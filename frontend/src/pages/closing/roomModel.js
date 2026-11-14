@@ -48,7 +48,6 @@ export const ROOM_FAILED = Object.freeze({
 
 /** What the room draws that no mounted route serves. Never a zero, never "none". */
 export const ROOM_WAITS = Object.freeze({
-  account: 'Your company’s receiving account is not read here yet: its route (D1217) is not mounted yet (#3214). Investors see no payment instructions until it is.',
   instructions: 'Payment instructions are not read here yet: the company’s receiving account route (D1217) is not mounted yet (#3214). Nothing here tells you where to pay. Never pay from details sent in an email.',
   sentWord: 'Your word that you sent it is recorded when you accept a match from your Mercury. No route records it without one yet.',
   clause: 'Eadwyn’s summary of a clause and the comments on this paper are not read here yet. Eadwyn summarises and never gives advice; your counsel decides.',
@@ -329,4 +328,109 @@ export function matchesFor(proposals, lines) {
   return (Array.isArray(proposals) ? proposals : [])
     .filter((p) => p?.state === 'proposed' && p?.target_kind === 'deal_commitment' && ids.has(Number(p.target_id)))
     .map((p) => ({ uid: p.uid, cents: cents(p.amount_cents), postedOn: dayOf(p.posted_on), lastFour: /^\d{2,4}$/.test(String(p.account_last_four ?? '')) ? String(p.account_last_four) : null }));
+}
+
+// ───────────────────────────────────────────── the company's receiving account
+
+/**
+ * #6190 — the founder's receiving account card, on D1217's route
+ * (`GET`/`PUT /api/closings/company-receiving-accounts/:projectId`).
+ *
+ * WHO MAY CHANGE IT. The Worker's PUT admits only the venture founder who is
+ * the company's primary admin (`scopeFor(..., write)`), and its GET admits a
+ * founder on exactly that test too: any other founder is answered 404. So a
+ * founder's successful read is the gate the room mirrors; the Worker stays the
+ * authority and its 403 is drawn as its own sentence.
+ *
+ * WHO IS TOLD. A save that replaces an account notifies every investor with an
+ * unpaid line (a pending commitment, or an open or sent line on an open
+ * closing), in the app and by email. The first account notifies nobody: the
+ * Worker selects recipients only when an account was already active. A save
+ * with the same details changes nothing and tells nobody.
+ *
+ * The full number is never in a read: the Worker masks it (last four digits,
+ * two for a short number) and the room draws that mask as given.
+ */
+export const ACCOUNT_WORDS = Object.freeze({
+  title: 'Your company’s receiving account',
+  none: 'No account set',
+  noneText: 'Direct and third-party investors see no payment instructions until it is set.',
+  set: 'Set the receiving account',
+  change: 'Change',
+  readOnly: 'Only the venture founder who administers this company sets or changes its receiving account.',
+  firstNotice: 'This is the company’s first receiving account, so no investor is notified now. An investor with a signed line sees it with the payment warning first.',
+  changeNotice: 'Saving tells every investor with an unpaid line, in the app and by email, that the account changed, with the warning to call the company on a number they already hold before they pay.',
+  reload: 'Reload the account',
+});
+
+/** The fields the Worker reads (`parse` in services/companyReceivingAccounts.ts), in the dialog's order. */
+export const ACCOUNT_FIELDS = Object.freeze([
+  { key: 'payee_name', label: 'Payee', hint: 'The company name on the account.', max: 160 },
+  { key: 'bank_name', label: 'Bank', max: 160 },
+  { key: 'account_number', label: 'Account number', secret: true },
+  { key: 'account_number_confirm', label: 'Account number again', hint: 'Type it a second time.', secret: true },
+  { key: 'routing_number', label: 'ABA routing number', digits: true },
+  { key: 'swift_code', label: 'SWIFT code', hint: 'Optional.' },
+  { key: 'currency', label: 'Currency', hint: 'A three-letter code, such as USD.', max: 3 },
+  { key: 'payment_reference', label: 'Payment reference', hint: 'Optional. Investors put it on their payment.', max: 120 },
+]);
+
+/** The field each of the Worker's field refusals names; any other refusal is the dialog's. */
+const FIELD_OF = Object.freeze({
+  company_account_names_required: 'payee_name',
+  account_number_invalid: 'account_number',
+  account_number_mismatch: 'account_number_confirm',
+  routing_number_invalid: 'routing_number',
+  swift_invalid: 'swift_code',
+  currency_required: 'currency',
+  payment_reference_invalid: 'payment_reference',
+});
+export const accountFieldOf = (code) => (typeof code === 'string' && Object.hasOwn(FIELD_OF, code) ? FIELD_OF[code] : null);
+export const isAccountConflict = (e) => Number(e?.status) === 409 && e?.code === 'company_account_changed';
+
+const maskedNumber = (v) => (typeof v === 'string' && /^•+\d{2,4}$/.test(v) ? v : null);
+
+/**
+ * The card's state from the read: `reading`, `unreadable` (the read failed or
+ * answered no shape the Worker gives), `refused` (403/404: not this viewer's
+ * to read), `none` (no account yet, revision 0) or `set`.
+ */
+export function accountView(read) {
+  if (!read || read.status === 'loading' || read.status === 'off') return { state: 'reading' };
+  if (read.status === 'error') {
+    const s = Number(read.error?.status);
+    if (s === 403 || s === 404) return { state: 'refused', text: typeof read.error?.message === 'string' ? read.error.message.trim() : '' };
+    return { state: 'unreadable' };
+  }
+  const d = read.data;
+  if (d && d.recorded === false) return { state: 'none', revision: 0 };
+  const a = d && d.recorded === true ? d.account : null;
+  if (!a || !maskedNumber(a.account_number) || !Number.isSafeInteger(a.revision)) return { state: 'unreadable' };
+  return { state: 'set', revision: a.revision, number: a.account_number, bank: a.bank_name || null, setOn: dayOf(a.created_at), account: a };
+}
+
+/** The dialog's starting values: the saved details, never either account number, which is typed again. */
+export function accountForm(view, currency = 'USD') {
+  const a = view?.state === 'set' ? view.account : {};
+  const str = (v) => (typeof v === 'string' ? v : '');
+  return {
+    payee_name: str(a.payee_name), bank_name: str(a.bank_name), account_number: '', account_number_confirm: '',
+    routing_number: str(a.routing_number), swift_code: str(a.swift_code), currency: str(a.currency) || currency || 'USD',
+    payment_reference: str(a.payment_reference),
+  };
+}
+
+/** The PUT's body: each field as typed (the Worker trims and checks it) and the revision the card was read at. */
+export function accountBody(form, revision) {
+  const out = { expected_revision: revision };
+  for (const f of ACCOUNT_FIELDS) out[f.key] = typeof form?.[f.key] === 'string' ? form[f.key] : '';
+  return out;
+}
+
+/** What the card says after a save, from the Worker's answer. */
+export function savedNote(result, hadAccount) {
+  if (result && result.changed === false) return 'Nothing changed: these are the details already saved, so no investor was told.';
+  return hadAccount
+    ? 'Saved. Investors with an unpaid line are sent a notice that the account changed.'
+    : 'Saved. No investor was notified, because this is the company’s first receiving account.';
 }

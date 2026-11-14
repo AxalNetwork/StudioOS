@@ -154,13 +154,24 @@ place.
 
 ## 5. Share the payment instructions (founder, then the investor)
 
-**Today this step happens outside StudioOS's pages.** The company's receiving
-instructions (D1217, migration 613) are mounted at
+**The founder's half is in the room; the investor's is not yet.** The
+company's receiving instructions (D1217, migration 613) are mounted at
 `/api/closings/company-receiving-accounts` (#3214): the founder saves the
 account, every read is masked, and an investor with a signed line (D1215's line
 on an open closing, its own envelope completed and signed by them) reveals it,
-logged without the number. No page calls these routes yet, so:
-- The founder's room reads "Your company's receiving account: Not read here yet".
+logged without the number.
+- The founder's room (#6190) shows "Your company's receiving account" with the
+  masked number and bank, or "No account set". The venture founder who
+  administers the company sees **Set the receiving account** or **Change**;
+  the Worker refuses anyone else, and its read already answers another founder
+  404, so they see no button. The dialog takes the payee, bank, the account
+  number typed twice, the ABA routing number, an optional SWIFT code, the
+  currency and an optional reference. It says first who is told: a change
+  notifies every investor with an unpaid line, in the app and by email; the
+  first account notifies nobody. A conflict ("The account changed") asks to
+  reload. An account the Worker cannot decrypt reads as could not be read, and
+  the room cannot replace it yet, because the save needs the revision the
+  failed read did not return.
 - The investor's **See payment instructions** drawer opens with CP9's warning,
   then says the instructions are not read here, naming #3214. It shows no
   account number and no mask.
@@ -294,7 +305,7 @@ These are recorded on the Worker but have no control on any page.
 | Record evidence on a line | `POST /api/closings/:uid/lines/:lineUid/evidence` | The same |
 | Withdraw evidence | `POST /api/closings/:uid/evidence/:evidenceUid/withdraw` | The same |
 | Commit or release fund money (`fund_investment.commit`, `.release`) | none | Not recordable. The page says "No route records this yet". |
-| Show the receiving account, and reveal it (CP1, CP9) | `GET`, `PUT` and `POST /reveal` on `/api/closings/company-receiving-accounts/:projectId` (#3214) | Step 5; no page calls them yet |
+| Show the receiving account, and reveal it (CP1, CP9) | `GET`, `PUT` and `POST /reveal` on `/api/closings/company-receiving-accounts/:projectId` (#3214) | Step 5; the founder's room reads and saves it (#6190); no page reveals it yet |
 
 A call made by hand is still the Admin's act: it is checked and logged the same
 way. Never paste the session token anywhere.
