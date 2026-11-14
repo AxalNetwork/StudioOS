@@ -83,7 +83,7 @@ const LOG_KEYS = new Set([...LOG_SELECT.slice(0, LOG_SELECT.indexOf('FROM adviso
   .matchAll(/(?:AS (\w+)|l\.(\w+))/g)].map((m) => m[1] || m[2]));
 
 const version = (over = {}) => ({
-  uid: 'v-1', version: 1, label: null, summary: null, link_url: null,
+  uid: 'v-1', version: 1, label: null, summary: null, version_summary: null, link_url: null,
   // #5960 (D5960): which kind of document, and a stored file's name, type and size.
   document: null, file: null,
   sent_at: null, opened_at: null, signed_off_at: null,

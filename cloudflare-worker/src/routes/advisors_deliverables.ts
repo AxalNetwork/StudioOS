@@ -57,6 +57,8 @@ type DeliverableRow = {
 type VersionRow = {
   id: number; uid: string; deliverable_id: number; version: number;
   label: string | null; summary: string | null; link_url: string | null;
+  // #5959 (D5959): the optional summary, apart from `summary` (the change note); null on older rows.
+  version_summary?: string | null;
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
   // #4684: who it was sent to and who recorded each receipt, each written once.
   recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
@@ -91,6 +93,8 @@ function fileOf(r: VersionRow): { name: string; type: string | null; size: numbe
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
+    // #5959 (D5959): optional, and null (never '') when the advisor gave none.
+    version_summary: r.version_summary ?? null,
     link_url: r.link_url,
     // #5960 (D5960): which kind of document this version has, and the file's name, type and size. Never the R2 key
     // or the hash: a key is a capability the routes alone hold.
@@ -401,9 +405,9 @@ advisors.post('/me/deliverables', async (c) => {
     // every read here assumes at least one row to be the latest.
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000), trimOrNull(body.version_summary, 2000),
            trimOrNull(body.link_url, 2000), stored?.key ?? null, stored?.name ?? null, stored?.type ?? null,
            stored?.size ?? null, stored?.sha256 ?? null, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
@@ -494,9 +498,9 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const uid = newUid();
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000), trimOrNull(body.version_summary, 2000),
            link, stored?.key ?? null, stored?.name ?? null, stored?.type ?? null, stored?.size ?? null, stored?.sha256 ?? null,
            now, now).run();
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
