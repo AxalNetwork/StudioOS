@@ -29,8 +29,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import AdminLicences from '../src/pages/admin/AdminLicences.jsx';
 import LicenceDeepLink, { deepLinkTarget } from '../src/pages/admin/licences/LicenceDeepLink.jsx';
-import { LicenceReasonDialog } from '../src/pages/admin/LicenceReasonDialog.jsx';
-import { LICENCE_REASONS } from '../src/pages/admin/licenceReasonModel.js';
+import { LicenceConsequenceSheet } from '../src/pages/admin/LicenceConsequenceSheet.jsx';
+import { licenceConsequence } from '../src/pages/admin/licenceConsequenceModel.js';
 import {
   NOT_INSTRUMENTED, attentionCell, countsLine, filterByNeeds, ledgerIsEmpty, needsFromParam, needsSummary, renewalCell, requestsCell, tabForSection, territoryCell,
 } from '../src/pages/admin/licenceLedgerModel.js';
@@ -227,13 +227,14 @@ test('no internal identifier reaches operator copy: seat utilisation reads Not r
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx')), /seats_used_reason/);
 });
 
-test('policy prose is off the ledger and at its actions: overlap at the territory step, suspension and release in their dialogs', async () => {
+test('policy prose is off the ledger and at its actions: overlap at the territory step, suspension and release in their consequence sheets', async () => {
   const page = codeOnly(read('frontend/src/pages/admin/AdminLicences.jsx'));
   assert.doesNotMatch(page, /Two licences\s+cannot hold the same country/);
   assert.match(read('frontend/src/pages/admin/licences/TerritoryEditor.jsx'), /this step refuses any country another\s+licence already holds regardless of kind/);
-  const suspend = renderedText(renderToStaticMarkup(h(LicenceReasonDialog, { ask: LICENCE_REASONS.suspendLicence, onDone: () => {} })));
+  // D4819 part 4 (#5927): the suspension and release rules moved from the reason dialog to the consequence sheet.
+  const suspend = renderedText(renderToStaticMarkup(h(LicenceConsequenceSheet, { sheet: licenceConsequence('suspend', { status: 'active', territories: ['FR'] }), onDone: () => {} })));
   assert.match(suspend, /A suspended licence still holds its countries, so no other licence can be issued over them\. Releasing them is a termination, not a suspension\./);
-  const terminate = renderedText(renderToStaticMarkup(h(LicenceReasonDialog, { ask: LICENCE_REASONS.terminateLicence, onDone: () => {} })));
+  const terminate = renderedText(renderToStaticMarkup(h(LicenceConsequenceSheet, { sheet: licenceConsequence('terminate', { status: 'active', territories: ['FR'] }), onDone: () => {} })));
   assert.match(terminate, /Terminating releases every country this licence holds, permanently\./);
   // The coverage grid keeps its legend, behind View territory coverage.
   assert.match(read('frontend/src/pages/admin/licences/Coverage.jsx'), /A suspended licence still holds its countries/);

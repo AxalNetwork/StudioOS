@@ -10,7 +10,9 @@
  * accepts (0 = optional), and optionally `consequence`, the rule the action
  * carries, said before the reason is asked for. D4819 (#4819) moved the
  * suspension rule here from the ledger's header: the ledger states what is
- * true, the action says what it will do.
+ * true, the action says what it will do. D4819 part 4 (#5927) moved suspend
+ * and terminate, with their rules, to the consequence sheet
+ * (`licenceConsequenceModel.js`); `REASON_MAX` and `checkReason` serve both.
  */
 export const LICENCE_REASONS = Object.freeze({
   demoteAdmin: {
@@ -27,17 +29,6 @@ export const LICENCE_REASONS = Object.freeze({
     title: 'Reject this response',
     question: 'Why is this response not accepted? The account stays frozen, and this is what they read.',
     min: 1, confirm: 'Reject', tone: 'danger',
-  },
-  suspendLicence: {
-    title: 'Suspend this licence',
-    consequence: 'A suspended licence still holds its countries, so no other licence can be issued over them. Releasing them is a termination, not a suspension.',
-    question: 'Why is this licence being suspended? The reason is recorded, and its holder reads it.',
-    min: 1, confirm: 'Suspend', tone: 'warn',
-  },
-  terminateLicence: {
-    title: 'Terminate this licence',
-    question: 'Terminating releases every country this licence holds, permanently. Why?',
-    min: 1, confirm: 'Terminate', tone: 'danger',
   },
 });
 
