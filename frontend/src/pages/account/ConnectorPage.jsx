@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { ChevronDown, Info } from 'lucide-react';
-import { BrandIcon, LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   ActivityGroup, CompaniesGroup, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, ToolModals,
@@ -24,6 +25,8 @@ import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
 import VercelProjectsSection from './VercelProjectsSection';
 import PosthogProjectsSection from './PosthogProjectsSection';
 import LinkedInSection, { LinkedInDisconnectChoice } from './LinkedInSection';
+import TeamsSection from './TeamsSection';
+import ConnectorMark from './ConnectorMark';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -161,6 +164,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {/* D5810 (#5810): Teams' rows on the shared Microsoft connection, and the way back to Record a session. */}
+      {p.key === 'teams' && <TeamsSection p={p} />}
       {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
       {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
       {shownBody
@@ -204,7 +209,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
       <header data-testid="connector-page-band" className="flex min-w-0 flex-wrap items-center gap-4 rounded-axal-sm bg-axal-ground p-5 dark:bg-gray-800/60">
-        <BrandIcon provider={p.key} name={p.display_name} size={phone ? 48 : 56} />
+        <ConnectorMark p={p} size={phone ? 48 : 56} />
         <div className="min-w-0 flex-1">
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
@@ -266,7 +271,60 @@ const ACCOUNT_MISSING = 'The service did not name the account this connection si
  * lands and what it reads, in place of Companies; Now fed by is a founder's
  * only; and the attention line says how to fix it, never the raw error.
  */
+function FacebookPages({ uid, companyId }) {
+  const [directory, setDirectory] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [attempt, retry] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setDirectory(null);
+    setNotice('');
+    connectorsApi.action(uid, 'list_pages', null, { companyId }).then(({ result }) => {
+      if (current) {
+        setDirectory(result.available);
+        setSelected(result.selected);
+      }
+    }).catch(() => { if (current) setNotice('Facebook Pages could not be read.'); });
+    return () => { current = false; };
+  }, [uid, companyId, attempt]);
+  async function save() {
+    setSaving(true);
+    setNotice('');
+    try {
+      const { result } = await connectorsApi.action(uid, 'choose_pages', { page_ids: selected }, { companyId });
+      setSelected(result.selected);
+      setNotice('Pages saved.');
+    } catch {
+      setNotice('Pages could not be saved. Reload the directory and try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <section className={`${BOX} flex flex-col gap-2`}>
+      <h3 className={H2}>Facebook Pages</h3>
+      {directory?.length === 0 && <p>No Pages were granted.</p>}
+      {directory?.map(page => (
+        <label key={page.id} className="flex items-center gap-2">
+          <input type="checkbox" checked={selected.includes(page.id)} disabled={saving} onChange={e => {
+            const checked = e.target.checked;
+            setSelected(ids => checked ? [...ids, page.id] : ids.filter(id => id !== page.id));
+          }} />
+          {page.name}
+        </label>
+      ))}
+      {directory && <button type="button" className={BTN.ghost} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save Pages'}</button>}
+      {!directory && !notice && <p>Reading Facebook Pages…</p>}
+      {notice && <p role="status">{notice}</p>}
+      {notice && notice !== 'Pages saved.' && <button type="button" className={BTN.ghost} disabled={saving} onClick={() => retry(n => n + 1)}>Reload Pages</button>}
+    </section>
+  );
+}
+
 function YourConnection({ p, flow, role = null, onChanged, repositories = false, phone = false }) {
+  const { company } = useActiveCompany();
   const conn = p.connection;
   const status = connectionStatus(conn, p);
   const mercury = isPersonalMercury(p);
@@ -285,7 +343,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false,
           <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">Last sync</div>
           <div data-testid="connector-page-last-sync">{flow.syncNote || lastSyncLabel(conn)}</div>
         </div>
-        {conn.uid && !p.legacy_only && (
+        {conn.uid && !p.legacy_only && p.key !== 'facebook' && (
           <button type="button" className={`${BTN.ghost} sm:ml-auto`} disabled={flow.syncing} onClick={flow.syncNow} data-testid="connector-page-sync">
             {flow.syncing ? 'Syncing…' : 'Sync now'}
           </button>
@@ -294,6 +352,9 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false,
       </div>
       {/* The provider's own section goes here: GitHub's repositories (F4, #1957), Mercury (F5, below), the channel cards (C1). */}
       {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
+      {p.key === 'facebook' && conn.uid && (company?.id
+        ? <FacebookPages key={`${conn.uid}:${company.id}`} uid={conn.uid} companyId={company.id} />
+        : <p>Choose an active company to manage Facebook Pages.</p>)}
       {/* D1086 (#2951): the pages a founder shared with Axal VC, and Add a source. */}
       {p.key === 'notion' && <NotionSourcesSection p={p} phone={phone} />}
       {/* D1096 (#2961): Vercel's Choose projects. */}

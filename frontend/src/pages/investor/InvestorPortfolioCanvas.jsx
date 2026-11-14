@@ -22,7 +22,7 @@ import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import {
-  AttentionItem, BasisStrip, FinancialMetric, HealthStatus, MetricValue, ObligationStatus, SourceFailure, SummaryTile,
+  AttentionItem, HealthStatus, ObligationStatus, PerformanceSummary, Skeleton, SourceFailure, SummaryTile,
 } from '../portfolio/PortfolioParts';
 import {
   HEALTH, NOT_RECORDED, SHAPES, attentionOf, companyRowsOf, filterRows, performanceOf, reportingSummaryOf, valueAddSummaryOf,
@@ -41,43 +41,6 @@ const SOURCES = {
 };
 
 const SOURCE_NAMES = { analytics: 'Performance', health: 'Health', updates: 'Founder updates', support: 'Support', compliance: 'Reporting' };
-
-function Skeleton({ rows = 3 }) {
-  return <div className="pf-skeleton" aria-busy="true" aria-label="Reading">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>;
-}
-
-/** Performance: NAV with mark coverage, the multiples with definitions, and the basis strip. */
-function Performance({ perf, onRetry, loading }) {
-  if (loading) return <section className="pf-card"><Skeleton rows={2} /></section>;
-  const failed = perf.nav.state === 'unreadable';
-  return (
-    <section className="pf-perf" aria-labelledby="pf-perf-title" data-testid="portfolio-performance">
-      <div className="pf-hero">
-        <span className="pf-eyebrow" id="pf-perf-title">Net asset value · gross</span>
-        <b data-testid="metric-nav"><MetricValue metric={perf.nav} /></b>
-        {failed ? (
-          <SourceFailure what="Performance" claim="No figure is shown in its place." onRetry={onRetry} testid="status-portfolio-performance-unreadable" retryTestid="button-retry-portfolio-performance" />
-        ) : (
-          <>
-            {perf.nav.state === 'not_recorded' ? <span className="pf-sub">{perf.nav.reason}</span> : null}
-            {perf.coverage ? <span className="pf-sub" data-testid="portfolio-mark-coverage">{perf.coverage}</span> : null}
-            {perf.atCost.map((t) => <span key={t} className="pf-sub">{t}.</span>)}
-          </>
-        )}
-      </div>
-      <div className="pf-mults">
-        {perf.multiples.map((m) => <FinancialMetric key={m.key} metric={m} />)}
-        {perf.flows.map((m) => <FinancialMetric key={m.key} metric={m} />)}
-        <div className="pf-metric" data-testid="metric-companies">
-          <small>Companies</small>
-          <b>{perf.companies ? perf.companies.value : <MetricValue metric={{ state: failed ? 'unreadable' : 'not_recorded', value: NOT_RECORDED }} />}</b>
-          {perf.companies?.note ? <em>{perf.companies.note}</em> : null}
-        </div>
-      </div>
-      <BasisStrip items={perf.basis} methodologyTo="/portfolio/performance" />
-    </section>
-  );
-}
 
 /** Needs attention: the evidence-backed queue, most urgent first. */
 function NeedsAttention({ attention, reads, retry }) {
@@ -293,7 +256,7 @@ export default function InvestorPortfolioCanvas() {
         />
       )}
     >
-      <Performance perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} />
+      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} />
       <NeedsAttention attention={attention} reads={reads} retry={retry} />
       <div className="pf-two">
         <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />

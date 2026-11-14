@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { requirePreview } from './_helpers.js';
+import { isolatePreviewTraffic, requirePreview } from './_helpers.js';
 
 /**
  * D753 (#1992) — Connectors: the hub, its filter menu and one connector's page.
@@ -123,13 +123,14 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
   // answering and the preview's real 404 would.
   test.use({ serviceWorkers: 'block' });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ context, page, baseURL }) => {
     requirePreview(test);
+    await isolatePreviewTraffic(context, baseURL);
     await signedInWithCatalogue(page);
   });
 
   test('the hub lists the catalogue on Discover, and search narrows it', async ({ page }) => {
-    await page.goto('/account/connectors?tab=discover');
+    await page.goto('/account/connectors?tab=discover', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('tab-connectors-discover')).toHaveAttribute('aria-selected', 'true');
     for (const p of PROVIDERS) await expect(page.getByTestId(`connector-card-${p.key}`)).toBeVisible();
     await page.getByTestId('input-connectors-search').fill('stripe');
@@ -138,7 +139,7 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
   });
 
   test('the filter menu narrows Discover to one category', async ({ page }) => {
-    await page.goto('/account/connectors?tab=discover');
+    await page.goto('/account/connectors?tab=discover', { waitUntil: 'domcontentloaded' });
     await page.getByTestId('button-connectors-filter').click();
     const menu = page.getByTestId('connectors-filter-menu');
     await expect(menu).toBeVisible();
@@ -150,7 +151,7 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
   });
 
   test('a card opens the connector\'s own page, and its back link returns to the tab it came from', async ({ page }) => {
-    await page.goto('/account/connectors?tab=discover');
+    await page.goto('/account/connectors?tab=discover', { waitUntil: 'domcontentloaded' });
     await page.getByTestId('connector-open-github').click();
     await expect(page).toHaveURL(/\/account\/connectors\/github$/);
     const view = page.getByTestId('connector-page');
@@ -169,7 +170,7 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
     test.use({ viewport: { width: 390, height: 844 } });
 
     test('the hub with its filter open does not scroll sideways', async ({ page }) => {
-      await page.goto('/account/connectors');
+      await page.goto('/account/connectors', { waitUntil: 'domcontentloaded' });
       await page.getByTestId('button-connectors-filter').click();
       // On a phone the filter is a sheet, not the desktop menu.
       await expect(page.getByTestId('connectors-filter-sheet')).toBeVisible();
@@ -179,13 +180,19 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
 
     for (const key of ['github', 'mercury', 'hubspot']) {
       test(`/account/connectors/${key} does not scroll sideways`, async ({ page }) => {
-        await page.goto(`/account/connectors/${key}`);
-        await expect(page.getByTestId('connector-page')).toBeVisible();
+        await page.goto(`/account/connectors/${key}`, { waitUntil: 'domcontentloaded' });
+        const view = page.getByTestId('connector-page');
+        // Direct links load a lazy route and its catalogue entry before the
+        // layout is measurable. Wait for that route's content, not page load.
+        await expect(view).toHaveAttribute('data-key', key, { timeout: 15_000 });
+        const bandView = view.getByTestId('connector-page-band');
+        const connect = bandView.getByTestId('connector-page-connect-button');
+        await expect(connect).toBeVisible();
         await hasNoHorizontalScroll(page);
         await hasPhoneTargets(page, '[data-testid="connector-page"]');
         // The band's one action takes its full width (its padding aside).
-        const band = await page.getByTestId('connector-page-band').evaluate((e) => { const c = getComputedStyle(e); return e.clientWidth - parseFloat(c.paddingLeft) - parseFloat(c.paddingRight); });
-        const button = await page.getByTestId('connector-page-connect-button').evaluate((e) => e.getBoundingClientRect().width);
+        const band = await bandView.evaluate((e) => { const c = getComputedStyle(e); return e.clientWidth - parseFloat(c.paddingLeft) - parseFloat(c.paddingRight); });
+        const button = await connect.evaluate((e) => e.getBoundingClientRect().width);
         expect(Math.round(button), 'the header button is the band\'s full width').toBeGreaterThanOrEqual(Math.floor(band) - 1);
       });
     }

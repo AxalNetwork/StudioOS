@@ -17,6 +17,7 @@
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
 | `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 | `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
+| `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
 
 ## The guards
 
@@ -283,6 +284,13 @@ binding targets and branch isolation.
 `--write` changes it, after the owner deploys both bot hosts. Its pure helper
 `lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.
 
+`check-meeting-bot-teams.mjs` (D5815, #5815) checks the Teams recorder's
+deployment matrix offline: each environment's site → host binding, run-state
+object, private chunk bucket, callback origin, signing audience, container,
+pinned browser, readiness/egress, revision order and switch values. It prints
+`pass`/`FAIL` per row, never a value. `lib/meetingBotTeamsMatrix.test.mjs` fails
+each row on its own mutation.
+
 ## Review harnesses
 
 | Script | What it does |
@@ -305,3 +313,6 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 
 | `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
 | `cloudflare-heartbeat-5671.mjs` | D5671: fixed-message read-only independent GitHub heartbeat check. |
+| `build-agent-compute-types.mjs` | D4557: generate ignored module-scoped host binding types. |
+| `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
+| `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |

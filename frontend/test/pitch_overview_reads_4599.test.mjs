@@ -65,7 +65,7 @@ async function mount({ url = '/raise/pitch?project_id=7', tab = 'overview', deck
   const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join(' ') : n.textContent || '');
   return {
     calls, by, text,
-    count: (re) => calls.filter((c) => re.test(c)).length,
+    count: (re) => calls.filter((c) => typeof re === 'string' ? c === re : re.test(c)).length,
     async press(node) { await act(async () => { await props(node).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
     async unmount() {
       await act(async () => root.unmount());
@@ -128,7 +128,7 @@ test('Overview with a deck: no read for a null deck, one usage and one presets r
     assert.equal(m.count(/\/cycles\/raise\/modules\/pitch-deck/), 0, 'the Overview draws nothing from the module read');
     // What the Overview does draw is still read, once each.
     for (const path of ['/decks/by-project/7', '/decks/31', '/decks/31/engagement', '/decks/31/rehearsals', '/decks/31/comments', '/decks/31/notes', '/decks/31/investor-links', '/decks/checks?project_id=7', '/decks/sources?project_id=7']) {
-      assert.equal(m.count(new RegExp(`GET /api${path.replace(/[?]/g, '\\?')}$`)), 1, `${path} is read once`);
+      assert.equal(m.count(`GET /api${path}`), 1, `${path} is read once`);
     }
   } finally { await m.unmount(); }
 });

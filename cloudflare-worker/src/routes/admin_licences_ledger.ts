@@ -4,6 +4,7 @@
  * moved unchanged, with their original comments.
  */
 import { Hono } from 'hono';
+import { ledgerLegalSignals } from '../services/agreementPolicies';
 import { requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { refuse } from '../util/refusal';
@@ -33,8 +34,16 @@ r.get('/', async (c) => {
       if (e instanceof LedgerReadRefusal) return refuse(c, 400, { code: e.code, message: e.sentence });
       throw e;
     }
+    const rows = page.rows as LicenceRow[];
+    const [items, signals] = await Promise.all([
+      hydrate(c.env, rows),
+      ledgerLegalSignals(c.env, rows).catch((error) => {
+        console.warn('[licences] legal readiness unreadable', error);
+        return null;
+      }),
+    ]);
     return c.json({
-      items: await hydrate(c.env, page.rows as LicenceRow[]),
+      items: items.map((item) => ({ ...item, legal_signals: signals?.get(item.uid) ?? null })),
       total: page.total,
       next_cursor: page.next_cursor,
       limit: page.limit,

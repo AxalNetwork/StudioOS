@@ -115,6 +115,7 @@ export const Thumbnail: React.FC<ThumbnailProps> = ({ template, data, slideIndex
       if (w > 0) setScale(w / INNER_W);
     };
     update();
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
@@ -221,6 +222,7 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
       if (w > 0) setScale(w / INNER_W);
     };
     update();
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();

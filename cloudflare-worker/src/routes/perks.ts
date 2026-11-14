@@ -64,7 +64,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { myPerk as sharedMyPerk } from '../services/profileWriteGates';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireRole, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
-import { programRefusal } from '../services/programEnforcement';
+import { memberProgramRefusal, programRefusal } from '../services/programEnforcement';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
@@ -1142,6 +1142,9 @@ r.post('/:uid/claim', async (c) => {
     // Idempotent: a second claim returns the first one rather than erroring,
     // so a double-click shows the code instead of a failure.
     if (existing) return c.json({ ...existing, already_claimed: true });
+    const denied = await memberProgramRefusal(c, user.id, 'perks');
+    if (denied) return denied;
+
 
     const balance = await balanceOf(c.env, user.id);
     const afford = affordability(perk, user, balance, today);

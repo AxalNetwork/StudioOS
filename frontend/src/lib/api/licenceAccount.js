@@ -9,6 +9,16 @@ const enc = encodeURIComponent;
 export const licenceAccountApi = {
   // `in_force` (latest signed), `pending` (sent, unsigned), `earlier`, and `sign_url` only while it is sent to the caller.
   contract: () => request('/licence/mine/contract'),
+  programAgreements: () => request('/licence/mine/program-agreements'),
+  signedProgramAgreementPdfBlob: async (envelopeId) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/legal/esign/${enc(envelopeId)}/document`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'The signed agreement could not be downloaded.');
+    return { blob: await res.blob(), filename: `axal-agreement-${envelopeId}.pdf` };
+  },
   // One contract's PDF, printed from its stored body (binary endpoint, not typed drift). Returns the blob and its
   // filename and creates no object URL: the caller saves it.
   contractPdfBlob: async (uid) => {

@@ -75,8 +75,8 @@ const CONTENT = [
   },
   {
     "n": "13",
-    "h": "Cookies",
-    "body": "Essential cookies support authentication and security. Functional, analytics and advertising technologies require accurate disclosure and consent where applicable. Honor preference controls and applicable privacy signals. Verify deployed providers and cookie behavior."
+    "h": "Cookies and similar technologies",
+    "body": "We use cookies and similar browser storage to operate StudioOS and remember your cookie choices. On your first visit, you can accept all, reject all optional categories, or choose which optional categories to enable. You can change or withdraw either optional choice at any time using **Cookie preferences** in the site footer.\n\n- **Essential.** This storage supports sign-in, session security and the settings you choose, including your cookie preferences. Essential storage is always on.\n- **Analytics.** If you enable Analytics, we measure which signup steps are reached and which link brought you here, using a random browser ID. We send this measurement only to Axal. Analytics also lets us count visits to active referral handles using a separate random ID kept in your browser for the life of that tab.\n- **Marketing.** If you enable Marketing, we use a first-party cookie to remember the first referral link you use so we can credit the referrer and apply eligible offers. The cookie lasts up to **30 days for a referral code** or **90 days for a referral handle**, measured from the first qualifying use.\n\nTurning off Analytics stops optional analytics measurement and clears the handle visit ID from your browser. Turning off Marketing stops referral attribution through the cookie and clears it. You can still sign up with either optional category turned off."
   },
   {
     "n": "14",

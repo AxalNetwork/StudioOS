@@ -11,6 +11,7 @@ export default {
       howto: [
         'Profile — name, headline, avatar, timezone, locale, pronouns, archetype character, and your public profile slug.',
         'Account — email change, account deletion request, data export.',
+        'Program access — open your Account profile to see which programs your licences make you eligible for, whether access is in force, and what is still required.',
         'Security — TOTP setup, recovery codes, active sessions, password-less login configuration.',
         'Notifications — per-channel email and in-app toggles plus quiet hours and digest cadence.',
         'Privacy — visibility (public / network / private), Public Directory opt-in, advisor discoverability.',

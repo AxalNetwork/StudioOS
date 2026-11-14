@@ -90,6 +90,23 @@ test('portfolio_marks is a history table, which is the premise of everything bel
   }
 });
 
+/**
+ * D4636 part 4: `positionScope` is the licence gate of the position reads.
+ * `canViewLpData` readers are scoped as before; a caller without it reads no
+ * held rows (the held read is null, every row, for a non-investor) and is
+ * refused unless they run a fund.
+ */
+function assertScopeGate() {
+  const at = POSITIONS.indexOf('async function positionScope(');
+  assert.ok(at >= 0, 'positionScope is gone');
+  const body = POSITIONS.slice(at, POSITIONS.indexOf('\n}\n', at));
+  assert.match(body, /const licensed = canViewLpData\(user\);/, 'positionScope no longer asks for the licence');
+  assert.match(body, /const held = licensed \? await investorHeldProjectIds\([^)]*\)[^:]*: \[\];/,
+    'a caller without the licence could read the held scope, which is every row for them');
+  assert.match(body, /if \(!licensed && funds\.length === 0\) return null;/,
+    'a caller with neither the licence nor a fund is no longer refused');
+}
+
 test('the history was already served to this reader before the button existed', () => {
   // The second half of the finding, and the more damning one: no new access is
   // granted here. `GET /positions/:projectUid` returns the same rows under the
@@ -97,7 +114,13 @@ test('the history was already served to this reader before the button existed', 
   const at = POSITIONS.indexOf("r.get('/:projectUid'");
   assert.ok(at > 0, 'the per-project read is gone');
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /canViewLpData\(user\)/, 'the per-project read changed its gate');
+  // D4636 part 4: the gate is `positionScope`, which admits `canViewLpData`
+  // readers and a GP of record for their own funds, and is null (403) for anyone else.
+  assert.match(handler, /const scope = await positionScope\(c, user\);\s*if \(!scope\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/,
+    'the per-project read changed its gate');
+  assert.ok(handler.indexOf('if (!scope)') < handler.indexOf('FROM projects'),
+    'the per-project read looks the company up before its gate');
+  assertScopeGate();
   assert.match(handler, /FROM portfolio_marks\s+WHERE project_id = \?/,
     'the per-project read no longer returns the mark history');
   assert.match(handler, /as_of_date, fmv, post_money, event, basis, source, note/,
@@ -230,7 +253,9 @@ test('an empty accessible set reads as empty, never as every row', () => {
   // Getting this wrong is a cross-tenant leak that looks like a working page.
   const at = POSITIONS.indexOf("r.get('/marks'");
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
-  assert.match(handler, /canViewLpData\(user\)/, 'the marks route lost its gate');
+  assert.match(handler, /const scope = await positionScope\(c, user\);\s*if \(!scope\) return c\.json\(\{ detail: 'Forbidden' \}, 403\);/,
+    'the marks route lost its gate');
+  assertScopeGate();
   // D1057: positions read the held scope (the relationship scope narrowed to confirmed commitments).
   // D4636 part 3: the handler reads it through `positionScope`, which adds the
   // companies the caller reaches only as GP of record.

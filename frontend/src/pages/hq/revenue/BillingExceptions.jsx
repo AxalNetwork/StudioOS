@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../../lib/api';
 import { parseMinor } from '../../../lib/money.js';
-import { REFUND_REASON_MIN, refundReasonOk } from '../../../lib/refundReason';
 import { Unreadable } from '../../../ui';
 import { Figure, StateMark, Section, When, Why, TABLE, TD, TH, NUM } from './RevenueStates.jsx';
 import {
@@ -16,11 +14,7 @@ import {
  * the other. LTV and the per-branch token margin moved out (the canvas: they
  * are analytics, not exceptions).
  *
- * THE REFUND IS TODAY'S CONTROL, UNCHANGED (D224): HQ's super admin, after a
- * step-up, with a written reason; the request helper runs the challenge and
- * the Worker is the gate. The five-step Lookup → Review → Confirm → Step-up →
- * Result flow (RV09) waits on #5037's read-only payment lookup and is the next
- * slice of #5039.
+ * RefundReviewFlow supplies the governed Lookup → Review → Confirm → Step-up → Result control.
  *
  * Pure over its props so every state renders in a test: `refunds` and
  * `disputes` are each null (loading), UNAVAILABLE (the read failed) or the
@@ -172,59 +166,4 @@ export function refundAmountShape(text) {
   if (!r.ok && r.reason !== 'decimals') return { ok: false, message: 'Enter the amount as a positive figure, such as 25 or 25.50.' };
   if (r.ok && r.minor <= 0) return { ok: false, message: 'The amount must be a positive figure.' };
   return { ok: true, text: String(text).trim() };
-}
-
-export function RefundForm({ onDone }) {
-  const [f, setF] = useState({ target: '', amount: '', reason: '' });
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const submit = async (e) => {
-    e.preventDefault();
-    if (busy) return;
-    const target = f.target.trim();
-    if (!target) { setMsg({ err: true, text: 'Enter a PaymentIntent (pi_…) or Charge (ch_…) id.' }); return; }
-    if (!refundReasonOk(f.reason)) { setMsg({ err: true, text: `Write why this money goes back, in at least ${REFUND_REASON_MIN} characters.` }); return; }
-    const body = { reason: f.reason.trim() };
-    if (target.startsWith('ch_')) body.charge = target; else body.payment_intent = target;
-    if (f.amount !== '') {
-      // D5029: this form is given a Stripe id, not a currency, so it cannot turn the figure into minor units. It
-      // sends what was typed, as major units, and the worker converts it in the charge's own currency (and refuses
-      // an amount that currency cannot hold, such as cents of a yen). The shape is checked here so a typo is
-      // caught before the round trip; how many decimals are allowed is the currency's, and the worker's to say.
-      const shape = refundAmountShape(f.amount);
-      if (!shape.ok) { setMsg({ err: true, text: shape.message }); return; }
-      body.amount_major = shape.text;
-    }
-    setBusy(true); setMsg(null);
-    try {
-      const r = await api.adminBillingRefund(body);
-      setMsg({ err: false, text: `Refund ${r.refund?.id || ''} ${r.refund?.status || 'issued'}.`.replace(/\s+/g, ' ') });
-      setF({ target: '', amount: '', reason: '' });
-      onDone?.();
-    } catch (err) {
-      const d = err?.data || {};
-      setMsg({ err: true, text: d.code === 'refund_policy_blocked'
-        ? `Blocked by the product refund policy (${d.reason || d.kind}). An override is on the Billing tab.`
-        : (d.error || err.message || 'The refund was not issued.') });
-    } finally {
-      setBusy(false);
-    }
-  };
-  const input = 'w-full rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px]';
-  return (
-    <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-axal-hairline pt-3 sm:grid-cols-2" data-testid="hq-revenue-refund-form">
-      <div className="sm:col-span-2 text-[12px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Issue a refund · step-up</div>
-      <input className={input} placeholder="pi_… or ch_…" value={f.target} onChange={(e) => set('target', e.target.value)} aria-label="PaymentIntent or Charge id" />
-      <input className={input} type="text" inputMode="decimal" autoComplete="off" placeholder="Amount (blank refunds the rest)" value={f.amount} onChange={(e) => set('amount', e.target.value)} aria-label="Amount" />
-      <textarea className={`${input} sm:col-span-2`} rows={2} required minLength={REFUND_REASON_MIN} placeholder="Why this money goes back — read by whoever audits it" value={f.reason} onChange={(e) => set('reason', e.target.value)} aria-label="Reason" />
-      <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={busy} className="rounded-lg bg-red-700 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">
-          {busy ? 'Issuing…' : 'Refund'}
-        </button>
-        <span className="text-[12px] text-axal-faint">Asks for your second factor, then writes one audit row.</span>
-        {msg && <span className={`text-[12px] ${msg.err ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`} role="status">{msg.text}</span>}
-      </div>
-    </form>
-  );
 }

@@ -15,7 +15,7 @@ import { coverageCount, readAgo, readClock } from './revenueModel.js';
  * place on the page where each "why" is written.
  */
 
-const SELECT = 'min-h-[36px] rounded-lg border border-axal-hairline bg-white px-2.5 text-[13px] font-semibold text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const SELECT = 'min-h-[44px] sm:min-h-[36px] rounded-lg border border-axal-hairline bg-white px-2.5 text-[13px] font-semibold text-axal-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 /** The nine-dot strip on the coverage button: one per source, its shape by state. */
 function CoverageDots({ sources }) {
@@ -36,7 +36,7 @@ function CoverageDots({ sources }) {
 }
 
 export function RevenueHeader({
-  period, periods, onPeriod, scope, scopes, onScope, readAt, nowMs, sources, onCoverage, ask = null,
+  period, periods, onPeriod, scope, scopes, onScope, stream = 'all', onStream, readAt, nowMs, sources, onCoverage, ask = null,
 }) {
   const count = coverageCount(sources);
   const ago = readAgo(readAt, nowMs);
@@ -69,6 +69,16 @@ export function RevenueHeader({
             <select className={SELECT} value={scope || ''} onChange={(e) => onScope(e.target.value || null)} data-testid="hq-revenue-scope">
               <option value="">All subsidiaries</option>
               {scopes.map((s) => <option key={s.licence_uid} value={s.licence_uid}>{s.name}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[13px] text-axal-muted dark:text-gray-400">
+            Stream
+            <select className={SELECT} value={stream} onChange={(e) => onStream?.(e.target.value)} aria-describedby="revenue-stream-scope" data-testid="hq-revenue-stream-filter">
+              <option value="all">All streams</option>
+              <option value="licence_fees">Licence fees</option>
+              <option value="statements">Revenue-share statements</option>
+              <option value="subscriptions">Subscriptions</option>
+              <option value="tokens">AI / tokens</option>
             </select>
           </label>
         </div>

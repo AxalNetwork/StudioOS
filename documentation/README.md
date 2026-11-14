@@ -86,3 +86,4 @@ Cloudflare delivery configuration, canary and rollback:
 `frontend/test/repo_layout.test.mjs` fails the build if an eighth appears, so
 the root cannot quietly refill with the 38 files this folder was created to
 hold.
+| `operations/AGENT_COMPUTE_4557.md` | General compute local verification and owner-gated hosted acceptance. |

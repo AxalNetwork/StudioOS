@@ -10,9 +10,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  CEILINGS, STAGE_A_ENV, STAGE_A_VARS, checkFlat, envView, extraSeed, fixtureIds, reconcile, renderFlat, stageANames,
-  stageASections, toCreate,
+  CEILINGS, SKILL_RUNTIME_VARS, STAGE_A_ENV, STAGE_A_VARS, checkFlat, envView, extraSeed, fixtureIds, reconcile, renderFlat,
+  skillRunVerdict, skillSeed, stageANames, stageASections, toCreate,
 } from './stageARun.mjs';
+import { buildFresh, postCutoffMigrations } from '../check-baseline-drift.mjs';
+import { seedStatements, toSqlFile } from './agentSyntheticFixtures.mjs';
 import { preflight } from './previewIsolation.mjs';
 import { parseToml } from './branchConfig.mjs';
 
@@ -40,7 +42,7 @@ test('names: every resource carries the run, and a non-run id is refused', () =>
   assert.equal(n.bucket('studioos-files-preview'), 'studioos-files-s4594-abc123');
   assert.throws(() => n.queue('studioos-agent-queue'), /not a preview queue/, 'production\'s queue name is never renamed into the run');
   for (const bad of ['', 'ABC123', 'abc', 'a'.repeat(21), 'abc-12', "abc'1", undefined]) assert.throws(() => stageANames(bad), /run id/, String(bad));
-  assert.deepEqual(fixtureIds(RUN), { sponsorEmail: 'syn-abc123-t0@synthetic.invalid', agentUid: 'syn-abc123-t0-a0', taskUid: 'syn-abc123-t0-a0-k0' });
+  assert.deepEqual(fixtureIds(RUN), { sponsorEmail: 'syn-abc123-t0@synthetic.invalid', agentUid: 'syn-abc123-t0-a0', taskUid: 'syn-abc123-t0-a0-k0', skillUid: 'syn-abc123-skill' });
 });
 
 test('the config: flat, on workers.dev, no route, no cron, no browser, every identity the run\'s, the engine and the stub on', () => {
@@ -124,4 +126,47 @@ test('reconcile: one proposal and one settled hold per key, settled equals charg
 
 test('the ceilings are the owner\'s decision 2 = A', () => {
   assert.deepEqual({ ...CEILINGS }, { wallClockMs: 3_600_000, d1RowsWritten: 1000, modelSpendMicrousd: 0, lifecyclesPerPath: 1 });
+});
+
+test('#4555 pass: the SDK variable is the redeploy\'s only change, and the flat config still passes checkFlat', () => {
+  const plain = renderFlat(stageASections(TOML, RUN, IDS));
+  const sdk = renderFlat(stageASections(TOML, RUN, IDS, { skillRuntime: true }));
+  assert.equal(checkFlat(sdk, TOML), true);
+  const a = plain.split('\n'); const b = sdk.split('\n');
+  const added = b.filter((l) => !a.includes(l));
+  assert.deepEqual(added, ['AGENT_SKILL_RUNTIME = "cloudflare_sdk"'], 'one line differs, and no identity');
+  assert.deepEqual(a.filter((l) => !b.includes(l)), []);
+  assert.deepEqual({ ...SKILL_RUNTIME_VARS }, { AGENT_SKILL_RUNTIME: 'cloudflare_sdk' });
+  assert.doesNotMatch(plain, /AGENT_SKILL_RUNTIME/, 'off unless the pass asks for it');
+});
+
+test('#4555 pass: the seed lands on the committed schema with foreign keys on, and pins version 1 to the agent', () => {
+  const ROOT = new URL('../../', import.meta.url).pathname;
+  const db = buildFresh(readFileSync(new URL('../../cloudflare-worker/sql/schema_baseline.sql', import.meta.url), 'utf8'), postCutoffMigrations(ROOT).map((m) => m.sql));
+  try {
+    db.exec(toSqlFile([...seedStatements({ run: RUN, tenants: 1, agentsPerTenant: 1, tasksPerAgent: 2 }), ...extraSeed(RUN), ...skillSeed(RUN)]));
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+    const link = db.prepare(`SELECT l.version, s.status, s.scope, s.uid, a.uid AS agent FROM agent_skill_links l
+      JOIN agent_skills s ON s.id = l.skill_id JOIN team_agents a ON a.id = l.agent_id`).all();
+    assert.deepEqual(link.map((r) => ({ ...r })), [{ version: 1, status: 'published', scope: 'hq', uid: 'syn-abc123-skill', agent: 'syn-abc123-t0-a0' }]);
+    const v = db.prepare('SELECT version, roles_json FROM agent_skill_versions').get();
+    assert.deepEqual([v.version, JSON.parse(v.roles_json)], [1, ['ceo']], 'the agent\'s own role (fixture agent 0 is the ceo)');
+    for (const x of skillSeed(RUN)) for (const a of x.args) assert.match(String(a), /abc123|synthetic|Synthetic/, 'every value is synthetic');
+  } finally { db.close(); }
+  assert.throws(() => skillSeed("x'; --"), /run id/);
+});
+
+test('#4555 pass: a skill run\'s verdict needs one usage row on the pinned version and the runtime it asked for', () => {
+  const one = [{ skill_version: 1 }];
+  assert.deepEqual(skillRunVerdict({ event: {}, usage: one, want: 'legacy' }), { ok: true, reason: null, runtime: 'legacy', fallback: null });
+  const sdk = skillRunVerdict({ event: { skill_runtime: { runtime: 'cloudflare_sdk', fallback: null } }, usage: one, want: 'cloudflare_sdk' });
+  assert.equal(sdk.ok, true); assert.equal(sdk.runtime, 'cloudflare_sdk');
+  const fell = skillRunVerdict({ event: { skill_runtime: { runtime: 'legacy', fallback: 'sdk_error' } }, usage: one, want: 'cloudflare_sdk' });
+  assert.deepEqual([fell.ok, fell.fallback], [true, 'sdk_error'], 'a recorded fallback is a result, reported as such');
+  const bad = (x, re) => { const v = skillRunVerdict(x); assert.equal(v.ok, false); assert.match(v.reason, re); };
+  bad({ event: {}, usage: one, want: 'cloudflare_sdk' }, /names no runtime/);
+  bad({ event: { skill_runtime: { runtime: 'cloudflare_sdk' } }, usage: one, want: 'legacy' }, /asked for legacy/);
+  bad({ event: {}, usage: [{ skill_version: 2 }], want: 'legacy' }, /not the pinned 1/);
+  bad({ event: {}, usage: [...one, ...one], want: 'legacy' }, /2 usage rows/);
+  bad({ event: null, usage: one, want: 'legacy' }, /could not be read/);
 });

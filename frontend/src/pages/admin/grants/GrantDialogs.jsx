@@ -65,7 +65,7 @@ export function ReasonDialog({ title, body, button, danger = false, reasonLabel 
         </div>
       )}>
       <div className="flex flex-col gap-3">
-        {body ? <p className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{body}</p> : null}
+        {body ? <div className="m-0 text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{body}</div> : null}
         <Reason value={reason} onChange={setReason} label={reasonLabel} testId={`${testId}-reason`} />
         <span className={SUB}>{STEP_UP}</span>
         {frozen ? <p role="alert" className={`m-0 font-semibold ${ERR}`} data-testid={`${testId}-frozen`}>{frozen}</p> : null}

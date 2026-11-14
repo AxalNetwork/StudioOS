@@ -107,7 +107,7 @@ const STEPS = SOURCES.flatMap(([file, src]) => [...src.matchAll(/^const (\w+) = 
 
 test('every step is a dynamic import of a module that still exports it, and none is imported statically', async () => {
   const expected = ['OverviewTab', 'ChannelsTab', 'ProspectsPage', 'CampaignsTab', 'ResultsTab', 'NewCampaignPage', 'AdsTab',
-    'InterviewRecord', 'CalendarTab', 'CalendarWeek', 'UpdatesHistory', 'ReportingDesk', 'BuildPlan', 'BuildPlanDoor', 'VerdictRecordWithPlan',
+    'InterviewRecord', 'CalendarTab', 'CalendarWeek', 'UpdatesHistory', 'GrowOverview', 'ReportingDesk', 'BuildPlan', 'BuildPlanDoor', 'VerdictRecordWithPlan',
     'NarrativeHome', 'NarrativeTabBar', 'NarrativeTabPage', 'CapTableHomeNav', 'CapTableTabPage', 'DataRoomHomeNav', 'DataRoomTabPage', 'DataRoomUpload',
     'UseOfFundsHomeNav', 'UseOfFundsTabPage', 'CapRelHomeNav', 'CapRelTabPage'];
   assert.deepEqual(STEPS.map(([name]) => name).sort(), [...expected].sort());

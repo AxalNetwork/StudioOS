@@ -46,8 +46,8 @@ const FILES = registeringFiles();
 for (const f of FILES) await import(pathToFileURL(f).href);
 
 // D1096 adds Vercel's read-only Integration.
-const TEN = ['calendly', 'carta', 'docusign', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'tiktok', 'vercel', 'zoom'];
-const MANAGED = TEN.filter((k) => k !== 'zoom' && k !== 'tiktok');
+const TEN = ['calendly', 'carta', 'docusign', 'facebook', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'tiktok', 'vercel', 'zoom'];
+const MANAGED = TEN.filter((k) => !['zoom', 'tiktok', 'facebook'].includes(k));
 const NAMES: Record<string, string> = { github: 'GitHub', slack: 'Slack', zoom: 'Zoom' };
 const FOUNDER = 1, ADMIN = 2, STUDIO = 3;
 

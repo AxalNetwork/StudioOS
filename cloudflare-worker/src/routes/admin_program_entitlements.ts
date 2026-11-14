@@ -5,6 +5,7 @@
  *   GET  /                               Program access by user licence: one row per account and program
  *                                        (?licence_type=all|founder|investor|operating_partner|advisor
  *                                         &holder=user:<id>&program=&q=&limit=)
+ *   GET  /reconciliation                  read-only legacy evidence and grant review queue (?program=&after=&limit=)
  *   GET  /rules                          every rule version, and the one in force per program and licence type
  *   POST /rules                          { program_key, licence_type, eligible, agreement_required?, effective_from, reason }
  *                                        the pair's next version
@@ -25,10 +26,11 @@ import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
+import { programGrantReconciliation } from '../services/programGrantReconciliation';
 import { isRegistryKey } from '../services/programRegistry';
 import {
   EntitlementError, GRANT_ACTIONS, REASON_MIN, accessQuery, addRuleVersion, changeGrant, entitlementsOfAccount,
-  entitlementsOfLicence, grantEventsOf, parseRuleInput, programAccessByHolder, programNames, readRules, rulesInForce, todayUtc,
+  entitlementsOfLicence, grantEventsOf, parseRuleInput, programAccessByHolder, programOptions, readRules, rulesInForce, todayUtc,
 } from '../services/programEntitlements';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -51,20 +53,35 @@ r.get('/', async (c) => {
   return c.json(await programAccessByHolder(c.env, accessQuery(c.req.query())));
 });
 
+r.get('/reconciliation', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    return c.json(await programGrantReconciliation(c.env, c.req.query()));
+  } catch (error) {
+    if (error instanceof EntitlementError) throw error;
+    return refuse(c, 503, {
+      code: 'reconciliation_unavailable',
+      message: 'The reconciliation report could not be read. Try again before reviewing grants.',
+      raw: error,
+    });
+  }
+});
+
 r.get('/rules', async (c) => {
   await requireSuperAdmin(c);
   const day = todayUtc();
-  const [rules, name] = await Promise.all([readRules(c.env), programNames(c.env)]);
+  const [rules, programs] = await Promise.all([readRules(c.env), programOptions(c.env)]);
   const inForce = rulesInForce(rules, day);
   const pairs = new Map<string, { program_key: string; program_name: string; licence_type: string; in_force: unknown; scheduled: unknown[]; versions: unknown[] }>();
   for (const rule of rules) {
     const k = `${rule.program_key}|${rule.licence_type}`;
-    if (!pairs.has(k)) pairs.set(k, { program_key: rule.program_key, program_name: name(rule.program_key), licence_type: rule.licence_type, in_force: inForce.get(k) ?? null, scheduled: [], versions: [] });
+    if (!pairs.has(k)) pairs.set(k, { program_key: rule.program_key, program_name: programs.get(rule.program_key) ?? rule.program_key, licence_type: rule.licence_type, in_force: inForce.get(k) ?? null, scheduled: [], versions: [] });
     const p = pairs.get(k)!;
     p.versions.unshift(rule);
     if (rule.effective_from > day) p.scheduled.push(rule);
   }
-  return c.json({ on: day, items: [...pairs.values()] });
+  return c.json({ on: day, items: [...pairs.values()], programs: Array.from(programs, ([key, name]) => ({ key, name })) });
 });
 
 r.post('/rules', async (c) => {

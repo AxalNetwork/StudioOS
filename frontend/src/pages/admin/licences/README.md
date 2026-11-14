@@ -45,6 +45,12 @@ unchanged when it was split.
 - `TermsWorkspace.jsx` — D4819 part 2: the Terms section (L05 to L07): the
   schedule read-only by default, Amend terms as a reviewed session, and the
   conflict view when another admin wrote first. It replaced step 4's editor.
+- `RegistryLedger.jsx` — D5060 (#5060, part 3): the registry by licence family (addendum board L36): the
+  family chips, and the ten-column table across operator and user licences read from
+  `/api/admin/licence-registry`. Operator / territory stays `LedgerTable.jsx`.
+- `UserLicenceDetail.jsx` — D5060 part 3: one user licence at `/admin/licences/registry/user/:uid` (L37, L37B):
+  Overview, Programs, Agreement, Billing (only with commercial terms) and History. Its model is
+  `../licenceRegistryModel.js`.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
 (sections, tabs and selection), `licenceOverviewModel.js` (the header's and

@@ -240,8 +240,12 @@ function legacyCartaFields() {
 
 /** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
 function linkedinCard(viewer: Viewer) {
-  const page = pageDescriptor({ key: 'linkedin' }, viewer);
-  return { ...FIRST_PARTY_CARDS.linkedin, ...(page ? pageFields(page) : {}) };
+  return firstPartyCard('linkedin', viewer);
+}
+/** A first-party card (LinkedIn; D5810: Microsoft Teams, on Microsoft's connection). No token, tenant or link. */
+function firstPartyCard(key: 'linkedin' | 'teams', viewer: Viewer) {
+  const page = pageDescriptor({ key }, viewer);
+  return { ...FIRST_PARTY_CARDS[key], ...(page ? pageFields(page) : {}) };
 }
 
 function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds: number[] = []) {
@@ -356,7 +360,7 @@ integrations.get('/available', async (c) => {
   // D753 W2: the Discover order (the SPA counts each category itself) and LinkedIn's card.
   return c.json({
     ok: true, items: providers, providers, unreadable_sources: unreadableSources,
-    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer)],
+    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer), firstPartyCard('teams', viewer)],
   });
 });
 
@@ -444,10 +448,10 @@ integrations.get('/directory/:key', async (c) => {
   const viewer = viewerOf(c, user);
   const k = directoryKeyFor(c.req.param('key'));
   if (!k) return c.json({ error: 'unknown_provider' }, 404);
-  if (k.key === 'linkedin') {
-    const page = pageDescriptor({ key: 'linkedin' }, viewer);
+  if (k.key === 'linkedin' || k.key === 'teams') {
+    const page = pageDescriptor({ key: k.key }, viewer);
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
-    return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
+    return c.json({ ok: true, connector: { ...firstPartyCard(k.key, viewer), ...pageBody(page) } });
   }
   // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
   const channel = channelPage(k.key);
@@ -785,12 +789,16 @@ integrations.delete('/:uid', async (c) => {
     catch { return c.json({ error: 'google_revocation_failed' }, 503); }
     return c.json({ ok: true });
   }
+  if (row.provider_key === 'facebook' && (await selectJwt(c))?.payload.impersonated_by) {
+    return c.json({ error: 'support_session_refused' }, 403);
+  }
 
   const impl = getProviderImpl(row.provider_key);
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
     catch (e) {
       if (row.provider_key === 'tiktok') return c.json({ error: 'tiktok_revocation_failed' }, 503);
+      if (row.provider_key === 'facebook') return c.json({ error: 'facebook_revocation_failed' }, 503);
       console.warn('[integrations] provider disconnect threw:', (e as Error).message);
     }
   } else {
@@ -1092,6 +1100,7 @@ async function actionHandler(c: Context<{ Bindings: Env }>) {
     const out = await impl.action(c, user, row, name, body);
     return c.json({ ok: true, action: name, result: out });
   } catch (e) {
+    if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
     const msg = (e as Error).message || 'action failed';
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,

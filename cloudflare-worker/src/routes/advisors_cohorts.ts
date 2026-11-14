@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
-import { programRefusal } from '../services/programEnforcement';
+import { memberProgramRefusal, programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
 import { ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 import { logAdminAction } from '../services/adminAudit';
@@ -123,6 +123,8 @@ advisors.put('/me/cohort-access/:advisorUserId', async (c) => {
 advisors.get('/me/cohort', async (c) => {
   try {
     const user = await requireAuth(c);
+    const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+    if (denied) return denied;
     await ensureAdvisorStoresSchema(c.env);
     // #4715: eligibility first, as every cohort read: an account that no longer
     // holds the Advisor licence keeps its assignment rows but lists no cohort.
@@ -184,6 +186,8 @@ advisors.get('/me/cohort', async (c) => {
 advisors.get('/me/cohort/:cycleId/founders', async (c) => {
   try {
     const user = await requireAuth(c);
+    const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+    if (denied) return denied;
     await ensureAdvisorStoresSchema(c.env);
     // Eligibility first, then the grant. See the header.
     if (!mayHoldCohortAssignment(user)) {
@@ -253,6 +257,8 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
 advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
   try {
     const user = await requireAuth(c);
+    const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+    if (denied) return denied;
     await ensureAdvisorStoresSchema(c.env);
     if (!mayHoldCohortAssignment(user)) {
       return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
@@ -372,6 +378,8 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
 async function requireOwnCohort(
   c: Context<{ Bindings: Env }>, user: User, cycleId: number,
 ): Promise<Response | null> {
+  const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+  if (denied) return denied;
   if (!mayHoldCohortAssignment(user)) {
     return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
   }
@@ -636,6 +644,8 @@ advisors.post('/me/cohort/:cycleId/guidance', async (c) => {
 advisors.patch('/me/guidance/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
+    const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+    if (denied) return denied;
     await ensureAdvisorStoresSchema(c.env);
     await ensureCohortGuidanceSchema(c.env);
     // #4715: writing guidance founders read is an advisor's act, so the
@@ -774,6 +784,8 @@ advisors.post('/me/guidance/:uid/publish', async (c) => {
 advisors.get('/me/guidance/:uid/history', async (c) => {
   try {
     const user = await requireAuth(c);
+    const denied = await memberProgramRefusal(c, user.id, 'mentor-cohorts');
+    if (denied) return denied;
     await ensureAdvisorStoresSchema(c.env);
     await ensureCohortGuidanceSchema(c.env);
     if (!mayHoldCohortAssignment(user)) {

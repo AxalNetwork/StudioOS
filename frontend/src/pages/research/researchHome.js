@@ -8,9 +8,7 @@
  *   { state: 'not_recorded', reason }  no store holds this yet
  *   { state: 'ok', ... }               an empty list is `ok` with no rows
  *
- * WHAT IS NOT RECORDED. The canvas's Saved briefs are a sectioned brief, which
- * is not stored yet (D3701 "Existing vs proposed"), and its card says so
- * instead of borrowing saved Ask answers and calling them briefs.
+ * Saved briefs read the member's stored project briefs (D5157-p4).
  *
  * RECENT RESEARCH PROJECTS (D5157, #5157) reads the Research Project store:
  * the three most recently touched active projects (`recentProjects` in
@@ -32,7 +30,6 @@ export const EXAMPLES = [
 ];
 
 export const NOT_RECORDED_REASONS = {
-  briefs: 'Briefs are not stored yet. Saved Ask answers are kept, with their citations, on the Ask page.',
   trackingOther: 'Markets and companies cannot be tracked yet; only the funds you add are kept.',
 };
 
@@ -87,7 +84,11 @@ export function trackingCard(read) {
 
 /** D5157: the three most recently touched active projects, from the list read. */
 export const projectsCard = (read) => recentProjects(read);
-export const briefsCard = () => ({ state: 'not_recorded', reason: NOT_RECORDED_REASONS.briefs });
+export const briefsCard = (read) => {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status !== 'ok' || !Array.isArray(read.value?.items)) return { state: 'unreadable' };
+  return { state: 'ok', rows: read.value.items };
+};
 
 /** A date for a card line, or Not recorded. Never today's date for a missing one. */
 export function shortDate(value) {

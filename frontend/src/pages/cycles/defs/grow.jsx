@@ -15,10 +15,12 @@ import UpdateAskReplies from '../UpdateAskReplies';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+import { growArea } from '../growOverviewModel';
 
 // D4574 (#4574, H5): Grow's steps, each behind its own lazy boundary.
 const CalendarWeek = lazyStep(() => import('../distribution/CalendarTab.jsx'), 'CalendarWeek');
 const UpdatesHistory = lazyStep(() => import('../UpdatesHistory'));
+const GrowOverview = lazyStep(() => import('../GrowOverview'));
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -34,6 +36,8 @@ const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data
  * compliance calendar stay one tool link away.
  */
 const grow = {
+  Overview: GrowOverview,
+  moduleName: (slug) => growArea(slug)?.name || null,
   modules: MODULES.grow,
   path: 'update',
   Mount: GrowMount,

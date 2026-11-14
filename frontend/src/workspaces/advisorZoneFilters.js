@@ -272,24 +272,18 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All time', key: 'all' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
-  // stores `lane` with five values, so Signed, Renewal due and Ended each read
-  // a column directly — `Signed` covers both signed lanes, because
-  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
-  // that excluded it would hide the contracts most in need of attention.
-  //
-  // `By client` IS A SORT, and saying so matters. Every other chip in these four
-  // tables narrows a set; this one orders the board, the renewal history and the
-  // scope cards by client name and drops nothing. A chip called "By client" that
-  // filtered rows out would be lying about what it did — and this file's own
-  // docblock is about exactly that failure mode, a chip whose empty result reads
-  // as an answer.
+  // #4831 (D4831): THE PRACTICE V2 CANVAS'S ROW (PX-03), which replaced PR2's
+  // `All · Signed · Renewal due · Ended · By client`. Each chip narrows the
+  // board and carries its count over the whole record (`chipRows` and
+  // `chipCounts` in `engagementBoard.js`); `Active` is signed or renewal due,
+  // the same set the Active tile counts. `By client` left with the PR2 row: it
+  // was a sort, and the v2 board draws none.
   'practice/engagements': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Signed', key: 'signed' },
-    { canvas: 'Renewal due', key: 'renewal_due' },
-    { canvas: 'Ended', key: 'ended' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Active', key: 'active', label: 'Active {n}' },
+    { canvas: 'Renewal due', key: 'renewal_due', label: 'Renewal due {n}' },
+    { canvas: 'Proposed', key: 'proposed', label: 'Proposed {n}' },
+    { canvas: 'Ended', key: 'ended', label: 'Ended {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
   // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,

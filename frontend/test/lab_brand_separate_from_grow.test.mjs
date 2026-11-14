@@ -59,8 +59,9 @@ test('Grow\'s own Brand page stays Grow\'s, and is its tab', () => {
   assert.match(read('frontend/src/pages/BrandBuilderPage.jsx'), /<BrandPagesSection projectId=\{projectId\} projectName=\{project\?\.name\} \/>/,
     "the builder dropped Grow's pages, leads and conversion");
   for (const zone of ['Focus', 'Talent', 'Customers', 'Partnerships', 'Launch']) {
-    assert.ok(read(`frontend/src/pages/founder/FounderGrow${zone}.jsx`).includes("['Brand', `/build/brand${query}`]"), `Grow · ${zone}'s Brand tab left the builder`);
+    assert.match(read(`frontend/src/pages/founder/FounderGrow${zone}.jsx`), /growTabs\(query,/, `Grow · ${zone} uses the shared operating areas`);
   }
+  assert.match(read('frontend/src/pages/cycles/GrowOverview.jsx'), /to=\{'\/build\/brand' \+ projectSearch\(search\)\}>Company · Brand<\/Link>/, 'the Company utility retains the existing Brand builder deep link');
   checks.doors(actual);
 });
 

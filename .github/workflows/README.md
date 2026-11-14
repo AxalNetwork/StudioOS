@@ -69,7 +69,7 @@ with the ones ahead of it is taken out of the queue with the reason.
 | applied migrations unchanged | `migration-immutability.yml` | diffs against `merge_group.base_sha` |
 | scan | `gitleaks.yml` | scans `merge_group.base_sha..head_sha` |
 | `merge-control-deploy.yml` | D5618: independent SQLite DO/Queue control Worker; main only and disabled until explicitly enabled | main pushes touching Merge Control, manual | `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; `MERGE_CONTROL_DEPLOY_ENABLED` |
-| `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes | hourly and manual | `contents: read`, `issues: write`, `pull-requests: write` |
+| `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes. D5580: hunk risk classes, per-PR evidence and a dated 30-day snapshot artifact | hourly and manual | `actions: read`, `checks: read`, `contents: read`, `issues: write`, `pull-requests: write` |
 | `claims-reaper.yml` | D5617: comments once per expired atomic task claim, never deletes refs | hourly and manual | `contents: read`, `issues: write` |
 
 Only these three workflows listen for `merge_group`. Previews, reviews,
@@ -178,3 +178,5 @@ D5675: the meeting-bot deploy verifies the exact deployed preview revision and s
 its exact Worker candidate on a disposable Linux runner using isolated workerd.
 It uses synthetic queue responses and has no production credentials.
 | `cloudflare-heartbeat-5671.yml` | D5671: disabled-by-default fixed-period fallback check; no PR secrets or per-event job. |
+| `agent-compute-image.yml` | D4557: read-only PR image validation; no publishing, credentials or deployment. |
+| `agent-compute-preview.yml` | D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement. |

@@ -47,6 +47,7 @@ reply against its schema, not only that the route exists.
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |
 | `deckTypedTables.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the deck and the venture's typed figures, graded Stated. |
 | `deckWithdrawInvestorLink.schema.json` | `POST /api/decks/:id/investor-links/:shareId/withdraw` (D1565, #3812): ok and the withdrawn link. |
+| `deckShareWalkthrough.schema.json` | `GET /api/decks/share/:token/walkthrough` (D5791, #5791): the walkthrough attached to one investor share link, each take of a card the link sends with its card uid and captions. Not in `CONTRACTS`: the share viewer calls its own client, as the other share reads do, so `deck_share_walkthrough_d5791.test.ts` checks the reply against it. |
 | `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
 | `deckModelPresets.schema.json` | `GET /api/decks/:id/model-presets` (D1549, #3796): the preset in force, the stored one, and per element group each preset's model, the resolved model and HQ's lock. |

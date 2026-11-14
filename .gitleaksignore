@@ -295,3 +295,6 @@ e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_ac
 # #4662: an in-memory mail test used a synthetic replay identifier. The fixture
 # now generates its identifier at runtime. Scope this to the original finding.
 25221cd018338be7d3de1fc71696bd28c1b5debc:cloudflare-worker/test/mail_conversation_history_4662.test.ts:generic-api-key:94
+# #5791: the share-walkthrough frontend test used a base64-looking placeholder share token (synthetic, never a
+# credential). The fixture now uses 'synthetic-share-token-5791-not-a-jwt'. Scope this to the original finding.
+19ffa0d4df299a7c7523026e7c5e6aa8261c61ce:frontend/test/share_walkthrough_d5791.test.mjs:generic-api-key:32

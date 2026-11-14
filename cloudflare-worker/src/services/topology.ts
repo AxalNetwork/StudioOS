@@ -124,6 +124,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
   // D1581 (#3828): the phone remote for Present.
   { name: 'DECK_REMOTE', kind: 'Durable Object namespace', hq: 'DeckRemote', branch: () => 'DeckRemote', shared: false },
+  // D5581 part 2 (#5581): WorkGraph leases, one object per tenant, company and asset.
+  { name: 'WORK_GRAPH_LEASE', kind: 'Durable Object namespace', hq: 'WorkGraphLease', branch: () => 'WorkGraphLease', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize.VECTORIZE, shared: false },
   // D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions).
   { name: 'DECK_QUOTES', kind: 'Vectorize index', hq: 'axal-deck-quotes', branch: (c) => branchResourceNames(c).vectorize.DECK_QUOTES, shared: false },
@@ -192,6 +194,7 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('gameHoldings', true),
       m('applyLicence', true),
       m('applyPromoCeiling', true),
+      m('promoCeilingReadback', true),
       m('applyEscalationAnswer', true),
       // D1003 — HQ's decision on a segment suggestion (persona_segments.ts). HQ-authored, no secret.
       m('applySegmentSuggestionAnswer', true),
@@ -250,8 +253,18 @@ export const NOT_FROM_ANALYTICS = [
 
 // ── deploys, secrets and access ─────────────────────────────────────────────
 
-/** Every workflow that runs `wrangler deploy`, and what each one deploys. */
+/** Every workflow invoking `wrangler deploy`, explicitly distinguishing offline validation from publication. */
 export const DEPLOY_WORKFLOWS = [
+  {
+    file: 'agent-compute-image.yml',
+    trigger: 'on each pull request affecting general compute',
+    deploys: 'nothing: validates offline Worker packaging with --dry-run and builds/scans the image without publishing or Cloudflare credentials',
+  },
+  {
+    file: 'agent-compute-preview.yml',
+    trigger: 'by hand from main; owner dispatch and independent environment approval required',
+    deploys: 'only the separately configured general compute preview host, with admission disabled; no production binding or enablement',
+  },
   {
     file: 'cloudflare-worker-deploy.yml',
     trigger: 'on every push to main, or by hand',

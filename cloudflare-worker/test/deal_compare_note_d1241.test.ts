@@ -117,6 +117,31 @@ test('the material carries a scope\'s state, band and confidence, never its valu
   assert.deepEqual(Object.keys(m[1]), ['ref', 'deal_id', 'name', 'locked', 'scopes']);
 });
 
+test('saved comparison notes and draft receipts follow current deal access', async () => {
+  const f = fixture();
+  const draft = await f.call(1, 'POST', '/compare-note', { deal_ids: [101, 102] });
+  assert.equal(draft.status, 200);
+  assert.equal((await f.call(1, 'POST', '/compare-note/keep', { receipt: draft.body.receipt })).status, 200);
+  f.db.exec('DELETE FROM deal_invitations WHERE deal_id = 102 AND investor_user_id = 1');
+  const read = await f.call(1, 'GET', '/compare-note?ids=101,102');
+  assert.deepEqual(read.body, { items: [], unreadable: 0 });
+  assert.equal((await f.call(1, 'POST', '/compare-note/keep', { receipt: draft.body.receipt })).status, 404);
+  assert.equal(f.count('research_zone_drafts'), 1);
+  assert.equal(f.count('activity_logs', "action = 'eadwyn_compare_note_saved'"), 1);
+});
+
+test('unreadable comparison-note rows are counted when another note is withheld', async () => {
+  const f = fixture();
+  const draft = await f.call(1, 'POST', '/compare-note', { deal_ids: [101, 102] });
+  assert.equal(draft.status, 200);
+  assert.equal((await f.call(1, 'POST', '/compare-note/keep', { receipt: draft.body.receipt })).status, 200);
+  f.db.exec(`INSERT INTO research_zone_drafts (uid, owner_user_id, surface, scope_key, body, accepted_at)
+    VALUES ('unreadable-fixture', 1, 'deals/compare-note', 'deals:101,102', '{}', datetime('now'))`);
+  f.db.exec('DELETE FROM deal_invitations WHERE deal_id = 102 AND investor_user_id = 1');
+  const read = await f.call(1, 'GET', '/compare-note?ids=101,102');
+  assert.deepEqual(read.body, { items: [], unreadable: 1 });
+});
+
 test('a draft that names a value or gives advice is not shown; a refused run answers in its own words', async () => {
   const f = fixture();
   f.set({ ok: true, output: JSON.stringify({ text: 'Acme Robotics scores 78 on Team.' }), usage: { est_cost_usd: 0.0001 } });

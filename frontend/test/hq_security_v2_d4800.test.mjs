@@ -338,7 +338,10 @@ test('"Checked and clear" lists measured zeros with what was read, and only chec
   assert.equal(model(sc).areas.find((a) => a.id === 'sessions').state, 'unavailable', 'a missing session count read as 0 active sessions');
 });
 
-test('status by area: eight cells, no score, and Subprocessor notices Not instrumented', () => {
+test('status by area: eight cells, UTC timestamps, and no score', (t) => {
+  const zone = process.env.TZ;
+  process.env.TZ = 'Europe/Zurich';
+  t.after(() => { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; });
   const areas = model().areas;
   assert.deepEqual(areas.map((a) => a.title), ['Authentication', 'Sessions & access', 'Privacy & DSR', 'Trust & sanctions', 'AI safety', 'Backup & recovery', 'Security events', 'Subprocessor notices']);
   const by = Object.fromEntries(areas.map((a) => [a.id, a]));

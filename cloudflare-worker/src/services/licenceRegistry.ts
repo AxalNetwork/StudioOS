@@ -11,13 +11,14 @@
  *   - A store this database does not have is "Not recorded" with its reason (`notRecorded`), never an empty list.
  *   - A store that fails to read is "Unreadable" for that section of every row (`unreadable`), never zero and
  *     never "none".
- *   - A user licence's program entitlements are #5059's: `programs` is Not recorded, naming #5059.
+ *   - The user licence detail reads program entitlements from D5059. The ledger does not expand those reads.
  *   - A user licence agreement is the e-sign envelope of its Contracts template
  *     (`USER_LICENCE_AGREEMENT_TEMPLATES`, `services/contractAgreementSources.ts`). The agreement this read names
  *     is the envelope uuid, the same `agreement_uid` Contracts' row carries for it.
  *
  * Every statement is literal SQL with its values bound; lists ride `json_each(?)`. No `${…}` reaches a query.
  */
+import { entitlementsOfLicence } from './programEntitlements';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { eventsOf } from './userLicences';
@@ -56,7 +57,8 @@ const missing = (e: unknown) => MISSING_TABLE.test(String((e as Error)?.message 
 const HOLDER = /^(user|entity):[A-Za-z0-9_:-]{1,120}$/;
 const STATUS = /^[a-z_]{1,40}$/;
 const UID = /^[A-Za-z0-9_-]{1,80}$/;
-export const ENTITLEMENTS_REASON = 'Program entitlements from a user licence are not recorded yet: #5059 derives them from the licences held.';
+// D5060 part 3: #5059 has merged, so the entitlements exist; the ledger page only does not expand them per row.
+export const ENTITLEMENTS_REASON = 'The ledger does not expand a user licence’s program entitlements (#5059); the licence detail reads them.';
 
 export type RegistryQuery = { family: RegistryFamily; holder: { type: string; id: string } | null; status: string | null; q: string | null; limit: number; after: string | null };
 
@@ -428,9 +430,15 @@ export async function registryDetail(env: Env, uid: string) {
   const accountId = /^[1-9][0-9]*$/.test(String(row.holder_id)) ? Number(row.holder_id) : null;
   const account = accountId === null ? null
     : await env.DB.prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?').bind(accountId).first<any>();
-  const users = await section(() => userAgreements(env, accountId === null ? [] : [accountId]));
+  const [users, events, entitlementRead] = await Promise.all([
+    section(() => userAgreements(env, accountId === null ? [] : [accountId])),
+    section(() => eventsOf(env, { uid })),
+    section(() => entitlementsOfLicence(env, uid)),
+  ]);
   const tpl = userLicenceTemplateFor(row.licence_type);
-  const events = await section(() => eventsOf(env, { uid }));
+  const programs = entitlementRead.ok
+    ? { available: true, items: entitlementRead.value.programs, on: entitlementRead.value.on, agreements: entitlementRead.value.agreements }
+    : entitlementRead.missing ? notRecorded('The program entitlement store is not on this database.') : unreadable('The program entitlements');
   const history = events.ok
     ? { available: true, items: events.value }
     : events.missing
@@ -455,9 +463,9 @@ export async function registryDetail(env: Env, uid: string) {
       account: account
         ? { available: true, user_id: account.id, name: account.name ?? null, email: account.email ?? null, role: account.role ?? null, is_active: Number(account.is_active) === 1 }
         : notRecorded('No account with this holder id is on file.'),
-      entitlements: notRecorded(ENTITLEMENTS_REASON),
+      entitlements: programs,
     },
-    programs: notRecorded(ENTITLEMENTS_REASON),
+    programs,
     packages: base.packages,
     agreement: {
       primary: base.agreement,

@@ -28,7 +28,7 @@
  * dispute entry (D514), the ceiling editor (D228) and the refund (D224, behind
  * the step-up) are today's controls in the sections that own them.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { adminStatementActionsApi } from '../../lib/api/adminStatementActions';
 import { reportError } from '../../lib/log';
@@ -63,6 +63,10 @@ export { TokenPnl } from './revenue/RevenueStreams';
 
 export default function RevenuePage() {
   const [period, setPeriod] = useState(null);       // null until the first summary names the current quarter
+  const [currentPeriod, setCurrentPeriod] = useState(null); // keep the server's quarter list usable during a refresh
+  const [stream, setStream] = useState('all');
+  const summaryRequest = useRef(0);
+  const statementsRequest = useRef(0);
   const [scope, setScope] = useState(null);         // a licence uid, or null for all subsidiaries
   const [data, setData] = useState(null);            // null = loading, UNAVAILABLE = failed
   // Disputes load separately on purpose: they are the one figure that comes
@@ -82,11 +86,14 @@ export default function RevenuePage() {
   const [statementUid, setStatementUid] = useState(null);
 
   const load = useCallback((p) => {
+    const generation = ++summaryRequest.current;
     setData(null);
     api.hqRevenue(p || undefined).then((r) => {
+      if (generation !== summaryRequest.current) return;
       setData(r);
+      setCurrentPeriod(r?.current_period || r?.quarter?.key || null);
       setPeriod((cur) => cur || r?.quarter?.key || r?.current_period || null);
-    }, (e) => { reportError('hq-revenue', e); setData(UNAVAILABLE); });
+    }, (e) => { if (generation === summaryRequest.current) { reportError('hq-revenue', e); setData(UNAVAILABLE); } });
   }, []);
   const loadDisputes = useCallback(() => {
     setDisputes(null);
@@ -104,8 +111,10 @@ export default function RevenuePage() {
   }, []);
   const loadPeriodStatements = useCallback((p) => {
     if (!p) return;
+    const generation = ++statementsRequest.current;
     setPeriodStatements(null);
-    api.statements(p).then(setPeriodStatements, (e) => {
+    api.statements(p).then((r) => { if (generation === statementsRequest.current) setPeriodStatements(r); }, (e) => {
+      if (generation !== statementsRequest.current) return;
       reportError('hq-revenue-statements-period', e);
       setPeriodStatements(UNAVAILABLE);
     });
@@ -135,14 +144,11 @@ export default function RevenuePage() {
     api.statements().then(setStatements, (e) => reportError('hq-revenue-statements', e));
     loadPeriodStatements(period);
   }, [loadPeriodStatements, period]);
-  const updateStatement = useCallback(async (uid, body) => {
-    const r = await api.statementUpdate(uid, body);
-    refreshStatements();
-    return r;
-  }, [refreshStatements]);
   // D5039 — a governed action: Record a payment, Mark issued or Void.
   const actOnStatement = useCallback((kind, uid, body) => (
     kind === 'record_payment' ? adminStatementActionsApi.recordPayment(uid, body)
+      : kind === 'record_dispute' ? adminStatementActionsApi.recordDispute(uid, body)
+      : kind === 'set_due_date' ? adminStatementActionsApi.setDueDate(uid, body)
       : kind === 'void' ? adminStatementActionsApi.void(uid, body)
         : adminStatementActionsApi.issue(uid, body)
   ), []);
@@ -163,7 +169,6 @@ export default function RevenuePage() {
   };
 
   const ready = isReady(data);
-  const currentPeriod = ready ? data.current_period : null;
   const shownPeriod = period || (ready ? data.quarter.key : null);
   const nowMs = Date.now();
   const usageCoverage = ready ? data.usage_coverage : null;
@@ -214,6 +219,7 @@ export default function RevenuePage() {
     <RailFrame rail={rail} data-testid="hq-revenue-page">
       <div className="flex min-w-0 flex-col gap-4">
         <RevenueHeader
+          stream={stream} onStream={setStream}
           period={shownPeriod}
           periods={periodOptions(currentPeriod)}
           onPeriod={choosePeriod}
@@ -252,7 +258,7 @@ export default function RevenuePage() {
           onRetryDisputes={loadDisputes}
         />
         <NeedsAttention items={attention} onStatement={setStatementUid} />
-        <RevenueStreams summary={data} periodStatements={periodStatements} period={shownPeriod} onWhy={why} />
+        <RevenueStreams stream={stream} summary={data} periodStatements={periodStatements} period={shownPeriod} onWhy={why} />
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <RevenueTrend period={shownPeriod} onWhy={why} />
           <AiEconomicsSection summary={data} period={shownPeriod} onWhy={why} />
@@ -305,7 +311,6 @@ export default function RevenuePage() {
         <StatementDrawer
           statement={openStatement}
           onClose={() => setStatementUid(null)}
-          onUpdate={updateStatement}
           onAction={actOnStatement}
           onChanged={refreshStatements}
         />

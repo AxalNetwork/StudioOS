@@ -147,6 +147,7 @@ export function startOptions(versions = [], methods = []) {
       slide_count: m.slide_count ?? null,
       best_for: m.best_for ?? null,
       category: m.category ?? null,
+      slides: Array.isArray(m.slides) ? m.slides.map(({ id, title }) => ({ id, title })) : [],
     })),
   ];
 }

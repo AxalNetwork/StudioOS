@@ -22,6 +22,7 @@
  * investor's email address so the founder can write; the investor is told the
  * founder accepted, and never receives the founder's address here.
  */
+import { memberProgramRefusal } from '../services/programEnforcement';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -47,6 +48,8 @@ async function verifiedSelf(c: C): Promise<{ id: number; name: string | null; fi
   if (!isVerifiedInvestor(u)) {
     return refuse(c, 403, { code: 'not_verified', message: 'Cohort access is for verified investors: an active account and approved KYC.' });
   }
+  const denied = await memberProgramRefusal(c, user.id, 'investor-cohorts');
+  if (denied) return denied;
   return { id: Number(u!.id), name: u!.name ?? null, firm: u!.firm ?? null };
 }
 

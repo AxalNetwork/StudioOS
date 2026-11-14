@@ -16,6 +16,7 @@ a public price list: no real person, venture, figure or credential.
 | `adversarial_4572/corpus.json` | D4572 (#4572): the versioned adversarial corpus — injection texts, tool-name variants, refused MCP URLs with their reasons, private and public addresses. Add under a new `version`; never edit an entry a test relies on | `agent_tool_boundary_4572.test.ts` |
 | `chromiumTaggedDeck.ts` | D1578: a synthetic page printed by Chromium with `tagged: true`, as base64 | `deck_tagged_exports_d1578.test.ts` |
 | `ai_gateway_4556.json` | D4556: the AI Gateway slice's price, ZDR, logging and limit facts, each with its Cloudflare page and the date read | `ai_gateway_slice_4556.test.ts` |
+| `accounting/` | D5833 (#5833): synthetic QuickBooks Online and Xero balance-sheet and profit-and-loss reports, in each provider's JSON shape, with negative, zero, empty and unreadable cells and two fiscal periods | `financial_statements_5833.test.ts` |
 
 ## Rules
 

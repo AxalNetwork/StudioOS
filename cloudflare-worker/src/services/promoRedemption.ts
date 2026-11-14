@@ -175,7 +175,7 @@ export function promoRefusalBody(r: Refusal): Record<string, unknown> {
 //   (r.state = 'committed' OR (r.state = 'reserved' AND r.expires_at > ?))
 
 /** The ceiling in force, `null` where HQ has recorded none for this period, or a refusal where it cannot be read. */
-async function readCeiling(env: Env, now: number, ownRefPrefix?: string): Promise<CeilingFigures | Refusal | null> {
+export async function readCeiling(env: Env, now: number, ownRefPrefix?: string): Promise<CeilingFigures | Refusal | null> {
   // The prefix of this checkout's own hold ("<reference>#<discount>"); a sentinel no ref starts with when it has none.
   const own = ownRefPrefix === undefined ? '\u0001' : `${ownRefPrefix}#`;
   try {

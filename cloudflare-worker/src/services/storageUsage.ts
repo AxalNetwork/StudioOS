@@ -32,7 +32,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
   | 'data_room_versions' | 'session_audio' | 'grow_voice_notes' | 'deck_reviews' | 'deck_rehearsals' | 'deck_recordings' | 'validate_evidence' | 'build_proofs'
-  | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles';
+  | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles' | 'agent_compute';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
 export type StorageArea = {
@@ -287,6 +287,13 @@ const AREAS: ReadonlyArray<Def> = [
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND TRIM(raw_file_r2_key) <> '' AND size_missing_at IS NULL
       GROUP BY user_id` },
+  { key: 'agent_compute', kind: 'documents', scope: 'personal',
+    groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
+      FROM agent_compute_objects WHERE owner_user_id = ?`,
+    largest: `SELECT name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
+      FROM agent_compute_objects WHERE owner_user_id = ? ORDER BY size_bytes DESC, uid LIMIT 10`,
+    owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
+      FROM agent_compute_objects GROUP BY owner_user_id` },
 ];
 
 /**

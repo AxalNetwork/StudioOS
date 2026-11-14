@@ -39,6 +39,7 @@
  */
 import type { Env } from '../types';
 import { IN_FLIGHT, agreementsOfLicence, type AgreementRow } from './programAgreements';
+import { unresolvedFields } from './licenceContract';
 import { presentGrant, type LicenceLite } from './programGrants';
 
 export const STRATEGIES = ['per_program', 'package_master', 'none'] as const;
@@ -232,13 +233,17 @@ export async function latestPolicy(env: Env, scopeKind: ScopeKind, scopeKey: str
 
 /** The licence's holdings with the policy version each one froze. `all` includes superseded holdings. */
 export async function holdingsOf(env: Env, licenceUid: string, all = false): Promise<Holding[]> {
+  return holdingsForLicences(env, [licenceUid], all);
+}
+
+async function holdingsForLicences(env: Env, licenceUids: string[], all = false): Promise<Holding[]> {
   const q = await env.DB.prepare(
     `SELECT h.*, p.uid AS p_uid, p.scope_kind AS p_scope_kind, p.scope_key AS p_scope_key, p.version AS p_version, p.strategy AS p_strategy,
             p.legal_gate AS p_legal_gate, p.programs_json AS p_programs_json, p.required_schedules_json AS p_required_schedules_json,
             p.reason AS p_reason, p.created_at AS p_created_at, p.created_by_user_id AS p_created_by_user_id
        FROM licence_agreement_policy_holdings h JOIN licence_agreement_policies p ON p.uid = h.policy_uid
-      WHERE h.licence_uid = ? AND (? = 1 OR h.superseded_at IS NULL) ORDER BY h.id`,
-  ).bind(licenceUid, all ? 1 : 0).all<Record<string, any>>();
+      WHERE h.licence_uid IN (SELECT value FROM json_each(?)) AND (? = 1 OR h.superseded_at IS NULL) ORDER BY h.id`,
+  ).bind(JSON.stringify(licenceUids), all ? 1 : 0).all<Record<string, any>>();
   return (q.results || []).map((r) => ({
     uid: r.uid, licence_uid: r.licence_uid, scope_kind: r.scope_kind, scope_key: r.scope_key, policy_uid: r.policy_uid,
     policy_version: Number(r.policy_version), origin: r.origin, package_offer_uid: r.package_offer_uid ?? null, frozen_at: r.frozen_at,
@@ -480,6 +485,41 @@ export async function readLicenceLegal(env: Env, licence: LicenceLite & { id: nu
   const programs = grants.map((g) => programLegalStatus(g, rows, requirementFor(String(g.program_key), holdings),
     { grantInForce: presentGrant(g, licence, today).in_force }));
   return { rows, grants, holdings, programs, replacements: replacementsRequired(rows, grants, holdings) };
+}
+
+/** Needs HQ flags for one ledger page. Query count stays fixed as the page grows. */
+export async function ledgerLegalSignals(env: Env, licences: LicenceLite[]) {
+  if (!licences.length) return new Map<string, string[]>();
+  const [agreementQuery, grantQuery, holdings] = await Promise.all([
+    env.DB.prepare(`SELECT * FROM licence_program_agreements
+      WHERE licence_uid IN (SELECT value FROM json_each(?)) ORDER BY slot_key, id DESC`)
+      .bind(JSON.stringify(licences.map((l) => l.uid))).all<AgreementRow & { body_md: string | null; unresolved_fields_json: string | null }>(),
+    env.DB.prepare('SELECT * FROM program_grants WHERE licence_id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(licences.map((l) => l.id))).all<Record<string, any>>(),
+    holdingsForLicences(env, licences.map((l) => l.uid)),
+  ]);
+  return new Map(licences.map((licence) => {
+    const rows = agreementQuery.results.filter((row) => row.licence_uid === licence.uid);
+    const grants = grantQuery.results.filter((grant) => grant.licence_id === licence.id);
+    const held = holdings.filter((holding) => holding.licence_uid === licence.uid);
+    const signals = new Set<string>();
+    for (const grant of grants.filter((g) => ['granted', 'paused'].includes(g.state))) {
+      const p = programLegalStatus(grant, rows, requirementFor(String(grant.program_key), held), { grantInForce: false });
+      if (p.requirement.documents.some((d) => p.missing.includes(d.slot_key) && !d.in_flight_agreement_uid)) signals.add('not_prepared');
+    }
+    for (const row of rows.filter((item) => IN_FLIGHT.includes(item.status))) {
+      if (row.status === 'sent' || row.status === 'partially_signed') {
+        signals.add('awaiting_signature');
+        continue;
+      }
+      let fields: unknown = [];
+      if (row.body_md) fields = unresolvedFields(row.body_md);
+      else if (row.unresolved_fields_json) fields = JSON.parse(row.unresolved_fields_json);
+      signals.add(Array.isArray(fields) && fields.length ? 'missing_fields' : 'awaiting_send');
+    }
+    if (replacementsRequired(rows, grants, held).length) signals.add('stale');
+    return [licence.uid, [...signals]] as const;
+  }));
 }
 
 /**

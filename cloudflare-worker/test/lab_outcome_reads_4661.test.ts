@@ -38,7 +38,9 @@ function world(): DatabaseSync {
   insertRow(db, 'projects', { id: 53, founder_id: 5030, name: 'Active Co' });
   db.prepare(`UPDATE spinout_lab_enrollments SET project_id = 51 WHERE user_id = ?`).run(GRAD);
   db.prepare(`UPDATE spinout_lab_enrollments SET project_id = 53 WHERE user_id = ?`).run(ACTIVE);
-  graduate(db, GRAD);
+  // The cohort only shows recent graduates. Use the clock that filters them.
+  const { at } = db.prepare("SELECT datetime('now', '-1 day') AS at").get() as { at: string };
+  graduate(db, GRAD, at);
   return db;
 }
 const emptyWorld = (): DatabaseSync => {

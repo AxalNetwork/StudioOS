@@ -25,6 +25,7 @@
  *
  * TERRITORY PROGRAM GRANTS (`program_grants`, D982) are not read or written here: they are what HQ grants a studio.
  */
+import { branchOf } from '../util/branch';
 import type { Env } from '../types';
 import { ACCESS_STATUSES, USER_LICENCE_TYPES, type UserLicenceStatus, type UserLicenceType } from './userLicences';
 import { PROGRAMS } from './programGrants';
@@ -232,12 +233,17 @@ export async function readRules(env: Env): Promise<Rule[]> {
 }
 
 /** The program names: the catalogue's nine and every program the registry added. */
-export async function programNames(env: Env): Promise<(key: string) => string> {
+export async function programOptions(env: Env) {
   const names = new Map(PROGRAMS.map((p) => [p.key, p.name]));
   try {
     const q = await env.DB.prepare('SELECT key, name FROM programs').all<{ key: string; name: string }>();
     for (const r of q.results || []) if (!names.has(r.key)) names.set(r.key, r.name);
   } catch { /* the registry is optional for a name: the key stands in */ }
+  return names;
+}
+
+export async function programNames(env: Env): Promise<(key: string) => string> {
+  const names = await programOptions(env);
   return (key: string) => names.get(key) ?? key;
 }
 
@@ -283,7 +289,7 @@ async function accountOf(env: Env, userId: number): Promise<Account | null> {
 }
 
 /** Every account in `userIds`, evaluated together: four statements whatever the number of accounts. */
-async function evaluateMany(env: Env, userIds: number[], day: string) {
+export async function evaluateMany(env: Env, userIds: number[], day: string) {
   const [licences, rules, grants, name] = await Promise.all([heldLicencesOf(env, userIds), readRules(env), grantsOf(env, userIds), programNames(env)]);
   const agreements = await readAgreements(env, licences.map((l) => l.uid));
   const by = new Map<number, Entitlement[]>();
@@ -299,6 +305,27 @@ const licenceView = (l: HeldLicence) => ({
   uid: l.uid, licence_ref: l.licence_ref, licence_type: l.licence_type, licence_type_label: LICENCE_TYPE_LABEL[l.licence_type],
   status: l.status, revision: l.revision, valid_source: ACCESS_STATUSES.includes(l.status as UserLicenceStatus),
 });
+
+/**
+ * Apply the licence entitlement alongside a program's existing participation checks.
+ * Rollout is explicit because the policy seed only creates eligibility rules.
+ */
+export async function checkMemberProgramEntry(env: Env, userId: number, programKey: string) {
+  if (env.PROGRAM_ENTITLEMENT_ENFORCEMENT !== 'true' || branchOf(env)) return 'allowed';
+  try {
+    const day = todayUtc();
+    const [licences, rules, grants] = await Promise.all([heldLicencesOf(env, [userId]), readRules(env), grantsOf(env, [userId])]);
+    const agreements = await readAgreements(env, licences.map((licence) => licence.uid));
+    const program = evaluateEntitlements({ licences, rules, grants, agreements, day, programName: (key) => key })
+      .find((entry) => entry.program_key === programKey);
+    if (program?.in_force) return 'allowed';
+    if (program?.blockers.some((blocker) => blocker.code === 'agreement_unreadable')) return 'unavailable';
+    return 'blocked';
+  } catch (error) {
+    console.warn('[program-entitlements] entry read failed', error);
+    return 'unavailable';
+  }
+}
 
 /** One account: the licences it holds and every program they make it eligible for, or that HQ granted it. */
 export async function entitlementsOfAccount(env: Env, userId: number, day = todayUtc()) {

@@ -86,6 +86,19 @@ export async function dealAudiences(env: Env, user: User, deals: Array<{ id: num
 export const namesInvestors = (a: DealAudience) => a === 'staff' || a === 'owner';
 /** Whether this audience may see the studio's internal fields. */
 export const seesStudioInternals = (a: DealAudience) => a === 'staff';
+
+/** Deal-linked workspace reads use the same audience and exclude deleted ventures. */
+export async function readableWorkspaceDealIds(env: Env, user: User, dealIds: readonly number[]): Promise<Set<number>> {
+  const ids = [...new Set(dealIds.filter((id) => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return new Set();
+  const { results } = await env.DB.prepare(`
+    SELECT d.id, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
+    WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) AND p.deleted_at IS NULL
+  `).bind(JSON.stringify(ids)).all<{ id: number; founder_id: number | null }>();
+  const audiences = await dealAudiences(env, user, results);
+  return new Set([...audiences].filter(([, audience]) => audience !== 'none').map(([id]) => id));
+}
+
 /**
  * Whether the caller is exempt from the venture's NDA: the platform admin, or the venture's own founder. An
  * Operating Partner reads every deal (#2460 keeps them outside members, not studio staff), so they sign the NDA.
@@ -99,7 +112,7 @@ export const ndaExempt = (user: User, projectFounderId: number | null | undefine
  * round call's room). In force means a `pairwise_ndas` row with an ACTIVE account of the venture's founder as
  * party A and the reader as party B, `status = 'active'`, and no `valid_until` or one later than now as SQLite's
  * `datetime()` reads it (a date it cannot read is not in force). Every other status (pending, partially signed,
- * expired, revoked) is not an NDA in force. The three helpers are the same predicate keyed three ways; each
+ * expired, revoked) is not an NDA in force. Both helpers apply the same predicate; each
  * statement is literal and binds every value.
  */
 
@@ -124,17 +137,6 @@ export async function hasActiveVentureNda(env: Env, projectId: number, readerId:
         AND n.status = 'active' AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
       LIMIT 1`,
   ).bind(projectId, readerId).first();
-  return !!row;
-}
-
-/** The same rule for one named pair: what the data room asks before it sends a new NDA to that pair. */
-export async function hasActivePairNda(env: Env, partyAUserId: number, readerId: number): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `SELECT 1 AS ok FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
-      WHERE n.party_a_user_id = ? AND COALESCE(owner.is_active, 1) = 1 AND n.party_b_user_id = ?
-        AND n.status = 'active' AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
-      LIMIT 1`,
-  ).bind(partyAUserId, readerId).first();
   return !!row;
 }
 

@@ -20,6 +20,7 @@
  * or an invite-only one the caller is not in or assigned to, answers 404 on
  * the detail read, so its uid is not confirmed to exist.
  */
+import { memberProgramRefusal } from '../services/programEnforcement';
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
@@ -228,6 +229,8 @@ r.post('/programs/:uid/enrol', async (c) => {
     // Only the Super Admin removes a member, and a member cannot undo that.
     return refuse(c, 403, { code: 'removed', message: 'You were removed from this program; ask its administrator.' });
   }
+  const denied = await memberProgramRefusal(c, user.id, 'learning');
+  if (denied) return denied;
   const t = new Date().toISOString();
   // The member's own row only: the user id is the session's. The enrolment
   // event (D954 §6) lands in the same batch, so neither lands without the other.

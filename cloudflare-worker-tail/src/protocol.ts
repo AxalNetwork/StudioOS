@@ -4,7 +4,9 @@ export type ArchiveNotice={version:1;source:'studioos-tail';batch_id:string;obje
 export function archiveNotice(value:unknown):ArchiveNotice{
  const n=value as ArchiveNotice;
  if(!n||Object.keys(n).some(k=>!['version','source','batch_id','object_key','events','bytes','attempt','state','observed_ms','lost_events','markers'].includes(k))||n.version!==1||n.source!=='studioos-tail'
-  ||!(/^[a-f0-9]{64}$/).test(n.batch_id)||!new RegExp(`^(?:\\d{4}/\\d{2}/\\d{2}/\\d{2}|undated)/${n.batch_id}\\.ndjson$`).test(n.object_key)
+  ||!(/^[a-f0-9]{64}$/).test(n.batch_id)||(typeof n.object_key !== 'string'
+    || !/^(?:\d{4}\/\d{2}\/\d{2}\/\d{2}|undated)\/[a-f0-9]{64}\.ndjson$/.test(n.object_key)
+    || !n.object_key.endsWith(`/${n.batch_id}.ndjson`))
   ||!Number.isSafeInteger(n.events)||n.events<1||n.events>1000||!Number.isSafeInteger(n.bytes)||n.bytes<0||n.bytes>4*1024*1024
   ||!Number.isSafeInteger(n.attempt)||n.attempt<0||n.attempt>3||!['received','retry','confirmed','exhausted'].includes(n.state)||!Number.isSafeInteger(n.observed_ms)||n.observed_ms<0
   ||!Number.isSafeInteger(n.lost_events)||n.lost_events<0||n.lost_events>n.events||!Array.isArray(n.markers)||n.markers.length>16||n.markers.some(m=>!(/^[a-f0-9]{32}$/).test(m))||new Set(n.markers).size!==n.markers.length)throw Error('invalid_archive_notice');

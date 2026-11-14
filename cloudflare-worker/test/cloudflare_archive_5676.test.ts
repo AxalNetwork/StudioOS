@@ -72,6 +72,9 @@ test('observer has independent role keys, rejects forged metadata and never expo
   assert.equal((await observer.fetch(request(await archiveMac(secret,path,raw,at)),{...e,ARCHIVE_OBSERVER_ENABLED:'off'})).status,404);
   const body=JSON.stringify({opened_ms:0}),checkPath='/check';assert.equal((await observer.fetch(new Request('https://observer.internal'+checkPath,{method:'POST',body,headers:{'x-archive-timestamp':String(at),'x-archive-signature':await archiveMac(e.ARCHIVE_READER_SECRET,checkPath,body,at)}}),e)).status,422,'reader cannot choose an incident recovery time');
   await assert.rejects(recordArchiveNotice(f.db,{...n,raw_tail:'never accept'}));
+  const otherBatch = (n.batch_id[0] === 'a' ? 'b' : 'a').repeat(64);
+  const mismatchedKey = n.object_key.replace(n.batch_id, otherBatch);
+  await assert.rejects(recordArchiveNotice(f.db, { ...n, object_key: mismatchedKey }), /invalid_archive_notice/);
  }finally{f.sql.close();}
 });
 

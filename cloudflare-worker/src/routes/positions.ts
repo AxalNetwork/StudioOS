@@ -18,6 +18,9 @@
  *               company), with those funds' marks and distributions and the
  *               firm-level marks of the same companies
  * A company the caller both holds and reaches as GP reads as held.
+ * Part 4: the five reads admit a GP of record without an investor licence to
+ * their funds' companies only (no held rows); a caller with neither the
+ * licence nor a fund is 403, as before. Writes stay admin-only.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -85,6 +88,13 @@ async function latestMarksByProject(env: Env, projectIds: number[] | null = null
  * loses the arm on the next read. `gpOnly` is the companies reached through
  * that arm alone, where the caller reads their funds' rows and not the whole
  * company. The CSVs feed the bound `instr` predicates below.
+ *
+ * D4636 part 4: the scope is also the licence gate of the five reads. A caller
+ * who passes `canViewLpData` (admin or an investor licence) is scoped as in
+ * part 3. A caller who fails it but runs at least one fund is admitted to
+ * their funds' companies only: `held` is forced to [] rather than read, because
+ * `investorHeldProjectIds` answers null ("every row") for a caller without the
+ * investor licence. Anyone else gets null, which each read answers with 403.
  */
 type PositionScope = {
   held: number[] | null;
@@ -97,12 +107,15 @@ type PositionScope = {
   visibleCsv: string | null;
 };
 
-async function positionScope(c: any, user: any): Promise<PositionScope> {
-  const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+async function positionScope(c: any, user: any): Promise<PositionScope | null> {
+  const licensed = canViewLpData(user);
+  // Never the held read without the licence: it is null, every row, for a non-investor.
+  const held = licensed ? await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user)) : [];
   if (held == null) {
     return { held: null, funds: [], gpOnly: [], heldCsv: null, fundCsv: '', gpOnlyCsv: '', visibleCsv: null };
   }
   const funds = await managedFundIds(c, user);
+  if (!licensed && funds.length === 0) return null;
   let gpOnly: number[] = [];
   if (funds.length > 0) {
     const fundCsv = funds.join(',');
@@ -164,8 +177,8 @@ function gpScopeStatement(scope: PositionScope) {
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const scope = await positionScope(c, user);
+    if (!scope) return c.json({ detail: 'Forbidden' }, 403);
     // D4644: this list honours `as_of` the way the metrics read below already
     // did. Before, the list always used the latest mark ever recorded while the
     // metrics beside it used the mark as of the requested date, so one page
@@ -300,8 +313,8 @@ r.get('/', async (c) => {
 r.get('/marks', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const scope = await positionScope(c, user);
+    if (!scope) return c.json({ detail: 'Forbidden' }, 403);
     // A book with no accessible projects reads as empty rather than as
     // unscoped: `investorProjectIds` returning [] must not become "all rows".
     if (scope.held != null && scope.held.length === 0 && scope.gpOnly.length === 0) {
@@ -352,8 +365,8 @@ r.get('/marks', async (c) => {
 r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const scope = await positionScope(c, user);
+    if (!scope) return c.json({ detail: 'Forbidden' }, 403);
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
 
     const [positions, distributions, marks] = await Promise.all([
@@ -438,8 +451,8 @@ r.get('/analytics', async (c) => {
 r.get('/kpi-compliance', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const scope = await positionScope(c, user);
+    if (!scope) return c.json({ detail: 'Forbidden' }, 403);
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
     // #4647 (D4647): THE DEFAULT IS THE LAST COMPLETED PERIOD.
@@ -541,10 +554,12 @@ r.get('/kpi-compliance', async (c) => {
 r.get('/:projectUid', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    // D4636 part 4: gated before the lookup, so a caller with neither the licence nor a fund
+    // still gets 403 whether or not the company exists, as before.
+    const scope = await positionScope(c, user);
+    if (!scope) return c.json({ detail: 'Forbidden' }, 403);
     const proj = await c.env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('projectUid')).first<any>();
     if (!proj) return c.json({ detail: 'Not found' }, 404);
-    const scope = await positionScope(c, user);
     const pid = Number(proj.id);
     const asHolder = scope.held == null || scope.held.includes(pid);
     if (!asHolder && !scope.gpOnly.includes(pid)) return c.json({ detail: 'Forbidden' }, 403);
