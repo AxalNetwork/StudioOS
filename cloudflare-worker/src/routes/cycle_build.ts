@@ -30,6 +30,8 @@ import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
+import { csvCell } from '../services/capTableRegister';
+import { csvResponse, stamp } from '../services/csv';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -1296,6 +1298,45 @@ app.get('/modules/:slug', async c => {
   return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
     ...(result.paged ? { rows: result.rows, ...result.paged } : pageBuildRows(result.rows, query, PAGE_SIZE, { orders: list?.orders, defaultSort: list?.sort.key })), filters, sorts,
     ...(result.add ? { add: result.add } : {}), linkable: hasRecords('build') }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
+});
+
+/**
+ * D6043 (#6043): the most rows one export writes. Past it the export refuses
+ * with 413 and the matching count, so a file is never silently short; a
+ * search or a filter narrows it. #4603 bounds what a read pulls per page; an
+ * export is the one read that wants every matching row, so it is bounded
+ * here instead, at a size well past any venture's list today.
+ */
+export const EXPORT_ROW_CAP = 5000;
+const NOT_RECORDED = 'Not recorded';
+/** A cell as the export writes it: its words, never a file; an empty cell is Not recorded. */
+function exportText(cell: Cell): string {
+  const t = cell == null ? '' : typeof cell === 'object' ? cell.text : String(cell);
+  return t === '' ? NOT_RECORDED : t;
+}
+
+/**
+ * D6043 (#6043): a module's records list as CSV. The page read's columns, its
+ * search, filters and sort (`pageBuildRows`, the in-memory path D4603's SQL
+ * pages agree with), and its access gate (`context`). Every matching row up to
+ * EXPORT_ROW_CAP; proof files are never read, the Proof column says their state.
+ */
+app.get('/modules/:slug/export', async c => {
+  const slug = c.req.param('slug') as Slug;
+  if (!Object.hasOwn(READS, slug)) return c.json({ detail: 'Module not found' }, 404);
+  const project = await context(c);
+  if (project instanceof Response) return project;
+  // The page's own read (its parts too: Prototype / MVP's Built column is drawn from GitHub and
+  // Vercel), with no `query`, so the reader returns every row and the page's paging filters them.
+  const result = await safeRead(slug, c.env, project, await requireAuth(c), FULL);
+  if (result.card.state === 'unreadable') return c.json({ detail: `${MODULES.find(m => m[0] === slug)![1]} is unreadable. Try again later.` }, 503);
+  const list = result.cols.length ? result.list : undefined;
+  const query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: '1' };
+  const matched = pageBuildRows(result.rows, query, EXPORT_ROW_CAP, { orders: list?.orders, defaultSort: list?.sort.key });
+  if (matched.total > EXPORT_ROW_CAP) return c.json({ detail: `This list has ${matched.total} matching rows; an export writes at most ${EXPORT_ROW_CAP}. Narrow it with a search or a filter.`, total: matched.total, cap: EXPORT_ROW_CAP }, 413);
+  const body = [result.cols.map(col => csvCell(col.label)).join(','),
+    ...matched.rows.map(row => result.cols.map(col => csvCell(exportText(row.cells[col.key] ?? null))).join(','))].join('\r\n');
+  return csvResponse(body, `${slug}-${project.id}-${stamp()}.csv`, { 'Cache-Control': 'no-store', 'X-Export-Rows': String(matched.total) });
 });
 
 // The existing MVP, OKR, cap table and obligation writers remain canonical for

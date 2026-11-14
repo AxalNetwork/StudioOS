@@ -8,6 +8,7 @@ import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
 import { Sources } from './CycleModulePage.jsx';
+import RecordsExport from './RecordsExport.jsx';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -75,7 +76,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = null,
   // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
   phoneRow: rowOf = phoneRow,
 }) {
@@ -199,6 +200,8 @@ export default function PhoneModulePage({
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}
       </div>
+      {/* D6043 (#6043): Export from the 'few' stage on, under the list, full width. */}
+      {rStatus === 'ready' && typeof onExport === 'function' && <div className="mt-3"><RecordsExport onExport={onExport} phone /></div>}
       {rStatus === 'ready' && count.pages > 1 && (
         <nav aria-label="Pages" className="mt-2 flex items-center justify-between gap-2" data-testid="phone-module-pages">
           <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>

@@ -9,6 +9,7 @@ import { buildPartsMap } from '../buildParts';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
+import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
 
@@ -53,6 +54,8 @@ const build = {
     ),
   }),
   phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
+  // D6043 (#6043): each module's records list as CSV, with the table's own search, filters and sort.
+  exportRecords: (projectId, slug, query) => buildModuleExportApi.exportCsv(projectId, slug, query),
   // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
   // they read: the roadmap tradeoff on Product roadmap; the Monday plan, the
   // Friday retro and the KPI annotation on Operating systems, the weekly

@@ -9,6 +9,7 @@ import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, s
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import RecordsExport from './RecordsExport.jsx';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -90,7 +91,7 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
   );
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null }) {
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null, onExport = null }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -130,6 +131,8 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
+          {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
+          {typeof onExport === 'function' && status === 'ready' && <RecordsExport onExport={onExport} />}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
         {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
@@ -234,7 +237,7 @@ export function Sources({ children, phone = false }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -301,6 +304,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             progressive={progressive}
+            onExport={onExport}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />}
           {zero && children ? <Sources>{children}</Sources> : children}
