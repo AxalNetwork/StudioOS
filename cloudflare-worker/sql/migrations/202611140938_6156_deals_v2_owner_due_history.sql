@@ -17,7 +17,8 @@
 --
 -- `deal_closing_checklist_events` is append-only: one row per write to an
 -- item (its creation included), with who wrote it, the state before and
--- after, and the note given with the write. Reverting an item appends a new
+-- after, the note given with the write, and the item's owner and due date as
+-- they stand after it (nullable, no default). Reverting an item appends a new
 -- row and keeps the earlier ones; the two triggers refuse UPDATE and DELETE.
 -- Items written before this migration have no events: their history before
 -- it was never recorded.
@@ -40,7 +41,10 @@ CREATE TABLE IF NOT EXISTS deal_closing_checklist_events (
   from_state TEXT CHECK (from_state IS NULL OR from_state IN ('pending', 'done', 'blocked', 'skipped')),
   to_state TEXT NOT NULL CHECK (to_state IN ('pending', 'done', 'blocked', 'skipped')),
   note TEXT,
-  at TEXT NOT NULL
+  at TEXT NOT NULL,
+  owner_user_id INTEGER REFERENCES users(id),
+  owner_label TEXT,
+  due_date TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_deal_closing_events_item ON deal_closing_checklist_events(item_id, id);
 

@@ -155,7 +155,8 @@ function freshDb() {
     -- D6156: every checklist write appends one event in the same batch.
     CREATE TABLE deal_closing_checklist_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, item_id INTEGER NOT NULL,
-      actor_user_id INTEGER NOT NULL, from_state TEXT, to_state TEXT NOT NULL, note TEXT, at TEXT NOT NULL
+      actor_user_id INTEGER NOT NULL, from_state TEXT, to_state TEXT NOT NULL, note TEXT, at TEXT NOT NULL,
+      owner_user_id INTEGER, owner_label TEXT, due_date TEXT
     );
     CREATE TABLE legal_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL,

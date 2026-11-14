@@ -1572,8 +1572,10 @@ deals.post('/:id/closing-checklist/items', async (c) => {
        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
     ).bind(itemUid, list.id, label, note, sort?.next || 1, f.owner_user_id ?? null, f.owner_label ?? null, f.due_date ?? null, at),
     c.env.DB.prepare(
-      `INSERT INTO deal_closing_checklist_events (uid, item_id, actor_user_id, from_state, to_state, note, at)
-       SELECT ?, id, ?, NULL, 'pending', ?, ? FROM deal_closing_checklist_items WHERE uid = ?`
+      `INSERT INTO deal_closing_checklist_events
+         (uid, item_id, actor_user_id, from_state, to_state, note, at, owner_user_id, owner_label, due_date)
+       SELECT ?, id, ?, NULL, 'pending', ?, ?, owner_user_id, owner_label, due_date
+         FROM deal_closing_checklist_items WHERE uid = ?`
     ).bind(newUid(), user.id, note, at, itemUid),
   ]);
   await sql.end();
@@ -1623,12 +1625,25 @@ deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
   // and its value, so the query text never carries an interpolation. The
   // event is written first and both statements are guarded on the state read
   // above, so a write that raced another lands neither row.
+  // The event carries the owner and due date as they stand AFTER this write:
+  // the sent value where one was sent, the stored one otherwise.
   const has = (v: unknown) => (v === undefined ? 0 : 1);
   const results = await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO deal_closing_checklist_events (uid, item_id, actor_user_id, from_state, to_state, note, at)
-       SELECT ?, id, ?, ?, ?, ?, ? FROM deal_closing_checklist_items WHERE id = ? AND state = ?`
-    ).bind(newUid(), user.id, fromState, toState, note ?? null, at, item.id, fromState),
+      `INSERT INTO deal_closing_checklist_events
+         (uid, item_id, actor_user_id, from_state, to_state, note, at, owner_user_id, owner_label, due_date)
+       SELECT ?, id, ?, ?, ?, ?, ?,
+              CASE WHEN ? = 1 THEN ? ELSE owner_user_id END,
+              CASE WHEN ? = 1 THEN ? ELSE owner_label END,
+              CASE WHEN ? = 1 THEN ? ELSE due_date END
+         FROM deal_closing_checklist_items WHERE id = ? AND state = ?`
+    ).bind(
+      newUid(), user.id, fromState, toState, note ?? null, at,
+      has(f.owner_user_id), f.owner_user_id ?? null,
+      has(f.owner_label), f.owner_label ?? null,
+      has(f.due_date), f.due_date ?? null,
+      item.id, fromState,
+    ),
     c.env.DB.prepare(
       `UPDATE deal_closing_checklist_items SET
          state = ?,
@@ -1669,11 +1684,13 @@ deals.get('/:id/closing-checklist/events', async (c) => {
   const { sql } = ctx;
   const rows = await c.env.DB.prepare(
     `SELECT e.uid, i.uid AS item_uid, i.label AS item_label, e.actor_user_id, u.name AS actor_name,
-            e.from_state, e.to_state, e.note, e.at
+            e.from_state, e.to_state, e.note, e.at,
+            e.owner_user_id, ou.name AS owner_name, e.owner_label, e.due_date
        FROM deal_closing_checklist_events e
        JOIN deal_closing_checklist_items i ON i.id = e.item_id
        JOIN deal_closing_checklists l ON l.id = i.checklist_id
        LEFT JOIN users u ON u.id = e.actor_user_id
+       LEFT JOIN users ou ON ou.id = e.owner_user_id
       WHERE l.deal_id = ? ORDER BY e.id ASC LIMIT 2000`
   ).bind(id).all<any>();
   await sql.end();

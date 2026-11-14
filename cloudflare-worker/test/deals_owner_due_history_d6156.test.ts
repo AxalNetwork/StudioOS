@@ -10,7 +10,9 @@
  *     default (the screen shows Not recorded);
  *   · only role partner plus canMoveRound (D4631) sets owner, due date or
  *     state, and a refused write records nothing;
- *   · each write adds exactly one event, in the same batch as the write;
+ *   · each write adds exactly one event, in the same batch as the write, and
+ *     the event carries the owner and due date as they stand after it
+ *     (owner decision, 2026-11-14);
  *   · reverting an item keeps the earlier event, and events refuse UPDATE and
  *     DELETE;
  *   · the events read refuses anyone who cannot read the deal;
@@ -30,7 +32,11 @@
  *   5. adding DEFAULT 'Founder' to owner_label in the migration — "existing rows read null" fails;
  *   6. writing the item and its event as two separate statements instead of one batch — "same batch" fails;
  *   7. removing the BEFORE UPDATE trigger from the migration — "reverting keeps the earlier event" fails;
- *   8. ignoring owner_user_id/owner_label in the IC condition create — "an IC condition carries its owner" fails.
+ *   8. ignoring owner_user_id/owner_label in the IC condition create — "an IC condition carries its owner" fails;
+ *   9. dropping owner_user_id/owner_label from the PATCH event insert (stored NULL) — "an owner-only edit … records the new owner" fails;
+ *  10. dropping due_date from the PATCH event insert (stored NULL) — "a due-only edit … records the new due date" fails;
+ *  11. dropping the owner/due columns from the add-item event insert — the add-item test fails;
+ *  12. dropping owner_name from the events read — the owner-only edit test fails.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -245,9 +251,12 @@ test('an item is added with owner, due date and note, and its creation is the fi
   assert.equal(item.note, 'from counsel');
   const ev = await call(partner, `/api/deals/${DEAL}/closing-checklist/events`, db);
   assert.equal(ev.body.events.length, 1);
+  const e0 = ev.body.events[0];
   assert.deepEqual(
-    { from: ev.body.events[0].from_state, to: ev.body.events[0].to_state, actor: ev.body.events[0].actor_user_id, note: ev.body.events[0].note, item: ev.body.events[0].item_uid },
-    { from: null, to: 'pending', actor: PARTNER, note: 'from counsel', item: item.uid },
+    { from: e0.from_state, to: e0.to_state, actor: e0.actor_user_id, note: e0.note, item: e0.item_uid,
+      owner: e0.owner_user_id, owner_name: e0.owner_name, label: e0.owner_label, due: e0.due_date },
+    { from: null, to: 'pending', actor: PARTNER, note: 'from counsel', item: item.uid,
+      owner: OWNER, owner_name: 'Ola Fixture', label: 'Founder', due: '2026-12-01' },
   );
 });
 
@@ -389,4 +398,43 @@ test('an IC condition carries its owner on create and on every read', async () =
   assert.equal(unknown.status, 400);
   assert.equal(unknown.body?.error, 'condition_owner_unknown');
   assert.equal(n(db, 'ic_conditions'), 2);
+});
+
+test('an owner-only edit records the new owner in its event, and keeps the due date as it stands', async () => {
+  const db = freshDb({ beforeMigration: (d) => seedOldChecklist(d) });
+  const uid = `it-${DEAL}`;
+  await patch(partner, DEAL, uid, db, { due_date: '2026-12-01' });
+  const r = await patch(partner, DEAL, uid, db, { owner_user_id: OWNER, owner_label: 'Founder' });
+  assert.equal(r.status, 200);
+  const ev = await call(partner, `/api/deals/${DEAL}/closing-checklist/events`, db);
+  assert.equal(ev.body.events.length, 2);
+  const last = ev.body.events[1];
+  assert.deepEqual(
+    [last.from_state, last.to_state, last.owner_user_id, last.owner_name, last.owner_label, last.due_date],
+    ['pending', 'pending', OWNER, 'Ola Fixture', 'Founder', '2026-12-01'],
+    'the event says who owns the item after the write, and the unchanged due date',
+  );
+  assert.deepEqual([ev.body.events[0].owner_user_id, ev.body.events[0].owner_label], [null, null],
+    'the earlier event keeps the owner it recorded');
+  // Clearing the owner is recorded as a cleared owner.
+  await patch(partner, DEAL, uid, db, { owner_user_id: null });
+  const after = await call(partner, `/api/deals/${DEAL}/closing-checklist/events`, db);
+  assert.deepEqual([after.body.events[2].owner_user_id, after.body.events[2].owner_name, after.body.events[2].owner_label],
+    [null, null, 'Founder']);
+});
+
+test('a due-only edit records the new due date in its event, and keeps the owner as it stands', async () => {
+  const db = freshDb({ beforeMigration: (d) => seedOldChecklist(d) });
+  const uid = `it-${DEAL}`;
+  await patch(partner, DEAL, uid, db, { owner_label: 'Founder' });
+  const r = await patch(partner, DEAL, uid, db, { due_date: '2027-01-15' });
+  assert.equal(r.status, 200);
+  const ev = await call(partner, `/api/deals/${DEAL}/closing-checklist/events`, db);
+  const last = ev.body.events[1];
+  assert.deepEqual([last.due_date, last.owner_label, last.owner_user_id], ['2027-01-15', 'Founder', null]);
+  assert.equal(ev.body.events[0].due_date, null, 'the earlier event keeps the due date it recorded');
+  // A state change carries both forward unchanged.
+  await patch(partner, DEAL, uid, db, { state: 'done' });
+  const done = (await call(partner, `/api/deals/${DEAL}/closing-checklist/events`, db)).body.events[2];
+  assert.deepEqual([done.to_state, done.due_date, done.owner_label], ['done', '2027-01-15', 'Founder']);
 });
