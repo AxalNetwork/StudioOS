@@ -3,6 +3,7 @@ import type { Ctx } from './growCycle';
 import type { User } from '../types';
 import type { Card, Figure } from './cycleCards';
 import { isTeamViewer } from './mercury/teamViewer';
+import { dueReportingPeriod, KIND_WORDS } from './reportingDuties';
 
 export type Evidence<T> = { state: 'recorded'; value: T } | { state: 'not_recorded' | 'unreadable'; value: null };
 export interface FocusTarget { metric_key: string; label: string | null; target_value: number; direction: 'up' | 'down'; updated_at: string | null }
@@ -32,7 +33,7 @@ export function baselineAction(projectId: number, focus: Evidence<FocusTarget>, 
 }
 
 /** Existing stores only; the caller has already enforced the venture read gate. No writes or global caches. */
-export async function growAttention(x: Ctx, writable: boolean, options: { user?: Pick<User, 'id' | 'founder_id'>; cards?: Card[]; figures?: Figure[] } = {}): Promise<GrowAttention> {
+export async function growAttention(x: Ctx, writable: boolean, options: { user?: Pick<User, 'id' | 'founder_id'> & Partial<Pick<User, 'role'>>; cards?: Card[]; figures?: Figure[] } = {}): Promise<GrowAttention> {
   let focus: Evidence<FocusTarget>;
   let measurement: Evidence<FocusMeasurement> = missing();
   try {
@@ -87,12 +88,22 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
       return unreadable();
     }
   };
-  const [targets, kpis, channels, customers, partner_proposals, stalled_customers] = await Promise.all([
+  const today = new Date(x.now).toISOString().slice(0, 10);
+  const [targets, kpis, channels, customers, partner_proposals, reporting, stalled_customers] = await Promise.all([
     count('targets', "SELECT COUNT(*) AS n FROM metric_targets WHERE project_id = ? AND metric_key IN ('mrr','arr','cac','ltv','monthly_churn_pct','active_users','new_users','net_burn','cash_balance','headcount','nrr_pct','paying_accounts')"),
     count('kpis', 'SELECT COUNT(*) AS n FROM project_metrics WHERE project_id = ?'),
     count('channels', 'SELECT COUNT(*) AS n FROM growth_channels WHERE project_id = ?'),
     count('customers', 'SELECT COUNT(*) AS n FROM waitlist_signups WHERE project_id = ?'),
     proposals(),
+    (async () => {
+      if (!writable || options.user?.role === 'admin') return { state: 'restricted', value: null } as const;
+      try {
+        return { state: 'recorded', value: await dueReportingPeriod(x.env, x.projectId, today) } as const;
+      } catch {
+        console.warn('[growAttention] source unreadable', { source: 'reporting' });
+        return unreadable<never>();
+      }
+    })(),
     // Match Customers' existing 14-day last-touch rule. Invalid stamps never count as stalled.
     (async (): Promise<Evidence<number>> => {
       try {
@@ -108,13 +119,21 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
       }
     })(),
   ]);
-  const signals = { targets, kpis, channels, customers, partner_proposals, stalled_customers };
-  const primary = baselineAction(x.projectId, focus, measurement, writable);
+  const due = reporting.value;
+  const signals: GrowAttention['signals'] = { targets, kpis, channels, customers, partner_proposals, stalled_customers,
+    reporting: reporting.state === 'recorded' ? { state: 'recorded', value: due ? 1 : 0 } : reporting };
+  const primary = due ? { key: 'report_due', label: 'Share an update', why: `Reporting period: ${due.period_label}`,
+    href: `/grow/reporting?project_id=${x.projectId}` } : baselineAction(x.projectId, focus, measurement, writable);
   const href = (path: string) => `${path}?project_id=${x.projectId}`;
   const items: AttentionAction[] = [];
   const add = (key: string, priority: number, label: string, why: string, path: string, area: string) => items.push({ key, priority, label, why, href: href(path), area });
   const critical = focus.state === 'unreadable' || measurement.state === 'unreadable';
   if (writable) {
+    if (due) {
+      const late = due.due_on < today;
+      add('report_due', late ? 1 : 5, `${KIND_WORDS[due.kind] || 'Report'} · ${due.period_label}`,
+        `${late ? 'Late since' : 'Due'} ${due.due_on}`, '/grow/reporting', 'Reporting');
+    }
     if (!critical) {
       if (focus.state === 'not_recorded') add('set_focus', 10, 'Choose your primary growth metric', 'Everything below is ranked against it.', '/grow/focus', 'Focus');
       if (targets.state === 'recorded' && targets.value === 0) add('set_target', 20, 'Set your growth target', 'A target turns the metric into a plan you can check.', '/grow/focus', 'Focus');
@@ -135,7 +154,7 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
     if (customers.state === 'recorded' && customers.value === 0) add('add_customer', 90, 'Add customer or prospect records', 'Bring your recorded discovery contacts into Grow.', '/grow/customers', 'Customers');
   }
   const actionLabels: Record<string, string> = { set_focus: 'Set focus metric', set_target: 'Set target', record_kpi: 'Enter a KPI', record_metric: 'Enter a KPI', focus_unreadable: 'Open Focus', partner_proposal: 'Review proposal', offers: 'Open roles', stalled_customers: 'Open customers', add_channel: 'Add channel', add_customer: 'Add customer' };
-  for (const item of items) item.actionLabel = actionLabels[item.key];
+  for (const item of items) item.actionLabel = item.key === 'report_due' ? 'Open Reporting' : actionLabels[item.key];
   const partial = Object.values(signals).some((s) => s.state === 'unreadable');
   return { state: critical ? 'unreadable' : partial ? 'partial' : 'ready', writable, period: new Date(x.now).toISOString().slice(0,7), focus, measurement, signals, primary, items: items.sort((a,b) => (a.priority || 0) - (b.priority || 0)).slice(0,4) };
 }
