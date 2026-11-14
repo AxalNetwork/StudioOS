@@ -2,7 +2,7 @@
  * D5624 (#5624) — a team's Landing settings: the contract.
  *
  * Pure types, defaults, HQ caps and `validateLandingPolicy(body, hq)`. No
- * imports, so the Worker (`cloudflare-worker/src/routes/team_landing.ts`) and
+ * imports, so the studioos Worker (its `team_landing.ts` route) and
  * Merge Control can both read it. Shape only: whether a referenced person is
  * on the team, an agent belongs to it, or a repository record is the team's,
  * is the caller's check against D1.
