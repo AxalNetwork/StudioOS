@@ -18,9 +18,9 @@ import { ChangeDialog } from './MyEventsDrawers';
 import { dateBlock, statusOf, timeLine, visibilityWord, whereOf, hostAction } from './myEventsModel';
 import { hostedPath, ticketPath } from './eventDrawersModel';
 import {
-  CALENDAR_KINDS, EMPTY, FORMATS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
-  dayChips, dayLabel, discoverMonths, discoverRow, freeForMe, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, monthTitle,
-  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, subscribeLine, typeChips, typeLabel,
+  CALENDAR_KINDS, EMPTY, FORMATS, TOPICS, HOST_DEFAULTS, HOST_SORT, HOST_STATUS, HOST_VISIBILITY, HOST_WHEN, PAST_FILTERS, PRICES, SUBSCRIBE,
+  dayChips, dayLabel, discoverMonths, discoverParams, discoverRow, freeForMe, hostCounts, hostMenu, hostingView, invitationDialog, monthCells, monthTitle,
+  pageOf, pastAll, pastChart, pastView, pastYears, placeMenu, registerDialog, shiftMonth, subscribeLine, topicLabel, typeChips, typeLabel,
 } from './myEventsTabsModel';
 
 export const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -506,7 +506,8 @@ export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel
 
 /**
  * Discover: the next three months as chips, each with its count; the type
- * chips with counts for the chosen month; Format, Price and "Free for me";
+ * chips with counts for the chosen month; the topic chips (ME5, #5868), one
+ * at a time, sent as `topic=` with the other filters; Format, Price and "Free for me";
  * each row's price line and action from eligibility; "1–25 of [N]". One
  * failed read is said where it is, and never blanks the tab.
  */
@@ -517,6 +518,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
   const [type, setType] = useState('');
   const [format, setFormat] = useState('');
   const [price, setPrice] = useState('');
+  const [topic, setTopic] = useState('');
   const [mine, setMine] = useState(false);
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -532,22 +534,22 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
   useEffect(() => {
     let live = true;
     for (const m of months) {
-      Promise.resolve().then(() => api.publicList({ limit: 1, offset: 0, from: m.from, to: m.to, format: format || undefined, price: price || undefined }))
+      Promise.resolve().then(() => api.publicList(discoverParams({ limit: 1, from: m.from, to: m.to, format, price, topic })))
         .then((r) => { if (live) setMonthCounts((c) => ({ ...c, [m.key]: Number.isFinite(Number(r?.total)) ? Number(r.total) : null })); })
         .catch(() => { if (live) setMonthCounts((c) => ({ ...c, [m.key]: null })); });
     }
     return () => { live = false; };
-  }, [format, price, again]);
+  }, [format, price, topic, again]);
 
   // The chosen month, every event the filters match up to 100, so the type chips and pages count what is there.
   useEffect(() => {
     let live = true;
     setRead({ status: 'loading', events: [], total: null });
-    Promise.resolve().then(() => api.publicList({ limit: 100, offset: 0, from: win.from, to: win.to, q: term || undefined, format: format || undefined, price: price || undefined }))
+    Promise.resolve().then(() => api.publicList(discoverParams({ limit: 100, from: win.from, to: win.to, q: term, format, price, topic })))
       .then((r) => { if (live) setRead({ status: 'ready', events: Array.isArray(r?.events) ? r.events : [], total: Number.isFinite(Number(r?.total)) ? Number(r.total) : null }); })
       .catch(() => { if (live) setRead({ status: 'error', events: [], total: null }); });
     return () => { live = false; };
-  }, [monthKey, term, format, price, again]);
+  }, [monthKey, term, format, price, topic, again]);
 
   const chips = typeChips(read.events);
   const byType = read.events.filter((ev) => !type || (ev.type || 'other') === type);
@@ -601,6 +603,12 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
           </Chip>
         ))}
       </div>
+      <div role="group" aria-label="Topic" className="flex flex-wrap items-center gap-1.5" data-testid="my-events-discover-topics">
+        <span className={EYEBROW}>Topic</span>
+        {TOPICS.map((t) => (
+          <Chip key={t.key} on={topic === t.key} onClick={() => { setTopic(topic === t.key ? '' : t.key); reset(); }} testId={`my-events-discover-topic-${t.key}`}>{t.label}</Chip>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center gap-2" data-testid="my-events-discover-types">
         {chips.map((t) => (
           <Chip key={t.key} on={type === t.key} onClick={() => { setType(type === t.key ? '' : t.key); reset(); }} testId={`my-events-discover-type-${t.key}`}>
@@ -618,7 +626,7 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
         <h2 className={`m-0 flex items-center justify-between border-b border-axal-hairline px-4 py-3 text-[14px] font-extrabold dark:border-gray-800 ${INK}`}>{win.title} <span className={`text-[12px] font-semibold ${MUTED}`}>By date</span></h2>
         {read.status === 'loading' ? <div className="p-4"><Skeleton lines={4} testId="my-events-discover-loading" /></div>
           : read.status === 'error' ? <div className="p-4" data-testid="my-events-discover-unreadable"><Unreadable what="The public calendar" claim="This is not a claim that nothing is on." onRetry={() => setAgain((x) => x + 1)} /></div>
-            : pg.rows.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-discover-none">{mine ? 'No event on this page’s list is free for you.' : term ? `No event in ${win.title} matches “${term}”.` : `No upcoming events on the public calendar in ${win.title}.`}</p>
+            : pg.rows.length === 0 ? <p className={`m-0 p-4 text-[12.5px] ${MUTED}`} data-testid="my-events-discover-none">{mine ? 'No event on this page’s list is free for you.' : term ? `No event in ${win.title} matches “${term}”.` : topic ? `No upcoming events on the public calendar in ${win.title} are about ${topicLabel(topic)}.` : `No upcoming events on the public calendar in ${win.title}.`}</p>
               : pg.rows.map((ev) => {
                 const row = discoverRow(ev, { held, invitation: invitationFor(ev.id), elig: elig[ev.id] });
                 return (

@@ -5981,13 +5981,15 @@ export const events = {
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
   // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
-  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
+  // #5868 (D3724 gap 5): `topic`, one of the Worker's `EVENT_TOPICS` (D1487).
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price, topic } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
     if (format) qs.set('format', format);
     if (price) qs.set('price', price);
+    if (topic) qs.set('topic', topic);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);
