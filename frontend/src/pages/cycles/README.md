@@ -148,3 +148,5 @@ title (`RecordCrumb`, D696).
 `distribution/` holds Distribution's tab components; its README records each
 component and the shell/wizard handoff. D4492 supplies the prospect pipeline,
 individual contact sheets and recorded marketing-permission summary.
+
+D6093 (#6093): Reporting phone writers get the existing Share/Reminder settings menu in CycleBar beside Eadwyn, with 44px targets and Escape/back dismissal. Readers get neither write action, including on an empty desk; desktop and the pinned Prepare bar retain their behavior. This is the authorized departure from RPT20’s no-More header.
