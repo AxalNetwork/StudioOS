@@ -90,7 +90,29 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
   );
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null }) {
+/**
+ * D6124 (#6124): the table's Export, drawn beside Add only when the page hands
+ * an `onExport` (the Worker said `records.exportable`: a writer, on a module
+ * that has one) and the table has rows. The file is the Worker's, of every row
+ * the search, filters and sort select; a refusal shows the Worker's sentence.
+ */
+export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30' }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (typeof onExport !== 'function') return null;
+  const run = async () => {
+    setBusy(true); setError('');
+    try { await onExport(); } catch (cause) { setError(cause?.message || 'The export could not be written.'); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" onClick={run} disabled={busy} className={className} data-testid="records-export">{busy ? 'Exporting…' : 'Export'}</button>
+      {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="records-export-error">{error}</span>}
+    </>
+  );
+}
+
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null, onExport = undefined }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -129,6 +151,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}
+          {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
@@ -234,7 +257,7 @@ export function Sources({ children, phone = false }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -301,6 +324,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             progressive={progressive}
+            onExport={onExport}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />}
           {zero && children ? <Sources>{children}</Sources> : children}
