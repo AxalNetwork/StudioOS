@@ -60,3 +60,6 @@ The rules for adding here: every figure no read holds is "Not recorded" with
 its reason, a read that failed is "Unreadable" with Try again and leaves the
 rest of the page standing, every change opens an in-page dialog, and colours
 come from the axal tokens with a `dark:` counterpart — never a hex value.
+
+- `roomFilesQuery.js` — D6185: sort, filter and page only admitted files using raw metadata for ordering; zero and unknown stay distinct.
+- `SharedRoomFiles.jsx` — D6185: shared content search whitelisted to the listing, name filter, stable sort/pages and phone file rows; mounted in Documents after the owner-authorized listing handoff.
