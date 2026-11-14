@@ -115,7 +115,11 @@ export function InvestorTabs() {
   return (
     <Strip label="Investor cohort access">
       <Tab to="/admin/programs/investor-cohorts" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/investor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/investor-cohorts/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/investor-cohorts/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/investor-cohorts/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/investor-cohorts/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/investor-cohorts/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }

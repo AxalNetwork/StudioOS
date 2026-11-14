@@ -438,7 +438,11 @@ export const PAGES = Object.freeze({
     facts: ['Who: Verified investors', 'Join: Assigned by an admin', 'Cycle: one Lab cohort'],
     tabs: [
       { key: 'overview', label: 'Overview', path: INVESTOR_PATH },
-      { key: 'activity', label: 'Activity', path: INVESTOR_ACTIVITY_PATH },
+      { key: 'how', label: 'Playbook', path: `${INVESTOR_PATH}/how-it-runs` },
+      { key: 'availability', label: 'Availability & grants', path: `${INVESTOR_PATH}/availability` },
+      { key: 'participation', label: 'Participation', path: `${INVESTOR_PATH}/participation` },
+      { key: 'activity', label: 'History', path: INVESTOR_ACTIVITY_PATH },
+      { key: 'settings', label: 'Settings', path: `${INVESTOR_PATH}/settings` },
     ],
   },
   // D4298 (#4298, IN11): seven tabs; the program's own address opens Applications.
