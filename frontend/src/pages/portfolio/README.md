@@ -78,3 +78,12 @@ source's own activity); `CompanyPanels.jsx` draws Financials, Support and
 Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
+
+D6208 (#6208) adds the Overview table's Sector, Stage and Reporting filters
+and its sort (`filterRows`, `filterOptionsOf`, `sortRows`, `tableCaptionOf`
+in the model) and the header's Export on the Overview and on Performance.
+`PortfolioExport.jsx` draws Export, one button or a menu of choices, and
+writes only through `exportView` (`../../lib/csvExport.js`); the model's
+`companyExportOf`, `quarterExportOf` and `cohortExportOf` decide what each
+file holds, or why there is nothing to write. Decision notes:
+`documentation/architecture/decisions/D6208.md`.
