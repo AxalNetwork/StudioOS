@@ -718,6 +718,72 @@ export async function updateObligation(env: Env, pid: number, user: User, id: nu
   return { id: row.id };
 }
 
+// ── Remove (D6115) ──────────────────────────────────────────────────────────
+// A record added by mistake is deleted outright, never hidden (D6115): no
+// reader filters a deleted flag. One that holds history is refused with what
+// to do instead; the check is inside the DELETE itself, so a row that gains
+// history while it runs is never taken. A connector's ledger row is unlinked
+// and kept, so the connector does not land it again. The activity row is
+// written after the delete and outlives the record.
+
+export const PARTNER_KEPT = 'This partner has revenue or deals recorded, so it stays as history. Set its stage to Ended instead.';
+export const OBLIGATION_KEPT = 'This obligation has been held, so its past meetings stay as history. Mark it done instead.';
+
+/** Kept: revenue, a deal, or Mercury payments accepted onto it. */
+const PARTNER_DELETE_SQL = `DELETE FROM growth_partners WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM partner_revenue WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM growth_partner_deals WHERE partner_id = ?)
+  AND NOT EXISTS (SELECT 1 FROM mercury_partner_proposals WHERE growth_partner_id = ? AND project_id = ? AND state = 'accepted')`;
+/** Kept: a held occurrence. */
+const OBLIGATION_DELETE_SQL = `DELETE FROM compliance_events WHERE id = ? AND project_id = ?
+  AND NOT EXISTS (SELECT 1 FROM obligation_occurrences WHERE event_id = ?)`;
+
+const changed = (r: { meta?: { changes?: number } } | undefined) => Number(r?.meta?.changes ?? 0) > 0;
+
+export async function removePartner(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(PARTNER_DELETE_SQL).bind(row.id, pid, row.id, row.id, row.id, pid),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'growth_partners' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM growth_partners WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  // The row is the venture's (`owned`), so a delete that took nothing found its history.
+  if (!changed(del)) throw new Refused(409, PARTNER_KEPT);
+  await logGrowWrite(env, pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_removed', summary: `Partner removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * A market holds plans and judgements only, so it is always removable; its entry
+ * steps and localisation go with it (`ON DELETE CASCADE`, which D1 enforces).
+ */
+export async function removeMarket(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; removed: true }> {
+  const row = await owned<{ id: number; name: string }>(env, 'SELECT id, name FROM markets WHERE uid = ? AND project_id = ?', uid, pid);
+  const del = await env.DB.prepare('DELETE FROM markets WHERE id = ? AND project_id = ?').bind(row.id, pid).run();
+  if (!changed(del)) throw new Refused(404, 'Not found');
+  await logGrowWrite(env, pid, user.id, { module: 'market-expansion', entityId: uid, action: 'grow_market_removed', summary: `Market removed: ${row.name}` });
+  return { uid, removed: true };
+}
+
+/**
+ * The one obligation delete: Grow's Remove and `DELETE /api/compliance/events/:id`
+ * both run it, each after its own write gate. A held obligation is refused; its
+ * agenda items go with it (they are its plan, not its record; `ON DELETE CASCADE`).
+ */
+export async function removeObligation(env: Env, pid: number, user: Pick<User, 'id'>, id: number): Promise<{ id: number; removed: true }> {
+  if (!Number.isSafeInteger(id) || id < 1) throw new Refused(404, 'Not found');
+  const row = await owned<{ id: number; title: string }>(env, 'SELECT id, title FROM compliance_events WHERE id = ? AND project_id = ?', id, pid);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(OBLIGATION_DELETE_SQL).bind(row.id, pid, row.id),
+    env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'compliance_events' AND local_id = ?
+       AND NOT EXISTS (SELECT 1 FROM compliance_events WHERE id = ?)`).bind(pid, row.id, row.id),
+  ]);
+  if (!changed(del)) throw new Refused(409, OBLIGATION_KEPT);
+  await logGrowWrite(env, pid, Number(user.id), { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_removed',
+    summary: `Obligation removed: ${row.title}` });
+  return { id: row.id, removed: true };
+}
+
 export async function setChecklistItem(env: Env, pid: number, user: User, key: string, done: boolean) {
   await env.DB.prepare(
     `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)

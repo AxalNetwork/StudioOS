@@ -36,7 +36,7 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  markHeld, obligationKind, obligationState, openMinutes, removeMarket, removeObligation, removePartner, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
@@ -103,6 +103,16 @@ async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult
 }
 /** `ownedRow` passed before the spec ran, so a missing row is a race with a delete. */
 const vanished = () => new Response(JSON.stringify({ detail: 'Record not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+
+/**
+ * D6115 (#6115): Remove, a danger write behind a confirmation, for a record
+ * added by mistake. The writer deletes it or refuses (409) with what to do
+ * instead; the page's re-read then 404s and goes back to the list.
+ */
+const remove = (title: string, body: string, run: (c: RecordContext) => Promise<unknown>): RecordAction => ({
+  key: 'remove', label: 'Remove', kind: 'write', tone: 'danger', confirm: { title, body, cta: 'Remove' },
+  execute: (c) => refusing(async () => ({ ok: true, record: await run(c) })),
+});
 
 /** What a record read loaded, for its sections and actions; never sent (the route spreads the record). */
 const loaded = new WeakMap<RecordContent, Any>();
@@ -749,7 +759,8 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
-  });
+  }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
+    (c) => removePartner(c.env, c.projectId, userOf(c), id)));
   return actions;
 }, async () => ({ types: opts(PARTNER_TYPES, LABEL), stages: opts(PARTNER_STAGES, LABEL), terms_kinds: opts(TERMS_KINDS, LABEL) }));
 
@@ -838,7 +849,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
-  }];
+  }, remove(`Remove ${m.name}?`, 'For a market added by mistake: it leaves the market list, its card and its counts, with its entry plan and localisation checks.',
+    (c) => removeMarket(c.env, c.projectId, userOf(c), id))];
 }, async (rc) => {
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
     geographies: await marketGeographies(rc) };
@@ -944,7 +956,8 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       if (remind !== undefined) b.remind_days = (Array.isArray(remind) ? remind : remind == null || remind === '' ? [] : [remind]).map(Number);
       return { ok: true, record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), b) };
     }),
-  });
+  }, remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
+    (c) => removeObligation(c.env, c.projectId, userOf(c), Number(id))));
   return actions;
 }, async () => ({
   kinds: opts(OBLIGATION_KINDS, LABEL),

@@ -247,6 +247,10 @@ function EventCard({ event, projectName, onUpdated, onDeleted }) {
     try {
       await api.complianceDelete(event.id);
       onDeleted(event.id);
+    } catch (e) {
+      // D6115: a held obligation is refused with what to do instead.
+      // eslint-disable-next-line no-alert
+      alert(e?.message || 'Failed to delete');
     } finally {
       setBusy(false);
     }
