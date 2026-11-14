@@ -536,6 +536,10 @@ export interface Env {
   AI_GOVERNOR?: DurableObjectNamespace;
   // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
   DECK_REMOTE?: DurableObjectNamespace;
+  // D5581 part 2 (#5581): WorkGraph leases (`services/workGraphLeases.ts`). Optional: without it every lease call is refused `no_binding`.
+  WORK_GRAPH_LEASE?: DurableObjectNamespace;
+  /** D5581 part 2: `on` switches WorkGraph leases on; anything else (the default, `off`) refuses every call `flag_off`. */
+  WORK_GRAPH_LEASES?: string;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
