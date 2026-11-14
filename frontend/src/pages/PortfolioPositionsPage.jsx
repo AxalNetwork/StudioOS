@@ -4,6 +4,7 @@ import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
+import WriteFlow from './portfolio/WriteFlow.jsx';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -22,9 +23,10 @@ export default function PortfolioPositionsPage({ embedded = false }) {
   const [form, setForm] = useState({ project_id: '', round_name: '', invested_amount: '', shares: '', price_per_share: '', ownership_pct: '', position_date: '' });
   // D464 — the governed write path, offered where the book is read: a mark and
   // a distribution are admin writes (the routes refuse anyone else), and the
-  // detail drawer already reads both histories back.
-  const [markForm, setMarkForm] = useState(null);
-  const [distForm, setDistForm] = useState(null);
+  // detail drawer already reads both histories back. D4817 part 7 (PF-07):
+  // each goes Prepare → Review → Confirm → Receipt in `WriteFlow`.
+  const [flow, setFlow] = useState(null); // { kind: 'mark' | 'distribution', n }
+  const [closeAsked, setCloseAsked] = useState(false);
 
   // Task #83 — when we arrive from an IC "invest" decision the startup + round
   // are handed over via router state; prefill the form and open it so the admin
@@ -75,41 +77,18 @@ export default function PortfolioPositionsPage({ embedded = false }) {
     finally { setBusy(false); }
   };
 
-  const submitMark = async (e) => {
-    e.preventDefault();
-    if (!markForm || !detail?.project?.uid) return;
-    setMarkForm({ ...markForm, busy: true, error: '' });
-    try {
-      await api.positionMarkCreate(detail.project.uid, {
-        fmv: Number(markForm.fmv),
-        as_of_date: markForm.as_of_date,
-        basis: markForm.basis,
-        event: markForm.event || undefined,
-      });
-      setMarkForm(null);
-      await openDetail(detail.project.uid);
-    } catch (cause) {
-      setMarkForm({ ...markForm, busy: false, error: cause?.message || 'The mark could not be recorded.' });
-    }
-  };
-
-  const submitDist = async (e) => {
-    e.preventDefault();
-    if (!distForm || !detail?.project?.uid) return;
-    setDistForm({ ...distForm, busy: true, error: '' });
-    try {
-      await api.positionDistributionCreate(detail.project.uid, {
-        amount: Number(distForm.amount),
-        distribution_date: distForm.distribution_date,
-        kind: distForm.kind,
-        note: distForm.note || undefined,
-      });
-      setDistForm(null);
-      await openDetail(detail.project.uid);
-    } catch (cause) {
-      setDistForm({ ...distForm, busy: false, error: cause?.message || 'The distribution could not be recorded.' });
-    }
-  };
+  // The writes and the re-read the flow checks against; the routes are the
+  // ones the forms called before PF-07.
+  const saveMark = (body) => api.positionMarkCreate(detail.project.uid, { ...body });
+  const saveDist = (body) => api.positionDistributionCreate(detail.project.uid, { ...body });
+  const rereadDetail = () => api.positionsByProject(detail.project.uid);
+  // The histories behind the flow refresh once the Worker has the record.
+  const onFlowSaved = () => { if (detail?.project?.uid) openDetail(detail.project.uid); };
+  const openFlow = (kind) => setFlow((cur) => ({ kind, n: (cur?.n || 0) + 1 }));
+  // The page's clock, read when a draft opens: the flow's model reads none.
+  const today = () => new Date().toISOString().slice(0, 10);
+  const closeSheet = () => { if (flow) setCloseAsked(true); else setDetail(null); };
+  const closeAnswered = (closed) => { setCloseAsked(false); if (closed) setDetail(null); };
 
   const field = (key, placeholder, extra = {}) => (
     <input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} placeholder={placeholder} {...extra}
@@ -197,7 +176,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
       )}
 
       {detail && (
-        <Sheet label={detail.project?.name || "Position"} title={detail.project?.name || "Position"} width={520} testId="portfolio-position-sheet" onClose={() => setDetail(null)}>
+        <Sheet label={detail.project?.name || "Position"} title={detail.project?.name || "Position"} width={520} testId="portfolio-position-sheet" onClose={closeSheet}>
           <div className="p-6">
 
             <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Dilution by round</h3>
@@ -269,24 +248,11 @@ export default function PortfolioPositionsPage({ embedded = false }) {
               </table>
             )}
             {isAdmin && (
-              markForm ? (
-                <form onSubmit={submitMark} className="mb-4 rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-mark">
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={markForm.fmv} onChange={(e) => setMarkForm({ ...markForm, fmv: e.target.value })} placeholder="FMV ($)" inputMode="decimal" required data-testid="input-mark-fmv" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                    <input type="date" value={markForm.as_of_date} onChange={(e) => setMarkForm({ ...markForm, as_of_date: e.target.value })} required data-testid="input-mark-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                    <select value={markForm.basis} onChange={(e) => setMarkForm({ ...markForm, basis: e.target.value })} data-testid="select-mark-basis" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
-                      {[['gp_estimate', 'GP estimate'], ['round_price', 'Round price'], ['secondary', 'Secondary'], ['write_down', 'Write-down'], ['cost', 'Cost']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                    <input value={markForm.event} onChange={(e) => setMarkForm({ ...markForm, event: e.target.value })} placeholder="Event (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                  </div>
-                  {markForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{markForm.error}</p>}
-                  <div className="mt-2 flex gap-2">
-                    <button disabled={markForm.busy} data-testid="button-mark-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{markForm.busy ? 'Recording…' : 'Record mark'}</button>
-                    <button type="button" onClick={() => setMarkForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
-                  </div>
-                </form>
+              flow?.kind === 'mark' ? (
+                <WriteFlow key={`mark-${flow.n}`} kind="mark" detail={detail} today={today()} save={saveMark} reread={rereadDetail}
+                  onSaved={onFlowSaved} onClose={() => setFlow(null)} closeAsked={closeAsked} onCloseAnswered={closeAnswered} />
               ) : (
-                <button type="button" onClick={() => setMarkForm({ fmv: '', as_of_date: new Date().toISOString().slice(0, 10), basis: 'gp_estimate', event: '', busy: false, error: '' })} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <button type="button" onClick={() => openFlow('mark')} disabled={Boolean(flow)} data-testid="button-mark-open" className="mb-4 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                   Record a mark
                 </button>
               )
@@ -314,24 +280,11 @@ export default function PortfolioPositionsPage({ embedded = false }) {
               </table>
             )}
             {isAdmin && (
-              distForm ? (
-                <form onSubmit={submitDist} className="rounded-lg border border-gray-200 p-3 dark:border-gray-700" data-testid="form-distribution">
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={distForm.amount} onChange={(e) => setDistForm({ ...distForm, amount: e.target.value })} placeholder="Amount ($)" inputMode="decimal" required data-testid="input-dist-amount" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                    <input type="date" value={distForm.distribution_date} onChange={(e) => setDistForm({ ...distForm, distribution_date: e.target.value })} required data-testid="input-dist-date" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                    <select value={distForm.kind} onChange={(e) => setDistForm({ ...distForm, kind: e.target.value })} data-testid="select-dist-kind" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm">
-                      {[['exit', 'Exit'], ['secondary', 'Secondary'], ['dividend', 'Dividend'], ['recapitalization', 'Recapitalization']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                    <input value={distForm.note} onChange={(e) => setDistForm({ ...distForm, note: e.target.value })} placeholder="Note (optional)" className="px-2.5 py-1.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-transparent text-sm" />
-                  </div>
-                  {distForm.error && <p className="mt-2 text-xs text-rose-700 dark:text-rose-400" role="alert">{distForm.error}</p>}
-                  <div className="mt-2 flex gap-2">
-                    <button disabled={distForm.busy} data-testid="button-dist-save" className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">{distForm.busy ? 'Recording…' : 'Record distribution'}</button>
-                    <button type="button" onClick={() => setDistForm(null)} className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400">Cancel</button>
-                  </div>
-                </form>
+              flow?.kind === 'distribution' ? (
+                <WriteFlow key={`distribution-${flow.n}`} kind="distribution" detail={detail} today={today()} save={saveDist} reread={rereadDetail}
+                  onSaved={onFlowSaved} onClose={() => setFlow(null)} closeAsked={closeAsked} onCloseAnswered={closeAnswered} />
               ) : (
-                <button type="button" onClick={() => setDistForm({ amount: '', distribution_date: new Date().toISOString().slice(0, 10), kind: 'exit', note: '', busy: false, error: '' })} data-testid="button-dist-open" className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <button type="button" onClick={() => openFlow('distribution')} disabled={Boolean(flow)} data-testid="button-dist-open" className="px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 rounded-lg text-xs font-medium dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
                   Record a distribution
                 </button>
               )
