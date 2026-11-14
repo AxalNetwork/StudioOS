@@ -17,6 +17,7 @@
  */
 
 import { formatMinorOrCount, majorToMinor } from '../../../lib/money.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 
 export const SLUG = 'capital-relationships';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -45,11 +46,21 @@ const TAB_WORDS = new Set([...TABS.filter((t) => t.path).map((t) => t.id), CLOSI
 /** True when CycleRoute's record id under this module is a tab, not an investor. */
 export const isCapRelTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));
 
-/** The query a tab keeps: the venture only. */
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
+}
+
+/**
+ * D5074 slice 4 (#5074): who the viewer is on Capital relationships, from the module read's `capabilities` alone
+ * (`cloudflare-worker/src/services/capRelCapabilities.ts`, the map the Worker refuses from). `true` allows; no map,
+ * an unknown key or any other value allows nothing. `support` is staff's reasoned, read-only view; `works` is every
+ * tab's read and write; `supportReads` is the founder's list of who read with a reason.
+ */
+export function capRelStanding(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  return { known: !!caps, can, support: can('support_read') && can('admin_reason_required'), works: can('work'), supportReads: can('support_reads') };
 }
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
