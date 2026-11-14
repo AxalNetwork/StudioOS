@@ -894,18 +894,17 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
       return { state: 'empty', series: null, next: ctx.canWrite === false ? null : { text: 'Open the landing-page builder', href: `/build/brand?project_id=${ctx.projectId}` }, reason: 'No waitlist connected.' };
     }
-    const next = !bar && ctx.canWrite !== false
-      ? { text: 'Set the bar for waitlist sign-ups', href: `${href(ctx, 'demand-signals')}#waitlist-bar` }
-      : toConfirm > 0
-        ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
-        : null;
+    const next = ctx.canWrite === false ? null
+      : bar == null ? { text: 'Set the bar for waitlist sign-ups', href: `${href(ctx, 'demand-signals')}#waitlist-bar` }
+      : toConfirm > 0 ? { text: `Confirm the ${plural(toConfirm, 'signal', 'signals')} waiting`, href: href(ctx, 'demand-signals') }
+      : null;
     const state = seriesState(weeks);
     return {
       state: state === 'empty' && (demand.signals.length > 0 || demand.paid.length > 0 || judged.size > 0) ? 'too_little' : state,
       series: {
         signups: cumulative(weeks, total).map((n, i) => ({ week_start: daysBefore(ctx.today, (13 - i) * 7 - 1), total: n })),
         bar,
-        bar_reason: bar ? null : 'No bar set',
+        bar_reason: bar == null ? 'No bar set' : null,
         need_to_have: judged.size > 0 ? { interviews: need.size, of: judged.size } : null,
         need_to_have_reason: judged.size > 0 ? null : 'No interview has a pain judged yet',
         signals: counts,

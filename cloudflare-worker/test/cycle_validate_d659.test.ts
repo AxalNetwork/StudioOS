@@ -466,6 +466,10 @@ test('D659: a demand signal — an amount of 0 is refused, a typed signal is con
   assert.equal(d.series.signals.loi, 1);
   assert.equal(d.series.signals.pre_sale, 1, 'the paid deposit counts; the unconfirmed one does not yet');
   assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}#waitlist-bar` });
+  assert.equal(card((await overview(db, PARTNER)).body, 'demand-signals').next, null);
+  const partnerModule = await call(db, PARTNER, 'GET', `/modules/demand-signals?project=${P}`);
+  assert.equal(partnerModule.body.parts.can_write, false);
+  assert.equal(partnerModule.body.card.next, null);
   assert.equal((await call(db, FOUNDER, 'PUT', `/waitlist-target?project=${P}`, { value: 40 })).status, 200);
   const o2 = await overview(db);
   assert.equal(card(o2.body, 'demand-signals').series.bar, 40);
