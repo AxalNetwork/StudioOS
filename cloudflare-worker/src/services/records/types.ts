@@ -9,13 +9,22 @@ export type Cycle = 'validate' | 'build' | 'raise' | 'grow';
  */
 export type Gate = 'read' | 'write' | ((project: ProjectRef, user: User, env: Env) => boolean | Promise<boolean>);
 
+/**
+ * A row's reference to a declared action: its key, and the body sent back with it.
+ * D6113 (#6113): `values` are a form action's starting values for this row only
+ * (an entry step's Edit opens on that step's text), overlaid on the declared fields' values.
+ */
+export type RowActionRef = string | { key: string; body: Record<string, unknown>; values?: Record<string, unknown> };
+
 export type Row = {
   a: string;
   b?: string;
   c?: string;
   tone?: string;
   href?: string;
-  action?: string | { key: string; body: Record<string, unknown> };
+  action?: RowActionRef;
+  /** D6113 (#6113): the row's further actions, drawn after `action` (an entry step's Edit and Remove). Writers only. */
+  actions?: RowActionRef[];
   /**
    * D1082 (#2947, LV1 and LV4): an experiment row's Build in Lovable. `can_launch`
    * is a writer's on a Planned experiment; `opened_at` is when it was last opened, or null.
@@ -83,7 +92,8 @@ export type RecordContent = {
 
 export type RecordFact = { label: string; value: string | number | null; reason?: string; action?: string };
 /** "Next for this record" (CO:263-269): what to do next, and the declared action that does it. */
-export type Next = { text: string; action: string | null };
+/** D6113 (#6113): a row's action keeps its body here, so the CTA addresses that row. */
+export type Next = { text: string; action: string | { key: string; body: Record<string, unknown> } | null };
 export type RecordForm = {
   title: string;
   sub?: string;
@@ -102,6 +112,11 @@ export type RecordAction = {
   form?: RecordForm;
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
+  /**
+   * D6113 (#6113): run only from a row that names it (with that row's body), so it is not drawn among the
+   * record's own actions. An entry step's Mark done, Reopen, Edit and Remove.
+   */
+  rowOnly?: true;
   /**
    * D5375: fields the client sends back with the form's values, as read with this record. Edit split
    * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.
@@ -153,6 +168,8 @@ export type Store =
   | 'growth_partners' | 'markets' | 'compliance_events'
   // A KPI key (`mrr`, … or `custom-<uid>`), and a held meeting through its obligation (migration 462).
   | 'grow_kpis' | 'obligation_occurrences'
+  // D6113 (#6113): an entry step, by its uid, through its market.
+  | 'market_entry_steps'
   // D690 (S18-B, #1694): Build's records, then the rows its sections name.
   | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
   | 'build_filings' | 'build_systems'

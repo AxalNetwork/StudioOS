@@ -36,8 +36,8 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
-  updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
+  markHeld, obligationKind, obligationState, openMinutes, removeEntryStep, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
 import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
@@ -757,6 +757,11 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
 
 const MARKET_EDIT = ['state', 'decision', ...MARKET_PARTS.flatMap(([k]) => [`${k}_score`, `${k}_source`]), 'geography_ref', 'size_cents', 'size_currency', 'size_source'] as const;
 
+/** D6113 (#6113): an entry step's Edit sends these keys only. */
+const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
+/** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
+const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
+
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
   if (!m) throw vanished();
@@ -772,10 +777,20 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
     const { m } = loadedOf(record);
-    const res = await rc.env.DB.prepare('SELECT text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
+    const res = await rc.env.DB.prepare('SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
       .bind(m.id).all<Any>();
-    return { rows: (res.results || []).map((s) => ({ a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb' })),
-      empty: 'No entry step recorded.', action: 'add-entry-step' };
+    // D6113 (#6113): each step names itself by uid, so Mark done or Reopen, Edit and Remove address it.
+    return { rows: (res.results || []).map((s) => {
+      const step = { step: String(s.uid) };
+      return {
+        a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb',
+        action: { key: s.done_at ? 'reopen-entry-step' : 'mark-entry-step-done', body: step },
+        actions: [
+          { key: 'edit-entry-step', body: step, values: { text: String(s.text), owner_name: s.owner_name ?? '', due_on: s.due_on ?? '' } },
+          { key: 'remove-entry-step', body: step },
+        ],
+      };
+    }), empty: 'No entry step recorded.', action: 'add-entry-step' };
   }),
   section('localisation', 'Localisation', async (rc, _id, record) => {
     const { m } = loadedOf(record);
@@ -815,6 +830,29 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addEntryStep(c.env, c.projectId, userOf(c), id, plain(body)) })),
+  }, {
+    key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', rowOnly: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: true }) })),
+  }, {
+    key: 'reopen-entry-step', label: 'Reopen', kind: 'write', rowOnly: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: false }) })),
+  }, {
+    key: 'edit-entry-step', label: 'Edit', kind: 'form', rowOnly: true,
+    references: stepRef,
+    form: { title: 'Edit entry step', cta: 'Save', fields: [
+      { key: 'text', label: 'Step', kind: 'T', required: true },
+      { key: 'owner_name', label: 'Owner', kind: 'T' },
+      { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), pick(body, ENTRY_STEP_EDIT)) })),
+  }, {
+    key: 'remove-entry-step', label: 'Remove', kind: 'write', tone: 'danger', rowOnly: true,
+    confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
   }, {
     key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),

@@ -285,6 +285,40 @@ test('6. download writes use the signed download door without rereading; foreign
   }
 });
 
+/**
+ * D6113 (#6113): a row's further actions draw beside its own, and a row form opens on that row's
+ * `values`, posting its body. Mutation checked: `editingValues: action.values` → null fails it
+ * (the form opens blank); restoring it passes.
+ */
+async function assertRowValues(View = CycleRoute) {
+  const data = record();
+  data.actions = [...data.actions,
+    { key: 'edit-step', kind: 'form', label: 'Edit step', rowOnly: true, form: { title: 'Edit step', fields: [{ key: 'text', label: 'Step', kind: 'T', required: true }] } },
+    { key: 'done-step', kind: 'write', label: 'Mark step done', rowOnly: true }];
+  data.main = [{ title: 'Entry plan', rows: [
+    { a: 'First step', c: 'Open', action: { key: 'done-step', body: { step: 's1' } }, actions: [{ key: 'edit-step', body: { step: 's1' }, values: { text: 'First step' } }] },
+    { a: 'Second step', c: 'Open', action: { key: 'done-step', body: { step: 's2' } }, actions: [{ key: 'edit-step', body: { step: 's2' }, values: { text: 'Second step' } }] },
+  ] }];
+  const view = await mounted((url, opts) => opts.method === 'POST' ? response({ ok: true }) : response(data), { View });
+  try {
+    // A rowOnly action draws on its rows only, never among the record's own actions.
+    const edits = view.nodes().filter(n => n.tagName === 'BUTTON' && view.props(n)?.children === 'Edit step');
+    assert.equal(edits.length, 2);
+    await view.run(() => view.props(edits[1]).onClick());
+    const form = view.fiber('FormLightbox'); assert.ok(form);
+    assert.equal(form.memoizedProps.current.text, 'Second step');
+    await view.run(() => form.memoizedProps.onSubmit({ text: 'Second step, sooner' }));
+    const post = view.requests.find(r => r.url.includes('/actions/edit-step?project=3'));
+    assert.deepEqual(JSON.parse(post.options.body), { step: 's2', text: 'Second step, sooner' });
+  } finally { await view.close(); }
+}
+test('6. a row\'s further actions draw, and its form opens on its own values (D6113); mutation checked', async () => {
+  await assertRowValues();
+  await mutationCheck(read('frontend/src/pages/cycles/CycleRoute.jsx'), 'pages/cycles/CycleRoute.jsx', module => assertRowValues(module.default), [
+    ['editingValues: action.values', 'editingValues: null'],
+  ], true);
+});
+
 test('6. the record dropdown navigates Back with its venture', async () => {
   const view = await mounted(defaultHandler);
   try {

@@ -143,6 +143,10 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
         'SELECT 1 FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id WHERE o.id = ? AND e.project_id = ?',
       ).bind(n, projectId).first();
     }
+    case 'market_entry_steps':
+      return !!await db.prepare(
+        'SELECT 1 FROM market_entry_steps s JOIN markets m ON m.id = s.market_id WHERE s.uid = ? AND m.project_id = ?',
+      ).bind(value, projectId).first();
     // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
     case 'mvp_features': {
       const n = numeric(value);

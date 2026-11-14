@@ -59,7 +59,9 @@ export function dispatchOf(action) {
 
 export function rowView(row = {}) {
   // D1082 (#2947): an experiment row's Build in Lovable, as the Worker sent it.
-  return { a: row.a ?? '', b: row.b ?? '', c: row.c ?? '', tone: toneOf(row.tone), href: recordLink(row.href), action: row.action, ...(row.lovable ? { lovable: row.lovable } : {}) };
+  // D6113 (#6113): `actions`, the row's further actions after `action` (an entry step's Edit and Remove).
+  return { a: row.a ?? '', b: row.b ?? '', c: row.c ?? '', tone: toneOf(row.tone), href: recordLink(row.href), action: row.action,
+    ...(Array.isArray(row.actions) && row.actions.length ? { actions: row.actions } : {}), ...(row.lovable ? { lovable: row.lovable } : {}) };
 }
 
 export function pillView(pill) {
@@ -80,7 +82,10 @@ export function rowAction(reference, declarations) {
   const key = typeof reference === 'string' ? reference : reference?.key;
   const action = declarations.get(key);
   if (!action || !dispatchOf(action)) return null;
-  return reference && typeof reference === 'object' && Object.hasOwn(reference, 'body') ? { ...action, body: reference.body } : action;
+  if (!reference || typeof reference !== 'object') return action;
+  const own = Object.hasOwn(reference, 'body') ? { ...action, body: reference.body } : action;
+  // D6113 (#6113): a row's `values` are its form's starting values, for that row only.
+  return reference.values && typeof reference.values === 'object' ? { ...own, values: reference.values } : own;
 }
 
 /**
@@ -107,6 +112,8 @@ export function recordFormFor(action, record, edit) {
   if (action?.kind !== 'form') return null;
   const fields = (action.form?.fields ?? []).map(field => ({ ...field, name: field.key ?? field.name }));
   const current = Object.fromEntries(fields.filter(field => Object.hasOwn(field, 'value')).map(field => [field.name, field.value]));
+  // D6113 (#6113): a row's own values, for the fields the form declares only.
+  for (const field of fields) if (action.values && Object.hasOwn(action.values, field.name)) current[field.name] = action.values[field.name];
   if (action.key === 'edit') {
     const row = { id: record.id, edit: { id: record.id, uid: record.uid ?? record.id } };
     const id = edit?.idOf(row);
@@ -153,6 +160,7 @@ export function availableRecord(record, edit) {
     action: canRun(rowAction(section.action, declarations)) ? section.action : undefined,
     rows: (section.rows ?? []).map(row => ({ ...row,
       action: canRun(rowAction(row.action, declarations)) ? row.action : undefined,
+      ...(Array.isArray(row.actions) ? { actions: row.actions.filter(ref => canRun(rowAction(ref, declarations))) } : {}),
     })),
   }));
   return { ...record, actions: (record.actions ?? []).filter(canRun), main: sections(record.main), side: sections(record.side) };
