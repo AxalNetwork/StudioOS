@@ -146,6 +146,7 @@ async function fixture() {
   db.exec(file('462'));
   db.exec(file('202611041912'));
   db.exec(file('507'));
+  db.exec(file('580'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(ADVISOR, 'founder', 20, 'Ada', 'ada@co.example');
@@ -226,6 +227,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
     (102,'legacy',7,1,'Legacy','2026-09','submitted','2026-09-15',NULL,NULL,NULL,'2026-09-15'),
     (103,'newer',7,1,'New sent','2026-09','submitted','2026-09-30','2026-09-30','2026-09-01','2026-09-30','2026-09-30'),
     (104,'draft',7,1,'Draft','2026-10','draft',NULL,NULL,NULL,NULL,'2026-10-10');
+    UPDATE portfolio_updates SET kind = 'report' WHERE id = 101;
     INSERT INTO update_recipients (update_id,audience,user_id,delivered_via,opened_at) VALUES
     (103,'investor',2,'notification','2026-10-01'),(103,'investor',NULL,NULL,NULL),
     (103,'team',1,'notification',NULL),(103,'network',3,'notification','2026-10-02');
@@ -236,7 +238,7 @@ test('Updates history is newest first with grouped counts, author links, legacy 
   const before = (f.db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n;
   const module = (await module_(f, 'durable-company-building')).body;
   const rows = module.parts.updates;
-  assert.deepEqual(rows.map((u: any) => u.uid), ['newer', 'legacy', 'older']);
+  assert.deepEqual(rows.map((u: any) => [u.uid, u.kind]), [['newer', 'update'], ['legacy', 'update'], ['older', 'report']]);
   assert.deepEqual(rows[0].sent_to, { investors: 2, team: 1, network: 1 });
   assert.deepEqual([rows[0].delivered, rows[0].opened, rows[0].asks, rows[0].replies, rows[0].asks_to_ask_again], [3, 2, 3, 1, 1]);
   assert.equal(rows[0].href, '/updates/newer');

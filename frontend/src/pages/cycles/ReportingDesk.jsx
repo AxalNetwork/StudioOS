@@ -60,7 +60,7 @@ export function DeskTabBar({ active, search = '', counts = {} }) {
   );
 }
 
-/** The History: every update the venture sent, from the Durable company-building read. */
+/** The History: the venture's recent reports and updates from the Durable company-building read. */
 function History({ projectId, onShare }) {
   const [state, setState] = useState({ status: 'loading', updates: undefined, reason: null, publish: null });
   const [reload, setReload] = useState(0);
@@ -78,7 +78,7 @@ function History({ projectId, onShare }) {
   const gate = state.publish;
   const mayPublish = gate?.state === 'ok' && (gate.can_publish || gate.empty?.kind === 'connect');
   const rowAction = mayPublish ? (u) => <PublishUpdate updateUid={u.uid} projectId={projectId} /> : null;
-  return <div data-testid="reporting-history"><UpdatesHistory updates={state.updates} reason={state.reason} onShare={onShare} rowAction={rowAction} /></div>;
+  return <div data-testid="reporting-history"><UpdatesHistory key={projectId} filterable updates={state.updates} reason={state.reason} onShare={onShare} rowAction={rowAction} /></div>;
 }
 
 /** Part 2's desk read: ready, unreadable, or not shared with this account (the Worker's 404). */
