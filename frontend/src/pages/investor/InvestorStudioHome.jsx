@@ -38,7 +38,7 @@ export default function InvestorStudioHome({
 }) {
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
   // #4622: each source is read, committed and retried on its own (`useInvestorSources`).
-  const { records, failures, readAll, retryFailed } = useInvestorSources({ previewing });
+  const { records, failures, read, readAll, retryFailed } = useInvestorSources({ previewing });
 
   // D4362 (#4362): an admin previewing arranges their own Investor Studio; its tiles stay withheld (`withheld`).
   const studio = useStudioLayout({ profile: 'investor', viewer: user });
@@ -64,7 +64,7 @@ export default function InvestorStudioHome({
   const retryLifecycle = onRetryLifecycle || refreshContext;
   const quick = quickStats({ previewing, dashboard, dashboardUnavailable, lifecycle, dealCount, dealCountIsLowerBound: dealSummary?.total_is_lower_bound === true });
   const tiles = investorTiles({
-    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, opportunities, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources,
+    user, previewing, dashboard, dashboardUnavailable, lifecycle, records, failures, opportunities, stages, events, eventsCoverage, quick, refreshContext, retryLifecycle, retrySources, retrySource: read,
   });
 
   return (

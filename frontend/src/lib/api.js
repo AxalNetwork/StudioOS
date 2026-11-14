@@ -3296,7 +3296,7 @@ export const api = {
   // pages render "Not recorded" rather than an invented figure.
   fundsAnalytics: () => request('/funds/analytics'),
   fundAnalytics: (id) => request(`/funds/${id}/analytics`),
-  fundsLpPortal: () => request('/funds/lp-portal'),
+  fundsLpPortal: ({ view } = {}) => request(view === 'studio' ? '/funds/lp-portal?view=studio' : '/funds/lp-portal'),
   // GP-only. Returns ONE limited partner's reporting data in the same shape as
   // fundsLpPortal, so the quarterly-report renderer is a single code path
   // whether the LP downloads their own statement or the GP produces it.
