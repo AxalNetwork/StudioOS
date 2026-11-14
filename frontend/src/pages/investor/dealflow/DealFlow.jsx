@@ -33,20 +33,20 @@ import {
   compareHref, opensDeal, viewHref,
 } from './dealFlowModel';
 import {
-  DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
+  DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
   settingsOfSpec, sortRows, viewChanged,
 } from './flowModel';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
 import { FlowTable, PhoneCards } from './FlowTable';
 import {
-  AddToFlowDialog, CardScopesPopover, ColumnsPopover, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, SortPopover, TOOL, ViewsMenu,
+  AddToFlowDialog, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, TAP, TOOL, ViewEdited, ViewSettings,
 } from './FlowControls';
 import NewForYou from './NewForYou';
 import OtherDealActivity from './OtherDealActivity';
 import { ZonePrimary } from '../../../workspaces/ZoneActions';
 import PeekDrawer from './PeekDrawer';
 import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
-import { moveKind } from './movesModel';
+import { moveKind, unreadSources } from './movesModel';
 
 export { CompareView, DealCompare } from './Compare';
 
@@ -164,6 +164,50 @@ function useScoresAndFit(ids) {
   return { scores, fits, retry: () => setAgain((n) => n + 1) };
 }
 
+/**
+ * D4815 part 3 (canvas DX1, board DE01): Needs your attention, above the board
+ * or table. Its one item with a field behind it is "new" (`attentionOf`): the
+ * deals that reached you and are not yet in your flow, linking to New for
+ * you. Its read answers alone: a failure says Unreadable with Try again for
+ * the strip and never 0, and the board below is unaffected.
+ */
+export function AttentionStrip({ read, onRetry, newHref }) {
+  const a = attentionOf(read, unreadSources);
+  const head = <b className="text-[13.5px]">Needs your attention</b>;
+  const shell = 'flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900';
+  if (a.kind === 'loading') return <section className={shell} aria-label="Needs your attention" aria-busy="true" data-testid="dealflow-attention">{head}<span className="text-[12.5px] text-axal-muted dark:text-gray-400">Reading…</span></section>;
+  if (a.kind === 'unreadable') {
+    return (
+      <section className={shell} aria-label="Needs your attention" data-testid="dealflow-attention">
+        {head}
+        <span className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unreadable">Unreadable</span>
+        <span className="text-[12.5px] text-axal-muted dark:text-gray-400">What needs your attention could not be read. That is not the same as nothing needing it.</span>
+        <button type="button" className={`text-[12.5px] font-semibold underline ${TAP}`} onClick={onRetry} data-testid="dealflow-attention-retry">Try again</button>
+      </section>
+    );
+  }
+  return (
+    <section className={shell} aria-label="Needs your attention" data-testid="dealflow-attention">
+      {head}
+      {a.items.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {a.items.map((i) => (
+            <Link key={i.key} to={newHref} aria-label={i.label} className={`inline-flex items-center rounded-full border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800 ${TAP}`} data-testid={`dealflow-attention-${i.key}`}>
+              {i.word}
+            </Link>
+          ))}
+        </div>
+      ) : <span className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-attention-none">Nothing new for you{a.unread.length ? ' from the ways in that could be read' : ''}.</span>}
+      {a.unread.length > 0 && (
+        <span className="text-[12.5px] text-amber-800 dark:text-amber-300" data-testid="dealflow-attention-unread">
+          {a.unread.join(', ')} could not be read, so there may be more.
+          <button type="button" className={`ml-2 font-semibold underline ${TAP}`} onClick={onRetry} data-testid="dealflow-attention-retry">Try again</button>
+        </span>
+      )}
+    </section>
+  );
+}
+
 const CLEAR_BTN = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 /**
@@ -199,7 +243,8 @@ function EmptyFlow() {
  * address. D4815 (canvas DX1): the root is My Deal Flow only. Screening, the
  * committee, Closing and the deal rooms are one "Other deal activity" line
  * linking to their routes (the deal rooms at `/deals/rooms` since the second
- * slice; My tasks moved to Studio).
+ * slice; My tasks moved to Studio). Part 3 (#5899): Needs your attention above
+ * the board or table, and View settings for the advanced view options.
  */
 export default function DealFlow({ view, scope }) {
   const location = useLocation();
@@ -222,6 +267,8 @@ export default function DealFlow({ view, scope }) {
   const [views, retryViews] = useRead(() => dealViewsApi.list(), []);
   // D4635: one accepted weighting for the control and the sort: a save re-reads it, and the order follows.
   const [weights, retryWeights] = useRead(() => ventureScoresApi.weights(), []);
+  // D4815 part 3: the strip's one read, the inbox New for you already lists; not made under New for you itself.
+  const [inbox, retryInbox] = useRead(() => (lists ? dealFlowApi.inbox() : Promise.resolve(null)), [lists]);
   const [entries, setEntries] = useState(null);
   useEffect(() => { setEntries(flow.kind === 'ok' ? flow.data?.items || [] : null); }, [flow]);
 
@@ -281,20 +328,25 @@ export default function DealFlow({ view, scope }) {
   const peekRow = dialog?.kind === 'peek' ? rows.find((r) => r.id === dialog.id) || null : null;
   const saveNote = async (row, note) => { replaceEntry(await dealFlowApi.update(row.id, { note })); };
 
+  const viewList = views.kind === 'unreadable' ? 'failed' : views.data;
   const controls = lists && (
     <div className="flex flex-col gap-2" data-testid="dealflow-controls">
       <div className="flex flex-wrap items-center gap-2">
-        <ViewsMenu views={views.kind === 'unreadable' ? 'failed' : views.data} current={{ view, scope, settings }} activeUid={viewUid} edited={edited}
-          onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
-          onSave={() => setDialog({ kind: 'save' })} onSaveChanges={(v) => setDialog({ kind: 'save', editing: v })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
         <input type="search" value={settings.filters.q} onChange={(e) => setSettings({ filters: { ...settings.filters, q: e.target.value } })} placeholder="Search ventures, sectors" aria-label="Search ventures, sectors"
-          className="min-w-[200px] rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="dealflow-search" />
-        <button type="button" className={TOOL} onClick={() => setDialog({ kind: 'filters' })} aria-haspopup="dialog" data-testid="dealflow-filters-open">
+          className={`min-w-[200px] flex-1 rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[13px] sm:flex-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 ${TAP}`} data-testid="dealflow-search" />
+        <button type="button" className={`${TOOL} ${TAP}`} onClick={() => setDialog({ kind: 'filters' })} aria-haspopup="dialog" data-testid="dealflow-filters-open">
           Filters{filterCount(settings.filters) ? <span className="rounded-full bg-violet-600 px-1.5 text-[10.5px] text-white dark:bg-violet-500">{filterCount(settings.filters)}</span> : null}
         </button>
-        <SortPopover sort={settings.sort} onSort={(sort) => setSettings({ sort })} />
-        {view === 'table' ? <ColumnsPopover columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS} />
-          : <CardScopesPopover cards={settings.cards} onCards={(cards) => setSettings({ cards })} />}
+        <ViewEdited views={viewList} activeUid={viewUid} edited={edited} onSave={() => setDialog({ kind: 'save' })} onSaveChanges={(v) => setDialog({ kind: 'save', editing: v })} />
+        <div className="ml-auto">
+          {/* D4815 part 3 (DE01): Sort, Columns or Card scopes, and the saved view, under View settings; each still in the address. */}
+          <ViewSettings view={view} views={viewList} activeUid={viewUid}
+            sort={settings.sort} onSort={(sort) => setSettings({ sort })}
+            columns={settings.columns} onColumns={(columns) => setSettings({ columns })} defaults={DEFAULT_COLUMNS}
+            cards={settings.cards} onCards={(cards) => setSettings({ cards })}
+            onPick={(v) => (v ? navigate(settingsHref({ ...settingsOfSpec(v.spec), viewUid: v.uid })) : navigate(viewHref({ view, scope })))}
+            onSave={() => setDialog({ kind: 'save' })} onDelete={(v) => setDialog({ kind: 'delete', view: v })} />
+        </div>
       </div>
       <FilterChips filters={settings.filters} onFilters={(filters) => setSettings({ filters })} />
     </div>
@@ -355,6 +407,7 @@ export default function DealFlow({ view, scope }) {
     <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow">
       <DealFlowToolbar view={view} scope={scope} hrefFor={(v) => settingsHref({ ...v, settings })} onWeightsSaved={retryWeights} />
       {controls}
+      {lists && <AttentionStrip read={inbox} onRetry={retryInbox} newHref={settingsHref({ view, scope: 'new', settings })} />}
       {body}
       {toast && (
         <div className={`flex flex-wrap items-center gap-3 rounded-lg px-3 py-2 text-[13px] ${toast.kind === 'refused' ? 'border border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200' : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'}`} role={toast.kind === 'refused' ? 'alert' : 'status'} data-testid="dealflow-toast">
