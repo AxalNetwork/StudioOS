@@ -63,7 +63,7 @@ function PerLp({ split }) {
         { key: 'amount', label: 'Amount', align: 'right', mono: true, cell: (l) => money(l.amount_cents) },
       ]} rows={d.rows} rowKey={(l) => l.lp_id} template="1.6fr .8fr 1fr" rowTestId={(l) => `distribution-line-${l.lp_id}`}
       foot={<div className="grid grid-cols-[1fr_auto] items-center bg-[#faf9fc] px-4 py-3 sm:grid-cols-[1.6fr_.8fr_1fr] sm:px-5 dark:bg-gray-950/40">
-        <div className="text-[11.5px] font-extrabold text-axal-ink dark:text-gray-100">Total</div>
+        <div className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Total</div>
         <div className="hidden sm:block" />
         <div className={`text-right text-[12px] font-extrabold text-axal-ink dark:text-gray-100 ${NUM}`} data-testid="distribution-preview-total">{d.totalText}</div>
       </div>} />
@@ -260,11 +260,11 @@ export function DistributionsTab({ apis, access, fund, overview }) {
             </form>
             {split && split.distributable && (
               <div className="mt-4 border-t border-axal-hairline pt-3.5 dark:border-gray-800">
-                <p className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">The job pays these lines. Nothing is sent from here: each line is marked paid when the money has gone.</p>
+                <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">The job pays these lines. Nothing is sent from here: each line is marked paid when the money has gone.</p>
                 <div className="mt-2.5">
                   <FundActControl access={access} act="distribution.execute" testId="distribution-execute-refused" className="text-[12px] text-axal-muted">
                     <button type="button" className={`${BTN.primary} w-full`} disabled={busy} onClick={() => setDialog({ kind: 'execute', split })} data-testid="distribution-execute">{`${actButton('Execute', split.proceeds_cents, 'distribution')}…`}</button>
-                    <p className="mt-2 text-[11px] text-axal-muted dark:text-gray-400" data-testid="distribution-execute-foot">{EXECUTE_FOOT}</p>
+                    <p className="mt-2 text-[12px] text-axal-muted dark:text-gray-400" data-testid="distribution-execute-foot">{EXECUTE_FOOT}</p>
                   </FundActControl>
                 </div>
               </div>
