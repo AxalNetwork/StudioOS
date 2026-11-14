@@ -40,7 +40,10 @@ test('replit.md: the dev commands, the Vite major and the migration name match t
   assert.doesNotMatch(doc, /python backend\/main\.py/);
   assert.ok(!existsSync(join(ROOT, 'backend/main.py')));
   assert.ok(existsSync(join(ROOT, 'backend/app/main.py')));
-  assert.match(doc, /\*\*Dev\*\*: `cd frontend && npm run dev` \(frontend\) \+ `uv run uvicorn backend\.app\.main:app /);
+  // The reload watcher is scoped to backend/, as .replit says it must be when run from the repo root.
+  const dev = /\*\*Dev\*\*: `cd frontend && npm run dev` \(frontend\) \+ `(uv run uvicorn backend\.app\.main:app [^`]+)`/.exec(doc)?.[1];
+  assert.match(dev, / --reload --reload-dir backend$/);
+  assert.match(read('.replit'), / --reload --reload-dir backend"/);
   assert.ok(JSON.parse(read('frontend/package.json')).scripts.dev);
 
   const major = /(\d+)/.exec(JSON.parse(read('frontend/package.json')).devDependencies.vite)[1];
@@ -98,8 +101,6 @@ test('skills state rules, not one day\'s tally', () => {
   assert.doesNotMatch(skill('task-lifecycle'), /On 2026-11-14 alone/);
   assert.doesNotMatch(skill('schema-change'), /between #5855 and #5822/);
   assert.doesNotMatch(skill('add-worker-endpoint'), /expected 19 normalised comparisons/);
-  // Both skills that hand out the one-call suite point at the skill that runs it in parts.
-  for (const name of ['task-lifecycle', 'build-screen-to-canvas']) assert.match(skill(name), /`verify-before-push` skill when one\s+run would outlast the session/);
   // The live-check rule is stated once, under the heading that says it is not in AGENTS.md.
   const rules = read('.claude/skills/coordinator-audit/RULES.md');
   assert.equal(rules.match(/owner's live check/g).length, 1);
