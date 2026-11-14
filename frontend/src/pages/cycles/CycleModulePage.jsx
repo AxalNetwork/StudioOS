@@ -26,6 +26,9 @@ import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progres
  * `page`): the page hands them to `onQuery`, and the caller re-reads. Nothing
  * is filtered in the browser, so a count is always the store's count.
  *
+ * `onExport` (D6103) is opt-in: only a caller whose module has an export, for
+ * a viewer the read says may export, passes it, and only then is Export drawn.
+ *
  * A module that already has a full working tool (the cap table, the data
  * room, the pitch deck, the capital pipeline, the roadmap) is linked through
  * `tool`, not redrawn here.
@@ -90,7 +93,37 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
   );
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null }) {
+/**
+ * D6103 (#6103): the table's Export, opt-in per module. `onExport()` hands the
+ * table's search, filter and sort to the Worker and resolves `{ rows }` once
+ * the file is saved; the Worker's refusal (the row cap, a reader) is shown as
+ * its sentence. A module that passes no `onExport` draws no control.
+ */
+export function ExportControl({ onExport, label = 'Export CSV' }) {
+  const [state, setState] = useState({ busy: false, said: '', failed: false });
+  const run = async () => {
+    setState({ busy: true, said: '', failed: false });
+    try {
+      const out = await onExport();
+      const n = Number(out?.rows);
+      setState({ busy: false, said: Number.isFinite(n) && n > 0 ? `Exported ${n} row${n === 1 ? '' : 's'}.` : 'Exported.', failed: false });
+    } catch (e) {
+      setState({ busy: false, said: e?.message || 'The export failed. Nothing was saved.', failed: true });
+    }
+  };
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <button type="button" onClick={run} disabled={state.busy} data-testid="records-export" aria-busy={state.busy || undefined}
+        className="whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800">
+        {state.busy ? 'Exporting…' : label}
+      </button>
+      {state.said && <span role={state.failed ? 'alert' : 'status'} data-testid="records-export-said"
+        className={state.failed ? 'text-[12px] text-red-700 dark:text-red-300' : 'text-[12px] text-axal-muted dark:text-gray-400'}>{state.said}</span>}
+    </span>
+  );
+}
+
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null, onExport = null }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -129,6 +162,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}
+          {typeof onExport === 'function' && status === 'ready' && <ExportControl onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
@@ -235,6 +269,7 @@ export function Sources({ children, phone = false }) {
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  onExport = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -301,6 +336,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             progressive={progressive}
+            onExport={onExport}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />}
           {zero && children ? <Sources>{children}</Sources> : children}

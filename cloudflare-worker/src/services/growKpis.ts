@@ -243,6 +243,52 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
   ];
 }
 
+/** One statement per typed column, so a key never names a column (decision 4). */
+const HISTORY_SQL = {
+  mrr: 'SELECT snapshot_date AS day, mrr AS v FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date, id',
+  paying_accounts: 'SELECT snapshot_date AS day, paying_accounts AS v FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date, id',
+  churn: 'SELECT snapshot_date AS day, monthly_churn_pct AS v FROM project_metrics WHERE project_id = ? AND monthly_churn_pct IS NOT NULL ORDER BY snapshot_date, id',
+  net_burn: 'SELECT snapshot_date AS day, net_burn AS v FROM project_metrics WHERE project_id = ? AND net_burn IS NOT NULL ORDER BY snapshot_date, id',
+} as const;
+
+/**
+ * A KPI by month, newest first, every month stored: the last value each month
+ * held. This is what is kept, not every entry: a KPI keeps a day's row per
+ * source, and its history (the record's History, D691, and Grow's CSV export,
+ * D6103) reads the month's last one. The value is in the row's own unit
+ * (`usd` whole dollars, `usd_cents` cents, as `kpiRows` reads it).
+ */
+export async function kpiMonths(env: Env, projectId: number, row: KpiRow): Promise<Array<{ month: string; value: number }>> {
+  const byMonth = new Map<string, number>();
+  const unit = row.unit;
+  const put = (day: string, v: number | null) => { if (v != null && Number.isFinite(Number(v))) byMonth.set(String(day).slice(0, 7), Number(v)); };
+  const ledger = row.id === 'new_mrr' || row.id === 'expansion_mrr' || (row.id === 'churn' && unit === 'usd_cents') ? await readRecurring(env, projectId) : null;
+  if (ledger) {
+    const kind = row.id === 'new_mrr' ? 'new' : row.id === 'expansion_mrr' ? 'expansion' : 'churned';
+    for (const m of computeMovements(ledger)) if (m.kind === kind) put(`${m.month}-01`, m.amount_cents);
+  } else if (row.id in HISTORY_SQL) {
+    const res = await env.DB.prepare(HISTORY_SQL[row.id as keyof typeof HISTORY_SQL]).bind(projectId).all<{ day: string; v: number }>();
+    for (const r of res.results || []) put(r.day, r.v);
+  } else if (row.id === 'runway') {
+    const res = await env.DB.prepare(
+      `SELECT snapshot_date AS day, cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets' ORDER BY snapshot_date, id`,
+    ).bind(projectId).all<{ day: string; cash: number | null; burn: number | null }>();
+    let cash: number | null = null; let burn: number | null = null;
+    for (const r of res.results || []) {
+      if (r.cash != null) cash = Number(r.cash);
+      if (r.burn != null) burn = Number(r.burn);
+      if (cash != null && burn != null) put(r.day, runwayMonths(cash, burn));
+    }
+  } else if (row.id.startsWith(CUSTOM_PREFIX)) {
+    const res = await env.DB.prepare(
+      `SELECT v.as_of AS day, COALESCE(v.value_cents, v.value) AS v FROM custom_kpi_values v JOIN custom_kpis k ON k.id = v.kpi_id
+        WHERE k.uid = ? AND k.project_id = ? ORDER BY v.as_of, v.id`,
+    ).bind(row.id.slice(CUSTOM_PREFIX.length), projectId).all<{ day: string; v: number }>();
+    for (const r of res.results || []) put(r.day, r.v);
+  }
+  return [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([month, value]) => ({ month, value }));
+}
+
 export type KpiEntry = { kpi?: unknown; value?: unknown; as_of?: unknown; note?: unknown; label?: unknown; unit?: unknown; source?: unknown };
 export type KpiWritten = { id: string; as_of: string; value: number; unit: string; source: 'manual'; created_kpi: boolean };
 

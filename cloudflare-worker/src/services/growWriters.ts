@@ -100,7 +100,7 @@ async function owned<T>(env: Env, sql: string, key: unknown, pid: number): Promi
   return row;
 }
 
-type Log = { module: GrowSlug | 'kpis'; entityId: string | number; action: string; summary: string };
+type Log = { module: GrowSlug | 'kpis'; entityId: string | number | null; action: string; summary: string };
 const MODULE_OF: Record<Log['module'], GrowSlug> = {
   'product-improvement': 'product-improvement', distribution: 'distribution', 'revenue-and-traction': 'revenue-and-traction',
   'team-expansion': 'team-expansion', 'partner-network': 'partner-network', 'market-expansion': 'market-expansion',

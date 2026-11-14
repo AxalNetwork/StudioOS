@@ -34,6 +34,26 @@ export function csvEsc(v: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/**
+ * A field a spreadsheet must never run (D6103). A cell that starts with `=`,
+ * `+`, `-`, `@`, a tab or a carriage return is read by Excel and Sheets as a
+ * formula, so text a person typed (a customer's feedback, a KPI's name) gets a
+ * leading apostrophe first; a plain number such as `-42` or `-1.5` is left as
+ * it is, because it is a value, not a formula. The same rule as
+ * `capTableRegister.ts`'s and `fundAdminLpsCsv.ts`'s private `csvCell`, here
+ * so a new export reuses it instead of writing a fifth copy.
+ */
+export function csvSafe(v: unknown): string {
+  if (v == null) return '';
+  const s = String(v);
+  return csvEsc(/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s) ? `'${s}` : s);
+}
+
+/** `toCsv` with every field through `csvSafe`: for an export that carries text people typed. */
+export function toSafeCsv(header: readonly string[], rows: readonly (readonly unknown[])[]): string {
+  return [header, ...rows].map((cells) => cells.map(csvSafe).join(',')).join('\r\n');
+}
+
 /** One row, already escaped. */
 export const csvRow = (cells: readonly unknown[]): string => cells.map(csvEsc).join(',');
 

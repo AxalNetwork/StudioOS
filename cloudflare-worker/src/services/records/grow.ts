@@ -28,9 +28,8 @@ import { canAccessProject } from '../projectAccess';
 import { ensureProjectMetricsSchema } from '../../routes/progress';
 import { channelRows, readiness, utmSource, MARKET_PARTS, type Ctx as GrowCtx, type MarketRow } from '../growCycle';
 import { billingPeriods, computeMovements, movementGap, readRecurring } from '../revenueMovements';
-import { runwayMonths } from '../saasMetrics';
 import {
-  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiRows, type KpiAlert, type KpiRow,
+  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiMonths, kpiRows, type KpiAlert, type KpiRow,
 } from '../growKpis';
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
@@ -410,45 +409,10 @@ export function kpiValueText(value: number | null, unit: string | null): string 
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
 
-/** One statement per typed column, so a key never names a column (decision 4). */
-const HISTORY_SQL = {
-  mrr: 'SELECT snapshot_date AS day, mrr AS v FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date, id',
-  paying_accounts: 'SELECT snapshot_date AS day, paying_accounts AS v FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date, id',
-  churn: 'SELECT snapshot_date AS day, monthly_churn_pct AS v FROM project_metrics WHERE project_id = ? AND monthly_churn_pct IS NOT NULL ORDER BY snapshot_date, id',
-  net_burn: 'SELECT snapshot_date AS day, net_burn AS v FROM project_metrics WHERE project_id = ? AND net_burn IS NOT NULL ORDER BY snapshot_date, id',
-} as const;
-
-/** The KPI by month, newest first: the last value each month held. */
+/** The KPI by month, newest first, the last twelve: the last value each month held (`kpiMonths`, D6103). */
 async function kpiHistory(rc: RecordContext, row: KpiRow): Promise<Array<{ month: string; text: string }>> {
-  const byMonth = new Map<string, number>();
-  const unit = row.unit;
-  const put = (day: string, v: number | null) => { if (v != null && Number.isFinite(Number(v))) byMonth.set(String(day).slice(0, 7), Number(v)); };
-  const ledger = row.id === 'new_mrr' || row.id === 'expansion_mrr' || (row.id === 'churn' && unit === 'usd_cents') ? await readRecurring(rc.env, rc.projectId) : null;
-  if (ledger) {
-    const kind = row.id === 'new_mrr' ? 'new' : row.id === 'expansion_mrr' ? 'expansion' : 'churned';
-    for (const m of computeMovements(ledger)) if (m.kind === kind) put(`${m.month}-01`, m.amount_cents);
-  } else if (row.id in HISTORY_SQL) {
-    const res = await rc.env.DB.prepare(HISTORY_SQL[row.id as keyof typeof HISTORY_SQL]).bind(rc.projectId).all<{ day: string; v: number }>();
-    for (const r of res.results || []) put(r.day, r.v);
-  } else if (row.id === 'runway') {
-    const res = await rc.env.DB.prepare(
-      `SELECT snapshot_date AS day, cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets' ORDER BY snapshot_date, id`,
-    ).bind(rc.projectId).all<{ day: string; cash: number | null; burn: number | null }>();
-    let cash: number | null = null; let burn: number | null = null;
-    for (const r of res.results || []) {
-      if (r.cash != null) cash = Number(r.cash);
-      if (r.burn != null) burn = Number(r.burn);
-      if (cash != null && burn != null) put(r.day, runwayMonths(cash, burn));
-    }
-  } else if (row.id.startsWith(CUSTOM_PREFIX)) {
-    const res = await rc.env.DB.prepare(
-      `SELECT v.as_of AS day, COALESCE(v.value_cents, v.value) AS v FROM custom_kpi_values v JOIN custom_kpis k ON k.id = v.kpi_id
-        WHERE k.uid = ? AND k.project_id = ? ORDER BY v.as_of, v.id`,
-    ).bind(row.id.slice(CUSTOM_PREFIX.length), rc.projectId).all<{ day: string; v: number }>();
-    for (const r of res.results || []) put(r.day, r.v);
-  }
-  return [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12)
-    .map(([month, v]) => ({ month, text: kpiValueText(v, unit) ?? '' }));
+  return (await kpiMonths(rc.env, rc.projectId, row)).slice(0, 12)
+    .map(({ month, value }) => ({ month, text: kpiValueText(value, row.unit) ?? '' }));
 }
 
 const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, id) => {

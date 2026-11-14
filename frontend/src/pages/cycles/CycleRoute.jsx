@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
+import { canExport, cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
 import { EadwynButton } from '../../ui/EadwynPanel.jsx';
@@ -899,6 +899,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
+        // D6103 (#6103): Export only where the module has one and the read says this viewer may (a writer).
+        onExport={!narrativeAdmin && projectId && canExport(cycle, slug) && read?.can_export === true
+          ? () => cyclesApi.exportCsv(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : null}
         action={action}
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))

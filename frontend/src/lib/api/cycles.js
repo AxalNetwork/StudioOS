@@ -1,4 +1,4 @@
-import { request } from '../api.js';
+import { api, request } from '../api.js';
 import { makeCycleWrites } from './cycleWrites.js';
 
 // D661 (#1474) — the cycle pages' shared read (#1469, D656), one entry per
@@ -33,6 +33,22 @@ const READS = {
   },
 };
 
+/**
+ * D6103 (#6103): the module exports, by cycle and slug: the table's own search,
+ * filter and sort, as a file. A module is here only when its Worker route
+ * exports it (`routes/cycle_grow.ts` `GET /modules/:slug/export`, a writer on
+ * the venture); every other module has no Export control.
+ */
+const EXPORTS = {
+  grow: {
+    'product-improvement': (projectId, q) => api._downloadCsv(`/cycles/grow/modules/product-improvement/export?${query(projectId, q)}`, 'feedback.csv'),
+    'revenue-and-traction': (projectId, q) => api._downloadCsv(`/cycles/grow/modules/revenue-and-traction/export?${query(projectId, q)}`, 'kpis.csv'),
+  },
+};
+
+/** Whether a module has an export (the page draws Export only then). */
+export const canExport = (cycle, slug) => typeof EXPORTS[cycle]?.[slug] === 'function';
+
 /** The cycles whose read the page can draw. A cycle not here keeps its current page. */
 export const WIRED_CYCLES = Object.keys(READS);
 
@@ -50,6 +66,10 @@ export const cyclesApi = {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
     return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/activity?project=${encodeURIComponent(projectId)}&page=${encodeURIComponent(page)}`);
   },
+  /** `{ q, filter, sort }` as the table holds them; resolves `{ filename, rows }` once the file is handed over. */
+  exportCsv: (cycle, projectId, slug, q) => (canExport(cycle, slug)
+    ? EXPORTS[cycle][slug](projectId, { ...q, page: 1 })
+    : Promise.reject(new Error('This module has no export'))),
   // D909 (#2693): D908's section-by-section compare of two narrative versions.
   narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
   // One implementation with the write table's, which Add filing's Proof calls (D695 #1656).
