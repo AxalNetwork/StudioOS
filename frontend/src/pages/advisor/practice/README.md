@@ -11,12 +11,13 @@ its `ZONE` map.
 | File | Artboard | Route | Architecture | Store |
 | --- | --- | --- | --- | --- |
 | `OpportunitiesZone.jsx` | PR1 · Opportunities | `/practice/opportunities` | FEED | `advisor_bookings` |
-| `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
+| `EngagementsZone.jsx` | PR2 · Engagements, with Practice v2 PX-03's chips and cards (D4831) | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
 | `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts). A Block card accepted in the Ask panel lands in the same form with its exact start/end shown in the advisor's timezone (`?block=<uid>&from=<instant>&until=<instant>`, D5364); a hand-entered range with no times remains whole-day, and the proposal is decided only after Block writes |
 | `SessionActions.jsx` | PR4 · Sessions | `/practice/sessions` | CONTROLS | Publish a slot and close a confirmed session (held, no-show, cancel); no store of its own (D4687) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 | `DeliverableSheet.jsx` | Practice v2 PX-06 B–D · Delivery detail | `/practice/delivery` | SHEET + DIALOGS | One work product's detail sheet (latest version, immutable history with each version's own recipient and receipts), Add version and the send confirmation; no store of its own (D4833) |
+| `EngagementSheet.jsx` | Practice v2 PX-03b–d · Engagement detail | `/practice/engagements` | SHEET | One engagement in six tabs (Overview, Scope, Sessions, Delivery, Agreement, Activity): the PX-03c outcome choice for a signed engagement (D5316's reason), the #4684 warning naming who its work was sent to, and an Agreement tab that says none is linked; reads only its history (D4831) |
 | `SourceState.jsx` | Practice v2 PX-08 · States | every Practice zone | STATE | One source's loading, empty, unreadable, not-recorded or withheld state in PX-08's words; a small stand-in for #5129's shared component; no store of its own (D4834) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
@@ -103,7 +104,7 @@ feature is not an instruction to delete it.
 A zone with real derivations keeps them in a sibling module that imports nothing:
 
 - `opportunityLog.js` — PR1's decision log.
-- `engagementBoard.js` — PR2's lanes, renewal rules and stored **calendar days**.
+- `engagementBoard.js` — PR2's lanes, renewal rules and stored **calendar days**; since D4831 also PX-03's chips, price, scope and activity lines, and the #4684 recipients.
 - `deliveryTrail.js` — PR3's version tags, open-state tones, seam line, median
   label and nudge targets, over **instants**.
 - `sessionGrid.js` — PR4's slot precedence, the four tile counts, day grouping
