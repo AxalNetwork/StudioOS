@@ -564,7 +564,6 @@ import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
 } from './lib/previewShells';
-import { pageOwnsPreviewBanner } from './pages/portfolio/previewModel';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -988,6 +987,15 @@ function UserDropdown({ user, onLogout }) {
   );
 }
 
+
+// D4817 part 8 (#5311, PF-08): the Portfolio boards that draw their own Investor
+// preview banner. App.jsx's imports are frozen (D5615), so this mirrors
+// `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
+// holds the two to the same addresses.
+const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+function pageOwnsPreviewBanner(pathname, selectedKey) {
+  return selectedKey === 'investor' && PREVIEW_BANNER_BOARDS.test(String(pathname || ''));
+}
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);

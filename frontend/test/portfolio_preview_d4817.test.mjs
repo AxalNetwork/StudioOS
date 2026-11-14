@@ -30,10 +30,12 @@
  *   - `exitPreview` calling `onViewModeChange('investor')` (no way back) → test 4;
  *   - `isInvestorPreview` ignoring `isImpersonating` → tests 5 and 6;
  *   - `previewBoardOf` answering for `/portfolio/companies/:uid` → test 6;
- *   - the preview board reading `/api/positions` in an effect → test 2.
+ *   - the preview board reading `/api/positions` in an effect → test 2;
+ *   - App.jsx's `PREVIEW_BANNER_BOARDS` also matching `/portfolio/companies/…` → test 6.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -258,4 +260,12 @@ test('6. the model: who previews, which board an address draws, the one banner, 
   assert.equal(previewExitLabel(false), 'Back to HQ’s own accounts');
   assert.equal(previewDocTitle('Positions · Portfolio · Axal VC'), 'Positions · Portfolio · Investor preview · Axal VC');
   assert.equal(previewDocTitle('Portfolio · Axal VC'), 'Portfolio · Investor preview · Axal VC');
+  // App.jsx's imports are frozen (D5615), so the strip's copy of the rule lives there: it answers as the model does.
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const source = /const PREVIEW_BANNER_BOARDS = \/(.+)\/;\n/.exec(app);
+  assert.ok(source, 'App.jsx holds the strip\'s board list');
+  const strip = new RegExp(source[1]);
+  for (const path of [...BOARDS, '/portfolio/updates/', '/portfolio/companies/acme', '/portfolio/companies/acme/reports', '/portfolio/waterfall', '/portfolio-x', '/studio', '/deals']) {
+    assert.equal(strip.test(path), previewBoardOf(path) !== null, `${path}: the strip and the model agree`);
+  }
 });
