@@ -273,6 +273,27 @@ test('a new note is checked before it is sent, then saved with its tag', async (
   } finally { await v.close(); }
 });
 
+// #6193 (D6193): the Deal, Documents and Diligence chips narrow on the row's kind; an empty one says what this reader can see.
+// Mutation checked: Documents narrowing on `type` instead of `kind` (fails); the empty Diligence line claiming nothing happened (fails).
+test('#6193 the activity\'s Deal, Documents and Diligence chips narrow on each row\'s kind', async () => {
+  const rows = [
+    { type: 'document', kind: 'documents', label: 'Document added: Cap table', at: '2026-10-20', mine: false },
+    { type: 'commitment', kind: 'deal', label: 'An investor committed', at: '2026-10-18', mine: false },
+    { type: 'created', label: 'Deal created', at: '2026-09-01', mine: false },
+  ];
+  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
+  try {
+    await v.click('deal-activity-documents');
+    assert.match(v.textOf('deal-activity'), /Document added: Cap table/);
+    assert.doesNotMatch(v.textOf('deal-activity'), /An investor committed|Deal created/);
+    await v.click('deal-activity-deal');
+    assert.match(v.textOf('deal-activity'), /An investor committed[\s\S]*Deal created/, 'a row with no kind is Deal');
+    assert.doesNotMatch(v.textOf('deal-activity'), /Cap table/);
+    await v.click('deal-activity-diligence');
+    assert.match(v.textOf('deal-activity'), /No diligence activity you can read is recorded\. A case shows to its own owner and reviewers\./);
+  } finally { await v.close(); }
+});
+
 test('the activity\'s Mine filter shows your own rows only', async () => {
   const rows = [{ type: 'commitment', label: 'An investor committed', at: '2026-10-18', mine: false }, { type: 'invitation', label: 'You were invited', at: '2026-09-22', mine: true }];
   const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({ '/api/deals/4/activity': () => response(rows) }));
