@@ -39,8 +39,9 @@ an unpublished or mismatched start notice before constructing an adapter.
 
 D886 selects Cloudflare Containers and the TypeScript/Node runtime, with a
 Python Zoom SDK sidecar. Before expanding access, confirm the cost measurement,
-B1's dispatch/callback enforcement, B2's lifecycle and notice, all three
-adapters, B6's assembly, B7's UI and B8's deployment on the deployed commit.
+B1's dispatch/callback enforcement, B2's lifecycle and notice, B6's assembly,
+B7's UI and B8's deployment on the deployed commit. Verify each adapter before
+enabling it. Meet and Zoom use #3588. Teams stays off pending #3709.
 **UNVERIFIED until deployment/live evidence lands:** the installed image,
 credentials actually installed, callback wiring, per-minute supplier cost,
 free-account compatibility, and live admission/notice/speaker behavior.
@@ -328,8 +329,18 @@ not always the same. Unknown codes are failures to investigate, never success.
   Inspect counts/states; retain the saved parts under the normal retention rule.
 
 Runtime leave reasons are `call_ended`, `alone`, `stopped`, `time_limit`,
-`tokens` and `interrupted`. Normal completion reports `processing`, with
-`chunks` and `chunks_failed: 0` after all uploads. B6 alone completes assembly.
+`tokens` and `interrupted`. On a normal departure before recording, the
+callback reports `stopped`. After recording starts, a successful drain with
+at least one uploaded chunk reports `processing`. B6 completes assembly.
+
+If recording started and both `chunks` and `chunks_failed` are zero on a
+normal departure, the callback reports `failed/no_audio`. The Worker checks
+its upload count. A confirmed empty run leaves the session stopped and queues
+no assembly, even after founder Stop. A conflicting upload count yields
+`processing_failed`. For `no_audio`, record the platform, final state, code
+and chunk counts on its live-check issue. Use §4a to investigate capture
+before repeating a consented test. Admission alone does not pass the audio check.
+
 `interrupted` currently maps to `failed/runtime_failed`; it is not an automatic
 safe rejoin. Founder Stop retains B1's 30-second captured-audio drain; consent
 withdrawal/access loss/deletion stop hard without that drain.
