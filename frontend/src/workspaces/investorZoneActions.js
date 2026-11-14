@@ -286,7 +286,8 @@ export const INVESTOR_ZONE_ACTIONS = {
     // D495 (#1023): both wait on `research.ts`'s `deals/*` routes, which are
     // slot S02's, so the reason names what each waits on rather than a store.
     { label: 'New request', unbuilt: 'a founder opens a room; asking one to waits on the deal-request routes in research.ts (slot S02), and a button that wrote nowhere would replace the conversation that does', hover: 'Requesting a data room waits on the deal-request routes (slot S02).' },
-    { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record yet; that link waits on the deal routes in research.ts (slot S02)', hover: 'Linking a room to a deal waits on the deal routes (slot S02).' },
+    // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
+    { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [

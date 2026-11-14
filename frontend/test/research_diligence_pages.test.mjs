@@ -55,10 +55,11 @@ test('the room page renders every element the room canvas draws', () => {
   for (const k of ['Open to you', 'In the room', 'Behind an NDA', 'Last opened']) bothEnds(ROOM_CANVAS, room, k);
   for (const h of ['Company', 'You last opened']) bothEnds(ROOM_CANVAS, room, h);
   for (const h of ['File', 'Size', 'You last downloaded']) bothEnds(ROOM_CANVAS, room, h);
-  // Deal stage is drawn as Not recorded with its reason, and the page renders
-  // the worker's own sentence rather than a copy of it.
+  // D6266: Deal stage draws the room's own deals (stage and Open the deal), and
+  // with none, the worker's own sentence rather than a copy of it.
   bothEnds(ROOM_CANVAS, room, 'Deal stage');
-  assert.match(room, /<Unrecorded reason=\{room\.deal_stage_note\} \/>/);
+  assert.match(room, /<RoomDeals deals=\{room\.deals\} note=\{room\.deal_stage_note\} \/>/);
+  assert.doesNotMatch(room, /no key between them/);
 });
 
 test('the document page renders every element the file canvas draws', () => {

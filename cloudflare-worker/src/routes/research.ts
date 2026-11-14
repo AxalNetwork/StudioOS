@@ -81,6 +81,7 @@ import { refuse } from '../util/refusal';
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
+import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
@@ -4668,6 +4669,32 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 // diligence information too." So the response returns both numbers and never
 // the ratio alone.
 
+/**
+ * D6266 (#6266): the deals on a room's company that this investor may open.
+ * `deals.project_id` and `data_room_grants.project_id` are the key between a
+ * room and a deal; which of those deals the caller may see is the deal page's
+ * own rule (`investorHasDealRelationship`: invited to it, or committed on it),
+ * reused rather than copied. A deal the caller cannot open is never named or
+ * counted. The stage is the deal's own `status`, the word the deal page shows.
+ */
+export const NO_ROOM_DEAL = 'No deal you are invited to is recorded for this company.';
+export const ROOM_DEAL_UNREADABLE = 'Unreadable: the deals on this company could not be read. That is not a claim that there are none.';
+/** `null` when the read failed: the room still opens, and says Unreadable rather than "no deal". */
+async function roomDeals(env: Env, userId: number, projectId: number) {
+  try { return await roomDealsOf(env, userId, projectId); } catch { return null; }
+}
+async function roomDealsOf(env: Env, userId: number, projectId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT d.id, d.status, p.name FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.project_id = ? ORDER BY d.created_at DESC, d.id DESC LIMIT 20`
+  ).bind(projectId).all<{ id: number; status: string; name: string | null }>();
+  const out: { id: number; stage: string; name: string | null }[] = [];
+  for (const r of rows.results || []) {
+    if (await investorHasDealRelationship(env, userId, Number(r.id))) out.push({ id: Number(r.id), stage: r.status, name: r.name ?? null });
+  }
+  return out;
+}
+
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
@@ -4705,8 +4732,15 @@ research.get('/diligence', async (c) => {
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
+  const dealsByProject = new Map<number, Awaited<ReturnType<typeof roomDeals>>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!dealsByProject.has(pid)) dealsByProject.set(pid, await roomDeals(c.env, user.id, pid));
+  }
+
   const items = (rows.results || []).map((r: any) => {
     const nda = ndaByProject.get(Number(r.project_id)) === true;
+    const deals = dealsByProject.get(Number(r.project_id)) ?? null;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
@@ -4721,6 +4755,8 @@ research.get('/diligence', async (c) => {
       last_opened_at: r.last_opened_at ?? null,
       expires_at: r.expires_at ?? null,
       created_at: r.created_at,
+      deals,
+      ...(deals === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : deals.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
     };
   });
 
@@ -4730,13 +4766,6 @@ research.get('/diligence', async (c) => {
     // Rooms where the founder staged less than everything they hold. Not a
     // complaint — it is the signal the zone exists to surface.
     partial_count: items.filter((r) => r.withheld_behind_nda > 0).length,
-    // Deal stage is on the canvas and is NOT joined here. A grant is between a
-    // founder and an investor; a deal is a separate record that may or may not
-    // exist for the same company, and joining them on a name rather than a key
-    // would attach a stage to the wrong room. Stated rather than guessed.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
   });
 });
 
@@ -4918,6 +4947,7 @@ research.get('/diligence/:grantUid', async (c) => {
     };
   });
 
+  const roomDealRows = await roomDeals(c.env, user.id, pid);
   await logAccess(c.env, pid, user.id, 'open_room', null);
 
   return c.json({
@@ -4934,10 +4964,9 @@ research.get('/diligence/:grantUid', async (c) => {
     files: openFiles,
     activity: yourActivity,
     download_note: DOWNLOAD_NOTE,
-    // Same reason as the list: no key joins a grant to a deal.
-    deal_stage: null,
-    deal_stage_note: 'A data-room grant and a deal are separate records with no key between them, '
-      + 'so no deal stage is attached to a room here. Opening the deal shows its own stage.',
+    // D6266: the room's company's deals this investor may open, as the list returns them.
+    deals: roomDealRows,
+    ...(roomDealRows === null ? { deal_stage_note: ROOM_DEAL_UNREADABLE } : roomDealRows.length ? {} : { deal_stage_note: NO_ROOM_DEAL }),
   });
 });
 
