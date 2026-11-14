@@ -168,6 +168,12 @@ const PROFILES = {
     buckets: /^(deals|funds|portfolio|network|research)\//,
     // 18 since D1243 (#3256): Deals · Pipeline retired into Deal flow's table.
     zones: 18,
+    // ON THE ARTBOARD, DELIBERATELY NOT CARRIED. D6205 (#6205): `Add follow-on`
+    // records a round, an admin write, so on the investor's book it could only
+    // ever be a disabled button. The investor asks instead (Ask HQ in the
+    // mark-history Sheet). Each label here must still be on its artboard and
+    // must not be in the table.
+    withheld: { 'portfolio/positions': ['Add follow-on'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -882,6 +888,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         assert.ok(!canvas[zone]?.includes(label), `${zone}: ${label} is on the artboard now; drop it from offCanvas`);
       }
       table[zone] = table[zone].filter((l) => !extra.includes(l));
+    }
+    for (const [zone, gone] of Object.entries(profile.withheld || {})) {
+      for (const label of gone) {
+        assert.ok(canvas[zone]?.includes(label), `${zone}: ${label} is withheld but no longer on the artboard; drop it from withheld`);
+        assert.ok(!table[zone]?.includes(label), `${zone}: ${label} is withheld but the table carries it`);
+      }
+      canvas[zone] = canvas[zone].filter((l) => !gone.includes(l));
     }
     for (const [zone, labels] of Object.entries(table)) {
       assert.ok(canvas[zone], `${zone} has no artboard — where did its labels come from?`);
