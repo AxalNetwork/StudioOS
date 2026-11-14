@@ -231,6 +231,9 @@ test('preview: a D1 re-check that refuses at activation or at a file read fails 
   assert.equal(modelCalls(w), 1);
   assert.match(w.systems[0], /Skill "synthetic-hq-brief" \(version 1\)/);
   assert.doesNotMatch(w.systems[0], /Synthetic SKILL\.md of/);
+  // #6420: a file the store no longer has is not called loaded.
+  assert.doesNotMatch(w.systems[0], /and its files are already loaded above/);
+  assert.match(w.systems[0], /is loaded above with 0 of its \d+ files; a file listed by id but not shown above is not available in this run/);
 });
 
 test('preview: the files a run takes are capped; the rest are left out, never truncated', async () => {
@@ -241,6 +244,10 @@ test('preview: the files a run takes are capped; the rest are left out, never tr
   assert.equal(r.ok, true, JSON.stringify(r));
   // Mutation checked: the RUN_FILES_MAX_CHARS check dropped → File 3 is in the prompt and this fails.
   assert.deepEqual([1, 2, 3].map((n) => w.systems[0].includes(big(n))), [true, true, false]);
+  // #6420: the closing sentence counts what was loaded; it does not say the left-out file is above.
+  // Mutation checked: the sentence fixed to "and its files are already loaded above" → both lines fail.
+  assert.ok(w.systems[0].includes('The skill "synthetic-hq-brief" is loaded above with 2 of its 3 files; a file listed by id but not shown above is not available in this run, so do not state what it says; no other skill can be loaded.'));
+  assert.doesNotMatch(w.systems[0], /and its files are already loaded above/);
 });
 
 test('rollback: switch off is today\'s text byte for byte with no manifest read; an unusable SDK or a skill outside the manifest falls back to it; skill data never changes', async () => {
