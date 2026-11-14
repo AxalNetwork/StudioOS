@@ -5,7 +5,7 @@ import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { refusalText } from './fundAdminModel';
 import { withQuery } from './lpsModel';
-import { Line, NUM, Note, Panel, ReadFailure, Section, Table } from './parts';
+import { Line, NUM, Note, Panel, ReadFailure, Section, TAP, Table } from './parts';
 import { LABEL } from './FundTabs';
 import { useRead } from './useRead';
 import {
@@ -74,7 +74,7 @@ export function FundsTab({ apis, access, overview }) {
           : <Table wide rows={rows} rowKey={(f) => f.id} rowTestId={(f) => `funds-row-${f.id}`}
             template="1.3fr 1fr .6fr 1.05fr .45fr .85fr .95fr 1.2fr .75fr 1fr .5fr"
             cols={[
-              { key: 'name', label: 'Fund', cell: (f) => <Link className="font-bold text-axal-ink hover:underline dark:text-gray-100" to={fundHref(f.id)} data-testid={`funds-open-${f.id}`}>{f.name || `Fund #${f.id}`}</Link> },
+              { key: 'name', label: 'Fund', cell: (f) => <Link className={`${TAP} font-bold text-axal-ink hover:underline dark:text-gray-100`} to={fundHref(f.id)} data-testid={`funds-open-${f.id}`}>{f.name || `Fund #${f.id}`}</Link> },
               { key: 'status', label: 'Status', cell: (f) => <Pill tone={STATUS_TONE[f.status] || 'neutral'}>{statusLabel(f.status)}</Pill> },
               { key: 'vintage', label: 'Vintage', mono: true, cell: (f) => f.vintage_year ?? <Unrecorded /> },
               { key: 'size', label: 'Fund size', mono: true, cell: (f) => sizeText(f.fund_size_cents) ?? <Unrecorded /> },
@@ -85,15 +85,15 @@ export function FundsTab({ apis, access, overview }) {
               { key: 'lpa', label: 'LPA', cell: (f) => (lpaOnFile(f)
                 ? <span className="font-bold text-axal-positive dark:text-emerald-300">✓ On file</span>
                 : <span className="font-bold text-amber-700 dark:text-amber-300">◷ Pending</span>) },
-              { key: 'slug', label: 'Slug', cell: (f) => (f.slug ? <span className={`${NUM} text-[11px] text-axal-muted dark:text-gray-400`}>{f.slug}</span> : <Unrecorded />) },
-              { key: 'open', label: '', align: 'right', cell: (f) => <Link className={BTN.link} to={fundHref(f.id)}>Open</Link> },
+              { key: 'slug', label: 'Slug', cell: (f) => (f.slug ? <span className={`${NUM} text-[12px] text-axal-muted dark:text-gray-400`}>{f.slug}</span> : <Unrecorded />) },
+              { key: 'open', label: '', align: 'right', cell: (f) => <Link className={`${BTN.link} ${TAP} max-sm:justify-center`} to={fundHref(f.id)}>Open</Link> },
             ]}
             foot={<Note>{FUNDS_FOOT}</Note>}
           />}
       </Panel>
       {split.outside.length > 0 && (
         <Panel label={`Run by an outside GP · ${split.outside.length}`} testId="funds-outside"
-          aside={<button type="button" className={BTN.link} aria-expanded={outsideOpen} onClick={() => setOutsideOpen((o) => !o)} data-testid="funds-outside-toggle">{outsideOpen ? '▴ Collapse' : '▾ Show'}</button>}>
+          aside={<button type="button" className={`${BTN.link} ${TAP}`} aria-expanded={outsideOpen} onClick={() => setOutsideOpen((o) => !o)} data-testid="funds-outside-toggle">{outsideOpen ? '▴ Collapse' : '▾ Show'}</button>}>
           {outsideOpen && split.outside.map((f) => (
             <Line key={f.id} testId={`funds-outside-${f.id}`} a={f.name || `Fund #${f.id}`}
               b={[f.vintage_year ? `Vintage ${f.vintage_year}` : 'Vintage not recorded', gpText(f) ? `run by ${gpText(f)}` : 'run by an outside GP', OUTSIDE_LINE].join(' · ')}
