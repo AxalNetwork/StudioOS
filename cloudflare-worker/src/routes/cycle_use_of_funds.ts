@@ -6,7 +6,7 @@ import { canWrite } from './_founder_validate_helpers';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
-import { base,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
+import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
 import { planRead,runwayToday } from '../services/useOfFunds/read';
 import useOfFundsEadwyn from './use_of_funds_eadwyn';
 
@@ -74,6 +74,8 @@ r.patch('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof')
 const queryRevision=(c:any)=>{const v=c.req.query('expected_revision');return v!==undefined&&/^[0-9]{1,15}$/.test(v)?{expected_revision:Number(v)}:v===undefined?{}:{expected_revision:-1};};
 r.delete('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof'),idOf(c.req.param('id')),queryRevision(c),true)));
 r.get('/hires',async c=>c.json({items:(await hires(c.env,c.get('uof'))).map(h=>({...h,source:'Typed'}))}));
+// D6083: Add a hire (UF6), through the store's own field rules and audit.
+r.post('/hires',async c=>c.json(await createHire(c.env,c.get('uof'),await body(c)),201));
 r.patch('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
 r.delete('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),queryRevision(c),true)));
 r.put('/',async c=>c.json(await saveSplit(c.env,c.get('uof'),await body(c),true)));
