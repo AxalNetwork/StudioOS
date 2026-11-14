@@ -9,6 +9,10 @@
  * `/raise/evidence/review` and See as an investor (VR11) `/raise/evidence/preview`.
  * Look again is the Worker's refresh. A change reads the page again.
  *
+ * D6048 (#6048): Raise v2's RA-15. A venture with no evidence draws first use (the founder's setup actions, or
+ * an admin viewer's "no visible evidence"), never the zero-filled dashboard; `EvidenceMain` decides from the
+ * read's own `permissions.can_decide`, the signal every Evidence block already uses.
+ *
  * The investor block (VR8–VR10) is `InvestorEvidence.jsx` (D1268), placed by
  * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
