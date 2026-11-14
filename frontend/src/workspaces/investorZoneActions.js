@@ -173,12 +173,11 @@ export const INVESTOR_ZONE_ACTIONS = {
     // ALREADY returning that history to the same readers looking at this
     // disabled button. It opens now.
     { label: 'Mark history', kind: 'handler', handler: 'markHistory' },
-    // WAS: 'follow-ons are recorded on the deal, not from the ledger', which
-    // has the modelling backwards — a follow-on IS a ledger row
-    // (`portfolio_positions.round_name`, one per round) and POST /positions
-    // creates it. What is true is that the write is admin-only, so an
-    // investor's book does not offer it.
-    { label: 'Add follow-on', unbuilt: 'a follow-on is a round on the position itself, and recording one is an admin write — this book is the investor’s read of it', hover: 'A follow-on is recorded as an admin write; this book is the investor’s read of it.' },
+    // REMOVED (D6205, #6205): 'Add follow-on'. Recording a round is an admin
+    // write (POST /positions), so on the investor's book the button could
+    // never be enabled. The investor's act is to ask: the mark-history Sheet's
+    // Ask HQ sends a follow-on request (`routes/mark_requests.ts`), and that is
+    // where the book offers it.
   ],
   'portfolio/updates': [
     // LIVE WITH D464 (migration 337). The old reason was right when written —
