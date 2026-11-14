@@ -253,7 +253,8 @@ test('mounted RPT10r and RPT11: the timeline; Read opens the reader with each fi
   } finally { await v.close(); }
 });
 
-test('mounted RPT11: Ask and Waive each open an in-page dialog that says what it changes; nothing is posted before the press; a refusal is drawn', async () => {
+// D4817 part 9 (#5311) re-aimed this test: Ask and Waive open the addendum's Review (PFA04, PFA05) in place of RPT11's dialogs.
+test('mounted RPT11: Ask and Waive each open an in-page Review that says what it changes; nothing is posted before the confirm; a refusal is drawn', async () => {
   const posted = [];
   const routes = COMPANY_ROUTES({
     'POST /reporting/periods/pm9/ask': (p) => { posted.push(p); return { ok: true, asked: true }; },
@@ -262,20 +263,21 @@ test('mounted RPT11: Ask and Waive each open an in-page dialog that says what it
   const v = await companyAt('/portfolio/companies/p-abc/reports', routes);
   try {
     await v.click('company-period-ask-pm9');
-    assert.match(v.text('company-ask-dialog'), /Ask Acme Robotics for the Sep 2026 · Monthly financial statements\?.*The company is told.*Nobody else sees your request.*once per period/);
+    assert.match(v.text('report-review-ask'), /Ask Acme Robotics for its report.*Who is told.*founder team.*No other investor.*Sep 2026 · Monthly financial statements.*once per period/);
     assert.deepEqual(v.writes(), []);
-    await v.click('company-ask-confirm');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask']);
+    await v.click('report-receipt-done');
     await v.click('company-period-waive-pm9');
-    assert.match(v.text('company-waive-dialog'), /Waive Sep 2026 for Acme Robotics\?.*waived by you/);
-    await v.click('company-waive-confirm');
+    assert.match(v.text('report-review-waive'), /Waive this reporting period.*waived by you/);
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask', '/reporting/periods/pm9/waive']);
   } finally { await v.close(); }
   const refused = await companyAt('/portfolio/companies/p-abc/reports', COMPANY_ROUTES({ 'POST /reporting/periods/pm9/ask': { __status: 409, detail: 'You already asked for this period’s report.' } }));
   try {
     await refused.click('company-period-ask-pm9');
-    await refused.click('company-ask-confirm');
-    assert.match(refused.text('company-ask-error'), /already asked/);
+    await refused.click('report-review-confirm');
+    assert.match(refused.text('report-review-error'), /already asked/);
   } finally { await refused.close(); }
 });
 

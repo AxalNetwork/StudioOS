@@ -23,8 +23,9 @@ export const LICENCE_TABS = Object.freeze([
   { key: 'admins', step: 8, label: 'Administrators', section: 'access' },
   { key: 'seats', step: 3, label: 'Seats', section: 'access' },
   { key: 'deploy', step: 6, label: 'Branch and domain', section: 'operations' },
-  { key: 'notices', step: 9, label: 'Notices', section: 'operations' },
-  { key: 'fee-invoices', step: 12, label: 'Annual fee invoices', testId: 'licence-fee-invoices-tab', section: 'operations' },
+  // D4819 part 12 (#5923): boards L12 and L13. The keys stay, so links already made still open them.
+  { key: 'notices', step: 9, label: 'Requests and compliance', section: 'operations' },
+  { key: 'fee-invoices', step: 12, label: 'Billing', testId: 'licence-fee-invoices-tab', section: 'operations' },
   { key: 'history', step: 7, label: 'History', section: 'history' },
 ]);
 

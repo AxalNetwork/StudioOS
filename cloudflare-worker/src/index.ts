@@ -2343,6 +2343,16 @@ export default {
           } catch {
             taskFailed('meeting bot operations');
           }
+          // D5674 (#5988): the recording-stage bridge. Stores firing/recovered/coverage receipts
+          // against the stored episode inventory; forwards them only when CF_BOT_DELIVERY_URL and
+          // CF_BOT_DELIVERY_SECRET are both set. Unset, receipts stay pending and nothing is sent.
+          try {
+            const { runBotSourceBridge } = await import('./services/cloudflareBotBridge');
+            const r = await runBotSourceBridge(env, { now: now.getTime() });
+            if (r.stored || r.forwarded || r.delivery === 'pending') cronSummary.push(`bot stage receipts stored=${r.stored} forwarded=${r.forwarded} delivery=${r.delivery}`);
+          } catch {
+            taskFailed('meeting bot stage bridge');
+          }
         }
         // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
         // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
@@ -2465,15 +2475,15 @@ export default {
         // D572 part 3b — the partner leaderboard's daily standings, so the
         // board's "change" has an earlier standing to compare with. Every
         // tier: a branch's partners are its own. Idempotent per day.
-        // D691 (#1698) — Grow's daily step: obligation reminders and KPI
-        // alerts, in the app only. Each is claimed before it is sent, so a
+        // D691 (#1698) — Grow's daily step: obligation reminders, partner
+        // renewal reminders (D6125) and KPI alerts, in the app only. Each is claimed before it is sent, so a
         // second run the same day sends nothing.
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
           try {
             const { runGrowDaily } = await import('./services/growDaily');
             const r = await runGrowDaily(env, now.getTime());
-            if (r.reminders || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} alerts=${r.alerts}`);
-            cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+            if (r.reminders || r.renewals || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} renewals=${r.renewals} alerts=${r.alerts}`);
+            cronSummary.push(`grow daily reminders=${r.reminders} renewals=${r.renewals} alerts=${r.alerts}`);
           } catch (e) {
             taskFailed('grow daily', e instanceof Error ? e.message : 'error');
           }
