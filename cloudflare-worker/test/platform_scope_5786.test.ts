@@ -253,8 +253,8 @@ test('the mounted routes: refused callers and scopes, scoped readings, HQ-wide s
       INSERT INTO users(id,name,email,role,is_active) VALUES (44,'Staff','staff@example.test','admin',1),(66,'Hq','hq@example.test','admin',1);
       INSERT INTO super_admins(user_id) VALUES (66);
       INSERT INTO licence_deployments(licence_uid, code, hostname, worker_name, d1_name, status, last_health_at, last_health_ok)
-        VALUES ('lic_fr_0001','fr','fr.example.test','studioos-fr-synthetic','studioos-fr-db-synthetic','worker_live','${new Date(Date.now() - 3_600_000).toISOString()}',1),
-               ('lic_de_0002','de','de.example.test','studioos-de-synthetic','studioos-de-db-synthetic','worker_live','${new Date(Date.now() - 3_600_000).toISOString()}',1),
+        VALUES ('lic_fr_0001','fr','fr.example.test','studioos-fr-synthetic','studioos-fr-db-synthetic','worker_live','2026-11-13 11:00:00',1),
+               ('lic_de_0002','de','de.example.test','studioos-de-synthetic','studioos-de-db-synthetic','worker_live','2026-11-13 11:00:00',1),
                ('lic_es_0003','es','es.example.test','studioos-es-synthetic','studioos-es-db-synthetic','requested',NULL,NULL);
     `);
     const env: any = {
