@@ -63,7 +63,7 @@ function Panel({ id, filters, set, close }) {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[
       ['licence', 'Licence reference or uid', { maxLength: 64, placeholder: 'AXL-FR-001' }],
       ['territory', 'Territory (country code)', { maxLength: 2, placeholder: 'FR' }]]}
-      note="Territories read as country codes until a country-name source is approved (D5050 §6)." />;
+      note="Type the two-letter country code. Rows and chips show the country name (D5050 part 3)." />;
   } else if (id === 'template') {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[['template', 'Template slug', { maxLength: 100, placeholder: 'program_schedule' }]]}
       note="Agreements made from this template. The template itself lives in Templates, never in this list." />;
