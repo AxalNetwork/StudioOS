@@ -315,7 +315,7 @@ function InvestorLeft({ left, unreadable, onRetry, full, onSign, onPay }) {
           <span className="text-[13px] font-semibold text-amber-800 dark:text-amber-300">Waits on you: {it.text}</span>
           {it.step === 'sign'
             ? <button type="button" className={`${BTN.primary} ${full}`} onClick={() => onSign(it.row)} data-testid="closing-left-sign-open">Open the signing order</button>
-            : <button type="button" className={`${BTN.ghost} ${full}`} onClick={onPay} data-testid="closing-left-pay-open">See payment instructions</button>}
+            : <button type="button" className={`${BTN.ghost} ${full}`} onClick={() => onPay(it.row)} data-testid="closing-left-pay-open">See payment instructions</button>}
         </div>
       ))}
       <div className={mutedText} data-testid="closing-left-rest">
@@ -369,7 +369,7 @@ function InvestorLine({ closing, rows, tiles, left, phone, onSign, onPay, onRece
           <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-2 dark:border-gray-800">
             <span className="text-[13px] font-semibold">See payment instructions</span>
             <p className={mutedText}>The account {closing.companyName} set, with the payment warning first.</p>
-            <button type="button" className={`${BTN.ghost} ${full}`} onClick={onPay} data-testid="closing-see-instructions">See payment instructions</button>
+            <button type="button" className={`${BTN.ghost} ${full}`} onClick={() => onPay(first)} data-testid="closing-see-instructions">See payment instructions</button>
           </div>
           <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-2 dark:border-gray-800">
             <span className="text-[13px] font-semibold">I have sent it</span>
@@ -534,7 +534,7 @@ export default function RecordRoom({ entry, viewer, deal }) {
       {viewer === 'investor' ? (
         <div className={twoCol}>
           <div className="flex min-w-0 flex-col gap-4">
-            <InvestorLine closing={ctx} rows={rows} tiles={tiles} left={investorLeft(closing, rows)} phone={phone} onSign={openLine('sign')} onPay={() => setDrawer({ kind: 'pay' })} onReceipt={openLine('receipt')} onRetry={read.retry} />
+            <InvestorLine closing={ctx} rows={rows} tiles={tiles} left={investorLeft(closing, rows)} phone={phone} onSign={openLine('sign')} onPay={(r) => setDrawer({ kind: 'pay', row: r })} onReceipt={openLine('receipt')} onRetry={read.retry} />
             {closing.status === 'closed' ? <InvestorClosed closing={closing} company={companyName} phone={phone} onRetry={read.retry} /> : null}
             {(closing.lines || []).filter((l) => l.route === 'syndicate' && l.vehicle_ref).map((l) => <SyndicatePanel key={l.uid} line={l} currency={currency} />)}
           </div>
@@ -573,7 +573,10 @@ export default function RecordRoom({ entry, viewer, deal }) {
         <SignDrawer row={drawer.row} envelope={liveEnvelope(papers[drawer.row.uid])} failed={papers[drawer.row.uid] === null} viewer={viewer} company={companyName} onClose={() => setDrawer(null)} />
       ) : null}
       {drawer?.kind === 'receipt' ? <ReceiptDrawer row={drawer.row} viewer={viewer} dealId={closing.deal_id} onClose={() => setDrawer(null)} /> : null}
-      {drawer?.kind === 'pay' ? <PaymentDrawer company={companyName} amount={tiles.mine} onClose={() => setDrawer(null)} /> : null}
+      {drawer?.kind === 'pay' ? (
+        // D6189: the company's account for this project, revealed for this line's own commitment.
+        <PaymentDrawer company={companyName} amount={tiles.mine} projectId={closing.project_id ?? entry.project_id} dealId={closing.deal_id ?? entry.deal_id} commitmentId={drawer.row?.commitmentId ?? null} onClose={() => setDrawer(null)} />
+      ) : null}
       {drawer?.kind === 'captable' ? (
         <CaptableDialog closing={closing} view={view} rows={rows} instrument={instrument} onClose={() => setDrawer(null)} onDone={() => { setDrawer(null); read.retry(); }} />
       ) : null}
