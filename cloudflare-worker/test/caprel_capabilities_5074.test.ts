@@ -24,7 +24,7 @@ import { CAPREL_CAPABILITIES as MIRROR_KEYS, capRelCapabilities as mirror } from
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
-const SECRET = 'synthetic-caprel-capabilities-5074-'.repeat(3);
+const SECRET = 'synthetic-5074-only-not-a-real-credential'.repeat(2);
 const OWNER = 1, COFOUNDER = 2, OTHER = 3, ADVISOR = 4, REMOVED = 5, INVESTOR = 6, MEMBER_OWNER = 7, ADMIN = 30, HQ = 31;
 const P = 101;
 
