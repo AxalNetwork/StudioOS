@@ -20,12 +20,16 @@ import InvestorPortfolioPositions from './investor/InvestorPortfolioPositions';
 import InvestorPortfolioUpdates from './investor/InvestorPortfolioUpdates';
 import InvestorPortfolioValueAdd from './investor/InvestorPortfolioValueAdd';
 import InvestorPortfolioPerformance from './investor/InvestorPortfolioPerformance';
+import PortfolioPreview from './portfolio/PortfolioPreview';
+import { isInvestorPreview, previewBoardOf } from './portfolio/previewModel';
+import { useViewMode } from '../contexts/ViewModeContext';
 import RailFrame from '../ui/RailFrame';
 import WorkerRail from '../ui/WorkerRail';
 
 export default function PortfolioWorkspace({ activeRole }) {
   const { pathname } = useLocation();
   const { role } = useAuth();
+  const view = useViewMode();
   const active = pathname.includes('/updates')
     ? 'updates'
     : pathname.includes('/positions')
@@ -49,6 +53,10 @@ export default function PortfolioWorkspace({ activeRole }) {
     { to: '/portfolio/value-add', label: 'Value-add', icon: Rocket, roles: ['admin', 'investor'] },
   ].filter((t) => !role || t.roles.includes(role));
 
+  // D4817 part 8 (#5311, PF-08): an administrator previewing the Investor
+  // shell sees each board with its investor records withheld, reading none.
+  const previewBoard = (activeRole || role) === 'investor' && isInvestorPreview(view) ? previewBoardOf(pathname) : null;
+  if (previewBoard) return <PortfolioPreview board={previewBoard} />;
   if ((activeRole || role) === 'investor' && active === 'health') {
     return <InvestorPortfolioCanvas />;
   }

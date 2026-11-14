@@ -48,7 +48,8 @@ const PORTFOLIO_ROUTES = {
   // D4817 part 4 (#5311): Reports draws in the same frame, headed "Portfolio".
   '/portfolio/updates': 'Portfolio',
   '/portfolio/performance': 'Portfolio',
-  '/portfolio/value-add': 'Value-add desk',
+  // D4817 part 8 (#5311, PF-08): in Investor preview every board, Value-add included, is the frame's withheld board, headed "Portfolio".
+  '/portfolio/value-add': 'Portfolio',
 };
 /** Other workspaces a licence owns, and what each reads as. */
 const OTHER_ROUTES = {
@@ -89,6 +90,7 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
     path: at?.pathname,
     studio: select(dom.document, STUDIO).length,
     canvas: select(dom.document, '[data-testid="investor-portfolio-canvas"]').length,
+    preview: select(dom.document, '[data-testid="portfolio-preview"]').length,
     h1: select(dom.document, 'h1').map((n) => n.textContent.trim()),
     links: select(dom.document, 'a').map((n) => n.getAttribute?.('href')).filter(Boolean),
   });
@@ -147,11 +149,21 @@ test('1. Super Admin → Investor preview: every Portfolio address draws Portfol
   });
 });
 
-test('2. the root is the I4 overview, not a withheld-records stub: it draws the Portfolio canvas', async () => {
+test('2. the root is Portfolio\'s own Overview, never the Studio home: the PF-08 preview board in Investor preview, the canvas for an investor', async () => {
+  // D4817 part 8 (#5311, PF-08) re-aimed this: in Investor preview the Overview is the
+  // frame's board with every investor record withheld (one banner, "Private in preview"
+  // chips, no private read), as the canvas and addendum decide; the canvas is the investor's.
   await app(SUPER, { viewMode: 'investor' }, async (a) => {
     for (const route of ['/portfolio', '/portfolio/health']) {
       const r = await a.load(route);
-      assert.equal(r.canvas, 1, `${route} draws InvestorPortfolioCanvas`);
+      assert.equal(r.preview, 1, `${route} draws the Portfolio preview board`);
+      assert.equal(r.studio, 0, `${route} is not the Studio home`);
+    }
+  });
+  await app(INVESTOR, {}, async (a) => {
+    for (const route of ['/portfolio', '/portfolio/health']) {
+      const r = await a.load(route);
+      assert.equal(r.canvas, 1, `${route} draws InvestorPortfolioCanvas for an investor`);
     }
   });
 });

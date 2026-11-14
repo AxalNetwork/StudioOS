@@ -155,6 +155,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/influencer/section', 'the member\'s Influencer section (D4289 P7, #4296): the page, its six tabs, the model and the one read seam'],
   ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
   ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
+  ['frontend/src/pages/portfolio',            'the Portfolio v2 frame every investor Portfolio board draws in, its shared parts, model and reads, and the Admin Investor preview (D4817)'],
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/admin/contentQueue',   'Content queue (D1290): Pipeline (D1295), Calendar (D1296), Authors and Performance (D1297)'],

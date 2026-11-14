@@ -564,6 +564,7 @@ import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
 } from './lib/previewShells';
+import { pageOwnsPreviewBanner } from './pages/portfolio/previewModel';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -1001,6 +1002,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
   const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
   const previewing = selected && home && selected.key !== home.key;
+  // D4817 part 8 (#5311, PF-08): a Portfolio board previewed as Investor draws
+  // the one preview banner itself (read-only, with this same way back), so the
+  // strip, whose note says writes still go out, stands down there.
+  const { pathname } = useLocation();
+  const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
     if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
@@ -1074,7 +1080,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       {/* H38's strip: while a shell other than the viewer's own is previewed,
           the chip, the sentence about whose name the writes carry — "the
           Super Admin" to the holder, "you" to anyone else — and the way back. */}
-      {!isImpersonating && previewing && (
+      {!isImpersonating && previewing && !pageBanner && (
         <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
           <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
           <span className="opacity-90">{previewNote(superAdmin)}</span>
@@ -1310,9 +1316,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   // Memoize the context value so consumers of `useViewMode()` don't re-render
   // on every App render. Stable identity unless one of the three inputs changes.
+  // D4817 part 8 (#5311, PF-08): a page that draws its own preview banner
+  // offers the strip's way back, so the context carries it and the elevation.
+  const viewModeChangeRef = useRef(onViewModeChange);
+  viewModeChangeRef.current = onViewModeChange;
+  const exitPreview = useCallback(() => viewModeChangeRef.current?.('admin', { hq: superAdmin === true }), [superAdmin]);
   const viewModeContextValue = useMemo(
-    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole }),
-    [activeRole, isAdmin, isImpersonating, shellRole],
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole, superAdmin: superAdmin === true, exitPreview }),
+    [activeRole, isAdmin, isImpersonating, shellRole, superAdmin, exitPreview],
   );
 
   // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
