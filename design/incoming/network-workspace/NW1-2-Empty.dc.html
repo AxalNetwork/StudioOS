@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Network first-run empty state</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.hdr{display:flex;flex-direction:column;gap:6px}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.ask .em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+</style>
+</helmet>
+<div class="cv" style="width:1440px;min-height:1000px">
+<div class="sh" style="min-height:1000px">
+<aside class="sd">
+<div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div>
+<button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company: Northwind Labs">Northwind Labs <span aria-hidden="true">▾</span></button>
+<span class="eye grp">Founder</span>
+<nav aria-label="Founder">
+<a href="#">Home</a><a href="#">Validate</a><a href="#">Build</a><a href="#">Raise</a><a href="#">Grow</a><a href="#" aria-current="page">Network</a><a href="#">Research</a><a href="#">Trust</a><a href="#">Company Settings</a>
+</nav>
+</aside>
+<div class="mn">
+<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button><span class="av" role="img" aria-label="Account">MR</span></div></div>
+<main class="bd">
+<header class="hdr">
+<span class="eye">Network · Relationship intelligence</span>
+<div class="hrow">
+<div><h1>Your network</h1><p>Know who you can reach, which relationships need attention, and which introductions are moving.</p></div>
+<div class="acts"><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button><button type="button" class="btn p">Request introduction</button></div>
+</div>
+</header>
+<nav class="ptabs" aria-label="Network">
+<a href="#" aria-current="page">Overview</a><a href="#">Relationships</a><a href="#">Introductions</a><a href="#">Organizations</a>
+</nav>
+
+<section class="cd" aria-labelledby="st" style="padding:28px 28px 24px;gap:20px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:720px">
+<span class="eye">Start here</span>
+<h2 id="st" style="font-size:22px;font-weight:800;letter-spacing:-.02em">Build your relationship book</h2>
+<p class="sub" style="font-size:13.5px">Your book is private to you. Teammates only see that you know someone if you choose to share it.</p>
+</div>
+<div class="g">
+<div class="c4 cd ec" style="background:var(--raised)">
+<span class="step" aria-hidden="true">1</span>
+<h2>Import LinkedIn</h2>
+<p class="sub">Bring your existing professional relationships into your private Network book.</p>
+<p class="foot">Upload the Connections CSV LinkedIn emails you. Possible duplicates wait for your review; nothing is merged on its own.</p>
+<button type="button" class="btn p" style="align-self:flex-start;min-height:40px">Import from LinkedIn</button>
+</div>
+<div class="c4 cd ec" style="background:var(--raised)">
+<span class="step" aria-hidden="true">2</span>
+<h2>Add person</h2>
+<p class="sub">Add someone you already know without inviting them to Axal.</p>
+<p class="foot">Name, organization, LinkedIn URL or email. They are not contacted. Inviting someone to Axal is a separate action.</p>
+<button type="button" class="btn" style="align-self:flex-start;min-height:40px">Add person</button>
+</div>
+<div class="c4 cd ec" style="background:var(--raised)">
+<span class="step" aria-hidden="true">3</span>
+<h2>Request introduction</h2>
+<p class="sub">Find someone in your permitted network who can introduce you.</p>
+<p class="foot">Search by LinkedIn URL or email. Only teammates who share their book are searched.</p>
+<button type="button" class="btn" style="align-self:flex-start;min-height:40px">Request introduction</button>
+</div>
+</div>
+<div class="nt"><span class="ic" aria-hidden="true">i</span><div>Network becomes more useful as your relationship book, team sharing, and introduction history grow.</div></div>
+</section>
+
+<div class="g">
+<section class="c4 cd" aria-label="Introductions"><span class="eye">Introductions</span><p class="sub">None yet. Requests you send or receive from your team appear here.</p></section>
+<section class="c4 cd" aria-label="Curated matches"><span class="eye">Curated matches</span><p class="sub">No curated matches yet. Axal proposes introductions when your profile matches someone’s thesis.</p><p class="foot">Spendable intro credits: <b class="mo">2</b></p></section>
+<section class="c4 cd" aria-label="Team sharing"><span class="eye">Team sharing</span><p class="sub">You are not sharing your book with Northwind Labs. Warm-path search uses only books that teammates share.</p><a href="#" style="font-weight:700;font-size:12.5px">Sharing settings →</a></section>
+</div>
+</main>
+</div>
+<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about your network</span></aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -111,7 +111,7 @@ const logRow = (over = {}) => ({
   advisor_name: 'Ada Advisor', document_uid: null, document_title: null, ...over,
 });
 const shared = (over = {}) => ({
-  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', scope_project: true,
+  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', granted_by_user_id: 12, scope_project: true,
   scope_data_room: false, scope_sessions: false, expires_at: null, created_at: '2026-09-01 08:00:00', ...over,
 });
 const advisor = (over = {}) => ({
