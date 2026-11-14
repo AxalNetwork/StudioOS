@@ -66,14 +66,16 @@ async function call(db: DatabaseSync, path: string) {
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 test('1. the default read: as_of stays null; as_of_default is the Worker\'s UTC date and read_at the instant', async () => {
-  const before = Date.now();
-  const r = await call(fixture(), '/positions/analytics');
-  const after = Date.now();
+  // The Worker's clock is pinned, so read_at is exactly the instant of the read.
+  const NOW = Date.parse('2026-11-14T10:32:05.000Z');
+  test.mock.timers.enable({ apis: ['Date'], now: NOW });
+  let r: Awaited<ReturnType<typeof call>>;
+  try { r = await call(fixture(), '/positions/analytics'); } finally { test.mock.timers.reset(); }
   assert.equal(r.status, 200);
   assert.equal(r.body.as_of, null, 'as_of keeps its meaning: no cut was asked');
   assert.match(r.body.read_at, ISO_INSTANT);
-  const at = Date.parse(r.body.read_at);
-  assert.ok(at >= before - 5 && at <= after + 5, 'read_at is the moment of this read');
+  assert.equal(r.body.read_at, '2026-11-14T10:32:05.000Z', 'read_at is the moment of this read');
+  assert.equal(r.body.as_of_default, '2026-11-14');
   assert.equal(r.body.as_of_default, r.body.read_at.slice(0, 10), 'the default date is read_at\'s UTC day');
   // Every flow and the latest mark count, as before.
   assert.equal(r.body.position_count, 2);
