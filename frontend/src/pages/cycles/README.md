@@ -87,6 +87,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `defs/` | D5615 (#5615): each cycle's entry in `CycleRoute`'s table (`CYCLE_DEFS`), one file per cycle: `validate.jsx`, `build.jsx`, `raise.jsx`, `grow.jsx`. Each holds that cycle's modules, action and the `*Mount` lightbox it opens (Validate's `RecordMount` too), tools, Add, fill and AI bands, the parts under each module, record pages and the lazy steps only it draws, and default-exports the entry; `CycleRoute.jsx` imports the four. A cycle's new part, band or tool goes here, not in `CycleRoute.jsx` (`documentation/architecture/HUBS.md`). |
 | `GrowOverview.jsx` | #4862: GR-01/02/13/16 focus-first overview, ranked attention, setup facts and compact domains on desktop and phone. |
 | `growOverviewModel.js` | #4862: canonical Grow labels over existing routes, action gating and focus-value formatting. |
+| `buildEadwyn.js` | D5077 (#5077, BD21 B): each Build module's own Eadwyn asks (`BUILD_ASKS`, `moduleAsks`), which fill Ask's composer and never run on their own, and the rail's sentence per module (`BUILD_RAIL_NOTES`, `moduleRailNote`); `defs/build.jsx` hands both to `CycleRoute`. |
 
 ## Rules
 

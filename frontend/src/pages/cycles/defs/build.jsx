@@ -11,6 +11,7 @@ import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
+import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
 
 /**
  * Build's read (#1475, D662) is already in D661's shape (chart specs,
@@ -34,6 +35,14 @@ const build = {
   path: 'connect',
   Mount: BuildMount,
   action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
+  // D5077 (#5077, BD7, BD8, BD18 A): Connect a tool is the overview's primary only. On a module the
+  // header gives way to the module's own work, the connector parts draw in a Sources region under the
+  // records, and that region carries Connect a tool as "Connect or manage tools".
+  modulePrimary: false,
+  sourcesRegion: true,
+  // D5077 (BD21): each module's own Eadwyn asks and rail sentence (buildEadwyn.js).
+  asks: BUILD_ASKS,
+  railNotes: BUILD_RAIL_NOTES,
   // D1311 (#2398, #2408): each module's connector parts, in the canvases'
   // order, one line per connector (buildParts.jsx). GitHub's are D782's;
   // Vercel's and Lovable's lines wait there for their tasks.
