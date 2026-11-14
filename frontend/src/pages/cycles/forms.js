@@ -1035,8 +1035,9 @@ const editPartner = {
   title: 'Edit partner',
   sub: partner.sub,
   fields: [
-    // #6111: the name and renewal, as the record's own Edit draws them.
-    partner.fields[0],
+    // #6111: the name and renewal, as the record's own Edit draws them. Not required, as Edit role's title is not:
+    // a row that carries no name opens without one, and an untouched name is not sent.
+    { ...partner.fields[0], required: false },
     { ...withChips(partner.fields[1], [['other', 'Other']]), required: true },
     { ...withChips(partner.fields[2], [['ended', 'Ended']]), required: true },
     bare(termsFields[0]), termsFields[1],
