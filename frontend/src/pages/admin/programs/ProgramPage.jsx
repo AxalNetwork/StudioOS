@@ -25,7 +25,7 @@ import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } f
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
 import { LearningOverview, LearningPeople } from './LearningPages';
 import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
-import { Availability, Modules, OnRegistry, Settings } from './ProgramShellSections';
+import { Availability, Modules, OnRegistry, Participation, Settings } from './ProgramShellSections';
 import { shellModules } from './genericProgramModel';
 import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
@@ -156,11 +156,21 @@ function Influencers({ tab, superAdmin }) {
     <ProgramFrame detail={detail} program={INFLUENCER_KEY} superAdmin={superAdmin} status={registryStatus(detail)} tabs={<InfluencerTabs queue={queue} />}>
       {t === 'how' ? <PlaybookEditor program={INFLUENCER_KEY} superAdmin={superAdmin} detail={detail} testId="programs-influencer-how" /> : null}
       {t === 'applications' ? <ApplicationsTab onCount={setCounts} /> : null}
+      {tab === 'overview' ? <Modules modules={shellModules(INFLUENCER_KEY, detail.read)} /> : null}
+      {t === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {t === 'participation' ? <Participation /> : null}
       {t === 'influencers' ? <InfluencersTab /> : null}
       {t === 'offers' ? <OffersTab superAdmin={superAdmin} /> : null}
       {t === 'payouts' ? <PayoutsTab /> : null}
       {t === 'activity' ? <ActivityTab program={INFLUENCER_KEY} testId="programs-influencer-activity" /> : null}
-      {t === 'settings' ? <SettingsTab superAdmin={superAdmin} /> : null}
+      {t === 'settings' ? (
+        <>
+          <SettingsTab superAdmin={superAdmin} />
+          <OnRegistry detail={detail}>
+            {(data) => <Settings programKey={INFLUENCER_KEY} program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}
+          </OnRegistry>
+        </>
+      ) : null}
     </ProgramFrame>
   );
 }

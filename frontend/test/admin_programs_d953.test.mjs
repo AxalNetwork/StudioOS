@@ -154,7 +154,7 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
     'referral-partners': ['Overview', 'How it runs', 'Queue', 'Activity'],
     // D4298 (#4298): Influencers (IN11).
-    influencer: ['How it runs', 'Applications', 'Influencers', 'Offers', 'Payouts', 'Activity', 'Settings'],
+    influencer: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Applications', 'Influencers', 'Offers', 'Payouts', 'History', 'Settings'],
     'investor-cohorts': ['Overview', 'Activity'],
     'ai-native-venture': [],
   });
