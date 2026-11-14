@@ -10,6 +10,8 @@
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
  *     Investor narrative's `parts.narrative` (D909): every version with its
  *     based-on, saved, by and read-by; the newest's check; the current deck.
+ *     D6068: `claims`, the newest's claim store tally (backed of total, and
+ *     the sections with a Mismatch), unreadable on its own.
  *     `{ state: 'unreadable' }` when it could not be read.
  *     The first sort is the default. Row ids are D691's (#1699): an item key,
  *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
