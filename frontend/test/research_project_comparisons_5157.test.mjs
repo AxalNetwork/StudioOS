@@ -206,6 +206,7 @@ function mountPanel(props, list) {
   const realCompared = { ...researchProjectComparisonsApi };
   const calls = [];
   Object.assign(researchProjectsApi, { list: list || (async () => ({ items: [{ uid: 'p1', title: 'EU GPU', status: 'in_progress' }, { uid: 'p2', title: 'Seed funds', status: 'in_progress' }] })) });
+  researchProjectsApi.link = async (...args) => { calls.push(['link', ...args]); return { ok: true, added: true }; };
   Object.assign(researchProjectComparisonsApi, {
     addSubjects: async (...args) => { calls.push(['add', ...args]); return { ok: true, added: args[2].length, already: 0 }; },
     create: async (...args) => { calls.push(['create', ...args]); return { item: { uid: 'k9', title: 'Nebula Compute · Aster Cloud' } }; },
@@ -230,6 +231,20 @@ test('Add to research: nothing is sent until a project is picked and confirmed; 
     assert.deepEqual(calls, [['add', 'p1', 'company', ['q-nebula', 'q-aster']]]);
     assert.match(textOf(byTid(m, 'add-to-research-result')), /Added 2 entries to “EU GPU”/);
     assert.equal(m.props(byTid(m, 'add-to-research-open')).href, '/research/projects/p1/comparisons');
+  } finally { await m.unmount(); restore(); }
+});
+
+test('Save to project links the Ask answer only after confirmation', async () => {
+  const { m, calls, restore } = await mountPanel({ kind: 'answer', items: [{ uid: 'ask-answer', name: 'Which providers are independent?' }] });
+  try {
+    await settle(m);
+    assert.match(textOf(byTid(m, 'add-to-research-items')), /Which providers are independent/);
+    await act(async () => { m.props(byTid(m, 'research-target-p1')).onChange(); });
+    assert.deepEqual(calls, []);
+    await submit(m, 'form-add-to-research');
+    assert.deepEqual(calls, [['link', 'p1', 'answers', 'ask-answer']]);
+    assert.match(textOf(byTid(m, 'add-to-research-result')), /Answer saved to “EU GPU”/);
+    assert.equal(m.props(byTid(m, 'add-to-research-open')).href, '/research/projects/p1');
   } finally { await m.unmount(); restore(); }
 });
 

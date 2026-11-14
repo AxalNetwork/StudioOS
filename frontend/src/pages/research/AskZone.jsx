@@ -19,6 +19,8 @@ import {
 } from './researchStates.js';
 import { openAddTokens } from '../../lib/aiTokens.js';
 import Sheet from '../../ui/Sheet.jsx';
+import AddToResearch from './AddToResearch.jsx';
+import { canAddToResearch } from './researchComparisons.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
@@ -186,6 +188,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const [pricing, setPricing] = useState(null);
   const [savingUid, setSavingUid] = useState('');
   const [copiedUid, setCopiedUid] = useState('');
+  const [projectAnswer, setProjectAnswer] = useState(null);
   // D3701 part 6 (RS-10B): on a phone a citation opens as a bottom sheet with
   // its passage; wider screens list every passage inline.
   const phone = usePhoneWidth();
@@ -731,6 +734,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                     {copiedUid === t.uid ? 'Copied' : 'Copy with citations'}
                   </button>
                 ) : null}
+                {t.uid && t.reason === 'answered' && !t.discarded && canAddToResearch(role) ? (
+                  <button type="button" data-testid={`button-ask-save-project-${t.uid}`}
+                    className="whitespace-nowrap text-[10px] font-bold text-violet-700 underline dark:text-violet-300"
+                    onClick={() => setProjectAnswer({ uid: t.uid, name: t.question })}>
+                    Save to project
+                  </button>
+                ) : null}
               </div>
 
               <AnswerDisposition item={t} busy={savingUid === t.uid} onUpdate={(changes) => updateAnswer(t, changes)} />
@@ -751,6 +761,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             );
           })}
         </div>
+        {projectAnswer ? <AddToResearch kind="answer" items={[projectAnswer]} onClose={() => setProjectAnswer(null)} /> : null}
 
         {/* THE ARTBOARD'S INSTRUMENT CARD. Every column is a field
             `api.research.documents()` already returns and this page has already

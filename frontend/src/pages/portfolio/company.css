@@ -1,0 +1,34 @@
+/* D4817 part 6 (#5311, PF-06): one company's workspace — its tabs, key facts,
+   Financials and Ownership & rights. Colours are the frame's tokens
+   (portfolio.css), which `.dark .pf-shell` redefines, so no colour here needs
+   its own dark rule. */
+.pf-crumb-link{color:var(--pf-mu);text-decoration:none}
+.pf-crumb-link:hover,.pf-crumb-link:focus-visible{color:var(--pf-vt);text-decoration:underline}
+.pf-co-tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--pf-hair);scrollbar-width:thin}
+.pf-co-tab{display:inline-flex;align-items:center;white-space:nowrap;padding:0 14px;border-bottom:2px solid transparent;margin-bottom:-1px;font-size:13px;font-weight:700;color:var(--pf-mu);text-decoration:none}
+.pf-co-tab:hover,.pf-co-tab:focus-visible{color:var(--pf-ink)}
+.pf-co-tab:focus-visible{outline:2px solid var(--pf-vi);outline-offset:-2px}
+.pf-co-tab.is-current{color:var(--pf-ink);border-bottom-color:var(--pf-vi);font-weight:800}
+.pf-co-facts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--pf-hair);border:1px solid var(--pf-hair);border-radius:12px;overflow:hidden}
+.pf-co-facts>.pf-metric,.pf-co-metrics>.pf-metric{border:0;background:var(--pf-card)}
+.pf-co-route{margin:0;font:500 12px var(--font-mono);color:var(--pf-mu)}
+.pf-co-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pf-co-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--pf-hair);font-size:12.5px}
+.pf-co-list li:first-child{border-top:0}
+.pf-co-list li>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pf-co-fin{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:14px;align-items:start}
+.pf-co-fin .pf-table tbody th{white-space:nowrap}
+.pf-co-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--pf-hair);border:1px solid var(--pf-hair);border-radius:9px;overflow:hidden}
+.pf-co-rights{display:flex;flex-direction:column;gap:12px;padding:16px 18px;border:1px solid var(--pf-hair);border-radius:12px;background:var(--pf-raised);outline:none}
+.pf-co-rights:focus-visible{outline:2px solid var(--pf-vi);outline-offset:2px}
+@media(max-width:1300px){.pf-co-facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:1499px){.pf-co-fin{grid-template-columns:1fr}.pf-co-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:850px){.pf-co-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+  .pf-co-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .pf-co-tab{min-height:44px}
+  .pf-co-list li{flex-direction:column;align-items:stretch}
+  .pf-co-list li .pf-btn{justify-content:center;min-height:44px}
+  .pf-co-rights{padding:14px 12px}
+  .pf-co-fin .pf-table tbody th{white-space:normal}
+}

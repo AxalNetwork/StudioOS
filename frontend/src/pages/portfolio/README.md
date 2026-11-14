@@ -79,3 +79,14 @@ the ledger and read Not recorded with that reason; failed figures (`totals:
 null`) read Unreadable beside the entries that were read. `valueAdd.css` holds
 its figure row, tables, in-place confirmation and Log support form. Decision
 notes: `documentation/architecture/decisions/D4817-p5.md`.
+D4817 part 6 (canvas PF-06) draws one company's workspace
+(`../investor/PortfolioCompanyPage.jsx` at `/portfolio/companies/:uid`, with
+`/financials`, `/reports`, `/support` and `/activity`; the old `/terms` lands
+on Financials' Ownership & rights) in the same frame, through its optional
+`title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
+(tabs and titles, who the company is to the caller, the holding route, the
+six key facts, evidence and next actions, rounds, return, support and each
+source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+Activity; `company.css` holds their styles on the frame's tokens. The name is
+drawn only once an authorised read has named the company. Decision notes:
+`documentation/architecture/decisions/D4817-p6.md`.
