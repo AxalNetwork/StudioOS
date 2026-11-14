@@ -258,7 +258,7 @@ function CompanyWorkspace({ uid, tab }) {
     } else if (tab === 'support') {
       tabBody = <CompanySupport uid={uid} name={name} read={reads.support} onRetry={() => retry('support')} />;
     } else if (tab === 'activity') {
-      tabBody = <CompanyActivity uid={uid} owed={reads.owed} support={reads.support} retry={retry} />;
+      tabBody = <CompanyActivity uid={uid} />;
     } else {
       tabBody = <Overview uid={uid} reads={reads} retry={retry} company={company} />;
     }

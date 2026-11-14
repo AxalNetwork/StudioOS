@@ -12,18 +12,20 @@
  *     caller, and the holding route those duties record (404: owes nothing);
  *   - `GET /api/portfolio/health/:uid` — its health snapshots;
  *   - `GET /api/portfolio-support` — the support ledger, of which this
- *     company's entries and its rollup are kept.
+ *     company's entries and its rollup are kept;
+ *   - `GET /api/positions/:uid/activity` (D6227) — the Activity tab's one
+ *     joined timeline, merged and paged by the Worker.
  *
  * Each figure is a value, Not recorded with its reason, or Unreadable when its
- * own read failed. A measured zero stays 0. Nothing is joined that the Worker
- * keeps apart: Activity lists each source's own history, never one feed.
+ * own read failed. A measured zero stays 0. Nothing is joined here that the
+ * Worker keeps apart: the Activity timeline is the Worker's own join.
  */
 
 import {
   NOT_RECORDED, UNREADABLE, basisLabel, day, markHistoryOf, markOf, money, multiple, percent,
 } from './portfolioModel';
 import { COMPANY_UID } from '../cycles/reportingModel';
-import { KIND_WORDS, ROUTE_WORDS, companyRows, periodWord, routeOf } from '../investor/portfolioReportsModel';
+import { ROUTE_WORDS, companyRows, periodWord, routeOf } from '../investor/portfolioReportsModel';
 
 const isNum = (v) => v !== null && v !== undefined && v !== '' && typeof v !== 'boolean' && Number.isFinite(Number(v));
 
@@ -87,6 +89,7 @@ export const COMPANY_SHAPES = {
   detail: (v) => Array.isArray(v.rounds) && Array.isArray(v.marks) && Array.isArray(v.distributions),
   health: (v) => Array.isArray(v.history),
   support: (v) => Array.isArray(v.entries) && Array.isArray(v.companies),
+  activity: (v) => Array.isArray(v.items) && Array.isArray(v.sources),
 };
 
 /** The caller's position in this company from the positions read, or null. */
@@ -378,46 +381,56 @@ export function supportOf(support, uid) {
 /* ---------------------------------------------------------------- activity */
 
 /**
- * Each source's own history (canvas PF-06 E). The Worker keeps marks, rounds
- * and distributions; reporting periods; and support entries in separate
- * stores, and no read joins them, so each list is that source's alone,
- * newest first. `at` is the ISO date each line is sorted by.
+ * D6227 (#6227): the company's joined activity, from `GET /api/positions/:uid/
+ * activity`. The Worker merges the sources newest first and pages them; each
+ * source answers `ok`, `failed` or `not_in_scope`. A failed source is named
+ * with its own Retry and is never read as "nothing happened".
+ *
+ * The Activity switch groups the sources: Financial (investments, marks,
+ * distributions), Reports (reports received and corrected, your asks and
+ * waivers) and Support.
  */
-export function financialEventsOf(detail) {
-  const ev = [];
-  for (const r of detail?.rounds || []) {
-    const at = r.position_date || r.created_at || null;
-    ev.push({ key: `round-${r.uid || at}`, at, date: day(at), text: `Investment: ${money(r.invested_amount) || NOT_RECORDED}${r.round_name ? ` · ${r.round_name}` : ''}` });
-  }
-  for (const m of detail?.marks || []) {
-    ev.push({ key: `mark-${m.uid || m.as_of_date}`, at: m.as_of_date, date: day(m.as_of_date), text: `Mark recorded: ${money(m.fmv) || NOT_RECORDED}${m.basis ? ` · ${basisLabel(m.basis)}` : ''}${m.event ? ` · ${m.event}` : ''}` });
-  }
-  for (const d of detail?.distributions || []) {
-    ev.push({ key: `dist-${d.uid || d.distribution_date}`, at: d.distribution_date, date: day(d.distribution_date), text: `Distribution: ${money(d.amount) || NOT_RECORDED}${d.kind ? ` · ${d.kind}` : ''}` });
-  }
-  return ev.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+export const ACTIVITY_GROUPS = Object.freeze({
+  financial: ['investments', 'marks', 'distributions'],
+  reports: ['reports', 'requests'],
+  support: ['support'],
+});
+
+export const ACTIVITY_SOURCE_WORDS = Object.freeze({
+  investments: 'Investments',
+  marks: 'Valuation marks',
+  distributions: 'Distributions',
+  reports: 'Reports received',
+  requests: 'Your asks and waivers',
+  support: 'Support',
+});
+
+/** One row as the timeline draws it: its day, its label and any amount. */
+export function activityRow(item) {
+  const amount = isNum(item?.amount) ? money(item.amount) : null;
+  return {
+    key: String(item?.id ?? ''),
+    date: day(item?.at) || null,
+    source: item?.source || null,
+    text: `${item?.label || NOT_RECORDED}${amount ? ` · ${amount}` : ''}`,
+    href: item?.link?.href || null,
+  };
 }
 
-export function reportEventsOf(company) {
-  const kindOf = new Map((company?.duties || []).map((d) => [d.uid, KIND_WORDS[d.kind] || d.title || 'Report']));
-  const ev = [];
-  for (const p of company?.periods || []) {
-    const what = `${periodWord(p.label)} · ${kindOf.get(p.duty_uid) || 'Report'}`;
-    if (p.sent_at) ev.push({ key: `sent-${p.uid}`, at: p.sent_at, date: day(p.sent_at), text: `Report received: ${what}` });
-    if (p.waived_at) ev.push({ key: `waived-${p.uid}`, at: p.waived_at, date: day(p.waived_at), text: `Period waived: ${what}` });
-  }
-  return ev.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-}
-
-export function supportEventsOf(support, uid) {
-  if (support.state !== 'ok') return [];
-  const ev = [];
-  for (const e of support.value.entries.filter((x) => String(x.project_uid) === String(uid))) {
-    const what = e.summary || 'Support';
-    const promised = e.promised_at || e.created_at;
-    if (promised) ev.push({ key: `p-${e.uid}`, at: promised, date: day(promised), text: `Support promised: ${what}` });
-    if (e.delivered_at) ev.push({ key: `d-${e.uid}`, at: e.delivered_at, date: day(e.delivered_at), text: `Support delivered: ${what}` });
-    if (e.withdrawn_at) ev.push({ key: `w-${e.uid}`, at: e.withdrawn_at, date: day(e.withdrawn_at), text: `Support withdrawn: ${what}` });
-  }
-  return ev.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+/**
+ * The timeline for one group (`all`, `financial`, `reports`, `support`):
+ * its rows (the first page plus any older pages read since), the sources in
+ * the group that failed or are out of scope, and whether every source in the
+ * group answered.
+ */
+export function activityOf(read, group = 'all', older = []) {
+  if (!read || read.state !== 'ok') return { state: read?.state || 'loading' };
+  const v = read.value;
+  const want = group === 'all' ? null : new Set(ACTIVITY_GROUPS[group] || []);
+  const inGroup = (s) => !want || want.has(s);
+  const sources = (v.sources || []).filter((s) => inGroup(s.source));
+  const failed = sources.filter((s) => s.state === 'failed').map((s) => ({ source: s.source, what: ACTIVITY_SOURCE_WORDS[s.source] || s.source }));
+  const outOfScope = sources.filter((s) => s.state === 'not_in_scope').map((s) => ({ source: s.source, what: ACTIVITY_SOURCE_WORDS[s.source] || s.source, reason: s.reason || null }));
+  const rows = [...(v.items || []), ...older].filter((x) => inGroup(x.source)).map(activityRow);
+  return { state: 'ok', rows, failed, outOfScope, complete: failed.length === 0 };
 }
