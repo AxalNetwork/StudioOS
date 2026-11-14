@@ -606,8 +606,8 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     const res = await rc.env.DB.prepare(
       `SELECT id, name, stage FROM job_applications WHERE posting_id = ?
         ORDER BY CASE stage WHEN 'offer' THEN 0 WHEN 'interview' THEN 1 WHEN 'screen' THEN 2 WHEN 'applied' THEN 3 WHEN 'hired' THEN 4 ELSE 5 END,
-                 stage_changed_at DESC, id DESC LIMIT ${APPLICANTS_SHOWN + 1}`,
-    ).bind(p.id).all<{ id: number; name: string | null; stage: string }>();
+                 stage_changed_at DESC, id DESC LIMIT ?`,
+    ).bind(p.id, APPLICANTS_SHOWN + 1).all<{ id: number; name: string | null; stage: string }>();
     const all = res.results || [];
     const rows: Row[] = all.slice(0, APPLICANTS_SHOWN).map((a) => ({
       a: a.name || 'An applicant with no name',
