@@ -16,6 +16,7 @@
  * with an apostrophe, as the cap table's export does (D1020).
  */
 import { toCsv } from './csv';
+import { toMajorString } from '../../../frontend/src/lib/money.js';
 
 type Row = Record<string, unknown>;
 
@@ -36,7 +37,8 @@ export function text(v: unknown): string | null {
   return /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s) ? `'${s}` : s;
 }
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const dollars = (cents: unknown): string | null => (typeof cents === 'number' && Number.isFinite(cents) ? (cents / 100).toFixed(2) : null);
+/** Partner revenue is stored in USD cents (the table draws it as USD); `lib/money.js` writes the major units. */
+const dollars = (cents: unknown): string | null => (typeof cents === 'number' && Number.isSafeInteger(cents) ? toMajorString(cents, 'USD') : null);
 const day = (v: unknown): string | null => (typeof v === 'string' && v ? v.slice(0, 10) : null);
 
 const COLUMNS: Record<GrowExportSlug, { header: string[]; cells: (r: Row) => unknown[] }> = {
