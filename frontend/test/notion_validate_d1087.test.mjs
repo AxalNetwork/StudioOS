@@ -123,7 +123,8 @@ test('without an accept dialog, Accept is immediate, as D1086 built it', async (
 test('the wiring: From Notion on Customer research with the consent dialog, and on Market intelligence', () => {
   const route = cycleRouteText();
   assert.match(route, /<FromNotion section="validate" projectId=\{ctx\.projectId\} module="customer_research" acceptDialog=\{NotionInterviewImport\} \/>/);
-  assert.match(route, /'market-intelligence': \(_data, ctx\) => <FromNotion section="validate" projectId=\{ctx\.projectId\} module="market_intelligence" \/>/);
+  // D6019 (#6019): the part is a fragment that opens with its Export, so the From Notion is inside the part, not the whole of it.
+  assert.match(route, /'market-intelligence': \(_data, ctx\) => \([^']*?<FromNotion section="validate" projectId=\{ctx\.projectId\} module="market_intelligence" \/>[^']*?\),\n/);
   const dialog = read('frontend/src/pages/cycles/NotionInterviewImport.jsx');
   assert.doesNotMatch(dialog, /window\.(alert|confirm|prompt)/, 'an in-page dialog, never a browser pop-up');
   for (const m of dialog.matchAll(/className=\{?[`"]([^`"]*)[`"]/g)) {

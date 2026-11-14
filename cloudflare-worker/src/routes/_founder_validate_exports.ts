@@ -179,3 +179,192 @@ export function serializeSummaryCsv(
     : toCsv(['decision'], [['not recorded']]);
   return `${table}\r\n\r\n${foot}`;
 }
+
+// ---------------------------------------------------------------------------
+// D6019 (#6019): the competitor list, the demand signals, and the evidence
+// behind each claim with its experiments. Same contract as the three above:
+// rows in, CSV out, and an empty cell is "not recorded", never `0`.
+// ---------------------------------------------------------------------------
+
+export type ExportCompetitorRow = {
+  name: string;
+  kind: string;
+  latest_signal: string | null;
+  latest_on: string | null;
+  source_url: string | null;
+  source_kind: string | null;
+};
+
+export const COMPETITORS_CSV_HEADER = [
+  'company', 'kind', 'latest_signal', 'latest_signal_date', 'source',
+] as const;
+
+/**
+ * The tracked list, one row per competitor, exactly as Market intelligence lists
+ * it (`loadTracked`): a name the venture stopped tracking is not in the file.
+ * A competitor with no signal writes empty signal cells, not "none": nobody
+ * recorded one, which is not the same as the competitor having done nothing.
+ */
+export function serializeCompetitorsCsv(rows: readonly ExportCompetitorRow[]): string {
+  return toCsv(COMPETITORS_CSV_HEADER, rows.map((c) => [
+    c.name,
+    c.kind,
+    c.latest_signal,
+    c.latest_on,
+    c.source_url ?? c.source_kind,
+  ]));
+}
+
+export type ExportSignalRow = {
+  key: string;
+  signal: string;
+  who: string | null;
+  /** Major units as exact decimal text (`toMajorString`), or null when no amount is recorded or it cannot be read. */
+  amount: string | null;
+  currency: string | null;
+  period: string | null;
+  date: string | null;
+  counts: string;
+};
+
+export const SIGNALS_CSV_HEADER = [
+  'id', 'signal', 'who', 'amount', 'currency', 'period', 'date', 'counts',
+] as const;
+
+/** Anything shaped like an email address. A waitlist name cell never carries one. */
+const EMAILISH = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+
+/**
+ * Demand and urgency signals: recorded signals, paid pre-sales and waitlist
+ * sign-ups, the one population the module lists (`demandRowsOf`).
+ *
+ * A WAITLIST ROW CARRIES NO EMAIL ADDRESS. The read never selects the address,
+ * and a sign-up who typed their address into the name field is written with an
+ * empty name: a person who joined a waitlist did not agree to have their address
+ * passed around in a spreadsheet.
+ *
+ * An amount that is absent is empty, never `0`; its currency is written only
+ * beside an amount.
+ */
+export function serializeSignalsCsv(rows: readonly ExportSignalRow[]): string {
+  return toCsv(SIGNALS_CSV_HEADER, rows.map((r) => {
+    const waitlist = r.key.startsWith('waitlist-');
+    const who = waitlist && r.who != null && EMAILISH.test(r.who) ? null : r.who;
+    return [
+      r.key,
+      r.signal,
+      who,
+      r.amount,
+      r.amount == null ? null : r.currency,
+      r.period,
+      r.date,
+      r.counts,
+    ];
+  }));
+}
+
+export type ExportClaim = { id: number; code: string; claim: string; retired_at: string | null };
+
+export type ExportEvidenceItem = {
+  id: string;
+  hypothesis_id: number;
+  kind: string;
+  label: string;
+  direction: string;
+  strength: string | null;
+  date: string | null;
+};
+
+export type ExportDecisionCitation = {
+  ref_id: string;
+  decision: string;
+  state: string | null;
+  decided_at: string | null;
+  superseded_at: string | null;
+};
+
+export type ExportExperiment = {
+  hypothesis_id: number;
+  title: string;
+  method: string | null;
+  target: string | null;
+  status: string;
+  result: string | null;
+};
+
+export const EVIDENCE_CSV_HEADER = [
+  'code', 'claim', 'retired_at', 'evidence_id', 'kind', 'evidence', 'direction', 'strength', 'date', 'decisions',
+] as const;
+
+export const EXPERIMENTS_CSV_HEADER = [
+  'code', 'experiment', 'method', 'target', 'status', 'result', 'observed',
+] as const;
+
+/** `proceed 2026-10-12`, with `(withheld)` and `(superseded)` said when they apply. */
+function citationText(d: ExportDecisionCitation): string {
+  return [
+    d.decision,
+    d.decided_at ? String(d.decided_at).slice(0, 10) : null,
+    d.state === 'withheld' ? '(withheld)' : null,
+    d.superseded_at ? '(superseded)' : null,
+  ].filter(Boolean).join(' ');
+}
+
+/**
+ * Every claim's linked evidence, then its experiments as a second block.
+ *
+ * The evidence rows are the record's Evidence section (`evidenceFor`): an
+ * interview behind a pain link, or a directly linked interview, demand signal,
+ * metric or experiment, each with its direction, strength and date. An
+ * interview is named by its date and theme, never by the interviewee's words, so
+ * no quote reaches this file whatever the consent.
+ *
+ * A claim with nothing linked still has a row, reading "No evidence linked",
+ * so the file cannot be read as missing the claim.
+ *
+ * `decisions` names the Verdict decisions that rested on the item. That column
+ * is why the route is gated as the summary is (`canReadDecision`).
+ *
+ * `observed` is yes only when the experiment has a result (D4586 § 4): a done
+ * experiment with no result recorded is context, not a finding.
+ */
+export function serializeEvidenceCsv(
+  claims: readonly ExportClaim[],
+  items: readonly ExportEvidenceItem[],
+  citations: readonly ExportDecisionCitation[],
+  experiments: readonly ExportExperiment[],
+): string {
+  const citedBy = new Map<string, string[]>();
+  for (const d of citations) {
+    const list = citedBy.get(d.ref_id) ?? [];
+    list.push(citationText(d));
+    citedBy.set(d.ref_id, list);
+  }
+  const itemsBy = new Map<number, ExportEvidenceItem[]>();
+  for (const it of items) {
+    const list = itemsBy.get(Number(it.hypothesis_id)) ?? [];
+    list.push(it);
+    itemsBy.set(Number(it.hypothesis_id), list);
+  }
+  const rows: unknown[][] = [];
+  for (const h of claims) {
+    const own = itemsBy.get(Number(h.id)) ?? [];
+    if (own.length === 0) {
+      rows.push([h.code, h.claim, h.retired_at, null, null, 'No evidence linked', null, null, null, null]);
+      continue;
+    }
+    for (const it of own) {
+      rows.push([
+        h.code, h.claim, h.retired_at, it.id, it.kind, it.label, it.direction, it.strength, it.date,
+        (citedBy.get(it.id) ?? []).join('; '),
+      ]);
+    }
+  }
+  const codeOf = new Map(claims.map((h) => [Number(h.id), h.code]));
+  const table = toCsv(EVIDENCE_CSV_HEADER, rows);
+  const exps = toCsv(EXPERIMENTS_CSV_HEADER, experiments.map((x) => {
+    const observed = typeof x.result === 'string' && x.result.trim() !== '';
+    return [codeOf.get(Number(x.hypothesis_id)) ?? null, x.title, x.method, x.target, x.status, observed ? x.result : null, observed ? 'yes' : 'no'];
+  }));
+  return `${table}\r\n\r\n${exps}`;
+}

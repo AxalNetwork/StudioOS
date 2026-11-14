@@ -450,6 +450,24 @@ export async function currentDecision(env: Env, projectId: number, scope: Scope)
 }
 
 /**
+ * D6019 (#6019): every decision that rested on a piece of evidence, keyed by the
+ * evidence item's `id` (the `ref_id` a decision's evidence row stores), oldest
+ * first, given and withheld, current and superseded. The hypothesis-evidence
+ * CSV names them; it is gated by `canReadDecision` for that reason. A failed
+ * read throws: the caller refuses rather than exporting "no decision".
+ */
+export async function decisionCitations(env: Env, projectId: number): Promise<Array<{
+  ref_id: string; decision: string; state: string | null; decided_at: string | null; superseded_at: string | null;
+}>> {
+  const res = await env.DB.prepare(
+    `SELECT e.ref_id, d.decision, d.state, d.decided_at, d.superseded_at
+       FROM validation_decision_evidence e JOIN validation_decisions d ON d.id = e.decision_id
+      WHERE d.project_id = ? ORDER BY d.decided_at, d.id`,
+  ).bind(projectId).all<{ ref_id: string; decision: string; state: string | null; decided_at: string | null; superseded_at: string | null }>();
+  return res.results || [];
+}
+
+/**
  * D1143 (#2433, owner question 5 A) — the day of the venture's latest Pivot
  * given, or null. A superseded Pivot still counts: it happened. A withheld
  * Pivot, or a Pivot on one claim, does not. The Product-market fit collector
