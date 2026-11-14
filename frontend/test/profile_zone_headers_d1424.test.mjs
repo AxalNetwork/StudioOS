@@ -114,10 +114,10 @@ test('the header Ask is "Ask", never "Fill", and the shared button is the one dr
 
 test('Deal flow: "Set your thesis" is the Deals root primary only while no deal is in the flow (owner C)', () => {
   assert.equal(THESIS_PRIMARY.label, 'Set your thesis');
-  assert.equal(THESIS_PRIMARY.to, '/account/security-privacy', 'the My thesis card is on the security-privacy section');
+  assert.equal(THESIS_PRIMARY.to, '/account/security-privacy?from=deal-flow#my-thesis', 'the My thesis card is on the security-privacy section');
   const html = routed(h(ZonePrimary, { item: THESIS_PRIMARY }));
   assert.match(html, /data-primary="true"/);
-  assert.match(html, /href="\/account\/security-privacy"/);
+  assert.ok(html.includes(`href="${THESIS_PRIMARY.to}"`));
   assert.match(html, /bg-indigo-600/);
   const flow = codeOnly(read('frontend/src/pages/investor/dealflow/DealFlow.jsx'));
   const empty = flow.slice(flow.indexOf('function EmptyFlow()'), flow.indexOf('export default function DealFlow'));
@@ -148,7 +148,8 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.match(unreadable, />Try again</);
   const empty = routed(h(ThesisBandView, { state: { kind: 'empty' } }));
   assert.match(empty, /No thesis set/);
-  assert.match(empty, new RegExp(`href="${THESIS_HREF}"`));
+  assert.equal(THESIS_HREF, '/account/security-privacy?from=home#my-thesis');
+  assert.ok(empty.includes(`href="${THESIS_HREF}"`));
   const set = routed(h(ThesisBandView, { state: { kind: 'set', text: 'Seed B2B infra' } }));
   assert.match(set, /Seed B2B infra/);
   assert.match(set, /Edit in Settings ›/);

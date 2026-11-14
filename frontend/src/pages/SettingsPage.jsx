@@ -340,7 +340,7 @@ export default function SettingsPage() {
     const r = (data.role || '').toLowerCase();
     const allowed = new Set(SECTIONS.filter(s => !s.roles || s.roles.includes(r)).map(s => s.id));
     if (!allowed.has(active)) navigate({ pathname: '/account', search: location.search }, { replace: true });
-  }, [data, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, active, location.hash]);
 
   // D568 — an anchor in the address names a card that only exists once the
   // page has read the account and drawn the pane, which is after the browser
@@ -515,7 +515,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <PrivacyCoreCard flash={flash} />
           <CohortAdvisorAccessCard flash={flash} />
           <InvestorSignalsContributionCard flash={flash} role={data?.role} />
-          <InvestorMyThesisCard flash={flash} role={data?.role} />
+          <InvestorMyThesisCard key={location.search} flash={flash} role={data?.role} />
           <InvestorThesisEditorCard flash={flash} role={data?.role} />
           <MarketIntelContributionCard flash={flash} />
           <PrivacySection data={data} patch={patch} flash={flash} />
@@ -556,9 +556,9 @@ function AccountPhoneIndexReads({ role }) {
 
 // ---------- Sections --------------------------------------------------------
 
-function Card({ title, description, children, footer }) {
+function Card({ title, description, children, footer, id }) {
   return (
-    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
+    <div id={id} data-card className="scroll-mt-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
       <div data-card-header className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
         {description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>}
@@ -4112,6 +4112,11 @@ function InvestorSignalsContributionCard({ flash, role }) {
 // path since we omit them here. Only investors (or anyone with a completed
 // profile) see it.
 function InvestorMyThesisCard({ flash, role }) {
+  const { search } = useLocation();
+  const from = new URLSearchParams(search).get('from');
+  const returnLink = from === 'home' ? { to: '/studio', label: 'Back to Investor Home' }
+    : from === 'deal-flow' ? { to: '/deals', label: 'Back to Deal flow' } : null;
+  const [saved, setSaved] = useState(false);
   const [profile, setProfile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -4126,8 +4131,8 @@ function InvestorMyThesisCard({ flash, role }) {
 
   const isInvestor = String(role || '').toLowerCase() === 'investor';
   if (!isInvestor && !profile?.completed_at) return null;
-  if (err) return <Card title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!profile) return <Card title="My thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+  if (err) return <Card id="my-thesis" title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (!profile) return <Card id="my-thesis" title="My thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
   const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
   const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
@@ -4162,6 +4167,7 @@ function InvestorMyThesisCard({ flash, role }) {
         value_weights: profile.value_weights || {},
       });
       setProfile(r.profile);
+      setSaved(true);
       flash('Thesis saved');
     } catch (e) {
       flash(e.message || 'Failed to save', 'error');
@@ -4185,6 +4191,7 @@ function InvestorMyThesisCard({ flash, role }) {
 
   return (
     <Card
+      id="my-thesis"
       title="My thesis"
       description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
     >
@@ -4215,7 +4222,8 @@ function InvestorMyThesisCard({ flash, role }) {
             <span className="text-gray-400"> — edit in “Investor Thesis &amp; Matching” below.</span>
           </div>
         )}
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {saved && returnLink && <Link className="text-sm font-medium text-violet-700 underline dark:text-violet-300" to={returnLink.to}>{returnLink.label}</Link>}
           <button onClick={save} disabled={busy}
             className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
             {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}

@@ -152,7 +152,7 @@ export const PATH_TO_SECTION = {
 export function accountViewFor({ pathname = '', hash = '', phone = false } = {}) {
   const m = String(pathname).match(/^\/(?:account|settings)\/([^/]+)/);
   if (m && PATH_TO_SECTION[m[1]]) return PATH_TO_SECTION[m[1]];
-  if (hash === '#security-recovery-codes') return 'security-privacy';
+  if (hash === '#security-recovery-codes' || hash === '#my-thesis') return 'security-privacy';
   return phone ? 'index' : 'account';
 }
 
