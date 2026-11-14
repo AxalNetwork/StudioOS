@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Introduction detail, accepted and not yet made</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.hdr{display:flex;flex-direction:column;gap:6px}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c8{grid-column:span 8}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn.ask .em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt .bt{margin-left:auto;flex:none}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 14px var(--sg);margin-top:3px;line-height:1.3}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);margin-top:2px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.tl{display:flex;flex-direction:column}
+.tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.tl li:first-child{border-top:0}
+.tl .mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.tl .mk.ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.tl .mk.cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.tl .mk.no{border-style:dashed}
+.tl .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+</style>
+</helmet>
+<div class="cv" style="width:1440px;min-height:1240px">
+<div class="sh" style="min-height:1240px">
+<aside class="sd">
+<div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div>
+<button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company: Northwind Labs">Northwind Labs <span aria-hidden="true">▾</span></button>
+<span class="eye grp">Founder</span>
+<nav aria-label="Founder">
+<a href="#">Home</a><a href="#">Validate</a><a href="#">Build</a><a href="#">Raise</a><a href="#">Grow</a><a href="#" aria-current="page">Network</a><a href="#">Research</a><a href="#">Trust</a><a href="#">Company Settings</a>
+</nav>
+</aside>
+<div class="mn">
+<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button><span class="av" role="img" aria-label="Account">MR</span></div></div>
+<main class="bd">
+<nav aria-label="Breadcrumb" class="foot"><a href="#">Network</a> › <a href="#">Introductions</a> › From your team › Priya Nair</nav>
+<header class="hdr">
+<span class="eye">Introduction · from your team</span>
+<div class="hrow">
+<div><h1>You → Priya Nair, via Tom Becker</h1><p>Requested <span class="mo">2026-10-31</span> · Priya Nair, VP Partnerships at Kelp Bio</p></div>
+<div class="acts"><span class="pl v" style="font-size:12.5px;padding:3px 11px">✓ Accepted · ◷ not yet made</span><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button></div>
+</div>
+</header>
+<nav class="ptabs" aria-label="Network">
+<a href="#">Overview</a><a href="#">Relationships <span>142</span></a><a href="#" aria-current="page">Introductions <span>9</span></a><a href="#">Organizations <span>38</span></a>
+</nav>
+
+<div class="nt a"><span class="ic" aria-hidden="true">◷</span><div><b>Tom accepted this introduction. It has not been made yet.</b> Accepting is Tom’s yes; the introduction counts as made only when Tom sends it or records it. Nothing is sent for him.</div><span class="bt"><button type="button" class="btn">Send Tom a reminder</button></span></div>
+
+<div class="g">
+<div class="c8" style="display:flex;flex-direction:column;gap:16px">
+<section class="cd" aria-labelledby="lc">
+<div class="ch"><h2 id="lc">Lifecycle</h2><span class="sm">recorded states only</span></div>
+<div class="stp" role="list" aria-label="Introduction lifecycle"><span role="listitem">✓ Requested</span><span role="listitem">✓ Decided</span><span role="listitem" class="on" aria-current="step">✓ Accepted</span><span role="listitem" class="nx">○ Made</span><span role="listitem" class="nx">○ Outcome</span></div>
+<p class="foot">Other recorded endings: Declined (with an optional note the requester can read) · Withdrawn by you.</p>
+<ol class="tl" aria-label="Timeline">
+<li><span class="mk ok" aria-hidden="true">✓</span><div><b>Requested</b> by you · note: “We’re piloting with two biotech labs; Priya runs partnerships.”<div class="foot">Recorded</div></div><span class="w">2026-10-31 10:02</span></li>
+<li><span class="mk ok" aria-hidden="true">✓</span><div><b>Accepted</b> by Tom Becker · “Happy to — I’ll send it this week.”<div class="foot">Recorded</div></div><span class="w">2026-11-03 11:04</span></li>
+<li><span class="mk cur" aria-hidden="true">◷</span><div><b>Introduction email</b> · not sent yet<div class="foot">Recorded: no send on file</div></div><span class="w">—</span></li>
+<li><span class="mk no" aria-hidden="true">○</span><div><b>Made</b><div class="foot">Not recorded yet</div></div><span class="w">—</span></li>
+<li><span class="mk no" aria-hidden="true">○</span><div><b>Outcome</b> · meeting held, replied, no reply or not a fit<div class="foot">You record this after the introduction is made</div></div><span class="w">—</span></li>
+</ol>
+<div class="lgd"><span>✓ Recorded</span><span>○ Not recorded</span><span>? Could not be read</span></div>
+</section>
+
+<section class="cd" aria-labelledby="rc">
+<div class="ch"><h2 id="rc">Variant · send recorded, made not recorded</h2><span class="pl a">! Reconciliation required</span></div>
+<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>The introduction was sent, but its status could not be fully recorded.</b> The email went out on <span class="mo">2026-11-06 09:41</span>; the record still says Accepted. It will not be sent again.</div></div>
+<div class="acts"><button type="button" class="btn p">Retry recording</button><button type="button" class="btn">View delivery details</button><span class="foot">No “Resend”: a second email would be a duplicate introduction.</span></div>
+<p class="foot">Needs backend: a reconciliation state on the request (#4604). Today the record holds the send reference and the made time separately.</p>
+</section>
+</div>
+
+<div class="c4" style="display:flex;flex-direction:column;gap:16px">
+<section class="cd" aria-labelledby="pp">
+<div class="ch"><h2 id="pp">People</h2></div>
+<dl class="st">
+<div><dt>Target</dt><dd>Priya Nair<small>VP Partnerships, Kelp Bio</small></dd></div>
+<div><dt>Introducer</dt><dd>Tom Becker<small>your teammate · shares his book with Northwind Labs</small></dd></div>
+<div><dt>Requester</dt><dd>You<small>Maya Reyes</small></dd></div>
+</dl>
+</section>
+<section class="cd" aria-labelledby="nx">
+<div class="ch"><h2 id="nx">Next step</h2></div>
+<p class="sub">Waiting on Tom to make the introduction. You can remind him, or withdraw the request.</p>
+<div class="acts"><button type="button" class="btn">Send Tom a reminder</button><button type="button" class="btn t">Withdraw request</button></div>
+<div style="border-top:1px solid var(--hair);padding-top:10px" class="sub">Follow-up on this request: <b>2026-11-10</b> · <a href="#">Change</a></div>
+</section>
+<section class="cd" aria-labelledby="cr">
+<div class="ch"><h2 id="cr">Credits</h2></div>
+<p class="sub">Team introductions spend no intro credits. Curated matches do.</p>
+</section>
+</div>
+</div>
+</main>
+</div>
+<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about this introduction</span></aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
