@@ -92,6 +92,14 @@ test('requiredChecks: missing, pending, skipped and another head are not green',
   assert.equal(requiredChecks([], green, HEAD).ok, false);
 });
 
+test('a green draft fast tier cannot clear the full-suite landing requirement', () => {
+  const draftFastCheck = { ...green[0], name: 'test:drift (draft fast tier)' };
+  const result = decide(facts({ checkRuns: [draftFastCheck, green[1], policyRun] }));
+  assert.equal(gate(result, 'required checks green').ok, false);
+  assert.match(gate(result, 'required checks green').detail, /test:drift \(full suite\)/);
+  assert.deepEqual(result.commands, []);
+});
+
 test('landingReport: exact head, LANDING_AUTO true and T0 or T1', () => {
   const report = { headSha: HEAD, landingAuto: true, tier: 'T0' };
   assert.equal(landingReport({ checkRun: policyRun, report, headSha: HEAD }).ok, true);

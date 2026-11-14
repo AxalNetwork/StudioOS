@@ -85,3 +85,23 @@ test('D5608 timing metadata is unpacked before duration planning', () => {
   assert.deepEqual(timingsOf({ 'a.test.mjs': 10 }), { 'a.test.mjs': 10 });
   for (const input of [null, [], { tests: [] }]) assert.throws(() => timingsOf(input), /invalid/);
 });
+
+test('#6460 the real CI planner gives drafts only rest and preserves all nine parts for ready, queue and push', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  assert.match(ci, /types: \[opened, synchronize, reopened, ready_for_review\]/);
+  const planner = ci.match(/id: plan\n(?:[^\n]*\n)*? {8}run: \|\n((?: {10}[^\n]*\n)+)/)[1];
+  const code = planner.replace(/^ {10}/gm, '').replace(
+    'node scripts/test-drift-parts.mjs --plan test-timings.json',
+    `printf '%s' '${JSON.stringify(plan.parts.map(part => part.name))}'`,
+  ).replace('>> "$GITHUB_OUTPUT"', '');
+  for (const [EVENT, DRAFT, expected] of [
+    ['pull_request', 'true', ['rest']],
+    ['pull_request', 'false', plan.parts.map(part => part.name)],
+    ['push', '', plan.parts.map(part => part.name)],
+    ['merge_group', '', plan.parts.map(part => part.name)],
+  ]) {
+    const run = spawnSync('bash', ['-e', '-c', code], { encoding: 'utf8', env: { ...process.env, EVENT, DRAFT } });
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(JSON.parse(run.stdout.trim().slice('parts='.length)), expected);
+  }
+});

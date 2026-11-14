@@ -48,7 +48,9 @@ because only Session 1 makes a task ready.
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains
    `Closes #<issue>` and fills in `.github/pull_request_template.md`. Then set
-   `state:review` and post a STATUS comment with the PR link.
+   `state:review` and post a STATUS comment with the PR link. Drafts run the
+   fast CI tier. When the work is finished, mark the PR ready to start the
+   full suite on that head. Honor any explicit request to keep a PR draft.
 4. **Blocked.** Set `state:blocked`, plus `needs-decision` when the call is
    the owner's. Put the question in a STATUS comment, then take another task.
    Give the owner lettered options (A, B, C) and say which one you would
@@ -62,7 +64,7 @@ because only Session 1 makes a task ready.
    T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
    the target still requires the merge queue and that the PR did not edit
    `.github/workflows/landing-policy.yml`. Then run
-   `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
+   `gh pr merge --auto --squash --match-head-commit <sha>` on the ready PR.
    Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
    the queue if queued before pushing changes. Wait for a new eligible report.
    Never use `--admin`, push to `main` or another slot's branch, or approve

@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   # #4107: the merge queue tests each entry on a `gh-readonly-queue/main/…`
   # branch through this event, and waits for main's required checks there.
   # Four of them are this file's: `frontend (build)`, `worker (typecheck)`,
@@ -184,8 +185,16 @@ jobs:
           fi
       - name: Generate the exact-once plan
         id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          parts=$(node --input-type=module -e '
+            import { tierFor } from "./scripts/lib/prTier.mjs";
+            const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
+            console.log(tier.parts === null ? process.argv[1] : JSON.stringify(tier.parts));
+          ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -519,6 +528,7 @@ jobs:
       - name: Required fast checks and full suite passed
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
           REQUIRED: ${{ needs.fast.outputs.required }}
@@ -532,14 +542,20 @@ jobs:
             exit 0
           fi
           if [ "$SUITE" = "success" ]; then
-            echo "Every part of test:drift passed."
+            if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+              echo "The draft fast tier passed."
+            else
+              echo "Every part of test:drift passed."
+            fi
             exit 0
           fi
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
           exit 1
 
   gate:
-    name: test:drift (full suite)
+    # A skipped required check would count as passed. The draft run must
+    # publish a different context so the full-suite context stays pending.
+    name: "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' || 'test:drift (full suite)' }}"
     needs: [verified, plan, suite]
     # Always, never skipped: a skipped required check reports as passed. This
     # job decides, and it passes only when every part passed — or, on a push
@@ -551,6 +567,7 @@ jobs:
       - name: Every part of test:drift passed
         env:
           EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
           PLAN: ${{ needs.plan.result }}
@@ -560,7 +577,11 @@ jobs:
             exit 0
           fi
           if [ "$PLAN" = "success" ] && [ "$SUITE" = "success" ]; then
-            echo "Every part of test:drift passed."
+            if [ "$EVENT" = "pull_request" ] && [ "$DRAFT" = "true" ]; then
+              echo "The draft fast tier passed."
+            else
+              echo "Every part of test:drift passed."
+            fi
             exit 0
           fi
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
@@ -672,7 +693,7 @@ jobs:
   # -------------------------------------------------------------------------
   visual:
     name: editor visual regression and axe
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -746,7 +767,7 @@ jobs:
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -777,7 +798,7 @@ jobs:
   # -------------------------------------------------------------------------
   dev-backend:
     name: dev backend (import smoke)
-    if: github.event_name != 'merge_group'
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
