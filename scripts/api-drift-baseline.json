@@ -6,7 +6,6 @@
     "error_envelope": "file:line (status) — a >=400 c.json() with no error/detail/message key, so the SPA's request() helper can only surface \"Request failed\"."
   },
   "missing_route": [
-    "GET /api/capital/funds",
     "GET /api/dashboard/stats",
     "GET /api/pipeline/votes/leaderboard",
     "POST /api/legal/spinout/:p"

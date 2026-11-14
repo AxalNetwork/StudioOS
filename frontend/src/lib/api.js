@@ -609,6 +609,7 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
       // public profile reads) must never trigger an auth-redirect — a 401
@@ -5159,9 +5160,6 @@ export const api = {
   fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
   fundSimScenarioDelete: (uid) =>
     request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
-  // Reuse the existing /api/capital/funds endpoint for the fund picker —
-  // it returns the canonical VCFund list with id/uid/name/total_commitment.
-  capitalFundsList: () => request('/capital/funds'),
 
   // Task #8 (IH) — Data import + migration tools.
   importsList: () => request('/imports/'),

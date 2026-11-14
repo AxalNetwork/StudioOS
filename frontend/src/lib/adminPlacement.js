@@ -149,7 +149,7 @@ export const ADMIN_PLACEMENT = [
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
-  page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
+  page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'How one fund splits exit proceeds between its LPs and GP.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
