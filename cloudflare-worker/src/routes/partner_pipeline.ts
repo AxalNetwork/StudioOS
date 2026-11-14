@@ -71,6 +71,56 @@ import {
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
 
+partnerPipeline.get('/activity', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const raw = c.req.query('need_id');
+    const needId = raw == null ? null : Number(raw);
+    if (raw != null && (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(needId))) {
+      return c.json({ detail: 'Name an opportunity by its need ID.' }, 400);
+    }
+    const { results } = await c.env.DB.prepare(
+      `WITH scoped_quotes AS (
+         SELECT id, need_id, status, decided_at FROM quotes
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), scoped_engagements AS (
+         SELECT id, need_id FROM engagements
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), events AS (
+         SELECT need_id, 'passed' AS kind, passed_at AS occurred_at, id AS source_id
+           FROM partner_lead_passes WHERE partner_id = ? AND (? IS NULL OR need_id = ?)
+         UNION ALL
+         SELECT q.need_id, 'proposal_version', v.created_at, v.id
+           FROM quote_versions v JOIN scoped_quotes q ON q.id = v.quote_id
+         UNION ALL
+         SELECT need_id, CASE status WHEN 'accepted' THEN 'proposal_won' ELSE 'proposal_lost' END, decided_at, id
+           FROM scoped_quotes WHERE status IN ('accepted', 'rejected') AND decided_at IS NOT NULL
+         UNION ALL
+         SELECT q.need_id, 'negotiation_moved', g.last_moved_at, g.id
+           FROM quote_negotiations g JOIN scoped_quotes q ON q.id = g.quote_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_created', r.created_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_ended', r.ended_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id WHERE r.ended_at IS NOT NULL
+       )
+       SELECT e.kind, e.occurred_at, e.source_id, n.id AS need_id, n.uid AS need_uid, n.title
+       FROM events e JOIN founder_needs n ON n.id = e.need_id
+       WHERE julianday(e.occurred_at) IS NOT NULL
+       ORDER BY julianday(e.occurred_at) DESC, e.kind, e.source_id DESC LIMIT ?`,
+    ).bind(partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, needId, needId, listLimit(c.req.query('limit')))
+      .all<{ kind: string; occurred_at: string; source_id: number; need_id: number; need_uid: string; title: string }>();
+    return c.json({ items: results.map(({ kind, occurred_at, source_id, need_id, need_uid, title }) => ({
+      key: `${kind}:${source_id}`, kind, occurred_at, opportunity: { need_id, uid: need_uid, title },
+    })) });
+  } catch (e) { return mapError(c, e); }
+});
+
 /** The partner row for the caller, or a throw `mapError` will shape. */
 async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
   const user = (await requireAuth(c)) as User;
