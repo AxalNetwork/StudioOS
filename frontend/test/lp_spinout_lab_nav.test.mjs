@@ -138,7 +138,8 @@ test('every sales-page CTA routes into the LP workspace — the CTA flow is real
     /export const LP_WORKSPACE_PATH = '\/spinout-lab\/investor-workspace'/,
     'one exported destination constant, not scattered strings',
   );
-  const links = salesPage.match(/to=\{LP_WORKSPACE_PATH\}/g) || [];
+  assert.match(salesPage, /const workspaceHref = LP_WORKSPACE_PATH \+ cta\.hash/);
+  const links = salesPage.match(/to=\{workspaceHref\}/g) || [];
   assert.ok(links.length >= 4, `hero, fund-position, workspace and request-access CTAs all point at the workspace (found ${links.length})`);
   assert.doesNotMatch(salesPage, /to="\/funds\/lp-workspace"/, 'the investor journey stays in the /spinout-lab namespace');
 });

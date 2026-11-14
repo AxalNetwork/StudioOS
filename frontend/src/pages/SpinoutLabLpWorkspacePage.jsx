@@ -23,7 +23,7 @@
 // participation-rights ladder, IR, allocation gate, onboarding requirements and
 // the compliance footer — is preserved.
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Landmark, Lock, Check, Clock, ShieldCheck, FileText,
   AlertCircle, RefreshCw, FileDown, Loader2,
@@ -116,7 +116,7 @@ const GATE = {
   },
   voting: {
     tone: 'green', icon: ShieldCheck, title: 'Full participation active.',
-    body: `You hold allocation and decision rights for Cohort 4, complete reporting access, and follow-on co-invest priority. The allocation window closes ${FUND.demoDay}.`,
+    body: `You hold allocation and decision rights for Cohort 4, complete reporting access, and follow-on co-invest priority. Scheduled demo day: ${FUND.demoDay}.`,
     wrap: 'border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30',
   },
 };
@@ -186,6 +186,7 @@ const EXTERNAL_DOCS = [
 /* ------------------------------------------------------------------- page */
 
 export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
+  const { hash } = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   // D752 (#1891): an investor on HQ only; never enabled for an admin, so a preview reads nothing.
@@ -265,6 +266,12 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   useEffect(() => { load(); }, []);
 
   const derived = useMemo(() => lpAccessState(portal, application), [portal, application]);
+  useEffect(() => {
+    if (hash === '#my-commitment' && (derived.holdings > 0 || err)) {
+      document.getElementById('my-commitment')?.scrollIntoView?.();
+    }
+  }, [hash, derived.holdings, err]);
+
   const state = isAdmin && preview ? preview : derived.state;
   const M = useMemo(() => fundModel(), []);
 
