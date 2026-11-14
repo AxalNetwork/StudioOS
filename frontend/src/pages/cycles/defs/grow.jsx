@@ -15,7 +15,7 @@ import UpdateAskReplies from '../UpdateAskReplies';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
-import { growArea } from '../growOverviewModel';
+import { growModuleTitle } from '../growOverviewModel';
 
 // D4574 (#4574, H5): Grow's steps, each behind its own lazy boundary.
 const CalendarWeek = lazyStep(() => import('../distribution/CalendarTab.jsx'), 'CalendarWeek');
@@ -37,7 +37,7 @@ const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data
  */
 const grow = {
   Overview: GrowOverview,
-  moduleName: (slug) => growArea(slug)?.name || null,
+  moduleName: (slug) => growModuleTitle(slug),
   modules: MODULES.grow,
   path: 'update',
   Mount: GrowMount,
@@ -46,6 +46,8 @@ const grow = {
   tools: toFnMap({
     'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
     'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
+    // #6109: the pair's other half. Partnerships reads the co-marketing pitches and attributions.
+    'partner-network': (q) => ({ label: 'Open Partnerships: pitches and attributions', href: `/grow/partnerships${q}` }),
     'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
   }),
   add: toFnMap({}),

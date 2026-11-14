@@ -26,6 +26,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
+import { logAdminAction } from '../services/adminAudit';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
@@ -652,6 +653,13 @@ r.post('/:projectUid/marks', async (c) => {
       user.id, nowIso(), nowIso(),
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_marks WHERE uid = ?').bind(uid).first<any>();
+    // D4817 part 7 (#5311): an admin moves the figures every holder of this
+    // company reads, so the act is audited in both stores (`logAdminAction`
+    // never throws, so it cannot undo the mark).
+    await logAdminAction(c.env, Number(user.id), String(user.email ?? ''), 'portfolio.mark_recorded', {
+      project_uid: c.req.param('projectUid'), mark_uid: uid, as_of_date: asOf, fmv, basis,
+      fund_id: body.fund_id != null ? Number(body.fund_id) : null,
+    });
     return c.json(fresh, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -680,6 +688,11 @@ r.post('/:projectUid/distributions', async (c) => {
       body.note ? String(body.note).slice(0, 2000) : null, user.id, nowIso(), nowIso(),
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_distributions WHERE uid = ?').bind(uid).first<any>();
+    // D4817 part 7 (#5311): audited as the mark is, for the same reason.
+    await logAdminAction(c.env, Number(user.id), String(user.email ?? ''), 'portfolio.distribution_recorded', {
+      project_uid: c.req.param('projectUid'), distribution_uid: uid, distribution_date: date, amount, kind,
+      fund_id: body.fund_id != null ? Number(body.fund_id) : null,
+    });
     return c.json(fresh, 201);
   } catch (e) { return mapError(c, e); }
 });
