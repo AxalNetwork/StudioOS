@@ -1,4 +1,5 @@
 import { growTabs, reportingHref } from '../cycles/growOverviewModel';
+import { GrowSubsections } from '../cycles/CycleOverview';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Crosshair, RefreshCw, Target } from 'lucide-react';
@@ -126,6 +127,7 @@ export default function FounderGrowFocus() {
 
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-focus-crumb"><GrowOverviewLink /><span>‹</span><b>Focus</b></div><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</LensLink>)}</nav><nav aria-label="Grow utilities"><LensLink to={reportingHref(query)}>Reporting</LensLink></nav>
+    <GrowSubsections search={query || params} active="focus" />
     <ZoneToolbar
               filters={founderZoneFilters('grow/focus', { value: view, onChange: setView, counts: { targets: readTargets.length } })}
               actions={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })}

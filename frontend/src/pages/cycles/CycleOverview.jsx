@@ -5,7 +5,7 @@ import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, l
 import { MODULES } from './modules';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
-import { growTabs, reportingHref, growArea, growModuleTitle } from './growOverviewModel';
+import { GROW_MODULE_TITLES, growTabs, reportingHref, growArea, growSubsections } from './growOverviewModel';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -73,6 +73,19 @@ export const CARD_CHART_LIMIT = 2;
  * both filled by the record through `slots` (`RecordHeader.jsx`); the module
  * tabs below are navigation only.
  */
+export function GrowSubsections({ search, active }) {
+  const tabs = growSubsections(search, active);
+  if (!tabs.length) return null;
+  return (
+    <nav aria-label={tabs[0].name + ' pages'} className="flex min-w-0 flex-wrap gap-2" data-testid="grow-subsections">
+      {tabs.map(tab => <Link key={tab.key} to={tab.href} aria-current={tab.active ? 'page' : undefined}
+        className={`inline-flex min-h-[44px] items-center rounded-lg border px-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 ${tab.active ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}>
+        {tab.name}
+      </Link>)}
+    </nav>
+  );
+}
+
 export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
@@ -80,7 +93,8 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
   const tabs = meta.key === 'grow' ? growTabs(search, active) : legacyTabs;
   const current = tabs.find((t) => t.active) || tabs[0];
   const backHref = record ? (legacyTabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
-  const displayTitle = meta.key === 'grow' && !record && active ? growModuleTitle(active) || title : title;
+  // #6109: Team expansion and Partner network say which half of their pair they are; #6090's subsections name theirs.
+  const displayTitle = meta.key === 'grow' && !record && active ? GROW_MODULE_TITLES[active] || growSubsections(search, active).find(tab => tab.active)?.name || growArea(active)?.name || title : title;
   const label = action?.label || meta.action;
   const href = safeHref(action?.href);
   const btn = 'inline-flex items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep' + (meta.key === 'grow' ? ' min-h-[44px] dark:bg-violet-600 dark:hover:bg-violet-500' : '');
@@ -123,6 +137,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>)}
         </select>
       </label>
+      {meta.key === 'grow' && !record && <GrowSubsections search={search} active={active} />}
     </header>
   );
 }
