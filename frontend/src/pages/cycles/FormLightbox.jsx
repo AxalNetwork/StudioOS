@@ -205,7 +205,7 @@ function FieldHead({ fill, name, label, value, busy, children }) {
 /** What stays live behind an open form: the AIRail and the Ask panel (`data-sheet-keep`, D1317's own mark). */
 export const FORM_KEEP = Object.freeze(['[data-sheet-keep]']);
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null, focusField = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
@@ -234,6 +234,12 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
   const fields = useMemo(() => formFields(base, loaded, current), [base, loaded, current]);
+  // #6030: an Edit opened for one field (Link evidence) moves focus to it once the fields are drawn.
+  useEffect(() => {
+    if (!focusField || !loaded || typeof document === 'undefined') return;
+    const el = document.getElementById(`${id}-${focusField}`) || document.getElementById(`${id}-${focusField}-0`);
+    if (el && typeof el.focus === 'function') { el.focus(); el.scrollIntoView?.({ block: 'center' }); }
+  }, [focusField, loaded, id]);
   // A T box with `search` offers what `onSearch` finds for its text, each
   // match under its `group`'s label; a pick fills the box and is sent under
   // its own `into` (else `search.into`) while the box still holds it.

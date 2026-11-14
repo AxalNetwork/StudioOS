@@ -5,7 +5,7 @@ import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
-import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
@@ -53,6 +53,12 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
   if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
   const v = cellView(cell);
   if (v.nr) return <span className={NR}>Not recorded</span>;
+  // #6030: several links, each its own record (a pain theme, a hypothesis), drawn apart.
+  if (!plain && v.links) {
+    return <span className="flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cell-links">{v.links.map((l, i) => (l.href
+      ? <Link key={i} to={l.href} state={linkState} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{l.text} →</Link>
+      : <span key={i} className="text-axal-ink/80 dark:text-gray-300">{l.text}</span>))}</span>;
+  }
   const text = !plain && v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
   if (v.tone) return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>;
   return <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
@@ -142,7 +148,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
                 onChange={(e) => set({ filter: { ...(query.filter || {}), [f.key]: e.target.value } })}>
                 <option value="">{f.label}: all</option>
-                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{optionLabel(o)}</option>)}
               </select>
             ))}
             {sorts.length > 0 && (

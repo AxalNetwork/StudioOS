@@ -3,7 +3,8 @@ import type { Card, Figure } from './cycleCards';
 
 export type BuildFigure = Omit<Figure, 'value'> & { value: Figure['value'] | [number, number] };
 export type ChartSpec = { kind: string; [key: string]: unknown };
-export type Cell = string | number | null | { text: string; tone?: string; href?: string };
+/** #6030: `links` draws a cell as several links (Solution design's evidence); `text` is its plain reading. */
+export type Cell = string | number | null | { text: string; tone?: string; href?: string; links?: Array<{ text: string; href?: string }> };
 /**
  * D690 (#1693): a row's `keys` are what its filters and sorts read, beside the
  * cells, never as a hidden cell. Its `edit` holds its stored values, which the
@@ -14,7 +15,8 @@ export type RecordRow = { id: string | number; cells: Record<string, Cell>; keys
 export type BuildRecords = {
   cols: Array<{ key: string; label: string }>;
   rows: RecordRow[]; total: number; page: number; page_size: number;
-  filters?: Array<{ key: string; label: string; options: Array<{ value: string; label: string }> }>;
+  /** #6030: an option may carry `count`, the number of records it selects over the whole list. */
+  filters?: Array<{ key: string; label: string; options: Array<{ value: string; label: string; count?: number }> }>;
   sorts?: Array<{ key: string; label: string }>;
   add?: { text: string; href: string };
 };
