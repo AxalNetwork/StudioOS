@@ -156,24 +156,24 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
   assert.match(home, /\{!previewing && <InvestorThesisBand \/>\}/, 'an admin preview withholds investor records');
 });
 
-test('the five bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots, Positions and Value-add carry its tools', () => {
+test('the four bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots, Positions, Reports and Value-add carry its tools', () => {
   // D4817 part 2 (#5311, PF-02): Positions draws in the Portfolio frame, whose
   // heading and local navigation replace ZoneHeader's; it keeps the header tools.
+  // D4817 part 4 (#5311, PF-04): Reports (InvestorPortfolioUpdates) does the same.
   // D4817 part 5 (PF-05): Value-add draws in the same frame, the same way.
-  for (const f of ['InvestorPortfolioUpdates', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
+  for (const f of ['InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
     const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
     assert.match(src, /return <ZonePrimaryScope>/, `${f} is not a primary scope`);
     assert.match(src, /<\/ZonePrimaryScope>;/, `${f} does not close its scope`);
     assert.match(src, /<ZoneHeader /, `${f} lost its ZoneHeader`);
     assert.doesNotMatch(src, /<ZoneNav /, `${f} draws a second pill row`);
   }
-  const positions = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioPositions.jsx'));
-  assert.match(positions, /<PortfolioFrame\s+tab="positions"/, 'Positions left the Portfolio frame');
-  assert.doesNotMatch(positions, /<ZoneNav |<ZoneHeader /, 'Positions draws a second heading or pill row');
-  const valueAdd = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioValueAdd.jsx'));
-  assert.match(valueAdd, /<PortfolioFrame\s+tab="value-add"/, 'Value-add left the Portfolio frame');
-  assert.doesNotMatch(valueAdd, /<ZoneNav |<ZoneHeader /, 'Value-add draws a second heading or pill row');
-  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorPortfolioValueAdd', 'InvestorFundLanding']) {
+  for (const [f, tab] of [['InvestorPortfolioPositions', 'positions'], ['InvestorPortfolioUpdates', 'updates'], ['InvestorPortfolioValueAdd', 'value-add']]) {
+    const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
+    assert.match(src, new RegExp(`<PortfolioFrame\\s+tab="${tab}"`), `${f} left the Portfolio frame`);
+    assert.doesNotMatch(src, /<ZoneNav |<ZoneHeader /, `${f} draws a second heading or pill row`);
+  }
+  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd', 'InvestorFundLanding']) {
     assert.match(codeOnly(read(`frontend/src/pages/investor/${f}.jsx`)), /<ZoneHeaderTools role="investor"/, `${f} lost its header tools`);
   }
 });
