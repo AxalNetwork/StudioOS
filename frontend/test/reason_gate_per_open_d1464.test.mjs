@@ -154,6 +154,8 @@ test('RR12: an admin on Capital relationships meets the gate on every tab; one r
     assert.match(page.text(), /Read only · HQ access for Due diligence/);
     assert.match(page.text(), /Synthetic partner 1/);
     assert.doesNotMatch(page.text(), /partner@example|private note/);
+    assert.equal(page.byId('caprel-pipeline-export'), undefined);
+    assert.equal(page.byId('caprel-commitments-export'), undefined);
     await act(async () => page.props(page.byId('caprel-support-next')).onClick());
     assert.ok(page.byId('caprel-support'), 'the next page is a fresh reason');
     assert.equal(page.props(page.byId('caprel-support-input')).value, '', 'the field starts empty');

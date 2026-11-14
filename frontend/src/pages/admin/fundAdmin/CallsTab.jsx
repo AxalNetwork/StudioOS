@@ -9,7 +9,7 @@ import { CALLS_COMPARE, PILL_TONE, VIEW_NOTE } from '../../../lib/proofOfFunds';
 import { reportError } from '../../../lib/log';
 import { kycLabel, lineAge, lineStateLabel } from '../../investor/fundCallsModel';
 import { refusalText } from './fundAdminModel';
-import { Line, NUM, Note, Panel, Table, Tiles } from './parts';
+import { Line, NUM, Note, Panel, TAP, Table, Tiles } from './parts';
 import { useRead } from './useRead';
 import { Alert, Busy, FundFrame } from './FundTabs';
 import { ChartBlock } from './ChartBlock';
@@ -49,7 +49,7 @@ function CallProofs({ apis, fund }) {
   return (
     <Panel label="Proof of funds shared by LPs" testId="calls-proofs">
       <Line a="Proofs of funds" b={VIEW_NOTE}
-        action={state.status === 'closed' ? <button type="button" className={BTN.link} onClick={show} data-testid="calls-proofs-show">Show proofs of funds</button> : null} />
+        action={state.status === 'closed' ? <button type="button" className={`${BTN.link} ${TAP}`} onClick={show} data-testid="calls-proofs-show">Show proofs of funds</button> : null} />
       {state.status === 'loading' && <Busy />}
       {state.status === 'unreadable' && <div className="px-4 py-3 sm:px-5"><Unreadable what="The proofs of funds" claim="This is not a claim that none was shared." onRetry={show} /></div>}
       {state.status === 'refused' && <Alert text={refusalText(state.error, 'The proofs of funds could not be read.')} />}
@@ -73,7 +73,7 @@ const PILL = { paid: 'ok', overdue: 'warn', part_received: 'neutral', pending: '
 /** One call's LP lines (FND7's table): owed, received, outstanding, state, days overdue, and each line's acts. */
 function CallLines({ call, fund, access, onReceipt }) {
   const cols = [
-    { key: 'lp', label: 'LP', cell: (l) => <span><span className="font-semibold">{lpName(l)}</span><span className="block text-[10.5px] text-axal-muted dark:text-gray-400">{kycLabel(l)}</span></span> },
+    { key: 'lp', label: 'LP', cell: (l) => <span><span className="font-semibold">{lpName(l)}</span><span className="block text-[12px] text-axal-muted dark:text-gray-400">{kycLabel(l)}</span></span> },
     { key: 'owed', label: 'Owed', align: 'right', mono: true, cell: (l) => money(l.owed_cents) },
     { key: 'received', label: 'Received', align: 'right', mono: true, cell: (l) => money(l.received_cents) },
     { key: 'outstanding', label: 'Outstanding', align: 'right', mono: true, cell: (l) => money(l.outstanding_cents) },
@@ -82,7 +82,7 @@ function CallLines({ call, fund, access, onReceipt }) {
     { key: 'act', label: '', align: 'right', cell: (l) => (
       <span className="inline-flex flex-wrap justify-end gap-2">
         {l.state !== 'paid' && Number(l.outstanding_cents) > 0 && (
-          <FundActControl access={access} act="capital_call.receipt" testId={`call-receipt-refused-${l.id}`} className="text-[11px] text-axal-muted">
+          <FundActControl access={access} act="capital_call.receipt" testId={`call-receipt-refused-${l.id}`} className="text-[12px] text-axal-muted">
             <button type="button" className={BTN.ghost} onClick={() => onReceipt(l, call)} data-testid={`call-receipt-${l.id}`}>Record receipt</button>
           </FundActControl>
         )}
@@ -154,7 +154,7 @@ export function CallsTab({ apis, access, fund, overview }) {
         {ledger.status === 'unreadable' && <div data-testid="calls-unreadable"><Unreadable what="This fund's call ledger" claim="This is not a claim that the fund has no calls." onRetry={ledger.reload} /></div>}
         {data && <>
           <Tiles testId="calls-tiles" cols="lg:grid-cols-3" items={tiles.map((t) => ({ ...t, testId: `calls-tile-${t.key}` }))} />
-          <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="calls-issue-line">
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="calls-issue-line">
             <FundActControl access={access} act="capital_call.issue" testId="calls-issue-refused">
               <span data-testid="calls-issue-allowed">New capital call previews the split and its effect; you issue it after the review, with your authenticator code.</span>
             </FundActControl>
@@ -177,7 +177,7 @@ export function CallsTab({ apis, access, fund, overview }) {
               <CallLines call={{ lines: data.unnumbered }} fund={fund} access={access} onReceipt={onReceipt} />
             </Panel>
           )}
-          {data.truncated && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">This fund has more calls or lines than one read returns; the oldest are not shown, and the totals cover only what was read.</p>}
+          {data.truncated && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">This fund has more calls or lines than one read returns; the oldest are not shown, and the totals cover only what was read.</p>}
         </>}
       </div>}
       {/* D4812 part 2: the dialog stays open on its Receipt step; the ledger is read again beneath it. */}
