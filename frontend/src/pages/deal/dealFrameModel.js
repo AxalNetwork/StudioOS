@@ -119,13 +119,25 @@ export function termsAtGlance(deal) {
   ].map(([label, value]) => ({ label, value: value ?? 'Not recorded', missing: value == null }));
 }
 
-/** What changed, in words, from part 2's `whats-new` (types and times only). */
+/** What changed, in words, from part 2's `whats-new` (types and times only).
+ *  One sentence for every type the Worker sends (D6170); a test reads the
+ *  Worker's list from deal_context.ts and fails when the two differ. The
+ *  route serves the investor only, so each sentence speaks to that investor
+ *  and names no other investor or amount. */
 export const CHANGE_WORDS = {
   deal: 'The deal’s status changed',
+  deck: 'The founder shared a new deck version with you',
   document: 'A document was added',
   firm_note: 'A note was added at your firm',
   investor_commitment: 'An investor committed',
   diligence_answer: 'The founder answered a diligence request',
+  invitation: 'Your invitation changed',
+  member: 'You joined the deal room',
+  dd: 'Your diligence case was updated',
+  ic: 'The IC record on this deal changed',
+  commitment: 'Your commitment changed',
+  envelope: 'Your signing papers moved',
+  funded: 'Your money was received',
 };
 
 export function whatsNewOf(read) {
