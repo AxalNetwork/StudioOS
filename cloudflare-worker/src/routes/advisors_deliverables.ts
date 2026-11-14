@@ -55,6 +55,8 @@ type DeliverableRow = {
 type VersionRow = {
   id: number; uid: string; deliverable_id: number; version: number;
   label: string | null; summary: string | null; link_url: string | null;
+  // #5959 (D5959): the optional summary, apart from `summary` (the change note); null on older rows.
+  version_summary?: string | null;
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
   // #4684: who it was sent to and who recorded each receipt, each written once.
   recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
@@ -78,6 +80,8 @@ function isHttpsLink(raw: string): boolean {
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
+    // #5959 (D5959): optional, and null (never '') when the advisor gave none.
+    version_summary: r.version_summary ?? null,
     link_url: r.link_url,
     // All three are null until they happen. Never coalesced to a date.
     sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
@@ -292,10 +296,10 @@ advisors.post('/me/deliverables', async (c) => {
     // every read here assumes at least one row to be the latest.
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?)`
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`
     ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
-           trimOrNull(body.link_url, 2000), now, now).run();
+           trimOrNull(body.version_summary, 2000), trimOrNull(body.link_url, 2000), now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
       .bind(id).first<DeliverableRow>();
     return c.json({ ...fresh, state: 'not_started', version_count: 1 }, 201);
@@ -377,10 +381,10 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const uid = newUid();
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, link_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
-           trimOrNull(body.link_url, 2000), now, now).run();
+           trimOrNull(body.version_summary, 2000), trimOrNull(body.link_url, 2000), now, now).run();
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE uid = ?')
