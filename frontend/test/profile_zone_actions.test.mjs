@@ -270,6 +270,8 @@ const PROFILES = {
     // silently drop out of this check.
     canvasDirs: ['design/canvases/integrated', 'design/incoming'],
     canvas: /^Pages · Partner /,
+    // #5935 (D4838): Leads' header is the Pipeline v2 canvas's (PP03).
+    v2Ops: [['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads']],
     // `/pipeline` IS IN SCOPE NOW, and the comment that used to sit here is the
     // reason it was not: it said `Pages · Partner Pipeline` "carries no `ops:`
     // on any artboard, so `canvasOps` finds nothing there and this pattern must
@@ -793,6 +795,18 @@ function canvasOps(profile) {
   // in `backlog/` — reading it for intent is not promoting it — and an entry
   // here is a claim that THIS zone's ops come from THAT artboard, checkable
   // because a route the file does not contain fails immediately.
+  // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
+  // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
+  // that call, and they override the older artboard's row for the same route.
+  for (const [zone, file, section] of profile.v2Ops || []) {
+    const src = read(file);
+    const at = src.indexOf(`const ${section} = () => hdr(`);
+    assert.ok(at >= 0, `${file} has no ${section} section builder`);
+    const call = src.slice(at, src.indexOf('+ zones(', at));
+    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
+    out[zone] = ops;
+  }
   for (const [zone, file] of profile.alsoZones || []) {
     const ops = headerOps(read(file), zone);
     assert.ok(ops.length, `${file}'s ${zone} artboard parsed with no ops`);

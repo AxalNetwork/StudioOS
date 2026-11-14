@@ -8,7 +8,8 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | --- | --- |
 | `PipelineCommandCentre.jsx` | `/pipeline` itself since D4838: the first-run setup path (PP01) or the command centre (PP02): Needs attention, four metrics with their basis, the lifecycle strip, Recent movement (Not recorded) and Risks. It also hands the Eadwyn rail its next steps. |
 | `commandCentre.js` | D4838: the pure rules the root reads. They cover setup steps from the record, when first run applies, metrics that print a zero only over a population, attention and risks from recorded fields, the lifecycle strip and the rail's steps. |
-| `LeadsZone.jsx` | `/pipeline/leads`: open needs scored against the firm's own fit rules, with receipts, and a recorded pass reason. |
+| `LeadsZone.jsx` | `/pipeline/leads` to boards PP03, PP03b and PP03m (#5935): five views, a strip whose zeros carry a population, cards with the fit reasons before the score and Why this score?, and a pass dialog with a required reason. |
+| `leadsModel.js` | #5935: the pure rules Leads draws by: fit state, reasons, Why this score?, Recent, the strip, the pass reasons (the Worker's `PASS_REASONS`). |
 | `ProposalsZone.jsx` | `/pipeline/proposals`: every quote, its versions and its outcome with a loss reason. |
 | `NegotiationsZone.jsx` | `/pipeline/negotiations`: stage, ball, the open question and clause-level terms. |
 | `RetainersZone.jsx` | `/pipeline/retainers`: cadence, monthly equivalent, usage against retained hours and renewal. |
