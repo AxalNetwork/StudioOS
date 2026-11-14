@@ -1,5 +1,5 @@
 // D5663: issue-backed health episodes and durable delivery intent; transports are injected for tests/adapters.
-import { ALERT_KINDS, message } from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, mainState, message } from './lib/githubAlerts.mjs';
 const marker = /\n?<!-- studioos-health:v1 ([^\n]+) -->/g;
 const locks = new Map();
 export function safeHealthFacts(facts = {}) {
@@ -12,6 +12,12 @@ export function safeHealthFacts(facts = {}) {
   return out;
 }
 const allowedOwners = new Set(['guillaumelauzier', 'github-actions[bot]']);
+export function runSource(runId, attempt = 1) {
+  const value = Number(runId) * 1000 + Number(attempt);
+  if (!Number.isSafeInteger(value) || Number(attempt) < 1 || Number(attempt) > 999) throw new Error('source_identity_invalid');
+  return value;
+}
+
 const serial = async (key, fn) => {
   const before = locks.get(key) || Promise.resolve();
   const next = before.catch(() => {}).then(fn); locks.set(key, next);
@@ -29,6 +35,32 @@ const bodyWith = (issue, state) => `${String(issue.body || '').replace(marker, '
 const receipt = value => ({ transport: value?.transport === 'adapter' ? 'adapter' : 'webhook', status: 200,
   ...(typeof value?.channel === 'string' && /^[CG][A-Z0-9]{2,30}$/.test(value.channel) ? { channel: value.channel } : {}),
   ...(typeof value?.ts === 'string' && /^\d{1,20}\.\d{1,10}$/.test(value.ts) ? { ts: value.ts } : {}) });
+// Operator-managed main-red repairs sometimes include the exact failing SHA in their title.
+// Adopt a single proven match and retain its original title/body/labels. Once adopted, the
+// durable marker lets the normal health monitor find the episode again on later SHAs.
+const operatorMainTitle = issue => issue.user?.login === 'guillaumelauzier' &&
+  issue.title?.startsWith(ALERT_KINDS['main-red'].title + ': ');
+const episodeIssue = (issue, kind) => issue.title === ALERT_KINDS[kind].title ||
+  (kind === 'main-red' && operatorMainTitle(issue) && stateOf(issue, kind).adopted);
+export const recoveredOperatorMain = issue => operatorMainTitle(issue) && stateOf(issue, 'main-red').recovered === true;
+const activeEpisode = (issue, kind) => issue.state === 'open' && !(kind === 'main-red' && recoveredOperatorMain(issue));
+const pendingOpen = (kind, facts, source) => ({
+  schema: 1, kind, episode: null, adopted: true, source, intents: [{ phase: 'open', state: 'pending', attempts: 0, facts }],
+});
+
+export async function ensureMainRedIssue({ api, repository, run, labels }) {
+  if (repository !== 'AxalNetwork/StudioOS' || run?.repository?.full_name !== repository ||
+      run.head_repository?.full_name !== repository || run.path !== '.github/workflows/ci.yml' ||
+      run.event !== 'push' || run.head_branch !== 'main' || run.status !== 'completed' || mainState(run.conclusion) !== true ||
+      !Number.isSafeInteger(run.id) || run.id <= 0 || !Number.isSafeInteger(run.run_attempt) || !/^[a-f0-9]{40}$/.test(run.head_sha)) return null;
+  const source = runSource(run.id, run.run_attempt);
+  const facts = { sha: run.head_sha, runUrl: `https://github.com/${repository}/actions/runs/${run.id}` };
+  // The regular main-red job owns Slack credentials. Persist pending delivery without consuming an attempt.
+  const monitor = createHealthMonitor({ api, repo: repository });
+  const result = await monitor.apply('main-red', true, facts, source, { deferDelivery: true, labels });
+  return result.issue;
+}
+
 export function createHealthMonitor({ api, deliver, repo, now = Date.now, log = () => {} }) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('repository_invalid');
   const root = `/repos/${repo}`;
@@ -42,10 +74,14 @@ export function createHealthMonitor({ api, deliver, repo, now = Date.now, log = 
     }
     throw new Error('issues_pagination_incomplete');
   };
-  const save = async (issue, state, extra = {}) => {
+  const save = async (issue, state, extra = {}, newLabels = []) => {
     const names = (issue.labels || []).map(l => typeof l === 'string' ? l : l.name);
+    // Preserve existing assignment, severity and triage decisions, including human edits to a bot-opened issue.
+    const knownGroups = new Set(names.filter(n => /^(slot|state|priority):/.test(n)).map(n => n.split(':')[0]));
+    const additions = newLabels.filter(n => !knownGroups.has(n.split(':')[0]));
+    const labels = [...new Set([...names, 'ci', 'observability', ...additions])];
     const body = bodyWith(issue, state);
-    const result = await api(`${root}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ body, labels: [...new Set([...names, 'ci', 'observability'])], ...extra }) });
+    const result = await api(`${root}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ body, ...(labels.length > names.length ? { labels } : {}), ...extra }) });
     return { ...issue, ...result, body, ...extra };
   };
   const owned = i => allowedOwners.has(i.user?.login) && Number.isSafeInteger(i.number) && i.number > 0;
@@ -72,15 +108,22 @@ export function createHealthMonitor({ api, deliver, repo, now = Date.now, log = 
     return issue;
   };
   return {
-    async apply(kind, active, facts = {}, source = now()) {
+    async apply(kind, active, facts = {}, source = now(), { deferDelivery = false, labels = [] } = {}) {
       if (!ALERT_KINDS[kind] || ![true, false, null].includes(active) || !Number.isFinite(source)) throw new Error('health_observation_invalid');
       facts = safeHealthFacts(facts);
       return serial(`${repo}:${kind}`, async () => {
-        let known = (await pages('state=all&labels=ci%2Cobservability')).filter(i => owned(i) && i.title === ALERT_KINDS[kind].title);
-        let open = known.filter(i => i.state === 'open');
+        let known = (await pages('state=all&labels=ci%2Cobservability')).filter(i => owned(i) && episodeIssue(i, kind));
+        let open = known.filter(i => activeEpisode(i, kind));
+        let operatorRepair;
         if (!open.some(i => stateOf(i, kind).adopted)) {
-          const legacy = (await pages('state=open')).filter(i => owned(i) && i.title === ALERT_KINDS[kind].title);
-          known = [...new Map([...known, ...legacy].map(i => [i.number, i])).values()]; open = known.filter(i => i.state === 'open');
+          const allOpen = (await pages('state=open')).filter(owned);
+          const legacy = allOpen.filter(i => episodeIssue(i, kind));
+          known = [...new Map([...known, ...legacy].map(i => [i.number, i])).values()]; open = known.filter(i => activeEpisode(i, kind));
+          if (!open.length && kind === 'main-red' && active === true && facts.sha) {
+            const matches = allOpen.filter(i => operatorMainTitle(i) && !stateOf(i, kind).adopted && (String(i.body || '').includes(facts.sha) ||
+              i.title.endsWith(' at ' + facts.sha.slice(0, 10))));
+            if (matches.length === 1) operatorRepair = matches[0];
+          }
         }
         open.sort((a, b) => a.number - b.number);
         let issue = open[0], state = issue && stateOf(issue, kind);
@@ -88,34 +131,44 @@ export function createHealthMonitor({ api, deliver, repo, now = Date.now, log = 
           state.adopted = true; state.duplicates = [...new Set([...(state.duplicates || []), ...open.slice(1).map(i => i.number)])];
           issue = await save(issue, state);
           for (const duplicate of open.slice(1)) {
-            const d = { schema: 1, kind, episode: duplicate.number, duplicateOf: issue.number, intents: [], adopted: true, source };
-            await save({ ...duplicate, body: `${duplicate.body || ''}\n\nReconciled duplicate of #${issue.number}; authoritative episode retained there.` }, d, { state: 'closed', state_reason: 'not_planned' });
+            const keepOpen = kind === 'main-red' && operatorMainTitle(duplicate);
+            const d = { schema: 1, kind, episode: duplicate.number, duplicateOf: issue.number, intents: [], adopted: true, source, ...(keepOpen ? { recovered: true } : {}) };
+            await save({ ...duplicate, body: `${duplicate.body || ''}\n\nReconciled duplicate of #${issue.number}; authoritative episode retained there.` }, d, keepOpen ? {} : { state: 'closed', state_reason: 'not_planned' });
           }
         }
         const newest = Math.max(0, ...known.map(i => Number(stateOf(i, kind).source) || 0));
         if (active === true && !issue && source > newest) {
-          state = { schema: 1, kind, episode: null, adopted: true, source, intents: [{ phase: 'open', state: 'pending', attempts: 0, facts }] };
-          issue = await api(`${root}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS[kind].title, body: bodyWith({ body: message(kind, 'open', facts) }, state), labels: ['ci', 'observability'] }) });
+          state = pendingOpen(kind, facts, source);
+          issue = operatorRepair || await api(`${root}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS[kind].title, body: bodyWith({ body: message(kind, 'open', facts) }, state), labels: [...new Set(['ci', 'observability', ...labels])] }) });
           state.episode = issue.number; issue = await save(issue, state);
         }
         if (issue && source >= (state.source || 0)) {
           if (active !== null) state.source = source;
           if (active === false) {
             if (!state.intents.some(i => i.phase === 'recovery')) state.intents.push({ phase: 'recovery', state: 'pending', attempts: 0, facts });
-            issue = await save(issue, state, { state: 'closed', state_reason: 'completed' });
-          } else issue = await save(issue, state);
+            // Green CI resolves the health episode. The owner still verifies and closes a manually tracked repair.
+            if (kind === 'main-red' && operatorMainTitle(issue)) {
+              state.recovered = true;
+              issue = await save(issue, state);
+            } else issue = await save(issue, state, { state: 'closed', state_reason: 'completed' });
+          } else {
+            if (kind === 'main-red' && active === true) state.currentEvidence = facts;
+            issue = await save(issue, state, {}, operatorMainTitle(issue) ? [] : labels);
+          }
         }
-        if (issue) await reconcile(issue, state, facts);
-        for (const closed of known.filter(i => i.state === 'closed' && i.number !== issue?.number)) {
-          const s = stateOf(closed, kind);
-          if (s.adopted && !s.duplicateOf) await reconcile(closed, s, facts);
+        if (!deferDelivery) {
+          if (issue) await reconcile(issue, state, facts);
+          for (const closed of known.filter(i => !activeEpisode(i, kind) && i.number !== issue?.number)) {
+            const s = stateOf(closed, kind);
+            if (s.adopted && !s.duplicateOf) await reconcile(closed, s, facts);
+          }
         }
         return { issue: issue?.number || null, active, delivery: state?.intents.map(i => ({ phase: i.phase, state: i.state })) || [] };
       });
     },
     async openIssue(kind) {
       const list = await pages('state=open');
-      return list.filter(i => owned(i) && i.title === ALERT_KINDS[kind]?.title).sort((a, b) => a.number - b.number)[0] || null;
+      return list.filter(i => owned(i) && episodeIssue(i, kind) && activeEpisode(i, kind)).sort((a, b) => a.number - b.number)[0] || null;
     },
   };
 }

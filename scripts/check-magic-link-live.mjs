@@ -263,6 +263,9 @@ async function main() {
     if (res.status !== 202) {
       // #4571 R2-09: say WHO refused (edge or Worker), as the insert probe does.
       refusal = describeRefusal({ status: res.status, headers: res.headers, body: await res.text().catch(() => '') });
+      if (process.env.GITHUB_ACTIONS === 'true' && refusal.origin === 'edge' && refusal.status === 403) {
+        console.log('::notice title=StudioOS auth probe::edge-refused');
+      }
       console.error(`check-magic-link-live: /magic/start REFUSED — ${refusal.line}`);
       console.error(`  ${refusal.reading}`);
     }
