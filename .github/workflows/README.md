@@ -68,6 +68,7 @@ with the ones ahead of it is taken out of the queue with the reason.
 | api ↔ worker drift | `ci.yml` | runs |
 | applied migrations unchanged | `migration-immutability.yml` | diffs against `merge_group.base_sha` |
 | scan | `gitleaks.yml` | scans `merge_group.base_sha..head_sha` |
+| `archive-observer-deploy.yml` | D5676: type-checks, packages and deploys the isolated archive observer once enabled | main pushes touching observer or tail source, manual | `ARCHIVE_OBSERVER_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ARCHIVE_OBSERVER_DEPLOY_ENABLED` |
 | `merge-control-deploy.yml` | D5618: independent SQLite DO/Queue control Worker; main only and disabled until explicitly enabled | main pushes touching Merge Control, manual | `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; `MERGE_CONTROL_DEPLOY_ENABLED` |
 | `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes. D5580: hunk risk classes, per-PR evidence and a dated 30-day snapshot artifact | hourly and manual | `actions: read`, `checks: read`, `contents: read`, `issues: write`, `pull-requests: write` |
 | `claims-reaper.yml` | D5617: comments once per expired atomic task claim, never deletes refs | hourly and manual | `contents: read`, `issues: write` |
