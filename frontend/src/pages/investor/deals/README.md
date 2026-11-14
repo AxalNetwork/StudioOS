@@ -15,7 +15,8 @@ band underneath.
 
 | File | Artboard | Route | Architecture |
 | --- | --- | --- | --- |
-| `ScreeningZone.jsx` | ID2 · Deals · Screening | `/deals/screening` | ANALYTICS. D1260: the deals you can read with each one's venture scorecard strip (`POST /api/venture-scores/batch`), and the pass taxonomy. No Lab score, tier or flag, and no memo |
+| `ScreeningZone.jsx` | ID2 · Deals · Screening, redrawn to Deals v2 board DE06 (D4815, #5909) | `/deals/screening` | DECISION TABLE. The deals you can read, each with its venture scorecard strip (`POST /api/venture-scores/batch`), thesis fit and your decision (Move to diligence, Pass with a reason, through your deal flow); the pass taxonomy is a secondary view behind a disclosure. No Lab score, tier or flag, and no memo |
+| `screeningModel.js` | — | — | The decision table's pure rules: the four summary figures, the Confidence cell and Your decision. Read by `ScreeningZone.jsx` and its test |
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
 | `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |
 
