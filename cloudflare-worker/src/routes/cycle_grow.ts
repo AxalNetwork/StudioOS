@@ -324,7 +324,7 @@ export async function updateAskReplies(env: Env, projectId: number, kind: 'custo
 async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|null; updates_reason: string|null; newsletter_reason?: string}> {
   const { env, projectId } = x;
   try {
-    const q = await env.DB.prepare(`SELECT id, uid, title, author_user_id, period, period_start, period_end, status,
+    const q = await env.DB.prepare(`SELECT id, uid, title, kind, author_user_id, period, period_start, period_end, status,
       submitted_at, sent_at, updated_at FROM portfolio_updates WHERE project_id = ?
       AND (sent_at IS NOT NULL OR status = 'submitted')
       ORDER BY COALESCE(sent_at, submitted_at, updated_at) DESC, id DESC LIMIT 100`).bind(projectId).all<any>();
@@ -350,7 +350,7 @@ async function updatesHistory(x: Ctx, viewer: User): Promise<{updates: Row[]|nul
     // D2407 part 3: a sent update's Beehiiv post's figures; null (with the reason) when there is none.
     const newsletters = await newsletterByUpdate(env, projectId);
     return { updates: updates.map((u) => {
-      const base = { uid: u.uid, title: u.title, period: u.period_start ? null : u.period,
+      const base = { uid: u.uid, title: u.title, kind: u.kind, period: u.period_start ? null : u.period,
         period_start: u.period_start, period_end: u.period_end, sent_at: u.sent_at,
         submitted_at: u.sent_at ? null : u.submitted_at,
         href: u.author_user_id === viewer.id || isAdmin(viewer) ? `/updates/${u.uid}` : null };
