@@ -1,0 +1,152 @@
+Objective
+  The frontend calls 24 entire feature areas that have no Worker
+  implementation. Result: silent 404s across Calendar, Customer
+  Discovery, Roadmap, Financials, Marketplace, Mentors, Compliance,
+  Wellbeing, and many more. Build minimum-viable handlers for each,
+  scoped by the existing auth + IDOR rules.
+
+Files to create + mount (path → mount + minimum endpoints)
+  cloudflare-worker/src/routes/progress.ts
+    app.route('/api/progress', progress)
+    GET/POST /discovery/:project_id
+    PUT/DELETE /discovery/interview/:id
+    GET/POST /roadmap/:project_id
+    PUT/DELETE /roadmap/okr/:id
+    POST /roadmap/okr/:id/move
+    GET /metrics/:project_id
+
+  cloudflare-worker/src/routes/calendar.ts
+    app.route('/api/calendar', calendar)
+    GET /events                           list events visible to user
+    POST /events                          create
+    PATCH /events/:id  DELETE /events/:id
+    GET /ic-meetings   POST /ic-meetings
+    GET /founder-checkins
+    GET /google/status
+    POST /google/connect                  starts OAuth (returns redirect)
+    GET /google/callback                  exchanges code, stores tokens
+    POST /google/sync                     pulls events; enqueues delta sync
+    POST /google/disconnect
+
+  cloudflare-worker/src/routes/compliance.ts
+    app.route('/api/compliance', compliance)
+    GET/POST /events       PATCH/DELETE /events/:id
+
+  cloudflare-worker/src/routes/wellbeing.ts
+    app.route('/api/wellbeing', wellbeing)
+    GET/POST /checkins   GET /aggregate   GET /resources
+
+  cloudflare-worker/src/routes/marketplace.ts
+    app.route('/api/marketplace', marketplace)
+    GET /categories
+    GET/POST /inquiries
+    GET /providers
+    GET /providers/me/stripe
+    POST /providers/me/stripe/onboard
+
+  cloudflare-worker/src/routes/mentors.ts
+    app.route('/api/mentors', mentors)
+    GET /me   POST /me/slots   DELETE /me/slots/:id
+    GET /:uid/slots  GET /     POST /:uid/book
+
+  cloudflare-worker/src/routes/financials.ts
+    app.route('/api/financials', financials)
+    GET/PUT /:projectId
+    GET /:projectId/export.xlsx
+
+  cloudflare-worker/src/routes/captable.ts
+    app.route('/api/captable', captable)
+    GET /:projectId   PUT /:projectId/holders
+    POST /simulate    GET /scenarios
+
+  cloudflare-worker/src/routes/company.ts
+    app.route('/api/company', company)
+    POST /create     GET /me     PATCH /me
+
+  cloudflare-worker/src/routes/cofounder.ts
+    app.route('/api/cofounder', cofounder)
+    GET /me   POST /me/preferences   GET /matches
+
+  cloudflare-worker/src/routes/comarketing.ts
+    app.route('/api/comarketing', comarketing)
+    GET /me/pitches  POST /pitches   GET/POST /campaigns
+
+  cloudflare-worker/src/routes/engagements.ts
+    app.route('/api/engagements', engagements)
+    GET /     POST /:id/deliver
+
+  cloudflare-worker/src/routes/founder_risk.ts
+    app.route('/api/founder-risk', founderRisk)
+    GET /by-deal/:dealId    POST /:founderId/pull
+
+  cloudflare-worker/src/routes/insights.ts
+    app.route('/api/insights', insights)
+    GET /heatmap   GET /trends   GET /feed
+
+  cloudflare-worker/src/routes/watchlist.ts
+    app.route('/api/watchlist', watchlist)
+    GET/POST /items    DELETE /items/:id    GET /digest
+
+  cloudflare-worker/src/routes/journal.ts
+    app.route('/api/journal', journal)
+    GET/POST /entries  PATCH/DELETE /entries/:id
+
+  cloudflare-worker/src/routes/needs.ts
+    app.route('/api/needs', needs)
+    GET /  POST /  GET /quotes/me   POST /:id/quotes
+
+  cloudflare-worker/src/routes/references.ts
+    app.route('/api/references', references)
+    GET /  POST /:id/recording   POST /:id/transcribe
+
+  cloudflare-worker/src/routes/services.ts
+    app.route('/api/services', services)
+    GET /offerings
+
+  cloudflare-worker/src/routes/public.ts
+    app.route('/api/public', publicRouter)
+    GET /u/:handle    GET /p/:partner_slug
+
+  cloudflare-worker/src/routes/partner_office_hours.ts
+    app.route('/api/partner-office-hours', partnerOH)
+    GET /me/slots   POST /me/slots   DELETE /me/slots/:id
+    POST /:uid/book
+
+Implementation rules for every new file
+  - Hono router pattern matching the existing routes/* style.
+  - `requireAuth(c)` on every handler unless explicitly public (only
+    `public.ts` and `calendar.ts` callback need to allow no-auth).
+  - IDOR guard: founders see only their own resources via
+    user.founder_id; admin/partner/investor see all per the existing
+    pattern in projects.ts.
+  - Use the existing getSQL(c.env) helper; close with sql.end() in a
+    finally.
+  - Add CREATE TABLE IF NOT EXISTS for any new tables under
+    cloudflare-worker/sql/schema.sql AND a single migration file
+    cloudflare-worker/sql/migrations/00xx_unmounted_routes.sql.
+    Tables to add if not already present:
+      calendar_events, calendar_google_tokens, ic_meetings,
+      founder_checkins, compliance_events, wellbeing_checkins,
+      wellbeing_resources, marketplace_categories, marketplace_inquiries,
+      marketplace_providers, mentor_slots, mentor_bookings,
+      financial_models, captable_holders, captable_securities,
+      captable_scenarios, companies, cofounder_preferences,
+      cofounder_matches, comarketing_pitches, comarketing_campaigns,
+      engagements, founder_risk_pulls, insights_signals,
+      watchlist_items, journal_entries, needs, quotes,
+      references_records, service_offerings, partner_oh_slots.
+  - Reuse existing helpers wherever a similar table already exists.
+
+Mount everything in cloudflare-worker/src/index.ts in alphabetical order.
+
+Drift smoke test (cloudflare-worker/test/api_drift.test.ts — add or
+extend)
+  - Parse frontend/src/lib/api.js, build the list of routes the
+    frontend calls, fail the build if any path is unmatched by the
+    Worker.
+
+Acceptance
+  - Build green; drift smoke test passes.
+  - Every page in the frontend that used to throw "Not found" now
+    returns either real data or an empty state.
+  - No regressions on existing route files.

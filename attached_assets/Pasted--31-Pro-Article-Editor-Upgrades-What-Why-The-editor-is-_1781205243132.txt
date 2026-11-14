@@ -1,0 +1,32 @@
+#31 - Pro Article Editor Upgrades
+What & Why
+The editor is a plain textarea — below the bar for the writing Axal publishes. This task upgrades it into a serious authoring surface: markdown with live preview, inline images, autosave, SEO/excerpt fields, slug preview, reading time, and a tag picker. Reuse the existing R2 storage, status flow, and taxonomy — do not redesign the backend.
+Done looks like
+* A 1500-word article with three inline images, a custom excerpt, and an overridden SEO title saves, submits, and renders correctly on the public reader page.
+* The body uses a markdown editor with a split-pane preview.
+* Dragging/pasting an image into the body uploads it and inserts the returned URL as markdown.
+* New fields work: Excerpt (≤200 chars, used for cards/OG description), SEO title override, optional Canonical URL, and an auto-computed reading time.
+* A live slug preview ("axal.vc/articles/{slug}") derives from the title, with a manual override that locks once published.
+* The draft autosaves a few seconds after edits stop (debounced), and the header shows word count and reading time.
+* A tag picker reads the existing sector taxonomy plus free-form tags persisted to the tags JSON column.
+Out of scope
+* Author dashboard / public profile / edit-from-reader (separate task).
+* Admin queue changes (separate task).
+Steps
+1. Replace the textarea with a markdown editor that has a split-pane preview — prefer a lightweight dependency already compatible with the stack rather than adding a heavy framework.
+2. Add an inline-image upload path: a new worker endpoint that stores body images in R2 under the article's prefix, returning a URL the editor inserts as markdown.
+3. Add Excerpt, SEO title override, Canonical URL, and auto-computed reading time fields, persisted on the draft.
+4. Add a live slug preview derived from the title with a manual override that locks when the article is published.
+5. Add debounced autosave (a few seconds after edits stop) with a visible save state, and show word count + reading time in the header.
+6. Add a tag picker sourced from the existing sectors taxonomy plus free-form tags stored in the tags JSON column.
+Relevant files
+* frontend/src/pages/ArticleAuthorPage.jsx
+* cloudflare-worker/src/routes/articles.ts
+* cloudflare-worker/src/data/sectors.ts
+* frontend/src/lib/api.js:2299-2334
+* frontend/src/pages/ArticleReaderPage.jsx
+* cloudflare-worker/sql/migrations/068_news_articles.sql
+Dependencies
+
+Merge the two admin content queues into one
+Main

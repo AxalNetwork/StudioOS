@@ -1,0 +1,83 @@
+You are building the Axal VC investor Network → Introductions experience.
+
+Goal
+Implement a secure matching and introduction flow between Founders, Investors, Advisors, and Partners.
+
+Core behavior
+1. Users should never see another user’s email address unless both sides have explicitly agreed to connect.
+2. A Founder can request an introduction to an Investor from the Network → Introductions area.
+3. Some Investor profiles may already exist in the system because they were added by an admin, even if those Investors are not yet signed up on Axal.
+4. If the target Investor is not yet on the platform, send them an email directly to the address on the admin-created profile.
+5. The email must include:
+   - the profile summary of the person reaching out,
+   - a short automated intro message from the Founder,
+   - a CTA to register on axal.vc,
+   - a prompt to review and accept or decline the connection request before viewing the Founder profile.
+6. If the target Investor is already on the platform, notify them inside Axal and also follow the same privacy rules.
+7. If a user has not accepted the match, do not reveal either party’s email address to the other user.
+8. Once both sides accept, unlock the connection and allow messaging / full profile visibility.
+
+Matching rules
+- Support one-way intro requests.
+- Support mutual matching approval.
+- Support admin-created Investor profiles that exist before platform signup.
+- Track match status with states such as:
+  - pending
+  - invited
+  - viewed
+  - accepted
+  - declined
+  - connected
+  - expired
+- Record who initiated the intro, who received it, and whether the recipient is on-platform or off-platform.
+
+Email rules
+- Email recipients should receive a branded Axal invitation.
+- Email should show the requester’s name, role, company, headline, and profile photo if available.
+- The email should not expose the receiver’s private email to the sender.
+- The email should contain a secure action link to register/login and review the introduction.
+- If the recipient is off-platform, the email is the primary notification path.
+- If the recipient is on-platform, also create an in-app notification and inbox item.
+
+UX rules
+- In Introductions, if the user is on-platform, show a clean intro card with the other person’s profile, the intro request status, and the next action.
+- Show “Connect,” “Request intro,” “Accept,” “Decline,” and “Message” only when appropriate.
+- Before a connection is accepted, do not reveal contact details.
+- After acceptance, unlock private messaging and shared contact details if enabled.
+- Include a preview of the draft intro message the Founder wrote.
+- Include an explicit privacy notice that emails are hidden until mutual agreement.
+
+Data model
+Add or extend models for:
+- profiles
+- introductions
+- invitation tokens
+- match statuses
+- notifications
+- connection approvals
+- email delivery logs
+
+Implementation requirements
+- Update the backend logic for intro requests and approvals.
+- Update the UI for Network → Introductions.
+- Add secure tokenized links for invitation review.
+- Ensure off-platform invitees can register and claim their profile.
+- Ensure admin-created profiles can be matched before signup.
+- Prevent email leakage in API responses, UI state, logs, and notifications.
+- Add tests for:
+  - on-platform recipient
+  - off-platform recipient
+  - accepted match
+  - declined match
+  - email privacy
+  - email invitation link handling
+
+Acceptance criteria
+- Founders can request an intro to an Investor profile even if the Investor is not yet signed up.
+- The recipient gets an email invitation if off-platform.
+- No one sees the other user’s email until both approve the match.
+- The recipient can register on Axal and then review the intro offer.
+- The system records match state and moves the connection forward only after explicit approval.
+- The UI clearly reflects the secure intro workflow.
+
+Build this in the existing Network / Introductions area and keep it consistent with the current Axal product style.

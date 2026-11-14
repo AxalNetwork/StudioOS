@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#ecebee;color:#1f2937;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:42px 46px 36px;border-bottom:1px solid rgba(31,41,55,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',ui-monospace,monospace;padding:4px 8px;background:#1f2937;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#6b7280}
+    .fr{width:1440px;min-width:1440px;box-sizing:border-box;flex:none;background:#fafafa;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 2px 14px rgba(31,41,55,.07);padding:24px;overflow:hidden}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#6b7280}
+    .c{background:#fff;border:1px solid #e5e7eb;border-radius:16px}
+    .cap{font-size:12px;line-height:1.65;color:#6b7280;margin-top:14px;max-width:1440px}
+    .bub{display:inline-block;background:#f3f4f6;color:#1f2937;border-radius:14px;padding:11px 16px;font-size:14px;line-height:1.5;max-width:520px}
+    .pillu{display:inline-block;background:#7c3aed;color:#fff;border-radius:12px;padding:10px 18px;font-size:14px;font-weight:600}
+    .chip{display:inline-block;font-size:12.5px;font-weight:600;color:#7c3aed;border:1px solid #ddd6fe;border-radius:999px;padding:6px 14px;background:#fff}
+    .qcard{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px}
+    .pri{font-size:9.5px;font-weight:800;letter-spacing:.06em;color:#6d28d9;background:#f3e8ff;border-radius:5px;padding:3px 8px;flex:none}
+    .hair{height:3px;background:#e5e7eb;border-radius:999px;margin-top:9px}
+    .qact{display:flex;align-items:center;gap:14px;margin-top:9px;font-size:12px;font-weight:600}
+    .sec{font-size:11px;font-weight:700;letter-spacing:.04em;color:#4b5563;border:1px solid #e5e7eb;border-radius:999px;padding:5px 12px;background:#fff;white-space:nowrap}
+    .mod-t{font-size:13.5px;font-weight:800;letter-spacing:-.01em}
+    .kv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid #f3f4f6}
+    .kv:first-of-type{border-top:none}
+    .nr{font-size:10px;font-weight:700;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:5px;padding:2px 7px;white-space:nowrap}
+    .spectr{height:6px;background:#e5e7eb;border-radius:999px;position:relative;margin-top:7px}
+    .spd{position:absolute;top:-3px;width:12px;height:12px;border-radius:50%;background:#7c3aed;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transform:translateX(-50%)}
+    .conf{font-size:9px;font-weight:800;letter-spacing:.05em;border-radius:4px;padding:2px 6px}
+    .act{font-size:12px;font-weight:700;padding:7px 13px;border-radius:8px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer}
+    .ghost{font-size:12px;font-weight:700;padding:7px 13px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;color:#374151;cursor:pointer}
+  </style>
+</helmet>
+
+<sc-for list="{{ studios }}" as="s" hint-placeholder-count="5">
+  <section class="ab" id="{{ s.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ s.href }}">{{ s.tag }}</a><span class="ab-nm">Studio · {{ s.role }}</span><span class="ab-sub">{{ s.sub }}</span></div>
+    <div class="fr">
+      <!-- context line -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:19px;font-weight:800;letter-spacing:-.02em">Studio</span>
+          <span style="{{ s.badge }}">{{ s.roleTag }}</span>
+          <span style="font-size:12.5px;color:#6b7280">{{ s.ctx }}</span>
+        </div>
+        <span class="mono" style="font-size:11px;color:#6b7280">{{ s.date }}</span>
+      </div>
+
+      <!-- ══ CHAT · full ══ -->
+      <sc-if value="{{ s.chatFull }}">
+        <div class="c" style="overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 22px;background:#f5f3ff;border-bottom:1px solid #e5e7eb">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="width:38px;height:38px;border-radius:11px;background:#fff;border:1px solid #e9d5ff;display:flex;align-items:center;justify-content:center;flex:none;padding:4px;box-sizing:border-box"><img src="axal-logo.png" alt="Axal VC" width="30" height="30" style="display:block;width:30px;height:30px;object-fit:contain"></span>
+              <div><div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Eadwyn</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ s.roleLc }} • {{ s.prog }}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px"><span style="font-size:13px;font-weight:700;color:#7c3aed;cursor:pointer">⛶ Open a ticket</span><span style="color:#6b7280">⤢</span></div>
+          </div>
+          <sc-if value="{{ s.ticket }}">
+            <div style="padding:16px 22px;background:#faf9ff;border-bottom:1px solid #e5e7eb">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:700;color:#6d28d9">Open a support ticket</span><span style="color:#9ca3af">✕</span></div>
+              <div style="border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:11px 14px;font-size:13px;color:#9ca3af;margin-top:11px">Brief summary of the issue</div>
+              <div style="display:flex;gap:12px;margin-top:10px">
+                <div style="flex:1;display:flex;align-items:center;gap:9px"><span style="font-size:12px;color:#6b7280">Priority</span><div style="flex:1;border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:9px 13px;font-size:13px">Medium ⌄</div></div>
+                <div style="flex:1;display:flex;align-items:center;gap:9px"><span style="font-size:12px;color:#6b7280">Type</span><div style="flex:1;border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:9px 13px;font-size:13px">Task ⌄</div></div>
+              </div>
+              <div style="border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:11px 14px;font-size:13px;color:#9ca3af;margin-top:10px;height:44px">Optional — add any details that would help us help you</div>
+              <div style="display:flex;gap:10px;margin-top:12px"><span class="act" style="background:#c4b5fd;border-color:#c4b5fd">⛶ File ticket</span><span style="font-size:12.5px;font-weight:600;color:#374151;align-self:center;cursor:pointer">Cancel</span></div>
+            </div>
+          </sc-if>
+          <div style="display:flex">
+            <div style="flex:1;min-width:0;border-right:1px solid #e5e7eb;display:flex;flex-direction:column">
+              <div style="padding:20px 22px;display:grid;gap:13px;min-height:280px">
+                <sc-for list="{{ s.msgs }}" as="m" hint-placeholder-count="5">
+                  <div style="{{ m.row }}">
+                    <sc-if value="{{ m.isA }}"><span class="bub">{{ m.t }}</span></sc-if>
+                    <sc-if value="{{ m.isU }}"><span class="pillu">{{ m.t }}</span></sc-if>
+                    <sc-if value="{{ m.isAct }}"><span class="bub">{{ m.t }}<br><span class="act" style="display:inline-block;margin-top:9px">{{ m.btn }} →</span></span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="padding:12px 22px;border-top:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <span style="font-size:13px;color:#374151"><strong style="color:#6d28d9">Currently:</strong> {{ s.currently }}</span>
+                <span style="font-size:12.5px;font-weight:600;color:#7c3aed;white-space:nowrap">ⓘ Explain</span>
+              </div>
+              <div style="padding:12px 22px 18px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ s.chips }}" as="ch" hint-placeholder-count="4"><span class="chip">{{ ch }}</span></sc-for></div>
+                <div style="display:flex;align-items:center;gap:11px;margin-top:11px">
+                  <div style="flex:1;border:1px solid #e5e7eb;border-radius:12px;padding:12px 16px;font-size:13.5px;color:#9ca3af">Type your answer, or "explain …"</div>
+                  <span style="color:#6b7280">🎙</span><span style="color:#6b7280">⏭</span>
+                  <span style="width:38px;height:38px;border-radius:11px;background:#c4b5fd;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">➤</span>
+                </div>
+              </div>
+            </div>
+            <div style="width:400px;flex:none;padding:18px 20px;background:#fbfbfc">
+              <div class="lbl">Focus a section</div>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px"><sc-for list="{{ s.sections }}" as="x" hint-placeholder-count="4"><span class="sec">{{ x }}</span></sc-for></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px"><span class="lbl" style="color:#374151">⌄ Proposed</span><span class="mono" style="font-size:11px;font-weight:700;background:#e5e7eb;border-radius:6px;padding:2px 8px">{{ s.propN }}</span></div>
+              <div style="display:grid;gap:9px;margin-top:10px">
+                <sc-for list="{{ s.props }}" as="p" hint-placeholder-count="4">
+                  <div class="qcard">
+                    <div style="display:flex;align-items:flex-start;gap:9px"><span style="width:15px;height:15px;flex:none;color:#7c3aed;margin-top:1px" dangerouslySetInnerHTML="{{ sparkIcon }}"></span><span style="font-size:13px;font-weight:700;flex:1;line-height:1.4">{{ p.t }}</span><span class="pri">{{ p.pri }}</span></div>
+                    <div class="hair"></div>
+                    <div class="qact"><span style="color:#6b7280">▯ Learn</span><span style="color:#7c3aed;margin-left:auto">{{ p.link }} →</span></div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px"><span class="lbl" style="color:#374151">⌄ Pending</span><span class="mono" style="font-size:11px;font-weight:700;background:#e5e7eb;border-radius:6px;padding:2px 8px">{{ s.pendN }}</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ══ CHAT · collapsed complete (the one improvement) ══ -->
+      <sc-if value="{{ s.chatDone }}">
+        <div class="c" style="display:flex;align-items:center;gap:20px;padding:16px 22px;flex-wrap:wrap">
+          <span style="width:38px;height:38px;border-radius:11px;background:#fff;border:1px solid #e9d5ff;display:flex;align-items:center;justify-content:center;flex:none;padding:4px;box-sizing:border-box"><img src="axal-logo.png" alt="Axal VC" width="30" height="30" style="display:block;width:30px;height:30px;object-fit:contain"></span>
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Eadwyn</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px">{{ s.roleLc }} • 14/14 answered (100%) · interview complete</div>
+          </div>
+          <div style="flex:1;min-width:280px;display:flex;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ s.doneTop }}" as="d" hint-placeholder-count="3"><span style="font-size:11.5px;font-weight:600;color:#4b5563;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:5px 12px">{{ d }}</span></sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex:none"><span style="font-size:13px;font-weight:700;color:#7c3aed;cursor:pointer">⛶ Open a ticket</span><span class="ghost">Resume ⌄</span></div>
+        </div>
+        <div style="font-size:11.5px;color:#6b7280;margin-top:8px">{{ s.doneNote }}</div>
+      </sc-if>
+
+      <!-- ══ ASSESSMENT BAND ══ -->
+      <sc-if value="{{ s.assess }}">
+        <div style="display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:14px;margin-top:16px;align-items:start">
+          <div class="c" style="padding:17px 19px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between"><span class="mod-t">Skills</span><span class="mono" style="font-size:10.5px;color:#6b7280">0–5</span></div>
+            <div style="position:relative;width:300px;height:216px;margin:8px auto 0">
+              <svg viewBox="0 0 300 216" width="300" height="216">
+                <sc-for list="{{ s.rings }}" as="r" hint-placeholder-count="3"><polygon points="{{ r }}" fill="none" stroke="#e5e7eb" stroke-width="1"></polygon></sc-for>
+                <polygon points="{{ s.poly }}" fill="rgba(124,58,237,.14)" stroke="#7c3aed" stroke-width="2"></polygon>
+              </svg>
+              <sc-for list="{{ s.axLabels }}" as="l" hint-placeholder-count="8"><span style="{{ l.style }}">{{ l.t }}</span></sc-for>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><sc-for list="{{ s.top3 }}" as="t3" hint-placeholder-count="3"><span style="font-size:10.5px;font-weight:700;color:#6d28d9;background:#f3e8ff;border-radius:999px;padding:3px 10px">{{ t3 }}</span></sc-for></div>
+          </div>
+          <div class="c" style="padding:17px 19px">
+            <span class="mod-t">Values</span>
+            <div style="display:grid;gap:13px;margin-top:13px">
+              <sc-for list="{{ s.values }}" as="v" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+                    <span style="font-size:11px;color:#6b7280">{{ v.l }}</span>
+                    <span style="font-size:11px;font-weight:700;color:#374151">{{ v.lean }}</span>
+                    <span style="font-size:11px;color:#6b7280">{{ v.r }}</span>
+                  </div>
+                  <div class="spectr"><span class="spd" style="left:{{ v.pos }}%"></span></div>
+                  <div style="display:flex;justify-content:flex-end;margin-top:5px"><span class="conf" style="{{ v.confStyle }}">{{ v.conf }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="c" style="padding:17px 19px">
+            <span class="lbl">{{ s.archTitle }}</span>
+            <div style="display:flex;align-items:center;gap:13px;margin-top:11px">
+              <span style="width:44px;height:44px;border-radius:12px;background:{{ s.archBg }};color:{{ s.archInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:10px;box-sizing:border-box" dangerouslySetInnerHTML="{{ s.archIcon }}"></span>
+              <div><div style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ s.arch }}</div>
+              <div style="font-size:11.5px;color:#6b7280;margin-top:2px">{{ s.archTag }}</div></div>
+              <span class="conf" style="{{ s.archConf }};margin-left:auto">{{ s.archConfT }}</span>
+            </div>
+            <div style="display:grid;gap:8px;margin-top:14px">
+              <sc-for list="{{ s.archRows }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex;gap:9px;align-items:baseline"><span class="lbl" style="font-size:8.5px;flex:none;width:76px">{{ a.k }}</span><span style="font-size:11.5px;color:#374151;line-height:1.5">{{ a.v }}</span></div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f3f4f6">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="lbl" style="font-size:8.5px">Level {{ s.lvl }}</span><span class="mono" style="font-size:10.5px;color:#6b7280">{{ s.xp }}</span></div>
+              <div style="height:5px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:6px"><div style="height:100%;width:{{ s.xpPct }}%;background:#7c3aed;border-radius:999px"></div></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ s.assessEmpty }}">
+        <div class="c" style="margin-top:16px;padding:26px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <span style="width:44px;height:44px;border-radius:12px;background:#f3e8ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;flex:none;padding:10px;box-sizing:border-box" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+          <div style="flex:1;min-width:280px">
+            <div style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Assessment not started</div>
+            <div style="font-size:12.5px;color:#6b7280;margin-top:4px;line-height:1.55">Skills, values and archetype appear here once you begin — the questions arrive through the chat above, a few at a time.</div>
+          </div>
+          <span class="act">Begin with the chat</span>
+        </div>
+      </sc-if>
+
+      <!-- ══ MODULES ══ -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px;align-items:start">
+        <sc-for list="{{ s.mods }}" as="m" hint-placeholder-count="6">
+          <div class="c" style="{{ m.span }};padding:16px 18px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+              <span class="mod-t">{{ m.t }}</span>
+              <span style="font-size:11.5px;font-weight:700;color:#7c3aed;white-space:nowrap;cursor:pointer">{{ m.dest }} →</span>
+            </div>
+            <sc-if value="{{ m.rows }}">
+              <div style="margin-top:9px">
+                <sc-for list="{{ m.rows }}" as="r" hint-placeholder-count="3">
+                  <div class="kv">
+                    <span style="font-size:12px;color:#6b7280">{{ r.k }}</span>
+                    <sc-if value="{{ r.nr }}"><span class="nr">Not recorded</span></sc-if>
+                    <sc-if value="{{ r.v }}"><span class="mono" style="font-size:12.5px;font-weight:700;color:{{ r.ink }};text-align:right">{{ r.v }}</span></sc-if>
+                  </div>
+                  <sc-if value="{{ r.pct }}"><div style="height:5px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin:2px 0 7px"><div style="height:100%;width:{{ r.pct }}%;background:#7c3aed;border-radius:999px"></div></div></sc-if>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ m.funnel }}">
+              <div style="display:flex;gap:7px;margin-top:12px">
+                <sc-for list="{{ m.funnel }}" as="f" hint-placeholder-count="4">
+                  <div style="flex:1;background:#f9fafb;border:1px solid #f3f4f6;border-radius:9px;padding:9px 10px;text-align:center">
+                    <div class="mono" style="font-size:16px;font-weight:800">{{ f.n }}</div>
+                    <div style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;margin-top:3px">{{ f.k }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ m.subs }}">
+              <div style="display:grid;gap:9px;margin-top:11px">
+                <sc-for list="{{ m.subs }}" as="sb" hint-placeholder-count="2">
+                  <div style="border:1px solid #f3f4f6;background:#fbfbfc;border-radius:10px;padding:11px 13px">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <sc-if value="{{ sb.score }}"><span class="mono" style="font-size:11px;font-weight:800;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:2px 7px;flex:none">{{ sb.score }}</span></sc-if>
+                      <span style="font-size:12.5px;font-weight:700;min-width:0;flex:1">{{ sb.t }}</span>
+                      <sc-if value="{{ sb.st }}"><span style="{{ sb.stStyle }}">{{ sb.st }}</span></sc-if>
+                    </div>
+                    <div style="font-size:11px;color:#6b7280;margin-top:4px">{{ sb.meta }}</div>
+                    <sc-if value="{{ sb.acts }}"><div style="display:flex;gap:12px;margin-top:8px;font-size:11.5px;font-weight:600;color:#7c3aed"><sc-for list="{{ sb.acts }}" as="ac" hint-placeholder-count="3"><span style="cursor:pointer">{{ ac }}</span></sc-for></div></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ m.note }}"><div style="font-size:11px;color:#6b7280;margin-top:10px;line-height:1.55">{{ m.note }}</div></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="cap">{{ s.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const spark = this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>');
+    const AX = ['Product','Engineering','Design','GTM/Sales','Marketing/Brand','Finance/Ops','Legal/Compliance','Capital/Network'];
+    const CX = 150, CY = 110, R = 70;
+    const pt = (i, r) => { const a = i * Math.PI / 4 - Math.PI / 2; return (CX + r * Math.cos(a)).toFixed(1) + ',' + (CY + r * Math.sin(a)).toFixed(1); };
+    const ring = (r) => AX.map((_, i) => pt(i, r)).join(' ');
+    const RINGS = [ring(R * .33), ring(R * .66), ring(R)];
+    const radar = (vals) => ({
+      rings: RINGS,
+      poly: vals.map((v, i) => pt(i, R * v / 5)).join(' '),
+      axLabels: AX.map((t, i) => {
+        const a = i * Math.PI / 4 - Math.PI / 2, x = CX + (R + 15) * Math.cos(a), y = CY + (R + 13) * Math.sin(a);
+        return { t, style:'position:absolute;left:' + x.toFixed(0) + 'px;top:' + y.toFixed(0)
+          + 'px;transform:translate(-50%,-50%);font-size:9px;font-weight:700;color:#6b7280;white-space:nowrap' };
+      })
+    });
+    const conf = (c) => c === 'High' ? 'background:#ecfdf5;color:#047857' : (c === 'Medium' ? 'background:#fffbeb;color:#92400e' : 'background:#f3f4f6;color:#6b7280');
+    // pos: 0 = left pole, 100 = right pole
+    const VAL_PAIRS = [['Mission-first','Profit-first'],['Speed-first','Quality-first'],['Risk-seeking','Risk-averse'],['Hyper-growth','Sustainable'],['Autonomy','Structure']];
+    const vals = (arr) => arr.map(([pos, lean, c], i) => ({
+      l:VAL_PAIRS[i][0], r:VAL_PAIRS[i][1], pos:String(pos), lean, conf:c, confStyle:conf(c) }));
+    const badge = (col, bg) => 'font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:4px 9px;border-radius:6px;color:' + col + ';background:' + bg;
+    const msg = (kind, t, btn) => ({ isA:kind === 'a', isU:kind === 'u', isAct:kind === 'act', t, btn:btn || null,
+      row: kind === 'a' || kind === 'act' ? '' : 'text-align:right' });
+    const st = (t) => {
+      const M = { Live:['#ecfdf5','#047857','#a7f3d0'], Confirmed:['#ecfdf5','#047857','#a7f3d0'], Active:['#ecfdf5','#047857','#a7f3d0'],
+                  Due:['#fffbeb','#92400e','#fde68a'], 'Going cold':['#fffbeb','#92400e','#fde68a'], Open:['#f3f4f6','#4b5563','#e5e7eb'] };
+      const c = M[t] || M.Open;
+      return 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none;white-space:nowrap';
+    };
+    const wide = 'grid-column:span 2';
+
+    const arch = (title, name, tag, strengths, blind, compl, confT) => ({
+      archTitle:title, arch:name, archTag:tag, archConfT:confT, archConf:conf(confT.split(' ')[0]),
+      archBg:'#f3e8ff', archInk:'#7c3aed', archIcon:spark,
+      archRows:[{ k:'Strengths', v:strengths }, { k:'Blind spots', v:blind }, { k:'Complements', v:compl }]
+    });
+
+    return {
+      sparkIcon: spark,
+      studios: [
+        // ══ FOUNDER ══
+        Object.assign({
+          id:'s1', href:'#s1', tag:'S1', role:'Founder', roleLc:'founder', sub:'emerald badge · venture-first',
+          badge:badge('#047857','#ecfdf5'), roleTag:'Founder', ctx:'Novacraft Labs — one company, one context', date:'Mon Aug 31, 2026',
+          chatFull:true, prog:'11/14 answered (79%)',
+          msgs:[ msg('a','What has to be true for you to raise the next round?'),
+                 msg('u','$25K MRR and one paid enterprise pilot.'),
+                 msg('a','Which part of the funnel worries you most right now?'),
+                 msg('u','(skipped)'),
+                 msg('act','Noted. Opening your metrics so we can set a target.','Open Metrics') ],
+          currently:'How often do you want to review runway with the studio?',
+          chips:['Weekly','Monthly','At each close','Not sure'],
+          sections:['VENTURE','TRACTION','RAISE · 60%','PREFS'],
+          propN:'5', pendN:'2',
+          props:[{ t:'Set a Q4 retention target', pri:'HIGH', link:'Open Metrics' },
+                 { t:'Who belongs on the second close list?', pri:'HIGH', link:'Open Round Manager' },
+                 { t:'Which narrative should deck v5 lead with?', pri:'NORMAL', link:'Open Pitch Deck' },
+                 { t:'Where should investor-view alerts reach you?', pri:'NORMAL', link:'Open Settings' }],
+          assess:true, top3:['Product','Engineering','GTM/Sales'],
+          values: vals([[22,'Leans Mission','High'],[18,'Leans Speed','High'],[38,'Balanced','Medium'],[30,'Leans Hyper-growth','Medium'],[24,'Leans Autonomy','Low']]),
+          lvl:'3', xp:'240 / 400 XP', xpPct:'60',
+          mods:[
+            { t:'Venture next step', dest:'Open Command Center', span:wide,
+              rows:[{ k:'Lifecycle stage', v:'Validating → Building', ink:'#1f2937' }, { k:'Suggested next', v:'Close 2 more ICP interviews', ink:'#6d28d9' }],
+              note:'One stage, one action. The strip never lists a second next step — a queue lives in Command Center, not here.' },
+            { t:'Deck', dest:'Open Pitch Deck',
+              rows:[{ k:'Version', v:'v4 · 11 slides', ink:'#1f2937' }, { k:'Last shared', v:'2 investors · 6d ago', ink:'#1f2937' }, { k:'Viewed', v:'3× this week', ink:'#047857' }] },
+            { t:'Raise', dest:'Open Round Manager',
+              rows:[{ k:'Target', v:'$1,500,000', ink:'#1f2937' }, { k:'Committed', v:'$450,000', ink:'#047857', pct:'30' }, { k:'Next close', v:'Sep 30, 2026', ink:'#1f2937' }] },
+            { t:'Key metrics', dest:'Open Metrics',
+              rows:[{ k:'MRR', v:'$8,400', ink:'#1f2937' }, { k:'Burn', v:'$32,000 / mo', ink:'#1f2937' }, { k:'Runway', nr:true }] },
+            { t:'Office hours', dest:'Open Bookings',
+              subs:[{ t:'Priya Nair · pricing', meta:'Tue Sep 1 · 14:00 · 60 min', st:'Confirmed', stStyle:st('Confirmed') },
+                    { t:'Marcus Chen · GTM', meta:'Thu Sep 3 · 10:00 · 30 min', st:'Confirmed', stStyle:st('Confirmed') }] },
+            { t:'Intros in motion', dest:'Open Network',
+              subs:[{ t:'Thornbury Capital', meta:'Requested Aug 27 · both sides asked', st:'Open', stStyle:st('Open') },
+                    { t:'Aoife Brennan · security review', meta:'Accepted · scheduling', st:'Active', stStyle:st('Active') }] },
+            { t:'Independent subsidiaries', dest:'Open Entities', span:wide,
+              rows:[{ k:'Novacraft GmbH · Germany', v:'studio 12% / founders 88%', ink:'#1f2937' }, { k:'Formed', v:'Jun 2026 · active', ink:'#1f2937' }],
+              note:'Rendered only because one exists — a founder with none never sees this card.' },
+            { t:'Spin-Out Lab', dest:'Continue in the Lab', rows:[{ k:'Week 2 · Solution & Roadmap', v:'3 of 5 done', ink:'#6d28d9', pct:'60' }] }
+          ],
+          cap:'Venture-first: the interview runs at full size because it is still mid-bank, and its two HIGH proposals are the same facts the raise and metrics cards show — one truth surfacing twice, not two. Everything unset renders “Not recorded” — runway has no invented number beside a real burn figure.'
+        }, radar([4.5,3.8,3.0,3.4,2.6,2.2,1.8,2.9]), arch('Founder archetype','The Rocketeer','Momentum first; course-correct in flight.',
+          'Ships fast, rallies people, thrives under a deadline.','Under-scopes compliance and finance work.','Pair with an Architect co-founder or a Finance/Ops hire.','High confidence')),
+
+        // ══ INVESTOR ══
+        Object.assign({
+          id:'s2', href:'#s2', tag:'S2', role:'Investor/LP', roleLc:'investor', sub:'indigo badge · assessment band is NEW for this profile',
+          badge:badge('#4338ca','#eef2ff'), roleTag:'Investor', ctx:'Thornbury Capital — one portfolio context', date:'Mon Aug 31, 2026',
+          chatFull:true, prog:'6/14 answered (43%)',
+          msgs:[ msg('a','What cheque size do you write most often at first entry?'),
+                 msg('u','$100–250K.'),
+                 msg('a','How hands-on do you want to be between rounds?'),
+                 msg('u','(skipped)'),
+                 msg('act','Noted. Opening your thesis settings.','Open Thesis') ],
+          currently:'Which sectors are explicitly out of scope for you?',
+          chips:['Deep tech','B2B SaaS','Consumer','None excluded'],
+          sections:['THESIS','PIPELINE','PORTFOLIO','PREFS · 75%'],
+          propN:'4', pendN:'1',
+          props:[{ t:'Which two metrics decide a pass for you?', pri:'HIGH', link:'Open Deals' },
+                 { t:'What is your target portfolio count for this fund?', pri:'NORMAL', link:'Open Portfolio' },
+                 { t:'Where should deal alerts reach you?', pri:'NORMAL', link:'Open Settings' }],
+          assess:true, top3:['Capital/Network','Finance/Ops','GTM/Sales'],
+          values: vals([[62,'Leans Profit','High'],[68,'Leans Quality','Medium'],[74,'Leans Risk-averse','High'],[70,'Leans Sustainable','Medium'],[58,'Balanced','Low']]),
+          lvl:'2', xp:'130 / 400 XP', xpPct:'33',
+          mods:[
+            { t:'Usage & quota', dest:'Open Account',
+              rows:[{ k:'Deal room seats', v:'3 of 5', ink:'#1f2937', pct:'60' }, { k:'AI scoring runs', v:'41 of 100', ink:'#1f2937', pct:'41' }] },
+            { t:'Deal lifecycle', dest:'Open Deals', span:wide,
+              funnel:[{ k:'Screening', n:'14' }, { k:'Diligence', n:'5' }, { k:'IC', n:'2' }, { k:'Closing', n:'1' }],
+              note:'Read-only here — stages move in Deals, never from the home page.' },
+            { t:'AI-scored opportunities', dest:'Open Deals', span:wide,
+              subs:[{ t:'Meridian Robotics', score:'87', meta:'Robotics • Seed · TU Delft spin-out', acts:['Open','Watchlist','Request intro'] },
+                    { t:'Kelp Bio', score:'74', meta:'Climate • Pre-seed · marketplace-sourced', acts:['Open','Watchlist','Request intro'] }],
+              note:'Scores are match signals against your thesis answers — Eadwyn proposes; it never places a deal anywhere.' },
+            { t:'Quick stats', dest:'Open Portfolio',
+              rows:[{ k:'Deals in flow', v:'22', ink:'#1f2937' }, { k:'Avg AI match', v:'74', ink:'#1f2937' }, { k:'Watching', v:'9', ink:'#1f2937' }, { k:'Active deal rooms', v:'3', ink:'#1f2937' }] },
+            { t:'Portfolio glance', dest:'Open Portfolio',
+              rows:[{ k:'IRR', nr:true }, { k:'TVPI', v:'1.4×', ink:'#1f2937' }, { k:'MOIC', v:'1.6×', ink:'#1f2937' }],
+              note:'IRR reads “Not recorded” until enough dated cash flows exist to compute one honestly.' },
+            { t:'Upcoming events', dest:'Open Events',
+              subs:[{ t:'LP briefing · Fund II', meta:'Wed Sep 9 · 16:00', st:'Confirmed', stStyle:st('Confirmed') },
+                    { t:'Demo Day · Cohort 4', meta:'Fri Sep 18 · RSVP closes Friday', st:'Open', stStyle:st('Open') }] }
+          ],
+          cap:'The assessment band is new for investors, so it sits directly under the interview that feeds it rather than below the deal desk — results arrive from those questions, and placing the band anywhere else would hide the cause from the effect. The funnel is deliberately read-only: stage moves are Deals actions.'
+        }, radar([3.2,2.0,1.6,3.6,2.4,4.2,3.4,4.6]), arch('Investor archetype','Thesis-Driven Backer','Writes when the thesis says so, not when the room does.',
+          'Disciplined entry points, clear pass reasons.','Can be slow on out-of-thesis outliers.','Pairs well with a Network Amplifier co-investor.','High confidence')),
+
+        // ══ ADVISOR ══
+        Object.assign({
+          id:'s3', href:'#s3', tag:'S3', role:'Advisor', roleLc:'advisor', sub:'the human expert · practice-first · interview complete (the one improvement)',
+          badge:badge('#b45309','#fffbeb'), roleTag:'Advisor', ctx:'Raghunathan Practice — one practice context', date:'Mon Aug 31, 2026',
+          chatDone:true,
+          doneTop:['Intro call filter — Open Storefront →','Consent to show client outcomes — Open Clients →','Session-note auto-send — Open Settings →'],
+          doneNote:'The one improvement, placed on the profile whose interview is actually finished: it collapses to a single row — completion, the top three open proposals, Resume — so today\u2019s sessions lead the page instead. Eadwyn keeps queueing proposals as answers age; Resume reopens the full pane.',
+          assess:true, top3:['Product','GTM/Sales','Design'],
+          values: vals([[35,'Leans Mission','Medium'],[62,'Leans Quality','High'],[58,'Balanced','Medium'],[66,'Leans Sustainable','High'],[40,'Balanced','Low']]),
+          lvl:'4', xp:'340 / 400 XP', xpPct:'85',
+          mods:[
+            { t:'Today', dest:'Open Calendar', span:wide,
+              subs:[{ t:'Meridian Labs · pricing session', meta:'Today · 14:00 · 60 min · prep ready', st:'Confirmed', stStyle:st('Confirmed') },
+                    { t:'Halverton · monthly review', meta:'Today · 16:30 · 45 min', st:'Confirmed', stStyle:st('Confirmed') },
+                    { t:'Open slot', meta:'Thu Sep 3 · 14:00 · date-specific, not recurring', st:'Open', stStyle:st('Open') }] },
+            { t:'Storefront', dest:'Open Storefront',
+              rows:[{ k:'Public profile', v:'Live', ink:'#047857' }, { k:'Visibility', v:'Directory + matches', ink:'#1f2937' }, { k:'Booking', v:'Request-first', ink:'#1f2937' }] },
+            { t:'Engagements', dest:'Open Clients',
+              subs:[{ t:'Meridian Labs', meta:'Retainer · 2 sessions/mo · renews Oct 1', st:'Active', stStyle:st('Active') },
+                    { t:'Novacraft Labs', meta:'5-pack · 3 of 5 used', st:'Active', stStyle:st('Active') }] },
+            { t:'Consented proof', dest:'Open Clients', span:wide,
+              note:'No consented proof connected yet — self-reported metrics are not shown as proof. When a client grants consent on an outcome, it appears here and on your storefront; nothing you type about yourself ever does.' },
+            { t:'Earnings', dest:'Open Earnings',
+              rows:[{ k:'This month', nr:true }, { k:'Payout account', v:'Verified', ink:'#047857' }] }
+          ],
+          cap:'Practice-first, and where the one improvement lands: the finished interview collapses to a single row so today\u2019s sessions lead because they are the only time-critical thing on the page, and slots are date-specific rows rather than a recurring pattern. The proof card\u2019s empty state carries the platform\u2019s rule in full — consent is the only path onto a storefront — and earnings render “Not recorded” beside a verified payout account, because the account state is a fact while the figure is not yet one.'
+        }, radar([4.6,2.4,3.6,4.2,3.0,2.0,1.6,3.2]), arch('Advisor archetype','Hands-On Coach','In the work with you, not above it.',
+          'Session preparation, concrete artefact review.','Can over-invest in a few clients.','Pairs with an Accountability Anchor for cadence.','Medium confidence')),
+
+        // ══ PARTNER ══
+        Object.assign({
+          id:'s4', href:'#s4', tag:'S4', role:'Partner/Operator', roleLc:'partner', sub:'blue badge · operations-first · assessment empty state',
+          badge:badge('#1d4ed8','#eff6ff'), roleTag:'Partner', ctx:'Studio Vireo — one firm context', date:'Mon Aug 31, 2026',
+          chatFull:true, prog:'2/14 answered (14%)',
+          msgs:[ msg('a','What kinds of work should reach you as leads?'),
+                 msg('u','Design systems, front-end builds.'),
+                 msg('a','What is the smallest engagement worth your time?'),
+                 msg('u','$10,000.') ],
+          currently:'Who on your team should see incoming leads first?',
+          chips:['Just me','Me + one','Whole team'],
+          sections:['DELIVERY','PIPELINE · 40%','RELATIONSHIPS','PREFS'],
+          propN:'3', pendN:'1',
+          props:[{ t:'Verwood status report is 3 days late', pri:'HIGH', link:'Open Delivery' },
+                 { t:'Which categories should we stop bidding?', pri:'NORMAL', link:'Open Pipeline' },
+                 { t:'Where should lead alerts reach you?', pri:'NORMAL', link:'Open Settings' }],
+          assessEmpty:true,
+          mods:[
+            { t:'Assigned tasks', dest:'Open Delivery', span:wide,
+              subs:[{ t:'Verwood · weekly status report', meta:'Due Mon · 3 days late', st:'Due', stStyle:st('Due') },
+                    { t:'Meridian sprint · milestone 2 sign-off', meta:'Due Thu Sep 3', st:'Open', stStyle:st('Open') },
+                    { t:'Novacraft seat · Q4 extension paperwork', meta:'Due Sep 12', st:'Open', stStyle:st('Open') }] },
+            { t:'BD pipeline', dest:'Open Pipeline',
+              rows:[{ k:'Live proposals', v:'4 · $100,500', ink:'#1f2937' }, { k:'Retainers', v:'3 · $21,000/mo', ink:'#1f2937' }, { k:'Win rate · Q3', v:'40%', ink:'#1f2937' }] },
+            { t:'Relationship health', dest:'Open Relationships',
+              subs:[{ t:'Thornfield', meta:'34% utilization · renews in 17d', st:'Going cold', stStyle:st('Going cold') },
+                    { t:'Halverton', meta:'95% utilization · renews in 9d', st:'Active', stStyle:st('Active') }] },
+            { t:'Co-marketing', dest:'Open Co-marketing',
+              rows:[{ k:'Published', v:'1 pitch · webinar', ink:'#1f2937' }, { k:'Attributed leads', v:'34', ink:'#047857' }] },
+            { t:'Referrals', dest:'Open Referrals',
+              rows:[{ k:'In motion', v:'2', ink:'#1f2937' }, { k:'Credited this quarter', v:'1', ink:'#1f2937' }] }
+          ],
+          cap:'Operations-first: tasks with due states lead, and the one late item is also the queue\u2019s HIGH proposal — the same fact surfacing in both places rather than two facts. The assessment band shows its empty state as a designed card with one action, because results genuinely can be absent and a gray placeholder would read as breakage.'
+        }),
+
+        // ══ ADMIN ══
+        Object.assign({
+          id:'s5', href:'#s5', tag:'S5', role:'Admin', roleLc:'admin', sub:'violet badge · interview at full prominence, ticket form expanded',
+          badge:badge('#6d28d9','#f3e8ff'), roleTag:'Admin', ctx:'Axal VC Studio — oversight context', date:'Mon Aug 31, 2026',
+          chatFull:true, ticket:true, prog:'3/14 answered (29%)',
+          msgs:[ msg('u','roadmap'),
+                 msg('act','Opening Dashboard.','Open Dashboard'),
+                 msg('u','(skipped)'),
+                 msg('a','How often do you review portfolio health across the studio?'),
+                 msg('u','Probably every week.'),
+                 msg('a','What is the studio\u2019s risk posture for early-stage bets right now?'),
+                 msg('u','I\u2019m conservative.'),
+                 msg('a','How often should admin/partner access be reviewed?') ],
+          currently:'How often should admin/partner access be reviewed?',
+          chips:['Daily','Weekly','Monthly','Quarterly'],
+          sections:['GOVERNANCE','OPERATIONS','OVERSIGHT · 50%','PREFS'],
+          propN:'7', pendN:'1',
+          props:[{ t:'How long should we retain inactive venture records?', pri:'NORMAL', link:'Open Admin' },
+                 { t:'When intake volume is high, what do you prioritize?', pri:'NORMAL', link:'Open Admin' },
+                 { t:'What conditions should trigger an immediate review?', pri:'NORMAL', link:'Open Admin' },
+                 { t:'Where should operational alerts reach you?', pri:'NORMAL', link:'Open Settings' }],
+          assess:true, top3:['Finance/Ops','Legal/Compliance','Capital/Network'],
+          values: vals([[45,'Balanced','Medium'],[64,'Leans Quality','High'],[76,'Leans Risk-averse','High'],[68,'Leans Sustainable','Medium'],[70,'Leans Structure','High']]),
+          lvl:'3', xp:'255 / 400 XP', xpPct:'64',
+          mods:[
+            { t:'Studio health', dest:'Open Admin', span:wide,
+              rows:[{ k:'Portfolio review cadence', v:'Weekly', ink:'#1f2937' }, { k:'Intake this week', v:'18 applications', ink:'#1f2937' }, { k:'Queues', v:'2 breaching SLA', ink:'#b91c1c' }] },
+            { t:'Licence & seats', dest:'Open Admin',
+              rows:[{ k:'Founder seats', v:'42 of 60', ink:'#1f2937', pct:'70' }, { k:'Investor seats', v:'18 of 25', ink:'#1f2937', pct:'72' }, { k:'Advisor seats', v:'11 of 15', ink:'#1f2937', pct:'73' }] }
+          ],
+          cap:'The admin artboard keeps the interview at full prominence with the ticket form expanded, matching the live screenshots — every proposal deep-links to Admin or Settings. Admins take the same assessment, so the band renders in full; the archetype card is titled for the track that produced it.'
+        }, radar([2.6,2.2,1.8,2.4,2.0,4.6,4.2,3.0]), arch('Admin archetype','Systems Builder','Makes the process the product.',
+          'Repeatable pipelines, clean audit trails.','Can optimize a process nobody should run.','Pairs with a Growth Catalyst for outward push.','High confidence'))
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

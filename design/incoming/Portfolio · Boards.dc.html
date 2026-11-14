@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#6b6577">Axal VC · Account › Portfolio · /account/portfolio</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Portfolio</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Renamed from “Companies and projects”. Members create and manage companies, which are legal entities, and projects, which stand alone or sit inside a company. Companies use a lavender mark; projects use a dashed mark. Every view shows its address: /c/{company}, /c/{company}/p/{project} or /p/{project}.</p>
+</header>
+<div style="display:flex;flex-wrap:wrap;gap:72px 64px;align-items:flex-start;max-width:2944px">
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1440px;font-size:13px;line-height:1.5;color:#3f3a47">{{ b.note }}</p></sc-if>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Portfolio Account Page" v="{{ f.v }}" hint-size="1440px,1100px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const fr = (v, w, h, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;min-height:' + h + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const boards = [
+      B('PF1', 'Portfolio overview', [fr('pf1', 1440, 1500, 'Overview · with the one-time rename notice'), fr('pf1m', 1440, 1500, '“New” open: Company or Project')], 'Companies as cards, with their projects nested beneath. Standalone projects sit in their own section.'),
+      B('PF2', 'Company page', [fr('pf2', 1440, 1240)], 'Legal information, Team, Locations, Projects in this company and Documents. A missing value reads “Not recorded”.'),
+      B('PF3', 'Project page', [fr('pf3a', 1440, 1000, 'Linked to a company'), fr('pf3b', 1440, 1000, 'Not a company yet')], '“Make it a company” opens Incorporate, prefilled with the project’s name, team and location.'),
+      B('PF4', 'Create sheets', [fr('pf4a', 1440, 1340, 'New company · required fields marked *'), fr('pf4b', 1440, 1100, 'New project · the slug follows the company'), fr('pf4c', 1440, 1340, 'Owner call · inset: Ask in the sheet head, field triggers on composition fields')], 'Account has no AIRail, so the brief draws no Ask here. The third frame is an inset for the owner to choose. No trigger on the legal name, identity numbers or signatures.'),
+      B('PF5', 'Sidebar switcher', [fr('pf5', 1440, 1000)], 'Companies with their projects nested, then standalone projects, then Create company and Create project. The current selection shows its type badge.'),
+      B('PF6', 'Settings follow who holds authority', [fr('pf6d', 1440, 860, 'Company and standalone project, side by side'), fr('pf6a', 1440, 820, 'Company → Team · Company settings (General, Legal) · Projects'), fr('pf6b', 1440, 820, 'Standalone project → Team · Project settings (General)'), fr('pf6c', 1440, 900, 'Project in a company → Company settings › Projects › [Atlas Pilot]')], 'A company is a legal entity and governs every project under it. A standalone project governs itself and has no Legal section; its Project settings › General offers “Move under a company”. Billing is not a sidebar entry: it links to Account › Billing (pending owner).'),
+      B('PF6m', 'Settings on the phone · bottom of the drawer menu', [fr('pf6f1', 390, 844, 'In a company, or a project inside one'), fr('pf6f2', 390, 844, 'In a standalone project')]),
+      B('PF7', 'States', [fr('pf7a', 1440, 760, 'Empty'), fr('pf7b', 1440, 900, 'Loading'), fr('pf7c', 1440, 1240, 'Could not be read · per block, company page'), fr('pf7c2', 1440, 1500, 'Could not be read · one company’s projects'), fr('pf7d', 390, 844, 'Phone · overview'), fr('pf7e', 390, 844, 'Phone · company'), fr('pf1-d', 1440, 1500, 'Dark · overview'), fr('pf2-d', 1440, 1240, 'Dark · company page')]),
+      B('PF8', 'Legal facts sheet', [fr('pf8a', 1440, 1060, 'As the brief says: no Ask on Account'), fr('pf8b', 1440, 1060, 'Owner call · inset: Ask in the sheet head, triggers on the registered agent and mailing address')], 'Opened from Company settings › Legal. No trigger on the legal name, identity numbers or signatures.'),
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

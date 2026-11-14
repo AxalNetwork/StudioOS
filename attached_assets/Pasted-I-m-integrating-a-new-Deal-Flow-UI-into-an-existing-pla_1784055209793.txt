@@ -1,0 +1,136 @@
+I'm integrating a new "Deal Flow" UI into an existing platform called Meridian.
+I'm uploading the HTML/JS files from Claude Design for the redesigned Deal Flow 
+page. Here is exactly what I need you to do:
+
+---
+
+## 1. INTEGRATE THE NEW UI
+
+- Import the uploaded HTML/JS files as the new Deal Flow page
+- The page route should be: /deal-flow (retitle from "Deal Flow Pipeline" to 
+  "Deal Flow" everywhere — page title, browser tab, and sidebar nav label)
+- Wrap the new UI inside the existing platform shell:
+  - Preserve the existing top header bar (with Meridian logo, user avatar, 
+    notifications bell — as seen in the uploaded screenshots)
+  - Preserve the existing left sidebar navigation, keeping all other nav items 
+    intact and marking "Deal Flow" as the active item when on this route
+  - Do NOT change fonts, colors, or global styles from the rest of the platform
+- The new page content (funnel cards, filter tabs, deal table) should render 
+  inside the main content area, replacing only the old Deal Flow component
+
+---
+
+## 2. CONNECT TO LIVE DATA (Backend)
+
+Connect all UI elements to real database records:
+
+Funnel cards (Applied, Scored, Active, Funded):
+- Count = live count of deals per stage from the deals table
+- Dollar value = SUM of target_raise or capital_committed per stage 
+  (match the label already shown: "requested" for Applied/Scored, 
+  "committed" for Active, "raised" for Funded)
+- Trend arrow (+3, +1, +2) = deals added to that stage in the last 7 days
+
+Filter tabs (All, Applied, Scored, Active, Funded, Rejected):
+- Count badges = live counts per stage
+- Clicking a tab filters the deal table in real time
+
+Deal table:
+- Fetch all deals from the deals table with columns: company name, sector/
+  industry tag, stage, target_raise, capital_committed (+ auto-calculate % 
+  progress), lead_partner (join to users table), days_in_stage 
+  (calculated from stage_changed_at timestamp)
+- Search bar filters by company name in real time
+- Column headers are sortable (ascending/descending)
+- Eye icon in each row opens the Deal Detail drawer (slide-in panel from 
+  the right) showing: SPV structure, funding progress bar, instrument, 
+  valuation cap, carry, management fee, minimum check, closing deadline, 
+  lead partner info, and a "View Full Deal Room" button
+
+Deal Detail full page (when "View Full Deal Room" is clicked):
+- Route: /deal-flow/:dealId
+- Show all deal fields + tabs: Overview, Documents, Commitments, Activity
+- "Download Data Room" button should zip and download all documents attached 
+  to that deal
+- "Commit Capital" button should open a commitment modal (amount input + 
+  confirm button) and write to a commitments table linked to the deal and 
+  the current investor's profile
+
+---
+
+## 3. ADMIN / GP ROLE — DRAFT NEW DEALS
+
+When the logged-in user has role = "admin" or role = "gp":
+
+- Show a "+ Draft Deal" button in the top-right of the Deal Flow page 
+  (replace or sit beside any existing "Submit Deal" button for other roles)
+- Clicking opens a full "New Deal" form modal or slide-in panel with fields:
+  - Company name, industry/sector, website URL
+  - Instrument type (SAFE, Convertible Note, Equity, etc.)
+  - Valuation cap, target raise amount
+  - Minimum check size
+  - Carry % (default 20), management fee % (default 2)
+  - Closing deadline (date picker)
+  - SPV jurisdiction (dropdown: Delaware, Cayman, UK, UAE, Other)
+  - Deal description / about the deal (rich text)
+  - Document upload (term sheet, subscription agreement, data room files)
+  - Stage (default: Applied)
+  - Assign lead partner (dropdown from users with role = partner or gp)
+- On save: writes to deals table, sets stage to "Applied", sets 
+  stage_changed_at to now(), and appears immediately in the pipeline
+
+---
+
+## 4. SEND OFFERS TO INVESTOR PROFILES
+
+When the logged-in user has role = "admin" or role = "gp", on any Active 
+or Scored deal:
+
+- Add an "Invite Investors" button on the Deal Detail page (top-right, 
+  beside "Download Data Room" and "Commit Capital")
+- Clicking opens an investor selection modal:
+  - Search/filter investor profiles by name, check size range, 
+    sector interest, or accreditation status
+  - Checkbox multi-select from the investors list
+  - Customizable message field (pre-filled with deal name and closing 
+    deadline)
+  - "Send Offer" button
+- On send: 
+  - Create a record in a deal_invitations table 
+    (deal_id, investor_id, sent_at, status = "invited")
+  - Send an in-app notification to each selected investor
+  - Optionally send an email notification if the investor has 
+    email_notifications = true in their profile settings
+- Invited investors see this deal appear in their "My Deals" or portfolio 
+  view with an "Interested" / "Pass" response option
+
+---
+
+## 5. PERMISSIONS SUMMARY
+
+| Action                        | Admin/GP | Partner/Scout | LP/Investor |
+|-------------------------------|----------|---------------|-------------|
+| View deal pipeline            | ✅       | ✅            | ❌          |
+| Submit deal (Applied)         | ✅       | ✅            | ❌          |
+| Draft deal + set terms        | ✅       | ❌            | ❌          |
+| Advance deal stage            | ✅       | ❌            | ❌          |
+| Invite investors to deal      | ✅       | ❌            | ❌          |
+| View deal they were invited to| ✅       | ✅            | ✅          |
+| Commit capital                | ✅       | ❌            | ✅          |
+
+Enforce these permissions both in the UI (hide/show buttons) and in the 
+backend API routes (return 403 if unauthorized).
+
+---
+
+## 6. TECH NOTES
+
+- Use the existing database schema where possible; add only the new tables 
+  needed: deal_invitations, commitments (if not already present)
+- Preserve all existing platform routes, auth, and session handling — do 
+  not replace or override the auth system
+- All new API endpoints should follow the existing REST or tRPC pattern 
+  already used in this codebase
+- Keep the existing color palette, typography, and component library — 
+  the new Deal Flow UI should feel native to Meridian, not like an 
+  embedded iframe

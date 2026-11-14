@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="./doc-page.js"></script>
+  <style>
+    doc-page:not(:defined){visibility:hidden}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;color:#141118;-webkit-font-smoothing:antialiased}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#7c3aed}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    /* Print density: 12pt-class body, so a Letter page fills with content rather than margin. */
+    .eb{font-family:'Roboto Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6b6577}
+    .ebv{font-family:'Roboto Mono',ui-monospace,monospace;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6d28d9}
+    .h2{margin:0;font-size:24px;font-weight:900;letter-spacing:-.025em;line-height:1.15}
+    .p{font-size:13px;line-height:1.62;color:#4a4553}
+    .card{background:#fff;border:1px solid #e8e6ee;border-radius:12px}
+    .foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 42px 16px;border-top:1px solid #e8e6ee;margin-top:auto}
+    .foot span{font-family:'Roboto Mono',ui-monospace,monospace;font-size:9px;color:#6b6577;letter-spacing:.02em}
+    .gi{display:flex;gap:7px;font-size:11.5px;line-height:1.5;color:#4a4553}
+    .tl{font-size:12px;font-weight:700;letter-spacing:-.01em;line-height:1.3}
+    .td{font-size:11px;color:#6b6577;line-height:1.5;margin-top:4px}
+  </style>
+</helmet>
+
+<doc-page>
+  <!-- ═════════ PAGE 1 · WHAT IT IS ═════════ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#faf9fc">
+    <!-- flex:none — a squeezed hero clips its chips; an overflow below would at least be visible. -->
+    <div style="position:relative;flex:none;color:#fff;padding:28px 42px 30px;background-image:url(&quot;735a9718-06a3-406f-b86b-82bf21befe1e&quot;);background-size:cover;background-position:center 38%;overflow:hidden">
+      <!-- Same principle: opaque under the headline column, clearing to transparent past 72%
+           where nothing but sky sits. -->
+      <div style="position:absolute;inset:0;background:linear-gradient(100deg,rgba(20,12,38,.96) 0%,rgba(24,15,46,.94) 52%,rgba(28,18,54,.62) 74%,rgba(38,22,74,.1) 100%)"></div>
+      <div style="position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:20px">
+          <div style="display:flex;align-items:center;gap:9px"><img src="./uploads/spinout-lab-brief-logo.png" alt="Axal VC" width="22" height="22" style="display:block;object-fit:contain"><span style="font-size:14px;font-weight:800;letter-spacing:-.015em">Axal VC</span><span style="opacity:.5">·</span><span style="font-size:14px;font-weight:600;opacity:.85">Spin-Out Lab</span></div>
+          <div class="mono" style="font-size:9px;letter-spacing:.14em;text-transform:uppercase;opacity:.75">Programme brief · {{ briefVersion }}</div>
+        </div>
+        <div class="ebv" style="color:#a78bfa;margin-top:26px">Twenty-eight days · four evidence gates · nineteen tools</div>
+        <h1 style="margin:10px 0 0;font-size:36px;font-weight:900;letter-spacing:-.035em;line-height:1.05;max-width:620px;text-wrap:balance">Idea in on the first. Incorporated, validated, funded company out on the twenty‑ninth.</h1>
+        <div style="font-size:14px;line-height:1.65;color:rgba(255,255,255,.78);margin-top:14px;max-width:580px">A structured company-formation programme run inside the Axal VC platform. Founders arrive at one of three starting points and leave with a working entity, a cap table that holds, evidence a buyer will pay, and a deck built from their own recorded data.</div>
+        <div style="display:flex;gap:8px;flex-wrap:nowrap;margin-top:18px">
+          <sc-for list="{{ live }}" as="l" hint-placeholder-count="3"><span style="display:inline-flex;align-items:baseline;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;white-space:nowrap"><span class="mono" style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;opacity:.7">{{ l.k }}</span><span class="mono" style="font-size:11px;font-weight:700">{{ l.v }}</span></span></sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:20px 42px 0;flex:1;min-height:0;display:flex;flex-direction:column">
+      <div class="eb">Three tracks · chosen at application</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px">
+        <sc-for list="{{ tracks }}" as="t" hint-placeholder-count="3">
+          <div class="card" style="padding:18px 18px">
+            <div style="display:flex;align-items:baseline;gap:9px"><span class="mono" style="font-size:11px;font-weight:700;color:#6d28d9">{{ t.n }}</span><span style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ t.name }}</span></div>
+            <div class="p" style="margin-top:7px">{{ t.who }}</div>
+            <div style="border-top:1px solid #f0eff3;margin-top:13px;padding-top:11px"><span class="eb" style="font-size:9px">Leads with</span><div class="p" style="font-size:12px;margin-top:5px;color:#141118">{{ t.leadsWith }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- 1.15fr / 1fr: the terms column needs the width, because six label–value pairs were
+           wrapping their values onto a second line at the old 1fr. -->
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:12px;margin-top:14px;align-items:stretch;flex:1;min-height:0;margin-bottom:20px">
+        <!-- No overflow:hidden here: this card has nothing to clip to a radius, and the clip
+             silently ate 26px of its own gate tiles last round. Overage removed instead. -->
+        <div class="card" style="padding:18px 18px;display:flex;flex-direction:column">
+          <div class="eb">How the twenty-eight days run</div>
+          <div class="p" style="margin-top:9px;font-size:13px">Four weeks, each ending at a gate that opens on evidence rather than attendance. Every track passes the same four gates; what fills each week comes from the track — a Form founder's formation week is a Find-fit founder's interview week. Companies advance only on completion. Cohorts are calendar months, numbered from May 2026; applications close seven days before the cohort starts, at 23:59 Delaware time, computed rather than fixed.</div>
+          <!-- 2×2 rather than 4×1: four gates across a narrowing column left the day range and
+               the gate name fighting for the same 80px. -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;padding-top:14px">
+            <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="4"><div style="background:#f4f0fe;border-radius:9px;padding:11px 13px;display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-size:13px;font-weight:800">Gate {{ w.n }}</span><span class="mono" style="font-size:10px;font-weight:700;color:#6d28d9">{{ w.days }}</span></div></sc-for>
+          </div>
+        </div>
+        <!-- The artwork gets its own strip at full opacity below the term rows; the rows keep a
+             solid dark ground. A scrim over the whole card would protect the text by erasing
+             the image, which is what the first attempt did. -->
+        <div class="card" style="display:flex;flex-direction:column;background:#141118;color:#fff;border-color:#141118;overflow:hidden">
+          <div style="padding:18px 20px 14px">
+            <div class="ebv" style="color:#a78bfa">Terms, stated once</div>
+            <sc-for list="{{ terms }}" as="x" hint-placeholder-count="6"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.14)"><span style="font-size:11.5px;color:rgba(255,255,255,.7);flex:none">{{ x.k }}</span><span style="font-size:11.5px;font-weight:700;text-align:right">{{ x.v }}</span></div></sc-for>
+          </div>
+          <div style="position:relative;flex:1;min-height:92px;background-image:url(&quot;de4910a3-d3e9-4249-99b7-ba0281580dfb&quot;);background-size:cover;background-position:center 42%">
+            <div style="position:absolute;inset:0;background:linear-gradient(to bottom,#141118 0%,rgba(20,17,24,.5) 20%,rgba(20,17,24,0) 52%)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot"><span>© {{ year }} Axal VC Management LLC. All rights reserved.</span><span>axal.vc/spinout-lab/brief · page 1 of 4</span></div>
+  </section>
+
+  <!-- ═════════ PAGE 2 · THE FOUR WEEKS, BY TRACK ═════════ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#faf9fc">
+    <div style="padding:34px 42px 0;flex:1;min-height:0;display:flex;flex-direction:column">
+      <div class="eb">The four weeks</div>
+      <h2 class="h2" style="margin-top:8px">Same gates, three different weeks.</h2>
+      <div class="p" style="margin-top:8px;max-width:640px">Each column is one track. Read down for what a founder does in each week; read across for what every track must prove at the same gate. The fourth gate is the same on every track — a raise the record supports.</div>
+
+      <!-- The four rows stretch to fill the page: the grid is flex:1 and each card grows,
+           so the last gate lands above the footer rather than a third of the way up. -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px;flex:1;margin-bottom:22px">
+        <sc-for list="{{ trackGates }}" as="tg" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column">
+            <div style="display:flex;align-items:baseline;gap:8px;padding:0 2px 10px"><span class="mono" style="font-size:11px;font-weight:700;color:#6d28d9">{{ tg.n }}</span><span style="font-size:16px;font-weight:800;letter-spacing:-.02em">{{ tg.name }}</span></div>
+            <div style="display:grid;grid-template-rows:repeat(4,1fr);gap:9px;flex:1">
+              <sc-for list="{{ tg.gates }}" as="g" hint-placeholder-count="4">
+                <div class="card" style="padding:14px 15px;display:flex;flex-direction:column">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ g.name }}</span><span class="mono" style="font-size:9.5px;color:#6b6577">{{ g.days }}</span></div>
+                  <div style="display:grid;gap:4px;margin-top:8px">
+                    <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3"><div class="gi"><span style="color:#6d28d9;flex:none">·</span><span>{{ it }}</span></div></sc-for>
+                  </div>
+                  <div style="margin-top:auto;padding-top:9px;border-top:1px solid #f0eff3;display:flex;gap:7px;align-items:baseline"><span class="eb" style="font-size:8.5px;flex:none">Gate opens on</span><span style="font-size:11.5px;font-weight:700;color:#141118">{{ g.gate }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="foot"><span>© {{ year }} Axal VC Management LLC. All rights reserved.</span><span>axal.vc/spinout-lab/brief · page 2 of 4</span></div>
+  </section>
+
+  <!-- ═════════ PAGE 3 · THE ARSENAL + JURISDICTIONS ═════════ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#faf9fc">
+    <div style="padding:34px 42px 0;flex:1;min-height:0;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px">
+        <div><div class="eb">The arsenal</div><h2 class="h2" style="margin-top:8px">Nineteen working tools. Count them.</h2></div>
+        <div class="p" style="max-width:320px;text-align:right;font-size:12px">Every one is a working tool with real data behind it, grouped by what it does rather than by the week that unlocks it. Incorporation is one of nineteen.</div>
+      </div>
+      <!-- Five columns of unequal height; the grid stretches and the cards share the height
+           equally within each column, so the tallest column sets the block and the rest breathe. -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:20px;flex:1">
+        <sc-for list="{{ groups }}" as="grp" hint-placeholder-count="5">
+          <div style="display:flex;flex-direction:column">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 9px"><span style="font-size:13px;font-weight:800">{{ grp.name }}</span><span class="mono" style="font-size:9.5px;color:#6b6577">{{ grp.count }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:7px;flex:1">
+              <sc-for list="{{ grp.tools }}" as="tl" hint-placeholder-count="4"><div class="card" style="padding:11px 12px;flex:1;display:flex;flex-direction:column"><div style="display:flex;gap:7px;align-items:baseline"><span class="mono" style="font-size:9.5px;color:#6d28d9;font-weight:700">{{ tl.n }}</span><span class="tl">{{ tl.name }}</span></div><div class="td">{{ tl.d }}</div>
+                <!-- Nine of the nineteen carry a simplified reading of their real screen in the
+                     card's spare height — the same shapes and figures the workspaces draw. -->
+                <sc-if value="{{ tl.m }}"><div style="margin-top:auto;padding-top:9px;display:flex;flex-direction:column;gap:5px">
+                  <sc-if value="{{ tl.m.bars }}"><div style="display:grid;gap:3px"><sc-for list="{{ tl.m.bars }}" as="b" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:4px"><span class="mono" style="font-size:7px;color:#6b6577;width:24px;flex:none">{{ b.k }}</span><div style="flex:1;height:5px;background:#f0eff3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ b.pct }}%;background:{{ b.c }};border-radius:999px"></div></div></div></sc-for></div></sc-if>
+                  <sc-if value="{{ tl.m.cols }}"><div style="display:flex;align-items:flex-end;gap:3px;height:28px"><sc-for list="{{ tl.m.cols }}" as="c" hint-placeholder-count="6"><div style="flex:1;height:{{ c.pct }}%;background:{{ c.c }};border-radius:2px 2px 0 0"></div></sc-for></div></sc-if>
+                  <sc-if value="{{ tl.m.rings }}"><div style="position:relative;height:28px"><sc-for list="{{ tl.m.rings }}" as="r" hint-placeholder-count="3"><div style="position:absolute;bottom:0;left:{{ r.left }}px;width:{{ r.size }}px;height:{{ r.size }}px;border-radius:50%;background:{{ r.c }}"></div></sc-for><span class="mono" style="position:absolute;right:0;top:0;font-size:7px;color:#6b6577;line-height:1.4;text-align:right">TAM<br>SAM<br>SOM</span></div></sc-if>
+                  <sc-if value="{{ tl.m.tiles }}"><div style="display:flex;gap:3px;height:28px"><sc-for list="{{ tl.m.tiles }}" as="t" hint-placeholder-count="4"><div style="flex:1;border-radius:3px;background:{{ t.c }};display:flex;flex-direction:column;gap:2px;padding:3px"><div style="height:3px;width:60%;background:rgba(20,17,24,.28);border-radius:1px"></div><div style="height:2px;width:85%;background:rgba(20,17,24,.14);border-radius:1px"></div><div style="height:2px;width:70%;background:rgba(20,17,24,.14);border-radius:1px"></div></div></sc-for></div></sc-if>
+                  <sc-if value="{{ tl.m.segs }}"><div><div style="display:flex;height:7px;border-radius:999px;overflow:hidden;background:#f0eff3"><sc-for list="{{ tl.m.segs }}" as="s" hint-placeholder-count="3"><div style="width:{{ s.pct }}%;background:{{ s.c }}"></div></sc-for></div><div style="display:flex;justify-content:space-between;margin-top:4px"><sc-for list="{{ tl.m.segs }}" as="s" hint-placeholder-count="3"><span class="mono" style="font-size:7px;color:#6b6577;white-space:nowrap">{{ s.k }}</span></sc-for></div></div></sc-if>
+                  <sc-if value="{{ tl.m.slots }}"><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:2px"><sc-for list="{{ tl.m.slots }}" as="s" hint-placeholder-count="10"><div style="height:11px;border-radius:2px;background:{{ s.c }}"></div></sc-for></div></sc-if>
+                  <sc-if value="{{ tl.m.okrs }}"><div style="display:grid;gap:3px"><sc-for list="{{ tl.m.okrs }}" as="o" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border-radius:2px;background:{{ o.c }};flex:none"></span><div style="flex:1;height:2px;background:#e8e6ee;border-radius:1px"></div><span class="mono" style="font-size:7px;color:#6b6577;flex:none">{{ o.v }}</span></div></sc-for></div></sc-if>
+                  <div class="mono" style="font-size:7.5px;color:#6b6577;line-height:1.35">{{ tl.m.read }}</div>
+                </div></sc-if>
+              </div></sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:18px 20px;margin-top:16px;margin-bottom:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px"><div class="eb">Incorporation jurisdiction</div><div class="p" style="font-size:12px">Chosen on the Form track. Changes the entity, the filing and the equity outcome. Two live, two coming.</div></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:12px">
+          <sc-for list="{{ jurs }}" as="j" hint-placeholder-count="4"><div style="padding:12px 13px;border-radius:10px;background:{{ j.bg }};border:1px solid {{ j.edge }};opacity:{{ j.op }}"><div style="font-size:13.5px;font-weight:800;letter-spacing:-.015em">{{ j.name }}</div><div class="mono" style="font-size:9.5px;color:#6b6577;margin-top:3px;white-space:nowrap">{{ j.sub }}</div><div style="border-top:1px solid rgba(20,17,24,.08);margin-top:9px;padding-top:8px;display:grid;gap:4px"><div style="display:flex;gap:6px;align-items:baseline"><span class="eb" style="font-size:8px;width:40px;flex:none">Filing</span><span style="font-size:11px;color:#141118;font-weight:600">{{ j.filing }}</span></div><div style="display:flex;gap:6px;align-items:baseline"><span class="eb" style="font-size:8px;width:40px;flex:none">Equity</span><span style="font-size:11px;color:#4a4553">{{ j.capTable }}</span></div></div></div></sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span>© {{ year }} Axal VC Management LLC. All rights reserved.</span><span>axal.vc/spinout-lab/brief · page 3 of 4</span></div>
+  </section>
+
+  <!-- ═════════ PAGE 4 · COMMUNITY, FIT, HOW TO APPLY ═════════ -->
+  <section class="page" style="display:flex;flex-direction:column;background:#faf9fc">
+    <div style="padding:28px 42px 0;flex:1;min-height:0;display:flex;flex-direction:column">
+      <!-- Deliverables moved here from page 3, where the arsenal now breathes at full height. -->
+      <div class="card" style="padding:16px 20px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px"><div class="eb">What you leave with · nine deliverables</div><div class="p" style="font-size:12px">Each one produced by a tool in the arsenal; none asserted by hand.</div></div>
+        <div style="display:grid;grid-template-columns:repeat(9,1fr);gap:7px;margin-top:11px">
+          <sc-for list="{{ deliverables }}" as="d" hint-placeholder-count="9"><div style="background:#f4f0fe;border-radius:9px;padding:9px 9px"><div class="mono" style="font-size:9px;font-weight:700;color:#6d28d9">{{ d.n }}</div><div style="font-size:11px;font-weight:700;letter-spacing:-.01em;margin-top:3px;line-height:1.3">{{ d.name }}</div></div></sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch;margin-top:12px">
+        <div class="card" style="padding:18px 20px">
+          <div class="eb">Community</div>
+          <h2 class="h2" style="font-size:18px;margin-top:7px">A working surface, not a social one.</h2>
+          <div class="p" style="margin-top:8px;font-size:12px">Three peer surfaces inside the platform, committed follow-on work. No chat room.</div>
+          <div style="display:grid;gap:0;margin-top:10px">
+            <sc-for list="{{ community }}" as="c" hint-placeholder-count="3"><div style="display:flex;gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid #f0eff3"><span style="font-size:12px;font-weight:800;flex:none;width:130px">{{ c.k }}</span><span style="font-size:11.5px;color:#4a4553;line-height:1.5">{{ c.v }}</span></div></sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:18px 20px">
+          <div class="eb">Advisors and office hours</div>
+          <h2 class="h2" style="font-size:18px;margin-top:7px">Two advisors, matched to measured gaps.</h2>
+          <div class="p" style="margin-top:8px;font-size:12px">Matching runs against the founder profile and the nine-dimension venture score, so an advisor covers a weakness the record shows rather than a sector label.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px">
+            <sc-for list="{{ support }}" as="s" hint-placeholder-count="4"><div style="background:#f4f0fe;border-radius:9px;padding:10px 11px"><div class="mono" style="font-size:9px;font-weight:700;color:#6d28d9">{{ s.k }}</div><div style="font-size:11.5px;color:#141118;margin-top:3px;line-height:1.45">{{ s.v }}</div></div></sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;align-items:stretch">
+        <div class="card" style="padding:16px 20px">
+          <div class="eb" style="color:#047857">A fit</div>
+          <div style="display:grid;gap:5px;margin-top:9px"><sc-for list="{{ fit }}" as="f" hint-placeholder-count="4"><div class="gi" style="color:#141118;font-size:12px"><span style="color:#047857;flex:none">✓</span><span>{{ f }}</span></div></sc-for></div>
+        </div>
+        <div class="card" style="padding:16px 20px">
+          <div class="eb" style="color:#b45309">Not a fit</div>
+          <div style="display:grid;gap:5px;margin-top:9px"><sc-for list="{{ notFit }}" as="f" hint-placeholder-count="4"><div class="gi" style="font-size:12px"><span style="color:#b45309;flex:none">—</span><span>{{ f }}</span></div></sc-for></div>
+        </div>
+      </div>
+
+      <!-- The artwork runs full-bleed and the scrim reaches transparent by 62%, so the right
+           third — which holds only the CTA button and one mono line — shows real imagery while
+           the copy on the left keeps a solid dark ground. -->
+      <div style="position:relative;background:#141118;color:#fff;border-radius:12px;padding:16px 22px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:22px;overflow:hidden">
+        <div style="position:absolute;inset:0;background-image:url(&quot;23586f65-ba2d-476d-9f83-78338fef2b21&quot;);background-size:cover;background-position:72% 46%"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(100deg,#141118 0%,#141118 44%,rgba(20,17,24,.74) 56%,rgba(20,17,24,0) 78%)"></div>
+        <div style="position:relative;min-width:0">
+          <div class="ebv" style="color:#a78bfa">How to apply</div>
+          <div style="font-size:20px;font-weight:900;letter-spacing:-.025em;line-height:1.2;margin-top:7px">Apply to {{ cohortName }}. Applications close {{ closeAt }}.</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.7);line-height:1.6;margin-top:7px;max-width:540px">Choose your track at application. Selection is on evidence of thinking, not stage; solo founders and research spin-outs are both in scope. Axal VC admits members by application — a decision is made by the studio team, and no response time is promised.</div>
+        </div>
+        <div style="position:relative;flex:none;text-align:right">
+          <div class="mono" style="font-size:12px;font-weight:700;background:#7c3aed;border-radius:9px;padding:11px 15px">axal.vc/register</div>
+          <div class="mono" style="font-size:9px;color:#fff;margin-top:8px;text-shadow:0 1px 3px rgba(20,17,24,.9)">lane=founder · product=spinout-lab</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-top:auto;padding:12px 0 14px;border-top:1px solid #e8e6ee">
+        <div style="font-size:9.5px;color:#6b6577;line-height:1.55;max-width:560px">This brief describes the Spin-Out Lab programme as offered by Axal VC. It is not an offer of securities and does not describe Fund I; fund materials are available to verified investors only. Cohort name, dates and deadline are live values from the platform at the time this brief was generated. Programme content and tools are subject to change between cohorts.</div>
+        <div style="text-align:right;flex:none"><div class="mono" style="font-size:9.5px;color:#141118;font-weight:700">Axal VC Management LLC</div><div class="mono" style="font-size:9px;color:#6b6577;margin-top:2px">16192 Coastal Hwy, Lewes, DE 19958, United States</div><div class="mono" style="font-size:9px;color:#6b6577;margin-top:2px">axal.vc · guillaume.lauzier@axal.vc</div></div>
+      </div>
+    </div>
+    <div class="foot"><span>© {{ year }} Axal VC Management LLC. All rights reserved. Axal VC and Spin-Out Lab are trademarks of Axal VC Management LLC.</span><span>axal.vc/spinout-lab/brief · page 4 of 4</span></div>
+  </section>
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    // ══ One source: the same TOOLS / TRACKS / JURS the public page renders, so the brief cannot
+    // describe a programme the page does not. Live values stay as fields — a generated PDF fills
+    // them from the platform, never from this file. ══
+    const TOOLS = [
+      { id:'record',   g:'Company', name:'Company record', d:'One record every tool writes into.' },
+      { id:'profile',  g:'Company', name:'Founder profiling', d:'Skills, values, archetype.' },
+      { id:'score',    g:'Company', name:'Venture scoring', d:'Nine dimensions with confidence.' },
+      { id:'advisors', g:'Company', name:'Advisor matching', d:'Two advisors against measured gaps.' },
+      { id:'cofind',   g:'Company', name:'Co-founder matching', d:'Complementarity, not similarity.' },
+      { id:'disc',     g:'Evidence', name:'Customer discovery', d:'Interviews logged with severity.' },
+      { id:'market',   g:'Evidence', name:'Market sizing', d:'TAM/SAM with citations.' },
+      { id:'revenue',  g:'Evidence', name:'Revenue proof', d:'Verified by source.' },
+      { id:'roadmap',  g:'Build', name:'Roadmap and OKRs', d:'MVP scope, value-rated.' },
+      { id:'brand',    g:'Build', name:'Brand and landing pages', d:'Sixteen templates, lead routing.' },
+      { id:'deck',     g:'Build', name:'Pitch deck', d:'Twelve slides from your own data.' },
+      { id:'inc',      g:'Formation', name:'Incorporation', d:'Entity by jurisdiction.' },
+      { id:'cap',      g:'Formation', name:'Cap table', d:'Vesting, dilution, waterfall.' },
+      { id:'e83b',     g:'Formation', name:'83(b) tracking', d:'The 30-day window, counted.' },
+      { id:'coagree',  g:'Formation', name:'Co-founder agreement', d:'Clause by clause, e-signed.' },
+      { id:'comply',   g:'Formation', name:'Compliance', d:'Formation, equity, filings, records.' },
+      { id:'raise',    g:'Capital', name:'Raise workspace', d:'Target, committed, wired.' },
+      { id:'uof',      g:'Capital', name:'Use of funds', d:'Allocation, runway, scenarios.' },
+      { id:'office',   g:'Capital', name:'Office hours', d:'Partner organisations, booked.' }
+    ];
+    const GROUPS = ['Company','Evidence','Build','Formation','Capital'];
+    const DAYS = ['Days 1–7','Days 8–14','Days 15–21','Days 22–28'];
+    const TRACKS = [
+      { n:'01', name:'Form', who:'No entity yet. An idea, a prototype, or research.',
+        leadsWith:'Incorporation, 83(b), cap table, co-founder agreement, co-founder matching, compliance.',
+        gates:[
+          { name:'Validate', items:['Problem and buyer defined','≥5 interviews logged','Founder profile complete'], gate:'discovery evidence reviewed' },
+          { name:'Structure', items:['Co-founder decision or solo declaration','Equity split and vesting drafted','Jurisdiction chosen'], gate:'a cap table that holds' },
+          { name:'Form', items:['Entity filed','83(b) window opened and counted','Co-founder agreement signed'], gate:'entity, equity, filing complete' },
+          { name:'Fund', items:['Deck from recorded data','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] },
+      { n:'02', name:'Find fit', who:'Incorporated, no product-market fit yet.',
+        leadsWith:'Customer discovery, market sizing, founder profiling, venture scoring, revenue proof.',
+        gates:[
+          { name:'Interview', items:['ICP hypothesis written down','≥5 interviews logged with severity','Pain map ranked'], gate:'a pain someone will pay to remove' },
+          { name:'Size', items:['TAM/SAM with citations','Competitive map','Venture score, nine dimensions'], gate:'a market the score can defend' },
+          { name:'Prove', items:['Pricing tested','Revenue proof by source','Two advisors matched to the weak dimensions'], gate:'paid evidence, however small' },
+          { name:'Fund', items:['Deck rebuilt on the evidence','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] },
+      { n:'03', name:'Launch a line', who:'Incorporated, testing a new product.',
+        leadsWith:'Discovery, market sizing, brand and landing pages, roadmap, revenue proof.',
+        gates:[
+          { name:'Discover', items:['Segment for the new line named','≥5 interviews logged','Pain map for this line only'], gate:'a distinct pain, not the old one' },
+          { name:'Scope', items:['MVP scope, value-rated','90-day OKRs locked','Landing page live'], gate:'a page collecting real leads' },
+          { name:'Prove', items:['First paid pilot recorded','Revenue proof by source','Advisor read on the line'], gate:'paid evidence for the line' },
+          { name:'Fund', items:['Deck for the line','Use of funds locked','Three warm introductions'], gate:'a raise the record supports' } ] }
+    ];
+    const JURS = [
+      { name:'Delaware C-Corp', sub:'United States · live', filing:'83(b) Election', capTable:'Vesting cap table on Carta', soon:false },
+      { name:'Wyoming C-Corp', sub:'United States · live', filing:'83(b) Election', capTable:'Vesting cap table on Carta', soon:false },
+      { name:'Singapore Pte Ltd', sub:'Singapore · coming soon', filing:'ACRA Share Allotment', capTable:'Vesting cap table, ACRA-registered', soon:true },
+      { name:'UK Ltd', sub:'England & Wales · coming soon', filing:'SH01 Return of Allotment', capTable:'Vesting cap table, Companies House', soon:true }
+    ];
+    const DELIV = ['Incorporated entity','Vesting cap table','Equity filing','12-slide pitch deck','3-year financial model','5–10 warm introductions','2 matched advisors','Data room','Alumni badge'];
+    const pad = (i) => (i < 9 ? '0' : '') + (i + 1);
+
+    return {
+      briefVersion: '{brief.generated_at}', year: '{brief.year}',
+      cohortName: '{cohort.name}', closeAt: '{cohort.close_at}',
+      // Three chips, one row. "Ends" is dropped: a cohort is 28 days from its start, so the
+      // end date is implied and the terms card states the length.
+      live: [ { k:'Cohort', v:'{cohort.name}' }, { k:'Starts', v:'{cohort.start_date}' }, { k:'Applications close', v:'{cohort.close_at}' } ],
+      tracks: TRACKS.map(t => ({ n:t.n, name:t.name, who:t.who, leadsWith:t.leadsWith })),
+      weeks: DAYS.map((days, i) => ({ n:String(i + 1), days })),
+
+      // Values kept short enough to sit on one line beside their label — the long forms were
+      // wrapping, which is what made the card read as a ragged list.
+      terms: [ { k:'Length', v:'28 days · four weeks' }, { k:'Cohort', v:'Calendar month · 1st' },
+        { k:'Applications close', v:'7 days before · 23:59 ET' }, { k:'Equity taken', v:'None' },
+        { k:'Admission', v:'By application' }, { k:'Places', v:'{cohort.places}' },
+        { k:'Decision', v:'Studio team' } ],
+      trackGates: TRACKS.map(t => ({ n:t.n, name:t.name, gates: t.gates.map((g, i) => Object.assign({ days:DAYS[i] }, g)) })),
+      // ── Nine of the nineteen carry a simplified reading of their real screen, keyed by tool
+      // id. Each shape is the one the tool draws and every figure is one the workspace canvases
+      // show — interviews by severity, the TAM/SAM/SOM ratio, the raise's committed share — so a
+      // founder who later opens the tool recognises the picture. ──
+      groups: (() => {
+        const V = '#6d28d9', VL = '#c4b5fd', VT = '#ede9fe', G = '#047857';
+        const MINI = {
+          disc:    { read:'9 interviews · 6 need-to-have', bars:[ { k:'Need', pct:67, c:V }, { k:'Good', pct:22, c:VL }, { k:'Nice', pct:11, c:VT } ] },
+          roadmap: { read:'3 OKRs · MVP scope value-rated', okrs:[ { c:G, v:'done' }, { c:V, v:'62%' }, { c:'#e8e6ee', v:'—' } ] },
+          market:  { read:'$2.4B · $340M · $34M · cited', rings:[ { size:28, left:0, c:VT }, { size:17, left:5, c:VL }, { size:8, left:10, c:V } ] },
+          revenue: { read:'6 months · verified by source', cols:[ { pct:18, c:VL }, { pct:26, c:VL }, { pct:34, c:VL }, { pct:48, c:V }, { pct:66, c:V }, { pct:100, c:V } ] },
+          brand:   { read:'2 pages live · leads routed', tiles:[ { c:VT }, { c:VL }, { c:VT } ] },
+          deck:    { read:'12 slides from recorded data', tiles:[ { c:'#141118' }, { c:VT }, { c:VT }, { c:VT }, { c:VL } ] },
+          raise:   { read:'$1.5M target · 30% committed', segs:[ { k:'Wired', pct:12, c:G }, { k:'Signed', pct:18, c:V }, { k:'Open', pct:70, c:'#f0eff3' } ] },
+          uof:     { read:'18 months of runway', segs:[ { k:'Eng', pct:55, c:V }, { k:'GTM', pct:30, c:VL }, { k:'Ops', pct:15, c:VT } ] },
+          office:  { read:'2 booked · partner sessions', slots:[ VT, VT, V, VT, VT, VT, V, VT, VT, VT ].map(c => ({ c })) }
+        };
+        const full = (m) => m ? Object.assign({ bars:null, cols:null, rings:null, tiles:null, segs:null, slots:null, okrs:null }, m) : null;
+        return GROUPS.map(gn => { const tools = TOOLS.filter(t => t.g === gn).map(t => ({ n:pad(TOOLS.indexOf(t)), name:t.name, d:t.d, m: full(MINI[t.id]) }));
+          return { name:gn, count: tools.length + ' of ' + TOOLS.length, tools }; });
+      })(),
+      jurs: JURS.map(j => ({ name:j.name, sub:j.sub, filing:j.filing, capTable:j.capTable,
+        bg: j.soon ? '#fff' : '#f4f0fe', edge: j.soon ? '#e8e6ee' : '#ddd6fe', op: j.soon ? '.62' : '1' })),
+      deliverables: DELIV.map((name, i) => ({ n:pad(i), name })),
+      community: [ { k:'Cohort directory', v:'Who else is building this month, by track and gate.' },
+        { k:'Shipping feed', v:'What the cohort cleared, gate by gate, with the tool that produced it.' },
+        { k:'Founder asks', v:'Questions to the cohort, answered in the open and kept.' } ],
+      support: [ { k:'Advisors', v:'Two, matched against the nine-dimension score' }, { k:'Office hours', v:'Partner organisations, booked with a pre-session brief' },
+        { k:'Introductions', v:'Five to ten warm, through the Axal VC network' }, { k:'Investors', v:'Fund I invests exclusively in graduates' } ],
+      fit: [ 'A thesis you can state and a buyer you can name — formed or not', 'Willing to log interviews, price a pilot and be scored on the record',
+        'Solo founders, co-founding pairs, university and corporate spin-outs', 'Available for the four weeks; the gates do not wait' ],
+      notFit: [ 'A company that already has product-market fit and a running raise', 'A consulting or services business with no product line to test',
+        'Founders who want a network without producing evidence', 'Anyone unable to commit the four weeks' ]
+    };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,254 @@
+/**
+ * Instantiate a licence agreement from a master template (H3 step 5, D110).
+ *
+ * WHY THIS IS A SERVICE AND NOT TWENTY LINES IN THE ROUTE. Two things here are
+ * worth reading on their own and testing without a Worker: what a licence
+ * can fill in, and what happens to a field it cannot. The rendering is a pure
+ * function over a template body and a licence row, so the test that matters —
+ * an unfillable field stays visible and is reported — needs no database.
+ *
+ * WHAT A PLACEHOLDER MEANS WHEN NOBODY CAN FILL IT. `extractMergeFields`
+ * (legalTemplateStore) reads `{{field}}` out of the body; the licence supplies
+ * what it has. A field it does not have is LEFT AS THE PLACEHOLDER and named
+ * in `unfilled_fields` — not replaced with an empty string. Blanking it would
+ * turn "we never agreed a governing law" into a contract that reads as
+ * complete and says nothing, which is the failure mode this whole file is
+ * arranged around.
+ *
+ * MONEY IS FORMATTED FROM INTEGERS, never stored as text and never re-derived
+ * on read. `annual_fee_cents` and the two `_bps` columns are the ledger's own
+ * integers (migration 187 says why); this renders them once, into the body
+ * that is then stored verbatim.
+ */
+import type { LicenceRow } from '../routes/admin_licences';
+import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
+import { LICENCE_TERM_FIELDS, type LicenceTerms } from './licenceTerms';
+import { codeAmount, exponentOf } from '../../../frontend/src/lib/money.js';
+
+/** `{{field}}`, the spelling `extractMergeFields` already recognises. */
+const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
+
+/**
+ * 3500 → "35%"; 3550 → "35.5%"; 3501 → "35.01%". Basis points, never a float in
+ * the store, and never rounded to one decimal on the way out (D4671): the old
+ * `toFixed(1)` printed 3501 as "35.0%", a contract that said the Licensee's
+ * share was a different number from the one the ledger and the statements use.
+ * A non-integer count of basis points is not a rate anyone agreed, so it reads
+ * as absent and the field stays unfilled.
+ */
+export function pctFromBps(bps: number | null | undefined): string | null {
+  if (bps === null || bps === undefined) return null;
+  const n = Number(bps);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return pctExact(n);
+}
+
+/**
+ * 9000000 cents in EUR → "EUR 90,000.00". Exact (D4671): an amount that is not
+ * a whole number of minor units keeps every digit it has, so 1234.5 cents reads
+ * "EUR 12.345" rather than being rounded into a figure nobody agreed.
+ */
+export function moneyFromCents(cents: number | null | undefined, currency: string | null): string | null {
+  if (cents === null || cents === undefined) return null;
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return null;
+  // D5373: the licence's own currency sets the decimals (JPY none, EUR two, KWD three). `licences.currency` is NOT NULL
+  // DEFAULT 'EUR'; a code that is not a listed currency has no known decimals, so the field stays unfilled (null).
+  const code = currency || 'EUR';
+  const exp = exponentOf(code);
+  if (exp === null) return null;
+  const abs = Math.abs(n);
+  const unit = 10 ** exp;
+  const whole = Math.floor(abs / unit);
+  // The minor units left over, to six places, with the trailing zeros dropped:
+  // 50 → "50", 5 → "05", 34.5 → "34" + "5" (the digits after the `exp` that are whole minor units).
+  const [minor, extra = ''] = String(Number((abs - whole * unit).toFixed(6))).split('.');
+  const frac = exp === 0 ? extra : minor.padStart(exp, '0') + extra;
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${code} ${n < 0 ? '-' : ''}${grouped}${frac ? `.${frac}` : ''}`;
+}
+
+/**
+ * Every value a licence can put into a contract, by the name a template uses.
+ *
+ * A KEY PRESENT WITH A NULL VALUE IS NOT THE SAME AS AN ABSENT KEY, and the
+ * difference is the reason `mergeValues` returns nulls rather than omitting
+ * them: a template asking for `renews_on` on a licence whose renewal date has
+ * never been set is asking for something this licence genuinely does not have,
+ * and it belongs in `unfilled_fields` exactly like a field nobody has heard
+ * of. Both are "the contract is not finished".
+ */
+export function mergeValues(
+  licence: LicenceRow,
+  territories: string[],
+  seats: Array<{ seat_type: string; seats_licensed: number }> = [],
+  terms: LicenceTerms | null = null,
+  exclusivity: ExclusivityMerge | null = null,
+): Record<string, string | null> {
+  const flat = ledgerValues(licence, territories, seats);
+  // D803 (#2240): the same values under `licence.<name>`, and D797's terms
+  // under `terms.<key>`. The flat names stay for the templates that use them.
+  const named: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(flat)) named[`licence.${k}`] = v;
+  for (const [k, v] of Object.entries(termValues(terms, licence.currency))) named[`terms.${k}`] = v;
+  for (const [k, v] of Object.entries(exclusivityValues(exclusivity, licence.currency))) named[`exclusivity.${k}`] = v;
+  return { ...flat, ...named };
+}
+
+/**
+ * D5019 (#5019): a contractual exclusivity, as `{{exclusivity.<name>}}` fields. Only a version marked contractual is
+ * given; a field with nothing recorded stays null, so the contract shows it unfilled rather than inventing a figure.
+ */
+export type ExclusivityMerge = {
+  scope_type: string; countries: string[]; regions: string[]; starts_on: string | null; ends_on: string | null;
+  review_on: string | null; cure_period_days: number | null;
+  targets: Array<{ year: number; period_start: string; period_end: string; min_revenue_cents: number | null; min_cohorts: number | null; min_active_members: number | null }>;
+};
+
+const SCOPE_WORDS: Record<string, string> = {
+  non_exclusive: 'non-exclusive', country_exclusive: 'exclusive in each named country', regional_exclusive: 'exclusive in each named region',
+  master_franchise: 'a master franchise over the named territory',
+};
+
+export function exclusivityValues(x: ExclusivityMerge | null, currency: string | null): Record<string, string | null> {
+  if (!x) return {};
+  const money = (c: number | null) => (c === null ? null : codeAmount(c, currency, { locale: 'en-GB' }));
+  const out: Record<string, string | null> = {
+    scope: SCOPE_WORDS[x.scope_type] ?? null,
+    territory: [...x.countries, ...x.regions].join(', ') || null,
+    starts_on: x.starts_on, ends_on: x.ends_on, review_on: x.review_on,
+    cure_period_days: x.cure_period_days === null ? null : String(x.cure_period_days),
+  };
+  for (const t of x.targets) {
+    out[`year_${t.year}_period`] = `${t.period_start} to ${t.period_end}`;
+    out[`year_${t.year}_min_revenue`] = money(t.min_revenue_cents);
+    out[`year_${t.year}_min_cohorts`] = t.min_cohorts === null ? null : String(t.min_cohorts);
+    out[`year_${t.year}_min_active_members`] = t.min_active_members === null ? null : String(t.min_active_members);
+  }
+  return out;
+}
+
+/** Basis points as a percentage with at most two decimals: 25 → "0.25%", 2000 → "20%". */
+export function pctExact(bps: number): string {
+  const s = (bps / 100).toFixed(2).replace(/\.?0+$/, '');
+  return `${s}%`;
+}
+
+/** An English ordinal: 1 → "1st", 22 → "22nd", 13 → "13th". */
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
+}
+
+/** D803: the words an enum or a yes/no term reads as in the contract's sentence. */
+const TERM_WORDS: Record<string, Record<string, string>> = {
+  renewal_mode: { auto: 'automatically', on_request: 'only on the Licensee\'s written request, accepted by the Licensors' },
+  fee_invoiced: { annually: 'annually', quarterly: 'quarterly' },
+  statement_period: { quarter: 'quarterly', month: 'monthly' },
+  data_role: {
+    licensee_controller: 'the Licensee as controller and the Licensors as processor',
+    hq_controller: 'the Licensors as controller and the Licensee as processor',
+  },
+  exclusive: { '1': 'exclusive', '0': 'non-exclusive' },
+  audit_right: { '1': 'have', '0': 'do not have' },
+};
+
+/**
+ * D803 (#2240): each D797 term (`services/licenceTerms.ts`) as the contract
+ * reads it. Money is the licence's currency, basis points a percentage, days
+ * "[n] days". A term HQ has not recorded is null, so it stays unfilled.
+ */
+export function termValues(terms: LicenceTerms | null, currency: string | null): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const f of LICENCE_TERM_FIELDS) {
+    const v = terms?.[f.key];
+    if (v === null || v === undefined || v === '') { out[f.key] = null; continue; }
+    const words = TERM_WORDS[f.key];
+    switch (f.type) {
+      case 'enum':
+        out[f.key] = f.key === 'licensor_ip_entity' || f.key === 'licensor_brand_entity'
+          ? (AXAL_ENTITIES[v as AxalEntityKey]?.name ?? null)
+          : (words?.[String(v)] ?? null);
+        break;
+      case 'bool': out[f.key] = words?.[String(Number(v))] ?? null; break;
+      case 'bps': out[f.key] = pctExact(Number(v)); break;
+      case 'cents': out[f.key] = moneyFromCents(Number(v), currency); break;
+      case 'text': out[f.key] = String(v); break;
+      case 'int': {
+        const n = Number(v);
+        out[f.key] = f.unit === 'days' ? `${n} ${n === 1 ? 'day' : 'days'}`
+          : f.unit === 'business_days' ? `${n} business ${n === 1 ? 'day' : 'days'}`
+          : f.unit === 'months' ? `${n} ${n === 1 ? 'month' : 'months'}`
+          : `the ${ordinal(n)} day`;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** The ledger's values (migration 187), by the flat names the older templates use. */
+function ledgerValues(
+  licence: LicenceRow,
+  territories: string[],
+  seats: Array<{ seat_type: string; seats_licensed: number }>,
+): Record<string, string | null> {
+  const seatsTotal = seats.reduce((n, s) => n + (Number(s.seats_licensed) || 0), 0);
+  const bySeat: Record<string, string> = {};
+  for (const s of seats) bySeat[`seats_${s.seat_type}`] = String(Number(s.seats_licensed) || 0);
+  return {
+    licence_ref: licence.licence_ref || null,
+    legal_entity_name: licence.legal_entity_name || null,
+    brand_name: licence.brand_name || null,
+    registered_address: licence.registered_address || null,
+    signatory_name: licence.signatory_name || null,
+    signatory_title: licence.signatory_title || null,
+    territory: territories.length ? territories.join(', ') : null,
+    territory_count: territories.length ? String(territories.length) : null,
+    seats_total: seats.length ? String(seatsTotal) : null,
+    ...bySeat,
+    annual_fee: moneyFromCents(licence.annual_fee_cents, licence.currency),
+    currency: licence.currency || null,
+    revenue_share: pctFromBps(licence.revenue_share_bps),
+    token_split: pctFromBps(licence.token_split_bps),
+    term_years: licence.term_years === null ? null : String(licence.term_years),
+    starts_on: licence.starts_on || null,
+    renews_on: licence.renews_on || null,
+  };
+}
+
+/**
+ * Substitute what the licence has; leave the rest visible and name it.
+ *
+ * Order is stable and duplicates collapse, so `unfilled_fields` reads as a
+ * checklist rather than as one entry per occurrence.
+ */
+export function renderContract(
+  templateBody: string,
+  values: Record<string, string | null>,
+): { body: string; unfilled: string[] } {
+  const unfilled: string[] = [];
+  const body = String(templateBody ?? '').replace(PLACEHOLDER, (whole, name: string) => {
+    const v = values[name];
+    if (v === null || v === undefined || v === '') {
+      if (!unfilled.includes(name)) unfilled.push(name);
+      return whole;
+    }
+    return v;
+  });
+  return { body, unfilled };
+}
+
+/**
+ * Every `{{field}}` still standing in a stored contract body, in order, once
+ * each (D4671). `unfilled_fields` is what instantiation reported; this reads
+ * the BODY, which is the document that would be signed, and so catches a
+ * namespaced `{{licence.x}}` / `{{terms.x}}` a hand edit or an older row left
+ * behind as well as the ones the list names.
+ */
+export function unresolvedFields(body: string): string[] {
+  const out: string[] = [];
+  for (const m of String(body ?? '').matchAll(PLACEHOLDER)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
+}

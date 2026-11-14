@@ -1,0 +1,15 @@
+-- 609 — when a job posting was last approved onto the public board (D1121, #3001).
+-- Reserved by S1 on #3001, 2026-10-25.
+--
+-- Admin › Community's Jobs card draws "[d] days open" and CM4 draws Posted and
+-- Days open (D930, D934). Nothing recorded when a posting went live:
+-- `created_at` is when its host started the draft. `POST /api/admin/jobs/:id/approve`
+-- (`routes/admin_jobs.ts`) now writes this column each time an admin approves
+-- a posting. Closing or unpublishing a posting leaves it as it was.
+--
+-- Nothing is backfilled: when a posting already live was approved is not
+-- recorded anywhere, so it stays NULL and reads "Not recorded", never 0 days.
+--
+-- Grep first (D689 D-t): `published_at` exists on `job_postings` in no earlier
+-- migration and not in schema_baseline.sql.
+ALTER TABLE job_postings ADD COLUMN published_at TEXT;

@@ -1,0 +1,34 @@
+{
+  "skill": "community-growth-program",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Community Growth Program Design",
+        "task_scope": "Designs community growth and participation with member journeys, rituals, moderation, contribution loops and measures.",
+        "evidence": [
+          "member contribution loop"
+        ],
+        "omitted_field": "moderation owner"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for member contribution loop."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "member contribution loop"
+    ],
+    "must_say_not_recorded": [
+      "moderation owner"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

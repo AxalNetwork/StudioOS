@@ -1,0 +1,42 @@
+#84 - Support Consolidation & Account Trim
+What & Why
+Investor audit ⑥ + ⑨ + ⑩ plus item ⑫'s mock-settlement label. The Support group has more pages than workspaces: the LP holdings table renders in both Funds and Liquidity; TVPI/DPI is computed live in Funds but hand-authored in LP Reporting; capital calls appear in both Funds and Capital; Reserve Allocation and Exit Waterfall are two views of the same simulator engine. The Account group is an over-stuffed bucket with items irrelevant to investors. Consolidate into a few coherent workspaces backed by canonical stores.
+
+Current state
+The investor sidebar was already reorganized into grouped sections and a canonical LP-portal view exists in Funds — verify what is in place first and focus on the genuine gaps below.
+Not yet done: Reserve Allocation + Exit Waterfall are still separate (not merged over the shared simulator); a single canonical holdings/capital-call store shared across Funds/Liquidity/LP-portal; mock-settlement labeling; locked-tab blurred previews; a quota card beside every 402.
+Done looks like
+Support is four workspaces (sidebar rows stay, deep-linking to tabs): Portfolio (Health · Updates · Positions), Fund Ops (Funds admin · LP Reporting · capital calls), My LP Portal (canonical holdings · reports · calls), and Fund Modeling (Reserve Allocation + Exit Waterfall merged). Liquidity reads holdings from the canonical source; mock settlement is labeled "simulation".
+One canonical holdings table and one capital-call store back these views (no duplicate/divergent copies).
+The investor Account group is trimmed to account-relevant items (Advisors, Jobs, Articles, Partners removed from the investor nav).
+Locked items show a blurred preview instead of a lock icon, and a quota card appears beside every paywall/402.
+Out of scope
+The home quota bars (Investor Deal Desk task).
+Steps
+Merge Fund Modeling first (Reserve Allocation + Exit Waterfall over the shared simulator/scenarios), then consolidate Portfolio (Health/Updates/Positions) and Fund Ops, and stand up the canonical holdings table + single capital-call store that Funds/Liquidity/LP-portal all read.
+Point Liquidity at the canonical holdings source and label mock settlement as simulation; assemble the My LP Portal view over the canonical holdings/reports/calls.
+Trim the investor Account group in the sidebar config (remove non-investor items) and add locked-tab blurred previews plus a quota card beside each 402/paywall.
+Constraints
+Depends on the Diligence→Commit→Ledger task for the canonical position/capital record shape and the DD de-admin nav changes (both touch positions/capital and the sidebar config).
+Any schema change is a new cloudflare-worker/sql/migrations/NNN_*.sql at the next free number; renumber on collision before merge.
+Keep npm run test:drift green and update both changelogs for user-facing changes.
+Relevant files
+frontend/src/pages/PortfolioHealthPage.jsx
+frontend/src/pages/PortfolioUpdatesPage.jsx
+frontend/src/pages/PortfolioPositionsPage.jsx
+frontend/src/pages/FundsPage.jsx
+frontend/src/pages/LPReportingPage.jsx
+frontend/src/pages/ReservesPage.jsx
+frontend/src/pages/WaterfallPage.jsx
+frontend/src/pages/LiquidityPage.jsx
+frontend/src/sidebarConfig.js
+frontend/src/components/InvestorQuotaBars.jsx
+cloudflare-worker/src/routes/funds.ts
+cloudflare-worker/src/routes/fund_simulator.ts
+cloudflare-worker/src/routes/liquidity.ts
+cloudflare-worker/src/routes/capital.ts
+cloudflare-worker/src/routes/positions.ts
+Dependencies
+
+Wire Diligence → Commit → Ledger
+Open task

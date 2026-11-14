@@ -1,0 +1,41 @@
+In the StudioOS repo, `scripts/migrate-d1.mjs` is a forward-only migration
+runner with a `schema_migrations` ledger. Add a `--bootstrap` mode for building
+an EMPTY database from `cloudflare-worker/sql/schema_baseline.sql`.
+
+WHAT IT DOES, in order:
+  1. Refuse to run at all unless the target database is empty (no
+     `schema_migrations` table, or that table has zero rows). A bootstrap
+     against a populated database is always a mistake — fail loudly and say so.
+  2. Apply `sql/schema_baseline.sql`.
+  3. Record EVERY migration file whose numeric prefix is <= the baseline cutoff
+     in `schema_migrations`, WITHOUT executing it — their effect is already
+     inside the baseline. Reuse the existing recording path; do not write a
+     second one.
+  4. Leave migrations above the cutoff pending, so the normal runner applies
+     them next.
+
+The cutoff is a single exported constant with a comment saying what it means:
+every migration numbered at or below it is contained in the baseline dump.
+Today that is 219 (the highest file is 219_ic_decision_company.sql, and the
+production ledger the dump came from holds all 221 files).
+
+CONSTRAINTS:
+  - `--bootstrap` must be refused outright when combined with `--remote`.
+    Production already has its ledger; re-bootstrapping it would be destructive.
+    Make that an explicit guard with a clear message, not a convention.
+  - Do not change the behaviour of `--local`, `--remote`, `--preview`,
+    `--baseline`, `--dry-run`, `--audit` or `--verify-marked`. This is a new
+    path beside them.
+  - `cloudflare-worker/test/migrate_d1_plan.test.ts` covers the planner. Keep it
+    green and add cases for the new mode, including the two refusals above.
+
+VERIFY before reporting done — paste the output:
+  rm -rf /tmp/dbboot
+  node scripts/migrate-d1.mjs --local --persist-to /tmp/dbboot --bootstrap
+  node scripts/migrate-d1.mjs --local --persist-to /tmp/dbboot
+
+The first must apply the baseline and record 219 files. The second must report
+zero pending (or apply only files above the cutoff, if any exist by then) and
+must NOT re-apply anything. Then confirm the built database still reports
+t=399, i=983, g=2, v=1, and that `SELECT COUNT(*) FROM schema_migrations`
+returns 221.

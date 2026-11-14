@@ -1,0 +1,836 @@
+/**
+ * Task #6 (DG) — Stripe provider (Live, Growth tier).
+ *
+ * Founder OAuth-connects their Stripe account via Stripe Connect (read_only
+ * scope). On first sync, on an import, and on webhook deltas we pull MRR /
+ * ARR / paying_customers / monthly_churn_pct from /v1/subscriptions and
+ * project them into:
+ *   - `project_metrics` rows tagged `source='stripe'` (history),
+ *   - `financial_models.assumptions_json` (current MRR/ARR/users/churn) so
+ *     the cap-table simulator + scoring engine see live numbers.
+ *
+ * Anti-cheat: when a self-reported (`source!='stripe'`) snapshot in the last
+ * 30 days disagrees with the latest Stripe snapshot by >20% (MRR), we insert
+ * a row into `metric_anomalies`; scoring + portfolio surfaces read this
+ * table to flag the project.
+ *
+ * WEBHOOK DELIVERY IS THE PER-CONNECTION RECEIVER, AND ONLY THAT (D232).
+ * `POST /api/integrations/webhook/stripe/:uid` (routes/integrations.ts) takes
+ * an event from the founder's own account endpoint, verifies it against that
+ * connection's signing secret (`verifyWebhook`), and re-syncs (`webhook`).
+ * It takes deliveries only for a connection that holds a signing secret
+ * (D719). The OAuth callback stores none, so an OAuth-connected row is
+ * updated by its first sync, by a manual sync and by the Stripe import.
+ *
+ * This header used to say the platform endpoint, /api/billing/stripe/webhook,
+ * received Connect events with `event.account` set and that routes/billing.ts
+ * dispatched them to an exported `handleStripeConnectEvent`. None of that was
+ * true: billing.ts never called it, and no Connect event reaches that
+ * endpoint — the one the Stripe console registers (routes/admin_stripe.ts) is
+ * an account endpoint with a fixed event list, not a Connect endpoint. D232
+ * deleted the function rather than wiring it, because wiring it is not a
+ * one-line dispatch: a Connect endpoint aimed at the billing route would also
+ * hand a connected founder's `customer.subscription.*` to `handleStripeEvent`
+ * as if it were the platform's own billing. Doing it would need its own
+ * endpoint, its own signing secret and that guard — a decision, not a repair.
+ *
+ * NOT SCHEDULED, AND SAID SO: `syncAllStripeIntegrations` below is a
+ * reconcile over every active connection, but index.ts's cron runs the other
+ * providers' reconciles and not this one. Filed by D232, not changed there.
+ */
+import type { Context } from 'hono';
+import { fromStripeUnits, toMajorString } from '../../../../frontend/src/lib/money.js';
+import { oauthCallbackUrl } from '../../util/url';
+import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
+import type { Env, User } from '../../types';
+import {
+  getDescriptor,
+  registerProvider,
+  type ProviderImpl,
+  type ConnectInput,
+  type ConnectResult,
+  type IntegrationRow,
+  type SyncResult,
+} from '../registry';
+import {
+  ConnectorError,
+  categoryOfStatus,
+  checkToolInput,
+  classifyWith,
+  healthOfCategory,
+  oneCall,
+  registerConnectorAdapter,
+  toolOf,
+  type ConnectorAdapter,
+  type ConnectorContext,
+  type ConnectorTool,
+  type ErrorCategory,
+  type ExecuteResult,
+  type HealthResult,
+} from '../contract';
+import {
+  decryptCredentials,
+  type CredentialBlob,
+} from '../secrets';
+
+const PROVIDER_KEY = 'stripe';
+const STRIPE_API = 'https://api.stripe.com';
+const STRIPE_CONNECT = 'https://connect.stripe.com';
+
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
+}
+
+async function ensureCreds(env: Env): Promise<{ clientId: string; secret: string }> {
+  const { loadOauthCreds } = await import('../../services/providerOauthKeys');
+  const c = await loadOauthCreds(env, 'stripe');
+  if (!c) {
+    throw new Error('stripe_oauth_unconfigured: set STRIPE_CONNECT_CLIENT_ID and STRIPE_SECRET_KEY as secrets, or configure them in HQ → Integration keys.');
+  }
+  return { clientId: c.id, secret: c.secret };
+}
+
+// ───────────────────────────────────────────────────────────── token helpers
+
+interface StripeOAuthToken {
+  access_token: string;
+  refresh_token: string;
+  stripe_user_id: string;
+  scope?: string;
+  livemode?: boolean;
+  token_type?: string;
+}
+
+async function exchangeCode(env: Env, code: string): Promise<StripeOAuthToken> {
+  const { secret } = await ensureCreds(env);
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+  });
+  const res = await fetch(`${STRIPE_CONNECT}/oauth/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Bearer ${secret}`,
+    },
+    body,
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`stripe_token_exchange_failed: ${res.status} ${txt.slice(0, 300)}`);
+  }
+  return await res.json() as StripeOAuthToken;
+}
+
+async function deauthorize(env: Env, stripeUserId: string): Promise<void> {
+  const { clientId, secret } = await ensureCreds(env);
+  try {
+    await fetch(`${STRIPE_CONNECT}/oauth/deauthorize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${secret}`,
+      },
+      body: new URLSearchParams({ client_id: clientId, stripe_user_id: stripeUserId }),
+    });
+  } catch (e) {
+    console.warn('[stripe] deauthorize failed (non-fatal):', (e as Error).message);
+  }
+}
+
+// ───────────────────────────────────────────────────────────── Stripe API
+
+interface StripeListResponse<T> { data: T[]; has_more: boolean; }
+interface StripeSubscriptionItem {
+  quantity: number;
+  price: { unit_amount: number | null; currency: string; recurring?: { interval?: 'day'|'week'|'month'|'year'; interval_count?: number } | null };
+}
+interface StripeSubscription {
+  id: string;
+  status: string;
+  customer: string;
+  currency?: string;
+  created: number;
+  canceled_at: number | null;
+  items: { data: StripeSubscriptionItem[] };
+}
+interface StripeAccount { id: string; business_profile?: { name?: string|null } | null; email?: string|null; display_name?: string|null; }
+
+async function stripeGet<T>(token: string, path: string): Promise<T> {
+  const r = await fetch(`${STRIPE_API}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Stripe-Version': '2024-06-20' },
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`stripe_api_failed ${path}: ${r.status} ${txt.slice(0, 300)}`);
+  }
+  return await r.json() as T;
+}
+
+async function fetchAccount(token: string): Promise<StripeAccount> {
+  return await stripeGet<StripeAccount>(token, '/v1/account');
+}
+
+/** Pull all pages (cap 10 = 1000 rows) of an /v1/{resource} listing. */
+async function listAll<T>(token: string, basePath: string): Promise<T[]> {
+  const out: T[] = [];
+  let starting_after: string | undefined;
+  for (let page = 0; page < 10; page++) {
+    const sep = basePath.includes('?') ? '&' : '?';
+    const url = `${basePath}${sep}limit=100${starting_after ? `&starting_after=${starting_after}` : ''}`;
+    const body = await stripeGet<StripeListResponse<T & { id: string }>>(token, url);
+    out.push(...body.data);
+    if (!body.has_more || !body.data.length) break;
+    starting_after = body.data[body.data.length - 1].id;
+  }
+  return out;
+}
+
+/** Normalize subscription item amount to monthly USD-cents. */
+function monthlyCents(item: StripeSubscriptionItem): number {
+  const units = item.price?.unit_amount;
+  if (units == null || units === 0) return 0;
+  if (item.price.currency?.toUpperCase() !== 'USD') throw new Error('stripe_mrr_currency_unsupported');
+  const amt = fromStripeUnits(units, item.price.currency);
+  if (amt === null) throw new Error('stripe_mrr_amount_invalid');
+  const qty = item.quantity || 1;
+  const recur = item.price?.recurring;
+  const interval = recur?.interval || 'month';
+  const count = recur?.interval_count || 1;
+  const perPeriod = amt * qty;
+  switch (interval) {
+    case 'year': return perPeriod / (12 * count);
+    case 'month': return perPeriod / count;
+    case 'week': return (perPeriod * 52) / (12 * count);
+    case 'day': return (perPeriod * 365) / (12 * count);
+    default: return perPeriod;
+  }
+}
+
+interface StripeMetrics {
+  mrr: number;             // USD (not cents)
+  mrr_cents: number;
+  arr: number;
+  paying_customers: number;
+  monthly_churn_pct: number; // 0..100
+  active_subs: number;
+}
+
+async function computeStripeMetrics(token: string): Promise<StripeMetrics> {
+  const active = await listAll<StripeSubscription>(token, '/v1/subscriptions?status=active');
+  const trialing = await listAll<StripeSubscription>(token, '/v1/subscriptions?status=trialing');
+  const allActive = [...active, ...trialing];
+  let mrrCents = 0;
+  const customers = new Set<string>();
+  for (const sub of allActive) {
+    customers.add(sub.customer);
+    for (const item of sub.items?.data || []) {
+      const amount = monthlyCents(item);
+      if (amount !== 0 && sub.currency && sub.currency.toUpperCase() !== 'USD') {
+        throw new Error('stripe_mrr_currency_unsupported');
+      }
+      mrrCents += amount;
+    }
+  }
+  const mrrMinor = Math.round(mrrCents);
+  const mrrText = toMajorString(mrrMinor, 'USD');
+  if (mrrText === null) throw new Error('stripe_mrr_amount_invalid');
+  const mrr = Number(mrrText);
+  const arr = mrr * 12;
+
+  // Churn — count canceled subs in last 30d / (canceled + still-active 30d ago).
+  const cutoff = Math.floor(Date.now() / 1000) - 30 * 86400;
+  const canceledRecent = await listAll<StripeSubscription>(
+    token,
+    `/v1/subscriptions?status=canceled&created[gte]=${cutoff - 365 * 86400}`,
+  );
+  const cancelledIn30 = canceledRecent.filter(s => (s.canceled_at || 0) >= cutoff).length;
+  const denom = cancelledIn30 + allActive.length;
+  const monthly_churn_pct = denom > 0 ? (cancelledIn30 / denom) * 100 : 0;
+
+  return {
+    mrr,
+    mrr_cents: mrrMinor,
+    arr,
+    paying_customers: customers.size,
+    monthly_churn_pct: Math.round(monthly_churn_pct * 100) / 100,
+    active_subs: allActive.length,
+  };
+}
+
+// ───────────────────────────────────────────────────────────── connect
+
+async function connect(c: Context<{ Bindings: Env }>, _user: User, input: ConnectInput): Promise<ConnectResult> {
+  if (!input.oauth_code) {
+    throw new Error('stripe_requires_oauth: provide oauth_code from /oauth/stripe/callback.');
+  }
+  const tok = await exchangeCode(c.env, input.oauth_code);
+  const account = await fetchAccount(tok.access_token);
+  const credentials: CredentialBlob = {
+    access_token: tok.access_token,
+    refresh_token: tok.refresh_token,
+    stripe_user_id: tok.stripe_user_id,
+    livemode: !!tok.livemode,
+    scope: tok.scope || null,
+    token_type: 'Bearer',
+  } as CredentialBlob;
+  const displayName = account.business_profile?.name
+    || account.display_name
+    || account.email
+    || account.id;
+  return {
+    credentials,
+    scopes: tok.scope ? [tok.scope] : [],
+    external_account_id: tok.stripe_user_id,
+    external_account_name: displayName,
+    capabilities: ['Pull MRR/ARR', 'Customer count', 'Churn analytics', 'Webhook deltas'],
+    config: { livemode: !!tok.livemode },
+  };
+}
+
+async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
+  const { clientId } = await ensureCreds(c.env);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    scope: 'read_only',
+    redirect_uri: redirectUri(c.env),
+    state,
+    'stripe_user[business_type]': 'company',
+  });
+  return `${STRIPE_CONNECT}/oauth/authorize?${params.toString()}`;
+}
+
+// ───────────────────────────────────────────────────────────── projection
+
+/**
+ * Resolve which project this integration's Stripe data should write to.
+ * Order: explicit `config_json.project_id` (set via PATCH /:uid/config) →
+ * the user's solo project (only if they own exactly one). Returns null
+ * when ambiguous; sync skips snapshot writes in that case.
+ */
+async function resolveProjectId(env: Env, row: IntegrationRow): Promise<number | null> {
+  const cfg = row.config_json ? safeJson<Record<string, unknown>>(row.config_json, {}) : {};
+  const explicit = Number(cfg.project_id);
+  if (Number.isSafeInteger(explicit) && explicit > 0) {
+    return await projectEnabled(env, row.id, explicit) ? explicit : null;
+  }
+  try {
+    // Integrations are keyed by `user_id`, but `projects` has NO owner_user_id
+    // column — it is keyed by `founder_id` (see schema.sql). The old query hit
+    // a non-existent column, threw, and was silently swallowed, which is why
+    // the Stripe MRR pull never landed. Map user → founder → project the same
+    // way routes/projects.ts does, and only auto-resolve when the founder owns
+    // exactly one live project (ambiguous → null → sync skips the snapshot).
+    const owned = await env.DB.prepare(
+      `SELECT p.id FROM projects p
+         JOIN users u ON u.founder_id = p.founder_id
+         JOIN integration_companies ic ON ic.company_id = p.company_id
+        WHERE u.id = ? AND p.deleted_at IS NULL AND ic.integration_id = ? AND ic.enabled = 1
+        LIMIT 2`,
+    ).bind(row.user_id, row.id).all<{ id: number }>();
+    const rows = owned.results || [];
+    if (rows.length === 1) return rows[0].id;
+  } catch (e) {
+    // Surface real DB errors instead of swallowing them — a silent catch here
+    // is exactly how the wrong-column bug above stayed hidden.
+    console.warn('[stripe] resolveProjectId:', (e as Error).message);
+  }
+  return null;
+}
+
+function safeJson<T>(s: string | null, def: T): T {
+  if (!s) return def;
+  try { return JSON.parse(s) as T; } catch { return def; }
+}
+
+async function ensureMetricAnomalies(env: Env): Promise<void> {
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS metric_anomalies (' +
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, ' +
+      'project_id INTEGER NOT NULL, ' +
+      'metric TEXT NOT NULL, ' +
+      'self_value REAL, stripe_value REAL, delta_pct REAL, ' +
+      'source TEXT NOT NULL DEFAULT "stripe", ' +
+      'severity TEXT NOT NULL DEFAULT "warn", ' +
+      'created_at TEXT NOT NULL DEFAULT (datetime("now")))',
+    );
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_metric_anomalies_project ON metric_anomalies(project_id, datetime(created_at) DESC)');
+  } catch (e) { console.warn('[stripe] ensureMetricAnomalies:', (e as Error).message); }
+}
+
+/**
+ * Write a stripe-sourced project_metrics row + upsert the relevant
+ * fields onto financial_models.assumptions_json. Also writes the anomaly
+ * flag when self-reported MRR diverges by >20%.
+ */
+async function projectMetricsToProject(
+  env: Env, projectId: number, m: StripeMetrics,
+): Promise<void> {
+  // Lazy schema bootstrap, mirroring migration 249 and
+  // `progress.ts`'s `ensureProjectMetricsSchema`. Inline rather than imported to
+  // avoid a cross-import cycle.
+  //
+  // WHAT THIS USED TO DECLARE WAS THE PROBLEM, NOT THE SOLUTION. It created
+  // `metrics_snapshots` with `project_id` — which is a no-op in production,
+  // because that table already exists with `deal_id NOT NULL` from
+  // `routes/pipeline.ts`. The INSERT below then threw `no such column:
+  // project_id` on every Stripe sync, and this CREATE is what made
+  // `check-sqlite-columns` believe the column existed: a writer's own CREATE
+  // vouching for its own names is the union limitation that guard documents.
+  try {
+    await env.DB.exec(
+      'CREATE TABLE IF NOT EXISTS project_metrics (' +
+      'id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, ' +
+      'snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL, ' +
+      'monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER, ' +
+      'net_burn REAL, cash_balance REAL, headcount INTEGER, ' +
+      'nrr_pct REAL, paying_accounts INTEGER, ' +
+      'notes TEXT, source TEXT, created_by INTEGER, ' +
+      'created_at TEXT NOT NULL DEFAULT (datetime("now")))',
+    );
+  } catch { /* table exists */ }
+  // The upsert below needs this index as its conflict target, so it is part of
+  // the bootstrap rather than an optimisation.
+  try {
+    await env.DB.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_project_metrics_day_source '
+      + 'ON project_metrics(project_id, snapshot_date, source)',
+    );
+  } catch { /* index exists */ }
+
+  const date = new Date().toISOString().slice(0, 10);
+  // AN UPSERT, NOT A DELETE-THEN-INSERT. The old pair was a read-modify-write
+  // with a window where the day had no figure at all, and the DELETE was wrapped
+  // in a catch while the INSERT was not — so a failed DELETE left a duplicate and
+  // a failed INSERT took the whole sync down. Migration 249's UNIQUE index on
+  // `(project_id, snapshot_date, source)` makes one statement enough, and two
+  // syncs in the same minute cannot leave two rows.
+  //
+  // `excluded.*` IS EXPLICIT RATHER THAN A BLANKET REPLACE. Only the figures
+  // Stripe actually knows are overwritten; anything a founder recorded against the
+  // same day in another column is left alone, because Stripe has no opinion about
+  // their headcount.
+  //
+  // THE PAYING-CUSTOMER COUNT GOES TO TWO COLUMNS (D691, #2180). Grow's Customers
+  // figure, the Revenue funnel's Paying stage and Enter a KPI's Customers chip read
+  // `paying_accounts`; the founder's desk (`routes/progress.ts`) still reads
+  // `active_users`. Writing only the latter left Customers "Not recorded".
+  await env.DB.prepare(
+    'INSERT INTO project_metrics (project_id, snapshot_date, mrr, arr, monthly_churn_pct, active_users, paying_accounts, source) '
+    + "VALUES (?, ?, ?, ?, ?, ?, ?, 'stripe') "
+    + 'ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET '
+    + 'mrr = excluded.mrr, arr = excluded.arr, '
+    + 'monthly_churn_pct = excluded.monthly_churn_pct, active_users = excluded.active_users, '
+    + 'paying_accounts = excluded.paying_accounts',
+  ).bind(projectId, date, m.mrr, m.arr, m.monthly_churn_pct, m.paying_customers, m.paying_customers).run();
+
+  // Upsert into financial_models.assumptions_json — keep existing keys but
+  // overwrite the live-source ones. Best-effort; the financials route's
+  // lazy schema ensure handles older shapes.
+  try {
+    const row = await env.DB.prepare(
+      'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+    ).bind(projectId).first<{ assumptions_json: string | null }>();
+    const assumptions = safeJson<Record<string, unknown>>(row?.assumptions_json || null, {});
+    assumptions.mrr = m.mrr;
+    assumptions.arr = m.arr;
+    assumptions.paying_customers = m.paying_customers;
+    assumptions.monthly_churn_pct = m.monthly_churn_pct;
+    assumptions._sources = {
+      ...(assumptions._sources as Record<string, string> || {}),
+      mrr: 'stripe',
+      arr: 'stripe',
+      paying_customers: 'stripe',
+      monthly_churn_pct: 'stripe',
+    };
+    assumptions._stripe_synced_at = new Date().toISOString();
+    if (row) {
+      await env.DB.prepare(
+        'UPDATE financial_models SET assumptions_json = ?, updated_at = datetime("now") WHERE project_id = ?',
+      ).bind(JSON.stringify(assumptions), projectId).run();
+    } else {
+      // Insert with deterministic values for legacy NOT-NULL columns
+      // (`name`, `inputs_json`) on stale schemas — see ensureFinancialsModelSchema.
+      try {
+        await env.DB.prepare(
+          'INSERT INTO financial_models (project_id, assumptions_json, name, inputs_json) VALUES (?, ?, ?, ?)',
+        ).bind(projectId, JSON.stringify(assumptions), 'stripe-imported', '{}').run();
+      } catch {
+        await env.DB.prepare(
+          'INSERT INTO financial_models (project_id, assumptions_json) VALUES (?, ?)',
+        ).bind(projectId, JSON.stringify(assumptions)).run();
+      }
+    }
+  } catch (e) {
+    console.warn('[stripe] financial_models upsert failed:', (e as Error).message);
+  }
+
+  // Anti-cheat — compare against most recent self-reported MRR snapshot in
+  // the last 30 days; flag >20% delta.
+  await ensureMetricAnomalies(env);
+  try {
+    const cutoff = new Date(Date.now() - 30 * 86400 * 1000).toISOString().slice(0, 10);
+    const self = await env.DB.prepare(
+      `SELECT mrr FROM project_metrics
+        WHERE project_id = ? AND (source IS NULL OR source != 'stripe')
+          AND snapshot_date >= ? AND mrr IS NOT NULL
+        ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
+    ).bind(projectId, cutoff).first<{ mrr: number | null }>();
+    const selfMrr = Number(self?.mrr || 0);
+    if (selfMrr > 0) {
+      const delta = Math.abs(selfMrr - m.mrr) / selfMrr;
+      if (delta > 0.2) {
+        await env.DB.prepare(
+          'INSERT INTO metric_anomalies (project_id, metric, self_value, stripe_value, delta_pct, severity) ' +
+          'VALUES (?, "mrr", ?, ?, ?, ?)',
+        ).bind(projectId, selfMrr, m.mrr, Math.round(delta * 10000) / 100, delta > 0.5 ? 'high' : 'warn').run();
+      }
+    }
+  } catch (e) {
+    console.warn('[stripe] anomaly check failed:', (e as Error).message);
+  }
+}
+
+// ───────────────────────────────────────────────────────────── sync / webhook
+
+async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
+  const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
+  if (!creds) throw new Error('stripe_credentials_missing');
+  const token = String(creds.access_token || '');
+  if (!token) throw new Error('stripe_access_token_missing');
+
+  const metrics = await computeStripeMetrics(token);
+
+  const projectId = await resolveProjectId(c.env, row);
+  if (projectId) await projectMetricsToProject(c.env, projectId, metrics);
+
+  // Cache latest snapshot on the integration config so the UI can render
+  // current Stripe values without re-querying.
+  try {
+    const cfg = safeJson<Record<string, unknown>>(row.config_json, {});
+    cfg.latest_metrics = { ...metrics, fetched_at: new Date().toISOString() };
+    await c.env.DB.prepare(
+      'UPDATE integrations SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ).bind(JSON.stringify(cfg), row.id).run();
+  } catch { /* non-fatal */ }
+
+  return {
+    summary: `mrr=$${metrics.mrr.toFixed(2)} customers=${metrics.paying_customers} churn=${metrics.monthly_churn_pct}% project=${projectId ?? 'unset'}`,
+    counts: {
+      mrr_cents: metrics.mrr_cents,
+      customers: metrics.paying_customers,
+      active_subs: metrics.active_subs,
+    },
+  };
+}
+
+const RESYNC_EVENTS = new Set([
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'invoice.payment_succeeded',
+  'invoice.payment_failed',
+  'customer.created',
+  'customer.deleted',
+]);
+
+async function webhook(
+  c: Context<{ Bindings: Env }>, row: IntegrationRow, body: string, _signature: string | null,
+): Promise<{ summary: string }> {
+  let evt: { type?: string };
+  try { evt = JSON.parse(body); } catch { return { summary: 'invalid_json' }; }
+  const type = String(evt.type || '');
+  if (!RESYNC_EVENTS.has(type)) return { summary: `noop ${type}` };
+  // Re-run the full sync. Stripe's eventual-consistency guarantees mean a
+  // delta-only path is fragile; a fresh aggregate is the simplest correct.
+  const stubUser = { id: row.user_id } as User;
+  const out = await sync(c, stubUser, row);
+  return { summary: `${type} → ${out.summary}` };
+}
+
+// Stripe-Signature is `t=…,v1=…` HMAC over `${t}.${body}` keyed by the
+// per-endpoint webhook signing secret. The integration row's
+// webhook_secret_enc holds that key, and only a `POST /connect` body that
+// carries `webhook_secret` stores one: the OAuth callback stores none, PATCH
+// /:uid/config never touches it, and nothing falls back to the platform's
+// STRIPE_WEBHOOK_SECRET. The receiver in routes/integrations.ts answers a
+// delivery to a row with no key as an unknown connection.
+async function verifyWebhook(secret: string, body: string, headers: Headers): Promise<boolean> {
+  const header = headers.get('stripe-signature') || '';
+  if (!header) return false;
+  const parts: Record<string, string> = {};
+  for (const seg of header.split(',')) {
+    const [k, v] = seg.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  }
+  const t = parts['t']; const v1 = parts['v1'];
+  if (!t || !v1) return false;
+  const ts = Number(t);
+  if (!Number.isFinite(ts)) return false;
+  if (Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${body}`));
+  const hex = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+  if (hex.length !== v1.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ v1.charCodeAt(i);
+  return diff === 0;
+}
+
+async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
+  const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
+  const stripeUserId = typeof creds?.stripe_user_id === 'string' ? creds.stripe_user_id as string : '';
+  if (stripeUserId) await deauthorize(c.env, stripeUserId);
+}
+
+async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
+  const account = typeof result.credentials.stripe_user_id === 'string' ? result.credentials.stripe_user_id : '';
+  if (account) await deauthorize(env, account);
+}
+
+function validateConfig(
+  patch: Record<string, unknown>, _existing: Record<string, unknown>,
+): { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
+  const ALLOWED = new Set(['project_id']);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (!ALLOWED.has(k)) return { ok: false, error: `unknown_config_key: ${k}` };
+    if (k === 'project_id') {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'project_id_must_be_positive_integer' };
+      out[k] = Math.trunc(n);
+    }
+  }
+  return { ok: true, patch: out };
+}
+
+async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void> {
+  try {
+    const fresh = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?')
+      .bind(row.id).first<IntegrationRow>();
+    if (fresh) await sync(c, user, fresh);
+  } catch (e) {
+    console.warn('[stripe] postConnect first sync:', (e as Error).message);
+  }
+}
+
+const impl: ProviderImpl = {
+  key: PROVIDER_KEY,
+  // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
+  ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'stripe'),
+  connect,
+  revokeGranted,
+  buildAuthorizeUrl,
+  sync,
+  webhook,
+  disconnect,
+  validateConfig,
+  verifyWebhook,
+  postConnect,
+};
+registerProvider(impl);
+
+// ───────────────────────────────────────────────────────────── D848 contract
+
+/**
+ * D848 (#2469): Stripe as a `ConnectorAdapter`. The same connect, disconnect
+ * and revoke as the routes, and one read tool, the account `connect` reads.
+ * It returns the account's id and name only: never its email, its keys or any
+ * customer. Nothing it runs writes to Stripe.
+ */
+const STRIPE_TOOLS: readonly ConnectorTool[] = Object.freeze([
+  { name: 'read_account', input_schema: { type: 'object', properties: {}, additionalProperties: false }, access: 'read', unit: 'call' },
+] as const);
+
+const STRIPE_API_STATUS = /^stripe_api_failed [^:\s]*: (\d{3})\b/;
+
+/** A Stripe call's error as a category. Only the status and our own codes are read, never the body. */
+export function classifyStripeError(e: unknown): ErrorCategory {
+  return classifyWith(e, (message) => {
+    const status = STRIPE_API_STATUS.exec(message);
+    return status ? categoryOfStatus(Number(status[1])) : null;
+  });
+}
+
+async function stripeToken(ctx: ConnectorContext): Promise<string> {
+  const creds = await decryptCredentials(ctx.env, ctx.row.uid, ctx.row.credentials_enc);
+  const token = typeof creds?.access_token === 'string' ? creds.access_token : '';
+  if (!token) throw new ConnectorError('auth', 'stripe_credentials_missing');
+  return token;
+}
+
+async function executeStripe(name: string, input: unknown, ctx: ConnectorContext): Promise<ExecuteResult> {
+  const tool = toolOf(stripeAdapter, name);
+  checkToolInput(tool.input_schema, input);
+  const account = await fetchAccount(await stripeToken(ctx));
+  const named = account.business_profile?.name || account.display_name || null;
+  return { result: { id: typeof account.id === 'string' ? account.id : null, name: named }, usage: oneCall() };
+}
+
+/** Whether the connection's token still reads its account. */
+async function stripeHealth(ctx: ConnectorContext): Promise<HealthResult> {
+  try {
+    await fetchAccount(await stripeToken(ctx));
+    return { state: 'ok', error_category: null };
+  } catch (e) {
+    const category = classifyStripeError(e);
+    return { state: healthOfCategory(category), error_category: category };
+  }
+}
+
+export const stripeAdapter: ConnectorAdapter = {
+  key: PROVIDER_KEY,
+  pattern: 'api',
+  capabilities: () => getDescriptor(PROVIDER_KEY)?.capabilities ?? [],
+  tools: () => STRIPE_TOOLS,
+  connect,
+  disconnect,
+  revoke: revokeGranted,
+  execute: executeStripe,
+  health: stripeHealth,
+  classifyError: classifyStripeError,
+};
+registerConnectorAdapter(stripeAdapter);
+
+/** Public sync entry-point used by /api/progress/metrics/:projectId/import-stripe. */
+export async function syncStripeForUser(env: Env, userId: number, projectId: number): Promise<{
+  ok: boolean; imported: number; detail?: string; mrr?: number; customers?: number;
+}> {
+  const row = await env.DB.prepare(
+    "SELECT * FROM integrations WHERE provider_key = 'stripe' AND user_id = ? AND status = 'active' LIMIT 1",
+  ).bind(userId).first<IntegrationRow>();
+  if (!row) return { ok: false, imported: 0, detail: 'not_connected' };
+  if (!(await projectEnabled(env, row.id, projectId))) return { ok: false, imported: 0, detail: 'company_not_enabled' };
+  const creds = await decryptCredentials(env, row.uid, row.credentials_enc);
+  if (!creds?.access_token) return { ok: false, imported: 0, detail: 'credentials_missing' };
+  try {
+    const metrics = await computeStripeMetrics(String(creds.access_token));
+    // Manual "Import from Stripe" only: when the connected account has no usable
+    // billing data (no active/trialing subscriptions → MRR *and* paying customers
+    // are both 0), do NOT persist anything. The route classifies this exact
+    // condition (`!result.mrr && !result.customers`) as `stripe_no_data` and
+    // tells the founder there is nothing to import; writing a zero
+    // `source='stripe'` snapshot here would contradict that message and leave a
+    // misleading $0 row in the metrics history. The shared cron/webhook path
+    // (`sync()`) intentionally still writes the zero snapshot — that reconcile
+    // behavior is unchanged.
+    const hasData = metrics.mrr !== 0 || metrics.paying_customers !== 0;
+    if (hasData) {
+      await projectMetricsToProject(env, projectId, metrics);
+    }
+    await env.DB.prepare(
+      'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
+    ).bind(row.id).run();
+    return { ok: true, imported: hasData ? 1 : 0, mrr: metrics.mrr, customers: metrics.paying_customers };
+  } catch (e) {
+    const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
+    try { await env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP WHERE id = ?').bind(msg, row.id).run(); } catch { /* non-fatal */ }
+    return { ok: false, imported: 0, detail: msg };
+  }
+}
+
+/**
+ * D587 — one succeeded charge, as much of it as the revenue ledger may keep.
+ *
+ * PERSONAL DATA STAYS IN STRIPE. A charge carries the founder's customer's
+ * name, email, address and card. None of that is read into this shape: the
+ * customer is the Stripe customer id (`cus_…`) or null, never a person.
+ */
+export interface LedgerCharge {
+  id: string;
+  amount: number;          // smallest currency unit
+  amount_refunded: number; // smallest currency unit
+  currency: string;
+  created: number;         // unix seconds
+  customer: string | null; // Stripe customer id, never a name or email
+  invoice: boolean;        // the charge paid an invoice
+}
+
+/** Charges listed per call: Stripe's page size times listAll's page cap. */
+export const LEDGER_CHARGE_CAP = 1000;
+
+/**
+ * The caller's OWN connected Stripe account's succeeded charges, read-only and
+ * paged (newest first, at most LEDGER_CHARGE_CAP). `not_connected` when the
+ * caller has no active Stripe integration; `read_failed` when Stripe or the
+ * credentials could not be read. Never an empty list standing in for a
+ * failure, which the ledger would draw as "no charges".
+ */
+export async function listLedgerChargesForUser(env: Env, userId: number): Promise<
+  | { ok: true; charges: LedgerCharge[]; capped: boolean }
+  | { ok: false; reason: 'not_connected' | 'read_failed'; detail: string }
+> {
+  const row = await env.DB.prepare(
+    "SELECT * FROM integrations WHERE provider_key = 'stripe' AND user_id = ? AND status = 'active' LIMIT 1",
+  ).bind(userId).first<IntegrationRow>();
+  if (!row) return { ok: false, reason: 'not_connected', detail: 'not_connected' };
+  let token: string;
+  try {
+    const creds = await decryptCredentials(env, row.uid, row.credentials_enc);
+    if (!creds?.access_token) return { ok: false, reason: 'not_connected', detail: 'credentials_missing' };
+    token = String(creds.access_token);
+  } catch (e) {
+    return { ok: false, reason: 'read_failed', detail: (e as Error).message?.slice(0, 300) || 'credentials unreadable' };
+  }
+  try {
+    type RawCharge = {
+      id: string; amount: number; amount_refunded?: number; currency: string; created: number;
+      status: string; paid?: boolean; customer?: string | { id?: string } | null; invoice?: string | { id?: string } | null;
+    };
+    const raw = await listAll<RawCharge>(token, '/v1/charges');
+    const charges = raw
+      .filter((ch) => ch.status === 'succeeded' && ch.paid !== false)
+      .map((ch) => ({
+        id: String(ch.id),
+        amount: Number(ch.amount),
+        amount_refunded: Number(ch.amount_refunded ?? 0),
+        currency: String(ch.currency || '').toLowerCase(),
+        created: Number(ch.created),
+        customer: typeof ch.customer === 'string' ? ch.customer
+          : (ch.customer && typeof ch.customer === 'object' && typeof ch.customer.id === 'string' ? ch.customer.id : null),
+        invoice: ch.invoice != null,
+      }));
+    return { ok: true, charges, capped: raw.length >= LEDGER_CHARGE_CAP };
+  } catch (e) {
+    return { ok: false, reason: 'read_failed', detail: (e as Error).message?.slice(0, 300) || 'stripe read failed' };
+  }
+}
+
+/** Cron entry-point — 15-min reconcile across every active Stripe integration. */
+export async function syncAllStripeIntegrations(env: Env): Promise<{ scanned: number; ok: number; failed: number }> {
+  let scanned = 0, ok = 0, failed = 0;
+  let rows: { results: IntegrationRow[] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT * FROM integrations WHERE provider_key = 'stripe' AND status = 'active' LIMIT 200",
+    ).all<IntegrationRow>() as unknown as { results: IntegrationRow[] };
+  } catch {
+    return { scanned: 0, ok: 0, failed: 0 };
+  }
+  for (const row of (rows.results || [])) {
+    if (!(await scheduledConnectorEnabled(env, row))) continue;
+    scanned++;
+    try {
+      const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
+      const stubUser = { id: row.user_id } as User;
+      const out = await sync(stubCtx, stubUser, row);
+      await env.DB.prepare(
+        'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
+      ).bind(row.id).run();
+      ok++;
+      console.info(`[stripe] cron sync ok integration=${row.id}: ${out.summary}`);
+    } catch (e) {
+      failed++;
+      const msg = (e as Error).message?.slice(0, 500) || 'sync failed';
+      try {
+        await env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP WHERE id = ?').bind(msg, row.id).run();
+      } catch { /* non-fatal */ }
+      console.error(`[stripe] cron sync failed integration=${row.id}: ${msg}`);
+    }
+  }
+  return { scanned, ok, failed };
+}

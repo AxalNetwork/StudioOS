@@ -1,0 +1,37 @@
+#8 - CC — Personal Advisor progress widget (right rail)
+
+What & Why
+
+The advisor card needs a right-rail progress widget that gives the user a clear sense of "what's next." It surfaces three buckets — Proposed, Pending, Completed — driven by the state machine's queue (CB), with a Spin-Out-Lab variant when the user is enrolled. Depends on CB because the bucket data comes from GET /api/advisor/queue.
+
+Done looks like
+
+Three buckets render with real counts and refresh safely after page reloads
+Each item card shows section icon, label, progress bar, importance pill; click focuses the chat on that question
+Hover shows explainer text + a doc-anchor "Learn more →"
+Sections that map to a page show an "Open page →" link beside the count
+Bucket sorting matches spec: Proposed by priority, Pending by completion % desc then priority, Completed newest-first (last 10)
+Empty states render the spec's friendly copy (incl. confetti SVG for "you're caught up")
+Completing a question moves it to Completed and pushes the next Proposed item up; animation < 500ms
+Free-tier user with a Studio-only question pending sees it in Proposed with a small lock pill and "Upgrade to unlock" CTA
+Spin-Out variant shows the week badge ("Week 2 of 4") and a per-week milestone strip with progress bars and "what's missing" tooltips
+Out of scope
+
+Changing the state machine itself (CB)
+Routing answers to platform tables (CD)
+Steps
+
+Build the widget — Create frontend/src/components/advisor/ProgressRail.jsx with the three collapsible buckets, sticky-on-scroll behavior, and item cards as described.
+Wire data — Fetch from GET /api/advisor/queue and re-fetch on every advisor turn commit.
+Push updates — Subscribe to the Durable Object channel advisor-progress:{user_id} so milestone unlocks / tier changes re-order the widget without a manual refresh.
+Spin-Out variant — When users.spinout_lab_active = 1, render the week badge + per-week milestone strip above the three buckets.
+Tier lock pill — Render the lock pill + "Upgrade to unlock" CTA on Studio-only items shown to lower-tier users.
+Empty states & animation — Implement the three empty-state copies (with confetti SVG for Proposed) and the < 500ms move animation when a question completes.
+Relevant files
+
+frontend/src/components/advisor/ProgressRail.jsx (new)
+frontend/src/components/advisor/PersonalAdvisor.jsx (host the rail)
+Dependencies
+
+CB — Personal Advisor conversation state machine
+Open task

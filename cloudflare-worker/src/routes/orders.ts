@@ -1,0 +1,351 @@
+/**
+ * One-time CART ORDER endpoints (Worker, prod) — parity with the FastAPI dev
+ * backend, conforming to .local/tasks/products-cart-contract.md.
+ *
+ *   POST /api/orders/intent            create/refresh a combined PaymentIntent
+ *   POST /api/orders/confirm           belt-and-suspenders fulfilment
+ *   GET  /api/orders/:order_ref        owner-only order view
+ *   GET  /api/orders/mine              owner's orders, most recent first
+ *   GET  /api/orders/:order_ref/invoice  owner-only PDF download
+ *
+ * Prices ALWAYS come from the mirrored Stripe catalog — never trusted from the
+ * client. Only `one_time` prices may be ordered. VAT (5% UAE) + promo discount
+ * are recomputed server-side.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAuth, selectJwt } from '../auth';
+import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
+import { ensurePaymentsCustomer } from './payments';
+import { stripeCall } from './billing';
+import {
+  ensureOrdersSchema,
+  priceCart,
+  resolveCartPromo,
+  vatRate,
+  makeOrderRef,
+  sha1Hex,
+  upsertPendingOrder,
+  insertPaidFreeOrder,
+  fulfilOrder,
+  getOrderForUser,
+  getOrderRow,
+  listOrdersForUser,
+  renderOrderInvoicePdf,
+  type OrderItemInput,
+  type OrderLine,
+  type PricedCart,
+} from '../services/orders';
+import { refuse } from '../util/refusal';
+import { commitPromoReservation, promoRefusalBody, releasePromoReservation } from '../services/promoRedemption';
+import { recordAiTopupPurchase } from '../services/aiTopups';
+import { isTokenPackPrice, packRefusalBody, TOKEN_PACK_REFUSALS, tokenPackQuote } from '../services/aiCredits';
+import { keyReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
+
+const orders = new Hono<{ Bindings: Env }>();
+
+/** Sanitise the caller-supplied nonce so it can't break the idempotency key. */
+function safeNonce(raw: unknown): string {
+  if (typeof raw === 'string' && raw.length > 0) {
+    return raw.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'n';
+  }
+  return 'n';
+}
+
+function normItems(raw: unknown): OrderItemInput[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((it) => ({
+    price_id: typeof (it as any)?.price_id === 'string' ? (it as any).price_id : '',
+    quantity: Number((it as any)?.quantity),
+  }));
+}
+
+// A canonical serialisation of the cart for the idempotency signature:
+// price_id:qty pairs, sorted, joined by comma.
+function cartSignature(items: OrderItemInput[]): string {
+  return items
+    .map((i) => `${i.price_id}:${i.quantity}`)
+    .sort()
+    .join(',');
+}
+
+// The `items` metadata blob Stripe carries (<=500 chars) — same shape.
+function itemsMetaBlob(lines: OrderLine[]): string {
+  return lines.map((l) => `${l.price_id}:${l.quantity}`).join(',').slice(0, 500);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/orders/intent
+// ---------------------------------------------------------------------------
+orders.post('/intent', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureTierSchema(c.env);
+  await ensureOrdersSchema(c.env);
+
+  const body = (await c.req.json().catch(() => ({}))) as {
+    items?: unknown;
+    promo_code?: string;
+    billing_country?: string;
+    nonce?: string;
+  };
+  const items = normItems(body.items);
+  // Identify packs before priceCart: an empty/stale mirror may otherwise call
+  // Stripe before this readiness refusal. Support sessions remain first.
+  const packCart = (await Promise.all(items.map(item => isTokenPackPrice(c.env, item.price_id)))).some(Boolean);
+  if (packCart && (await selectJwt(c))?.payload.impersonated_by) {
+    return c.json({ error: 'support_session_refused', message: 'A support session cannot buy AI tokens.' }, 403);
+  }
+  if (packCart) {
+    const readiness = await keyReadiness(c.env);
+    if (readiness.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+      audience: 'member', extra: { reason: readiness.reason } });
+  }
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+  const billingCountry =
+    typeof body.billing_country === 'string' && body.billing_country.trim()
+      ? body.billing_country.trim()
+      : null;
+  const nonce = safeNonce(body.nonce);
+
+  // 1–2. Price the cart from the catalog (rejects non-one_time / inactive).
+  const priced = await priceCart(c.env, items);
+  if ('error' in priced) {
+    const status = priced.error === 'not_one_time' ? 400 : 400;
+    return c.json({ error: priced.error }, status);
+  }
+  const cart = priced as PricedCart;
+
+  // 6 (first). Deterministic order id/ref per (user + items + promo +
+  //    billing_country + nonce) so a refresh is stable/idempotent.
+  const sig = await sha1Hex(
+    `${user.id}:${cartSignature(items)}:${promoCode.toUpperCase()}:${billingCountry ?? ''}:${nonce}`,
+  );
+  const orderId = `ord_${sig}`;
+  const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
+    .bind(orderId)
+    .first<{ order_ref: string }>();
+
+  // D755 §5: a token pack is bought alone, at face value, with no promo and
+  // within the limits. Judged before the promo, so it never takes the free path.
+  const aiQuote = await tokenPackQuote(c.env, user.id, cart, promoCode, { excludeOrderRef: priorById?.order_ref ?? null });
+  if (aiQuote && 'error' in aiQuote) {
+    // D790, D1289 (CRP5): every pack refusal answers its code with the sentence the sheet shows.
+    return c.json(packRefusalBody(aiQuote.error), TOKEN_PACK_REFUSALS[aiQuote.error].status);
+  }
+
+  // 3. Promo discount (percent on subtotal; amount_off capped at subtotal).
+  let discountCents = 0;
+  let resolvedPromoCode: string | null = null;
+  let reservationRef: string | null = null;
+  if (promoCode) {
+    const pr = await resolveCartPromo(c.env, promoCode, cart, user.id, `cart:${orderId}`);
+    if ('refusal' in pr) return c.json(promoRefusalBody(pr.refusal), 400);
+    if ('error' in pr) return c.json({ error: 'promo_invalid', reason: pr.error }, 400);
+    discountCents = pr.discountCents;
+    reservationRef = pr.reservationRef;
+    resolvedPromoCode = pr.promo.code;
+  }
+
+  // 4–5. VAT on (subtotal - discount); total.
+  const netAfterDiscount = Math.max(0, cart.subtotal - discountCents);
+  const rate = vatRate(billingCountry);
+  const vatCents = Math.round(netAfterDiscount * rate);
+  const total = cart.subtotal - discountCents + vatCents;
+
+  const itemLineOut = cart.lines.map((l) => ({
+    price_id: l.price_id,
+    product_id: l.product_id,
+    name: l.name,
+    kind: l.kind,
+    quantity: l.quantity,
+    unit_amount: l.unit_amount,
+    line_total: l.line_total,
+  }));
+
+  // 7. Free (via promo) — fulfil immediately, no PaymentIntent.
+  if (total <= 0) {
+    // Reuse the existing paid order's ref if this signature was already
+    // fulfilled; otherwise mint a fresh ref.
+    const orderRef = priorById?.order_ref ?? makeOrderRef();
+    await insertPaidFreeOrder(c.env, {
+      id: orderId,
+      orderRef,
+      userId: user.id,
+      currency: cart.currency,
+      subtotal: cart.subtotal,
+      discountCents,
+      vatCents,
+      total: 0,
+      promoCode: resolvedPromoCode,
+      billingCountry,
+      paymentIntentId: null,
+      items: cart.lines,
+    });
+    await fulfilOrder(c.env, orderRef);
+    // D4855: no payment webhook follows a free order, so its discount counts now.
+    await commitPromoReservation(c.env, reservationRef);
+    return c.json({
+      free: true,
+      order_ref: orderRef,
+      currency: cart.currency,
+      subtotal: cart.subtotal,
+      discount_cents: discountCents,
+      vat_cents: vatCents,
+      total: 0,
+      items: itemLineOut,
+      client_secret: null,
+    });
+  }
+
+  // 8. Paid — create/refresh ONE combined PaymentIntent for `total`.
+  const orderRef = priorById?.order_ref ?? makeOrderRef();
+
+  const customer = await ensurePaymentsCustomer(c.env, user);
+  const idempotencyKey = `order:${user.id}:${sig}:${nonce}`;
+  const piParams: Record<string, string> = {
+    customer,
+    amount: String(total),
+    currency: cart.currency,
+    'automatic_payment_methods[enabled]': 'true',
+    // Embedded card-only checkout: no off-site redirects, so the SPA confirms
+    // with `redirect: 'if_required'` and no return_url (parity with FastAPI dev).
+    'automatic_payment_methods[allow_redirects]': 'never',
+    'metadata[kind]': 'cart_order',
+    'metadata[order_ref]': orderRef,
+    'metadata[user_id]': String(user.id),
+    'metadata[uid]': user.uid,
+    'metadata[items]': itemsMetaBlob(cart.lines),
+  };
+  if (resolvedPromoCode) piParams['metadata[promo_code]'] = resolvedPromoCode;
+  if (reservationRef) piParams['metadata[promo_reservation_ref]'] = reservationRef;
+
+  let intent: { id: string; client_secret: string; status: string };
+  try {
+    intent = await stripeCall<{ id: string; client_secret: string; status: string }>(
+      c.env,
+      '/payment_intents',
+      piParams,
+      { idempotencyKey, moneyKind: 'marketplace' },
+    );
+  } catch (e) {
+    // No PaymentIntent, so nothing was spent against the ceiling.
+    await releasePromoReservation(c.env, reservationRef);
+    return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
+  }
+
+  await upsertPendingOrder(c.env, {
+    id: orderId,
+    orderRef,
+    userId: user.id,
+    currency: cart.currency,
+    subtotal: cart.subtotal,
+    discountCents,
+    vatCents,
+    total,
+    promoCode: resolvedPromoCode,
+    billingCountry,
+    paymentIntentId: intent.id,
+    items: cart.lines,
+  });
+
+  await recordAiTopupPurchase(c.env, {paymentIntentId:intent.id,orderRef,userId:user.id,totalCents:total,currency:cart.currency,quote:aiQuote});
+
+  return c.json({
+    client_secret: intent.client_secret,
+    payment_intent_id: intent.id,
+    order_ref: orderRef,
+    currency: cart.currency,
+    subtotal: cart.subtotal,
+    discount_cents: discountCents,
+    vat_cents: vatCents,
+    total,
+    free: false,
+    items: itemLineOut,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/orders/confirm — belt-and-suspenders fulfilment.
+// ---------------------------------------------------------------------------
+orders.post('/confirm', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  await ensureOrdersSchema(c.env);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+
+  const body = (await c.req.json().catch(() => ({}))) as { payment_intent_id?: string };
+  const piId = typeof body.payment_intent_id === 'string' ? body.payment_intent_id.trim() : '';
+  if (!piId) return c.json({ error: 'payment_intent_id_required' }, 400);
+
+  let pi: { id: string; status: string; metadata?: Record<string, string> };
+  try {
+    pi = await stripeCall<{ id: string; status: string; metadata?: Record<string, string> }>(
+      c.env,
+      `/payment_intents/${encodeURIComponent(piId)}`,
+      {},
+      { method: 'GET' },
+    );
+  } catch (e) {
+    return refuse(c, 502, { code: 'pi_lookup_failed', message: 'The payment could not be looked up. Try again in a moment.', raw: e, audience: 'member' });
+  }
+
+  const meta = pi.metadata ?? {};
+  if (meta.kind !== 'cart_order') return c.json({ error: 'not_cart_order' }, 400);
+  if (Number(meta.user_id) !== user.id) return c.json({ error: 'not_owner' }, 403);
+  const orderRef = (meta.order_ref || '').trim();
+  if (!orderRef) return c.json({ error: 'order_ref_missing' }, 400);
+
+  if (pi.status !== 'succeeded') {
+    return c.json({ error: 'not_paid', status: pi.status }, 409);
+  }
+
+  const order = await fulfilOrder(c.env, orderRef);
+  if (!order) return c.json({ error: 'order_not_found' }, 404);
+  return c.json({ order });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/orders/mine — most recent first. Declared BEFORE /:order_ref so
+// "mine" isn't captured as an order_ref param.
+// ---------------------------------------------------------------------------
+orders.get('/mine', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const list = await listOrdersForUser(c.env, user.id);
+  return c.json({ orders: list });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/orders/:order_ref/invoice — owner-only PDF download.
+// ---------------------------------------------------------------------------
+orders.get('/:order_ref/invoice', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const orderRef = c.req.param('order_ref');
+  const row = await getOrderRow(c.env, orderRef);
+  if (!row || row.user_id !== user.id) return c.json({ error: 'not_found' }, 404);
+  let pdf: Uint8Array;
+  try {
+    pdf = await renderOrderInvoicePdf(c.env, orderRef);
+  } catch (e) {
+    return refuse(c, 502, { code: 'invoice_render_failed', message: 'The invoice could not be produced. Try again in a moment.', raw: e, audience: 'member' });
+  }
+  return new Response(pdf, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="invoice-${orderRef}.pdf"`,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/orders/:order_ref — owner-only order view.
+// ---------------------------------------------------------------------------
+orders.get('/:order_ref', async (c) => {
+  const user = (await requireAuth(c)) as TierUser;
+  const orderRef = c.req.param('order_ref');
+  const order = await getOrderForUser(c.env, orderRef, user.id);
+  if (!order) return c.json({ error: 'not_found' }, 404);
+  return c.json({ order });
+});
+
+export default orders;

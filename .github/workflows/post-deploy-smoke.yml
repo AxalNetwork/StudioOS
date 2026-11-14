@@ -1,0 +1,111 @@
+name: post-deploy SPA smoke
+
+# Task #16 — Runtime smoke check that the live site serves the rendered SPA
+# shell (HTTP 200 + `<div id="root">` + a hashed `/assets/*.js` module script)
+# instead of a blank page or the JSON 404. Task #15 added a BUILD-time guard;
+# this is the LIVE counterpart. The original blank-page incident shipped because
+# nothing verified the deployed site.
+#
+# Both hosts are whole-host custom domains of the `studioos` Worker, served
+# from its [assets] copy of docs/ (wrangler.toml), and ship together on every
+# `wrangler deploy`: by hand via `npm run deploy` (which runs
+# scripts/check-spa-live.mjs as its `postdeploy` hook) or from CI via
+# cloudflare-worker-deploy.yml, which runs it after every deploy. This is the
+# synthetic/on-demand layer:
+# - workflow_dispatch: re-run by hand right after a deploy. This probe is the
+#   evidence a host updated — the deploy run's closing "Deployed studioos
+#   triggers" lines say what was bound, this says what is being served — and
+#   since 2026-09-03 it also asserts the static security headers that
+#   docs/_headers sets on every SPA shell route, so
+#   documentation/architecture/UNRESOLVED_ITEMS.md U10 is answered by this
+#   run, not by a document.
+# - schedule: catch a site that goes blank between deploys (cache purge, asset
+#   rot, Worker rollback, etc.).
+#
+# D751 T9 (#1921): each host's /api/health lists every catalogue OAuth
+# connector's readiness. A connector with no client prints one WARN line, and
+# the run summary lists it; the run stays green. The fix is the owner's keys
+# (for GitHub, #1008 item 33). The `connectors_strict` input turns that WARN
+# into a failure; a missing or malformed block always fails.
+#
+# No secrets required — it makes plain public HTTPS requests to the prod hosts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: 'Space/comma-separated base URLs to check'
+        required: false
+        default: 'https://axal.vc https://app.axal.vc'
+      # The two /api/* probes, exposed because an incident is exactly when you
+      # want to aim them by hand — at the path that is actually failing, or at a
+      # real non-exempt route instead of the synthetic one. Left blank they fall
+      # back to the script's own defaults.
+      api_probe:
+        description: 'Rate-limit-EXEMPT /api/* path (blank = /api/health)'
+        required: false
+        default: ''
+      api_probe_limited:
+        description: 'NON-exempt /api/* path (blank = /api/__smoke/rate-limited)'
+        required: false
+        default: ''
+      connectors_strict:
+        description: 'Fail when a catalogue OAuth connector has no client (default: WARN only)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Every 6 hours. Frequent enough to catch a blank prod fast, cheap enough
+    # to stay well inside free CI minutes.
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: live SPA smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      # The newest deployed cache holds [current, previous, ...]. Unlike the
+      # pre-build capture in the deploy job, select generation 1 here.
+      - name: Restore the deployed retention window
+        id: retention
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+      - name: Capture the retained previous lazy entry
+        continue-on-error: true
+        env:
+          SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json" --previous-generation
+      # Custom hosts have their own live graph; production cache hashes do not
+      # belong to a preview/other deployment. Scheduled/default hosts use both.
+      - name: Live SPA smoke check
+        env:
+          SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
+          SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
+          SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
+          SMOKE_CONNECTORS_STRICT: ${{ github.event.inputs.connectors_strict == 'true' && '1' || '' }}
+          SMOKE_BUILD_DIR: ${{ (github.event.inputs.hosts == '' || github.event.inputs.hosts == 'https://axal.vc https://app.axal.vc') && steps.retention.outputs.cache-matched-key != '' && 'docs' || '' }}
+          SMOKE_PREVIOUS_BUILD: ${{ (github.event.inputs.hosts == '' || github.event.inputs.hosts == 'https://axal.vc https://app.axal.vc') && format('{0}/spa-smoke-previous.json', runner.temp) || '' }}
+          SKIP_LIVE_SMOKE: '0'
+        run: node scripts/check-spa-live.mjs
+      # D755 (#1987): the public plans-and-packs read and /plans-and-pricing,
+      # read-only (no sign-in, no purchase, no Stripe). A warning step: a red
+      # here never fails the smoke, and a route not deployed yet only warns.
+      - name: AI credits live check (warning)
+        continue-on-error: true
+        env:
+          SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
+        run: node scripts/check-ai-credits-live.mjs

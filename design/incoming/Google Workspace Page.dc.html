@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f3f7}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+</style>
+</helmet>
+<div style="{{ rootSt }}">
+
+<sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+<div style="position:relative;display:flex;align-items:stretch;min-height:960px">
+<aside aria-label="Main navigation" style="width:216px;flex:none;box-sizing:border-box;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px;padding:16px 12px">
+<div style="display:flex;align-items:center;gap:9px;padding:0 6px;height:32px"><img src="/axal-mark.png" alt="Axal VC" style="width:28px;height:28px;display:block;border-radius:7px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span></div>
+<button type="button" aria-label="Company: [Northwind Labs]" style="display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;cursor:pointer"><span style="width:24px;height:24px;border-radius:7px;background:var(--lav);color:var(--vdeep);display:grid;place-items:center;font-size:10px;font-weight:800">NL</span><span style="flex:1;text-align:left">[Northwind Labs]</span><span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+<nav aria-label="Workspace" style="display:flex;flex-direction:column;gap:2px"><sc-for list="{{ side }}" as="r" hint-placeholder-count="8"><a href="#" style="display:flex;align-items:center;gap:10px;min-height:36px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:500;color:var(--body);text-decoration:none"><span style="width:16px;height:16px;display:block;flex:none" dangerouslySetInnerHTML="{{ r.icon }}"></span>{{ r.t }}</a></sc-for></nav>
+</aside>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<header style="height:56px;flex:none;box-sizing:border-box;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 24px">
+<div style="width:320px;height:36px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;background:var(--raised);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:12.5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg>Search StudioOS</div>
+<div style="flex:1"></div>
+<button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;color:var(--body);cursor:pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"></path></svg></button>
+<button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 4px;border-radius:9px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:var(--ink)"><span style="width:28px;height:28px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:10.5px;font-weight:800;color:var(--vdeep)">NA</span>[Name]<span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+</header>
+<main style="flex:1;box-sizing:border-box;padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px">
+<nav aria-label="Breadcrumb" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Account › Connectors › Google Workspace</nav>
+<div style="display:flex;align-items:flex-start;gap:16px">
+<span aria-hidden="true" style="width:48px;height:48px;flex:none;border-radius:12px;background:var(--card);border:1px solid var(--line2);display:grid;place-items:center;font-size:20px;font-weight:800;color:var(--ink)">G</span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Google Workspace</h1>
+<p style="margin:0;font-size:13.5px;color:var(--mut)">Choose Google files for your modules. Axal VC reads only the files you choose.</p>
+<div style="display:flex;gap:7px;flex-wrap:wrap;padding-top:2px"><span style="{{ stPill.st }}">{{ stPill.t }}</span><sc-if value="{{ kList }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;min-height:24px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);border:1px solid var(--line2);color:var(--ink);box-sizing:border-box">Permission: files you choose</span></sc-if></div>
+</div>
+<sc-if value="{{ kList }}" hint-placeholder-val="{{ true }}"><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;flex:none">Choose files</button></sc-if>
+</div>
+
+<sc-if value="{{ kList }}" hint-placeholder-val="{{ true }}">
+<div role="note" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:12px 16px;border-radius:10px;background:var(--lav);border:1px solid var(--lavE);font-size:13px;color:var(--ink)"><span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="color:var(--vio);font-weight:800">✓</span>Only files you pick in Google’s file picker</span><span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="color:var(--vio);font-weight:800">✓</span>Read only: Axal VC never edits, moves or deletes them</span><span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="color:var(--vio);font-weight:800">✓</span>Stop using a file and Axal VC can no longer open it</span><span style="flex:1"></span><a href="#" style="font-weight:600">Google sign-in is on the Google page ›</a></div>
+<section aria-label="Files you chose" style="background:var(--card);border:1px solid var(--line);border-radius:12px">
+<div style="display:flex;align-items:baseline;gap:10px;padding:14px 18px"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">Files you chose</h2><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">5 files · 1 venture</span></div>
+<div role="table" aria-label="Files you chose">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1.5fr) 110px 150px minmax(0,1.2fr) 150px 100px;gap:12px;padding:10px 18px;border-top:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Name</span><span role="columnheader">Kind</span><span role="columnheader">Venture</span><span role="columnheader">Module</span><span role="columnheader">Last read</span><span role="columnheader" aria-label="Actions"></span></div>
+<sc-for list="{{ files }}" as="f" hint-placeholder-count="5">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1.5fr) 110px 150px minmax(0,1.2fr) 150px 100px;gap:12px;align-items:center;padding:12px 18px;border-top:1px solid var(--line)">
+<div role="cell" style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.n }}</span><sc-if value="{{ f.x }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mut)">{{ f.x }}</span></sc-if></div>
+<div role="cell" style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:30px;height:30px;flex:none;border-radius:7px;background:var(--chip);color:var(--body);display:grid;place-items:center"><span style="width:17px;height:17px;display:block" dangerouslySetInnerHTML="{{ f.icon }}"></span></span><span style="font-size:12.5px">{{ f.k }}</span></div>
+<div role="cell" style="font-size:13px">[Northwind Labs]</div>
+<div role="cell" style="min-width:0"><a href="#" style="font-size:13px;font-weight:600">{{ f.m }}</a></div>
+<div role="cell" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">{{ f.r }}</div>
+<div role="cell" style="display:flex;justify-content:flex-end"><button type="button" aria-label="{{ f.sl }}" style="display:inline-flex;align-items:center;min-height:36px;padding:0 10px;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--body);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Stop using</button></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ kAllow }}" hint-placeholder-val="{{ false }}">
+<section style="max-width:640px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Allow Axal VC to open the files you choose</h2>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Axal VC opens only the files you pick in Google’s file picker. It cannot see the rest of your Drive.</p>
+<p style="margin:0;font-size:12.5px;color:var(--mut)">Google asks you to confirm. Nothing is opened until you choose a file.</p>
+<button type="button" style="align-self:flex-start;display:inline-flex;align-items:center;min-height:40px;margin-top:4px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Allow Google files</button>
+</section>
+</sc-if>
+
+<sc-if value="{{ kNoG }}" hint-placeholder-val="{{ false }}">
+<section style="max-width:640px;background:var(--card);border:1px dashed var(--line2);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Google is not connected yet</h2>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Connect your Google account first. Then you can choose files here.</p>
+<a href="#" style="align-self:flex-start;display:inline-flex;align-items:center;min-height:36px;font-size:13.5px;font-weight:600">Open the Google page ›</a>
+</section>
+</sc-if>
+</main>
+</div>
+
+<sc-if value="{{ dlgOn }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding-top:64px;box-sizing:border-box">
+
+<sc-if value="{{ dStop }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Stop using Roadmap 2027" style="width:520px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.2);padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Stop using “Roadmap 2027”?</h2>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Product roadmap keeps the 6 rows already read, marked “No longer synced”.</p>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Axal VC can no longer open this file. The file in Google is not changed.</p>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding-top:6px"><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid #b91c1c;background:#b91c1c;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Stop using</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ dMap }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Map Metrics to Revenue and traction" style="width:780px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.2);display:flex;flex-direction:column">
+<div style="padding:20px 24px 14px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line)"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Map columns</span><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Map “Metrics” to Revenue and traction</h2><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">From Google Sheets · tab “Monthly” · 14 rows · as of 2026-10-21</span></div>
+<div style="padding:16px 24px;display:flex;flex-direction:column;gap:14px">
+<sc-if value="{{ mapErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE)"><span style="font-size:13.5px;font-weight:700;color:var(--ambT)">Date column has 3 rows that are not dates. They will be skipped.</span><span style="font-size:12.5px;color:var(--body)">Rows 4, 9 and 13 read “TBD”, “Q3” and a blank cell.</span></div></sc-if>
+<div role="table" aria-label="Column mapping" style="display:flex;flex-direction:column;gap:6px">
+<div role="row" style="display:grid;grid-template-columns:220px 24px minmax(0,1fr);gap:10px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Column in the sheet</span><span role="columnheader" aria-hidden="true"></span><span role="columnheader">Field in Revenue and traction</span></div>
+<sc-for list="{{ maps }}" as="m" hint-placeholder-count="5"><div role="row" style="display:grid;grid-template-columns:220px 24px minmax(0,1fr);gap:10px;align-items:center"><span role="cell" style="display:inline-flex;align-items:center;min-height:38px;padding:0 12px;border-radius:7px;background:var(--raised);border:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;box-sizing:border-box">{{ m.c }}</span><span aria-hidden="true" style="text-align:center;color:var(--mut)">→</span><span role="cell"><span role="combobox" aria-label="{{ m.al }}" aria-expanded="false" tabindex="0" style="{{ m.fSt }}">{{ m.f }}<span aria-hidden="true" style="color:var(--mut)">▾</span></span></span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden">
+<span style="padding:9px 12px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);background:var(--raised)">Preview · first 5 rows</span>
+<div role="row" style="display:grid;grid-template-columns:110px repeat(3,minmax(0,1fr)) 90px;gap:10px;padding:8px 12px;border-top:1px solid var(--line);font-size:12px;font-weight:700"><span>Month</span><span>MRR (EUR)</span><span>Active users</span><span>Paying customers</span><span></span></div>
+<sc-for list="{{ prevRows }}" as="r" hint-placeholder-count="5"><div role="row" style="{{ r.st }}"><span style="{{ r.cSt }}">{{ r.m }}</span><span style="{{ r.cSt }}">{{ r.a }}</span><span style="{{ r.cSt }}">{{ r.u }}</span><span style="{{ r.cSt }}">{{ r.p }}</span><span><sc-if value="{{ r.skip }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--card);border:1px solid var(--ambE);color:var(--ambT)">Skipped</span></sc-if></span></div></sc-for>
+</div>
+</div>
+<div style="padding:14px 24px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:12.5px;color:var(--mut)">Axal VC reads this sheet. It never changes it.</span><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Use this mapping</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ dForm }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Map Waitlist survey to Demand and urgency signals" style="width:640px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.2);display:flex;flex-direction:column">
+<div style="padding:20px 24px 14px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line)"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Map a question</span><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Map “Waitlist survey” to Demand and urgency signals</h2><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">From Google Forms · 42 responses · as of 2026-10-21</span></div>
+<div style="padding:16px 24px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:700">Question</span><div role="radiogroup" aria-label="Question" style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ qs }}" as="q" hint-placeholder-count="3"><div role="radio" aria-checked="{{ q.on }}" tabindex="0" style="{{ q.rowSt }}"><span aria-hidden="true" style="{{ q.box }}">{{ q.mk }}</span><span style="font-size:13.5px">{{ q.t }}</span></div></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:12.5px;font-weight:700">Answers that count as demand</span><sc-for list="{{ ans }}" as="a" hint-placeholder-count="4"><div role="checkbox" aria-checked="{{ a.on }}" tabindex="0" style="{{ a.rowSt }}"><span aria-hidden="true" style="{{ a.box }}">{{ a.mk }}</span><span style="flex:1;font-size:13.5px">{{ a.t }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--body)">{{ a.n }} responses</span></div></sc-for></div>
+<div role="status" style="display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:var(--lav);border:1px solid var(--lavE)"><span style="font-size:13.5px;font-weight:700">18 responses would be proposed as demand signals to confirm.</span><span style="font-size:12.5px;color:var(--body)">No names or emails are kept.</span></div>
+</div>
+<div style="padding:14px 24px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px"><span style="flex:1;font-size:12.5px;color:var(--mut)">Each signal waits for you to confirm it in Demand and urgency signals.</span><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Propose 18 signals</button></div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ crop }}" hint-placeholder-val="{{ false }}">
+<div style="box-sizing:border-box;padding:28px 30px 32px;display:flex;flex-direction:column;gap:18px">
+<sc-if value="{{ modHead }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:5px"><nav aria-label="Breadcrumb" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">{{ modCrumb }}</nav><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">{{ modTitle }}</h1><p style="margin:0;font-size:13.5px;color:var(--mut)">{{ modLine }}</p></div></sc-if>
+
+<sc-if value="{{ gCard }}" hint-placeholder-val="{{ false }}">
+<section aria-label="From Google" style="background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;flex-wrap:wrap">
+<span aria-hidden="true" style="width:34px;height:34px;flex:none;border-radius:9px;background:var(--card);border:1px solid var(--line2);display:grid;place-items:center;font-size:15px;font-weight:800">G</span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">From Google</h2><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">{{ srcLine }}</span></div>
+<div style="display:flex;gap:8px"><sc-for list="{{ gBtns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.st }}">{{ b.t }}</button></sc-for></div>
+</div>
+<sc-if value="{{ gPart }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;align-items:center;gap:12px;margin:0 18px 12px;padding:12px 14px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE)"><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:700;color:var(--ambT)">Partly synced: 4 of 6 rows read.</span><span style="font-size:12.5px;color:var(--body)">Rows 9 and 12 in “Roadmap 2027” have an empty Objective cell, so they were not read. The 4 rows below are current.</span></span><button type="button" style="display:inline-flex;align-items:center;min-height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;flex:none">Sync again</button></div></sc-if>
+<sc-if value="{{ gUnread }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;align-items:center;gap:12px;margin:0 18px 12px;padding:12px 14px;border-radius:10px;background:var(--negT);border:1px solid var(--negE)"><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:700;color:var(--neg)">We could not read “Roadmap 2027”.</span><span style="font-size:12.5px;color:var(--body)">Google says the file was moved, or you no longer have access to it. The 6 rows read on 2026-10-21 are kept below.</span></span><button type="button" style="display:inline-flex;align-items:center;min-height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;flex:none">Choose again</button></div></sc-if>
+<sc-if value="{{ gTable }}" hint-placeholder-val="{{ false }}">
+<div role="table" aria-label="Roadmap rows from Google">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px 92px 80px;gap:12px;padding:10px 18px;border-top:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Objective</span><span role="columnheader">Key result</span><span role="columnheader">Quarter</span><span role="columnheader">Progress</span><span role="columnheader" aria-label="Actions"></span></div>
+<sc-for list="{{ okr }}" as="o" hint-placeholder-count="6"><div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px 92px 80px;gap:12px;align-items:center;padding:11px 18px;border-top:1px solid var(--line)"><span role="cell" style="font-size:13px;font-weight:600">{{ o.o }}</span><span role="cell" style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">{{ o.k }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">From Google Sheets, as of 2026-10-21</span></span><span role="cell" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">{{ o.q }}</span><span role="cell" title="{{ o.tip }}" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">{{ o.p }}</span><span role="cell" style="display:flex;justify-content:flex-end"><button type="button" aria-label="{{ o.dl }}" style="display:inline-flex;align-items:center;min-height:34px;padding:0 8px;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--neg);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Delete</button></span></div></sc-for>
+</div>
+<sc-if value="{{ gDelNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:10px 18px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mut)">2 rows you deleted stay deleted. The “—” under Progress means the sheet’s cell is empty, so nothing was recorded.</p></sc-if>
+</sc-if>
+<sc-if value="{{ gLoad }}" hint-placeholder-val="{{ false }}"><div aria-busy="true"><sc-for list="{{ sk }}" as="s" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px 92px;gap:12px;padding:14px 18px;border-top:1px solid var(--line)"><span style="display:block;height:12px;width:70%;border-radius:999px;background:var(--chip)"></span><span style="display:block;height:12px;width:85%;border-radius:999px;background:var(--chip)"></span><span style="display:block;height:12px;width:60%;border-radius:999px;background:var(--chip)"></span><span style="display:block;height:12px;width:50%;border-radius:999px;background:var(--chip)"></span></div></sc-for><span style="display:block;padding:10px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--mut)">Reading…</span></div></sc-if>
+<sc-if value="{{ gEmpty }}" hint-placeholder-val="{{ false }}"><div style="margin:0 18px 18px;padding:28px 20px;border-radius:10px;border:1px dashed var(--line2);display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><span style="font-size:14px;font-weight:700">No Google files chosen for this module yet.</span><span style="font-size:12.5px;color:var(--mut)">Axal VC opens only the files you choose.</span><button type="button" style="display:inline-flex;align-items:center;min-height:36px;padding:0 13px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Choose from Google Drive</button></div></sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ kDel }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Delete this row" style="width:540px;box-sizing:border-box;align-self:center;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.14);padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Delete this row?</h2>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">“Median booking time under 2 minutes” leaves Product roadmap. It stays deleted when you sync again.</p>
+<p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">“Roadmap 2027” in Google is not changed.</p>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding-top:6px"><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancel</button><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid #b91c1c;background:#b91c1c;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Delete</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ kDeck }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Proposal from Google Slides" style="max-width:880px;background:var(--card);border:1px solid var(--lavE);border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;gap:12px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--vdeep)">From Google Slides · as of 2026-10-21</span>
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Import “Seed deck v7” as version 8?</h2>
+<p style="margin:0;font-size:13.5px;color:var(--body)">Version 7 stays as it is. You can switch back to it at any time.</p>
+<ol style="margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px"><sc-for list="{{ slides }}" as="s" hint-placeholder-count="12"><li style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line)"><span style="width:22px;flex:none;font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">{{ s.n }}</span><span style="font-size:13.5px">{{ s.t }}</span></li></sc-for></ol>
+<div style="display:flex;gap:8px;padding-top:4px"><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Accept</button><button type="button" style="display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--vio);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Dismiss</button></div>
+</section>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ ph }}" hint-placeholder-val="{{ false }}">
+<div style="position:relative;width:390px;height:844px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column">
+<div style="height:56px;flex:none;box-sizing:border-box;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:4px;padding:0 6px">
+<sc-if value="{{ phList }}" hint-placeholder-val="{{ true }}"><a href="#" style="display:inline-flex;align-items:center;min-height:44px;padding:0 10px;color:var(--vio);font-weight:600;font-size:14px;text-decoration:none">‹ Connectors</a><span style="flex:1"></span></sc-if>
+<sc-if value="{{ phMod }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Menu" style="width:44px;height:44px;border:none;background:transparent;color:var(--ink);font-size:18px;cursor:pointer">☰</button><img src="/axal-mark.png" alt="Axal VC" style="width:26px;height:26px;display:block;border-radius:6px;object-fit:contain"><span style="flex:1;padding-left:6px;font-size:16px;font-weight:800;letter-spacing:-0.02em">Build</span></sc-if>
+<button type="button" aria-label="Notifications" style="width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center;color:var(--body);cursor:pointer"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"></path></svg></button>
+</div>
+<sc-if value="{{ phList }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Google Workspace</h1>
+<p style="margin:0;font-size:13px;line-height:1.5;color:var(--mut)">Choose Google files for your modules. Axal VC reads only the files you choose.</p>
+<div style="display:flex"><span style="{{ stPill.st }}">{{ stPill.t }}</span></div>
+<button type="button" style="min-height:48px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:pointer">Choose files</button>
+<div style="display:flex;align-items:baseline;gap:8px;padding-top:4px"><h2 style="margin:0;font-size:15px;font-weight:800">Files you chose</h2><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">5</span></div>
+<sc-for list="{{ files }}" as="f" hint-placeholder-count="5"><article style="display:flex;gap:10px;align-items:center;padding:10px 6px 10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line)"><span role="img" aria-label="{{ f.k }}" style="width:34px;height:34px;flex:none;border-radius:8px;background:var(--chip);color:var(--body);display:grid;place-items:center"><span style="width:18px;height:18px;display:block" dangerouslySetInnerHTML="{{ f.icon }}"></span></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.n }}</span><span style="font-size:12px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.m }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">Last read {{ f.r }}</span></span><button type="button" aria-label="{{ f.sl }}" style="min-height:44px;padding:0 10px;flex:none;border-radius:9px;border:1px solid transparent;background:transparent;color:var(--body);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer">Stop using</button></article></sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ phMod }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<nav aria-label="Breadcrumb" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Build › Product roadmap</nav>
+<h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Product roadmap</h1>
+<p style="margin:0;font-size:13px;line-height:1.5;color:var(--mut)">What you will build next, and the evidence behind each item.</p>
+<button type="button" aria-expanded="false" style="display:flex;align-items:center;gap:10px;min-height:64px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font-family:'Space Grotesk',sans-serif;cursor:pointer;box-sizing:border-box"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;border:1px solid var(--line2);display:grid;place-items:center;font-size:14px;font-weight:800">G</span><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">From Google</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">Roadmap 2027 · 6 rows · as of 2026-10-21</span></span><span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+<button type="button" aria-expanded="false" style="display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font-family:'Space Grotesk',sans-serif;cursor:pointer;box-sizing:border-box"><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">Roadmap items</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">9 items · 3 from Validate</span></span><span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+<button type="button" aria-expanded="false" style="display:flex;align-items:center;gap:10px;min-height:56px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:left;font-family:'Space Grotesk',sans-serif;cursor:pointer;box-sizing:border-box"><span style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;font-weight:700">Must-haves</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">4 of 6 done</span></span><span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+</div>
+<nav aria-label="Cycles" style="height:64px;flex:none;box-sizing:border-box;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr)"><a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:var(--mut);text-decoration:none"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ navIc.v }}"></span>Validate</a><a href="#" aria-current="page" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:700;color:var(--vio);text-decoration:none"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ navIc.b }}"></span>Build</a><a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:var(--mut);text-decoration:none"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ navIc.r }}"></span>Raise</a><a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:var(--mut);text-decoration:none"><span style="width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ navIc.g }}"></span>Grow</a><a href="#" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:600;color:var(--mut);text-decoration:none"><span style="font-size:18px;line-height:20px">⋯</span>More</a></nav>
+</sc-if>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;gw1&quot;,&quot;gw1d&quot;,&quot;gw2a&quot;,&quot;gw2b&quot;,&quot;gw3&quot;,&quot;gw3d&quot;,&quot;gw4&quot;,&quot;gw4e&quot;,&quot;gw5&quot;,&quot;gw6&quot;,&quot;gw7l&quot;,&quot;gw7e&quot;,&quot;gw7u&quot;,&quot;gw7p&quot;,&quot;gw8a&quot;,&quot;gw8b&quot;,&quot;gw8c&quot;,&quot;gw8d&quot;],&quot;default&quot;:&quot;gw1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const v = this.props.v || 'gw1';
+    const dark = v === 'gw8c' || v === 'gw8d';
+    const ph = /^gw8/.test(v);
+    const crop = ['gw3', 'gw3d', 'gw6', 'gw7l', 'gw7e', 'gw7u', 'gw7p'].indexOf(v) >= 0;
+    const desk = !ph && !crop;
+    const LIGHT = '--bg:#f4f3f7;--card:#fff;--raised:#faf9fc;--ink:#18181b;--body:#3f3a47;--mut:#6b6577;--line:#ececf1;--line2:#e2dfe8;--vio:#7c3aed;--vdeep:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--chip:#f4f3f7;--pos:#047857;--posT:rgba(4,120,87,.09);--neg:#b91c1c;--negT:#fef2f2;--negE:#fecaca;--ambF:#fdf3cf;--ambT:#92400e;--ambE:#fcd34d;--scrim:rgba(24,24,27,.32);';
+    const DARK = '--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--body:#d1d5db;--mut:#9ca3af;--line:#374151;--line2:#4b5563;--vio:#a78bfa;--vdeep:#c4b5fd;--lav:rgba(167,139,250,.14);--lavE:rgba(167,139,250,.45);--chip:#1f2937;--pos:#34d399;--posT:rgba(52,211,153,.12);--neg:#f87171;--negT:rgba(248,113,113,.1);--negE:rgba(248,113,113,.4);--ambF:rgba(252,211,77,.12);--ambT:#fcd34d;--ambE:rgba(252,211,77,.45);--scrim:rgba(0,0,0,.5);';
+    const rootSt = (dark ? DARK : LIGHT) + "position:relative;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;min-height:100%";
+    const svg = (p, w) => ({ __html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 1.9) + '" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + p + '</svg>' });
+    const NAV = [['Studio', '<path d="M4 11 12 4l8 7v9H4Z"/>'], ['Spin-Out Lab', '<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>'], ['Validate', '<path d="M20 6 9 17l-5-5"/>'], ['Build', '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'], ['Raise', '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'], ['Grow', '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'], ['Network', '<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'], ['Research', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>']];
+    const side = NAV.map(([t, p]) => ({ t, icon: svg(p) }));
+    const navIc = { v: svg(NAV[2][1]), b: svg(NAV[3][1]), r: svg(NAV[4][1]), g: svg(NAV[5][1]) };
+    const K = { Doc: '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M9.5 12h6M9.5 15.5h6M9.5 9h3"/>', Form: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 8.5h1M11.5 8.5h4M8.5 12.5h1M11.5 12.5h4M8.5 16.5h1M11.5 16.5h4"/>', Sheet: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9.5h16M4 15h16M10 4v16"/>', Slides: '<rect x="3.5" y="5" width="17" height="12" rx="2"/><path d="M12 17v3M8.5 20h7"/>' };
+    const FILES = [['Interview notes — [Customer 4]', 'Doc', 'Validate › Customer research', '2026-10-21 09:12', ''], ['Waitlist survey', 'Form', 'Validate › Demand and urgency signals', '2026-10-21 08:40', '42 responses'], ['Roadmap 2027', 'Sheet', 'Build › Product roadmap', '2026-10-21 07:55', '6 rows used'], ['Seed deck v7', 'Slides', 'Raise › Pitch deck', '2026-10-20 18:02', '12 slides'], ['Metrics', 'Sheet', 'Grow › Revenue and traction', '2026-10-21 09:30', '14 rows used']];
+    const files = FILES.map(([n, k, m, r, x]) => ({ n, k, icon: svg(K[k], 1.7), m, r, x, sl: 'Stop using ' + n }));
+    const PB = 'display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;box-sizing:border-box;';
+    const kList = ['gw1', 'gw1d', 'gw4', 'gw4e', 'gw5', 'gw8a', 'gw8c'].indexOf(v) >= 0;
+    const stPill = v === 'gw2a' ? { t: 'Files not allowed yet', st: PB + 'background:var(--ambF);color:var(--ambT);border:1px solid var(--ambE)' } : v === 'gw2b' ? { t: 'Google not connected', st: PB + 'background:var(--chip);color:var(--body)' } : { t: '✓ Connected · [name]@example.com', st: PB + 'background:var(--posT);color:var(--pos)' };
+    const mapErr = v === 'gw4e';
+    const FS = (mut) => "display:flex;align-items:center;justify-content:space-between;min-height:38px;padding:0 12px;border-radius:7px;border:1px solid var(--line2);background:var(--card);box-sizing:border-box;font-size:13px;font-weight:600;color:" + (mut ? 'var(--mut)' : 'var(--ink)');
+    const maps = [['Date', 'Month'], ['MRR', 'MRR (EUR)'], ['Active users', 'Active users'], ['Paying accounts', 'Paying customers'], ['Notes', 'Don’t use']].map(([c, f]) => ({ c, f, al: 'Field for the column ' + c, fSt: FS(f === 'Don’t use') }));
+    const R = (m, a, u, p, skip) => ({ m, a, u, p, skip: !!skip, st: "display:grid;grid-template-columns:110px repeat(3,minmax(0,1fr)) 90px;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;" + (skip ? 'background:var(--ambF)' : ''), cSt: skip ? 'color:var(--mut);text-decoration:line-through' : '' });
+    const prevRows = mapErr ? [R('2026-05', '[€4,100]', '128', '9'), R('2026-06', '[€5,300]', '151', '12'), R('TBD', '[€5,900]', '166', '13', 1), R('2026-07', '[€6,800]', '190', '15'), R('2026-08', '[€8,200]', '214', '18')] : [R('2026-05', '[€4,100]', '128', '9'), R('2026-06', '[€5,300]', '151', '12'), R('2026-07', '[€6,800]', '190', '15'), R('2026-08', '[€8,200]', '214', '18'), R('2026-09', '[€9,600]', '241', '21')];
+    const BOX = (rd, on) => 'display:grid;place-items:center;width:18px;height:18px;flex:none;box-sizing:border-box;font-size:10px;font-weight:800;line-height:1;border-radius:' + (rd ? '999px' : '5px') + ';' + (on ? 'background:#7c3aed;border:1px solid #7c3aed;color:#fff' : 'background:var(--card);border:1.5px solid var(--line2);color:transparent');
+    const ROW = (on) => 'display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border-radius:10px;box-sizing:border-box;cursor:pointer;' + (on ? 'background:var(--lav);border:1px solid var(--lavE)' : 'background:var(--card);border:1px solid var(--line)');
+    const qs = ['Would you pay for this?', 'What do you use today?', 'How many sites do you run?'].map((t, i) => ({ t, on: String(i === 0), mk: i === 0 ? '●' : '', box: BOX(1, i === 0), rowSt: ROW(i === 0) }));
+    const ans = [['Yes, now', 11, 1], ['Yes, later', 7, 1], ['Not now', 15, 0], ['No', 9, 0]].map(([t, n, on]) => ({ t, n: String(n), on: String(!!on), mk: on ? '✓' : '', box: BOX(0, !!on), rowSt: ROW(!!on) }));
+    const OKR = [['Crews book inspections without calling', '40% of inspections booked in the app', 'Q4 2026', '35%'], ['Crews book inspections without calling', 'Median booking time under 2 minutes', 'Q4 2026', '60%'], ['Win the first paying sites', '10 paying sites', 'Q1 2027', '20%'], ['Win the first paying sites', '[€12,000] MRR', 'Q1 2027', '15%'], ['Ship offline mode', 'Works without signal on 3 pilot sites', 'Q1 2027', ''], ['Ship offline mode', 'Sync conflicts under 1 in 500', 'Q2 2027', '10%']];
+    const okrAll = OKR.map(([o, k, q, p]) => ({ o, k, q, p: p || '—', tip: p ? '' : 'Not recorded: the Progress cell in the sheet is empty', dl: 'Delete the row “' + k + '”' }));
+    const gPart = v === 'gw7p', gUnread = v === 'gw7u', gLoad = v === 'gw7l', gEmpty = v === 'gw7e';
+    const gTable = v === 'gw3' || gPart || gUnread;
+    const gCard = v === 'gw3' || gPart || gUnread || gLoad || gEmpty;
+    const srcLine = gLoad ? 'Reading “Roadmap 2027”…' : gEmpty ? 'No file chosen' : gUnread ? '“Roadmap 2027” · last read 2026-10-21' : '“Roadmap 2027” · From Google Sheets, as of 2026-10-21';
+    const BS = "display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 13px;border-radius:9px;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;box-sizing:border-box;white-space:nowrap;border:1px solid var(--line2);background:var(--card);color:var(--ink)";
+    const gBtns = gEmpty || gLoad ? [] : [{ t: 'Choose from Google Drive', st: BS }, { t: 'Sync from Google', st: BS }];
+    const isDeck = v === 'gw6';
+    const slides = ['Title', 'Problem', 'Why now', 'Solution', 'Product', 'Traction', 'Market', 'Business model', 'Competition', 'Team', 'Use of funds', 'The ask'].map((t, i) => ({ t, n: String(i + 1).padStart(2, '0') }));
+    return {
+      rootSt, desk, crop, ph, side, navIc, files, stPill,
+      kList: kList && !ph, kAllow: v === 'gw2a', kNoG: v === 'gw2b',
+      dlgOn: ['gw1d', 'gw4', 'gw4e', 'gw5'].indexOf(v) >= 0, dStop: v === 'gw1d', dMap: v === 'gw4' || mapErr, dForm: v === 'gw5', mapErr, maps, prevRows, qs, ans,
+      modHead: v === 'gw3' || isDeck, modCrumb: isDeck ? 'Raise › Pitch deck' : 'Build › Product roadmap', modTitle: isDeck ? 'Pitch deck' : 'Product roadmap', modLine: isDeck ? 'The deck investors see, version by version.' : 'What you will build next, and the evidence behind each item.',
+      gCard, srcLine, gBtns, gPart, gUnread, gTable, gLoad, gEmpty, gDelNote: v === 'gw3', okr: gPart ? okrAll.slice(0, 4) : okrAll,
+      kDel: v === 'gw3d', kDeck: isDeck, slides,
+      phList: v === 'gw8a' || v === 'gw8c', phMod: v === 'gw8b' || v === 'gw8d', sk: [1, 2, 3, 4],
+    };
+  }
+}
+</script>
+</body></html>

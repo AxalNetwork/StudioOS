@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:284px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .seam{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .cons{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .prop{background:#f4fdf8;border:1px solid #a7f3d0;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#d9f7e7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .vm{font-size:11.5px;font-weight:700;color:#047857}
+  </style>
+</helmet>
+
+<!-- ══════════ C1 · FOUNDERS ══════════ -->
+<section class="ab" id="c1">
+  <div class="ab-hd"><a class="ab-id" href="#c1">C1</a><span class="ab-nm">Founders — WORK BOARD</span><span class="ab-sub">emerald · /cohorts/founders</span></div>
+  <div class="ab-sub" style="max-width:920px;margin:-6px 0 16px">Every assigned founder with week state, progress and flags. The compressed zone shows who is behind; depth shows why, and what each founder owes before the week closes.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navC }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Cohorts</span><span>‹</span><span style="font-weight:700;color:#18181b">Founders</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Founders</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ f_sub }}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ f_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Bulk: nudge behind-plan</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ f_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:15px">
+        <sc-for list="{{ f_lanes }}" as="ln" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px">
+              <span style="font-size:12px;font-weight:800">{{ ln.name }}</span>
+              <span class="num" style="font-size:11px;color:#615c6e;font-weight:700">{{ ln.count }}</span>
+            </div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ ln.cards }}" as="c" hint-placeholder-count="2">
+                <div style="{{ c.cardStyle }}">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <div style="width:26px;height:26px;border-radius:8px;background:#d9f7e7;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800;flex:none">{{ c.init }}</div>
+                    <span style="font-size:12.5px;font-weight:800;min-width:0">{{ c.who }}</span>
+                  </div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.45">{{ c.company }}</div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:9px"><div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div></div>
+                  <div class="num" style="font-size:10px;color:{{ c.ink }};margin-top:5px;font-weight:700">{{ c.progress }}</div>
+                  <sc-if value="{{ c.flag }}"><div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;margin-top:8px;line-height:1.45">{{ c.flag }}</div></sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{ ln.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:10px;padding:14px;text-align:center;font-size:11px;color:#615c6e">Nobody here yet</div></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:14px;line-height:1.6">{{ f_note }}</div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Cohorts" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ C2 · GUIDANCE ══════════ -->
+<section class="ab" id="c2">
+  <div class="ab-hd"><a class="ab-id" href="#c2">C2</a><span class="ab-nm">Guidance — FEED</span><span class="ab-sub">emerald · /cohorts/guidance</span></div>
+  <div class="ab-sub" style="max-width:920px;margin:-6px 0 16px">The full queue with threads, and the archive across cohorts — which is where you notice you have answered the same question eleven times.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navC }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Cohorts</span><span>‹</span><span style="font-weight:700;color:#18181b">Guidance</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Guidance</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every question across both cohorts, with its thread and the founder's state beside it.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ g_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Bulk: mark answered</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ g_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Open queue</span><span class="zs">Sorted by response-time state, not arrival</span></div>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ g_queue }}" as="q" hint-placeholder-count="4">
+            <div style="{{ q.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1">
+                <div style="width:32px;height:32px;border-radius:9px;background:#d9f7e7;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;flex:none">{{ q.init }}</div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13px;font-weight:700">{{ q.who }}</span><span class="tag">{{ q.cohort }}</span><span class="tag">{{ q.week }}</span>
+                    <sc-if value="{{ q.consent }}"><span class="cons" style="color:#b91c1c;background:#fef2f2;border:1px solid #fecaca"><span style="width:6px;height:6px;border-radius:50%;background:#dc2626;flex:none"></span>{{ q.consent }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ q.q }}</div>
+                  <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ q.thread }}</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:none">
+                <span style="{{ q.pill }}">{{ q.state }}</span>
+                <span class="vm" style="cursor:pointer">Open thread</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Batch · prep-packs</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ g_cost }}</span></div>
+          <div style="font-size:12px;color:#14532d;line-height:1.65">{{ g_batch }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Run batch</span><span class="gho">Pick slots</span><span class="dis">Not now</span><span class="shield" style="margin-left:auto">Screened before send</span></div>
+        </div>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Archive · across cohorts</span><span class="zs">{{ g_archLabel }}</span></div>
+        <div style="display:grid;grid-template-columns:1.6fr .7fr .8fr;gap:11px"><span class="th">Recurring question</span><span class="th">Asked</span><span class="th">Action</span></div>
+        <sc-for list="{{ g_archive }}" as="a" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.6fr .7fr .8fr;gap:11px;align-items:center">
+            <span class="td">{{ a.q }}</span><span class="td num" style="font-weight:700">{{ a.n }}</span><span class="td" style="color:#047857;font-weight:600">{{ a.action }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ g_archNote }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Cohorts" hint-size="100%,720px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ C3 · THIS WEEK ══════════ -->
+<section class="ab" id="c3">
+  <div class="ab-hd"><a class="ab-id" href="#c3">C3</a><span class="ab-nm">This week — COLLECTION</span><span class="ab-sub">emerald · /cohorts/this-week</span></div>
+  <div class="ab-sub" style="max-width:920px;margin:-6px 0 16px">Module content, materials, and every past week. Depth is the archive: a cohort running for the fourth time should not rebuild Week 2 from memory.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navC }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Cohorts</span><span>‹</span><span style="font-weight:700;color:#18181b">This week</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">This week</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ w_sub }}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ w_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Duplicate from Cohort 3</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:15px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Week 2 · Solution &amp; Roadmap</span><span class="zs">Cohort 4 · live</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ w_modules }}" as="m" hint-placeholder-count="4">
+              <div style="{{ m.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700">{{ m.name }}</span><span class="tag">{{ m.kind }}</span></div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">{{ m.meta }}</div>
+                </div>
+                <span style="{{ m.pill }}">{{ m.state }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Past weeks</span><span class="zs">{{ w_archLabel }}</span></div>
+          <div style="display:grid;grid-template-columns:.7fr 1.3fr .8fr;gap:11px"><span class="th">Week</span><span class="th">Module</span><span class="th">Reuse</span></div>
+          <sc-for list="{{ w_past }}" as="p" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:.7fr 1.3fr .8fr;gap:11px;align-items:center">
+              <span class="td num" style="font-weight:600">{{ p.week }}</span><span class="td">{{ p.module }}</span>
+              <span class="td" style="color:{{ p.ink }};font-weight:600">{{ p.reuse }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ w_archNote }}</div>
+        </div>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Materials</span><span class="zs">Versioned · what each cohort actually received</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+          <sc-for list="{{ w_materials }}" as="m" hint-placeholder-count="4">
+            <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:11px;padding:13px 14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span class="tag">{{ m.kind }}</span><span class="num" style="font-size:10px;color:#615c6e">{{ m.ver }}</span></div>
+              <div style="font-size:12.5px;font-weight:700;margin-top:9px;line-height:1.4">{{ m.name }}</div>
+              <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:6px">{{ m.meta }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Cohorts" hint-size="100%,680px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ C4 · CALENDAR ══════════ -->
+<section class="ab" id="c4">
+  <div class="ab-hd"><a class="ab-id" href="#c4">C4</a><span class="ab-nm">Calendar — FEED</span><span class="ab-sub">emerald · /cohorts/calendar</span></div>
+  <div class="ab-sub" style="max-width:920px;margin:-6px 0 16px">Sessions, milestone reviews and Demo Day logistics in one chronology. Cohort obligations and paid client work compete for the same hours, so this page shows the collision rather than hiding it in two calendars.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navC }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Cohorts</span><span>‹</span><span style="font-weight:700;color:#18181b">Calendar</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Calendar</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ cal_sub }}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ cal_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Export to calendar</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ cal_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Next fourteen days</span><span class="zs">Cohort and client work in one stream</span></div>
+        <div style="display:grid;gap:9px">
+          <sc-for list="{{ cal_items }}" as="c" hint-placeholder-count="6">
+            <div style="{{ c.rowStyle }}">
+              <div style="width:64px;flex:none;text-align:center">
+                <div class="num" style="font-size:15px;font-weight:800;letter-spacing:-.02em">{{ c.day }}</div>
+                <div class="num" style="font-size:10px;color:#615c6e;margin-top:2px">{{ c.time }}</div>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:700">{{ c.title }}</span>
+                  <span style="{{ c.kindPill }}">{{ c.kind }}</span>
+                  <sc-if value="{{ c.rec }}"><span class="cons" style="color:#b91c1c;background:#fef2f2;border:1px solid #fecaca"><span style="width:6px;height:6px;border-radius:50%;background:#dc2626;flex:none"></span>Recording on</span></sc-if>
+                </div>
+                <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.5">{{ c.meta }}</div>
+                <sc-if value="{{ c.clash }}"><div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:7px 9px;margin-top:8px;line-height:1.5">{{ c.clash }}</div></sc-if>
+              </div>
+              <span style="{{ c.readyPill }}">{{ c.ready }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ cal_note }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Cohorts" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ C5 · OUTCOMES ══════════ -->
+<section class="ab" id="c5">
+  <div class="ab-hd"><a class="ab-id" href="#c5">C5</a><span class="ab-nm">Outcomes — COLLECTION</span><span class="ab-sub">emerald · /cohorts/outcomes</span></div>
+  <div class="ab-sub" style="max-width:920px;margin:-6px 0 16px">Graduated founders and what happened next — with consent gating every export, because a cohort result belongs to the founder who produced it before it belongs to the advisor who taught them.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navC }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#047857;font-weight:700">Cohorts</span><span>‹</span><span style="font-weight:700;color:#18181b">Outcomes</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Outcomes</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ o_sub }}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ o_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Bulk: request consent</span><span class="vm" style="cursor:pointer">{{ o_export }}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ o_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Graduates</span><span class="zs">Consent state decides what leaves this page</span></div>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ o_grads }}" as="g" hint-placeholder-count="5">
+            <div style="{{ g.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:800">{{ g.who }}</span><span class="tag">{{ g.cohort }}</span>
+                  <span class="seam"><span class="seamd"></span>{{ g.src }}</span>
+                  <span class="cons" style="{{ g.consStyle }}"><span style="{{ g.consDot }}"></span>{{ g.consent }}</span>
+                </div>
+                <div style="font-size:12px;color:#3f3a49;margin-top:7px;line-height:1.6">{{ g.outcome }}</div>
+                <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:6px">{{ g.meta }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:none">
+                <span style="{{ g.usePill }}">{{ g.usable }}</span>
+                <span class="vm" style="cursor:pointer">{{ g.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ o_note }}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Cohort comparison</span><span class="zs">Graduation and outcome rate</span></div>
+          <div style="display:grid;grid-template-columns:.8fr .7fr .7fr 1.3fr;gap:11px"><span class="th">Cohort</span><span class="th">Started</span><span class="th">Graduated</span><span class="th">Read</span></div>
+          <sc-for list="{{ o_cohorts }}" as="c" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:.8fr .7fr .7fr 1.3fr;gap:11px;align-items:center">
+              <span class="td" style="font-weight:600">{{ c.name }}</span><span class="td num">{{ c.started }}</span>
+              <span class="td num" style="font-weight:700;color:{{ c.ink }}">{{ c.grad }}</span><span class="td">{{ c.read }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Track-record export</span><span class="zs">What Expertise is allowed to show</span></div>
+          <div class="prop">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · export</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ o_cost }}</span></div>
+            <div style="font-size:12px;color:#14532d;line-height:1.65">{{ o_draft }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Export {{ o_grantedN }}</span><span class="gho">Chase the rest</span><span class="dis">Discard</span></div>
+          </div>
+          <div style="border:1px solid #fecaca;background:#fffbfb;border-radius:11px;padding:12px 14px;margin-top:12px">
+            <div style="font-size:11.5px;color:#7f1d1d;line-height:1.6">{{ o_consentNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="emerald" page="Cohorts" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      prac:  this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      coh:   this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/>'),
+      exp:   this.ic('<circle cx="12" cy="9" r="5"/><path d="M8.5 13.5 7 22l5-2.5L17 22l-1.5-8.5"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>')
+    };
+    const EM = '#047857', EMT = '#f0fdf6';
+    const navC = [['Home',I.home],['Practice',I.prac],['Cohorts',I.coh],['Expertise',I.exp],['Network',I.net],['Research',I.res],['Practice Settings',I.cog]]
+      .map(([label, icon]) => ({ label, icon,
+        style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+          + (label === 'Cohorts' ? 'font-weight:700;color:' + EM + ';background:' + EMT + ';box-shadow:inset 2px 0 0 ' + EM : 'font-weight:600;color:#4a4553') }));
+
+    const c4 = (n) => '$' + n.toFixed(4);
+    const c5 = (n) => '$' + n.toFixed(5);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:#f2fdf7;color:' + EM + ';border:1px solid #a7f3d0' : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const views = (list) => list.map((l, i) => ({ label:l, style:seg(i === 0) }));
+    const pill = (t) => {
+      const M = { 'On plan':['#ecfdf5','#047857','#a7f3d0'], 'Ready':['#ecfdf5','#047857','#a7f3d0'],
+                  'Answered':['#ecfdf5','#047857','#a7f3d0'], 'Same day':['#ecfdf5','#047857','#a7f3d0'],
+                  'Published':['#ecfdf5','#047857','#a7f3d0'], 'Publishable':['#ecfdf5','#047857','#a7f3d0'],
+                  'Behind':['#fffbeb','#92400e','#fde68a'], 'Waiting':['#fffbeb','#92400e','#fde68a'],
+                  'Draft':['#fffbeb','#92400e','#fde68a'], 'Prep missing':['#fffbeb','#92400e','#fde68a'],
+                  'Blocked':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'],
+                  'At risk':['#fef2f2','#b91c1c','#fecaca'] };
+      const c = M[t] || ['#f4f4f6','#615c6e','#e4e4e8'];
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;flex:none';
+    };
+
+    // ══ ONE cohort record, declared first: it sets each cohort's current week, so a founder's
+    // lane is a fact about their cohort rather than a field that can drift from it. ══
+    const WEEKS = 4;
+    const COHORTS = [
+      { name:'Cohort 4', started:6, week:2, running:true },
+      { name:'Cohort 3', started:6, week:4, running:true, note:'Finishes at Demo Day Sep 3' },
+      { name:'Cohort 2', started:5, week:WEEKS, graduated:5 },
+      { name:'Cohort 1', started:4, week:WEEKS, graduated:3 }
+    ];
+    const cohortOf = (name) => COHORTS.filter(c => c.name === name)[0];
+    const gradTotal = COHORTS.reduce((a, c) => a + (c.graduated || 0), 0);
+    const doneCohorts = COHORTS.filter(c => !c.running);
+    const runningCohorts = COHORTS.filter(c => c.running);
+    const weeksRun = COHORTS.reduce((a, c) => a + c.week, 0);
+
+    // ══ ONE founder record. Lanes, stats and the note all derive from it. ══
+    const FOUNDERS = [
+      { who:'Amara Osei', init:'AO', company:'Tessellate · design tooling', cohort:'Cohort 4', done:5, total:8 },
+      { who:'Tobias Lindqvist', init:'TL', company:'Corvid Labs · dev infra', cohort:'Cohort 4', done:3, total:8 },
+      { who:'Nadia Okonkwo', init:'NO', company:'Meriwether · health data', cohort:'Cohort 3', done:14, total:16 },
+      { who:'Guillaume Lauzier', init:'GL', company:'Novacraft · async workflow', cohort:'Cohort 3', done:16, total:16 },
+      { who:'Priya Anand', init:'PA', company:'Halcyon · logistics', cohort:'Cohort 4', done:2, total:8 }
+    ];
+    // A founder's lane IS their cohort's week — nobody sits in a week their cohort has left.
+    const weekOf = (f) => cohortOf(f.cohort).week;
+    // Every prose count of "who is in this week's module" comes from here — a founder changing
+    // lane cannot leave a hand-typed "both" or "of 2" behind on another artboard.
+    // NB: c4 / c5 further down are currency formatters — these are deliberately named apart.
+    const inCohort = (name) => FOUNDERS.filter(f => f.cohort === name);
+    const c4Founders = () => inCohort('Cohort 4');
+    const c4Count = () => c4Founders().length;
+    const nWord = ['no','one','two','three','four','five','six'];
+    const c4CountWord = () => nWord[c4Count()] || String(c4Count());
+    const pctOf = (f) => Math.round(f.done / f.total * 100);
+    const behind = FOUNDERS.filter(f => pctOf(f) < 50);
+    const complete = FOUNDERS.filter(f => pctOf(f) === 100);
+    const LANES = ['Week 1','Week 2','Week 3','Week 4'];
+
+    // ══ ONE guidance record ══
+    const QUEUE = [
+      { init:'AO', who:'Amara Osei', cohort:'Cohort 4', week:'Week 2', state:'Overdue', hrs:31,
+        q:'How do I price a design partner who wants exclusivity in their vertical?', thread:'3 messages · last from her 31h ago' },
+      { init:'TL', who:'Tobias Lindqvist', cohort:'Cohort 4', week:'Week 2', state:'Overdue', hrs:27,
+        q:'Is 18% too much for a first advisor? Two people have told me opposite things.', thread:'1 message · 27h ago' },
+      { init:'NO', who:'Nadia Okonkwo', cohort:'Cohort 3', week:'Week 4', state:'Waiting', hrs:9,
+        q:'Our churn moved 4 points this month. Do I put that in the update or wait for a second month?',
+        thread:'5 messages · last from you 9h ago', consent:'Recorded session Aug 24' },
+      { init:'GL', who:'Guillaume Lauzier', cohort:'Cohort 3', week:'Week 4', state:'Same day', hrs:4,
+        q:'Investor asked for a cohort retention curve we do not have. What do I send instead?', thread:'2 messages · answered 4h ago' }
+    ];
+    const overdue = QUEUE.filter(q => q.state === 'Overdue');
+    // The flag is GENERATED from the queue and the deliverable count — never typed, so it
+    // cannot claim a number of open questions the queue does not contain.
+    const overdueFor = (f) => overdue.filter(q => q.who === f.who);
+    const flagOf = (f) => {
+      const parts = [];
+      if (pctOf(f) < 50) parts.push((f.total - f.done) + ' deliverables outstanding');
+      const oq = overdueFor(f);
+      if (oq.length) parts.push(oq.length + (oq.length === 1 ? ' question' : ' questions')
+        + ' overdue ' + oq.map(q => q.hrs + 'h').join(', '));
+      return parts.length ? parts.join(' · ') : null;
+    };
+    const flagged = FOUNDERS.filter(f => flagOf(f));
+    const ANSWERED = 148;
+    const PACK = run(4200, 620, 0.045, 0.384);
+
+    // ══ ONE outcomes record ══
+    // Outcomes can only come from a cohort that has finished.
+    const GRADS = [
+      { who:'Thornfield', cohort:'Cohort 2', consent:'granted', src:'From their record',
+        outcome:'Raised $1.5M seed nine weeks after graduating. Entry tier restructured from three plans to two.', meta:'Verified Aug 2026' },
+      { who:'Halverton', cohort:'Cohort 2', consent:'granted', src:'From their record',
+        outcome:'Net revenue retention moved 96% → 112% across the two quarters after the programme.', meta:'Verified Jun 2026' },
+      { who:'Verwood', cohort:'Cohort 2', consent:'granted', src:'From their record',
+        outcome:'Acquired by a strategic buyer fourteen months out. Terms undisclosed at their request.', meta:'Verified Mar 2026' },
+      { who:'Marrow Studio', cohort:'Cohort 2', consent:'requested', src:'From their record',
+        outcome:'Signed three enterprise pilots in the quarter after graduating.', meta:'Requested Aug 19 · 7 days without an answer' },
+      { who:'Kelso Freight', cohort:'Cohort 1', consent:'declined', src:'From their record',
+        outcome:'Reduced time-to-first-value from 21 days to 6.', meta:'Declined attribution Jun 30. Kept, never shown.' }
+    ];
+    const granted = GRADS.filter(g => g.consent === 'granted');
+    const requested = GRADS.filter(g => g.consent === 'requested');
+    const declined = GRADS.filter(g => g.consent === 'declined');
+    const CST = { granted:['#ecfdf5','#047857','#a7f3d0','#10b981','Consent · granted','Publishable','Use in Expertise'],
+                  requested:['#fffbeb','#92400e','#fde68a','#f59e0b','Consent · requested','Blocked','Send reminder'],
+                  declined:['#fef2f2','#b91c1c','#fecaca','#ef4444','Consent · declined','Blocked','Ask again in Q4'] };
+
+    // ══ ONE calendar record ══
+    const CAL = [
+      { day:'Wed 26', time:'09:00', title:'Cohort 4 · Week 2 module', kind:'Cohort',
+        meta:'All ' + c4CountWord() + ' Cohort 4 founders — ' + c4Founders().map(f => f.who.split(' ')[0]).join(', ') + '.', ready:'Ready', rec:true },
+      { day:'Wed 26', time:'14:00', title:'Meridian Labs · client session', kind:'Client', meta:'Paid engagement. Prep assembled.', ready:'Ready', rec:true },
+      { day:'Thu 27', time:'11:00', title:'Amara Osei · 1:1', kind:'Cohort', meta:'Pricing question from the queue, unanswered 31h.', ready:'Prep missing', rec:false },
+      { day:'Fri 28', time:'10:00', title:'Cohort 3 · milestone review', kind:'Milestone', meta:'Week 4 sign-off for Nadia and Guillaume.', ready:'Ready', rec:true,
+        clash:'Overlaps a Halverton review slot held at 10:00. One of the two moves — the milestone gate cannot.' },
+      { day:'Tue 1', time:'13:00', title:'Cohort 3 · Demo Day rehearsal', kind:'Demo Day', meta:'Full run, investor panel confirmed.', ready:'Ready', rec:false },
+      { day:'Thu 3', time:'09:30', title:'Cohort 3 · Demo Day', kind:'Demo Day', meta:'Nine investors registered. Room booked, stream tested.', ready:'Ready', rec:true }
+    ];
+    const KP = { Cohort:['#f2fdf7','#065f46','#a7f3d0'], Client:['#f5f2ff','#6d28d9','#e6dcff'],
+                 Milestone:['#fffbf2','#b45309','#fde68a'], 'Demo Day':['#f0fdff','#0e7490','#a5edf5'] };
+    const clashes = CAL.filter(c => c.clash);
+    const prepMissing = CAL.filter(c => c.ready === 'Prep missing');
+    // The batch is the cohort-facing sessions actually in the stream — declared after CAL so it
+    // cannot price a session the calendar does not hold. Demo Day and its rehearsal are group
+    // events, not per-founder slots, so they take no prep-pack.
+    const PREPPABLE = CAL.filter(c => c.kind === 'Cohort' || c.kind === 'Milestone');
+    const SLOTS = PREPPABLE.length;
+    const batchSpan = PREPPABLE[0].day + ' to ' + PREPPABLE[PREPPABLE.length - 1].day;
+
+    return {
+      navC,
+
+      // ── C1 ──
+      f_sub: FOUNDERS.length + ' founders across ' + runningCohorts.length + ' running cohorts · '
+        + behind.length + ' behind plan · ' + complete.length + ' complete through Week ' + WEEKS,
+      f_views: views(['All','Behind plan','Cohort 4','Cohort 3']),
+      f_stats: [
+        { label:'Assigned', value:String(FOUNDERS.length),
+          note:'across ' + runningCohorts.filter(c => inCohort(c.name).length).map(c => c.name).join(' and '), ink:'#18181b' },
+        { label:'Behind plan', value:String(behind.length), note:'under half their deliverables', ink:'#b91c1c' },
+        { label:'Complete', value:String(complete.length), note:'all Week-4 deliverables in', ink:'#047857' },
+        { label:'Flagged', value:String(flagged.length), note:'needs your attention today', ink:'#92400e' }
+      ],
+      f_lanes: LANES.map((name, li) => {
+        const cards = FOUNDERS.filter(f => weekOf(f) === li + 1);
+        return { name, count:String(cards.length), empty:cards.length === 0,
+          cards:cards.map(f => {
+            const p = pctOf(f);
+            const ink = p === 100 ? '#047857' : (p < 50 ? '#b91c1c' : '#b45309');
+            const fl = flagOf(f);
+            return { who:f.who, init:f.init, company:f.company, pct:String(p), ink,
+              progress:f.done + ' of ' + f.total + ' deliverables · ' + p + '%', flag:fl,
+              cardStyle:'border:1px solid ' + (fl ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px' };
+          }) };
+      }),
+      f_note: flagged.map(f => f.who.split(' ')[0] + ' (' + flagOf(f) + ')').join(' · ')
+        + '. Each flag is generated from the Guidance queue and the deliverable count, so it cannot claim an open question the queue does not hold. Lanes come from the cohort, not the founder — all three Cohort 4 founders sit in Week 2 because their cohort does, which is what makes Priya at '
+        + pctOf(FOUNDERS[4]) + '% legible as behind rather than early.',
+
+      // ── C2 ──
+      g_views: views(['Open','Overdue','Answered','All cohorts']),
+      g_stats: [
+        { label:'Open', value:String(QUEUE.length), note:'across 2 cohorts', ink:'#18181b' },
+        { label:'Overdue', value:String(overdue.length), note:'past your 24h commitment', ink:'#b91c1c' },
+        { label:'Median response', value:'6h', note:'last 30 days', ink:'#047857' },
+        { label:'Answered', value:String(ANSWERED), note:'archive, all cohorts', ink:'#18181b' }
+      ],
+      g_queue: QUEUE.map(q => ({ init:q.init, who:q.who, cohort:q.cohort, week:q.week, q:q.q, thread:q.thread,
+        consent:q.consent || null, state:q.state, pill:pill(q.state),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px 15px;border:1px solid '
+          + (q.state === 'Overdue' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      g_cost: '≈ ' + c4(PACK * SLOTS) + ' · ' + SLOTS + ' packs',
+      g_batch: SLOTS + ' cohort sessions in the stream, ' + batchSpan
+        + ' — the same rows the Calendar holds, and no more. One prep-pack each — the founder\u2019s week state, their open thread, and what you promised them last time — at '
+        + c5(PACK) + ' a pack. Each lands as its own proposal, so a bad one is discarded without touching the other '
+        + (nWord[SLOTS - 1] || String(SLOTS - 1)) + '.',
+      g_archLabel: ANSWERED + ' answered',
+      g_archive: [
+        { q:'How much equity for a first advisor?', n:'11', action:'Publish it' },
+        { q:'When do I tell investors a metric moved the wrong way?', n:'8', action:'Publish it' },
+        { q:'Should I take a design partner who wants exclusivity?', n:'6', action:'Draft' }
+      ],
+      g_archNote: 'The archive is not a log, it is a publishing queue. Eleven founders have asked the same equity question — answering it a twelfth time in a thread reaches one person, and Expertise can reach the rest.',
+
+      // ── C3 ──
+      w_sub: runningCohorts.map(c => c.name + ' is in Week ' + c.week).join('. ') + '. '
+        + cohortOf('Cohort 3').note + '.',
+      w_views: views(['Cohort 4 · live','Cohort 3','Past weeks','Materials']),
+      w_modules: [
+        { name:'Solution definition workshop', kind:'Live', meta:'90 min · Wed 09:00 · all ' + c4CountWord() + ' Week-2 founders', state:'Ready' },
+        { name:'90-day OKR template', kind:'Worksheet', meta:'Due Fri · 1 of ' + c4Count() + ' submitted', state:'Waiting' },
+        { name:'Pricing primer', kind:'Reading', meta:'Reused from Cohort 3 · v2', state:'Ready' },
+        { name:'Roadmap review · 1:1', kind:'Session', meta:'Thu and Fri slots · one unprepped', state:'Prep missing' }
+      ].map(m => ({ ...m, pill:pill(m.state),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 13px;border:1px solid '
+          + (m.state === 'Prep missing' ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      w_archLabel: COHORTS.length + ' cohorts · ' + weeksRun + ' weeks run',
+      w_past: [
+        { week:'C4 · W1', module:'Idea & customer discovery', reuse:'Reused from C3', ink:'#047857' },
+        { week:'C3 · W4', module:'Incorporate & capital', reuse:'Live now', ink:'#b45309' },
+        { week:'C3 · W3', module:'Validate & team', reuse:'Archived', ink:'#615c6e' },
+        { week:'C2 · W2', module:'Solution & roadmap', reuse:'Superseded by v2', ink:'#615c6e' },
+        { week:'C1 · W2', module:'Solution & roadmap', reuse:'Superseded by v2', ink:'#615c6e' }
+      ],
+      w_archNote: 'Week 2 has now run three times, and the version actually delivered differs each time. The archive keeps what each cohort received rather than what the current template says — otherwise a graduate\u2019s question about "the pricing primer" has no answerable referent.',
+      w_materials: [
+        { kind:'Deck', ver:'v2', name:'Solution definition', meta:'Updated Aug 4 · used by C4' },
+        { kind:'Worksheet', ver:'v3', name:'90-day OKRs', meta:'Updated Aug 18 · used by C4' },
+        { kind:'Reading', ver:'v2', name:'Pricing primer', meta:'From C3 · unchanged' },
+        { kind:'Template', ver:'v1', name:'Roadmap one-pager', meta:'New this cohort' }
+      ],
+
+      // ── C4 ──
+      cal_sub: CAL.length + ' commitments in the next fourteen days · ' + clashes.length + ' collision · '
+        + prepMissing.length + ' without prep',
+      cal_views: views(['Next 14 days','Cohort only','Client only','Demo Day']),
+      cal_stats: [
+        { label:'Next 14 days', value:String(CAL.length), note:'cohort and client combined', ink:'#18181b' },
+        { label:'Cohort obligations', value:String(CAL.filter(c => c.kind !== 'Client').length), note:'unpaid, and non-negotiable', ink:'#047857' },
+        { label:'Collisions', value:String(clashes.length), note:'one must move', ink:'#92400e' },
+        { label:'Missing prep', value:String(prepMissing.length), note:'session without a brief', ink:'#b91c1c' }
+      ],
+      cal_items: CAL.map(c => {
+        const k = KP[c.kind];
+        return { day:c.day, time:c.time, title:c.title, kind:c.kind, meta:c.meta, ready:c.ready, rec:c.rec, clash:c.clash || null,
+          kindPill:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+k[0]+';color:'+k[1]+';border:1px solid '+k[2]+';white-space:nowrap',
+          readyPill:pill(c.ready),
+          rowStyle:'display:flex;align-items:flex-start;gap:14px;padding:13px 15px;border:1px solid '
+            + (c.clash ? '#fde68a;background:#fffdf5' : (c.ready === 'Prep missing' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc'))
+            + ';border-radius:10px' };
+      }),
+      cal_note: 'Cohort work is unpaid and client work is not, which is exactly why they belong in one stream: the Friday collision is only visible if the milestone review and the Halverton slot are on the same page. Two calendars would show two free Fridays.',
+
+      // ── C5 ──
+      o_sub: gradTotal + ' graduates from ' + doneCohorts.length + ' finished cohorts · '
+        + GRADS.length + ' outcomes on record · ' + granted.length + ' publishable · '
+        + requested.length + ' awaiting consent · ' + declined.length + ' declined',
+      o_views: views(['All','Publishable','Awaiting consent','Declined']),
+      o_export: 'Export ' + granted.length + ' consented',
+      o_stats: [
+        { label:'Outcomes on record', value:String(GRADS.length), note:'of ' + gradTotal + ' graduates, ' + doneCohorts.length + ' finished cohorts', ink:'#18181b' },
+        { label:'Publishable', value:String(granted.length), note:'consent granted', ink:'#047857' },
+        { label:'Awaiting consent', value:String(requested.length), note:'requested, unanswered', ink:'#92400e' },
+        { label:'Declined', value:String(declined.length), note:'kept, never shown', ink:'#b91c1c' }
+      ],
+      o_grads: GRADS.map(g => {
+        const c = CST[g.consent];
+        return { who:g.who, cohort:g.cohort, src:g.src, outcome:g.outcome, meta:g.meta,
+          consent:c[4], usable:c[5], action:c[6],
+          consStyle:'color:' + c[1] + ';background:' + c[0] + ';border:1px solid ' + c[2],
+          consDot:'width:6px;height:6px;border-radius:50%;background:' + c[3] + ';flex:none',
+          usePill:pill(c[5]),
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid '
+            + (g.consent === 'granted' ? '#a5edf5;background:#f8feff' : (g.consent === 'declined' ? '#fecaca;background:#fffbfb' : '#fde68a;background:#fffdf5'))
+            + ';border-radius:11px' };
+      }),
+      o_note: 'Every outcome here comes from the graduate\u2019s own record — a raise closed, a metric moved, an acquisition — never a number you typed about your own teaching. That is the only reason the page is worth reading, and the reason ' + declined.length + ' of ' + GRADS.length + ' cannot be shown.',
+      // Derived from COHORTS and GRADS: a running cohort shows no graduate count at all.
+      o_cohorts: COHORTS.map(c => {
+        const g = GRADS.filter(x => x.cohort === c.name);
+        const gr = g.filter(x => x.consent === 'granted').length;
+        return { name:c.name, started:String(c.started),
+          grad: c.running ? '—' : c.graduated + ' of ' + c.started,
+          ink: c.running ? '#615c6e' : (c.graduated === c.started ? '#047857' : '#b45309'),
+          read: c.running
+            ? 'Week ' + c.week + ' · ' + FOUNDERS.filter(f => f.cohort === c.name).length
+              + ' of your founders here · no outcomes until it finishes'
+            : (g.length
+                ? g.length + ' outcome' + (g.length === 1 ? '' : 's') + ' on record, ' + gr + ' consented'
+                : 'No outcomes recorded yet') };
+      }),
+      o_cost: '≈ ' + c4(run(19000, 1600, 0.293, 2.253)),
+      o_grantedN: String(granted.length),
+      o_draft: 'A track-record summary built from the ' + granted.length + ' consented outcomes only — the raise, the retention move, the acquisition — with each figure attributed to the graduate\u2019s own record and dated. '
+        + requested.concat(declined).map(g => g.who).join(' and ') + ' are excluded, and the export says so rather than quietly omitting them.',
+      o_consentNote: 'Consent to graduate is not consent to be cited. A founder can complete the programme, produce a result you helped cause, and still decline to have it used in your marketing — and the export has to survive that without becoming dishonest by omission.'
+    };
+  }
+}
+</script>
+</body>
+</html>

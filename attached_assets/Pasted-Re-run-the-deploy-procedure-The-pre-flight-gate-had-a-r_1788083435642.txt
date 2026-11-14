@@ -1,0 +1,46 @@
+Re-run the deploy procedure. The pre-flight gate had a real bug — the dry-run
+was planning against a hardcoded empty ledger instead of reading the real one,
+which is why it printed every migration back to 001 and you correctly refused.
+That's fixed on main now (PR #356). Full history in
+documentation/operations/DEPLOY.md if useful.
+
+From the REPOSITORY ROOT (not cloudflare-worker/):
+
+  git checkout main && git pull origin main
+  npm run test:drift ; echo "exit=$?"
+  node scripts/check-docs-fresh.mjs --strict ; echo "exit=$?"
+  node scripts/migrate-d1.mjs --remote --dry-run
+
+Read exit codes directly — never grep for "error" or "fail". Both of the
+first two must be 0.
+
+The dry-run now actually reads schema_migrations on production and reports
+one of two honest outcomes — both are fine, neither is a reason to stop:
+
+  (a) A short pending list. Expected: two migrations, 190 and 191. If it's
+      that or close to it, proceed to the deploy below.
+  (b) "has N table(s) but an empty ledger." Production was never migrated
+      by this runner before, so its ledger is genuinely empty — this is
+      not the same failure as last time, it's an expected one-time state.
+      Run the baseline ONCE:
+        node scripts/migrate-d1.mjs --remote --baseline
+      Read what it prints — which files it applied for real vs. only
+      recorded — then re-run the dry-run above. It should now show only
+      190 and 191 pending. Proceed.
+
+If the dry-run instead lists a broad, unexpected range again, or errors
+without printing a plan, stop and report back rather than guessing.
+
+Once the pending set looks right:
+
+  cd cloudflare-worker && npx wrangler deployments list --config ../wrangler.toml --env production
+  cd ..
+  npm run deploy ; echo "exit=$?"
+
+Capture the deployment ID from that first command before deploying, for
+rollback. Do NOT run `npx wrangler deploy` by hand, and do NOT run
+`npm run deploy` from inside cloudflare-worker/ — both skip the migration
+hook and ship the worker ahead of its schema. Do NOT set SKIP_LIVE_SMOKE=1.
+
+npm run deploy exit 0 means migrations applied, the frontend built, the
+worker uploaded, and the live smoke check passed — all four.

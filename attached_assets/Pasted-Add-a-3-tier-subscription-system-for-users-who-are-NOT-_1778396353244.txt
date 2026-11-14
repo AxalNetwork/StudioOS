@@ -1,0 +1,70 @@
+Add a 3-tier subscription system for users who are NOT in the Spin-Out Lab (existing
+founders / company owners). Tiers:
+
+  FREE        — $0/mo
+                Includes: Projects, Roadmap, Customer Discovery, Brand Builder
+                          (limited: 1 project, 5 interviews, 3 OKRs), Public Directory
+  GROWTH      — $79/mo
+                Adds: Pitch Deck (unlimited), Cap Table, Mentors (3 sessions/mo),
+                      Scoring (unlimited), Compliance basics, Co-marketing
+                Limits lifted: unlimited projects, interviews, OKRs
+  STUDIO      — $249/mo
+                Adds: Capital (fundraise), Investor matching, Office Hours unlimited,
+                      Liquidity, Cofounder Agreement, Section 83(b), Legal templates
+                      (unlimited), Advanced Compliance, KYC bulk, Co-founder Match
+                      premium pool, Funds, Reserves, Waterfall, Watchlist Journal,
+                      Network Effects, Partner Insights
+  Admins, partners, investors, mentors are exempt (no paywall).
+
+Rationale: high-value features that produce filings/dollars (Capital, Cap Table for
+issuances, Legal docs, Cofounder Agreement, 83(b), Compliance, KYC) sit at the top.
+Mid-value advisory and growth features sit in Growth. The skeleton (project, roadmap,
+discovery) stays free so users can validate before paying.
+
+Schema:
+  ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'
+    CHECK (subscription_tier IN ('free','growth','studio'));
+  ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'active';
+  ALTER TABLE users ADD COLUMN subscription_renews_at DATETIME;
+  ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
+  ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT;
+
+Implementation:
+1. Worker middleware cloudflare-worker/src/middleware/requireTier.ts:
+     export const requireTier = (minTier: 'free'|'growth'|'studio') => async (c, next) => {
+       const user = await requireAuth(c);
+       if (['admin','partner','investor','mentor'].includes(user.role)) return next();
+       const order = { free: 0, growth: 1, studio: 2 };
+       if (order[user.subscription_tier ?? 'free'] < order[minTier]) {
+         return c.json({ error: { code: 'tier_required', required: minTier } }, 402);
+       }
+       return next();
+     }
+2. Apply to routes:
+     Growth: pitch deck save+export, captable mutations, mentors booking, scoring run,
+             co-marketing, compliance create
+     Studio: capital, funds, reserves, waterfall, liquidity, legalcap (incorporation
+             post-spinout), cofounder agreement, section 83b, kyc, network effects,
+             partner insights, watchlist journal, office hours premium
+3. Free-tier limits enforced in the create handlers:
+     - projects.ts: free user with ≥1 project → 402 tier_required:growth
+     - progress.ts discovery POST: free user with ≥5 interviews → 402
+     - progress.ts okrs POST: free user with ≥3 okrs → 402
+4. Frontend:
+   - lib/api.js handle 402: throw a TierRequiredError with required tier.
+   - Components: when 402 lands, show <PaywallModal tier={required} /> with upgrade CTA.
+   - Sidebar: show a small lock icon next to features above the user's tier; clicking
+     opens the paywall modal instead of routing.
+   - SettingsPage → Billing tab: show current tier, next renewal, "Manage subscription"
+     button (links to Stripe billing portal).
+5. Stripe integration: NEW worker route /api/billing/stripe/checkout (creates a checkout
+   session for the tier), /api/billing/stripe/portal (returns billing portal url),
+   /api/billing/stripe/webhook (handles subscription.created/updated/deleted, mutates
+   users.subscription_tier). Use STRIPE_SECRET (Secrets) and STRIPE_WEBHOOK_SECRET.
+6. Seed prices: STRIPE_PRICE_GROWTH and STRIPE_PRICE_STUDIO env vars.
+
+Acceptance:
+- Free user creating a 2nd project sees the paywall.
+- Free user opens Capital → sees lock icon, clicks → paywall modal with Studio CTA.
+- Stripe checkout completes → tier updates within seconds via webhook.
+- Admin/partner/investor users never see paywalls.

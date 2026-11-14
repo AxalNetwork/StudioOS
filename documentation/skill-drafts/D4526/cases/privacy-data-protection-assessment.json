@@ -1,0 +1,41 @@
+{
+  "skill": "privacy-data-protection-assessment",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "process": "Support analytics",
+        "retention": "indefinite",
+        "data": "Support transcripts",
+        "legal_basis": null,
+        "jurisdiction": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Support analytics",
+      "indefinite",
+      "Support transcripts"
+    ],
+    "must_say_not_recorded": [
+      "legal basis"
+    ],
+    "must_not_include": [
+      "GDPR compliant"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why legal basis is missing rather than inventing it.",
+    "Do not assert: GDPR compliant.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Support analytics; indefinite; Support transcripts. legal basis: Not recorded. Human review required."
+}

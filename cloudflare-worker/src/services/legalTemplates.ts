@@ -1,0 +1,92 @@
+/**
+ * Legal templates registry — Task #3 (Y-1).
+ *
+ * Templates are committed as Markdown under
+ * `cloudflare-worker/src/templates/legal/*.md` and bundled into the
+ * worker via Wrangler's `?raw` import suffix. Each template begins
+ * with a "Subject to legal review" banner and uses
+ * `{{merge_field}}` placeholders that this module resolves at render
+ * time from the personal/corporate profile (AE-1 schema).
+ *
+ * Adding a new template:
+ *   1. Drop the .md file under templates/legal/.
+ *   2. Add an entry to `TEMPLATES` below.
+ *   3. Reference it by key from a route (e.g. trust.ts -> 3-way NDA).
+ */
+
+// Wrangler bundles ?raw imports as TS string literals. The
+// `as any` cast keeps tsc happy without needing a custom .d.ts.
+//
+// D705 (#1717): six of these keys read a newer file that names the Fund
+// Axal VC Spin-Out Lab Fund I LP. The key is unchanged, so every caller and
+// every recorded obligation key stays as it was; the older file stays in the
+// folder, because a document already signed names its version.
+// `tos_v3.md` descends from `tos_v1.md`; `tos_v2.md` is imported by nothing.
+import tos                            from '../templates/legal/tos_v3.md?raw';
+import privacy                        from '../templates/legal/privacy_v2.md?raw';
+import founderNda                     from '../templates/legal/founder_nda_v1.md?raw';
+import investorNda                    from '../templates/legal/investor_nda_v2.md?raw';
+import advisorNda                      from '../templates/legal/mentor_nda_v1.md?raw';
+import advisorDisclaimer               from '../templates/legal/mentor_disclaimer_v2.md?raw';
+import partnerMsa                     from '../templates/legal/partner_msa_v2.md?raw';
+import accreditation                  from '../templates/legal/accreditation_v2.md?raw';
+import nda3Way                        from '../templates/legal/nda_3way_founder_investor_axal_v1.md?raw';
+
+// Defined in `./legalDocTypes` (which holds no assets) and re-exported here so
+// the key set has exactly one definition.
+import type { LegalTemplateKey } from './legalDocTypes';
+export type { LegalTemplateKey };
+
+const TEMPLATES: Record<LegalTemplateKey, string> = {
+  tos_v1: tos as unknown as string,
+  privacy_v1: privacy as unknown as string,
+  founder_nda_v1: founderNda as unknown as string,
+  investor_nda_v1: investorNda as unknown as string,
+  mentor_nda_v1: advisorNda as unknown as string,
+  mentor_disclaimer_v1: advisorDisclaimer as unknown as string,
+  partner_msa_v1: partnerMsa as unknown as string,
+  accreditation_v1: accreditation as unknown as string,
+  nda_3way_founder_investor_axal_v1: nda3Way as unknown as string,
+};
+
+export function getLegalTemplateBody(key: LegalTemplateKey): string {
+  const body = TEMPLATES[key];
+  if (!body) throw new Error(`unknown_legal_template:${key}`);
+  return body;
+}
+
+/**
+ * Replace `{{key}}` placeholders with values from `merge`. Missing
+ * keys are left as-is so reviewers spot the omission immediately
+ * (and the audit trail keeps the literal placeholder for evidence).
+ */
+// Pure resolver lives in `./mergeFields.ts` so node-test can import it
+// without dragging in Wrangler-only `?raw` markdown imports.
+import { applyMergeFields } from './mergeFields';
+export { applyMergeFields, mergeTokensIn } from './mergeFields';
+
+export async function renderLegalTemplate(
+  key: LegalTemplateKey,
+  merge: Record<string, unknown>,
+): Promise<string> {
+  return applyMergeFields(getLegalTemplateBody(key), merge);
+}
+
+export const ALL_TEMPLATE_KEYS: LegalTemplateKey[] = Object.keys(TEMPLATES) as LegalTemplateKey[];
+
+/**
+ * Task #5 (Z) v3 — Map the public `doc_type` string surfaced by the
+ * admin "Create envelope" wizard (and stored on
+ * `esign_envelopes.document_type`) to the canonical Y-1 template key.
+ * Keep this in sync with `LEGAL_TEMPLATE_CATALOG` in
+ * cloudflare-worker/src/routes/admin_contracts.ts and the W/X/Y doc
+ * type labels emitted by the wizard.
+ *
+ * MOVED to `./legalDocTypes`, and re-exported here so every existing caller
+ * keeps working. The table is routing data and holds no assets; this module
+ * imports nine `.md?raw` bodies, which only a bundler can resolve, so anything
+ * needing just the mapping used to be dragged into that dependency and could not
+ * run under `node --test` at all. `satisfyObligationFromEnvelope` needs the
+ * mapping and none of the bodies.
+ */
+export { templateKeyForDocType } from './legalDocTypes';

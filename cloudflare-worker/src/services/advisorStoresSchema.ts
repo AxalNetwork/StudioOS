@@ -1,0 +1,506 @@
+/**
+ * Lazy schema bootstrap for the advisor's own stores — migrations 201–206,
+ * with 367's notice ledger and opt-outs, 565's assignment history, and
+ * 202611062216's attestation codes, answer history and pinned claim (D4670).
+ *
+ * WHY THIS EXISTS, and it is a rule rather than a precaution.
+ * `documentation/architecture/GOTCHAS.md` states it directly: an `ALTER` file
+ * is flagged non-idempotent by `npm run d1:audit` and will be
+ * RECORDED-WITHOUT-RUNNING by a `--baseline` adoption — so on any database
+ * baselined after these files land, the ledger says `202_advisor_profile_fields`
+ * applied and `advisors.headline` does not exist. The lazy bootstrap is what
+ * closes that gap, and the gotcha names `ensureAdvisorWeekColumn()` /
+ * `ensureMarketIntelSchema()` as the patterns to mirror. This mirrors
+ * `ensurePartnerDirectoryColumns()`, which is the same shape over ALTERs plus
+ * CREATEs.
+ *
+ * The migration files remain the canonical definition. This heals a database
+ * that never ran them; it does not replace them, and the two are kept
+ * identical on purpose — `cloudflare-worker/test/advisor_stores_bootstrap.test.ts`
+ * fails if they drift.
+ *
+ * Cached per D1 binding rather than in a module-level flag. A module flag is
+ * right for a worker isolate (one isolate, one database) and wrong for the test
+ * process (one process, a fresh database per test), where it would make every
+ * test after the first run against tables nobody created.
+ */
+import type { Env } from '../types';
+import { tableColumns } from '../util/schemaBootstrap';
+
+const READY = new WeakMap<object, boolean>();
+
+/**
+ * Migration 202 — the advisor profile fields the Expertise canvas needs.
+ *
+ * Each entry carries its whole ALTER as a LITERAL rather than a name and a type
+ * to interpolate. `scripts/check-sql-prepare.mjs` treats every `${…}` inside a
+ * `DB.prepare` as an injection site and fails on new ones, and it is right to:
+ * a table or column name assembled at the call site is how the safe cases and
+ * the unsafe ones stop being distinguishable by reading.
+ */
+const PROFILE_COLUMNS: Array<[string, string]> = [
+  ['headline', 'ALTER TABLE advisors ADD COLUMN headline TEXT'],
+  ['stages_json', 'ALTER TABLE advisors ADD COLUMN stages_json TEXT'],
+  ['languages_json', 'ALTER TABLE advisors ADD COLUMN languages_json TEXT'],
+  ['country', 'ALTER TABLE advisors ADD COLUMN country TEXT'],
+  ['timezone', 'ALTER TABLE advisors ADD COLUMN timezone TEXT'],
+  ['availability_note', 'ALTER TABLE advisors ADD COLUMN availability_note TEXT'],
+  ['headshot_url', 'ALTER TABLE advisors ADD COLUMN headshot_url TEXT'],
+];
+
+/** Migration 205 — per-session money. Recording only; nothing settles. */
+const BOOKING_COLUMNS: Array<[string, string]> = [
+  ['amount_cents', 'ALTER TABLE advisor_bookings ADD COLUMN amount_cents INTEGER'],
+  ['billing_state',
+   "ALTER TABLE advisor_bookings ADD COLUMN billing_state TEXT NOT NULL DEFAULT 'unpriced'"],
+];
+
+/**
+ * Migrations 203, 204 and 206, verbatim.
+ *
+ * `billing_state`'s CHECK is deliberately absent from `BOOKING_COLUMNS` above:
+ * SQLite accepts a CHECK in `ADD COLUMN`, but a constraint that exists only on
+ * databases healed through this path and not on those migrated properly is a
+ * difference nobody would ever see until it bit. The route validates the value
+ * against `BILLING_STATES` before every write, which is the check that runs on
+ * every database.
+ */
+const TABLES = [
+  // Migration 240: the public catalogue and links must exist on adopted stores too.
+  `CREATE TABLE IF NOT EXISTS advisor_session_types (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL, name TEXT NOT NULL, duration_minutes INTEGER,
+     cadence_note TEXT, price_cents INTEGER, is_free_intro INTEGER NOT NULL DEFAULT 0,
+     once_per_client INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_session_types_advisor
+     ON advisor_session_types(advisor_id, sort_order)`,
+  `CREATE TABLE IF NOT EXISTS advisor_booking_links (
+     id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL,
+     slug TEXT NOT NULL UNIQUE,
+     session_type_id INTEGER REFERENCES advisor_session_types(id) ON DELETE SET NULL,
+     audience TEXT NOT NULL DEFAULT 'public' CHECK (audience IN ('public', 'cohort', 'private')),
+     cohort_ref TEXT, requires_payout_account INTEGER NOT NULL DEFAULT 0, note TEXT,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_booking_links_advisor
+     ON advisor_booking_links(advisor_id, is_active)`,
+  `CREATE TABLE IF NOT EXISTS advisor_services (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL REFERENCES advisors(id),
+     title TEXT NOT NULL,
+     kind TEXT NOT NULL DEFAULT 'fixed' CHECK (kind IN ('fixed', 'package', 'retainer')),
+     duration_note TEXT,
+     price_cents INTEGER,
+     currency TEXT NOT NULL DEFAULT 'USD',
+     scope TEXT,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_services_advisor
+     ON advisor_services(advisor_id, is_active)`,
+  `CREATE TABLE IF NOT EXISTS advisor_proof_items (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     uid TEXT NOT NULL UNIQUE,
+     advisor_id INTEGER NOT NULL REFERENCES advisors(id),
+     kind TEXT NOT NULL DEFAULT 'engagement'
+       CHECK (kind IN ('engagement', 'outcome', 'role', 'credential')),
+     title TEXT NOT NULL,
+     detail TEXT,
+     organization TEXT,
+     period_note TEXT,
+     is_public INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_items_advisor
+     ON advisor_proof_items(advisor_id, created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consents (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     uid TEXT NOT NULL UNIQUE,
+     proof_item_id INTEGER NOT NULL REFERENCES advisor_proof_items(id),
+     attester_name TEXT NOT NULL,
+     attester_email TEXT,
+     attester_role TEXT,
+     relationship TEXT,
+     requested_at TEXT,
+     requested_by INTEGER,
+     request_token TEXT UNIQUE,
+     consent_given INTEGER NOT NULL DEFAULT 0,
+     consent_given_at TEXT,
+     consent_text TEXT,
+     consent_captured_by INTEGER,
+     statement TEXT,
+     withdrawn_at TEXT,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consents_item
+     ON advisor_proof_consents(proof_item_id, consent_given)`,
+  `CREATE TABLE IF NOT EXISTS advisor_cohort_assignments (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     uid TEXT NOT NULL UNIQUE,
+     advisor_user_id INTEGER NOT NULL REFERENCES users(id),
+     cohort_cycle_id INTEGER NOT NULL REFERENCES cohort_cycles(id),
+     assigned_by_admin_id INTEGER,
+     assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     unassigned_at TEXT,
+     note TEXT,
+     is_active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+     UNIQUE (advisor_user_id, cohort_cycle_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignments_advisor
+     ON advisor_cohort_assignments(advisor_user_id, is_active)`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignments_cycle
+     ON advisor_cohort_assignments(cohort_cycle_id, is_active)`,
+  // 367 (D492, U6) — the founder's notice ledger and per-advisor opt-out.
+  `CREATE TABLE IF NOT EXISTS cohort_advisor_notices (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     assignment_id INTEGER NOT NULL REFERENCES advisor_cohort_assignments(id),
+     founder_user_id INTEGER NOT NULL REFERENCES users(id),
+     kind TEXT NOT NULL CHECK (kind IN ('started', 'ended')),
+     episode_at TEXT NOT NULL,
+     notified_at TEXT NOT NULL DEFAULT (datetime('now')),
+     UNIQUE (assignment_id, founder_user_id, kind, episode_at)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_cohort_advisor_notices_founder
+     ON cohort_advisor_notices (founder_user_id, assignment_id)`,
+  `CREATE TABLE IF NOT EXISTS cohort_advisor_optouts (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     founder_user_id INTEGER NOT NULL REFERENCES users(id),
+     advisor_user_id INTEGER NOT NULL REFERENCES users(id),
+     opted_out_at TEXT NOT NULL DEFAULT (datetime('now')),
+     withdrawn_at TEXT,
+     UNIQUE (founder_user_id, advisor_user_id)
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_cohort_advisor_optouts_advisor
+     ON cohort_advisor_optouts (advisor_user_id, withdrawn_at)`,
+  // 565 (D960) — every grant and end, which a re-assign no longer overwrites.
+  // The schema only: 565's backfill is a one-off and does not belong in a
+  // bootstrap that runs on every request.
+  `CREATE TABLE IF NOT EXISTS advisor_cohort_assignment_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     assignment_id INTEGER NOT NULL REFERENCES advisor_cohort_assignments(id),
+     advisor_user_id INTEGER NOT NULL,
+     cohort_cycle_id INTEGER NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('assigned', 'ended')),
+     admin_user_id INTEGER,
+     note TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_assignment
+     ON advisor_cohort_assignment_events(assignment_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_cycle
+     ON advisor_cohort_assignment_events(cohort_cycle_id, created_at)`,
+  // 202611062216 (D4670) — the attester's one-time codes and the answer history.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_codes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL REFERENCES advisor_proof_consents(id),
+     code_hash TEXT NOT NULL,
+     expires_at TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     used_at TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_codes_consent
+     ON advisor_proof_consent_codes(consent_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     consent_id INTEGER NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('asked', 'confirmed', 'declined', 'withdrawn', 'reconfirmed')),
+     claim_sha256 TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_proof_consent_events_consent
+     ON advisor_proof_consent_events(consent_id, id)`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_update
+   BEFORE UPDATE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_events_block_delete
+   BEFORE DELETE ON advisor_proof_consent_events
+   BEGIN
+       SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
+   END`,
+
+  // D5315: cancellation evidence and credential revocation are one write.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_cancellations (
+     consent_id   INTEGER PRIMARY KEY,
+     cancelled_by INTEGER NOT NULL,
+     cancelled_at TEXT NOT NULL
+   )`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_revoke
+   AFTER INSERT ON advisor_proof_consent_cancellations
+   BEGIN
+     UPDATE advisor_proof_consents SET request_token = NULL, updated_at = NEW.cancelled_at
+      WHERE id = NEW.consent_id;
+     UPDATE advisor_proof_consent_codes SET used_at = NEW.cancelled_at
+      WHERE consent_id = NEW.consent_id AND used_at IS NULL;
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_update
+   BEFORE UPDATE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_delete
+   BEFORE DELETE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  // D5315: private profile drafts and atomic publication.
+  `CREATE TABLE IF NOT EXISTS advisor_profile_drafts (
+     advisor_id           INTEGER PRIMARY KEY REFERENCES advisors(id) ON DELETE CASCADE,
+     revision             TEXT NOT NULL,
+     base_revision        TEXT NOT NULL,
+     fields_json          TEXT NOT NULL CHECK (json_valid(fields_json)),
+     updated_at           TEXT NOT NULL,
+     publish_requested_at TEXT
+   )`,
+];
+
+/** 202611062216 (D4670) — the claim a confirmation was asked about. */
+const CONSENT_COLUMNS: Array<[string, string]> = [
+  ['claim_sha256', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_sha256 TEXT'],
+  ['claim_json', 'ALTER TABLE advisor_proof_consents ADD COLUMN claim_json TEXT'],
+];
+
+async function addMissingColumns(
+  env: Env, table: string, wanted: Array<[string, string]>,
+): Promise<void> {
+  // A table this bootstrap does not create — `advisors` and `advisor_bookings`
+  // both come from `sql/t13_t14_t15.sql`. An empty column set means the table
+  // is absent, and inventing a shape for a table that already has two
+  // definitions in this repository is exactly the hazard migration 201
+  // declines to add to.
+  //
+  // Asks first through `tableColumns` (#4568 R2-04), the shared per-binding
+  // read in util/schemaBootstrap.ts, so a database that already has a column
+  // issues no ALTER for it. The set is the cached one, so a column added here
+  // is recorded in it and a later call on the same table does not ask again.
+  const have = await tableColumns(env, table);
+  if (!have.size) return;
+  for (const [name, alter] of wanted) {
+    if (have.has(name)) continue;
+    try { await env.DB.prepare(alter).run(); have.add(name); }
+    catch (e) { console.warn('[advisorStoresSchema] ALTER failed (likely a race):', alter, e); }
+  }
+}
+
+/**
+ * PRODUCTION CALLS THE SLOT OWNER `mentor_id`; THIS REPOSITORY CALLS IT
+ * `advisor_id`. This converges them, and it is a fix for a live defect rather
+ * than tidying.
+ *
+ * WHAT WAS WRONG. `sql/t13_t14_t15.sql` declares `advisor_id` on both
+ * `advisor_office_hour_slots` and `advisor_bookings`; production has
+ * `mentor_id` on both, and no migration in this repository performs a rename —
+ * the two simply diverged. Every shipped query uses `advisor_id`, so against
+ * production three handlers in `routes/advisors.ts` are broken:
+ *
+ *   · `GET /:uid/slots` — "no such column" → 500. An advisor's slots cannot be
+ *     listed.
+ *   · `POST /me/slots` — the INSERT names `advisor_id` → 500. A slot cannot be
+ *     published at all.
+ *   · `DELETE /me/slots/:id` — worse, because it does not throw:
+ *     `slot.advisor_id` is `undefined` and `undefined !== m.id` is always true,
+ *     so it returns "Slot not found" forever and a slot can never be cancelled.
+ *
+ * WHY NOBODY HAS HIT IT, and why that is the reason to fix it now: production
+ * has zero advisors, zero slots and zero bookings. The rename is free while the
+ * tables are empty and stops being free the moment they are not. The tests
+ * never caught it because they build the table from the t13 shape
+ * (`advisor_stores.test.ts:102`, commented "in the LIVE (t13) shape") — so they
+ * assert against the schema production does not have.
+ *
+ * WHY THIS IS NOT A MIGRATION, which was the first instinct. SQLite has no
+ * conditional DDL and no `RENAME COLUMN IF EXISTS`. Dev, preview and every
+ * database built from `t13_t14_t15.sql` already have `advisor_id`, so a bare
+ * rename fails there with "no such column: mentor_id" — and the runner aborts
+ * the whole deploy on the first failing statement, taking every later migration
+ * and the Worker with it. A migration would fix production by breaking
+ * everywhere else. Reading `PRAGMA table_info` first is the only shape that is
+ * correct on both, and it is the pattern this file and
+ * `discoveryInterviewSchema` already use.
+ *
+ * It runs once per isolate, before the READY latch is set, and is a no-op on
+ * every database that is already correct.
+ */
+/**
+ * Rename only when the legacy name is present AND the correct one is absent.
+ *
+ * A table carrying BOTH is a half-finished rename somebody else is in the
+ * middle of. Attempting it there would fail as a duplicate column and log a
+ * warning on every fresh isolate for a statement that can never succeed, so it
+ * is skipped deliberately instead — which is what
+ * `advisor_slot_column_rename.test.ts` asserts, on the log rather than on the
+ * columns, because the two outcomes leave the table looking identical.
+ */
+const needsOwnerRename = (have: Set<string>) => have.has('mentor_id') && !have.has('advisor_id');
+
+const columnNames = (rows: { results?: Array<{ name: string }> } | null | undefined) =>
+  new Set((rows?.results || []).map((r) => r.name));
+
+/**
+ * UNROLLED PER TABLE, AND EVERY STRING IS A LITERAL. This began as a loop over
+ * a two-element `as const` tuple, which cost two `table === '…'` ternaries (to
+ * satisfy `check-sql-prepare`, which refuses any `${}` inside `DB.prepare`) and
+ * still put `${table}` into the log lines. Semgrep flagged the latter as an
+ * unsafe format string — not reachable here, since the only values came from a
+ * hardcoded tuple, but the finding pointed at real awkwardness. Unrolling
+ * removes the ternaries and the interpolation together.
+ *
+ * The two `try` blocks are separate on purpose: the rename is per-table, not a
+ * global bail-out, so one table already half-renamed must not stop the other.
+ */
+async function renameLegacySlotOwnerColumn(env: Env): Promise<void> {
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_office_hour_slots)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_office_hour_slots RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_office_hour_slots.mentor_id to advisor_id');
+    }
+  } catch (e) {
+    // Never fatal and never cached: a failed rename must be retried on the next
+    // request rather than remembered as done.
+    console.warn('[advisorStoresSchema] advisor_office_hour_slots owner-column rename failed', e);
+  }
+
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_bookings)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_bookings RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_bookings.mentor_id to advisor_id');
+    }
+  } catch (e) {
+    console.warn('[advisorStoresSchema] advisor_bookings owner-column rename failed', e);
+  }
+}
+
+export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
+  const key = env.DB as unknown as object;
+  if (READY.get(key)) return;
+  try {
+    for (const stmt of TABLES) {
+      try { await env.DB.prepare(stmt).run(); } catch { /* idempotent */ }
+    }
+    // Before the column adds below: those read `PRAGMA table_info` too, and a
+    // half-renamed table would make them reason about the wrong shape.
+    await renameLegacySlotOwnerColumn(env);
+    await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
+    await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
+    await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisor_services', [
+      ['publication_state', `ALTER TABLE advisor_services ADD COLUMN publication_state TEXT NOT NULL DEFAULT 'draft'  CHECK (publication_state IN ('draft', 'published', 'hidden'))`],
+    ]);
+    await addMissingColumns(env, 'advisor_proof_items', [
+      ['published_consent_id', 'ALTER TABLE advisor_proof_items ADD COLUMN published_consent_id INTEGER'],
+    ]);
+    // SQLite validates existing trigger bodies during ALTER TABLE. Install
+    // this after the legacy renames and after its target column exists.
+    await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_proof_withdrawal_unpublishes
+   AFTER UPDATE OF consent_given, withdrawn_at ON advisor_proof_consents
+   WHEN NEW.consent_given <> 1 OR COALESCE(NEW.withdrawn_at, '') <> ''
+   BEGIN
+     UPDATE advisor_proof_items SET published_consent_id = NULL
+      WHERE id = NEW.proof_item_id AND published_consent_id = NEW.id;
+   END`).run();
+    // D573 / migration 394: nullable facts, including databases adopted by baseline.
+    await addMissingColumns(env, 'advisor_deliverables', [
+      ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],
+      ['manual_status', 'ALTER TABLE advisor_deliverables ADD COLUMN manual_status TEXT'],
+    ]);
+    // #4684 / migration 202611062152: who a version went to and who recorded its receipts.
+    await addMissingColumns(env, 'advisor_deliverable_versions', [
+      ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
+      ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
+      ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
+      // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
+      ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
+      ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
+      // #5960 / migration 202611141100: a version's document as a stored file.
+      ['file_key', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_key TEXT'],
+      ['file_name', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_name TEXT'],
+      ['file_type', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_type TEXT'],
+      ['file_size', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_size INTEGER'],
+      ['file_sha256', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_sha256 TEXT'],
+    ]);
+    await addMissingColumns(env, 'advisor_session_types', [
+      ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
+    ]);
+    await addMissingColumns(env, 'advisor_bookings', [
+      ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
+      ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
+      // #5316 / migration 202611110746: a session recorded as included in an engagement.
+      ['included_at', 'ALTER TABLE advisor_bookings ADD COLUMN included_at TEXT'],
+      ['included_by_user_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_by_user_id INTEGER'],
+      ['included_engagement_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_engagement_id INTEGER'],
+    ]);
+    await addMissingColumns(env, 'advisor_booking_links', [
+      ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
+    ]);
+    // #5316 / migration 202611110734: why a signed engagement ended (bare here;
+    // the CHECK is the migration's, the route validates every write).
+    await addMissingColumns(env, 'advisor_engagements', [
+      ['end_reason', 'ALTER TABLE advisor_engagements ADD COLUMN end_reason TEXT'],
+    ]);
+    // Install after legacy renames and column upgrades, as for proof withdrawal.
+    await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_profile_drafts_publish
+   AFTER UPDATE OF publish_requested_at ON advisor_profile_drafts
+   WHEN NEW.publish_requested_at IS NOT NULL
+   BEGIN
+     UPDATE advisors SET
+       display_name = json_extract(NEW.fields_json, '$.display_name'),
+       bio = json_extract(NEW.fields_json, '$.bio'),
+       linkedin_url = json_extract(NEW.fields_json, '$.linkedin_url'),
+       hourly_rate_usd = json_extract(NEW.fields_json, '$.hourly_rate_usd'),
+       expertise_json = json_extract(NEW.fields_json, '$.expertise_json'),
+       sectors_json = json_extract(NEW.fields_json, '$.sectors_json'),
+       headline = json_extract(NEW.fields_json, '$.headline'),
+       stages_json = json_extract(NEW.fields_json, '$.stages_json'),
+       languages_json = json_extract(NEW.fields_json, '$.languages_json'),
+       country = json_extract(NEW.fields_json, '$.country'),
+       timezone = json_extract(NEW.fields_json, '$.timezone'),
+       availability_note = json_extract(NEW.fields_json, '$.availability_note'),
+       headshot_url = json_extract(NEW.fields_json, '$.headshot_url'),
+       updated_at = NEW.publish_requested_at
+     WHERE id = NEW.advisor_id AND updated_at IS NEW.base_revision;
+
+     DELETE FROM advisor_profile_drafts
+      WHERE advisor_id = NEW.advisor_id AND revision = NEW.revision
+        AND EXISTS (
+          SELECT 1 FROM advisors
+           WHERE id = NEW.advisor_id AND updated_at = NEW.publish_requested_at
+        );
+   END`).run();
+    READY.set(key, true);
+  } catch (e) {
+    // Not fatal, and deliberately not swallowed silently: on a database that
+    // already has the schema this never runs, and on one that does not, the
+    // route below will fail with a message naming the missing table.
+    console.error('[advisorStoresSchema] bootstrap failed:', (e as Error).message);
+  }
+}
+
+/** Exported so a test can hold these against the migration files. */
+export const ADVISOR_PROFILE_COLUMNS = PROFILE_COLUMNS.map(([n]) => n);
+export const ADVISOR_BOOKING_COLUMNS = BOOKING_COLUMNS.map(([n]) => n);
+export const ADVISOR_CONSENT_COLUMNS = CONSENT_COLUMNS.map(([n]) => n);

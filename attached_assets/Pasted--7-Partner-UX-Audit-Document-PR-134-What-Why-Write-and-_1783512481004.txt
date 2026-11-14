@@ -1,0 +1,56 @@
+#7 - Partner UX Audit Document (PR #134)
+What & Why
+Write and publish the fourth and final persona UX audit — the service-partner experience — as PARTNER_UX_AUDIT.md at the repo root, joining the investor + advisor audits already on draft PR #134 (founder audit merged via #133). This is a docs-only task: no product code changes.
+The full source plan, including the complete audit content to expand into prose, is in attached_assets/Pasted--Axal-vc-Service-Partner-Experience-UX-UI-Audit-Redesig_1783510918395.txt. Use it as the authoritative content spec.
+Done looks like
+* PARTNER_UX_AUDIT.md exists at repo root with full prose covering: the six systemic problems, section-by-section findings (Home, Marketplace consolidation, Office hours, Money, Onboarding, Leads & network), the Partner Lifecycle module table, the Merge/remove/relocate table, and the prioritized roadmap (Critical ①–④, Important ⑤–⑧, Nice-to-have ⑨–⑫).
+* The doc is committed on branch claude/axal-founder-ux-audit-hvf5a1 and pushed (-u origin), joining draft PR #134.
+* PR #134 retitled to "Investor + Advisor + Partner UX audits and redesign roadmaps"; PR body extended (What & why + Manual verification) to cover the partner doc.
+* Markdown renders cleanly in GitHub preview.
+* No product code changes anywhere.
+Out of scope
+* Any code fixes for the issues the audit documents (field-drift fixes, schema reconciliation migration, Partner Desk, Engagements tab, Stripe invoicing, onboarding changes, etc.) — those are future roadmap items.
+* Re-reporting known CI config failures on the PR (expected, not to be re-reported).
+Audit content summary (expand to full prose in the deliverable)
+Executive summary — six systemic problems
+1. Partners land on the wrong desk — twice. ROLE_DEFAULT_PATH (App.jsx:219) sends partners to /partner-portal → PartnerPortal.jsx, titled "Partner / Investor Portal" with tabs Deals / Capital Calls / LP Investors / Portfolio — an LP-investor console with almost nothing for a service partner. Sidebar Home says Studio (/studio → founder-identical Dashboard, whose dashboard.ts partner payload is never rendered). Two homes; neither is a service-partner workspace.
+2. One economy, three marketplaces, two schemas. My Services (/services → ServiceCatalogPage → services.ts offerings + service_engagements), Needs Board (/needs → NeedsBoardPage → needs.ts full RFP economy), and Marketplace (/marketplace → MarketplacePage → catalog.ts providers/inquiries/messages/provider-reviews). Two conflicting CREATE TABLE IF NOT EXISTS service_offerings definitions: schema.sql:724 (owner_user_id/summary/price_usd) vs t13_t14_t15.sql:377 (partner_id/description/price_min/price_max) — whichever ran first on production won.
+3. The drift disease, again. ServiceCatalogPage renders o.description/o.partner_name; services.ts serializes summary/owner_user_id (services.ts:19-46) — descriptions render blank; create form Description silently dropped (POST reads summary, services.ts:83). PartnerOfficeHoursPage broken identically to the advisor page: sends start_at/duration_min where partner_office_hours.ts requires starts_at/ends_at — slot creation 400s; status vocabulary mismatch makes bookings unconfirmable; no founder-facing page renders partner slots.
+4. Win-work lifecycle buried in one page, ending in a stub. needs.ts implements need → RFP → quote → engagement with gated transitions, delivery notes, reviews — but the whole partner workflow lives in the 910-line NeedsBoardPage; no "My engagements" home or pipeline view. Terminal step is fake: invoice writes invoice_id = 'stub-…' (needs.ts:431), while wellbeing-experts has full Stripe Connect one door over.
+5. Front door is an invite token; side door mislabels people. Real partner onboarding is the partner_onboarding.ts invite-token wizard writing partner_profiles + partner_deals. Persona onboarding funnels every "Operator / Advisor" signup into the partner role (personas.ts:178-181) with no setup path — dumped on the LP portal.
+6. Bright spots point the way. Demand Insights (PartnerInsightsPage) is real aggregation; the partner sidebar is the best-curated of the four personas. The failure isn't the IA — surfaces behind it are fragmented, drifted, and unpaid.
+Section-by-section recommendations
+1. Home — Partner Desk on /studio with role-conditional composition (lifecycle rail + matching open needs + quotes awaiting + active engagements + insights digest); /partner-portal stays for investor-type partners and is dropped from ROLE_DEFAULT_PATH for service partners.
+2. Marketplace consolidation (core recommendation) — needs.ts RFP economy becomes canonical; services.ts offerings fold in as storefront listings (migrate one true service_offerings shape, reconcile double-CREATE); catalog.ts retires into needs-inquiries. My Services = storefront CRUD; Needs Board = demand only; new Engagements tab inside existing workspace; FounderMarketplacePage keeps its tabs on the canonical backend.
+3. Office hours — Same contract fix as advisor audit ① (PartnerOfficeHoursPage / partner_office_hours.ts); then unify with the advisor engine (parameterized service, advisor audit ⑥); add founder-facing discovery on PublicPartnerProfilePage and Team/Network.
+4. Money — Adopt wellbeing Stripe Connect rails for engagement invoicing (replace stub): quote → invoice → payment intent → payout; Earnings panel on Partner Desk. Refer & Earn stays separate.
+5. Onboarding — Self-serve "Offer services" path: persona onboarding flows into first-run setup (profile + first offering + categories) instead of the LP portal; invite-token deal wizard remains for equity/deal partners; fix "Operator / Advisor"→partner mislabel jointly with advisor audit ③.
+6. Leads & network — Partner-audience landing signups get a real destination (intro queue on Partner Desk / Marketplace inquiry) instead of dead-ending in /network; Contacts hub gains "Promote to partner inquiry".
+Partner Lifecycle module (Join / List / Win / Deliver / Get paid / Grow)
+Reproduce the six-stage table from the source file: stages, goals, existing surfaces, top actions, surface-first metrics. Mechanics: same rail/next-action components as the other three personas; stages derived from partner_profiles/offerings/quotes/engagements/reviews/Stripe status; no new sidebar sections.
+Merge / remove / relocate table
+Reproduce the 12-row table from the source file (fixes: field drift, double-CREATE, office-hours contract; merges: catalog.ts + services.ts → needs.ts, office-hours engines; surfaces: engagements workspace, dashboard partner payload, partner slots; replace stub invoicing with Stripe; relocate default landing; add self-serve onboarding; wire partner leads).
+Prioritized roadmap
+* Critical: ① Marketplace contract + schema reconciliation (M); ② Partner Desk landing (M/L); ③ Engagements workspace tab (M); ④ Office-hours contract fix (S when done with advisor ①).
+* Important: ⑤ Stripe invoicing replacing the stub (L); ⑥ Marketplace consolidation to needs.ts canonical (L); ⑦ Self-serve onboarding + persona fix (M); ⑧ Partner-lead destination + slot discovery (M).
+* Nice to have: ⑨ Partner lifecycle rail (M); ⑩ Co-Marketing/Insights cross-links (S); ⑪ Shared primitives with advisor ⑨ (M); ⑫ Retitle "Partner / Investor Portal" (S).
+Steps
+1. Write PARTNER_UX_AUDIT.md at repo root, expanding the audit content above (and the full source file) into complete prose with the executive summary, section-by-section analysis, lifecycle table, merge/remove/relocate table, and prioritized roadmap.
+2. Commit the doc on branch claude/axal-founder-ux-audit-hvf5a1 and push with -u origin so it joins draft PR #134.
+3. Update PR #134: retitle to "Investor + Advisor + Partner UX audits and redesign roadmaps"; extend the body's What & why and Manual verification sections to cover the partner doc.
+4. Verify the markdown renders in GitHub preview. Known CI config failures are expected — do not re-report them.
+Verification notes (already verified first-hand; cite in the doc)
+* services.ts:19-46,78-95 vs ServiceCatalogPage.jsx:74,137,307,357
+* schema.sql:724 vs t13_t14_t15.sql:377
+* needs.ts:400-442 (stub invoice at :431)
+* PartnerOfficeHoursPage.jsx:13-46 vs partner_office_hours.ts:18,32,45,60
+* App.jsx:219-232 (partner → /partner-portal); PartnerPortal.jsx:79-87 (LP-console tabs)
+* partner_onboarding.ts:94-294 (token wizard); PartnerInsightsPage api calls
+Relevant files
+* attached_assets/Pasted--Axal-vc-Service-Partner-Experience-UX-UI-Audit-Redesig_1783510918395.txt
+* cloudflare-worker/src/routes/services.ts
+* cloudflare-worker/src/routes/needs.ts
+* cloudflare-worker/src/routes/catalog.ts
+* cloudflare-worker/src/routes/partner_office_hours.ts
+* cloudflare-worker/src/routes/partner_onboarding.ts
+* frontend/src/App.jsx

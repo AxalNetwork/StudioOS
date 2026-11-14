@@ -1,0 +1,227 @@
+import { holdsLicence } from '../services/accountLicences';
+/**
+ * Shared helpers for T13/T14/T15 ports.
+ */
+import type { Context } from 'hono';
+import type { Env, User } from '../types';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from '../util/authErrors';
+import { BRANCH_SUSPENDED } from '../util/branch';
+import { refusalBody } from '../util/refusal';
+
+export function role(u: { role: string }): string {
+  return (u.role || '').toLowerCase();
+}
+
+export function isAdmin(u: User): boolean {
+  return role(u) === 'admin';
+}
+
+export function isFounder(u: User): boolean {
+  return holdsLicence(u, 'founder');
+}
+
+export function isPartner(u: User): boolean {
+  return holdsLicence(u, 'partner');
+}
+
+export function isInvestor(u: User): boolean {
+  return holdsLicence(u, 'investor');
+}
+
+export function nowIso(): string {
+  return new Date().toISOString();
+}
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Generate a short uid (mirrors FastAPI default uid; shape: hex). */
+export function newUid(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Convenience: bind a list of values into `?,?,?,...` placeholders. */
+export function placeholders(n: number): string {
+  return Array.from({ length: n }, () => '?').join(',');
+}
+
+/** Safe JSON parse with default. */
+export function jload<T>(s: string | null | undefined, def: T): T {
+  if (!s) return def;
+  try { return JSON.parse(s) as T; } catch { return def; }
+}
+
+/** Trim a value to a string, capped at `max`, or null when blank. */
+export function trimOrNull(v: unknown, max = 100000): string | null {
+  const s = v == null ? '' : String(v).trim();
+  return s ? s.slice(0, max) : null;
+}
+
+/**
+ * Normalise a tags input to a JSON-array string, mirroring backend
+ * watchlist.py::_normalise_tags: accepts a JSON-array string, a comma-separated
+ * string, or an array; trims + drops blanks; caps at 20 entries.
+ */
+export function normaliseTags(value: unknown): string {
+  if (value == null) return '[]';
+  if (Array.isArray(value)) {
+    return JSON.stringify(value.map((t) => String(t).trim()).filter(Boolean).slice(0, 20));
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return JSON.stringify(parsed.map((t: unknown) => String(t).trim()).filter(Boolean).slice(0, 20));
+      }
+    } catch { /* not JSON — fall through to CSV parsing */ }
+    return JSON.stringify(value.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 20));
+  }
+  return '[]';
+}
+
+/**
+ * Map a thrown Error to a JSON response. Use inside
+ * `try {...} catch (e) { return mapError(c, e); }` — every route file that
+ * calls it relies on the pass-through below for the sentences it throws.
+ *
+ * THE STATUSES IT CAN RETURN: whatever a thrown `Response` carries; 423 for
+ * the admin freeze and the branch suspension; 403 for step-up and the
+ * permission refusals in `AUTH_ERROR_STATUSES`, 401 for the authentication
+ * ones there; 500 for a schema mismatch or any other D1/SQLite failure; and
+ * 400 for everything else, including a UNIQUE / FOREIGN KEY / NOT NULL / CHECK
+ * constraint failure, answered in our own words (D278).
+ */
+export function mapError(c: Context<{ Bindings: Env }>, e: any) {
+  // A THROWN `Response` IS THE ANSWER, not something to describe.
+  //
+  // Apart from a thrown Response, every status this function produces is one
+  // it picks from the message. A helper that needs any OTHER status has
+  // nowhere to put it, and 404 is the one that matters: an ownership check must answer
+  // "not found" rather than "forbidden", because 403 confirms to a non-owner
+  // that the row exists. `requireOwnEngagement` and `requireOwnQuote` in
+  // `_partner_workspace_helpers.ts` therefore throw the Response itself.
+  //
+  // Without this line that Response fell through to `String(e?.message || e)`
+  // and shipped as a 400 reading `[object Response]` — which is why it is here:
+  // `partner_pipeline_stores.test.ts` asserted the 404 and got the 400. No
+  // existing caller throws a Response, so nothing else changes.
+  if (e instanceof Response) return e;
+
+  const msg = String(e?.message || e || 'Error');
+
+  // A SCHEMA ERROR IS A BUG, NOT A REFUSAL, and the caller must not be handed
+  // the query's internals. Every other message this function maps is a sentence
+  // somebody wrote for a person to read; "no such column" is SQLite talking to
+  // us. It reached a customer: `/pipeline/leads` queried a column
+  // `service_offerings` has never had, and because the frontend promotes
+  // `detail` to the thrown `Error.message` and the zone renders that verbatim,
+  // a partner's screen read `D1_ERROR: no such column: partner_id at offset 62:
+  // SQLITE_ERROR`.
+  //
+  // DELIBERATELY NARROW — only the two shapes that mean "the code and the
+  // schema disagree". A UNIQUE or FOREIGN KEY constraint failure is a real
+  // answer about the caller's data, routes translate those into their own
+  // wording, and swallowing them here would hide a refusal rather than a bug.
+  // 500 rather than 400 because nothing about the request was wrong.
+  if (/no such column|no such table/i.test(msg)) {
+    console.error('[mapError] schema mismatch — the code and D1 disagree:', msg);
+    return c.json({ detail: 'Something went wrong loading this. The failure has been logged.' }, 500);
+  }
+
+  // D278 — A CONSTRAINT FAILURE IS STILL A REFUSAL, BUT NOT IN SQLITE'S WORDS.
+  // The reasoning above stands: a UNIQUE or FOREIGN KEY failure is a real
+  // answer about the caller's data, so it stays a 400. What changes is the
+  // text: "D1_ERROR: UNIQUE constraint failed: users.email: SQLITE_CONSTRAINT"
+  // names a table and a column and reached the page verbatim once D258 made
+  // `message`/`detail` the sentence the page prints. The raw text goes to the
+  // log; the caller reads which kind of conflict it was.
+  const constraint = /\b(UNIQUE|FOREIGN KEY|NOT NULL|CHECK) constraint failed/i.exec(msg);
+  if (constraint) {
+    const kind = constraint[1].toUpperCase();
+    return c.json(refusalBody({
+      code: kind === 'UNIQUE' ? 'already_exists' : kind === 'FOREIGN KEY' ? 'related_record_missing' : 'invalid_record',
+      message: kind === 'UNIQUE'
+        ? 'That already exists, so nothing was saved.'
+        : kind === 'FOREIGN KEY'
+          ? 'That refers to a record that does not exist (or is still referred to elsewhere), so nothing was saved.'
+          : 'A required value was missing or not allowed, so nothing was saved.',
+      raw: msg,
+    }), 400);
+  }
+  // Any other D1 or SQLite failure is ours, not the caller's: 500, logged.
+  // TWO TESTS, NOT ONE ALTERNATION: a message that STARTS with `D1_ERROR`, or
+  // one that CONTAINS `SQLITE_` anywhere (`Error: SQLITE_BUSY: …` does not
+  // start with it). The single anchored group CodeQL's autofix proposed on
+  // #814 dropped the second case (D278 follow-up).
+  if (/^D1_ERROR/.test(msg) || /SQLITE_/.test(msg)) {
+    return c.json(refusalBody({
+      code: 'storage_error',
+      message: 'Something went wrong saving or loading this. The failure has been logged.',
+      raw: msg,
+    }), 500);
+  }
+
+  // D110 — THE SHARED TABLE, not a second copy of it. This ternary used to
+  // list four sentences of its own and did not know 'Super admin required',
+  // so every route in `admin_licences.ts` — which catches its own throws, so
+  // `app.onError` never sees them — answered a permission refusal with **400
+  // Bad Request**. The SPA cannot tell a refusal from a malformed request at
+  // 400, and the gate that worked reported the wrong thing.
+  // D134 — the step-up refusal carries a body, not only a status. Its remedy is
+  // "type a fresh TOTP code and retry", and the SPA finds that out from `code`;
+  // a bare `{detail: 'step_up_required'}` would be the right number and still a
+  // dead end. Same object as `app.onError` builds, from the same function.
+  if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(e), 423);
+  if (msg === ADMIN_MFA_REQUIRED) return c.json(adminMfaRequiredBody(), 403);
+  if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(e), 423);
+  if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(e), 403);
+
+  const status = AUTH_ERROR_STATUSES[msg] ?? 400;
+  return c.json({ detail: msg }, status as any);
+}
+
+/**
+ * Resolve the firm attached to this account — through `users.partner_id` and
+ * through nothing else.
+ *
+ * ONE KEY, BECAUSE THE SECOND ONE COULD NOT FAIL CLOSED. This used to fall back
+ * to `SELECT * FROM partners WHERE email = ?` whenever `partner_id` did not
+ * resolve, and that fallback was both useless and dangerous:
+ *
+ *   USELESS, MEASURED. Of 26 `role='partner'` accounts in production, 8 resolve
+ *   by `partner_id`, 18 resolve to nothing, and 0 resolved only by email. It
+ *   could not have been otherwise: `ensureRoleProfile` runs the SAME email
+ *   lookup on every `/auth/me` and writes `partner_id` from it, so any row the
+ *   fallback could have matched was already linked before it was reached.
+ *
+ *   DANGEROUS, BY SHAPE. `partners.email` is a person's address and `users`
+ *   holds another copy of one; matching two tables on a mutable string is a
+ *   link nobody records making. Change an account's email to one a firm happens
+ *   to carry and the account silently acquires that firm's quotes, engagements
+ *   and clients, with a 200 and no audit row. It is the same failure
+ *   `partner_user_firm_link.test.mjs` was written to keep migration 210 from
+ *   causing — "a row matched too broadly does not fail closed" — reached by a
+ *   different route.
+ *
+ * So a `partner_id` that resolves is the only way in, and everything else —
+ * unset, or pointing at a firm that no longer exists — gets the gap card.
+ * That card already tells the reader exactly what happened and that an admin
+ * can attach the account, which is a better answer than a guess.
+ *
+ * An admin acts as a partner only when their own `users.partner_id` is set;
+ * previewing the role attaches them to nobody, on purpose.
+ */
+export async function requirePartnerProfile(env: Env, user: User) {
+  if (!(isPartner(user) || isAdmin(user))) {
+    throw new Error('Forbidden');
+  }
+  if (user.partner_id) {
+    const row = await env.DB.prepare('SELECT * FROM partners WHERE id = ?')
+      .bind(user.partner_id).first<any>();
+    if (row) return row;
+  }
+  throw new Error('No partner profile attached to your account');
+}

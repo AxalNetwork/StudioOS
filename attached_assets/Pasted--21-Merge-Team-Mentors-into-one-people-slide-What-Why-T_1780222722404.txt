@@ -1,0 +1,47 @@
+#21 - Merge Team & Mentors into one people slide
+What & Why
+The Spin-Out Demo Day deck currently has two adjacent people-focused slides: "08 · Team & venture readiness" (founder cards + the READINESS score bars) and "10 · Mentors & network" (the admin-managed network roster as profile cards, the SKILL COVERAGE radar, plus a MENTOR SESSIONS list and an OPERATING PARTNERS ON CALL grid). The founder wants these collapsed into a single "who's around the table" slide that leads with profile cards for founders, partners, advisors, and mentors — each showing the person's name and the company/companies they're currently part of — while keeping the READINESS graphic and the SKILL COVERAGE chart, and shrinking Mentor Sessions and Operating Partners On Call down to a minimal footprint.
+A "company / affiliation" value does not exist in the data today, so this task also adds a proper editable field for it on both the admin network roster and on founders, end to end.
+Done looks like
+* The deck shows one combined people slide where there used to be two; the standalone Team & Readiness slide and the standalone Mentors & Network slide are gone from the running deck.
+* The combined slide's primary content is a set of profile cards covering founders + partners + advisors + mentors, each card showing the person's name and the company/affiliation they're currently with (grouped or visually distinguished by kind so it's clear who's a founder vs network).
+* The READINESS score graphic (the sub-score bars / total) is still present on the slide.
+* The SKILL COVERAGE radar is still present on the slide.
+* Mentor Sessions and Operating Partners On Call still appear but take minimal space (compact, secondary treatment — not full panels).
+* Admins can enter/edit a Company / affiliation value for each network roster person, and it shows on their card.
+* Founders have an editable Company / affiliation value (entered wherever founder name/role/bio is edited today), and it shows on their card.
+* Cards degrade gracefully: a person with no company shows just name + role, with no broken/empty UI; the whole slide still renders when founders, roster, readiness, or skills data is missing.
+* The deck's slide count is internally consistent across the three layers (frontend slide registry, worker slide emit, and the deck method spec) so the existing deck tests pass.
+* Both changelogs updated (CHANGELOG.md technical, frontend/public/CHANGELOG-user.md plain-English).
+Out of scope
+* Any redesign of the other 11 slides.
+* Pulling company data from an external/enrichment source — company is a plain editable field only.
+* LinkedIn/photo changes beyond what already exists on the roster.
+* Reordering the deck beyond removing the now-redundant second slide.
+Steps
+1. Add a Company / affiliation field to the network roster. Add an additive company (a.k.a. affiliation) column to the network_profiles table via a new additive IF NOT EXISTS-style migration, mirror it in the lazy bootstrap schema helper, and thread it through the admin CRUD route (create/update sanitisation + read) and the admin roster editor form so admins can set it.
+2. Add a Company / affiliation field to founders. Add an additive company column to the founders table (with a lazy column-ensure in the consuming route following the project's additive-migration convention), and expose an input for it wherever founder name/role/bio is edited today (the Edit Project flow), persisting through the projects route.
+3. Surface company in the deck data layer. Extend the deck's founder and network-profile data shapes (worker shaper + frontend template types + hydrate + sample data) so each founder and each roster person carries a company/affiliation value end to end.
+4. Build the merged people slide. Replace the two existing slide components with a single slide that: leads with profile cards for founders + partners + advisors + mentors (name + company, grouped/marked by kind), keeps the READINESS score graphic, keeps the SKILL COVERAGE radar, and renders Mentor Sessions + Operating Partners On Call in a compact, minimal-footprint treatment. Preserve all existing graceful empty/placeholder states.
+5. Keep the three slide layers in lockstep. Update the frontend slide registry, the worker slide-emit builder, the coverage/autofill builder, and the deck method spec in methods.ts (including slide_count) so the merged slide is reflected consistently and the old separate slide ids are removed/merged. Note: the method spec currently still lists separate venture_readiness + team + mentor_network slides at a 14-count while the frontend/worker already merged Team+Readiness — reconcile all of them to the new single people slide.
+6. Update tests and changelogs. Update the deck autofill/render tests (slide count + the merged slide's fields + missing-data paths) to match the new structure, and add a user-facing line to both changelogs.
+Relevant files
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:88-128
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:401-606
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2045-2129
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2586-2625
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2680-2733
+* frontend/src/decks/templates/axal_spinout_demoday_app.tsx:2801-2817
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:57-94
+* cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:791-830
+* cloudflare-worker/src/services/decks/methods.ts:783-912
+* cloudflare-worker/sql/migrations/075_network_profiles.sql
+* cloudflare-worker/src/services/networkProfilesSchema.ts
+* cloudflare-worker/src/routes/admin_network_profiles.ts
+* frontend/src/pages/admin/AdminNetworkProfiles.jsx
+* frontend/src/pages/ProjectDetail.jsx
+* cloudflare-worker/src/routes/projects.ts
+* cloudflare-worker/sql/schema.sql
+* cloudflare-worker/test/decks.autofill.test.ts
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

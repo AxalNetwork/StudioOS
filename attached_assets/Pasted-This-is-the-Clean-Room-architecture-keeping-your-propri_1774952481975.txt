@@ -1,0 +1,52 @@
+This is the "Clean Room" architecture—keeping your proprietary "Alpha" and sensitive user data behind a firewall while letting the UI live and breathe on the public web. 
+
+To get Replit to build this correctly, the prompt needs to define the **Data Boundary**. You are essentially asking Replit to build the **API Brain**, while your GitHub/Jekyll repo handles the **UI Skin**.
+
+### The Replit Prompt: StudioOS Hybrid Data Engine
+
+**Role:** You are a Senior Security & Systems Architect. Your task is to build a high-performance **FastAPI (Python) Backend** that serves as the private data engine for a Jekyll-based VC Portal.
+
+**1. Data Architecture (The Split):**
+* **GitHub (Public/Static):** The Jekyll repo contains UI components, CSS, and non-sensitive market data (e.g., general sector descriptions).
+* **Replit (Private/Dynamic):** This server MUST store and serve only:
+    * **User PII:** Names, emails, encrypted passwords, and roles (Admin, Partner, Founder, LP).
+    * **Private Financials:** Specific company burn rates, NRR, and LP capital account balances.
+    * **Authentication:** JWT-based login/logout logic.
+
+**2. Administrator "Portal Command":**
+* **Impersonation API:** Create a protected `/admin/view-as/{user_id}` endpoint. When called by an Admin, it returns the data payload associated with that specific user’s role.
+* **Role-Based Access Control (RBAC):** Ensure that the `/private-data/founder` endpoint *only* returns data if the JWT belongs to that specific founder or an Admin.
+
+**3. API Endpoints to Build:**
+* `POST /auth/login`: Authenticates users and returns a JWT.
+* `GET /user/profile`: Returns private personal info.
+* `GET /market/private-signals`: Returns the "Aggressive" vs "Wait-and-See" status and private multiples.
+* `GET /portfolio/metrics`: Returns private company data (Burn Multiple, LTV/CAC) filtered by user role.
+
+**4. Technical Guardrails:**
+* **CORS Setup:** Explicitly allow requests ONLY from the Jekyll domain (e.g., `https://your-studio.github.io`).
+* **Database:** Use Replit’s built-in PostgreSQL for the private data. 
+* **Frontend Bridge:** Provide a snippet of JavaScript (`fetch` calls) that I can paste into my Jekyll pages to link the two systems.
+
+---
+
+### How this works for your portals:
+
+
+
+### For the Administrator:
+When you are on your Jekyll site, you will see an **Admin Bar**. When you toggle "View As LP," the JavaScript on the Jekyll page sends a request to Replit saying, *"Hey, I'm the Admin, show me the data for LP #12345."* Replit checks your credentials, fetches the private capital call data, and sends it back to your browser to render inside the Jekyll layout.
+
+### For the Founder:
+They log in via the Jekyll page. The site asks Replit for their data. Replit sends back **only** their private company metrics. Their password and burn rate never touch GitHub; they stay in the Replit PostgreSQL database.
+
+---
+
+### Implementation Tip for Jekyll:
+Since Jekyll is static, you can’t use "server-side" code to hide things. You must use **Conditional CSS/JS**. 
+
+1.  Keep a `config.yml` in GitHub that lists your **Replit API URL**.
+2.  Use a small script in your `head.html` that checks for a "Session Token" in the browser's local storage.
+3.  If no token is found, redirect them to the `/login` page on your Jekyll site.
+
+**Would you like me to generate the "Frontend Bridge" JavaScript snippet so you can see how Jekyll will actually talk to the Replit server?**

@@ -1,0 +1,1248 @@
+/**
+ * The hypothesis board and the validation summary, over evidence that already
+ * exists.
+ *
+ * WHAT THIS READS AND WHAT IT DOES NOT TOUCH. Hypotheses have lived in
+ * `discovery_interviews.hypotheses_json` all along, and two shipped surfaces
+ * read them — `signalsSlider` in `progress.ts` and the demo-day deck builder.
+ * Nothing here migrates, rewrites, or supersedes that column. Migration 211's
+ * `hypotheses` table is the PROJECT-LEVEL claim those per-interview sentences
+ * roll up to, exactly as `pain_groups` is the project-level theme that
+ * `pains_json` strings roll up to. One sentence, one home.
+ *
+ * THE COUNTS ARE COMPUTED HERE AND STORED NOWHERE. Verdict, lane, For, Against
+ * and the distance to the bar are all derived at read time from the interviews
+ * plus the links. Storing any of them would be a second answer to a question
+ * the interviews already answer, and the two disagree the first time an
+ * interview is edited.
+ *
+ * TWO ACCESS RULES, DELIBERATELY DIFFERENT. The board and summary are derived
+ * from interviews and are read by whoever may read the interviews — admins and
+ * partners included. The founder's proceed/pivot/stop decision is not derived
+ * from anything, and partners are excluded from it: here it reaches only the
+ * summary export. Both predicates live in `_founder_validate_helpers.ts` with
+ * the tests that hold them apart. The decision itself is the Verdict module's
+ * (D693); D704 (#1666) removed this file's old `GET` and `POST /decision/:id`.
+ */
+import { Hono } from 'hono';
+import { logCycleWrite } from '../services/cycleActivity';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import {
+  loadPainGroupModel, normPhrase, getPainGroupsView,
+  isPainSeverity, PAIN_SEVERITIES, isPainSeverityLevel, PAIN_SEVERITY_LEVELS,
+} from '../services/painGroups';
+import { csvResponse, stamp } from '../services/csv';
+import {
+  serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
+  type ExportInterviewRow,
+} from './_founder_validate_exports';
+import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
+import {
+  recordVerdictChanges, loadVerdictHistory,
+} from '../services/verdictHistory';
+import {
+  canReadBoard, canReadDecision, canWrite,
+  verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, v1StateFor, VALIDATION_BAR,
+  type ProjectRef,
+} from './_founder_validate_helpers';
+// `insertHypothesis` stays — `POST /hypotheses`, the MANUAL form, is in this
+// file. `upsertPainAlias` left with the accept path's dispatch: the pain tag's
+// registry entry calls it now, and this file's own alias write lives in
+// `progress.ts`. Both callers still go through the one writer, which is the
+// point; only the caller moved.
+import { insertHypothesis, insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
+import { FILL_KINDS, fillKind } from '../services/fills/registry';
+import { claimFills, ensureProposalRunColumn, recordFill } from '../services/fills/provenance';
+// `PROPOSAL_KINDS`, `TASK_FOR_KIND`, `TAG_PROMPT`, `DRAFT_PROMPT` and the two
+// parsers are gone from this file: the registry owns them per kind now, and it is
+// the parsers themselves the registry calls. They stay exported from that module
+// because its own tests exercise them directly — the shortest path to asserting
+// what a parser refuses is to hand it a bad reply, not to run a route.
+import {
+  MAX_PROPOSALS_PER_RUN, listPending, priorPayloads, type ProposalKind,
+} from './_founder_validate_proposals';
+import { refuseReason } from '../services/fills/types';
+import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
+import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { currentDecision } from '../services/verdict';
+import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
+import { HINT_DEPS, HintRefused, THEME_JOBS, hintSection, themeHints } from '../services/ai/themeHints';
+import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+
+const founderValidate = new Hono<{ Bindings: Env }>();
+
+const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
+  status, headers: { 'Content-Type': 'application/json' },
+});
+const forbidden = () => json({ detail: 'Forbidden' }, 403);
+const notFound = (what: string) => json({ detail: `${what} not found` }, 404);
+
+const trimOrNull = (v: unknown): string | null => {
+  const s = String(v ?? '').trim();
+  return s ? s : null;
+};
+
+/** ICP fit values the product recognises. NULL is a fourth state, not a value. */
+const ICP_VALUES = new Set(['strong', 'partial', 'none']);
+const DIRECTIONS = new Set(['supports', 'contradicts']);
+
+type ProjectRow = ProjectRef & { name: string };
+
+async function loadProject(env: Env, projectId: number): Promise<ProjectRow | null> {
+  return env.DB.prepare('SELECT id, name, founder_id FROM projects WHERE id = ?')
+    .bind(projectId).first<ProjectRow>();
+}
+
+/** Resolve the project and the caller, or the Response that refuses them. */
+async function scope(
+  c: any, projectId: number, gate: (p: ProjectRef, u: User) => boolean,
+): Promise<{ user: User; project: ProjectRow } | Response> {
+  if (!Number.isFinite(projectId)) return json({ detail: 'Invalid project id' }, 400);
+  const user = (await requireAuth(c)) as User;
+  const project = await loadProject(c.env, projectId);
+  if (!project) return notFound('Project');
+  if (!gate(project, user)) return forbidden();
+  return { user, project };
+}
+
+type InterviewRow = {
+  id: number;
+  interviewee_name: string | null;
+  interviewee_role: string | null;
+  interviewee_company: string | null;
+  icp_fit: string | null;
+  quote_consent: number | null;
+  pains_json: string | null;
+};
+
+/**
+ * Every interview on the project, with the pain groups it touched.
+ *
+ * The phrase→group hop goes through `pain_group_aliases` because that is where
+ * the founder's own curation lives; matching raw strings would re-cluster the
+ * pains differently from the pain map next door and give two pages two
+ * different answers about the same interviews.
+ */
+/**
+ * D4585 (#4585): a required evidence read that failed. It is never turned into an empty collection: the board and
+ * the exports refuse with `evidence_unreadable` and say which source, so a failure cannot read as "no claims" or "no
+ * interviews", and so the verdict history is never written from an incomplete read. A genuinely empty venture reads
+ * successfully and exports successfully.
+ */
+export class EvidenceUnreadable extends Error {
+  readonly source: 'claims' | 'pain links' | 'interviews';
+  constructor(source: 'claims' | 'pain links' | 'interviews') { super(`${source} unreadable`); this.source = source; }
+}
+async function required<T>(source: EvidenceUnreadable['source'], read: Promise<T>): Promise<T> {
+  try { return await read; } catch (e) {
+    console.error(`[founder_validate] ${source} unreadable:`, (e as Error)?.message);
+    throw new EvidenceUnreadable(source);
+  }
+}
+const evidenceUnreadable = (e: EvidenceUnreadable, what: string) =>
+  json({ error: 'evidence_unreadable', source: e.source, detail: `The ${e.source} could not be read, so ${what}. Nothing was changed. Try again.` }, 503);
+
+async function loadEvidenceBase(env: Env, projectId: number) {
+  const model = await loadPainGroupModel(env, projectId);
+  // The SELECT below names migration 211's columns. On an environment where
+  // 211 has not run, `.catch(() => [])` would turn "no such column" into "no
+  // interviews" and the board would read as empty rather than broken — so the
+  // columns are ensured first, the same way the interview CRUD ensures them.
+  await ensureDiscoveryEvidenceColumns(env);
+  const res = await required('interviews', env.DB.prepare(
+    `SELECT id, interviewee_name, interviewee_role, interviewee_company,
+            icp_fit, quote_consent, pains_json
+       FROM discovery_interviews WHERE project_id = ? ORDER BY id`,
+  ).bind(projectId).all<InterviewRow>());
+
+  const interviews = (res.results || []).map((r) => {
+    let pains: unknown[] = [];
+    try {
+      const parsed = JSON.parse(r.pains_json || '[]');
+      if (Array.isArray(parsed)) pains = parsed;
+    } catch { /* a malformed blob is no pains, not a crash */ }
+    const groups = new Set<number>();
+    for (const p of pains) {
+      const gid = model.aliasByNorm.get(normPhrase(typeof p === 'string' ? p : String((p as any)?.pain ?? '')));
+      if (gid) groups.add(gid);
+    }
+    return { row: r, groups, icp_fit: r.icp_fit, name: r.interviewee_name, company: r.interviewee_company };
+  });
+  return { interviews, model };
+}
+
+// ---------------------------------------------------------------------------
+// The board
+// ---------------------------------------------------------------------------
+
+// `claimFills` (Eadwyn's mark, D424) lives in `services/fills/provenance.ts`
+// so the Validate cycle read (`services/cycleValidate.ts`) shares it; it is
+// re-exported here for the board's existing callers.
+export { claimFills };
+
+/**
+ * The board, built once.
+ *
+ * Extracted when the CSV export arrived: a second copy of this orchestration
+ * would be a second answer to "what lane is H3 in", and the two would part
+ * company the first time either was edited. The counts are derived, never
+ * stored, precisely so there is one answer — deriving them twice from two
+ * places gives that away again.
+ */
+async function buildBoard(env: Env, projectId: number) {
+  // D4585: the claims, their pain links and the interviews are all required. A failed read throws before any verdict
+  // is derived, so `recordVerdictChanges` below never sees an incomplete board: no false transition is written, and a
+  // later healthy read has nothing to "recover" from.
+  const hyps = await required('claims', env.DB.prepare(
+    `SELECT id, code, claim, sort_order, retired_at, sprint
+       FROM hypotheses WHERE project_id = ? ORDER BY sort_order, id`,
+  ).bind(projectId).all<any>());
+
+  const linkRes = await required('pain links', env.DB.prepare(
+    `SELECT l.id, l.hypothesis_id, l.pain_group_id, l.direction
+       FROM hypothesis_pain_links l
+       JOIN hypotheses h ON h.id = l.hypothesis_id
+      WHERE h.project_id = ?`,
+  ).bind(projectId).all<any>());
+
+  const { interviews, model } = await loadEvidenceBase(env, projectId);
+  const linksBy = new Map<number, any[]>();
+  for (const l of linkRes.results || []) {
+    if (!linksBy.has(l.hypothesis_id)) linksBy.set(l.hypothesis_id, []);
+    linksBy.get(l.hypothesis_id)!.push(l);
+  }
+
+  const items = (hyps.results || []).map((h) => {
+    const links = linksBy.get(h.id) || [];
+    const evidence = evidenceFor(links, interviews);
+    const verdict = verdictFor(evidence);
+    return {
+      ...h,
+      links,
+      evidence,
+      verdict,
+      lane: laneFor(verdict, evidence),
+      bar_note: barNoteFor(evidence),
+      // The page must be able to say WHY a verdict is missing rather than
+      // rendering a blank cell that looks like a loading state.
+      _note: verdict === null
+        ? `${evidence.fitUnrecorded} interview(s) touching this claim have no ICP fit recorded, and counting them could change the status, so a verdict would be a guess`
+        : null,
+    };
+  });
+
+  // WHAT THE BOARD USED TO SAY (#175, migration 255). Everything above is
+  // derived and stored nowhere, which is correct and stays — but it left three
+  // chips with nothing to stand on: `As of last week` and `Changed this month`
+  // on /validate/verdict, and `Recently moved` on /validate/hypotheses. The
+  // history is recorded here, on the read, and the reasoning for that is in
+  // `services/verdictHistory.ts`: there is no single evidence-write path to hang
+  // it on, and the failure mode of missing one of the six is a hole nothing can
+  // see. Writes only on a change, so this is one SELECT in the steady state.
+  //
+  // Never allowed to cost the board: a history that cannot be written or read
+  // leaves `history: []`, a null start and unavailable coverage, and the chips
+  // refuse rather than drawing an empty answer.
+  await recordVerdictChanges(env, projectId, items.map((h: any) => ({
+    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane), v1: v1StateFor(h.evidence),
+  }))).catch(() => 0);
+  const now = new Date();
+  const history = await loadVerdictHistory(env, projectId, {
+    claimIds: items.map((h: any) => Number(h.id)),
+    boundaries: [
+      new Date(now.getTime() - 7 * 86_400_000),
+      new Date(now.getTime() - 14 * 86_400_000),
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    ],
+  });
+  for (const h of items as any[]) {
+    h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
+      verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
+    }));
+  }
+
+  // Eadwyn's mark on the claims it supplied (D424). Never allowed to cost the
+  // board, and never folded into "no claim was supplied" when it failed.
+  let fillsRecorded = true;
+  const fills = await claimFills(env, projectId, items).catch(() => {
+    fillsRecorded = false;
+    return new Map();
+  });
+  for (const h of items as any[]) h.filled = fills.get(Number(h.id)) ?? null;
+
+  // Project-level honesty: how much of the evidence base is unusable, and why.
+  const fitMissing = interviews.filter((i) => i.row.icp_fit == null).length;
+  const consentMissing = interviews.filter((i) => i.row.quote_consent == null).length;
+
+  return {
+    bar: VALIDATION_BAR,
+    hypotheses: items,
+    pain_groups: model.groups,
+    // WHEN THE RECORD STARTS, so the page can say it. Nothing is backfilled —
+    // the only timestamp available to invent a past verdict from is
+    // `hypotheses.updated_at`, which moves when the claim TEXT is edited — and a
+    // window with no observations in it must read as "not recorded yet" rather
+    // than as "nothing changed". `/build/this-week` returns `history_since` for
+    // exactly this reason and this is the same seam.
+    verdict_history_since: history.since,
+    verdict_history_coverage: history.coverage,
+    // False when `fill_provenance` could not be read: every `filled` is then
+    // unknown, not "typed by hand", and the page says which.
+    fills_recorded: fillsRecorded,
+    evidence_base: {
+      interviews: interviews.length,
+      icp: interviews.filter((i) => isIcp(i.row.icp_fit)).length,
+      fit_not_recorded: fitMissing,
+      quotable: interviews.filter((i) => i.row.quote_consent === 1).length,
+      consent_not_recorded: consentMissing,
+    },
+  };
+}
+
+founderValidate.get('/board/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'the board is not shown');
+    throw e;
+  }
+  return json({ project: { id: s.project.id, name: s.project.name }, ...board });
+});
+
+founderValidate.post('/board/:projectId/hypotheses', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
+  if (s instanceof Response) return s;
+  const b = await c.req.json().catch(() => ({} as any));
+  const claim = trimOrNull(b.claim);
+  if (!claim) return json({ detail: 'A hypothesis needs a claim' }, 400);
+
+  // Through the shared writer, which is also what accepting an AI proposal
+  // calls. `code` is allocated from the highest ever used rather than the
+  // current count — retiring H2 must not hand "H2" to a different claim later
+  // — and a second insert with its own idea of that rule is exactly how the
+  // allocation would quietly start handing out duplicates.
+  const row = await insertHypothesis(c.env, s.project.id, claim, s.user.id);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: row.id, action: 'hypothesis_created', summary: `Hypothesis ${row.code} created` });
+  return json(row, 201);
+});
+
+founderValidate.patch('/hypotheses/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id, code FROM hypotheses WHERE id = ?',
+  ).bind(id).first<{ project_id: number; code: string }>();
+  if (!owner) return notFound('Hypothesis');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const claim = trimOrNull(b.claim);
+  // Retire and un-retire, never delete: an abandoned hypothesis is evidence
+  // about how the venture thought, and the canvas draws a "Retired" filter.
+  const retire = b.retired === true ? new Date().toISOString()
+    : b.retired === false ? null : undefined;
+  if (claim === null && retire === undefined) return json({ detail: 'Nothing to change' }, 400);
+
+  if (claim !== null) {
+    await c.env.DB.prepare(
+      "UPDATE hypotheses SET claim = ?, updated_at = datetime('now') WHERE id = ?",
+    ).bind(claim, id).run();
+  }
+  if (retire !== undefined) {
+    await c.env.DB.prepare(
+      "UPDATE hypotheses SET retired_at = ?, updated_at = datetime('now') WHERE id = ?",
+    ).bind(retire, id).run();
+  }
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: id, action: 'hypothesis_updated', summary: `${owner.code} updated` });
+  return json({ ok: true });
+});
+
+founderValidate.post('/hypotheses/:id/links', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id, code FROM hypotheses WHERE id = ?',
+  ).bind(id).first<{ project_id: number; code: string }>();
+  if (!owner) return notFound('Hypothesis');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const direction = String(b.direction || '');
+  const groupId = Number(b.pain_group_id);
+  if (!DIRECTIONS.has(direction)) return json({ detail: 'direction must be supports or contradicts' }, 400);
+
+  // The pain group must belong to the SAME project. Without this a link could
+  // pull another venture's interviews into this venture's evidence count.
+  // `insertHypothesisLink` checks both ends; an accepted D658 placement
+  // writes through the same function.
+  const linked = await insertHypothesisLink(c.env, Number(owner.project_id), id, groupId, direction as 'supports' | 'contradicts');
+  if (!linked) return notFound('Pain group');
+  // A link that already existed wrote nothing, so it logs nothing. Each side
+  // names the other by code or title: "Linked to H3" on the theme.
+  if (linked.inserted) {
+    const theme = await c.env.DB.prepare('SELECT title FROM pain_groups WHERE id = ? AND project_id = ?')
+      .bind(groupId, s.project.id).first<{ title: string }>();
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+      entityId: id, action: 'hypothesis_pain_linked', summary: `Linked to ${theme?.title ?? 'a theme'}` });
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
+      entityId: groupId, action: 'hypothesis_pain_linked', summary: `Linked to ${owner.code}` });
+  }
+  return json({ ok: true }, 201);
+});
+
+founderValidate.delete('/links/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    `SELECT h.project_id, l.hypothesis_id, l.pain_group_id, h.code, g.title FROM hypothesis_pain_links l
+       JOIN hypotheses h ON h.id = l.hypothesis_id
+       LEFT JOIN pain_groups g ON g.id = l.pain_group_id WHERE l.id = ?`,
+  ).bind(id).first<{ project_id: number; hypothesis_id: number; pain_group_id: number; code: string; title: string | null }>();
+  if (!owner) return notFound('Link');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+  await c.env.DB.prepare('DELETE FROM hypothesis_pain_links WHERE id = ?').bind(id).run();
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: owner.hypothesis_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked from ${owner.title ?? 'a theme'}` });
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: owner.pain_group_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked from ${owner.code}` });
+  return json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// The three exports
+//
+// GET, not POST: none of these takes a filter, so the URL is the whole request
+// and a person can bookmark or curl it. (`admin.ts`'s transcript export is a
+// POST precisely because it does take filters.)
+//
+// Each caps its rows. A Worker materialises the whole body in memory, so an
+// unbounded export is an outage waiting for the venture that logs 40,000
+// interviews — and `X-Export-Rows` tells the caller what it actually got, so a
+// truncated file cannot be mistaken for a complete one.
+// ---------------------------------------------------------------------------
+
+/**
+ * Row cap, written as a literal in the SQL below rather than interpolated.
+ *
+ * `scripts/check-sql-prepare.mjs` refuses ANY `${…}` inside a `DB.prepare`
+ * template — a constant reads the same as a variable at the point the query
+ * text is built, and the guard is right to not try to tell them apart. Keeping
+ * the number in one place means keeping it in the statement, so there is no
+ * second copy to drift: 5000 is enough that no real venture reaches it, and
+ * small enough that a bug cannot exhaust a Worker's memory. `admin.ts`'s
+ * transcript export uses the same figure for the same reason.
+ */
+
+/** `Acme_Robotics-interviews-2026-09-06.csv` — the worker's two filename idioms at once. */
+const exportName = (projectName: string, what: string) =>
+  `${String(projectName || 'venture').replace(/[^A-Za-z0-9._-]/g, '_')}-${what}-${stamp()}.csv`;
+
+founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
+  // Interview notes and pain phrases leave the app in this file; partners cannot export them.
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
+  if (s instanceof Response) return s;
+
+  // 211's columns are ensured before they are named, the same way the board
+  // does it: on an environment where the migration has not run, "no such
+  // column" would otherwise read as "no interviews".
+  await ensureDiscoveryEvidenceColumns(c.env);
+  // D4585: a failed read refuses the export; an empty CSV would say the venture has no interviews.
+  let res: { results?: ExportInterviewRow[] };
+  try {
+    res = await required('interviews', c.env.DB.prepare(
+      `SELECT id, interviewee_name, interviewee_role, interviewee_company,
+              interview_date, icp_fit, quote_consent, featured,
+              validation_rating, validation_comment, notes, pains_json
+         FROM discovery_interviews WHERE project_id = ?
+        ORDER BY interview_date DESC, id DESC LIMIT 5000`,
+    ).bind(s.project.id).all<ExportInterviewRow>());
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
+
+  const rows = res.results || [];
+  return csvResponse(
+    serializeInterviewsCsv(rows),
+    exportName(s.project.name, 'interviews'),
+    { 'X-Export-Rows': String(rows.length) },
+  );
+});
+
+founderValidate.get('/pain-map/:projectId/export.csv', async (c) => {
+  // Theme wordings and ungrouped phrases are restricted to venture writers.
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
+  if (s instanceof Response) return s;
+  const view = await getPainGroupsView(c.env, s.project.id);
+  return csvResponse(
+    serializePainMapCsv(view),
+    exportName(s.project.name, 'pain-map'),
+    { 'X-Export-Rows': String(view.groups.length + view.ungrouped.length) },
+  );
+});
+
+// `canReadDecision`, NOT `canReadBoard`: this file carries the founder's own
+// proceed/pivot/stop, which partners may not read. Gating the whole export on
+// the stricter of the two rules is easier to reason about than one that
+// silently drops a section for some callers — and the board itself is still
+// readable in the app by anyone `canReadBoard` admits.
+founderValidate.get('/summary/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
+  if (s instanceof Response) return s;
+
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
+  // The venture's current given decision, through the one reader (D693). A
+  // read that fails refuses the export: a summary with no decision in it
+  // would say the founder has not decided.
+  let cur: Awaited<ReturnType<typeof currentDecision>>;
+  try {
+    cur = await currentDecision(c.env, s.project.id, 'venture');
+  } catch (e) {
+    console.error('[founder_validate] decision unreadable:', (e as Error)?.message);
+    return json({ detail: 'The decision could not be read.' }, 503);
+  }
+
+  return csvResponse(
+    serializeSummaryCsv(board.hypotheses as any, cur ? { decision: cur.decision, reasoning: cur.reasoning, decided_at: cur.decided_at } : null),
+    exportName(s.project.name, 'validation-summary'),
+    { 'X-Export-Rows': String(board.hypotheses.length) },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The four facts about an interview that make the numbers above mean something
+// ---------------------------------------------------------------------------
+
+founderValidate.patch('/interviews/:id/evidence', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ project_id: number }>();
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  // Each field is only written when the caller actually sent it. `undefined`
+  // leaves the column alone; an explicit null clears it back to not-recorded.
+  if ('icp_fit' in b) {
+    const v = b.icp_fit == null ? null : String(b.icp_fit);
+    if (v !== null && !ICP_VALUES.has(v)) return json({ detail: 'icp_fit must be strong, partial or none' }, 400);
+    await setInterviewIcpFit(c.env, id, v);
+  }
+  if ('quote_consent' in b) {
+    // Three states, and the third is the reason this column is nullable:
+    // asked-and-yes, asked-and-no, never asked.
+    const v = b.quote_consent == null ? null : (b.quote_consent ? 1 : 0);
+    await c.env.DB.prepare(
+      "UPDATE discovery_interviews SET quote_consent = ?, updated_at = datetime('now') WHERE id = ?",
+    ).bind(v, id).run();
+  }
+  if ('interviewee_company' in b) {
+    await c.env.DB.prepare(
+      "UPDATE discovery_interviews SET interviewee_company = ?, updated_at = datetime('now') WHERE id = ?",
+    ).bind(trimOrNull(b.interviewee_company), id).run();
+  }
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'interview_evidence_updated', summary: `Interview ${id} evidence updated` });
+  return json({ ok: true });
+});
+
+/**
+ * Record — or clear — how severe ONE pain was in ONE interview.
+ *
+ * `interview_pain_severities` (migration 211) shipped with the right shape, a
+ * unique index, and no reader and no writer anywhere in the worker. Migration
+ * 215's own header names it as the example of "a column that comes to exist
+ * that nothing reads". This is the writer; `getPainGroupsView` is the reader.
+ *
+ * The consequence on screen is the `Need-to-have` chip on `/validate/pain-map`,
+ * which was `unbuilt` with exactly this reason recorded against it: "no mention
+ * carries a severity, so nothing separates a need from a nice-to-have".
+ *
+ * KEYED ON THE PHRASE AS TYPED, NORMALISED HERE. The table's key is
+ * `(interview_id, phrase_norm)` and `normPhrase` is the same function the pain
+ * map groups by, so a severity follows its phrase through re-grouping and
+ * re-wording exactly as its mention does. A caller sending a display phrase and
+ * a caller sending a normalised one reach the same row.
+ *
+ * NO CHECK THAT THE PHRASE IS ONE THE INTERVIEW LOGGED, and that is deliberate
+ * rather than missed. `pains_json` is a free-text blob a founder edits; a
+ * severity written against a phrase they then reword would have to be deleted
+ * or orphaned, and orphaned is the honest state — the view joins on the phrase,
+ * so an orphan simply stops counting and comes back if the wording does.
+ * Rejecting the write instead would make the order of two edits matter.
+ * An accepted placement writes its mention in the same batch as its severity
+ * (D757, #1897), so only a hand-set severity can still be an orphan.
+ */
+founderValidate.put('/interviews/:id/pain-severity', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await c.env.DB.prepare(
+    'SELECT project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ project_id: number }>();
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const norm = normPhrase(String(b?.phrase ?? ''));
+  if (!norm) return json({ detail: 'phrase is required' }, 400);
+
+  // An explicit null CLEARS the record, which is a third state and not the same
+  // as `nice`: "this founder has not judged it" is what the pain map reports as
+  // no severity on file, and a page that could only ever add would have no way
+  // back to it.
+  if (b?.severity == null) {
+    await c.env.DB.prepare(
+      'DELETE FROM interview_pain_severities WHERE interview_id = ? AND phrase_norm = ?',
+    ).bind(id, norm).run();
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+      entityId: id, action: 'pain_severity_cleared', summary: `Interview ${id} pain severity cleared` });
+    return json({ ok: true, severity: null });
+  }
+
+  // The three levels (D659) are accepted beside the two the form has always
+  // sent; `severityLevel` reads both on one scale.
+  if (!isPainSeverity(b.severity) && !isPainSeverityLevel(b.severity)) {
+    return json({ detail: `severity must be ${[...PAIN_SEVERITIES, ...PAIN_SEVERITY_LEVELS].join(', ')}, or null to clear` }, 400);
+  }
+
+  // UPSERT ON THE TABLE'S OWN UNIQUE INDEX. Two tabs judging the same pain must
+  // not leave two rows — the view would then count one interview twice, and the
+  // `need_count` it reports is a count of interviews.
+  await upsertPainSeverity(c.env, id, norm, b.severity);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'pain_severity_set', summary: `Interview ${id} pain severity set` });
+  return json({ ok: true, severity: b.severity });
+});
+
+// ---------------------------------------------------------------------------
+// "AI fills the blanks" — proposals, and the two decisions a person makes
+// about each one.
+//
+// Nothing here runs unless the founder asked for it. The rail's toggle is off
+// until they turn it on (DECISIONS D17 amended), and even on, a proposal is
+// written only when this route is called. The mode does not poll.
+// ---------------------------------------------------------------------------
+
+/**
+ * Run one fill kind, and store what it proposed.
+ *
+ * THE PATH SAYS "VALIDATE" AND SERVES EVERY SURFACE, which is the same trade
+ * migration 246 already made for the table: *"The name stays. `validate_proposals`
+ * will hold a brand-copy proposal and read oddly, and renaming a live table means
+ * updating the baseline and both index names while `check-baseline-drift.mjs`
+ * verifies production against it. The migration header records that the name is
+ * where the table started, not what it serves."* The same holds for the route —
+ * renaming it means moving four handlers, four `api.js` methods, the drift
+ * baseline and every call site, for a clearer URL. That is its own task if the
+ * name ever costs more than the risk; recording it is what stops it being a
+ * surprise.
+ *
+ * NO BRANCH ON KIND. This route used to have one `if (kind === 'pain_tag')` for
+ * the facts and the prompt, and its sibling had another for the writer. Both are
+ * `services/fills/registry.ts` now: `gather` assembles the facts, `parse` turns a
+ * reply into proposals, and the entry owns its own prompt. A third kind is a
+ * registry entry and nothing here.
+ *
+ * A REFUSED PROPOSAL IS COUNTED AND REPORTED. `refuseReason` drops a `sourced`
+ * fill with no citation, which is the guarantee the class exists for — and a run
+ * that silently returned two of five reads as a model with little to say, when
+ * what happened is that three were refused. The count is the difference.
+ */
+/**
+ * D778 part 4 (#2103): the founder's fill bands, each on the page D771's
+ * inventory gives it (`frontend/src/lib/railOptions/founder.js`, held to this
+ * table by `founder_fill_bands_d778.test.ts`). A run from a client that sent no
+ * rail page names that page; a mounted rail's page still wins, since it holds
+ * the member's Manual switch. A kind the founder's boards do not list keeps
+ * its surface's workspace.
+ */
+export const FOUNDER_FILL_PAGES: Readonly<Record<string, string>> = {
+  pain_tag: 'Founder · Validate · Problem discovery',
+  hypothesis: 'Founder · Validate · Experiments and evidence',
+  feedback_theme: 'Founder · Grow · Product improvement',
+};
+
+founderValidate.post('/propose/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const kind = String(b.kind || '');
+  const spec = fillKind(kind);
+  if (!spec) {
+    return json({ detail: `kind must be one of: ${Object.keys(FILL_KINDS).sort().join(', ')}` }, 400);
+  }
+  // Passed through unvalidated: `run()` owns the allow-list, and a second copy
+  // here is a second thing to keep true.
+  const model = String(b.model || '').trim().slice(0, 120) || undefined;
+
+  const ctx = { env: c.env, user: s.user, projectId: s.project.id };
+
+  // NOTHING IS SPENT TO BE TOLD THERE IS NOTHING TO WORK FROM. `gather` says so
+  // in the words the page shows, and the run never happens.
+  const gathered = await spec.gather(ctx);
+  if (gathered.empty) {
+    return json({
+      error: 'nothing_to_propose',
+      message: gathered.emptyReason || 'There is nothing to propose from yet.',
+    }, 400);
+  }
+
+  // Everything this project has ever been offered of this kind — pending,
+  // accepted or discarded — read through the kind's own `readable` so one
+  // conversion serves every kind. A suggestion a founder threw away is never
+  // offered back to them.
+  const priors: string[] = [];
+  for (const raw of await priorPayloads(c.env, s.project.id, kind as ProposalKind)) {
+    try { priors.push(spec.readable(JSON.parse(raw))); } catch { /* a malformed row is not a prior */ }
+  }
+
+  // D765: the fill's page (its surface's workspace) and the fill as the option.
+  const rail = railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`);
+
+  // #3938 part 6 (D1478): a kind whose plan job retrieves first (GR1, VA11)
+  // embeds its items and themes, and the writer reads each item's nearest
+  // themes as a hint. A refusal the member must hear about stops the press here.
+  let hints = '';
+  const job = THEME_JOBS[spec.task];
+  if (job && spec.hints) {
+    const want = spec.hints(gathered);
+    try {
+      hints = hintSection(await themeHints(want.themes, want.items, HINT_DEPS.make(c.env, { userId: s.user.id, surface: AI_SURFACE.validate, rail }, job)));
+    } catch (e) {
+      if (!(e instanceof HintRefused)) throw e;
+      return refuseRun(c, e.result) ?? json({ detail: 'The retrieval step was refused. Nothing was proposed.' }, 503);
+    }
+  }
+
+  const r = await aiRun(c.env, {
+    task: spec.task as any,
+    userId: s.user.id,
+    model,
+    surface: AI_SURFACE.validate,
+    rail,
+    systemPrompt: spec.prompt,
+    messages: [{ role: 'user', content: gathered.facts + hints }],
+    maxTokens: 500,
+    temperature: 0.3,
+  });
+
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
+  // `run` never throws — a spent budget and an unreachable model both arrive
+  // as refusals with their reason intact, and both must keep it.
+  if (!r.ok) {
+    return json({
+      ok: false,
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'model_not_offered'
+        ? 'That model is no longer offered for this. Nothing was run.'
+        : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+          ? 'This month’s AI budget is spent. Nothing was run.'
+          // D763, D770 (#2095): the guard withheld the proposals, or could not check them; its own words.
+          : r.refusal === 'guard_blocked_output' || r.refusal === 'guard_unavailable'
+            ? r.error
+            : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      ...(r.guard?.refusal?.link ? { link: r.guard.refusal.link } : {}),
+      usage: { model: r.usage.model, est_cost_usd: 0 },
+    }, 503);
+  }
+
+  const proposed = await spec.parse(r.output || '', { ...gathered, priors }, ctx);
+
+  const created: Array<{ id: number; kind: string; payload: unknown }> = [];
+  const refused: string[] = [];
+  await ensureProposalRunColumn(c.env);
+  for (const p of proposed.slice(0, MAX_PROPOSALS_PER_RUN)) {
+    // THE SECOND CHECK, AND NOT A REDUNDANT ONE. `parse` refuses what it can see
+    // — an unmatched phrase, a figure it could not source — and this refuses what
+    // the CLASS requires regardless of the parser: a `sourced` proposal with no
+    // citation, a citation with no quote, a restatement carrying one. The store
+    // must not be able to hold any of those, whatever a parser was written to do.
+    const why = refuseReason(spec, p);
+    if (why) { refused.push(why); continue; }
+    // THE NEVER-FILL REGISTRY (D777). A proposal aimed at a signature, a payment
+    // amount, an identity number or an attestation is not stored at all, so no
+    // band can ever draw an Accept button over one.
+    const t = spec.target(p.payload, p.targetRef, ctx);
+    if (neverFillReason(`${t.table}.${t.column}`)) { refused.push('a field Eadwyn never fills'); continue; }
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO validate_proposals
+         (project_id, kind, payload_json, model, task, created_by,
+          surface, fill_class, citation_json, target_ref, ai_usage_log_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      s.project.id, kind, JSON.stringify(p.payload),
+      // The model that ACTUALLY ran, from the router's usage metadata. Not the
+      // one that was asked for: the router falls back to a smaller sibling
+      // under load, and recording the request would put one model's name over
+      // another model's sentence.
+      r.usage.model, r.usage.task, s.user.id,
+      spec.surface, spec.fillClass,
+      p.citation ? JSON.stringify(p.citation) : null,
+      p.targetRef,
+      // D777 part 2: the usage row of this run, so the value it fills can name it.
+      r.usageLogId ?? null,
+    ).run();
+    created.push({ id: Number(ins.meta?.last_row_id || 0), kind, payload: p.payload });
+  }
+
+  return json({
+    ok: true,
+    proposals: created,
+    // How many were dropped and why, so a thin result reads as refusals rather
+    // than as a model that had little to say.
+    refused: refused.length,
+    refused_reasons: [...new Set(refused)],
+    usage: {
+      model: r.usage.model,
+      est_cost_usd: r.usage.est_cost_usd,
+      prompt_tokens: r.usage.prompt_tokens,
+      completion_tokens: r.usage.completion_tokens,
+      fallback_used: r.usage.fallback_used,
+    },
+  }, 201);
+});
+
+founderValidate.get('/proposals/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  const rows = await listPending(c.env, s.project.id);
+  // The field each proposal would fill, as `table.column` (D777), so the band
+  // can check it against the SPA's never-fill registry before it draws Accept.
+  // Null for a kind that has left the registry.
+  const fieldOf = (p: { id: number; kind: string; payload: any }): string | null => {
+    const spec = fillKind(p.kind);
+    if (!spec) return null;
+    const ref = String(rows.find((r) => r.id === p.id)?.target_ref || '');
+    const t = spec.target(p.payload, ref, { env: c.env, user: s.user, projectId: s.project.id });
+    return `${t.table}.${t.column}`;
+  };
+  return json({
+    proposals: rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      model: row.model,
+      created_at: row.created_at,
+      // Migration 246. Null on a row written before it; the band shows the
+      // citation only when there is one, which is also what tells a reader a
+      // `sourced` fill is sourced rather than merely labelled.
+      fill_class: row.fill_class ?? null,
+      citation: (() => {
+        try { return row.citation_json ? JSON.parse(row.citation_json) : null; } catch { return null; }
+      })(),
+      payload: (() => { try { return JSON.parse(row.payload_json); } catch { return null; } })(),
+    })).filter((p) => p.payload !== null).map((p) => ({ ...p, field: fieldOf(p) })),
+    // THE BAND'S COPY COMES FROM THE REGISTRY, with the list that needs it.
+    //
+    // `ValidateProposals.jsx` held its own `COPY` map, hardcoded to the two kinds,
+    // and a third kind meant editing it as well as the registry — two places for
+    // one fact, which is the thing the registry was built to stop. Travelling on
+    // the list response rather than through a new endpoint keeps it one request
+    // and keeps `eadwynConfig`'s rule intact: config follows a mount.
+    //
+    // `editable` is what the Edit control is drawn from. A kind that declares no
+    // editable field must not offer one — a `pain_tag`'s phrase is the project's
+    // own logged string, and the accept route refuses an edit to it with that as
+    // the reason, so drawing the control would be a button that always fails.
+    //
+    // `task` is the router task a run of this kind bills (D424). The band
+    // quotes the founder's own average for it BEFORE they press run, and
+    // `/api/ai/me/spend` groups by task, so the band has to know which one —
+    // from here rather than from a second copy of the registry in the SPA.
+    kinds: Object.fromEntries(Object.values(FILL_KINDS).map((k) => [k.kind, {
+      copy: k.copy,
+      fill_class: k.fillClass,
+      editable: k.editableField != null,
+      task: k.task,
+    }])),
+  });
+});
+
+type ProposalRow = {
+  id: number; project_id: number; kind: string; payload_json: string; status: string;
+  // Migration 246. Null on a row written before it, and on a dev database that
+  // has not applied it — both read as "no citation, no explicit target".
+  target_ref: string | null; citation_json: string | null;
+  model: string | null; task: string | null;
+  // Migration 503 (D777 part 2): the run that proposed it. Null before 503 and
+  // on a proposal from a path that does not record its run.
+  ai_usage_log_id: number | null;
+};
+
+/** The proposal plus the project that owns it, or null. */
+async function loadProposal(env: Env, id: number): Promise<ProposalRow | null> {
+  // `target_ref`, `citation_json`, `model` and `task` join the select because
+  // the accept path now writes a provenance row and all four travel onto it.
+  // Migration 246 added the first two; a database that has not run it returns
+  // them as null, which is what the coalescing reads below expect.
+  await ensureProposalRunColumn(env);
+  return env.DB.prepare(
+    `SELECT id, project_id, kind, payload_json, status, target_ref, citation_json, model, task, ai_usage_log_id
+       FROM validate_proposals WHERE id = ?`,
+  ).bind(id).first<ProposalRow>();
+}
+
+founderValidate.post('/proposals/:id/accept', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await loadProposal(c.env, id);
+  if (!row) return notFound('Proposal');
+  const s = await scope(c, Number(row.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // CLAIM FIRST, atomically. `WHERE status = 'pending'` is what stops two
+  // founders both accepting one proposal and writing the row twice — the same
+  // idiom `routes/pipeline.ts` uses on `decision_gates`. D1's HTTP API has no
+  // multi-statement transaction to wrap the claim and the write together, so
+  // the claim goes first and the write follows; a write that then fails puts
+  // the row back to pending rather than leaving an "accepted" proposal that
+  // wrote nothing.
+  const claim = await c.env.DB.prepare(
+    `UPDATE validate_proposals
+        SET status = 'accepted', decided_by = ?, decided_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`,
+  ).bind(s.user.id, id).run();
+  if (!claim.meta?.changes) {
+    return json({ detail: 'That proposal has already been decided' }, 409);
+  }
+
+  const revert = async () => {
+    await c.env.DB.prepare(
+      "UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?",
+    ).bind(id).run();
+  };
+
+  let payload: any;
+  try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
+  if (!payload) { await revert(); return json({ detail: 'That proposal could not be read' }, 422); }
+
+  // THE DISPATCH IS THE REGISTRY'S NOW, and it was `if (row.kind ===
+  // 'pain_tag')` here until task #188. Two branches in a file about Validate is
+  // fine for two kinds and is the wrong place for a third: `services/fills/`
+  // holds one entry per kind, each naming its own `apply`, and the invariant
+  // that entry must keep is the one this route always kept — `apply` calls the
+  // function the manual form calls, so accepting and typing produce the same
+  // row. See that file's header for why `insertHypothesis` in particular cannot
+  // be reimplemented.
+  //
+  // AN UNKNOWN KIND REVERTS RATHER THAN THROWS. A proposal whose kind has left
+  // the registry is a row this build cannot apply, which is exactly the
+  // no-longer-applies case the theme check below already handles: back to
+  // pending, so a founder sees it rather than losing it to a 500.
+  const spec = fillKind(row.kind);
+  if (!spec) {
+    await revert();
+    return json({ detail: 'That kind of proposal is no longer offered' }, 409);
+  }
+
+  // EDIT-ON-ACCEPT. The canvas has said accept / edit / discard since this band
+  // was drawn and only two of the three existed. A founder who corrects a
+  // proposed value before accepting it has produced something that is neither
+  // the model's answer nor an unaided human one, so `fill_provenance` keeps
+  // BOTH — `edited` is derived there from comparing them, never passed in.
+  const body = await c.req.json().catch(() => ({} as any));
+  const editedValue = body?.value != null ? String(body.value).slice(0, 4000).trim() : null;
+  if (editedValue && !spec.editableField) {
+    // Refused rather than ignored. Accepting the original under an edit the
+    // caller believes was applied is the worse of the two, and for a
+    // `restatement` the reason is real: the value has to stay the row it matched.
+    await revert();
+    return json({
+      detail: 'This proposal is not editable — its value has to stay the one it matched in your project.',
+    }, 422);
+  }
+  const applyPayload = editedValue && spec.editableField
+    ? { ...payload, [spec.editableField]: editedValue }
+    : payload;
+
+  // THE NEVER-FILL REGISTRY, AGAIN, BEFORE ANYTHING IS WRITTEN (D777). The
+  // propose route already refuses to store such a proposal; this catches one
+  // stored before the registry listed its field, and refuses rather than reverts
+  // to pending, because it can never become acceptable.
+  const fixed = spec.target(applyPayload, String(row.target_ref || ''), {
+    env: c.env, user: s.user, projectId: row.project_id,
+  });
+  const field = `${fixed.table}.${fixed.column}`;
+  if (neverFillReason(field)) {
+    await c.env.DB.prepare(
+      "UPDATE validate_proposals SET status = 'discarded' WHERE id = ?",
+    ).bind(id).run();
+    return json({ refusal: 'never_fill', detail: neverFillMessage(field) }, 422);
+  }
+
+  try {
+    // `proposalId` (D4627, #4627) is the idempotency key a kind's `apply` may
+    // use to make its own target creation safe to run twice: a RETRY of this
+    // same proposal after `recordFill` below fails claims the row again and
+    // calls `apply` again, and a kind that keys off this (today: `hypothesis`)
+    // lands on the SAME row rather than allocating a second one.
+    const applied = await spec.apply(
+      { env: c.env, user: s.user, projectId: row.project_id, proposalId: row.id }, applyPayload, String(row.target_ref || ''),
+    );
+    // RECORDED AFTER THE WRITE AND NOT SWALLOWED. A value written with no
+    // provenance row is the state `fill_provenance` exists to prevent — on this
+    // page it would mean a figure nothing can attribute — so a failure here
+    // reverts the claim rather than leaving one behind.
+    await recordFill(c.env, {
+      // THE ADDRESS THE WRITE FOUND, when it found one. An INSERT allocates the
+      // row id and an upsert lands on one that depends on what was already there,
+      // so neither is knowable before `apply` runs; `target()` is the fallback for
+      // a kind whose address is fixed up front. Preferring the other way round
+      // would file a hypothesis's provenance against a row that is not it.
+      target: applied.target ?? spec.target(applyPayload, String(row.target_ref || ''), {
+        env: c.env, user: s.user, projectId: row.project_id,
+      }),
+      proposalId: row.id,
+      fillClass: spec.fillClass,
+      proposedValue: spec.readable(payload),
+      writtenValue: applied.written,
+      citation: row.citation_json ? JSON.parse(row.citation_json) : null,
+      model: row.model ?? null,
+      task: row.task ?? null,
+      decidedBy: s.user.id,
+      // D777 part 2: the row as the proposal named it, and the run that proposed it.
+      targetRowRef: row.target_ref ?? null,
+      usageLogId: row.ai_usage_log_id ?? null,
+    });
+    return json({ ok: true, kind: row.kind, ...(applied.result || {}) }, row.kind === 'hypothesis' ? 201 : 200);
+  } catch (e) {
+    // The theme may have been renamed away or deleted since the proposal was
+    // written. That is not an error in the proposal and not a 500: it is a
+    // proposal that no longer applies, and it goes back to pending so the
+    // founder sees it rather than silently losing it.
+    await revert();
+    const msg = (e as Error).message;
+    if (/no longer exists/i.test(msg)) return json({ detail: msg }, 409);
+    return json({ detail: 'That proposal could not be applied', error: msg }, 500);
+  }
+});
+
+founderValidate.post('/proposals/:id/discard', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await loadProposal(c.env, id);
+  if (!row) return notFound('Proposal');
+  const s = await scope(c, Number(row.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // Discarded, never deleted. What the machine suggested and a person rejected
+  // is a fact about both, and the propose path reads it back so the same
+  // suggestion is not offered twice.
+  const r = await c.env.DB.prepare(
+    `UPDATE validate_proposals
+        SET status = 'discarded', decided_by = ?, decided_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`,
+  ).bind(s.user.id, id).run();
+  if (!r.meta?.changes) return json({ detail: 'That proposal has already been decided' }, 409);
+  return json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// A recording, and the text it becomes.
+//
+// The third thing the mode note promises, and the one migration 214 said it
+// could not keep. Two routes, in the order a person uses them: put the audio
+// somewhere, then ask for words.
+// ---------------------------------------------------------------------------
+
+/**
+ * 20 MB, the same ceiling `research.ts` and `deck_reviewer.ts` use — and here
+ * it is a memory bound as well as a policy one. The router hands Workers AI
+ * `Array.from(bytes)`, which materialises a JS number[] at roughly 8 bytes an
+ * element against the isolate's 128 MB, so this is what keeps a transcription
+ * from OOMing rather than failing. At the 32 kbps this product assumes, 20 MB
+ * is about 83 minutes of speech.
+ */
+const MAX_RECORDING_BYTES = 20 * 1024 * 1024;
+
+/**
+ * What a browser's MediaRecorder actually produces, plus the two container
+ * types a founder is likely to drag in from a phone. An allowlist and not a
+ * prefix check on `audio/`: `audio/*` would admit anything a client cares to
+ * label, and the model has to decode it.
+ */
+const AUDIO_MIME: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+};
+
+/** The interview plus the project that owns it, or null. */
+type InterviewOwner = { id: number; project_id: number };
+async function loadInterview(env: Env, id: number): Promise<InterviewOwner | null> {
+  return env.DB.prepare(
+    'SELECT id, project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<InterviewOwner>();
+}
+
+founderValidate.post('/interviews/:id/recording', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await loadInterview(c.env, id);
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // `FILES` is optional in types.ts, so a missing bucket is a 503 with a reason
+  // rather than a crash — the same shape data_room.ts and research.ts use.
+  if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
+  if (!(await ensureDiscoveryRecordingColumns(c.env))) {
+    return json({ detail: 'recording_columns_unavailable' }, 503);
+  }
+
+  let form: FormData;
+  try { form = await c.req.formData(); } catch { return json({ detail: 'invalid_form' }, 400); }
+  // Workers-types declares FormData entries as string; at runtime an upload is
+  // a File. Narrowing out the string case is load-bearing, not defensive.
+  const entry = form.get('file') as unknown;
+  if (!entry || typeof entry === 'string') return json({ detail: 'file_required' }, 400);
+  const file = entry as File;
+
+  const mime = String(file.type || '').toLowerCase();
+  const ext = AUDIO_MIME[mime];
+  if (!ext) return json({ detail: 'unsupported_type', accepted: Object.keys(AUDIO_MIME) }, 415);
+  if (file.size > MAX_RECORDING_BYTES) {
+    return json({ detail: 'too_large', max_bytes: MAX_RECORDING_BYTES }, 413);
+  }
+  if (!file.size) return json({ detail: 'empty_file' }, 400);
+
+  // For DISPLAY only, and clamped. Billing reads the byte length instead —
+  // a number the client chooses must not decide what a run costs. See
+  // `audioMinutesFromBytes`.
+  const rawDuration = Number(form.get('duration_sec'));
+  const durationSec = Number.isFinite(rawDuration) && rawDuration > 0
+    ? Math.min(Math.round(rawDuration), 24 * 3600)
+    : null;
+
+  // DERIVED SERVER-SIDE, NEVER TAKEN FROM THE REQUEST. A caller-supplied key is
+  // a path-traversal write into another account's prefix.
+  const key = `validate-audio/${s.user.id}/${crypto.randomUUID()}.${ext}`;
+  // D1170 — an interview recording counts to the venture's owner (D1169 §1).
+  const storage = await assertStorageRoom(c.env, { projectId: Number(owner.project_id) }, file.size, s.user);
+  try {
+    await c.env.FILES.put(key, await file.arrayBuffer(), {
+      httpMetadata: { contentType: mime },
+      customMetadata: {
+        owner_user_id: String(s.user.id),
+        project_id: String(owner.project_id),
+        interview_id: String(id),
+      },
+    });
+  } catch (e) {
+    console.error('[founder_validate] R2 put failed:', (e as Error).message);
+    return json({ detail: 'storage_write_failed' }, 502);
+  }
+
+  // The previous recording, if any, is orphaned rather than deleted: a delete
+  // that raced a transcription would pull the bytes out from under it. The R2
+  // lifecycle sweeps the prefix; what matters here is that the row points at
+  // one object and that object exists.
+  await c.env.DB.prepare(
+    `UPDATE discovery_interviews
+        SET recording_r2_key = ?, recording_mime = ?, recording_size_bytes = ?,
+            recording_duration_sec = ?, recording_uploaded_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(key, mime, file.size, durationSec, id).run();
+  await noteStorageLanded(c.env, storage);
+
+  return json({
+    ok: true,
+    size_bytes: file.size,
+    duration_sec: durationSec,
+    // What a transcription of this clip would cost, before running it. Derived
+    // from the same function that bills it, so the quote and the charge cannot
+    // disagree.
+    estimated_audio_minutes: audioMinutesFromBytes(file.size),
+  }, 201);
+});
+
+founderValidate.post('/interviews/:id/transcribe', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await loadInterview(c.env, id);
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+  if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
+  if (!(await ensureDiscoveryRecordingColumns(c.env))) {
+    return json({ detail: 'recording_columns_unavailable' }, 503);
+  }
+
+  const row = await c.env.DB.prepare(
+    'SELECT recording_r2_key, recording_size_bytes FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ recording_r2_key: string | null; recording_size_bytes: number | null }>();
+  if (!row?.recording_r2_key) {
+    return json({ error: 'no_recording', message: 'There is no recording on this interview yet.' }, 400);
+  }
+
+  // Hard guard on the prefix before reading, the idiom `services/r2.ts` states
+  // at each of its getters: never serve or read outside the prefix this feature
+  // owns, whatever the stored key says.
+  if (!row.recording_r2_key.startsWith('validate-audio/')) {
+    console.error('[founder_validate] refusing a key outside validate-audio/');
+    return json({ detail: 'storage_read_failed' }, 502);
+  }
+
+  const obj = await c.env.FILES.get(row.recording_r2_key);
+  if (!obj) return json({ error: 'no_recording', message: 'The recording could not be read.' }, 404);
+  const bytes = new Uint8Array(await obj.arrayBuffer());
+
+  const r = await aiRun(c.env, {
+    task: 'transcribe',
+    userId: s.user.id,
+    surface: AI_SURFACE.validateInterviews,
+    // D765: saving, which the switch never refuses; recorded with its page and interview.
+    // D778 part 6: the inventory's page and option (D771) stand for a client that sent none.
+    rail: railFor(c, { page: CUSTOMER_RESEARCH_PAGE, option: TRANSCRIBE_OPTIONS.recording }, `interview:${id}`),
+    audio: bytes,
+    // From the BYTES, not from the duration the client reported.
+    audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
+  });
+
+  if (!r.ok) {
+    return json({
+      ok: false,
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+        ? 'This month’s AI budget is spent. Nothing was run.'
+        : 'The recording could not be transcribed. Nothing was charged.',
+      usage: { model: r.usage.model, est_cost_usd: 0 },
+    }, 503);
+  }
+
+  // An empty transcript is an ANSWER: the clip had no speech in it. Stored as
+  // an empty string rather than left NULL, so the page stops offering a
+  // transcription that would cost the same and return the same nothing.
+  const text = r.output ?? '';
+  await c.env.DB.prepare(
+    `UPDATE discovery_interviews
+        SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?,
+            updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(text, r.usage.model, id).run();
+
+  return json({
+    ok: true,
+    transcript: text,
+    usage: {
+      model: r.usage.model,
+      est_cost_usd: r.usage.est_cost_usd,
+      audio_minutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
+    },
+  });
+});
+
+export default founderValidate;

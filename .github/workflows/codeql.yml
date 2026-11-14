@@ -1,0 +1,193 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [main]
+  schedule:
+    # Weekly Sunday 03:42 UTC — catches advisories that land between PRs
+    # without bursting CI minutes.
+    - cron: '42 3 * * 0'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+# One scan per event and ref at a time. On a pull request a newer push
+# cancels the older scan. On main the running scan is never cancelled: merges
+# land every minute or two, and cancelling in progress meant no main scan ever
+# finished (runs 10067 and 10091-10093 on 2026-11-08). GitHub instead keeps
+# one scan running and only the newest commit waiting; each scan covers the
+# whole tree, so no code goes unscanned. Scheduled runs keep their own group.
+concurrency:
+  group: codeql-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Analyses both the worker (TS) and the FastAPI dev backend (Python) even
+# though FastAPI is not deployed — Python supply-chain issues still hit
+# Replit dev sessions.
+#
+# UPLOADS ONLY WHERE CODE SCANNING TAKES THEM (D721). D672 stopped the
+# upload while the repository was private and code scanning needed GitHub
+# Code Security, which was off; D718 put it back once the repository was
+# public, where code scanning is free and Copilot Autofix can propose a fix
+# per alert. The `visibility` job below now decides on every run, so a
+# change of visibility no longer turns this check red.
+# The SARIF is still written to codeql-results/, and the report step still
+# lists the findings in the job summary, because the agents that fix them
+# cannot read the code-scanning API (it answers 403 to their token).
+# Findings never fail the job.
+jobs:
+  scope:
+    name: security scan scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      scan: ${{ steps.scope.outputs.scan }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Verify prior-run artifact read permission
+        run: node scripts/scan-scope.mjs verify-artifact-read
+      - name: Select scan scope
+        id: scope
+        run: node scripts/scan-scope.mjs scope
+
+  # D721: ask, do not assume, whether code scanning takes an upload. It is
+  # free on a public repository and needs GitHub Code Security on a private
+  # one, which this repository does not have. The repository has been both
+  # (private under D672, public under D718, private again on 2026-10-18), and
+  # an upload it refuses turns this check red on every PR. The same job is in
+  # codeql.yml and semgrep.yml; code_scanning_visibility_d721.test.mjs keeps
+  # the two identical and runs its step.
+  visibility:
+    needs: scope
+    if: needs.scope.outputs.scan == 'true'
+    name: code scanning takes uploads?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upload: ${{ steps.ask.outputs.upload }}
+    steps:
+      - name: Ask the repository API
+        id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # code_security reads "unknown" when this token cannot see it.
+          answer="$(gh api "repos/$GITHUB_REPOSITORY" --jq '[.private, (.security_and_analysis.code_security.status // "unknown")] | map(tostring) | join(" ")')"
+          case "$answer" in
+            "false "*|"true enabled")
+              echo "upload=always" >> "$GITHUB_OUTPUT"
+              ;;
+            "true "*)
+              echo "upload=never" >> "$GITHUB_OUTPUT"
+              echo "::notice::This repository is private and code scanning is off, so the findings are in the job summary only (D721)."
+              ;;
+            *)
+              echo "::error::The repository API answered '$answer' for private and code_security."
+              exit 1
+              ;;
+          esac
+
+  analyze:
+    name: analyze (${{ matrix.language }})
+    needs: [scope, visibility]
+    if: needs.scope.outputs.scan == 'true'
+    runs-on: ubuntu-latest
+    # 60, not 30: the JavaScript analysis took 28+ minutes on main (2026-11-08).
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended,security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          category: '/language:${{ matrix.language }}'
+          output: codeql-results
+          upload: ${{ needs.visibility.outputs.upload }}
+      - name: Report findings
+        run: python3 scripts/sarif-summary.py "CodeQL (${{ matrix.language }})" codeql-results
+      - name: Save opaque finding fingerprints
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/scan-scope.mjs snapshot codeql codeql-results .scan-fingerprints/${{ matrix.language }}.json
+      - name: Upload finding fingerprints
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-fingerprints-codeql-${{ matrix.language }}
+          path: .scan-fingerprints/${{ matrix.language }}.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
+
+  findings:
+    name: main scan findings
+    needs: analyze
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    # Both scanners update the same incident; never race its creation/closure.
+    concurrency:
+      group: scan-main-findings
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: scan-fingerprints-codeql*
+          path: .scan-input
+          merge-multiple: true
+      - name: Compare with the previous completed main scan
+        run: node scripts/scan-scope.mjs prepare codeql .scan-input .scan-state
+      - name: Retain the scan baseline and outstanding fingerprints
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-state-codeql
+          path: .scan-state/state.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 90
+      - name: Reconcile one main scan alert
+        env:
+          SCAN_FACTS_FILE: .scan-state/facts.json
+        run: node scripts/github-alerts.mjs scan

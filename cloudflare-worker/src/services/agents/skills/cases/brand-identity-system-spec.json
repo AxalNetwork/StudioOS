@@ -1,0 +1,34 @@
+{
+  "skill": "brand-identity-system-spec",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Brand Identity System Specification",
+        "task_scope": "Specifies a coherent identity system across visual principles, components, variants, usage and asset governance.",
+        "evidence": [
+          "identity usage system"
+        ],
+        "omitted_field": "approved brand asset"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for identity usage system."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "identity usage system"
+    ],
+    "must_say_not_recorded": [
+      "approved brand asset"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

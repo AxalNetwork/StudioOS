@@ -1,0 +1,33 @@
+#13 - Signup funnel instrumentation
+What & Why
+Per the signup friction audit (PR #135, §F), there is no client-side analytics anywhere in the frontend — the funnel's drop-off points (form starts, field errors, Turnstile failures, TOTP abandonment, resends) are invisible, and every drop-off percentage in the audit is an unvalidated hypothesis. The server's activity_logs rows allow only a coarse account-level funnel. The audit specifies a minimal first-party plan: one worker endpoint writing ~15 events into a D1 table, consistent with the repo's no-third-party posture and cookie-consent setup. This must land after the funnel-fix tasks so it instruments the final flow.
+Done looks like
+* A first-party tracking endpoint on the worker writes funnel events (batched) into a new D1 table, with a per-bucket rate limit like other public endpoints
+* The ~15 audit-specified events fire across landing, register, verify-email, TOTP setup, login, onboarding chat, and first dashboard view, with the common properties (anonymous id, session id, device, referrer, utm, ref_code, lane, invite type)
+* Tracking respects the cookie-consent state — no events for users who declined
+* The email_sent:false signal from registration is captured so deliverability failures become measurable
+* A baseline server-side funnel query over activity_logs (registered vs verified vs first login) is documented/runnable so today's numbers exist as ground truth
+Out of scope
+* Third-party analytics (PostHog/GA/Clarity), session replay
+* Dashboards/visualization UI — a queryable table + documented queries is enough for v1
+* Running the A/B tests themselves (the audit's §E roadmap is future work)
+Steps
+1. Schema + endpoint — Add the funnel-events D1 migration (additive, IF NOT EXISTS, no BEGIN/COMMIT — see GOTCHAS "Migrations & schema") plus a lazy schema bootstrap, and a rate-limited worker route accepting batched events
+2. Client tracker — Small consent-aware tracking helper (anonymous id cookie, session id, common props, batching/beacon on pagehide) using the repo's safe-storage utilities
+3. Instrument the funnel — Fire the audit's event list across the funnel pages, including Turnstile client failures, TOTP setup abandonment, login error codes, and resend clicks
+4. Baseline + docs — Add the activity_logs reconciliation query and a short doc of the event schema and the funnel edges to monitor (including the email_sent:false alert threshold)
+Relevant files
+* cloudflare-worker/src/routes/auth.ts
+* cloudflare-worker/src/index.ts
+* frontend/src/lib/cookieConsent.js
+* frontend/src/lib/api.js
+* frontend/src/pages/RegisterPage.jsx
+* frontend/src/pages/LoginPage.jsx
+* frontend/src/pages/VerifyEmailPage.jsx
+* frontend/src/pages/LandingPage.jsx
+* frontend/src/pages/OnboardingChatPage.jsx
+* cloudflare-worker/sql/migrations/
+Dependencies
+
+Invitation & lane continuity through signup
+Main

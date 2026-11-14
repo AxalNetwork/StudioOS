@@ -1,0 +1,377 @@
+This is a research audit, not a code change. I need to ground every claim in actual files, not generalities. Let me forensically map the Market Intelligence surface first — every route, every provider, every prompt, every scoring formula — then write the report on top of real evidence.
+
+Forensic agent is mapping the MI surface in the background — every route, provider, prompt, formula, dashboard, and cron. I'll write the audit on top of its evidence rather than guessing at the architecture.
+
+While it runs, I'll hold off on parallel work to avoid double-reading the same files. I'll notify you the moment it returns and immediately produce the 15-section due-diligence report.
+
+The forensic map is in. The headline is grim but well-supported by evidence — let me write the audit straight, in the voice it deserves. This is the report.
+
+---
+
+# AXAL MARKET INTELLIGENCE — INSTITUTIONAL DUE DILIGENCE AUDIT
+
+**Prepared by:** Principal Research & Investment Practice
+**Subject:** `cloudflare-worker/src/routes/market_intel*.ts` and connected services
+**Date:** 2026-05-25
+**Codebase SHA:** branch `claude/add-missing-sidebar-options-tmCKz`
+**Classification:** Internal · Founder/CEO eyes-on
+**Confidence:** High — every finding below cites file:line evidence
+
+---
+
+## 1 · EXECUTIVE SUMMARY
+
+The Market Intelligence module is **architecturally well-built and intelligence-empty**.
+
+The platform ships a 32-connector "sources catalog" (`services/market_intel/sources/*.ts`), 7 scored dimensions, 4 lens dashboards, a watchlist + email digest system, an investor-signals aggregator with proper k-anonymity, and a tier-gated public surface. The plumbing is real and well-engineered.
+
+**But of the 32 advertised data sources, exactly zero are pulling live data today.** 12 throw `paid_contract_not_signed` (Gartner, PitchBook, CB Insights, SimilarWeb, Glassdoor, LinkedIn, Indeed, Ahrefs, BuiltWith, NewsAPI, Semrush) and 20 return deterministically-seeded synthetic numbers (`seededAround(seed, mid, spread)`) from a per-day random generator. The Sector Compass that an investor or partner sees — "AI Infra composite 78.4, demand 84.1, capital 71.2" — is mathematically valid arithmetic over **invented inputs**. The numbers are stable within a calendar day (seeded), drift smoothly day-to-day, and have **zero correspondence to any real-world signal**.
+
+Three further dashboards (Market Pulse, High-Conviction Plays, Studio Benchmarks) are **not aggregated at all** — they are hand-typed TypeScript object literals (`market_intel.ts:37-102`) that change only on code deploy. "TALC Positioning", which the marketing page advertises as one of six MI dashboards, **does not exist** in the codebase.
+
+The one feature that does produce real, defensible intelligence is **Investor Signals** (`services/investor_signals/`), which aggregates investor-profile data with proper k-anonymity (MIN_CELL_SIZE = 5), correct quantile statistics, masked thin cells, and a 6-hour snapshot cadence. It is the only piece of this module that an institutional reviewer would respect — and it is sparse by construction (currently below k-threshold for most cells).
+
+**Verdict.** As a product sold to investors, partners, or enterprise users today, Market Intelligence would not survive even a casual diligence review. Three rounds of dashboards are decorative; the headline scoring system is sophisticated arithmetic over fake inputs; the marketing claim of "real-time intelligence from 30+ providers refreshed nightly" is, as currently implemented, **materially false**. The marketing surface and the data surface are misaligned to a degree that exposes the company to credibility and (depending on subscription pricing) potential misrepresentation risk.
+
+The good news: the **scaffolding is sound**. Wiring 6–8 genuinely free, high-credibility public APIs (SEC EDGAR, USPTO, OpenAlex, Hacker News, GitHub Trending, World Bank, OECD, Crossref) into the existing aggregator can be done in 30 days and would turn the Sector Compass from fiction into a defensible, citation-backed second-tier intelligence product. The investor-signals primitive can be the wedge for a genuinely differentiated capability nobody else owns. But the hardcoded vanity surfaces — Market Pulse, High-Conviction Plays, Studio Benchmarks, TALC — should be **removed before the next investor demo**, not improved.
+
+**Recommended actions, in priority order:**
+
+1. **This week.** Remove or clearly badge as "preview only" every dashboard backed by stub data. Stop marketing "30+ providers".
+2. **30 days.** Wire 6 free, credible providers end-to-end. Rebuild Sector Compass on real data only.
+3. **90 days.** Wire 6 more. Add provenance rail. Ship Geography Lens with real per-country rollups.
+4. **180 days.** Define the intelligence wedge — Axal cannot win as a generic PitchBook alternative; it can win as an evidence-graph layer that connects founder activity inside Axal to public signal outside.
+
+---
+
+## 2 · ARCHITECTURE FINDINGS
+
+The system is in three layers, all of which are technically competent.
+
+**Connector layer** (`services/market_intel/sources/*.ts`, registered in `registry.ts`). 32 connectors with a uniform `CommonRow` output shape, dimension tagging (demand/supply/capital/talent/research/sentiment), per-source `weight ∈ [0.4, 0.9]`, quota tracking (`market_intel_quota` table), graceful stub fallback on rate-limit/error. The registry pattern is excellent and would scale to 100+ sources without architectural change.
+
+**Aggregation layer** (`services/market_intel/aggregator.ts` + `scoring.ts`). Time-decayed weighted average per (sector, dimension) with a 14-day half-life and 30-day window. Composite headline is the unweighted mean of six dimensions. Idempotent UPSERT into `market_intel_indexes` on `(sector, geo, period_key, dimension)`. This is a defensible, transparent, **boring** algorithm — exactly what you want for intelligence work. No black-box ML; no LLM rewriting numbers; no AI synthesis. A reviewer can read scoring.ts and understand exactly why a sector got an 84.1.
+
+**Serving layer** (`routes/market_intel.ts`). Three-tier cache (edge → KV 24h → DB recompute on demand), tier-gating per dashboard (free composite-only, Growth+ dimensions, Professional+ investor lens, Investor-role-only investor signals), HMAC-verified public unsubscribe surface. Cron schedule is sensible (`wrangler.toml`: hourly at :00, daily at 02:30, weekly Sun 02:45, recompute at 04:00, digests at 09:00).
+
+**Architectural verdict:** A+ for the skeleton. The connector/aggregator/index split is exactly how this kind of system should be built. The problem is not architecture; the problem is that the connectors don't connect to anything.
+
+**One real architectural risk:** `market_intel_rows` has no retention policy. The 30-day scoring window means anything older than 30 days is dead weight. With even modest live ingestion (say 32 sources × 12 sectors × 1 row/day = 384 rows/day), the table grows ~140K rows/year per geo. Once geography rollups land (the spec implies eventually 50+ geos), this becomes 7M+ rows/year with no TTL. Add a nightly purge of rows older than 90 days before live providers turn on.
+
+---
+
+## 3 · DATA SOURCE FINDINGS
+
+The system claims to integrate 32 sources. **Zero are live.** This is the central finding of the audit.
+
+| Class | Count | Status | Examples |
+|---|---|---|---|
+| **Paid · contract not signed** | 12 | `throw Error('paid_contract_not_signed')` | Gartner, PitchBook, CB Insights, SimilarWeb, Semrush, NewsAPI, BuiltWith, Glassdoor, LinkedIn, Indeed, Ahrefs |
+| **Free · TODO** | 20 | `return buildRows(sectors, new Date())` — seeded synthetic | SEC EDGAR, Crunchbase (open API), Google Trends, Reddit, Hacker News, Product Hunt, GitHub trending, World Bank, OECD, Eurostat, BLS, USPTO, EPO, GDELT, arXiv, Papers with Code, Stack Exchange, Shopify Partners, Apple App Store, Google Play |
+| **Live** | 0 | — | — |
+| **Adjacent: live but outside MI pipeline** | 2 | Yahoo Finance (10 tickers), 3 RSS feeds (TechCrunch, The Verge, Axios) | Used in `/macro` and `/market-pulse` headlines only — not fed into the index pipeline |
+
+**The synthetic-data generator** (`sources/_lib.ts`'s `seededAround()`) produces deterministic per-day pseudo-random values in the 0.05–0.95 band around a per-source midpoint (typically 0.5–0.6). These are then run through the weighted aggregator and presented to users as composite scores. The system **works exactly as designed**; it just designs to fiction.
+
+**Source-quality scoring** (the audit asked for 0–10 per source on authority, reliability, coverage, etc.). Because zero sources are wired, this scoring is hypothetical. For the 20 free TODO sources, here is my prioritization for actual implementation:
+
+| Source | Authority | Coverage | Startup useful | Investor useful | Difficulty | Priority |
+|---|---|---|---|---|---|---|
+| **SEC EDGAR** | 10 | 10 (US) | 7 | 10 | Low (free, REST, no key) | **P0** |
+| **USPTO PatentsView** | 9 | 10 (US) | 6 | 9 | Low (free, REST, no key) | **P0** |
+| **OpenAlex** | 9 | 10 (global research) | 6 | 7 | Low (free, REST, no key) | **P0** |
+| **Hacker News (Algolia)** | 6 (sentiment proxy) | 9 | 7 (founder pulse) | 5 | Trivial (no key) | **P0** |
+| **GitHub Trending / GitHub API** | 8 | 9 | 8 | 7 | Low (free, key for rate) | **P0** |
+| **World Bank Open Data** | 10 | 10 (macro) | 5 | 7 | Low (free) | **P1** |
+| **OECD SDMX-JSON** | 10 (OECD member states) | 7 | 5 | 7 | Medium (SDMX schema) | **P1** |
+| **Crossref** | 9 | 10 (DOI universe) | 5 | 6 | Low (free) | **P1** |
+| **arXiv** | 9 | 9 (STEM preprints) | 7 | 6 | Low (free) | **P1** |
+| **Crunchbase Open Data Map** | 6 (sparse) | 7 | 7 | 7 | Low (free tier exists) | **P1** |
+| **EPO Open Patent Services** | 9 | 9 (EU patents) | 5 | 7 | Medium (OAuth) | **P2** |
+| **Eurostat JSON-stat** | 9 | 9 (EU) | 4 | 6 | Medium (JSON-stat schema) | **P2** |
+| **BLS Open Data API** | 10 (US labor) | 9 (US) | 6 | 7 | Low (key) | **P2** |
+| **GDELT 2.0** | 6 (news firehose, noisy) | 10 (global) | 5 | 5 | Medium (BigQuery) | **P2** |
+| **Reddit JSON endpoints** | 4 (sentiment, noisy) | 8 | 6 | 4 | Trivial | **P3** |
+| **Product Hunt API** | 5 (US consumer-tech bias) | 4 | 6 | 4 | Low (token) | **P3** |
+| **Papers with Code** | 7 (ML-specific) | 5 | 6 | 5 | Low | **P3** |
+| **Stack Exchange API** | 6 (developer pulse) | 7 | 5 | 4 | Low (key) | **P3** |
+| **Google Trends (unofficial)** | 5 (noisy, no longer official) | 9 | 6 | 4 | Medium (unofficial libraries) | **P3** |
+| **Apple/Google App Store charts** | 6 | 7 | 5 (consumer only) | 5 | Medium (unofficial scrapers) | **P3** |
+
+**Decision implication:** The first row of P0 sources (SEC EDGAR, USPTO, OpenAlex, Hacker News, GitHub) is enough to produce a genuinely credible early version of the Sector Compass. None require contracts, payments, or fragile scrapers.
+
+---
+
+## 4 · METHODOLOGY FINDINGS
+
+The math is **defensible where it exists**, **opaque where it matters**, and **fictional in places that present as analysis**.
+
+**Defensible.** The aggregator's recency-decayed weighted average (`scoring.ts:38-64`) is a textbook approach. Exponential half-life decay, per-source authority weights in [0.4, 0.9], composite = mean of 6 dimensions. A reviewer can read this in 90 seconds and form an informed view. Investor Signals' k-anonymity (`investor_signals.ts:543-547`, MIN_CELL_SIZE=5) is correctly implemented. Quantile statistics on ticket bands use order statistics without interpolation — pedantically correct.
+
+**Opaque.** Three numbers drive most user-facing claims and **none are documented**:
+- Per-source `weight` in `registry.ts` is in [0.4, 0.9]. Why is Gartner 0.7 and PitchBook 0.9? Why is Reddit 0.5 and Crunchbase 0.75? No rubric is documented. These weights propagate into every composite.
+- Investor Lens score = `0.6 × capital + 0.4 × sentiment` (`market_intel.ts:332`). Why 60/40? No rationale in code or comments. An LP looking at a sector ranking generated from this would have to take the 60/40 split on faith.
+- Founder Lens "Opportunity Gap" = `demand - supply`. This treats demand and supply as commensurable scalars, which is only true by construction (both are 0–100 composites of incommensurable underlying signals). A 12-point opportunity gap could mean "real demand-supply imbalance" or "Google Trends is spiking and BLS isn't" — the user can't tell.
+
+**Fictional.** Three categories of output present as analysis but are not derived from data:
+
+1. **Hardcoded constant arrays.** `MARKET_PULSE` (9 sectors with hand-written multiples, sentiment, technographic_signal, hiring_surge, gap_opportunity prose), `HIGH_CONVICTION` (6–7 plays with hand-written reasoning), `STUDIO_BENCHMARKS` (15 KPIs, all round numbers — `avg_time_to_inc_days: 11`, `founder_match_rate: 88`, etc.). These are TypeScript object literals in `market_intel.ts:37-102`. They change only on code deploy. They are presented to users in elaborate dashboard UI as if they were measured.
+2. **Threshold-keyed narrative strings.** `compassReasoning()` (`MarketIntelPage.jsx:1097`) returns hand-written sentences keyed off composite buckets: `composite > 70 → "Hot sector — high demand + capital deployment is accelerating."` Users may interpret these as model-generated insights. They are CSS.
+3. **The 32 source stubs themselves.** `seededAround(`${KEY}|${sector}|${day}`, 0.55)` is a deterministic PRNG masquerading as observation.
+
+**No LLM is used in this module.** Zero `env.AI.run()` calls in any MI service file. This is, paradoxically, a **strength** — there is no hallucination risk because there is no generation. The risk surface is entirely "fake precision" and "arbitrary weighting", not "hallucinated content".
+
+**Statistical validity verdict per artefact:**
+
+| Artefact | Verdict |
+|---|---|
+| Sector Compass composite | Valid arithmetic, fictional inputs — **misleading** |
+| Founder Lens opportunity gap | Heuristic, undefended assumption that subscores are commensurable — **speculative** |
+| Investor Lens 60/40 score | Heuristic, undocumented weights — **arbitrary** |
+| Investor Signals (k≥5 cells) | Statistically valid — **defensible** |
+| Investor Signals (k<5 cells) | Correctly masked — **defensible** |
+| Market Pulse multiples | Hand-typed constants — **fake** |
+| High-Conviction reasoning | Hand-typed prose — **fake** |
+| Studio Benchmarks KPIs | Hand-typed constants — **fake** |
+| Live Yahoo Finance quotes | Real, current, 30-min cache — **valid** |
+| RSS headlines | Real ingest, no relevance filter — **noise** |
+| compassReasoning() text | Hand-typed thresholds — **fake** (presents as analysis) |
+
+---
+
+## 5 · FOUNDER PERSPECTIVE
+
+**Useful today, in current state:**
+- The watchlist + digest plumbing (when pointed at real data). It is a well-built notification rail.
+- The Founder Lens *concept* — "where is demand-supply imbalanced" is the right question for an idea-stage founder.
+
+**Partially useful:**
+- The Citations tab (`/api/market-intel/citations`) — once real, this is the most useful surface for a founder, because raw observations with source URLs are decision-supporting. Today it shows synthetic rows pointing to `https://axal.vc/market-intel/sources/crunchbase` (a 404).
+
+**Not useful:**
+- Sector Compass. A pre-incorporation founder will not make a sector-choice decision based on a composite they cannot interrogate. A composite of synthetic data is worse than no compass.
+- Market Pulse, High-Conviction, Studio Benchmarks. Each is a single-screen-of-fiction. A serious founder will discount the platform's analytical credibility after one look.
+- Geography Lens. Returns `geo='global'` only. The Lab's claim to support founders in "Delaware default, plus UK / DE / FR" is unsupported in the geography view.
+
+**Brutal answer to "can a founder use this to validate an idea?"** Not today. The signal-to-noise ratio is too low and the inability to drill into provenance breaks trust on contact. A founder is better served by 30 minutes of Hacker News search + USPTO Quick Lookup + an OpenAlex query — which are the very sources Axal is supposed to be integrating.
+
+---
+
+## 6 · INVESTOR PERSPECTIVE
+
+**The one bright spot.** Investor Signals is genuinely useful **once cell counts cross k=5**. The output — "of N investors with completed profiles, 14% target seed-stage AI infra in North America, median ticket $250K–$500K, top thesis keywords {agents, evaluation, retrieval}" — is novel. PitchBook will tell an investor what other firms have *invested in*; nobody else aggregates *what investors say they want to invest in next* with privacy protection. This is the wedge.
+
+The problem is sparsity. With Axal's current investor base, most cells are masked as `insufficient_data`. The UI shows a lot of "—". This is correct behaviour but feels broken to a user. Two recommendations: (a) explicitly surface "X/N investors required" so users understand when a cell will unlock; (b) merge cells across adjacent sectors when below threshold (e.g. "AI Infra + AI Apps = AI" if either alone is k<5).
+
+**The rest of the investor surface is unusable for a professional investor.** A Series A partner running diligence on a sector will not consult a Sector Compass whose composite is computed from sources that explicitly return `seededAround()`. They will use PitchBook ($15–30K/seat/yr), CB Insights ($60K+/seat/yr), Crunchbase Pro ($720/yr/seat) — all of which have real data flowing in. Axal's current output would not be respected at IC.
+
+**Brutal answer to "would an institutional LP rely on this?"** No. An LP reviewing a fund's deal-sourcing tool would walk away after 10 minutes once they realised the source connectors are stubs. The presentation layer is more polished than the data layer warrants, which is the *worst* failure mode — it signals a culture of marketing-first engineering.
+
+---
+
+## 7 · PARTNER PERSPECTIVE
+
+**Corporate innovation teams.** Use case: scouting an emerging sub-sector for partnership/acquisition. They would expect a tool that surfaces companies, patents, talent flows, and academic momentum. Axal today surfaces none of these with real data. CB Insights, Dealroom, and Statista each cover this well. Axal would lose every comparison.
+
+**Government / sovereign / public agencies.** Use case: macro and capital-velocity intelligence for policy. Eurostat, OECD, IMF, World Bank already publish this directly. Axal would be a thinner re-presentation layer unless it adds genuine cross-source synthesis — which the architecture supports but the data does not.
+
+**Channel and infrastructure partners.** Use case: identifying high-growth sectors where their platform is under-represented. Today Axal has nothing actionable here. SimilarWeb (paid) and BuiltWith (paid) own this category.
+
+**Ecosystem partners (legal, design, recruiting, technical DD, finance — the five Axal claims to network).** Use case: matchmaking founders to services. Investor Signals' shape could be extended to "service-provider signals" using the same primitive: which providers are matched to which sectors at which stages. This would be a genuinely novel capability — but it is not built yet.
+
+**Brutal answer to "would a corporate strategy team pay for this?"** No, not at current data quality. The architecture is interesting; the output is not. They would pay for **investor signals + service-provider signals + sector-evidence rail with real provenance** — a product that does not yet exist but could be built from existing primitives in 60–90 days.
+
+---
+
+## 8 · SECTIONS TO REMOVE
+
+Sections recommended for **removal before next investor demo or external customer pitch**. Each is presented to users as data and is, in fact, a hand-typed constant or unreviewed pass-through.
+
+| Section | File:line | Verdict | Reason |
+|---|---|---|---|
+| **Market Pulse tab** | `market_intel.ts:37-47` + `MarketIntelPage.jsx:165-225` | **REMOVE** | 9 sectors of hand-typed multiples, sentiment labels, hiring claims. Presented as live data. |
+| **High-Conviction Plays tab** | `market_intel.ts:75-94` + `MarketIntelPage.jsx:358-383` | **REMOVE** | 6–7 hand-typed "plays" with hand-typed "reasoning". Pure marketing copy in a data wrapper. |
+| **Studio Benchmarks tab** | `market_intel.ts:96-102` + `MarketIntelPage.jsx:393-467` | **REMOVE** | 15 round-number KPIs (`founder_match_rate: 88`, `conversion_idea_to_funded: 23`, `cost_per_spinout: '$185k'`). LP-grade misrepresentation risk. |
+| **TALC Positioning** (marketed but doesn't exist) | — | **REMOVE FROM MARKETING** | Advertised on the spinout-lab page as one of six MI dashboards. Zero code references. |
+| **Live RSS headlines** (in Market Pulse) | `market-data.ts:165-191` | **MERGE or REMOVE** | Three feeds (TechCrunch AI, The Verge, Axios) ingested raw, no relevance filter. Either filter by sector + recency or remove. |
+| **Public Markets / Macro tab** | `MarketIntelPage.jsx:228-318` | **MERGE** into a single "Context" tab if kept. Yahoo Finance quotes for 10 hand-picked tickers are not market intelligence. |
+| **`compassReasoning()` narrative strings** | `MarketIntelPage.jsx:1097, 1117` | **REMOVE** | "Hot sector — high demand + capital deployment is accelerating" rendered as if AI-generated insight. Replace with provenance: "composite computed from N sources, last refresh T". |
+| **Stub-data citation URLs** | All `sources/*.ts` | **REMOVE or FIX** | All stubs cite `https://axal.vc/market-intel/sources/<key>` (404). At minimum link to the source's own URL. |
+
+The page should display, by default, **only** what is actually backed by real data: Investor Signals (when k≥5), and — once wired — Sector Compass with the live free providers. Everything else is a credibility liability.
+
+---
+
+## 9 · SECTIONS TO IMPROVE
+
+| Section | Current state | Recommended improvement | Priority |
+|---|---|---|---|
+| **Sector Compass** | Synthetic composite over stub inputs | Rebuild on 6 P0 free sources with explicit provenance per dimension | **P0** |
+| **Founder Lens** | Opportunity gap from synthetic inputs | (a) Real inputs. (b) Add confidence interval: "Gap +12, n=37 observations from 4 sources, 14d half-life". (c) Surface the underlying citations on click. | **P0** |
+| **Investor Signals** | Sparse, mostly masked | (a) Surface "N more needed to unlock" per cell. (b) Add hierarchical fallback (sector → super-sector). (c) Expose a "thesis-keyword diff" view: how investor language is shifting period-over-period. | **P1** |
+| **Citations tab** | Synthetic rows, broken URLs | Citations are the most important surface — every score should land here. Add source filter, sector filter, date range, full-text search across `payload_json`. | **P0** |
+| **Geography Lens** | `geo='global'` only | Wire 5–10 priority countries: US, UK, DE, FR, CA, IL, SG, IN, BR, AU. Add per-country compass + delta vs global. | **P1** |
+| **Watchlist digest** | Works, content thin | Add: "what changed in the underlying citations since last digest", not just composite delta. Founders care about *new evidence*, not score deltas. | **P2** |
+| **Sources catalog page** | Lists names | Add per-source health: last successful pull, quota remaining, error rate 7d, last citation timestamp. Even partial transparency builds trust. | **P2** |
+| **Investor Lens 60/40 weighting** | Undocumented | Either make weights user-configurable (slider) or document the rationale in-product. Current state is unscientific by appearance. | **P1** |
+
+---
+
+## 10 · MISSING CAPABILITIES
+
+What an institutional intelligence platform has that Axal does not:
+
+| Capability | Why it matters | Difficulty | Priority |
+|---|---|---|---|
+| **Provenance rail per score** | Every composite should be one click away from "show me the 47 rows that produced this 78.4". Without this, no analyst will trust any number. | Medium (already have the data model) | **P0** |
+| **Real freshness badges** | Every metric should show "as of T, from N sources" inline. Today the freshness is buried. | Low | **P0** |
+| **Per-sector evidence brief** | A founder researching "agentic infrastructure" should get: top 5 SEC S-1 filings in last 90 days, top 10 USPTO grants, top 5 arXiv papers, top 5 HN threads, GitHub repo velocity. None of this exists. | Medium (once providers are live) | **P1** |
+| **Diff over time** | "What's new in this sector this week" is more useful than absolute composite. We have `delta_pct` in the schema but it's unused in reads. | Low | **P1** |
+| **Founder ↔ market match** | One of the six marketed dashboards. Embeddings-based thesis match between founder project profile and current market evidence. Architecture supports it (Vectorize is in `wrangler.toml`), no implementation. | Medium-High | **P2** |
+| **Service-provider signals** | Extend investor-signals primitive to service partners. Novel category nobody else owns. | Low (reuse existing primitive) | **P2** |
+| **PDF / data-room export** | Investors and partners ask for portable artefacts. Today there's a CSV export for Market Pulse only. | Low | **P3** |
+| **API surface for partners** | If partners want to embed Axal signals in their own tools, they currently can't. | Medium | **P3** |
+| **Sector taxonomy versioning** | Sectors are hardcoded in `aggregator.ts:25-30`. As new sub-sectors emerge, no graceful evolution path. | Medium | **P3** |
+| **Investor-cohort cohorting** | Investor Signals shows static cells. A real product would let users save filter sets ("seed-stage AI infra in EU") and track them over time. | Medium | **P3** |
+
+---
+
+## 11 · RECOMMENDED NEW DATA SOURCES
+
+Beyond fixing the 20 free TODOs already in the registry, here are sources that should be added because they are **free, high-credibility, and complement what's already scaffolded.**
+
+| Source | What it adds | Free? | Difficulty | Score 0–10 |
+|---|---|---|---|---|
+| **Federal Reserve FRED** | Macro indicators (yields, employment, inflation) with REST + API key | Yes | Low | 9 |
+| **ECB Statistical Data Warehouse** | EU macro counterpart to FRED | Yes | Medium | 8 |
+| **UK Companies House API** | Real-time UK incorporations and filings — directly relevant to spin-out tracking | Yes | Low | 8 |
+| **OpenSanctions** | Sanctions / PEP screening data — directly relevant to Axal's KYC/compliance claims | Yes (CC-BY) | Low | 9 |
+| **GLEIF (Legal Entity Identifier)** | Canonical entity resolution across global filings | Yes | Low | 9 |
+| **OpenCorporates** | 200M+ companies from public registries — already on the audit checklist, not implemented | Free tier + paid | Low (free) / Medium (paid) | 8 |
+| **Lens.org** | Combined patent + scholarly works, more usable than USPTO/EPO directly | Free tier | Medium | 8 |
+| **GitHub GHArchive (BigQuery)** | Event-level GitHub data — superior to "trending" scrape | Free (BQ public datasets) | Medium | 8 |
+| **Common Crawl** | Web-scale text corpus — sector-text frequency analysis without paying SimilarWeb | Free | High | 6 |
+| **EDGAR XBRL** | Structured financial filings — much richer than raw S-1 text scraping | Yes | Medium | 9 |
+| **OpenAlex Topics / Concepts** | Already proposed; specifically the topic-evolution endpoint is gold for "research velocity by field" | Yes | Low | 9 |
+| **Wikipedia pageviews API** | Sector-name pageview trends — surprisingly clean proxy for public interest | Yes | Low | 7 |
+| **Ecosia / DuckDuckGo trends (proxies for search)** | Backup for Google Trends, which is unofficial and fragile | Yes | Medium | 5 |
+
+The top combo for a first-class Sector Compass on free data: **SEC EDGAR + USPTO + OpenAlex + Hacker News + GitHub + FRED + UK Companies House + GLEIF**. Eight sources, all free, all credibility-grade-A, none requiring contracts.
+
+---
+
+## 12 · COMPETITIVE BENCHMARK
+
+| Capability | Axal today | Crunchbase ($720/yr) | Dealroom ($$$ enterprise) | PitchBook ($15–30K/seat/yr) | CB Insights ($60K+/seat/yr) | SimilarWeb ($14K+/yr) |
+|---|---|---|---|---|---|---|
+| **Real-time funding rounds** | Stub | ✓ | ✓ | ✓ | ✓ | — |
+| **Patent intelligence** | Stub | — | — | Partial | ✓ | — |
+| **Web traffic signals** | Stub | — | — | — | Partial | ✓ |
+| **Job postings** | Stub | — | Partial | — | Partial | — |
+| **Sector composites** | Synthetic | — | ✓ | ✓ | ✓ | — |
+| **Investor signals (forward-looking)** | **Real, novel** | — | — | — | — | — |
+| **Founder workspace integration** | **Real, novel** | — | — | — | — | — |
+| **Pricing accessibility** | Free → tiered | $720/yr | $$$ | $15–30K | $60K+ | $14K+ |
+
+**Where Axal is stronger:** investor signals (genuinely novel — nobody aggregates forward-looking investor preferences with privacy protection); deep integration with the founder workspace (PitchBook can't tell you what your portfolio company is building; Axal can).
+
+**Where Axal is comparable:** Nowhere, at current data state.
+
+**Where Axal is weaker:** All conventional intelligence axes — funding rounds, patents, web traffic, job postings, sector composites computed from real signal. Today: comprehensively weaker than every competitor on every traditional axis.
+
+**Where Axal is missing entirely:** Company resolution, executive movement tracking, M&A pipeline, IPO pipeline, alumni-graph effects (the famous "PayPal mafia" pattern PitchBook started exposing in 2022).
+
+**Strategic positioning verdict.** Axal cannot — and should not try to — out-Crunchbase Crunchbase. The data licensing economics are unwinnable. Axal's differentiated wedge is the combination of (a) forward-looking investor signals and (b) the evidence-graph from inside the founder workspace. Both are unique. Neither is properly built today. Both can be built without paid data contracts.
+
+---
+
+## 13 · 30-DAY IMPROVEMENT PLAN
+
+The single goal: **make the Sector Compass real on six free sources** and **delete every dashboard that misrepresents itself**.
+
+| Day | Deliverable | Owner | Acceptance |
+|---|---|---|---|
+| **1–2** | Remove Market Pulse, High-Conviction Plays, Studio Benchmarks tabs OR badge them "Internal demo — synthetic data". Stop any marketing copy claiming "30+ providers" or "real-time intelligence". | Founder / marketing | UI updated; marketing site corrected |
+| **3–7** | Wire **SEC EDGAR S-1 / 10-K filings** as a live source. Real `fetchLive(env, {sectors})` replacing the stub. Pull last 30 days of filings, classify by sector (heuristic on company description or simple keyword map), emit one row per filing with `metric_value` = normalized count, `citation_url` = SEC filing URL. | Engineering | `market_intel_rows.source_key='sec_edgar'` shows ≥ 50 real rows |
+| **8–12** | Wire **USPTO PatentsView**. Real fetchLive pulling last 30 days of grants by IPC code → sector mapping. | Engineering | Real rows present, citations resolve |
+| **13–17** | Wire **OpenAlex** (research velocity per sector via Topic/Concept API). | Engineering | Real rows present |
+| **18–20** | Wire **Hacker News Algolia API** (sector-keyword story volume + score velocity). | Engineering | Real rows present |
+| **21–24** | Wire **GitHub Trending + GH API** (repo creation velocity by topic/language proxy). | Engineering | Real rows present |
+| **25–27** | Wire **FRED** for macro context (10-year yield, unemployment, M2, sector-specific PPI). | Engineering | Real rows present |
+| **28–29** | Rebuild Sector Compass card: surface **per-dimension source counts** prominently; clicking a dimension drills to the actual rows feeding it. Show **last refresh timestamp** on every card. | Frontend | Compass shows real data; click → citation rail |
+| **30** | Add `market_intel_rows` retention purge (90 days) + a `/api/admin/market-intel/health` endpoint showing per-source last-refresh, quota usage, error rate. | Engineering | Purge runs nightly; admin endpoint returns JSON |
+
+**End-state at day 30:** Sector Compass and Citations tab show genuine, citable, dated signal from 6 free sources. Every other dashboard is removed or honestly badged. Marketing claims align with reality.
+
+---
+
+## 14 · 90-DAY IMPROVEMENT PLAN
+
+Build on the day-30 foundation. Two themes: **provider depth** and **Axal's differentiation**.
+
+**Days 31–60 — provider depth.** Add the next P1 sources: **EPO**, **BLS**, **OECD SDMX**, **Eurostat JSON-stat**, **UK Companies House**, **OpenSanctions**, **GLEIF**, **Crossref**. With these the connector total reaches ~14 live sources, sufficient for credible per-country compass.
+
+**Days 61–75 — geography lens.** Ship per-country rollups for US, UK, DE, FR, CA, IL, SG, IN. Each country gets its own composite and dimension breakdown. Schema is already there (`geo` column); the aggregator just needs to partition. UI delivers a country picker + an "vs global" delta.
+
+**Days 76–90 — Axal's wedge.**
+
+1. **Investor Signals v2.** Add the missing primitives: thesis-keyword diff period-over-period; sector × stage × geo × ticket-band heatmap with k-aware merging across adjacent cells; "investors whose thesis closest matches your project" recommendation (embedding-based via the existing Vectorize binding, currently unused for MI).
+2. **Founder evidence brief.** New endpoint and UI: enter a sector, get a one-page brief: top 10 recent S-1s, top 10 USPTO grants, top 5 arXiv papers, top 5 HN threads, GitHub repo velocity chart, the names of the 12 most-aligned investors from Investor Signals. This is what the Lab's Week-1 founder actually needs.
+3. **Sector × evidence drill, real-time.** Every score in the UI becomes a portal into provenance: click any cell → see exactly which rows from which sources contributed, ordered by recency × source weight. This is the table-stakes feature for institutional credibility.
+
+**End-state at day 90:** 14+ live sources; per-country Sector Compass; defensible Investor Signals with embedding-based founder ↔ investor match; founder evidence brief that genuinely beats 30 minutes of manual research.
+
+---
+
+## 15 · LONG-TERM STRATEGIC ROADMAP
+
+The 6-18 month thesis: **stop chasing the PitchBook category; own the categories nobody owns.**
+
+**Quarter 1 (months 4-6) — Evidence-graph layer.** Axal's true unfair advantage is that the platform sits between the founder's private workspace (project profile, customer interviews, OKRs, financial model) and public market evidence. Build an explicit "evidence graph" that links founder activity to public signal:
+
+- Founder writes a problem statement → system surfaces patents and S-1 filings citing similar problem language.
+- Founder logs a customer interview tagged with pain X → system surfaces investors whose theses mention X.
+- Founder ships a product wedge → system surfaces competing GitHub repos and HN threads.
+
+This product is impossible for Crunchbase, PitchBook, or CB Insights to build because they don't have the private founder side. It is impossible for a founder workspace tool (Notion, Linear) to build because they don't have the market intelligence side. Axal sits in the middle.
+
+**Quarter 2 (months 7-9) — Service-provider signals.** Extend the Investor Signals primitive to legal, design, recruiting, technical DD, finance. K-anonymized aggregation of which providers serve which sectors at which stages. Becomes a two-sided marketplace signal that complements existing matchmaking. No competitor owns this.
+
+**Quarter 3 (months 10-12) — Outcome telemetry.** As Lab cohorts graduate, the platform accumulates the most valuable asset in venture: dose-response data. "Cohorts that hit milestone X by week Y had a 3.2× higher Series A conversion rate." This is what every investor wants to know and nobody can buy. Axal can publish it (privacy-respecting, k-anonymized) and become the citation source for "early-stage venture outcome benchmarks."
+
+**Quarters 4-6 (months 13-18) — Open the API.** Once the underlying signal is credible and unique, expose a metered API for partners (corporate VC arms, sovereign funds, accelerators). Pricing per query against the Evidence Graph. The competitive moat is no longer the data (which is partly public) but the synthesis layer (which is proprietary because it sits across founder + market).
+
+**Strategic risk to manage.** Through all of this, the temptation will be to claim breadth ("30+ providers, real-time intelligence") when reality is depth and synthesis. The right marketing posture is honesty about coverage paired with a clear story about the unique synthesis. "We don't have more rows than PitchBook. We have rows nobody else has, joined to rows nobody else can join."
+
+---
+
+## APPENDIX A · ARTEFACT INVENTORY (for the record)
+
+**Sources audited:**
+- `cloudflare-worker/src/routes/market_intel.ts` (514 lines)
+- `cloudflare-worker/src/routes/market_intel_public.ts` (131 lines)
+- `cloudflare-worker/src/routes/investor_signals.ts` (610 lines)
+- `cloudflare-worker/src/services/market_intel/` (32 source files, aggregator.ts, scoring.ts, registry.ts, cache.ts, quota.ts, digest.ts, market-data.ts)
+- `cloudflare-worker/sql/migrations/030_market_intel.sql`, `031_*`, `032_*`, `037_market_intel_v2.sql`
+- `frontend/src/pages/MarketIntelPage.jsx` (~84KB, ~1,700 lines)
+- `wrangler.toml` (cron schedule)
+
+**Source files reviewed with critical findings:**
+- `services/market_intel/sources/sec_edgar.ts:38-42` — fetchLive is TODO stub
+- `services/market_intel/sources/crunchbase.ts:38-42` — fetchLive is TODO stub
+- `services/market_intel/sources/_lib.ts` — `seededAround()` synthetic generator
+- `routes/market_intel.ts:37-102` — hardcoded MARKET_PULSE, HIGH_CONVICTION, STUDIO_BENCHMARKS
+- `routes/market_intel.ts:332` — undocumented 60/40 weighting
+- `services/market_intel/scoring.ts:11-12` — WINDOW_DAYS=30, HALF_LIFE_DAYS=14 (defensible)
+- `services/investor_signals/investor_signals.ts:25` — MIN_CELL_SIZE=5 (k-anonymity correctly applied)
+
+**Findings classification:**
+- **Critical (data quality):** 1 (all sources are stubs)
+- **High (misrepresentation):** 3 (Market Pulse, High Conviction, Studio Benchmarks)
+- **Medium (methodology opacity):** 3 (per-source weights, 60/40 investor split, opportunity gap)
+- **Medium (incomplete):** 2 (TALC missing, geography global-only)
+- **Low (operational):** 4 (no retention TTL, broken citation URLs, RSS noise, user-ID enumeration)
+
+---
+
+**End of report.** Distribute internally; do not externalize without legal review of the marketing-claim alignment changes recommended in Section 8.

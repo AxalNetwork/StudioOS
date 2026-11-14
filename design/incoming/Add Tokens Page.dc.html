@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&family=Public+Sans:wght@400;600;700;800&family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f3f7}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+</style>
+</helmet>
+<div style="{{ rootSt }}">
+
+<sc-if value="{{ pageOn }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:stretch;min-height:100%">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ false }}">
+<aside aria-label="Main navigation" style="width:216px;flex:none;box-sizing:border-box;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px;padding:16px 12px">
+<div style="display:flex;align-items:center;gap:9px;padding:0 6px;height:32px"><img src="/axal-mark.png" alt="Axal VC" style="width:28px;height:28px;display:block;border-radius:7px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span></div>
+<button type="button" aria-label="Switch company" style="display:flex;align-items:center;gap:8px;height:40px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:var(--raised);font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:var(--ink);text-align:left;cursor:pointer"><span style="width:22px;height:22px;border-radius:6px;background:var(--lav);color:var(--vdeep);display:grid;place-items:center;font-size:10px;font-weight:800;flex:none">NL</span><span style="flex:1">[Northwind Labs]</span><span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+<nav aria-label="Workspace" style="display:flex;flex-direction:column;gap:2px"><sc-for list="{{ side }}" as="r" hint-placeholder-count="8"><div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;font-weight:500;color:var(--body)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--mut)"><path d="{{ r.ic }}"></path></svg>{{ r.t }}</div></sc-for></nav>
+</aside>
+</sc-if>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ false }}">
+<header style="height:56px;flex:none;box-sizing:border-box;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 24px">
+<div style="width:320px;height:36px;box-sizing:border-box;border:1px solid var(--line);border-radius:9px;background:var(--raised);display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--mut);font-size:12.5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg><span style="flex:1">Search StudioOS</span><span style="font-family:'Roboto Mono',monospace;font-size:11px">⌘K</span></div>
+<div style="flex:1"></div>
+<button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;color:var(--body);cursor:pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"></path></svg></button>
+<button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 4px;border-radius:9px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:var(--ink)"><span style="width:28px;height:28px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:10.5px;font-weight:800;color:var(--vdeep)">NA</span>[Name A]<span aria-hidden="true" style="color:var(--mut)">▾</span></button>
+</header>
+</sc-if>
+<sc-if value="{{ hero }}" hint-placeholder-val="{{ true }}">
+<section style="padding:72px 34px 8px;text-align:center;background:var(--hg)">
+<h1 style="margin:0;font:800 60px/1.02 'Bricolage Grotesque',sans-serif;letter-spacing:-.035em;color:var(--hInk)">Pricing</h1>
+<p style="margin:16px auto 0;max-width:620px;font:400 17px/1.6 'Public Sans',sans-serif;color:var(--hBody);text-wrap:pretty">Pay for the cycles you are in. AI is included with every plan, and you can top up as you go.</p>
+<div style="display:flex;justify-content:center;margin-top:30px">
+<div role="tablist" aria-label="Pricing for" style="display:flex;gap:4px;padding:4px;border:1px solid var(--tLine);border-radius:12px;background:var(--tBg);max-width:100%;overflow-x:auto;box-sizing:border-box">
+<button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Founder</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Investor</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Advisors</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Operating Partners</button><button type="button" role="tab" aria-selected="true" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;font:700 14px 'Public Sans',sans-serif;background:#6d28d9;color:#fff">Models</button>
+</div>
+</div>
+</section>
+</sc-if>
+<div style="box-sizing:border-box;width:100%;max-width:1224px;margin:0 auto;padding:32px 40px 48px;display:flex;flex-direction:column;gap:22px">
+
+
+
+<sc-for list="{{ bands }}" as="b" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ b.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">{{ b.cap }}</span></sc-if>
+<section aria-label="Your AI tokens" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+<sc-if value="{{ b.paused }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:13px;font-weight:600"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 4v8M10 4v8"></path></svg><span style="flex:1">AI is paused on this account. Contact support. You can still add tokens: runs are paused, not purchases.</span></div></sc-if>
+<div style="display:grid;grid-template-columns:230px minmax(0,1fr) 250px;gap:28px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Token balance</span>
+<sc-if value="{{ b.ok }}" hint-placeholder-val="{{ true }}"><span aria-label="{{ b.balL }}" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:30px;font-weight:600;letter-spacing:-0.01em">{{ b.bal }}</span><span style="font-size:12.5px;color:var(--mut)">Tokens never expire.</span></sc-if>
+<sc-if value="{{ b.bad }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--body);line-height:1.5">Your token balance couldn’t be read. That’s not the same as having none.</span><div><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Try again</button></div></sc-if>
+<sc-if value="{{ b.load }}" hint-placeholder-val="{{ false }}"><span style="display:block;width:132px;height:28px;border-radius:7px;background:var(--chip)"></span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mut)">Reading…</span></sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">{{ b.eyeb }}</span>
+<sc-if value="{{ b.load }}" hint-placeholder-val="{{ false }}"><span style="display:block;width:160px;height:14px;border-radius:999px;background:var(--chip)"></span><span style="display:block;width:240px;height:10px;border-radius:999px;background:var(--chip)"></span><span style="display:block;width:120px;height:10px;border-radius:999px;background:var(--chip)"></span></sc-if>
+<sc-if value="{{ b.planOn }}" hint-placeholder-val="{{ true }}"><span style="font-size:15px;font-weight:800">{{ b.plan }}</span><sc-for list="{{ b.lines }}" as="l" hint-placeholder-count="2"><span style="font-size:13px;color:var(--body)">{{ l.t }}</span></sc-for>
+<sc-if value="{{ b.store }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--mut)">{{ b.store }} <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">See storage ›</a></span></sc-if>
+<sc-if value="{{ b.hq }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--mut)">Super Admin: token packs are set on <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">HQ › AI allowances ›</a></span></sc-if>
+</sc-if>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ b.addOn }}" hint-placeholder-val="{{ true }}"><button type="button" style="display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 18px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Add tokens</button><span style="font-size:12.5px;color:var(--mut)">Auto-reload: off · <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">Set up ›</a></span></sc-if>
+<sc-if value="{{ b.addOff }}" hint-placeholder-val="{{ false }}"><button type="button" disabled="{{ true }}" aria-disabled="true" title="{{ b.offT }}" style="display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 18px;border-radius:9px;border:1px solid var(--line2);background:var(--chip);color:var(--mut);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:not-allowed">Add tokens</button><span style="font-size:12.5px;color:var(--mut)">{{ b.offT }}</span></sc-if>
+</div>
+</div>
+<sc-if value="{{ b.bar }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div role="img" aria-label="{{ b.barL }}" style="display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--chip)"><span style="{{ b.vSt }}"></span><span style="{{ b.sSt }}"></span></div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--body)"><sc-for list="{{ b.lab }}" as="l" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ l.st }}"></span>{{ l.t }}</span></sc-for></div>
+</div>
+</sc-if>
+</section>
+</div>
+</sc-for>
+
+<sc-if value="{{ packsOn }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Token packs" style="display:flex;flex-direction:column;gap:14px;padding-top:6px">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">AI tokens</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Token packs</h2><p style="margin:0;font-size:13.5px;color:var(--body);max-width:640px">Buy AI tokens as you need them. Runs use your plan’s AI allowance first, then your tokens.</p></div>
+<sc-if value="{{ pkList }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+<sc-for list="{{ packs }}" as="p" hint-placeholder-count="3">
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;min-height:196px;box-sizing:border-box">
+<span style="font-size:13px;font-weight:700;color:var(--body)">{{ p.amt }} of AI tokens</span>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:28px;font-weight:600">{{ p.price }}</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap;min-height:22px"><sc-for list="{{ p.pills }}" as="x" hint-placeholder-count="1"><span style="{{ x.st }}">{{ x.t }}</span></sc-for></div>
+<sc-if value="{{ p.bonus }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--ambT);font-weight:600">{{ p.bonus }}</span></sc-if>
+<div style="flex:1"></div>
+<button type="button" style="display:inline-flex;align-items:center;justify-content:center;height:44px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">{{ p.btn }}</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{ pkLoad }}" hint-placeholder-val="{{ false }}">
+<div aria-busy="true" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;min-height:196px;box-sizing:border-box"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mut)">Reading…</span><span style="display:block;width:70%;height:12px;border-radius:999px;background:var(--chip)"></span><span style="display:block;width:40%;height:26px;border-radius:7px;background:var(--chip)"></span><div style="flex:1"></div><span style="display:block;height:44px;border-radius:9px;background:var(--chip)"></span></div>
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;min-height:196px;box-sizing:border-box"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mut)">Reading…</span><span style="display:block;width:70%;height:12px;border-radius:999px;background:var(--chip)"></span><span style="display:block;width:40%;height:26px;border-radius:7px;background:var(--chip)"></span><div style="flex:1"></div><span style="display:block;height:44px;border-radius:9px;background:var(--chip)"></span></div>
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;min-height:196px;box-sizing:border-box"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:var(--mut)">Reading…</span><span style="display:block;width:70%;height:12px;border-radius:999px;background:var(--chip)"></span><span style="display:block;width:40%;height:26px;border-radius:7px;background:var(--chip)"></span><div style="flex:1"></div><span style="display:block;height:44px;border-radius:9px;background:var(--chip)"></span></div>
+</div>
+</sc-if>
+<sc-if value="{{ pkNone }}" hint-placeholder-val="{{ false }}"><div style="background:var(--card);border:1px dashed var(--line2);border-radius:12px;padding:28px;font-size:14px;font-weight:700;color:var(--body)">Top-up isn’t available yet.</div></sc-if>
+<sc-if value="{{ pkBad }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px"><span style="font-size:13.5px;font-weight:600;color:var(--body)">Token packs couldn’t be read just now.</span><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Try again</button></div></sc-if>
+<p style="margin:0;font-size:12px;color:var(--mut)">Sold by Axal VC Management LLC. Paid securely through Stripe. VAT, where it applies, is added at checkout and is not part of the tokens.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ models }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Model prices" style="padding-top:8px">
+<p style="margin:0;max-width:760px;font:400 15px/1.6 'Public Sans',sans-serif;color:var(--hBody)">Prices are Cloudflare's published Workers AI rates plus 25%. Runs are paid from your plan's monthly AI allowance first, then from your AI tokens.</p>
+<div style="margin-top:26px">
+<div style="font:800 18px 'Bricolage Grotesque',sans-serif;letter-spacing:-.015em;margin-bottom:10px;color:var(--hInk)">Conversation and writing</div>
+<div style="border:1px solid var(--line);border-radius:15px;overflow:hidden;background:var(--card)">
+<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.7fr) 160px 160px;gap:14px;padding:11px 18px;background:var(--mHead);font:800 10.5px 'Public Sans',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--mut)"><span>Model</span><span>Used for</span><span style="text-align:right">Input / 1M tokens</span><span style="text-align:right">Output / 1M tokens</span></div>
+</div>
+</div>
+<p style="margin:10px 0 0;font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:var(--mut)">The model tables and the FAQ continue here as they are today.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ touch }}" hint-placeholder-val="{{ false }}">
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">The AI rail’s Usage box</span>
+<div style="width:320px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px">
+<span style="font-size:13px;font-weight:800">Usage</span>
+<div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--mut)">Today</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">[$0.12]</span></div>
+<div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--mut)">This month</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">[$1.90]</span></div>
+<div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="color:var(--mut)">Token balance</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-weight:600">[$3.40]</span></div>
+<button type="button" style="height:40px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Add tokens</button>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Account › Billing · Buy tokens</span>
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-size:14px;font-weight:800">Buy tokens</span><span style="font-size:12.5px;color:var(--body)">Balance <span style="font-family:'Roboto Mono',ui-monospace,monospace">[$3.40]</span>. Tokens never expire.</span></div>
+<button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Add tokens</button>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Account › Usage · top-up tile</span>
+<div style="width:300px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:6px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Top-ups</span>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:22px;font-weight:600">[$3.40]</span>
+<span style="font-size:12px;color:var(--mut)">Token balance · last top-up <span style="font-family:'Roboto Mono',ui-monospace,monospace">[5 Oct]</span></span>
+<button type="button" style="margin-top:6px;height:40px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Add tokens</button>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">A run Eadwyn could not start</span>
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;align-items:flex-start;gap:12px">
+<img src="/eadwyn-ai.png" alt="" style="width:32px;height:32px;display:block;border-radius:8px;object-fit:contain;background:#18181b;padding:2px;box-sizing:border-box;flex:none">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="font-size:13px;color:var(--body);line-height:1.5">The included AI allowance and token balance cannot cover this run.</span><button type="button" style="height:40px;padding:0 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Add tokens</button></div>
+</div></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hqT }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Platform › AI allowances</span>
+<div style="display:flex;align-items:center;gap:10px"><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">AI allowances</h2><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:#18181b;color:#fff">HQ only</span></div>
+<div role="tablist" style="display:flex;gap:18px;border-bottom:1px solid var(--line)"><span role="tab" aria-selected="false" style="height:40px;display:inline-flex;align-items:center;font-size:13px;font-weight:600;color:var(--mut)">Allowances</span><span role="tab" aria-selected="true" style="height:40px;display:inline-flex;align-items:center;font-size:13px;font-weight:700;color:var(--ink);border-bottom:2px solid #7c3aed">Token packs</span><span role="tab" aria-selected="false" style="height:40px;display:inline-flex;align-items:center;font-size:13px;font-weight:600;color:var(--mut)">AI usage</span></div>
+<div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:15px;font-weight:800">Token packs</span><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600">New pack</button></div>
+<div style="display:grid;grid-template-columns:120px 120px minmax(0,1fr) 120px 280px;gap:12px;padding-bottom:6px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span>Pack</span><span>Price</span><span>Offer</span><span>State</span><span>Actions</span></div>
+<sc-for list="{{ hqRows }}" as="r" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:120px 120px minmax(0,1fr) 120px 280px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)"><span style="font-weight:700">{{ r.p }} of AI tokens</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ r.p }}</span><span style="font-size:12.5px;color:var(--body)">{{ r.o }}</span><span><span style="{{ r.sSt }}">{{ r.s }}</span></span><span style="display:flex;gap:6px"><button type="button" style="height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">Bonus</button><button type="button" style="height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">On sale</button><button type="button" style="height:34px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">Archive</button></span></div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheetOn }}" hint-placeholder-val="{{ false }}">
+<div style="{{ sheetWrap }}">
+<div role="dialog" aria-modal="true" aria-label="Add tokens" style="width:880px;max-width:100%;box-sizing:border-box;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 80px rgba(11,18,32,.28);overflow:hidden;display:flex;flex-direction:column">
+<sc-if value="{{ histHead }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:0 20px 0 24px;border-bottom:1px solid var(--line)"><div role="tablist" aria-label="Add tokens" style="display:flex;flex:1"><a role="tab" aria-selected="false" href="#" style="{{ tabOff }}">Add tokens</a><a role="tab" aria-selected="true" href="#" style="{{ tabOn }}">History</a></div><button type="button" aria-label="Close" style="font-size:22px;line-height:1;color:var(--mut);background:none;border:0;cursor:pointer;padding:8px">×</button></div></sc-if>
+<sc-if value="{{ closeHead }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:flex-end;padding:14px 20px 0"><button type="button" aria-label="Close" style="font-size:22px;line-height:1;color:var(--mut);background:none;border:0;cursor:pointer;padding:8px">×</button></div></sc-if>
+
+<sc-if value="{{ twoCol }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:360px minmax(0,1fr)">
+<div style="padding:0 24px 24px;display:flex;flex-direction:column;gap:14px;border-right:1px solid var(--line);background:var(--raised);min-width:0;box-sizing:border-box">
+<div role="tablist" aria-label="Add tokens" style="display:flex;border-bottom:1px solid var(--line);margin:0 -24px;padding:0 24px"><a role="tab" aria-selected="true" href="#" style="{{ tabOn }}">Add tokens</a><a role="tab" aria-selected="false" href="#" style="{{ tabOff }}">History</a></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">AI tokens</span><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Add tokens</h2><span style="font-size:12.5px;color:var(--mut)">$1 of tokens buys $1 of AI use. Tokens never expire.</span></div>
+<div role="radiogroup" aria-label="Token packs" style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div role="radio" aria-checked="{{ r.aria }}" tabindex="0" style="{{ r.st }}"><span style="{{ r.ring }}"><span style="{{ r.dot }}"></span></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-weight:700">{{ r.amt }} of AI tokens</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ r.pills }}" as="x" hint-placeholder-count="1"><span style="{{ x.st }}">{{ x.t }}</span></sc-for></div></div><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:15px;font-weight:600">{{ r.price }}</span></div>
+<sc-if value="{{ r.rule }}" hint-placeholder-val="{{ false }}"><div role="alert" style="padding:9px 12px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:12.5px;font-weight:600;line-height:1.45">This pack is for your first token purchase, and you have bought tokens before. Choose another pack.</div></sc-if>
+</div>
+</sc-for>
+</div>
+<sc-if value="{{ ruleMore }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Other pack rules, shown the same way</span>
+<div style="padding:9px 12px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:12.5px;font-weight:600">You’ve reached today’s limit of [5] pack orders. Try again tomorrow.</div>
+<div style="padding:9px 12px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:12.5px;font-weight:600">This pack would take your balance over [$1,000].</div>
+<div style="padding:9px 12px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:12.5px;font-weight:600">Buying tokens is paused on this account while a payment is reviewed. Contact support.</div>
+</div>
+</sc-if>
+<p style="margin:0;font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--body);line-height:1.5">Your balance: [$3.40] → {{ tot.after }} once the payment is confirmed.</p>
+<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px;font-size:13px">
+<div style="display:flex;justify-content:space-between"><span>{{ tot.l }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.c }}</span></div>
+<sc-if value="{{ tot.bonus }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:space-between"><span>Bonus tokens</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;color:var(--pos)">{{ tot.bonus }}</span></div></sc-if>
+<div style="display:flex;justify-content:space-between"><span style="color:var(--mut)">VAT, where it applies</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.vat }}</span></div>
+<div style="display:flex;justify-content:space-between;font-weight:800;padding-top:8px;border-top:1px solid var(--line)"><span>Due today</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.due }}</span></div>
+</div>
+<p style="margin:0;font-size:12px;color:var(--mut)">Promo codes don’t apply to token packs. Offers show on the pack.</p>
+<sc-if value="{{ arOff }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--body);line-height:1.5">Auto-reload is off. Turn it on to buy [$25] of tokens automatically when your balance drops below [$5]. <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">Set up on Billing ›</a></div></sc-if>
+<sc-if value="{{ arOn }}" hint-placeholder-val="{{ false }}"><div style="padding:12px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--body);line-height:1.5">Auto-reload is on: [$25] when your balance drops below [$5], up to your monthly limit of [$100]. Card: Visa ending <span style="font-family:'Roboto Mono',ui-monospace,monospace">[4242]</span>. <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">Change on Billing ›</a></div></sc-if>
+<sc-if value="{{ arDecl }}" hint-placeholder-val="{{ false }}"><div role="status" style="padding:12px 14px;border-radius:10px;background:var(--ambF);border:1px solid var(--ambE);color:var(--ambT);font-size:12.5px;font-weight:600;line-height:1.5">Auto-reload is off: your card was declined. Update it on Billing. <a href="#" style="color:var(--ambT);text-decoration:underline">Open Billing ›</a></div></sc-if>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:9px;padding:24px;min-width:0;box-sizing:border-box;background:var(--card)">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><h3 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3">Payment</h3><button type="button" aria-label="Close" style="font-size:22px;line-height:1;color:var(--mut);background:none;border:0;cursor:pointer;padding:0 2px">×</button></div>
+<sc-if value="{{ refusedOn }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px;margin-bottom:6px;border-radius:10px;background:var(--negT);border:1px solid var(--negE)"><span aria-hidden="true" style="display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;background:var(--neg);color:#fff;font:800 11px 'Space Grotesk',sans-serif">!</span><span style="font-size:13px;font-weight:600;line-height:1.5;color:var(--ink)">Your card doesn’t have enough funds for this payment. You were not charged.</span></div></sc-if>
+<div style="display:flex;padding:0 0 4px;font:700 10px 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Pay with</div>
+<div role="radiogroup" aria-label="Pay with" style="display:flex;flex-direction:column"><div role="radio" aria-checked="true" tabindex="0" style="display:flex;gap:10px;align-items:center;padding:11px 12px;margin-bottom:7px;border-radius:10px;box-sizing:border-box;border:1px solid var(--lavE);background:var(--lav)"><span aria-hidden="true" style="font-size:15px;flex:none;color:var(--vio)">◉</span><span style="flex:1;font-size:13px;font-weight:700">Visa ending [4242] · expires [08/28]</span><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:var(--lav);color:var(--vdeep);border:1px solid var(--lavE)">Default</span></div><div role="radio" aria-checked="false" tabindex="0" style="display:flex;gap:10px;align-items:center;padding:11px 12px;margin-bottom:7px;border-radius:10px;box-sizing:border-box;border:1px solid var(--line);background:var(--card)"><span aria-hidden="true" style="font-size:15px;flex:none;color:var(--mut)">○</span><span style="flex:1;font-size:13px;font-weight:600">Apple Pay</span></div><div role="radio" aria-checked="false" tabindex="0" style="display:flex;gap:10px;align-items:center;padding:11px 12px;margin-bottom:7px;border-radius:10px;box-sizing:border-box;border:1px solid var(--line);background:var(--card)"><span aria-hidden="true" style="font-size:15px;flex:none;color:var(--mut)">○</span><span style="flex:1;font-size:13px;font-weight:600">A new card</span></div></div>
+<div style="font-size:12px;color:var(--mut)">Choosing A new card shows the card form here.</div>
+<sc-if value="{{ payOn }}" hint-placeholder-val="{{ true }}"><div style="display:flex;padding:8px 0 0"><button type="button" style="width:100%;min-height:44px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:pointer">{{ payT }}</button></div></sc-if>
+<sc-if value="{{ payOff }}" hint-placeholder-val="{{ false }}"><div style="display:flex;padding:8px 0 0"><button type="button" disabled="{{ true }}" aria-disabled="true" style="width:100%;min-height:44px;border-radius:9px;border:1px solid var(--line2);background:var(--chip);color:var(--mut);font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:not-allowed">{{ payT }}</button></div><span style="font-size:12.5px;color:var(--mut)">Choose another pack to continue.</span></sc-if>
+<sc-if value="{{ refusedOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;padding:8px 0 0"><button type="button" style="flex:1;min-height:44px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:pointer">Try again</button><button type="button" style="flex:1;min-height:44px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;cursor:pointer">Use another method</button></div></sc-if>
+<div style="display:flex;gap:7px;align-items:flex-start;padding:6px 0 0"><span aria-hidden="true" style="display:inline-flex;flex:none;margin-top:3px;color:var(--mut)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7V5.2a3 3 0 0 1 6 0V7M4 7h8v6.5H4z"></path></svg></span><div style="display:flex;flex-direction:column"><span style="font-size:12px;color:var(--mut);line-height:1.5">Paid securely through Stripe. Axal VC never stores your card details.</span><span style="font-size:12px;color:var(--mut)">Sold by Axal VC Management LLC.</span></div></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ okOn }}" hint-placeholder-val="{{ false }}">
+<div style="padding:30px 40px 34px;display:flex;flex-direction:column;gap:16px;align-items:flex-start">
+<span aria-hidden="true" style="width:44px;height:44px;border-radius:999px;background:var(--posT);border:1px solid var(--posE);display:grid;place-items:center;color:var(--pos)"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"></path></svg></span>
+<h2 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Tokens added.</h2>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Token balance</span><span aria-hidden="true" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:38px;font-weight:600;letter-spacing:-0.01em">{{ balT }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">{{ balFinalL }}</span></div>
+<div style="width:100%;display:flex;flex-direction:column;gap:8px"><div role="img" aria-label="{{ okBarL }}" style="display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--chip);width:100%"><span style="{{ okV }}"></span><span style="{{ okS }}"></span></div><div style="display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--body)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="display:block;width:8px;height:8px;border-radius:999px;background:var(--bar)"></span>Plan allowance left [$3.10]</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="display:block;width:8px;height:8px;border-radius:999px;background:#0ea5e9"></span>AI tokens {{ balFinal }}</span></div></div>
+<div style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:auto 1fr;gap:7px 20px;font-size:13px">
+<span style="color:var(--mut)">Paid</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.due }}</span>
+<span style="color:var(--mut)">Card</span><span>Visa ending <span style="font-family:'Roboto Mono',ui-monospace,monospace">[4242]</span></span>
+<span style="color:var(--mut)">Date</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">[21 Oct]</span>
+<span style="color:var(--mut)">Order</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">[MRD-2026-AB12C]</span>
+<span style="color:var(--mut)">Receipt</span><span>Receipt sent to your email.</span>
+</div>
+<sc-if value="{{ bonusOk }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;font-weight:700;color:var(--pos)">+[$2.50] bonus added</span></sc-if>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" style="height:44px;padding:0 18px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Back to Models</button><button type="button" style="height:44px;padding:0 16px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">See history</button><button type="button" style="height:44px;padding:0 16px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Close</button></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ addingOn }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="padding:34px 40px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+<span aria-hidden="true" style="width:36px;height:36px;box-sizing:border-box;border-radius:999px;border:3px solid var(--chip);border-top-color:var(--vio)"></span>
+<h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Payment received.</h2>
+<p style="margin:0;font-size:14px;color:var(--body)">Adding <span style="font-family:'Roboto Mono',ui-monospace,monospace">[$25.00]</span> to your balance…</p>
+<div style="width:100%;height:6px;border-radius:999px;background:var(--chip);overflow:hidden"><span style="display:block;width:62%;height:100%;background:var(--vio)"></span></div>
+<p style="margin:0;font-size:12.5px;color:var(--mut)">This usually takes a few seconds.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ lateOn }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="padding:34px 40px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+<span aria-hidden="true" style="width:40px;height:40px;border-radius:999px;background:var(--ambF);border:1px solid var(--ambE);display:grid;place-items:center;color:var(--ambT)"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 5v3.2l2.2 1.4M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0"></path></svg></span>
+<h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Your tokens are on their way.</h2>
+<p style="margin:0;font-size:14px;color:var(--body);max-width:620px;line-height:1.55">Your payment for <span style="font-family:'Roboto Mono',ui-monospace,monospace">[MRD-2026-AB12C]</span> is recorded, but the tokens are not in your balance yet. We’re on it.</p>
+<a href="#" style="color:var(--vio);font-weight:600;font-size:13.5px;text-decoration:none">Open Usage ›</a>
+<p style="margin:0;font-size:12.5px;color:var(--mut)">You won’t be charged again for this order.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ histOn }}" hint-placeholder-val="{{ false }}">
+<div style="padding:20px 24px 24px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">History</h2><button type="button" role="switch" aria-checked="{{ runsA }}" onClick="{{ toggleRuns }}" style="display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 4px;border:none;background:transparent;color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Show AI runs<span style="{{ trk }}"><span style="{{ knob }}"></span></span></button></div>
+<div role="table" aria-label="Token history" style="display:flex;flex-direction:column">
+<div role="row" style="display:grid;grid-template-columns:90px 170px 110px minmax(0,1fr) 110px;gap:12px;padding-bottom:8px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Date</span><span role="columnheader">What</span><span role="columnheader">Amount</span><span role="columnheader">Order or page</span><span role="columnheader">Balance after</span></div>
+<sc-for list="{{ hist }}" as="h" hint-placeholder-count="6">
+<div role="row" style="display:grid;grid-template-columns:90px 170px 110px minmax(0,1fr) 110px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">{{ h.d }}</span><span style="font-weight:600">{{ h.w }}</span><span style="{{ h.aSt }}">{{ h.a }}</span><span style="{{ h.refSt }}">{{ h.ref }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">{{ h.after }}</span></div>
+</sc-for>
+</div>
+<a href="#" style="color:var(--vio);font-weight:600;font-size:13px;text-decoration:none">See all on Usage ›</a>
+</div>
+</sc-if>
+
+<sc-if value="{{ histEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="padding:44px 24px;display:flex;flex-direction:column;gap:8px;align-items:center;text-align:center"><h2 style="margin:0;font-size:16px;font-weight:800">No top-ups yet.</h2><p style="margin:0;font-size:13px;color:var(--mut)">Packs you buy, bonuses and refunds will be listed here.</p></div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ phModels }}" hint-placeholder-val="{{ false }}">
+<div style="width:390px;height:844px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 6px"><button type="button" aria-label="Menu" style="width:44px;height:44px;border:none;background:transparent;color:var(--ink);font-size:18px">☰</button><span style="font-weight:800">Pricing</span><button type="button" aria-label="Account menu" style="width:44px;height:44px;border:none;background:transparent;display:grid;place-items:center"><span style="width:30px;height:30px;border-radius:999px;background:var(--lav);border:1px solid var(--lavE);display:grid;place-items:center;font-size:10.5px;font-weight:800;color:var(--vdeep)">NA</span></button></div>
+<div style="padding:10px 12px;background:var(--card);border-bottom:1px solid var(--line)"><div role="tablist" aria-label="Pricing for" style="display:flex;gap:4px;padding:4px;border:1px solid var(--tLine);border-radius:12px;background:var(--tBg);max-width:100%;overflow-x:auto;scrollbar-width:none;box-sizing:border-box"><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;min-height:44px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Founder</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;min-height:44px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Investor</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;min-height:44px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Advisors</button><button type="button" role="tab" aria-selected="false" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;min-height:44px;font:600 14px 'Public Sans',sans-serif;background:transparent;color:var(--tTxt)">Operating Partners</button><button type="button" role="tab" aria-selected="true" style="flex:none;white-space:nowrap;border:0;cursor:pointer;border-radius:9px;padding:10px 16px;min-height:44px;font:700 14px 'Public Sans',sans-serif;background:#6d28d9;color:#fff">Models</button></div></div>
+<div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+<section style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-direction:column;gap:2px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Token balance</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:28px;font-weight:600">[$3.40]</span><span style="font-size:12.5px;color:var(--mut)">Tokens never expire.</span></div>
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:10px;border-top:1px solid var(--line)"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Included with your plan</span><span style="font-weight:800">Validate + Build</span><span style="font-size:13px;color:var(--body)">[$3.10] of [$5.00] left this month · resets on [1 Nov]</span><span style="font-size:12.5px;color:var(--mut)">Your plan also includes 10 GB storage. <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">See storage ›</a></span></div>
+<div role="img" aria-label="Plan allowance left [$3.10], then AI tokens [$3.40]" style="display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--chip)"><span style="display:block;width:47.7%;background:var(--bar)"></span><span style="display:block;width:52.3%;background:#0ea5e9"></span></div>
+<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--body)"><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:var(--bar)"></span>Allowance left</span><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:999px;background:#0ea5e9"></span>AI tokens</span></div>
+<button type="button" style="height:48px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600">Add tokens</button>
+<span style="font-size:12.5px;color:var(--mut);text-align:center">Auto-reload: off · <a href="#" style="color:var(--vio);font-weight:600;text-decoration:none">Set up ›</a></span>
+</section>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Token packs</span>
+<sc-for list="{{ packs }}" as="p" hint-placeholder-count="3"><div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px"><div style="flex:1;display:flex;flex-direction:column;gap:4px"><span style="font-weight:700">{{ p.amt }} of AI tokens</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ p.pills }}" as="x" hint-placeholder-count="1"><span style="{{ x.st }}">{{ x.t }}</span></sc-for></div></div><button type="button" style="height:44px;min-width:64px;padding:0 12px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600">{{ p.price }}</button></div></sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ phSheet }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="Add tokens" style="width:390px;height:844px;overflow:hidden;background:var(--card);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:4px;padding:0 6px;border-bottom:1px solid var(--line)"><a href="#" style="display:inline-flex;align-items:center;height:44px;padding:0 10px;color:var(--vio);font-weight:600;font-size:14px;text-decoration:none">‹ Back</a><span style="flex:1;text-align:center;font-weight:800;margin-right:62px">Add tokens</span></div>
+<div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+<div role="radiogroup" aria-label="Token packs" style="display:flex;flex-direction:column;gap:8px"><sc-for list="{{ rows }}" as="r" hint-placeholder-count="3"><div role="radio" aria-checked="{{ r.aria }}" tabindex="0" style="{{ r.st }}"><span style="{{ r.ring }}"><span style="{{ r.dot }}"></span></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-weight:700">{{ r.amt }} of AI tokens</span><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ r.pills }}" as="x" hint-placeholder-count="1"><span style="{{ x.st }}">{{ x.t }}</span></sc-for></div></div><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:15px;font-weight:600">{{ r.price }}</span></div></sc-for></div>
+<p style="margin:0;font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--body)">Your balance: [$3.40] → {{ tot.after }} once the payment is confirmed.</p>
+<div style="display:flex;flex-direction:column;gap:5px;font-size:13px;padding-top:10px;border-top:1px solid var(--line)"><div style="display:flex;justify-content:space-between"><span>{{ tot.l }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.c }}</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--mut)">VAT, where it applies</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.vat }}</span></div></div>
+<button type="button" aria-label="Pay with Apple Pay" style="display:flex;align-items:center;justify-content:center;min-height:48px;border-radius:9px;background:#000;color:#fff;border:1px solid var(--apE);font:600 15px 'Space Grotesk',sans-serif;box-sizing:border-box">Apple Pay</button>
+<div style="display:flex;align-items:center;gap:10px;padding:2px 0"><span style="flex:1;height:1px;background:var(--line)"></span><span style="font-size:12px;color:var(--mut);white-space:nowrap">or pay by card</span><span style="flex:1;height:1px;background:var(--line)"></span></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span style="font:700 10px 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Card number</span><span style="display:block;box-sizing:border-box;width:100%;padding:12px 11px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font:500 13px 'Space Grotesk',sans-serif;line-height:1.45;color:#a1a1aa">1234 1234 1234 1234</span></div>
+<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font:700 10px 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Expiry · CVC</span><span style="display:block;box-sizing:border-box;width:100%;padding:12px 11px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font:500 13px 'Space Grotesk',sans-serif;line-height:1.45;color:#a1a1aa">MM / YY</span></div><div style="width:120px;flex:none;margin-top:17px"><span style="display:block;box-sizing:border-box;width:100%;padding:12px 11px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font:500 13px 'Space Grotesk',sans-serif;line-height:1.45;color:#a1a1aa">CVC</span></div></div>
+<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><span style="font:700 10px 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)">Country · Postcode</span><span style="display:block;box-sizing:border-box;width:100%;padding:12px 11px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font:600 13px 'Space Grotesk',sans-serif;line-height:1.45;color:var(--ink)">Portugal ▾</span></div><div style="width:120px;flex:none;margin-top:17px"><span style="display:block;box-sizing:border-box;width:100%;padding:12px 11px;border:1px solid var(--line2);border-radius:7px;background:var(--card);font:500 13px 'Space Grotesk',sans-serif;line-height:1.45;color:#a1a1aa">Postcode</span></div></div>
+</div>
+<div style="flex:none;padding:12px 16px 24px;border-top:1px solid var(--line);background:var(--card);display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;font-weight:800"><span>Due today</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.due }}</span></div><button type="button" style="height:48px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600">{{ payT }}</button><span style="font-size:11.5px;color:var(--mut);text-align:center">Paid securely through Stripe. Sold by Axal VC Management LLC.</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ phOk }}" hint-placeholder-val="{{ false }}">
+<div style="width:390px;height:844px;overflow:hidden;background:var(--card);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;justify-content:flex-end;padding:0 6px;border-bottom:1px solid var(--line)"><button type="button" aria-label="Close" style="width:44px;height:44px;border:none;background:transparent;font-size:20px;color:var(--body)">×</button></div>
+<div style="flex:1;padding:24px 20px;display:flex;flex-direction:column;gap:14px">
+<span aria-hidden="true" style="width:44px;height:44px;border-radius:999px;background:var(--posT);border:1px solid var(--posE);display:grid;place-items:center;color:var(--pos)"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"></path></svg></span>
+<h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Tokens added.</h1>
+<span aria-hidden="true" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:36px;font-weight:600">{{ balT }}</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">{{ balFinalL }}</span>
+<div role="img" aria-label="{{ okBarL }}" style="display:flex;height:8px;border-radius:999px;overflow:hidden;background:var(--chip)"><span style="{{ okV }}"></span><span style="{{ okS }}"></span></div>
+<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px"><span style="color:var(--mut)">Paid</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ tot.due }}</span><span style="color:var(--mut)">Card</span><span>Visa ending [4242]</span><span style="color:var(--mut)">Order</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">[MRD-2026-AB12C]</span><span style="color:var(--mut)">Receipt</span><span>Sent to your email.</span></div>
+<div style="flex:1"></div>
+<button type="button" style="height:48px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600">Back to Models</button>
+<button type="button" style="height:48px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600">See history</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ phHist }}" hint-placeholder-val="{{ false }}">
+<div style="width:390px;height:844px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;padding:0 6px;background:var(--card);border-bottom:1px solid var(--line)"><a href="#" style="display:inline-flex;align-items:center;height:44px;padding:0 10px;color:var(--vio);font-weight:600;font-size:14px;text-decoration:none">‹ Add tokens</a></div>
+<div style="padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">History</h1><button type="button" role="switch" aria-checked="{{ runsA }}" onClick="{{ toggleRuns }}" style="display:inline-flex;align-items:center;gap:8px;height:44px;border:none;background:transparent;color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600">AI runs<span style="{{ trk }}"><span style="{{ knob }}"></span></span></button></div>
+<div style="flex:1;overflow:hidden;padding:6px 16px 16px;display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ hist }}" as="h" hint-placeholder-count="6"><div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;gap:10px"><span style="font-weight:700">{{ h.w }}</span><span style="{{ h.aSt }}">{{ h.a }}</span></div><div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--mut)"><span>{{ h.d }} · {{ h.ref }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace">after {{ h.after }}</span></div></div></sc-for>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;p1&quot;,&quot;s2&quot;,&quot;s3&quot;,&quot;s3b&quot;,&quot;s4a&quot;,&quot;s4b&quot;,&quot;s5a&quot;,&quot;s5b&quot;,&quot;c6&quot;,&quot;s7a&quot;,&quot;s7b&quot;,&quot;s7c&quot;,&quot;s8&quot;,&quot;s8e&quot;,&quot;c9&quot;,&quot;p10&quot;,&quot;c11a&quot;,&quot;c11b&quot;,&quot;c11c&quot;,&quot;c12&quot;,&quot;c13&quot;,&quot;c14&quot;,&quot;f15a&quot;,&quot;f15b&quot;,&quot;f15c&quot;,&quot;f15d&quot;,&quot;d16a&quot;,&quot;d16b&quot;,&quot;f17&quot;,&quot;c18&quot;],&quot;default&quot;:&quot;p1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { bal: null, runs: true };
+
+  cfg() {
+    const v = this.props.v || 'p1';
+    const P1 = { shell: 1, hero: 1, band: 'founder', packs: 'buy', models: 1 };
+    const CF = {
+      p1: P1,
+      s2: { ...P1, sheet: 'over', mode: 'choose', pick: 1 },
+      s3: { ...P1, sheet: 'over', mode: 'ok', pick: 1, count: 28.4 },
+      s3b: { sheet: 'alone', mode: 'ok', pick: 2, count: 55.9 },
+      s4a: { sheet: 'alone', mode: 'adding', pick: 1 },
+      s4b: { sheet: 'alone', mode: 'late', pick: 1 },
+      s5a: { sheet: 'alone', mode: 'refused', pick: 1 },
+      s5b: { sheet: 'alone', mode: 'rule', pick: 0 },
+      c6: { packs: 'buy' },
+      s7a: { sheet: 'alone', mode: 'choose', pick: 1, ar: 'off' },
+      s7b: { sheet: 'alone', mode: 'choose', pick: 1, ar: 'on' },
+      s7c: { sheet: 'alone', mode: 'choose', pick: 1, ar: 'decl' },
+      s8: { sheet: 'alone', mode: 'hist' },
+      s8e: { sheet: 'alone', mode: 'histEmpty' },
+      c9: { touch: 1 },
+      p10: { ...P1, packs: 'none', noSale: 1 },
+      c11a: { band: 'loading', packs: 'loading' },
+      c11b: { band: 'unreadable', packs: 'buy' },
+      c11c: { band: 'founder', packs: 'unreadable' },
+      c12: { packs: 'visitor' },
+      c13: { band: 'profiles' },
+      c14: { band: 'paused' },
+      f15a: { phone: 'models' }, f15b: { phone: 'sheet', pick: 1 }, f15c: { phone: 'ok', pick: 1, count: 28.4 }, f15d: { phone: 'hist' },
+      d16a: { ...P1, dark: 1 },
+      d16b: { ...P1, sheet: 'over', mode: 'ok', pick: 1, count: 28.4, dark: 1 },
+      f17: { phone: 'sheet', pick: 1, dark: 1 },
+      c18: { hqT: 1 },
+    };
+    return CF[v] || P1;
+  }
+
+  componentDidMount() { this._vis = () => { if (document.hidden) this.finish(); }; if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this._vis); this.run(); }
+  finish() { clearInterval(this._i); clearTimeout(this._t); const F = this.cfg(); if (F.count) this.setState({ bal: F.count }); }
+  componentDidUpdate(pp) { if (pp.v !== this.props.v) this.run(); }
+  componentWillUnmount() { clearInterval(this._i); clearTimeout(this._t); if (this._vis && typeof document !== 'undefined') document.removeEventListener('visibilitychange', this._vis); }
+  run() {
+    clearInterval(this._i);
+    const F = this.cfg();
+    if (!F.count) return;
+    const to = F.count, from = 3.4;
+    const rm = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (rm || (typeof document !== 'undefined' && document.hidden)) { this.setState({ bal: to }); return; }
+    const t0 = Date.now();
+    this.setState({ bal: from });
+    this._i = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / 1400);
+      this.setState({ bal: from + (to - from) * (1 - Math.pow(1 - k, 3)) });
+      if (k >= 1) clearInterval(this._i);
+    }, 40);
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.finish(), 1700);
+  }
+
+  renderVals() {
+    const F = this.cfg();
+    const TH = F.dark
+      ? '--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--body:#d1d5db;--mut:#9ca3af;--line:#374151;--line2:#4b5563;--vio:#a78bfa;--vdeep:#c4b5fd;--lav:rgba(167,139,250,.14);--lavE:rgba(167,139,250,.45);--pos:#34d399;--posT:rgba(52,211,153,.10);--posE:rgba(52,211,153,.35);--neg:#f87171;--negT:rgba(248,113,113,.10);--negE:rgba(248,113,113,.40);--ambF:rgba(252,211,77,.12);--ambT:#fcd34d;--ambE:rgba(252,211,77,.45);--chip:#1f2937;--bar:#a78bfa;--apE:#e5e7eb;--hg:linear-gradient(180deg,#151a2e 0%,#0b1220 100%);--hInk:#e5e7eb;--hBody:#d1d5db;--tBg:#111827;--tLine:#374151;--tTxt:#d1d5db;--mHead:#1f2937;'
+      : '--bg:#f4f3f7;--card:#fff;--raised:#faf9fc;--ink:#18181b;--body:#3f3a47;--mut:#6b6577;--line:#ececf1;--line2:#e2dfe8;--vio:#7c3aed;--vdeep:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posT:rgba(4,120,87,.08);--posE:rgba(4,120,87,.30);--neg:#b91c1c;--negT:#fef2f2;--negE:#fecaca;--ambF:#fdf3cf;--ambT:#92400e;--ambE:#fcd34d;--chip:#f4f3f7;--bar:#7c3aed;--apE:#000;--hg:linear-gradient(180deg,#faf8ff 0%,#fff 100%);--hInk:#141118;--hBody:#4a4553;--tBg:#fff;--tLine:#ececf1;--tTxt:#4a4553;--mHead:#faf9fc;';
+    const rootSt = TH + "position:relative;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;min-height:100%";
+    const MONO = "font-family:'Roboto Mono',ui-monospace,monospace;";
+    const PB = 'display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;box-sizing:border-box;';
+    const PSt = {
+      vio: PB + 'background:var(--lav);color:var(--vdeep);border:1px solid var(--lavE)',
+      amb: PB + 'background:var(--ambF);color:var(--ambT);border:1px solid var(--ambE)',
+      pos: PB + 'background:var(--posT);color:var(--pos);border:1px solid var(--posE)',
+      mut: PB + 'background:var(--chip);color:var(--mut);border:1px solid var(--line2)',
+    };
+    const SI = {
+      'Studio': 'M2.5 7.5L8 3l5.5 4.5V13h-11z', 'Spin-Out Lab': 'M6 2.5h4M6.5 2.5v4L3 12.5h10L9.5 6.5v-4', 'Validate': 'M3 8.5l3 3 7-7',
+      'Build': 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z', 'Raise': 'M2.5 12.5l4-4 3 3 4-6M10 5.5h3.5V9',
+      'Grow': 'M8 13.5V7M8 7c0-2.5 2-4 4.5-4 0 2.5-2 4-4.5 4zM8 9c0-2-1.5-3.5-4.5-3.5 0 2.5 2 3.5 4.5 3.5z',
+      'Network': 'M5.5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM2 13c0-2 1.6-3.5 3.5-3.5S9 11 9 13M11 7.5a1.6 1.6 0 1 0 0-3.2M10.5 9.6c1.9 0 3.5 1.4 3.5 3.4',
+      'Research': 'M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14',
+    };
+    const side = Object.keys(SI).map(t => ({ t, ic: SI[t] }));
+
+    const PK = [
+      { amt: '[$10]', price: '[$10]', c: '[$10.00]', vat: '[$0.50]', due: '[$10.50]', after: '[$13.40]', pills: [{ t: 'First purchase only', k: 'vio' }] },
+      { amt: '[$25]', price: '[$25]', c: '[$25.00]', vat: '[$1.25]', due: '[$26.25]', after: '[$28.40]', pills: [] },
+      { amt: '[$50]', price: '[$50]', c: '[$50.00]', vat: '[$2.50]', due: '[$52.50]', after: '[$55.90]', pills: [{ t: '+[5]% bonus until [12 Nov]', k: 'amb' }], bonus: '+[$2.50] of bonus tokens' },
+    ];
+    const pk = (p) => p.pills.map(x => ({ t: x.t, st: PSt[x.k] }));
+    const packs = PK.map(p => ({ ...p, pills: pk(p), btn: F.packs === 'visitor' ? 'Sign in to buy' : 'Buy' }));
+    const pick = F.pick != null ? F.pick : 1;
+    const P = PK[pick];
+    const tot = { l: P.amt + ' of AI tokens', c: P.c, vat: P.vat, due: P.due, after: P.after, bonus: pick === 2 ? '+[$2.50] · free' : '' };
+
+    const dot = (c) => 'display:block;width:8px;height:8px;border-radius:999px;background:' + c;
+    const bar = (a, t) => { const s = a + t; return { vSt: 'display:block;height:100%;background:var(--bar);width:' + (a / s * 100).toFixed(1) + '%', sSt: 'display:block;height:100%;background:#0ea5e9;width:' + (t / s * 100).toFixed(1) + '%' }; };
+    const L = (t) => ({ t });
+    const base = { ok: 1, bad: 0, load: 0, bal: '[$3.40]', balL: 'Token balance [$3.40]', eyeb: 'Included with your plan', planOn: 1, addOn: 1, addOff: 0, offT: '', bar: 1, barL: 'Plan allowance left [$3.10], then AI tokens [$3.40]', lab: [{ st: dot('var(--bar)'), t: 'Plan allowance left [$3.10]' }, { st: dot('#0ea5e9'), t: 'AI tokens [$3.40]' }], ...bar(3.1, 3.4), cap: '', paused: 0, hq: 0, store: '' };
+    const founder = { ...base, plan: 'Validate + Build', lines: [L('[$3.10] of [$5.00] left this month'), L('Resets on [1 Nov]')], store: 'Your plan also includes 10 GB storage.' };
+    const tokOnly = { vSt: 'display:none', sSt: 'display:block;height:100%;width:100%;background:#0ea5e9', lab: [{ st: dot('#0ea5e9'), t: 'AI tokens [$3.40]' }], barL: 'AI tokens [$3.40]' };
+    let bands = [];
+    if (F.band === 'founder') bands = [F.noSale ? { ...founder, addOn: 0, addOff: 1, offT: 'Top-up isn’t available yet.' } : founder];
+    if (F.band === 'paused') bands = [{ ...founder, paused: 1 }];
+    if (F.band === 'unreadable') bands = [{ ...founder, ok: 0, bad: 1, bar: 0 }];
+    if (F.band === 'loading') bands = [{ ...founder, ok: 0, load: 1, planOn: 0, bar: 0, addOn: 0, addOff: 1, offT: 'Reading…' }];
+    if (F.band === 'profiles') bands = [
+      { ...base, ...tokOnly, cap: 'Investor · Investor Basic', plan: 'Investor Basic', lines: [L('Investor Basic includes no AI allowance. Runs use your tokens.')], store: '1 GB storage.' },
+      { ...base, ...bar(4.2, 3.4), cap: 'Advisor · Advisor Pro', plan: 'Advisor Pro', lines: [L('[$5.00] of AI a month'), L('[$4.20] left this month · resets on [1 Nov]')], store: '10 GB storage.', lab: [{ st: dot('var(--bar)'), t: 'Plan allowance left [$4.20]' }, { st: dot('#0ea5e9'), t: 'AI tokens [$3.40]' }], barL: 'Plan allowance left [$4.20], then AI tokens [$3.40]' },
+      { ...base, ...tokOnly, cap: 'Explorer', eyeb: 'Your plan', plan: 'No plan', lines: [L('No plan. Runs use your tokens.')] },
+      { ...base, ...tokOnly, cap: 'Admin or Super Admin', eyeb: 'Your plan', plan: 'Staff account', lines: [L('Staff account. Runs use your tokens.')], hq: 1 },
+    ];
+
+    const mode = F.mode;
+    const sheetWrap = F.sheet === 'over'
+      ? 'position:absolute;inset:0;z-index:5;background:rgba(11,18,32,.45);display:flex;justify-content:center;align-items:flex-start;padding-top:72px;box-sizing:border-box'
+      : 'display:flex;justify-content:center;padding:24px;background:var(--bg)';
+    const histMode = mode === 'hist' || mode === 'histEmpty';
+    const TAB = (on) => 'display:inline-flex;align-items:center;height:44px;margin-right:20px;font-size:13.5px;text-decoration:none;border-bottom:2px solid ' + (on ? 'var(--vio);color:var(--ink);font-weight:700' : 'transparent;color:var(--mut);font-weight:600');
+    const ROW = (on) => 'display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-radius:10px;box-sizing:border-box;cursor:pointer;' + (on ? 'background:var(--lav);border:1.5px solid var(--vio)' : 'background:var(--card);border:1px solid var(--line2)');
+    const RING = (on) => 'width:18px;height:18px;flex:none;box-sizing:border-box;border-radius:999px;display:grid;place-items:center;border:' + (on ? '2px solid var(--vio)' : '1.5px solid var(--line2)');
+    const DOT = (on) => on ? 'display:block;width:8px;height:8px;border-radius:999px;background:var(--vio)' : 'display:none';
+    const rows = PK.map((p, i) => ({ ...p, pills: pk(p), aria: String(i === pick), st: ROW(i === pick), ring: RING(i === pick), dot: DOT(i === pick), rule: mode === 'rule' && i === pick }));
+
+    const fin = F.count || 28.4;
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const bal = !hidden && this.state.bal != null ? this.state.bal : fin;
+    const money = (n) => '[$' + n.toFixed(2) + ']';
+    const sum = 3.1 + fin;
+    const okV = 'display:block;height:100%;background:var(--bar);width:' + (3.1 / sum * 100).toFixed(1) + '%';
+    const okS = 'display:block;height:100%;background:#0ea5e9;width:' + (Math.max(0, bal) / sum * 100).toFixed(1) + '%';
+
+    const runs = this.state.runs;
+    const HR = [
+      { d: '21 Oct', w: 'Purchase', a: '+[$25.00]', ref: '[MRD-2026-AB12C]', after: '[$28.40]' },
+      { d: '14 Oct', w: 'AI run · release', a: '+[$0.30]', ref: 'Build › Product roadmap', after: '[$3.40]', run: 1 },
+      { d: '14 Oct', w: 'AI run · hold', a: '−[$0.80]', ref: 'Build › Product roadmap', after: '[$3.10]', run: 1 },
+      { d: '9 Oct', w: 'AI run · spend', a: '−[$8.10]', ref: 'Raise › Pitch deck', after: '[$3.90]', run: 1 },
+      { d: '5 Oct', w: 'Purchase', a: '+[$10.00]', ref: '[MRD-2026-4TT8D]', after: '[$12.00]' },
+      { d: '2 Oct', w: 'Adjustment by HQ', a: '+[$2.00]', ref: 'Note from HQ', after: '[$2.00]' },
+    ];
+    const hist = HR.filter(r => runs || !r.run).map(r => ({
+      ...r,
+      aSt: MONO + 'font-size:12.5px;font-weight:600;color:' + (r.a.charAt(0) === '+' ? 'var(--pos)' : 'var(--ink)'),
+      refSt: r.ref.charAt(0) === '[' ? MONO + 'font-size:12px;color:var(--vio);font-weight:600' : 'font-size:12.5px;color:var(--body)',
+    }));
+    const trk = 'position:relative;display:inline-block;width:36px;height:22px;border-radius:999px;box-sizing:border-box;' + (runs ? 'background:#7c3aed' : 'background:var(--chip);border:1px solid var(--line2)');
+    const knob = 'position:absolute;top:3px;width:16px;height:16px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);' + (runs ? 'left:17px' : 'left:3px');
+
+    const hqRows = [
+      { p: '[$10]', o: 'First purchase only', s: 'On sale', on: 1 },
+      { p: '[$25]', o: '—', s: 'On sale', on: 1 },
+      { p: '[$50]', o: '+[5]% bonus until [12 Nov]', s: 'On sale', on: 1 },
+      { p: '[$100]', o: '—', s: 'Archived', on: 0 },
+    ].map(r => ({ ...r, sSt: r.on ? PSt.pos : PSt.mut }));
+
+    const ph = F.phone;
+    return {
+      rootSt,
+      pageOn: !F.phone && F.sheet !== 'alone',
+      shell: !!F.shell, side, hero: !!F.hero, bands,
+      packsOn: !!F.packs, pkList: F.packs === 'buy' || F.packs === 'visitor', pkLoad: F.packs === 'loading', pkNone: F.packs === 'none', pkBad: F.packs === 'unreadable', packs,
+      models: !!F.models, touch: !!F.touch, hqT: !!F.hqT, hqRows,
+      sheetOn: !!F.sheet, sheetWrap,
+      tabOn: TAB(true), tabOff: TAB(false), histHead: histMode, closeHead: mode === 'ok' || mode === 'adding' || mode === 'late',
+      twoCol: mode === 'choose' || mode === 'refused' || mode === 'rule',
+      rows, tot, ruleMore: mode === 'rule',
+      arOff: F.ar === 'off', arOn: F.ar === 'on', arDecl: F.ar === 'decl',
+      refusedOn: mode === 'refused', payOn: mode === 'choose', payOff: mode === 'rule', payT: 'Pay ' + P.due,
+      okOn: mode === 'ok', addingOn: mode === 'adding', lateOn: mode === 'late',
+      histOn: mode === 'hist', histEmpty: mode === 'histEmpty', hist, runsA: String(runs), trk, knob,
+      toggleRuns: () => this.setState({ runs: !this.state.runs }),
+      balT: money(bal), balFinal: money(fin), balFinalL: 'Token balance ' + money(fin), okV, okS,
+      okBarL: 'Plan allowance left [$3.10], then AI tokens ' + money(fin), bonusOk: pick === 2,
+      phModels: ph === 'models', phSheet: ph === 'sheet', phOk: ph === 'ok', phHist: ph === 'hist',
+    };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,334 @@
+name: GitHub alerts
+
+# GitHub health alerts to one Slack channel (scripts/github-alerts.mjs, rules in
+# scripts/lib/githubAlerts.mjs). Found on 2026-11-09:
+#   main-red      every 15 min: the latest finished CI run on a push to main
+#                 failed, so every PR that merges main fails
+#   queue         the Actions queue backed up, so CI results arrive hours late
+#   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
+#                 date-bound test (D5052, D5039) before its date breaks main
+# The reviewer's alert (no model called) is a job in claude-review.yml, where
+# its outcome is known. main-red polls instead of using `workflow_run`, which
+# WF-4 (frontend/test/workflow_security_4571.test.mjs) keeps out of the repo.
+#
+# Each alert is one issue titled `[alert] ...`: the channel hears only when it
+# opens and when it closes. Needs the secret SLACK_GITHUB_WEBHOOK_URL (a Slack
+# incoming webhook for the channel); without it the issues still open and close
+# and the outbox retains delivery intent. Reporter errors fail visibly.
+
+on:
+  schedule:
+    - cron: '2-57/5 * * * *' # reconcile workflow failures; offset from the existing quarter-hour checks
+    - cron: '*/15 * * * *' # main red
+    - cron: '7 * * * *'    # queue, hourly
+    - cron: '23 2 * * *'   # future clock, nightly
+  workflow_dispatch:
+    inputs:
+      check:
+        description: 'Which check to run now'
+        type: choice
+        options: [main-red, queue, queue-stalled, future-clock, workflow-failures]
+        default: queue
+      attempts:
+        description: 'Verified completion hint batch: JSON array of up to 20 [run_id, attempt] pairs'
+        type: string
+      run_id:
+        description: 'Workflow failure replay: exact GitHub run ID (leave blank for reconciliation)'
+        type: string
+      run_attempt:
+        description: 'Workflow failure replay: exact GitHub run attempt'
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: github-alerts-${{ github.event_name }}-${{ (github.event.inputs.attempts || github.event.inputs.run_id) && github.run_id || github.event.schedule || github.event.inputs.check || 'run' }}
+  cancel-in-progress: false
+
+jobs:
+  workflow-failures:
+    name: Report workflow failures to Issues
+    if: >-
+      github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '2-57/5 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.check == 'workflow-failures'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: github-health-main-red
+      queue: max
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: refs/heads/main
+          sparse-checkout: |
+            scripts
+            engineering-notifications
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Restore the last reconciled creation window and unfinished runs
+        if: inputs.run_id == '' && inputs.attempts == ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/workflow-failure-state.json
+          key: workflow-failure-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: workflow-failure-state-v1-
+      - name: Report verified failures
+        run: node scripts/workflow-failure-reconcile.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ATTEMPTS: ${{ inputs.attempts }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          CURSOR_FILE: ${{ runner.temp }}/workflow-failure-state.json
+      - name: Save the completed reconciliation checkpoint
+        if: success() && inputs.run_id == '' && inputs.attempts == ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/workflow-failure-state.json
+          key: workflow-failure-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+  queue-stalled:
+    name: Merge queue stalled
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue-stalled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-alerts-queue-stalled
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue-stalled
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+
+  main-red:
+    name: main is red
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'main-red')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-main-red
+      queue: max
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: refs/heads/main
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs main-red
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+
+  queue:
+    name: Actions queue
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-queue
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: refs/heads/main
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
+          QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
+
+  future-clock-plan:
+    name: suite plan
+    if: >-
+      github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Newest main timing artifact, or equal weights
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact=''
+          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
+            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
+          fi
+          if [ -n "$artifact" ]; then
+            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
+              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
+            fi
+          fi
+          if [ ! -f test-timings.json ]; then
+            echo "::notice::No main timings artifact available; using equal weights."
+          fi
+      - name: Generate the exact-once plan
+        id: plan
+        run: |
+          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json --without-rest)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+
+  future-clock-part:
+    needs: future-clock-plan
+    name: future clock (${{ matrix.part }})
+    if: >-
+      github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.future-clock-plan.outputs.parts) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: suite-plan
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      - name: Install age and libfaketime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age faketime
+      - name: Build the SPA
+        run: npm run build
+      # The same part CI runs, with every test process's clock 7 days ahead.
+      # libfaketime moves the operating system's clock, so Date, node:sqlite's
+      # datetime('now') and a shell's date agree, as D1 and the Worker do; the
+      # loader carries it into children started with their own env (D5398).
+      # Moving only Date made 817 false failures on 2026-11-10. A failure here
+      # is a warning for the channel, not a red job; a clock that did not move
+      # fails the job, so a silent no-op never reads as "nothing will break".
+      - name: Run the part 7 days ahead
+        env:
+          FUTURE_CLOCK_DAYS: '7'
+          FAKETIME: '+7d'
+          FAKETIME_DONT_FAKE_MONOTONIC: '1'
+          FAKETIME_DONT_RESET: '1'
+        run: |
+          export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1
+          export NODE_OPTIONS="--import=$GITHUB_WORKSPACE/scripts/future-clock.mjs"
+          node scripts/future-clock-check.mjs
+          node scripts/future-clock-producer.mjs ${{ matrix.part }} --plan-file suite-plan.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: future-clock-${{ matrix.part }}
+          path: ${{ runner.temp }}/future-clock/
+          if-no-files-found: error
+          retention-days: 3
+
+  future-clock:
+    name: future clock (report)
+    needs: future-clock-part
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.future-clock-part.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-health-future-clock
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts
+            package.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # missing artifacts are reported as unknown, never recovery
+        with:
+          pattern: future-clock-*
+          path: ${{ runner.temp }}/fc
+      - run: node scripts/github-alerts.mjs future-clock
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          FUTURE_CLOCK_DAYS: '7'
+          FUTURE_CLOCK_DIR: ${{ runner.temp }}/fc
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

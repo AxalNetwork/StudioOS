@@ -1,0 +1,100 @@
+# D1511 (#3762, deck v2 A18) — visual regression and axe on the Pitch deck
+# editor, in a pinned container: the Playwright image matching
+# @playwright/test, with the fonts pinned in frontend/package.json. A laptop's
+# pixels are never a baseline (frontend/playwright.visual.config.js).
+#
+# BASELINES ARE MADE HERE, AND COMMITTED BY A PERSON OR A SESSION. The suite
+# runs with `--update-snapshots=missing`: a screenshot that has no baseline yet
+# is written, not compared. A run that writes new ones uploads them as the
+# `deck-visual-new-baselines` artifact and fails, naming each file; the PR's
+# author downloads it, looks at every PNG, and commits them to
+# frontend/tests/visual/__screenshots__/. Every later run compares against them,
+# and a change past `maxDiffPixelRatio` fails. D1434: the run no longer commits
+# them itself. A push by github-actions[bot] holds every workflow on the PR
+# until someone approves it (#4306), and a baseline nobody looked at is not a
+# baseline. To redraw one on purpose, delete the changed PNGs and push: the next
+# run writes them into the artifact.
+#
+# axe needs no baseline: zero serious or critical violations, every run.
+name: deck-visual
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/pages/raise/pitch/**'
+      - 'frontend/src/index.css'
+      - 'frontend/tests/visual/**'
+      - 'frontend/playwright.visual.config.js'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'cloudflare-worker/src/services/decks/**'
+      - '.github/workflows/deck-visual.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deck-visual-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: Deck editor visual regression and axe (Playwright, pinned container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: mcr.microsoft.com/playwright@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f # v1.64.1-noble
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      # D5612: the API index is built, not committed; vite's webServer imports it.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+
+      - name: Run the visual and axe suites
+        id: run
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: npx --no-install playwright test -c playwright.visual.config.js --update-snapshots=missing
+
+      - name: Find baselines this run wrote
+        id: fresh
+        if: success()
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain -- frontend/tests/visual/__screenshots__ | awk '{print $2}' > "$RUNNER_TEMP/new-baselines.txt"
+          count=$(wc -l < "$RUNNER_TEMP/new-baselines.txt" | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" = "0" ]; then echo "Every screenshot matched its baseline."; fi
+
+      - name: Keep the new baselines for review
+        if: success() && steps.fresh.outputs.count != '0'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deck-visual-new-baselines
+          path: frontend/tests/visual/__screenshots__/
+          retention-days: 14
+
+      - name: Ask for the new baselines to be committed
+        if: success() && steps.fresh.outputs.count != '0'
+        shell: bash
+        run: |
+          echo "::error::${{ steps.fresh.outputs.count }} screenshot(s) have no baseline yet. They were drawn in the pinned container and attached to this run as the deck-visual-new-baselines artifact. Download it, look at each PNG, and commit them to frontend/tests/visual/__screenshots__/ (the files below). The next run then compares against them."
+          sed 's/^/  /' "$RUNNER_TEMP/new-baselines.txt"
+          exit 1
+
+      - name: Keep the failed screenshots and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deck-visual-results
+          path: frontend/test-results/
+          retention-days: 7

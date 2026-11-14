@@ -1,0 +1,227 @@
+/**
+ * LP Reporting / quarterly LP updates (Support stage).
+ *
+ * GPs (admin/investor) draft and publish per-fund, per-period reports (NAV,
+ * called, distributed, DPI/TVPI/IRR, narrative). LPs (investors who are a
+ * limited_partner of the fund) see only PUBLISHED reports for those funds.
+ * Fills the gap where capital *calls* existed but there was no way to report
+ * back to LPs.
+ *
+ * Mounted at /api/lp-reports. Added to STUDIO_PREFIXES so founders get a 402;
+ * admin/investor bypass the studio gate and are further narrowed here.
+ *
+ * The same investor may be a GP (of one fund) and an LP (of a different
+ * fund). D4636 part 2: on reads, the funds a caller runs are the operating
+ * gate's scope (`fundManageScope`, what `requireFundGp` would let them
+ * operate), not the reports they once authored, so a changed relationship
+ * applies to the next read. A fund they run shows every report, drafts
+ * included, as the whole row; a fund they are an LP of shows its published
+ * reports in the LP projection (`lpView`).
+ */
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth, canViewLpData } from '../auth';
+import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { lpMembershipScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
+import { requireFundGp, managedFundIds } from '../services/fundGpAccess';
+
+const r = new Hono<{ Bindings: Env }>();
+
+/** GPs — may draft/edit/publish reports. Founders are already 402'd upstream. */
+function isGp(user: User): boolean {
+  return isAdmin(user) || isInvestor(user);
+}
+
+/** Require an authenticated GP; throws "Forbidden" (mapped to 403) otherwise. */
+async function requireGp(c: any): Promise<User> {
+  const user = await requireAuth(c);
+  if (!isGp(user)) throw new Error('Forbidden');
+  return user;
+}
+
+type ReportRow = {
+  id: number; uid: string; fund_id: number; period: string; status: string;
+  nav: number | null; called: number | null; distributed: number | null;
+  dpi: number | null; tvpi: number | null; irr: number | null;
+  narrative: string | null; created_by: number | null; published_at: string | null;
+  created_at: string; updated_at: string;
+};
+
+async function dto(env: Env, x: ReportRow): Promise<any> {
+  const fund = await env.DB.prepare('SELECT id, name, vintage_year, status FROM vc_funds WHERE id = ?').bind(x.fund_id).first<any>();
+  return { ...x, fund: fund || null };
+}
+
+/**
+ * Fund ids the caller may view: all for admin, else funds where they are an LP.
+ *
+ * The membership question goes through `lpMembershipScope` — admin has already
+ * short-circuited to 'all' above, so what reaches the query is the LP arm. It
+ * matters here because a quarterly report is the one place an LP learns what
+ * their position did, and the old `user_id = ?` refused it to exactly the
+ * legacy LPs whose capital calls the platform was still sending.
+ */
+async function visibleFundIds(env: Env, user: User): Promise<number[] | 'all'> {
+  if (isAdmin(user)) return 'all';
+  await claimLpRowsByEmail(env, Number(user.id), user.email);
+  const scope = lpMembershipScope(user as any);
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT lp.fund_id AS fund_id FROM limited_partners lp WHERE ${scope.sql}`,
+  ).bind(...scope.binds).all<{ fund_id: number }>();
+  return (rows.results || []).map((row) => Number(row.fund_id));
+}
+
+/** The LP projection: the published report, without who on the GP side drafted it. */
+function lpView(report: any): any {
+  const { created_by: _author, ...rest } = report;
+  return rest;
+}
+
+function num(v: any): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+// GET /api/lp-reports — admin: all; a fund's GP (operating gate): its reports; an LP: published reports of their funds
+r.get('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const fundId = c.req.query('fund_id');
+    const visible = await visibleFundIds(c.env, user);
+    let where = '1=1';
+    const params: any[] = [];
+    const managed = visible === 'all' ? null : new Set(await managedFundIds(c, user));
+    if (visible !== 'all') {
+      // Non-admin (D4636 part 2): every report of a fund they run now, OR the
+      // published reports of funds they are an LP of. Authorship alone no
+      // longer reads a report: the relationship is evaluated on this request.
+      const clauses: string[] = ['1=0'];
+      if (managed && managed.size > 0) {
+        clauses.push(`fund_id IN (${[...managed].map(() => '?').join(',')})`);
+        params.push(...managed);
+      }
+      if (visible.length > 0) {
+        clauses.push(`(fund_id IN (${visible.map(() => '?').join(',')}) AND status = 'published')`);
+        params.push(...visible);
+      }
+      where += ` AND (${clauses.join(' OR ')})`;
+    }
+    if (fundId) { where += ' AND fund_id = ?'; params.push(Number(fundId)); }
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM lp_reports WHERE ${where} ORDER BY period DESC, updated_at DESC LIMIT 500`
+    ).bind(...params).all<ReportRow>();
+    const items: any[] = [];
+    for (const x of (rows.results || []) as ReportRow[]) {
+      const full = await dto(c.env, x);
+      items.push(managed === null || managed.has(Number(x.fund_id)) ? full : lpView(full));
+    }
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/lp-reports — create a draft (GP: admin/investor)
+r.post('/', async (c) => {
+  try {
+    const user = await requireGp(c);
+    const body = await c.req.json().catch(() => ({} as any));
+    const fundId = Number(body.fund_id);
+    const period = body.period ? String(body.period).slice(0, 32) : null;
+    if (!Number.isFinite(fundId) || !period) return c.json({ detail: 'fund_id and period required' }, 400);
+    // D712 decision 6: only the fund's GP of record (or an admin) writes its reports.
+    await requireFundGp(c, fundId);
+    const uid = newUid();
+    try {
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO lp_reports (uid, fund_id, period, status, nav, called, distributed, dpi, tvpi, irr, narrative, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        uid, fundId, period,
+        num(body.nav), num(body.called), num(body.distributed),
+        num(body.dpi), num(body.tvpi), num(body.irr),
+        body.narrative ? String(body.narrative).slice(0, 20000) : null,
+        user.id, nowIso(), nowIso(),
+      ).run();
+      const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE id = ?').bind((ins as any).meta?.last_row_id).first<ReportRow>();
+      return c.json(await dto(c.env, x!), 201);
+    } catch (e: any) {
+      if (String(e?.message || e).includes('UNIQUE')) return c.json({ detail: 'A report already exists for this fund and period' }, 409);
+      throw e;
+    }
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/lp-reports/:uid — detail (same visibility rules as list)
+r.get('/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
+    if (!x) return c.json({ detail: 'Not found' }, 404);
+    if (!isAdmin(user)) {
+      // D4636 part 2: the manager arm is the operating gate's scope, as on the list.
+      const manages = (await managedFundIds(c, user)).includes(Number(x.fund_id));
+      if (!manages) {
+        if (x.status !== 'published') return c.json({ detail: 'Not found' }, 404);
+        // Same predicate as the list above — a report reachable in one and
+        // refused in the other is the drift this consolidation removes.
+        await claimLpRowsByEmail(c.env, Number(user.id), user.email, Number(x.fund_id));
+        const scope = lpMembershipScope(user as any);
+        const lp = await c.env.DB.prepare(
+          `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`,
+        ).bind(x.fund_id, ...scope.binds).first();
+        if (!lp) return c.json({ detail: 'Forbidden' }, 403);
+        return c.json(lpView(await dto(c.env, x)));
+      }
+    }
+    return c.json(await dto(c.env, x));
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/lp-reports/:uid — edit metrics/narrative (GP: admin/investor)
+r.put('/:uid', async (c) => {
+  try {
+    await requireGp(c);
+    const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
+    if (!x) return c.json({ detail: 'Not found' }, 404);
+    await requireFundGp(c, Number(x.fund_id));
+    // A published report is what its LPs read; it is never edited (D712).
+    if (x.status === 'published') return c.json({ detail: 'A published report cannot be edited.', code: 'report_published' }, 409);
+    const body = await c.req.json().catch(() => ({} as any));
+    await c.env.DB.prepare(
+      `UPDATE lp_reports SET nav=?, called=?, distributed=?, dpi=?, tvpi=?, irr=?, narrative=?, updated_at=? WHERE id=?`
+    ).bind(
+      body.nav !== undefined ? num(body.nav) : x.nav,
+      body.called !== undefined ? num(body.called) : x.called,
+      body.distributed !== undefined ? num(body.distributed) : x.distributed,
+      body.dpi !== undefined ? num(body.dpi) : x.dpi,
+      body.tvpi !== undefined ? num(body.tvpi) : x.tvpi,
+      body.irr !== undefined ? num(body.irr) : x.irr,
+      body.narrative !== undefined ? (body.narrative ? String(body.narrative).slice(0, 20000) : null) : x.narrative,
+      nowIso(), x.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE id = ?').bind(x.id).first<ReportRow>();
+    return c.json(await dto(c.env, fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/lp-reports/:uid/publish — publish (GP: admin/investor)
+r.post('/:uid/publish', async (c) => {
+  try {
+    await requireGp(c);
+    const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
+    if (!x) return c.json({ detail: 'Not found' }, 404);
+    const { viaAdmin } = await requireFundGp(c, Number(x.fund_id));
+    // D712 decision 6: admins issue LP reports from the reporting queue.
+    if (viaAdmin) return c.json({ detail: 'Admins issue LP reports from the reporting queue.', code: 'issue_from_reporting_queue' }, 409);
+    if (x.status === 'published') return c.json({ detail: 'This report is already published.', code: 'report_published' }, 409);
+    await c.env.DB.prepare("UPDATE lp_reports SET status='published', published_at=?, updated_at=? WHERE id=? AND status <> 'published'")
+      .bind(nowIso(), nowIso(), x.id).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE id = ?').bind(x.id).first<ReportRow>();
+    return c.json(await dto(c.env, fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+export default r;

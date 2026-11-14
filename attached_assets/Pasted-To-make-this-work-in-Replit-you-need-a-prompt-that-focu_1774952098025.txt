@@ -1,0 +1,40 @@
+To make this work in Replit, you need a prompt that focuses on **Role-Based Access Control (RBAC)** and a "View As" or **Impersonation** feature. This allows the Admin to not only manage the portals but literally toggle the entire UI to see exactly what a Founder or LP sees.
+
+Here is the refined prompt for **Replit Agent**:
+
+---
+
+### The Replit Prompt: StudioOS Admin & Multi-Portal Architecture
+
+**Role:** You are a Lead Systems Architect building the "Command Center" for StudioOS.
+
+**Objective:** Create a unified Administrator Dashboard that manages four distinct portal views: Admin, Partner, Founder, and LP Investor. The Admin must be able to switch between these views seamlessly to verify data and UI.
+
+**1. Admin-Specific Features:**
+* **Portal Switcher:** A high-level navigation bar (visible only to Admins) with a "View Mode" dropdown: [Admin, Partner, Founder, LP]. 
+* **Impersonation Engine:** When a mode is selected, the entire application state and sidebar should update to reflect that specific user role’s permissions and data visibility.
+* **User Management Table:** A master list of all users showing: Name, Role, Last Login, and "Active Spin-outs." Include a "Login As" button for specific users.
+* **API & Data Config:** A settings panel to manage API keys for the data sources (PitchBook, Harmonic, BuiltWith) and toggle "Global Market Conviction" (Aggressive/Wait-and-See).
+
+**2. Portal-Specific UI Mapping:**
+* **Partner View:** Show the "Market Pulse" (Revenue Multiples, Hiring Signals) and "Spin-out Opportunities."
+* **Founder View:** Show the "Operational Benchmarking" (Burn Multiples, API Stability) and "Resource Vault."
+* **LP View:** Show the "Capital & Investment Ops" (TVPI, Capital Calls, K-1s).
+
+**3. Technical Requirements:**
+* **State Management:** Use a global state (like React Context or Zustand) to handle the `activeRole` and `activeUser`.
+* **UI Components:** Use the existing dark-mode, high-density financial aesthetic. Ensure the sidebar changes dynamically based on the `activeRole`.
+* **Security Logic:** Implement a middleware check—only users with `role: 'admin'` can see the "Portal Switcher" bar.
+
+**4. Data Schema:**
+* Create a mock `users` JSON with at least one representative for each role (e.g., "Sarah - Partner," "Alex - Founder @ ShieldAI," "Global Pension Fund - LP").
+
+---
+
+### How to use this in Replit:
+
+1.  **The "Switcher" Bar:** Ask Replit to place this at the very top of the screen in a distinct color (like a dark purple or "Axal Blue") so you always know you are in "Admin Mode."
+2.  **Verify the Logic:** Once it builds the UI, test it by clicking "LP View." If the "Market Pulse" (proprietary partner data) disappears and the "Capital Account" appears, the RBAC logic is working.
+3.  **The "Login As" Feature:** This is crucial for 2026 VC ops. If a founder says, "I can't see our LTV/CAC benchmark," the Admin can "Login As" that founder to troubleshoot the data feed instantly.
+
+**Would you like me to draft the specific "User Table" schema for the Admin to track which founders are currently 'Active' vs. 'Vesting'?**

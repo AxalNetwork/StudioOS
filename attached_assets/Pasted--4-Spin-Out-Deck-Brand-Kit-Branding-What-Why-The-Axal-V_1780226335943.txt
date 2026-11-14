@@ -1,0 +1,47 @@
+#4 - Spin-Out Deck Brand Kit Branding
+
+What & Why
+
+The Axal VC Spin-Out Demo Day deck (axal_spinout_demoday) currently has a standalone "06 · BRAND" slide that only shows a static brand-palette illustration (an "Aa" type sample plus ACCENT / GOLD / INK swatches). It's a placeholder, not part of the actual pitch. Founders instead want the whole deck to look like their brand on demo day — their own background/colors and typography applied across every slide, pulled automatically from the brand kit they already build in Brand Builder.
+
+Today the deck only offers four hard-coded preset "looks" (editorial, product_first, data_dense, manifesto), each with a fixed color palette and font pairing. The Brand Builder brand kit only captures a single accent color (theme_color) — it stores no full palette and no font choice. So to deliver "auto-pull full palette + typography from the brand kit," the brand kit must first be able to hold a full palette and a typography choice, and the deck must read and apply them.
+
+This applies to the Axal VC Spin-Out deck only. Every other deck template keeps its existing presets unchanged.
+
+Done looks like
+
+The "06 · BRAND" slide no longer appears anywhere in the Spin-Out deck — not in the web preview, the slide rail, PDF export, or PPTX export. The deck reads cleanly with the slide removed (no gap, no broken numbering).
+In Brand Builder, a founder can define a full brand palette (background, accent, and text/ink colors — building on the existing accent color) and pick a typography pairing (display + body font). These save with the rest of the brand kit.
+When a founder opens the Spin-Out deck, the deck automatically themes itself from their saved brand kit: background, colors, and fonts across all slides reflect their brand. No manual re-entry in the deck builder.
+The brand-kit look is selectable alongside the four existing presets (so a founder can still preview a preset), but the founder's brand kit is the default/active look for the Spin-Out deck when a brand kit exists.
+The branding carries through to PDF and PPTX exports, not just the web view.
+If a founder has not set a full palette / fonts yet, the deck falls back to a sane default (today's editorial preset) instead of breaking or rendering unreadable color combinations.
+Out of scope
+
+Manual color/font overrides inside the deck builder itself — the brand kit is the single source of truth (founders edit branding in Brand Builder).
+Applying custom branding to any deck other than the Spin-Out deck.
+Logo placement / watermark changes (the existing watermark feature stays as-is).
+AI-generated palettes or font recommendations.
+Steps
+
+Remove the BRAND slide — Drop the brand slide from the Spin-Out deck's slide list and remove its slide component and the brand-palette illustration it used. Remove the matching brand-slide data block from the deck's backend builder service and from the slide-spec/export path so PDF/PPTX no longer emit it. Keep the rest of the slide order intact.
+Extend the brand kit to hold a full palette + typography — Add storage for a full palette (background and text/ink colors, alongside the existing accent theme_color) and a typography choice (display + body font) to the brand kit record. Use an additive, IF NOT EXISTS migration on the landing_pages table plus a lazy-bootstrap schema check in the consuming route (mirror the existing ensure*Schema() patterns) so prod keeps working before the migration is applied.
+Brand Builder UI for palette + fonts — In the Brand Builder "Tune" section, let founders set the background and text colors (in addition to the existing accent color picker) and pick a typography pairing from a small curated list of font pairings. Persist them with the existing brand-kit save.
+Deck consumes the brand kit — Have the Spin-Out deck read the founder's saved palette + fonts and feed them into the deck's theming layer (the variant palette/fonts that drive background, colors, and type on every slide). Add a "My brand kit" option to the deck's look switcher and make it the active default when a brand kit with custom values exists; the four existing presets remain available for preview. Persist the chosen look the same way the current preset selection is persisted.
+Fallback + contrast safety — When no custom palette/fonts are set, render the existing default preset. Ensure the applied background/text combination stays legible (fall back to a safe default rather than rendering low-contrast or unreadable slides).
+Verify — Confirm: BRAND slide gone everywhere (web, rail, PDF, PPTX); brand-kit colors + fonts applied across all Spin-Out slides on web and in exports; other decks unaffected and still show their four presets; and the no-brand-kit fallback renders cleanly. Run the deck render/drift checks (npm run test:drift).
+Notes / constraints
+
+Migration must be additive-only with IF NOT EXISTS, paired with a lazy ensure*Schema() bootstrap in the consuming route so prod works before the migration is applied (per project migration conventions).
+Reuse the existing preset/variant theming layer rather than introducing a parallel theming path.
+Dependencies
+
+Related (not yet a tracked task): "Let founders embed a YouTube/Vimeo demo video on the Product Demo slide." No formal dependency wired since that task does not exist yet.
+Relevant files
+
+frontend/src/decks/templates/axal_spinout_demoday_app.tsx:42-84,166-180,250-260,575-590,1376-1396,1879-1916,2801-2815
+frontend/src/pages/PitchDeckPage.jsx:183-188,651-732
+frontend/src/pages/BrandBuilderPage.jsx:230-310
+cloudflare-worker/src/services/decks/axalSpinoutDemoDay.ts:240-260,936-941,1091,1244-1252
+cloudflare-worker/src/routes/brand.ts:30-50,200-285
+cloudflare-worker/sql/migrations/

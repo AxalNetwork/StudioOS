@@ -1,0 +1,309 @@
+# Add 4 investor lifecycle features (Commit + Support)
+
+## Context
+
+The investor sidebar was just regrouped around the investment lifecycle (PR
+#119). That audit surfaced four workflows that have **no home today** and are
+"smeared" across other features. This plan builds them as first-class features,
+following the repo's canonical pattern: **worker route first** (production API),
+then D1 migration, then SPA page + `api.js` method + route + sidebar entry.
+
+| Feature | Stage | Gap it closes |
+| --- | --- | --- |
+| Investment Decision / IC record | Commit | Decision is scattered across Pipeline votes, Scoring deal-memo, Watchlist decision fields — no single per-deal object (memo + vote + terms + outcome). |
+| LP Reporting / quarterly LP updates | Support | Capital *calls* exist but there's no way to report back to LPs (NAV, DPI/TVPI/IRR, narrative). Already earmarked in `index.ts:485`. |
+| Portfolio-company update inbox | Support | Portfolio Health is *computed*; no feed of founder-submitted KPIs/updates flowing to investors. |
+| Portfolio cap-table / ownership view | Support | Reserves/waterfall exist but no ownership %/dilution-across-rounds per company. |
+
+**Architecture rules honored** (`CLAUDE.md`): new behavior lands in
+`cloudflare-worker/src/routes/` (production); D1 changes are new migration files
+under `cloudflare-worker/sql/migrations/`; every new `api.js` `/api/*` call has a
+matching worker mount so `npm run test:drift` stays green; FastAPI (`backend/`)
+is dev-only and is **not** ported here.
+
+---
+
+## Shared conventions (mirror exactly)
+
+- **Worker route file:** `const r = new Hono<{ Bindings: Env }>()`, handlers use
+  `getSQL(c.env)` (template-tag SQL, remember `await sql.end()` in `finally`),
+  bodies via `await c.req.json().catch(() => ({}))`, `uid` = 32-char hex, return
+  `c.json(...)` / `c.json(..., 201)`. `export default r;`. Pattern refs:
+  `cloudflare-worker/src/routes/watchlist.ts` (simple CRUD),
+  `cloudflare-worker/src/routes/dd.ts` (scoped access + audit).
+- **Auth helpers** (`cloudflare-worker/src/auth.ts`): `requireAuth`,
+  `requireAdmin`, `requireRole(c, ...roles)`, `canViewLpData(user)` (admin|
+  investor), `canAccessFounderResource(user, ownerId)`.
+- **Mounting** (`cloudflare-worker/src/index.ts`): add `import x from './routes/x'`
+  at the top block and `app.route('/api/x', x)` alongside the other mounts
+  (~line 503+). Mount specific prefixes before the `/api/admin` catch-all
+  (line 596) — not relevant here since all four use fresh top-level prefixes.
+- **Tier gating** (decided per closest analog):
+  - IC ties to deals/pipeline (professional-gated) → add `'/api/ic'` to
+    `INVESTOR_PRO_PREFIXES` (index.ts:470).
+  - LP Reporting + Positions are fund/LP tools like capital/funds → add
+    `'/api/lp-reports'` and `'/api/positions'` to `STUDIO_PREFIXES`
+    (index.ts:445) so founders get 402 while admin/investor bypass. Read access
+    is further narrowed in-route via `canViewLpData`.
+  - Portfolio Updates is dual-audience (founders write, investors read) → **no**
+    paywall prefix; enforce per-role in-route.
+- **Rate limit:** all four fall into the default `user` bucket (60/min) — no
+  change to `middleware/rateLimit.ts` needed.
+- **SPA api.js** (`frontend/src/lib/api.js`): add methods in the existing object
+  style, e.g. `icList: (opts={}) => request('/ic'+qs)`, `icCreate: (d) =>
+  request('/ic', { method:'POST', body: JSON.stringify(d) })`.
+- **SPA page:** `import { api } from '../lib/api'`, `import { useAuth } from
+  '../hooks/useAuthSync'`, `useEffect(load, [])`, loading/error state, gate
+  writes with `const { role } = useAuth()`. Refs: `WatchlistJournalPage.jsx`,
+  `CapitalPage.jsx`.
+- **SPA route** (`frontend/src/App.jsx`): `const X = lazy(() =>
+  import('./pages/X'))` (~line 42 block) + `<Route path="/x" element={guard([...],
+  <X/>)} />` (~line 1245 block).
+- **Sidebar** (`frontend/src/sidebarConfig.js`): add items to the investor
+  `commit` / `support` groups; import any new lucide icons at the top.
+- **Migrations:** next numbers are **116–119** (highest today is `115`).
+
+---
+
+## Feature 1 — Investment Decision / IC record (Commit)
+
+**Migration** `cloudflare-worker/sql/migrations/116_ic_decisions.sql`
+```sql
+CREATE TABLE IF NOT EXISTS ic_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT UNIQUE NOT NULL,
+  project_id INTEGER REFERENCES projects(id),
+  deal_id INTEGER,                       -- optional link to deals(id)
+  title TEXT NOT NULL,
+  memo TEXT,                             -- IC thesis memo (seedable from scoring deal-memo)
+  terms_json TEXT,                       -- proposed terms (amount, instrument, valuation, pro-rata)
+  status TEXT NOT NULL DEFAULT 'draft',  -- draft | voting | decided
+  decision TEXT,                         -- invest | pass | defer
+  outcome TEXT,                          -- open | vindicated | regret (post-hoc)
+  created_by INTEGER REFERENCES users(id),
+  decided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ic_project ON ic_decisions(project_id);
+CREATE INDEX IF NOT EXISTS idx_ic_status  ON ic_decisions(status);
+
+CREATE TABLE IF NOT EXISTS ic_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ic_decision_id INTEGER NOT NULL REFERENCES ic_decisions(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  vote TEXT NOT NULL,                    -- yes | no | abstain
+  rationale TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(ic_decision_id, user_id)        -- one vote per member; upsert on re-vote
+);
+```
+
+**Worker** `cloudflare-worker/src/routes/ic.ts` → `app.route('/api/ic', ic)`
+- `GET /` — list (filter `?status=`, `?project_id=`); reader = admin/partner/
+  investor (`requireRole`). Returns each decision with vote tally.
+- `POST /` — create (admin/partner/investor). Optional `?from_scoring=` to seed
+  `memo` from the latest scoring deal-memo for the project.
+- `GET /:uid` — detail incl. votes array + tally.
+- `PUT /:uid` — update memo/terms/status/decision/outcome (creator or admin);
+  setting `decision` stamps `decided_at` and flips `status='decided'`.
+- `POST /:uid/vote` — upsert caller's vote (admin/partner/investor).
+- Gate: add `'/api/ic'` to `INVESTOR_PRO_PREFIXES`.
+
+**SPA**
+- `api.js`: `icList, icGet, icCreate, icUpdate, icVote`.
+- Pages: `frontend/src/pages/ICDecisionsPage.jsx` (`/ic`, list + create) and
+  `frontend/src/pages/ICDecisionPage.jsx` (`/ic/:uid`, memo + terms + vote panel
+  + decision/outcome) — mirrors the dd cases list/detail split.
+- `App.jsx`: lazy-import both; `guard(['admin','partner','investor'], …)` for
+  `/ic` and `/ic/:uid`.
+- Sidebar `commit` group: `{ to: '/ic', icon: Gavel, label: 'IC Decisions' }`
+  (import `Gavel`).
+
+---
+
+## Feature 2 — LP Reporting / quarterly LP updates (Support)
+
+**Migration** `cloudflare-worker/sql/migrations/117_lp_reports.sql`
+```sql
+CREATE TABLE IF NOT EXISTS lp_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT UNIQUE NOT NULL,
+  fund_id INTEGER NOT NULL REFERENCES vc_funds(id),
+  period TEXT NOT NULL,                  -- e.g. '2026-Q2'
+  status TEXT NOT NULL DEFAULT 'draft',  -- draft | published
+  nav REAL, called REAL, distributed REAL,
+  dpi REAL, tvpi REAL, irr REAL,
+  narrative TEXT,
+  created_by INTEGER REFERENCES users(id),
+  published_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(fund_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_lp_reports_fund ON lp_reports(fund_id);
+```
+
+**Worker** `cloudflare-worker/src/routes/lp_reports.ts` →
+`app.route('/api/lp-reports', lpReports)`
+- `GET /` — admin sees all; investor (LP) sees only **published** reports for
+  funds they belong to (join `limited_partners` on `user_id`). Uses
+  `canViewLpData`.
+- `POST /` — create draft (admin only, `requireAdmin`).
+- `GET /:uid` — detail (same visibility rule as list).
+- `PUT /:uid` — edit metrics/narrative (admin only).
+- `POST /:uid/publish` — set `status='published'`, stamp `published_at` (admin).
+- Gate: add `'/api/lp-reports'` to `STUDIO_PREFIXES`.
+
+**SPA**
+- `api.js`: `lpReportsList, lpReportGet, lpReportCreate, lpReportUpdate,
+  lpReportPublish`.
+- Page `frontend/src/pages/LPReportingPage.jsx` (`/lp-reports`): list by
+  fund/period with status badges; admin-only create/edit/publish form; investor
+  view is read-only. Detail shown in a drawer.
+- `App.jsx`: `guard(['admin','investor'], <LPReportingPage/>)` at `/lp-reports`.
+- Sidebar `support` group: `{ to: '/lp-reports', icon: FileBarChart, label: 'LP
+  Reporting' }` (import `FileBarChart`).
+
+---
+
+## Feature 3 — Portfolio-company update inbox (Support)
+
+**Migration** `cloudflare-worker/sql/migrations/118_portfolio_updates.sql`
+```sql
+CREATE TABLE IF NOT EXISTS portfolio_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT UNIQUE NOT NULL,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  author_user_id INTEGER NOT NULL REFERENCES users(id),
+  period TEXT,                           -- e.g. '2026-06'
+  title TEXT NOT NULL,
+  body TEXT,                             -- narrative / asks / highlights
+  kpis_json TEXT,                        -- { arr, mrr, burn, runway_months, headcount, cash }
+  status TEXT NOT NULL DEFAULT 'submitted', -- draft | submitted
+  submitted_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pupdates_project ON portfolio_updates(project_id);
+CREATE INDEX IF NOT EXISTS idx_pupdates_status  ON portfolio_updates(status);
+```
+
+**Worker** `cloudflare-worker/src/routes/portfolio_updates.ts` →
+`app.route('/api/portfolio-updates', portfolioUpdates)`
+- `GET /` — investor/partner/admin read the inbox of **submitted** updates
+  across portfolio companies (filter `?project_id=`, `?period=`); founders see
+  only their own project's updates (`canAccessFounderResource`).
+- `POST /` — founder creates an update for a project they own (guard via
+  `canAccessFounderResource`); admin may create for any.
+- `GET /:uid` — detail (same visibility rules).
+- `PUT /:uid` — author edits own draft; `POST /:uid/submit` flips
+  `status='submitted'` + stamps `submitted_at`.
+- Gate: none added to paywall prefixes (dual-audience); enforce per-role
+  in-route.
+
+**SPA**
+- `api.js`: `portfolioUpdatesList, portfolioUpdateGet, portfolioUpdateCreate,
+  portfolioUpdateSubmit`.
+- Page `frontend/src/pages/PortfolioUpdatesPage.jsx` (`/portfolio/updates`):
+  investor inbox (list + KPI sparklines + detail drawer); when `role==='founder'`
+  the page shows a "Submit update" form for the founder's projects so the feed
+  has data.
+- `App.jsx`: `guard(['admin','partner','investor','founder'],
+  <PortfolioUpdatesPage/>)` at `/portfolio/updates`.
+- Sidebar `support` group: `{ to: '/portfolio/updates', icon: Inbox, label:
+  'Company Updates' }` (import `Inbox`).
+
+---
+
+## Feature 4 — Portfolio cap-table / ownership view (Support)
+
+Reuses the existing `cap_table_holders` snapshot (migration `020`); adds a
+**positions** table for the fund's round-by-round entries so dilution over time
+is representable.
+
+**Migration** `cloudflare-worker/sql/migrations/119_portfolio_positions.sql`
+```sql
+CREATE TABLE IF NOT EXISTS portfolio_positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT UNIQUE NOT NULL,
+  fund_id INTEGER REFERENCES vc_funds(id),   -- nullable = firm-level
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  round_name TEXT NOT NULL,                  -- 'Pre-Seed','Seed','Series A',…
+  invested_amount REAL NOT NULL DEFAULT 0,
+  shares REAL,
+  price_per_share REAL,
+  ownership_pct REAL,                        -- fully-diluted % after this round
+  position_date TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_positions_project ON portfolio_positions(project_id);
+CREATE INDEX IF NOT EXISTS idx_positions_fund    ON portfolio_positions(fund_id);
+```
+
+**Worker** `cloudflare-worker/src/routes/positions.ts` →
+`app.route('/api/positions', positions)`
+- `GET /` — portfolio ownership summary: one row per project (latest
+  `ownership_pct`, total invested, current shares) for admin/investor
+  (`canViewLpData`).
+- `GET /:projectUid` — per-company round history (dilution timeline) from
+  `portfolio_positions` **plus** the current holder snapshot from
+  `cap_table_holders` for context.
+- `POST /` / `PUT /:uid` — admin records/edits a round position.
+- Gate: add `'/api/positions'` to `STUDIO_PREFIXES`.
+
+**SPA**
+- `api.js`: `positionsList, positionsByProject, positionCreate, positionUpdate`.
+- Page `frontend/src/pages/PortfolioPositionsPage.jsx` (`/portfolio/positions`):
+  ownership table across companies; click a company → dilution-by-round view +
+  cap-table snapshot. Admin-only "record round" form.
+- `App.jsx`: `guard(['admin','investor'], <PortfolioPositionsPage/>)` at
+  `/portfolio/positions`.
+- Sidebar `support` group: `{ to: '/portfolio/positions', icon: PieIcon, label:
+  'Cap Table' }` (`PieIcon` is already imported).
+
+---
+
+## Resulting investor sidebar deltas
+
+- **Commit** gains: IC Decisions (`/ic`).
+- **Support** gains: LP Reporting (`/lp-reports`), Company Updates
+  (`/portfolio/updates`), Cap Table (`/portfolio/positions`).
+
+New lucide imports in `sidebarConfig.js`: `Gavel`, `FileBarChart`, `Inbox`
+(`PieChart as PieIcon` already imported).
+
+---
+
+## Verification
+
+1. **API drift** (`node scripts/check-api-drift.mjs`) — pure Node, no deps, runs
+   in this env. Confirms the 4 new prefixes (`/api/ic`, `/api/lp-reports`,
+   `/api/portfolio-updates`, `/api/positions`) cover the new `api.js` calls. If
+   any path is flagged, the mount is missing — fix the mount rather than
+   allowlisting.
+2. **Worker types** — `cd cloudflare-worker && npx tsc --noEmit` (if deps
+   available; otherwise CI). Catches Hono handler / SQL typing mistakes.
+3. **Frontend build** — `cd frontend && npm run build` (blocked locally by the
+   Replit package firewall; runs in CI). Confirms lazy imports, icon imports,
+   and JSX compile.
+4. **Migrations** apply cleanly (CI / prod): `wrangler d1 execute studioos-db
+   --file=cloudflare-worker/sql/migrations/116_ic_decisions.sql` … through `119`
+   (all `CREATE TABLE IF NOT EXISTS`, idempotent).
+5. **Manual smoke** (post-deploy, per role):
+   - Investor: `/ic` create → vote → set decision; `/lp-reports` sees only
+     published reports for own funds; `/portfolio/updates` shows submitted feed;
+     `/portfolio/positions` shows ownership + dilution.
+   - Founder: `/portfolio/updates` can submit for own project only; `/lp-reports`
+     & `/portfolio/positions` return 402 (studio gate); confirm no LP data leaks.
+   - Admin: full CRUD on all four.
+
+## Out of scope (recorded follow-ups)
+
+- FastAPI (`backend/`) parity ports — dev-only, skipped per `CLAUDE.md`.
+- Emailing published LP reports to LPs (reuse `routes/email.ts`) — later.
+- Auto-seeding IC memo from scoring is optional (`?from_scoring=`); full
+  two-way sync with Pipeline votes is a later enhancement.
+- PageExplainer help text seeds for the new `pageKey`s (cosmetic).

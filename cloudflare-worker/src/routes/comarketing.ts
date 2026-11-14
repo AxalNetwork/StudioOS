@@ -1,0 +1,692 @@
+import { holdsLicence } from '../services/accountLicences';
+/**
+ * T15 — Co-marketing pitches + admin approval + attribution tracking.
+ * Mounted at /api/comarketing. D4439 (#4439) splits the member audience:
+ * partners and founders retain their existing permissions; investors cannot
+ * read or write this area. HQ's inner requireAdmin gates remain authoritative.
+ */
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+import type { Env } from '../types';
+import { requireAdmin, requireAuth } from '../auth';
+import { ensureTier } from '../middleware/requireTier';
+import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { refuse } from '../util/refusal';
+import { logActorAct } from '../services/actorLog';
+import { notify } from '../services/notify';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { hashEmail } from '../util/hashEmail';
+
+const r = new Hono<{ Bindings: Env }>();
+
+r.use('*', async (c, next) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'founder')) {
+      return refuse(c, 403, { code: 'comarketing_role_required', message: 'Co-marketing is available to partners and founders. HQ reviews it under Approvals.' });
+    }
+  } catch (e) { return mapError(c, e); }
+  return next();
+});
+
+const ASSET_TYPES = new Set(['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other']);
+// Migration 183. An angle is a sentence, not an essay — the whole point of the
+// field is that it is specific.
+const ANGLE_MAX = 500;
+const BRING_MAX = 1000;
+const LEGAL_TRANSITIONS: Record<string, Set<string>> = {
+  approved: new Set(['proposed']),
+  rejected: new Set(['proposed']),
+  published: new Set(['approved']),
+  withdrawn: new Set(['proposed', 'approved']),
+};
+
+type Pitch = {
+  id: number; uid: string;
+  partner_id: number; submitter_user_id: number;
+  title: string; summary: string; asset_type: string;
+  proposed_date: string | null;
+  target_audience: string | null; distribution_channels: string | null;
+  co_branding_notes: string | null; asset_url: string | null;
+  angle: string | null; what_you_bring: string | null;
+  status: string;
+  review_notes: string | null; reviewed_by_user_id: number | null; reviewed_at: string | null;
+  published_at: string | null; published_url: string | null;
+  /** D5302: who published it, apart from who approved it (migration 202611100935); null before that. */
+  published_by_user_id?: number | null;
+  attribution_code: string | null;
+  created_at: string; updated_at: string;
+};
+
+async function attribCounts(env: Env, pitchId: number) {
+  const rows = await env.DB.prepare(
+    `SELECT event_kind, COUNT(*) c FROM comarketing_attributions
+     WHERE pitch_id = ? GROUP BY event_kind`
+  ).bind(pitchId).all<{ event_kind: string; c: number }>();
+  if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Attribution counts were not returned');
+  const out = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 } as Record<string, number>;
+  for (const row of rows.results || []) {
+    out[row.event_kind] = Number(row.c);
+    out.total += Number(row.c);
+  }
+  return out;
+}
+
+function pitchDto(p: Pitch, attribution: any, includeReviewNotes = true): any {
+  const out: any = {
+    id: p.id, uid: p.uid,
+    partner_id: p.partner_id, submitter_user_id: p.submitter_user_id,
+    title: p.title, summary: p.summary, asset_type: p.asset_type,
+    proposed_date: p.proposed_date, target_audience: p.target_audience,
+    distribution_channels: p.distribution_channels,
+    co_branding_notes: p.co_branding_notes, asset_url: p.asset_url,
+    angle: p.angle, what_you_bring: p.what_you_bring,
+    status: p.status, published_at: p.published_at,
+    published_url: p.published_url, attribution_code: p.attribution_code,
+    created_at: p.created_at, updated_at: p.updated_at,
+    attribution,
+  };
+  if (includeReviewNotes) {
+    out.review_notes = p.review_notes;
+    out.reviewed_at = p.reviewed_at;
+  }
+  return out;
+}
+
+async function mintCode(env: Env): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    const code = Array.from(bytes).map((b) => b.toString(36)).join('').slice(0, 12).toLowerCase();
+    const exists = await env.DB.prepare('SELECT 1 FROM comarketing_pitches WHERE attribution_code = ?').bind(code).first();
+    if (!exists) return code;
+  }
+  // Last-ditch
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16)).join('').slice(0, 16);
+}
+
+// Partner side ----------------------------------------------------------
+r.post('/me/pitches', async (c) => {
+  // Task #6 — co-marketing pitch creation. D683: Grow work, on the Raise +
+  // Grow plan (`studio`).
+  ensureTier(await requireAuth(c), 'studio');
+  try {
+    const user = await requireAuth(c);
+    if (!(isPartner(user) || isAdmin(user))) return c.json({ detail: 'Partner role required' }, 403);
+    const body = await c.req.json().catch(() => ({} as any));
+    const asset_type = String(body.asset_type || 'webinar');
+    if (!ASSET_TYPES.has(asset_type)) return c.json({ detail: 'invalid asset_type' }, 400);
+    const title = String(body.title || '').trim();
+    const summary = String(body.summary || '').trim();
+    if (title.length < 3 || summary.length < 10) return c.json({ detail: 'title/summary too short' }, 400);
+    const partner = await requirePartnerProfile(c.env, user);
+    const uid = newUid();
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO comarketing_pitches
+         (uid, partner_id, submitter_user_id, title, summary, asset_type,
+          proposed_date, target_audience, distribution_channels, co_branding_notes,
+          asset_url, angle, what_you_bring, status, created_at, updated_at, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?)`
+    ).bind(uid, partner.id, user.id, title.slice(0, 200), summary.slice(0, 4000), asset_type,
+           body.proposed_date || null,
+           body.target_audience ? String(body.target_audience).slice(0, 500) : null,
+           body.distribution_channels ? String(body.distribution_channels).slice(0, 500) : null,
+           body.co_branding_notes ? String(body.co_branding_notes).slice(0, 2000) : null,
+           body.asset_url ? String(body.asset_url).slice(0, 500) : null,
+           body.angle ? String(body.angle).slice(0, ANGLE_MAX) : null,
+           body.what_you_bring ? String(body.what_you_bring).slice(0, BRING_MAX) : null,
+           // Company scoping, stage 8: the pitch records the agency that made
+           // it. No company selected records NULL, not a guess at the primary.
+           nowIso(), nowIso(), await activeCompanyFor(c, user)).run();
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<Pitch>();
+    return c.json(pitchDto(p!, await attribCounts(c.env, p!.id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/me/pitches', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const status = c.req.query('status');
+    // Company scoping, stage 8. "My pitches" is a claim about THIS agency, so
+    // it narrows; a pitch with a NULL company_id was made before the partner
+    // had a primary company and stays visible under all of theirs.
+    //
+    // Four full literals rather than one template with a clause interpolated.
+    // The handler already spelled the status variants out for the same reason
+    // — nothing may reach the query TEXT — and the company doubles it.
+    const companyId = await activeCompanyFor(c, user);
+    const rows = await (
+      status
+        ? companyId !== null
+          ? c.env.DB.prepare(
+              `SELECT * FROM comarketing_pitches
+                WHERE partner_id = ? AND status = ?
+                  AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC`,
+            ).bind(partner.id, status, companyId)
+          : c.env.DB.prepare(
+              'SELECT * FROM comarketing_pitches WHERE partner_id = ? AND status = ? ORDER BY created_at DESC',
+            ).bind(partner.id, status)
+        : companyId !== null
+          ? c.env.DB.prepare(
+              `SELECT * FROM comarketing_pitches
+                WHERE partner_id = ?
+                  AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC`,
+            ).bind(partner.id, companyId)
+          : c.env.DB.prepare(
+              'SELECT * FROM comarketing_pitches WHERE partner_id = ? ORDER BY created_at DESC',
+            ).bind(partner.id)
+    ).all<Pitch>();
+    const items: any[] = [];
+    for (const p of rows.results || []) items.push(pitchDto(p, await attribCounts(c.env, p.id)));
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D637 — why a pitch that is not Proposed cannot be edited, in the words the
+ * pitch page shows beside the locked form.
+ */
+export function lockedPitchSentence(status: string): string {
+  if (status === 'approved') return 'This pitch is approved, so it can no longer be edited. To change it, withdraw it and propose again.';
+  if (status === 'published') return 'This pitch is published, so it can no longer be edited.';
+  if (status === 'rejected') return 'This pitch was rejected, so it can no longer be edited. Propose a new one instead.';
+  if (status === 'withdrawn') return 'This pitch was withdrawn, so it can no longer be edited. Propose a new one instead.';
+  return 'This pitch can only be edited while it is proposed.';
+}
+
+/**
+ * D637 — one pitch, for its own page. The partner who owns it, or an admin.
+ * Anyone else reads 404, as the edit does, so a uid tells nobody else whether
+ * the pitch exists.
+ */
+r.get('/me/pitches/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
+      .bind(c.req.param('uid')).first<Pitch>();
+    if (!isAdmin(user)) {
+      const partner = await requirePartnerProfile(c.env, user);
+      if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
+    } else if (!p) {
+      return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist.' });
+    }
+    return c.json(pitchDto(p!, await attribCounts(c.env, p!.id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.patch('/me/pitches/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
+      .bind(c.req.param('uid')).first<Pitch>();
+    if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
+    if (p.status !== 'proposed') {
+      return refuse(c, 409, { code: 'pitch_locked', message: lockedPitchSentence(p.status), extra: { status: p.status } });
+    }
+    const body = await c.req.json().catch(() => ({} as any));
+    if (body.asset_type && !ASSET_TYPES.has(body.asset_type)) {
+      return refuse(c, 400, { code: 'invalid_asset_type', message: 'Choose a webinar, blog post, podcast, event, newsletter or other.' });
+    }
+    // D637 — the create path's floors, so an edit cannot empty what create requires.
+    if (body.title !== undefined && String(body.title ?? '').trim().length < 3) {
+      return refuse(c, 400, { code: 'title_too_short', message: 'Give the pitch a title of at least 3 characters.' });
+    }
+    if (body.summary !== undefined && String(body.summary ?? '').trim().length < 10) {
+      return refuse(c, 400, { code: 'summary_too_short', message: 'Describe the pitch in at least 10 characters.' });
+    }
+    const fields = ['title', 'summary', 'asset_type', 'proposed_date', 'target_audience',
+      'distribution_channels', 'co_branding_notes', 'asset_url',
+      'angle', 'what_you_bring'] as const;
+    // The same caps the create path applies, so an edit cannot smuggle past a
+    // limit the insert enforces.
+    const CAPS: Partial<Record<typeof fields[number], number>> = {
+      angle: ANGLE_MAX, what_you_bring: BRING_MAX,
+    };
+    const sets: string[] = []; const params: any[] = [];
+    for (const f of fields) {
+      if (body[f] === undefined) continue;
+      const cap = CAPS[f];
+      const v = cap != null && body[f] != null ? String(body[f]).slice(0, cap) : body[f];
+      sets.push(`${f} = ?`); params.push(v);
+    }
+    if (!sets.length) return c.json(pitchDto(p, await attribCounts(c.env, p.id)));
+    sets.push('updated_at = ?'); params.push(nowIso()); params.push(p.id);
+    await c.env.DB.prepare(`UPDATE comarketing_pitches SET ${sets.join(', ')} WHERE id = ?`).bind(...params).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
+    await logActorAct(c.env, user, 'comarketing_pitch_edited', {
+      pitch_uid: p.uid, fields: fields.filter((f) => body[f] !== undefined),
+    });
+    return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/me/pitches/:uid/withdraw', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
+      .bind(c.req.param('uid')).first<Pitch>();
+    if (!p || p.partner_id !== partner.id) return refuse(c, 404, { code: 'pitch_not_found', message: 'This pitch does not exist, or it is not yours.' });
+    if (!LEGAL_TRANSITIONS.withdrawn.has(p.status)) {
+      return refuse(c, 409, {
+        code: 'cannot_withdraw',
+        message: `This pitch is ${p.status}, so it can no longer be withdrawn. Only a proposed or approved pitch can be.`,
+        extra: { status: p.status },
+      });
+    }
+    await c.env.DB.prepare("UPDATE comarketing_pitches SET status='withdrawn', updated_at=? WHERE id=?")
+      .bind(nowIso(), p.id).run();
+    await logActorAct(c.env, user, 'comarketing_pitch_withdrawn', { pitch_uid: p.uid, from_status: p.status });
+    const fresh = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
+    return c.json(pitchDto(fresh!, await attribCounts(c.env, p.id)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// Admin -----------------------------------------------------------------
+// D1039 (#2887): every admin route here is behind `requireAdmin`, so the HQ
+// compliance freeze and its refusals apply to the decisions (a read is never
+// frozen), as on every other admin surface.
+r.get('/admin/queue', async (c) => {
+  try {
+    await requireAdmin(c);
+    const status = c.req.query('status') || 'proposed';
+    if (!['proposed', 'approved', 'rejected', 'published', 'withdrawn', 'all'].includes(status)) {
+      return refuse(c, 400, { code: 'invalid_status', message: 'Choose a pitch status or all.' });
+    }
+    // Legacy consoles request only status and expect the complete list.
+    // Explicit paging opts in to the bounded page contract.
+    const paged = c.req.query('limit') !== undefined || c.req.query('offset') !== undefined;
+    const limit = paged ? Number(c.req.query('limit') ?? 25) : null;
+    const offset = Number(c.req.query('offset') ?? 0);
+    if ((limit !== null && (!Number.isSafeInteger(limit) || limit < 1 || limit > 200)) || !Number.isSafeInteger(offset) || offset < 0) {
+      return refuse(c, 400, { code: 'invalid_page', message: 'Use a limit from 1 to 200 and a nonnegative offset.' });
+    }
+    const since = new Date(Date.now() - 30 * 86400000).toISOString();
+    const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM comarketing_pitches WHERE (? = 'all' OR status = ?)`)
+      .bind(status, status).first<{ n: number }>();
+    if (!total || !Number.isSafeInteger(total.n)) throw new Error('Pitch total was not returned');
+    const rows = await c.env.DB.prepare(
+      `SELECT p.*, pt.name AS partner_name, pt.company AS partner_company FROM comarketing_pitches p
+       LEFT JOIN partners pt ON pt.id = p.partner_id WHERE (? = 'all' OR p.status = ?)
+       ORDER BY datetime(p.created_at) ASC, p.id ASC LIMIT ? OFFSET ?`
+    ).bind(status, status, limit ?? -1, offset).all<Pitch & { partner_name: string | null; partner_company: string | null }>();
+    if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Pitch rows were not returned');
+    const summary = await c.env.DB.prepare(
+      `SELECT a.event_kind, COUNT(*) AS n FROM comarketing_attributions a
+       JOIN comarketing_pitches p ON p.id = a.pitch_id
+       WHERE (? = 'all' OR p.status = ?) AND datetime(a.created_at) >= datetime(?) AND datetime(a.created_at) <= datetime('now') GROUP BY a.event_kind`,
+    ).bind(status, status, since).all<{ event_kind: string; n: number }>();
+    if (('success' in summary && !summary.success) || !Array.isArray(summary.results)) throw new Error('Attribution summary was not returned');
+    const attribution30d: Record<string, number> = { visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 };
+    for (const row of summary.results) { attribution30d[row.event_kind] = Number(row.n); attribution30d.total += Number(row.n); }
+    const pageCounts = await c.env.DB.prepare(
+      `SELECT pitch_id, event_kind, COUNT(*) AS lifetime_count,
+        SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime('now') THEN 1 ELSE 0 END) AS recent_count
+       FROM comarketing_attributions WHERE pitch_id IN (SELECT value FROM json_each(?)) GROUP BY pitch_id, event_kind`,
+    ).bind(since, JSON.stringify(rows.results.map((p) => p.id))).all<{ pitch_id: number; event_kind: string; lifetime_count: number; recent_count: number }>();
+    if (('success' in pageCounts && !pageCounts.success) || !Array.isArray(pageCounts.results)) throw new Error('Pitch attribution was not returned');
+    const zero = () => ({ visit: 0, signup: 0, lead: 0, conversion: 0, total: 0 } as Record<string, number>);
+    const byPitch = new Map<number, { lifetime: Record<string, number>; recent: Record<string, number> }>();
+    for (const row of pageCounts.results) {
+      const counts = byPitch.get(Number(row.pitch_id)) ?? { lifetime: zero(), recent: zero() };
+      counts.lifetime[row.event_kind] = Number(row.lifetime_count); counts.lifetime.total += Number(row.lifetime_count);
+      counts.recent[row.event_kind] = Number(row.recent_count); counts.recent.total += Number(row.recent_count);
+      byPitch.set(Number(row.pitch_id), counts);
+    }
+    const items = rows.results.map((p) => {
+      const counts = byPitch.get(Number(p.id)) ?? { lifetime: zero(), recent: zero() };
+      return { ...pitchDto(p, counts.lifetime), attribution_30d: counts.recent,
+        partner_name: p.partner_name ?? null, partner_company: p.partner_company ?? null };
+    });
+    return c.json({ items, total: Number(total.n), limit, offset, attribution_30d: attribution30d, attribution_since: since });
+  } catch (e) {
+    if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);
+    console.error('[comarketing] queue read failed');
+    return refuse(c, 503, { code: 'queue_unreadable', message: 'The co-marketing queue could not be read. That is not the same as none.' });
+  }
+});
+
+/**
+ * D1132 (#3012) — one pitch for the board's item address
+ * (`/admin/approvals/co-marketing/…`), as the queue shows it, with its
+ * partner, its attribution and who decided it. `requireAdmin`, like the queue.
+ */
+r.get('/admin/pitches/:uid', async (c) => {
+  try {
+    await requireAdmin(c);
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?').bind(c.req.param('uid')).first<Pitch>();
+    if (!p) return refuse(c, 404, { code: 'pitch_not_found', message: 'That pitch does not exist.' });
+    const partner = await c.env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(p.partner_id).first<any>();
+    const d = pitchDto(p, await attribCounts(c.env, p.id));
+    d.partner_name = partner?.name || null;
+    d.partner_company = partner?.company || null;
+    d.decided = await deciderOf(c.env, p);
+    return c.json(d);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Who decided a pitch and when: the reviewer the row names, or null while it
+ * is undecided. A reviewer whose account is gone reads by its id.
+ */
+async function deciderOf(env: Env, p: Pitch) {
+  // D5302: a pitch published since migration 202611100935 names its publisher
+  // apart from its approver; one published before it has the publisher in the
+  // review columns, which is what they read then.
+  const published = p.status === 'published' && p.published_by_user_id != null;
+  const by = published ? p.published_by_user_id : p.reviewed_by_user_id;
+  if (p.status === 'proposed' || by == null) return null;
+  const u = await env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(by).first<any>();
+  return {
+    status: p.status,
+    by: { id: Number(by), name: (u?.name || '').trim() || u?.email || `account ${by}` },
+    at: published ? p.published_at : p.reviewed_at,
+  };
+}
+
+/** D1132: a pitch already decided answers this, with who decided it. */
+async function alreadyDecided(c: Context<{ Bindings: Env }>, p: Pitch, target: string) {
+  const decided = await deciderOf(c.env, p);
+  const who = decided ? `${decided.by.name} ${decided.status === 'rejected' ? 'declined' : decided.status} it` : `It is ${p.status}`;
+  return refuse(c, 409, {
+    code: 'pitch_decided',
+    message: `This pitch cannot be ${target === 'reject' ? 'declined' : `${target}d`} now. ${who}${decided?.at ? ` on ${String(decided.at).slice(0, 10)}` : ''}.`,
+    extra: { status: p.status, decided },
+  });
+}
+
+/** D1039: a decline tells the partner why, in at least this many characters. */
+export const DECLINE_REASON_MIN = 10;
+
+async function adminTransition(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
+  try {
+    return await decide(c, target);
+  } catch (e) {
+    if (e instanceof Response || (e instanceof Error && AUTH_ERROR_STATUSES[e.message])) return mapError(c, e);
+    console.error('[comarketing] decision failed');
+    return refuse(c, 503, { code: 'decision_failed', message: 'The pitch decision could not be completed. Read the pitch before retrying.' });
+  }
+}
+
+async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject' | 'publish') {
+  const user = await requireAdmin(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return refuse(c, 400, { code: 'invalid_body', message: 'Send the decision as an object.' });
+  if (target === 'reject') {
+    const reason = typeof body?.notes === 'string' ? body.notes.trim() : '';
+    if (reason.length < DECLINE_REASON_MIN) {
+      return refuse(c, 400, {
+        code: 'reason_required',
+        message: `A decline needs a reason of at least ${DECLINE_REASON_MIN} characters. The partner sees it.`,
+      });
+    }
+    body.notes = reason;
+  }
+  const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE uid = ?')
+    .bind(c.req.param('uid')).first<Pitch>();
+  if (!p) return c.json({ detail: 'Pitch not found' }, 404);
+  const next = target === 'approve' ? 'approved' : target === 'reject' ? 'rejected' : 'published';
+  if (!LEGAL_TRANSITIONS[next].has(p.status)) return alreadyDecided(c, p, target);
+  let setAttribCode = p.attribution_code;
+  if (next === 'approved' && !p.attribution_code) setAttribCode = await mintCode(c.env);
+  let publishedAt = p.published_at;
+  let publishedUrl = p.published_url;
+  let reviewNotes = p.review_notes;
+  if (next === 'published') {
+    try {
+      const url = new URL(typeof body.published_url === 'string' ? body.published_url : '');
+      if (url.protocol !== 'https:' || url.username || url.password || url.href.length > 500) throw new Error('invalid');
+      publishedUrl = url.href;
+    } catch {
+      return refuse(c, 400, { code: 'https_url_required', message: 'Publishing needs an HTTPS link without sign-in details.' });
+    }
+    if (body.notes) {
+      reviewNotes = (p.review_notes ? `${p.review_notes}\n\n` : '') + `[publish] ${body.notes}`;
+    }
+  } else if (body.notes !== undefined) {
+    reviewNotes = body.notes ? String(body.notes).slice(0, 2000) : null;
+  }
+  // Read response-only data before committing, so a failed read cannot make
+  // a completed decision look like a failed one.
+  const counts = await attribCounts(c.env, p.id);
+  const stampedAt = nowIso();
+  // D5302 (#5302): publishing is not a review. It writes its own actor and time
+  // (`published_by_user_id`, `published_at`) and leaves the approval's
+  // `reviewed_by_user_id` and `reviewed_at` as the approve route wrote them.
+  if (next === 'published') publishedAt = stampedAt;
+  const reviewedBy = next === 'published' ? p.reviewed_by_user_id : user.id;
+  const reviewedAt = next === 'published' ? p.reviewed_at : stampedAt;
+  const publishedBy = next === 'published' ? user.id : (p.published_by_user_id ?? null);
+  // D1132: only from the status this read saw, so a second admin deciding in
+  // between is refused with who decided, never overwritten.
+  const action = `comarketing_${next}`;
+  const details = JSON.stringify({ pitch_uid: p.uid, partner_id: p.partner_id });
+  const actor = await hashEmail(String(user.email || ''));
+  const committed = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
+         attribution_code=?, published_at=?, published_url=?, published_by_user_id=?, updated_at=? WHERE id=? AND status=?`
+    ).bind(next, reviewNotes, reviewedBy, reviewedAt, setAttribCode, publishedAt, publishedUrl, publishedBy, stampedAt, p.id, p.status),
+    c.env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+       SELECT NULL, ?, ?, ?, ? WHERE changes() > 0`,
+    ).bind(user.id, action, details, actor),
+  ]);
+  if (committed.some((row) => 'success' in row && !row.success)) throw new Error('Decision batch failed');
+  const written = committed[0];
+  if (Number(written?.meta?.changes ?? 0) !== 1) {
+    const now = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
+    return alreadyDecided(c, now ?? p, target);
+  }
+  // D4814 (AP-18f): the decision is committed above, so a notice that does
+  // not go out is reported (`notified: false`), never thrown as a failure
+  // that would invite a second decision.
+  let notified = false;
+  try {
+    notified = (await notify(c.env, {
+      userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
+      body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
+      link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
+    })) !== null;
+  } catch (e) { console.warn('[comarketing] notify failed', e); }
+  return c.json({ ...pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: reviewedBy,
+    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl,
+    published_by_user_id: publishedBy, updated_at: stampedAt }, counts), notified });
+}
+
+r.post('/admin/pitches/:uid/approve', (c) => adminTransition(c, 'approve'));
+r.post('/admin/pitches/:uid/reject', (c) => adminTransition(c, 'reject'));
+r.post('/admin/pitches/:uid/publish', (c) => adminTransition(c, 'publish'));
+
+// Public ----------------------------------------------------------------
+r.get('/published', async (c) => {
+  try {
+    await requireAuth(c);
+    const rows = await c.env.DB.prepare(
+      "SELECT * FROM comarketing_pitches WHERE status='published' ORDER BY published_at DESC LIMIT 200"
+    ).all<Pitch>();
+    const items: any[] = [];
+    for (const p of rows.results || []) {
+      const partner = await c.env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(p.partner_id).first<any>();
+      const d = pitchDto(p, await attribCounts(c.env, p.id), false);
+      d.partner_name = partner?.name || null;
+      d.partner_company = partner?.company || null;
+      items.push(d);
+    }
+    return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/track', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const body = await c.req.json().catch(() => ({} as any));
+    const code = String(body.code || '').trim();
+    if (!code) return refuse(c, 400, { code: 'code_required', message: 'This link carries no attribution code.' });
+    const kind = String(body.event_kind || 'visit');
+    if (!['visit', 'signup', 'lead', 'conversion'].includes(kind)) {
+      return refuse(c, 400, { code: 'invalid_event_kind', message: 'An event is a visit, sign-up, lead or conversion.' });
+    }
+    const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE attribution_code = ?')
+      .bind(code).first<Pitch>();
+    if (!p) return refuse(c, 404, { code: 'unknown_code', message: 'No pitch carries this attribution code.' });
+    if (!['approved', 'published'].includes(p.status)) {
+      return refuse(c, 409, { code: 'pitch_not_active', message: 'This pitch is not live, so nothing is recorded against it.' });
+    }
+    const referrer = c.req.header('referer') || c.req.header('referrer') || null;
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO comarketing_attributions
+         (uid, pitch_id, partner_id, event_kind, user_id, project_id, lead_email, referrer, landing_path, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, p.id, p.partner_id, kind, user.id,
+           body.project_id != null ? Number(body.project_id) : null,
+           // D637 — a visit is not a lead: the viewer's address is stored only
+           // for an event that is one, or when the caller names it.
+           body.lead_email || (kind === 'visit' ? null : user.email),
+           referrer ? referrer.slice(0, 500) : null,
+           body.landing_path || null,
+           body.notes ? String(body.notes).slice(0, 1000) : null,
+           nowIso()).run();
+    return c.json({ ok: true, pitch_uid: p.uid, attribution_uid: uid });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/me/attributions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const pitchUid = c.req.query('pitch_uid');
+    let where = 'partner_id = ?';
+    const params: any[] = [partner.id];
+    // An attribution hangs off a pitch, so it inherits that pitch's agency
+    // rather than carrying a company of its own — migration 196 gives it no
+    // column. Without this the attributions list would still report reach for
+    // pitches the list above has stopped showing, and the two views of the
+    // same agency would disagree.
+    const companyId = await activeCompanyFor(c, user);
+    if (companyId !== null) {
+      where += ` AND pitch_id IN (
+        SELECT id FROM comarketing_pitches
+         WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL))`;
+      params.push(partner.id, companyId);
+    }
+    if (pitchUid) {
+      const p = await c.env.DB.prepare('SELECT id FROM comarketing_pitches WHERE uid = ?').bind(pitchUid).first<{ id: number }>();
+      if (p) { where += ' AND pitch_id = ?'; params.push(p.id); }
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM comarketing_attributions WHERE ${where} ORDER BY created_at DESC LIMIT 500`
+    ).bind(...params).all<any>();
+    return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+// Task #1 (AG) — spec-contract aliases.
+// POST /pitches mirrors /me/pitches (the create endpoint for the caller's pitch).
+r.post('/pitches', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/me/pitches';
+  url.search = '';
+  const body = await c.req.text();
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+// GET /campaigns aliases /published (campaigns = published pitches). Query
+// params on /campaigns?... must be forwarded via url.search, never embedded
+// into url.pathname (which would produce an encoded `%3F` segment).
+r.get('/campaigns', (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/published';
+  return r.fetch(new Request(url, { method: 'GET', headers: c.req.raw.headers }), c.env, c.executionCtx);
+});
+// POST /campaigns aliases /me/pitches (creating a campaign = creating a pitch).
+r.post('/campaigns', async (c) => {
+  const url = new URL(c.req.url);
+  url.pathname = '/api/comarketing/me/pitches';
+  url.search = '';
+  const body = await c.req.text();
+  return r.fetch(new Request(url, { method: 'POST', headers: c.req.raw.headers, body }), c.env, c.executionCtx);
+});
+
+// Founder side ----------------------------------------------------------
+
+/** How many attribution rows one founder read returns before it says it stopped. */
+export const FOUNDER_ATTRIBUTIONS_CAP = 500;
+
+/**
+ * GET /api/comarketing/founder/by-project/:pid — the co-marketing records that
+ * touch one of the caller's own startups: every attribution recorded against
+ * the project, and the pitches those attributions belong to.
+ *
+ * WHY IT EXISTS. `/me/pitches` and `/me/attributions` are the PARTNER side:
+ * `requirePartnerProfile` refuses anyone who is not a partner, so a founder
+ * always got 403. The founder's Grow desk, Launch and Partnerships pages read
+ * those two routes, so each of them showed "Some selected-project sources are
+ * unavailable" on every load for every founder, and Retry could not clear it.
+ *
+ * WHAT IT RETURNS, AND WHAT IT DOES NOT. What the pages draw: a pitch's title,
+ * kind, status, dates, published link and the partner's company; an attribution's
+ * kind, pitch and time. Never the attribution's lead email, referrer, landing
+ * path or notes — those are the partner's campaign data, not the founder's.
+ *
+ * WHO. The project's own founder (inside their active company, as the brand
+ * routes scope it) or an admin. Anyone else — including a founder asking for a
+ * project that is not theirs — gets the same 404 as a project that does not
+ * exist, so the route does not confirm another founder's project id.
+ */
+r.get('/founder/by-project/:pid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = Number(c.req.param('pid'));
+    const notFound = () => refuse(c, 404, {
+      code: 'project_not_found',
+      message: 'No startup of yours has that id, so there are no co-marketing records to show for it.',
+    });
+    if (!Number.isSafeInteger(pid) || pid <= 0) return notFound();
+    const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
+      .bind(pid).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+    if (!project) return notFound();
+    if (!isAdmin(user)) {
+      const own = holdsLicence(user, 'founder') && user.founder_id != null && project.founder_id === user.founder_id;
+      if (!own || !projectInActiveCompany(await activeCompanyFor(c, user), project)) return notFound();
+    }
+
+    const attributionRows = (await c.env.DB.prepare(
+      `SELECT id, uid, pitch_id, event_kind, project_id, created_at
+         FROM comarketing_attributions
+        WHERE project_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?`,
+    ).bind(pid, FOUNDER_ATTRIBUTIONS_CAP + 1).all<any>()).results || [];
+    const complete = attributionRows.length <= FOUNDER_ATTRIBUTIONS_CAP;
+    const attributions = complete ? attributionRows : attributionRows.slice(0, FOUNDER_ATTRIBUTIONS_CAP);
+
+    const pitches = (await c.env.DB.prepare(
+      `SELECT p.id, p.uid, p.title, p.asset_type, p.status, p.proposed_date, p.published_at, p.published_url,
+              pa.company AS partner_company, ? AS project_id,
+              (SELECT COUNT(*) FROM comarketing_attributions a WHERE a.pitch_id = p.id AND a.project_id = ?) AS attribution_count
+         FROM comarketing_pitches p
+         LEFT JOIN partners pa ON pa.id = p.partner_id
+        WHERE p.id IN (SELECT DISTINCT pitch_id FROM comarketing_attributions WHERE project_id = ?)
+        ORDER BY p.created_at DESC, p.id DESC`,
+    ).bind(pid, pid, pid).all<any>()).results || [];
+
+    return c.json({
+      project_id: pid,
+      pitches: pitches.map((p) => ({ ...p, attribution_count: Number(p.attribution_count) })),
+      attributions,
+      complete,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+export default r;

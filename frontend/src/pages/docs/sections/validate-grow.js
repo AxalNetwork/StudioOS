@@ -1,0 +1,199 @@
+export default {
+  id: 'validate-grow',
+  title: 'Validate & Grow',
+  icon: 'TrendingUp',
+  subsections: [
+    {
+      id: 'trust-center',
+      title: 'Trust Center',
+      overview:
+        "The Trust Center is the central place where founders, investors, partners, and admins see and manage trust signals: identity verification status, founder/company badges, references, and the documents that back each badge. Each role sees the tabs relevant to them.",
+      howto: [
+        'Open Trust Center from the sidebar.',
+        'Founders — review badges on your profile, upload supporting documents, and request verification.',
+        'Investors and partners — review a founder’s trust score and badges before opening a dealroom.',
+        'Admins — approve or revoke badges and resolve disputes.',
+      ],
+      tips: [
+        'Trust badges follow you across startups — you only have to verify once.',
+        'A higher trust score speeds up dealroom invites and reduces the diligence ask.',
+      ],
+      pitfalls: [
+        'Uploading low-resolution scans of supporting documents is the top cause of slow verification.',
+        'Revoked badges are visible to investors who saw them previously — keep your supporting docs current.',
+      ],
+      related: [
+        { label: 'Due Diligence', href: '#validate-grow/due-diligence' },
+        { label: 'NDA flows', href: '#legal/nda' },
+      ],
+    },
+    {
+      id: 'data-room',
+      title: 'Data Room',
+      overview:
+        "Your data room is one tool at Raise › Data room, with seven tabs: Home, Files, Access, Requests, Activity, Checklist and Preview. A founder sees their own venture's room — folders, files, who it is shared with and what happened in it. An investor sees the rooms shared with them on their deals. Nothing shows two companies at once.",
+      howto: [
+        'Founders — open Data room from Raise, create folders in Files, and upload files (20 MB each).',
+        'Set each file to "Open to invited" or "NDA required". An NDA file stays hidden — not greyed out, hidden — until that investor has an active NDA with you.',
+        'Share from Access, picking an investor from Capital relationships. They must already have an account at that address: sharing does NOT send an invitation.',
+        'A grant can carry an expiry. Once it lapses the room disappears for that investor without you having to revoke it.',
+        'Investors — open Data Room to see the rooms shared with you, and download from there.',
+      ],
+      tips: [
+        'Activity is the room\'s log: who opened the room, who was issued a download link for which file, and who was blocked by the NDA, with when. A link issued is not proof the file was read.',
+        'Put the documents the DD checklist asks for in the room before you share it — the first visit is the one that counts.',
+      ],
+      pitfalls: [
+        'Downloads are NOT watermarked. There is no PDF pipeline. What protects a file is that the link is per-investor, single-use, expires after two minutes, and is logged — so treat a shared file as shared.',
+        'Revoking a grant stops new downloads; it cannot recall a file someone already saved.',
+        'Adding a file to a shared folder shares it immediately. Set its visibility before you upload, not after.',
+      ],
+      related: [
+        { label: 'Due Diligence', href: '#validate-grow/due-diligence' },
+        { label: 'NDA flows', href: '#legal/nda' },
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+      ],
+    },
+    {
+      id: 'due-diligence',
+      title: 'Due Diligence',
+      overview:
+        "Due Diligence (DD) is the structured workflow investors, partners, advisors, and admins use to review a deal before committing. Founders never read a DD report on themselves; they upload requested documents and respond to questions raised in the DD checklist.",
+      howto: [
+        'Founders — open Due Diligence on your startup to see open requests and upload requested docs.',
+        'Reviewers — open Due Diligence from the deal record; sign the NDA, then walk the checklist (financials, legal, team, IP, market).',
+        'Mark each checklist item with a verdict (pass / conditional / fail / not applicable) and notes.',
+        'Generate the DD report when the checklist is complete; it downloads as an encrypted PDF.',
+      ],
+      tips: [
+        'Front-load the documents the checklist asks for — every missing doc adds a week.',
+        'Use the comment thread on each checklist item to keep the conversation in one place.',
+      ],
+      pitfalls: [
+        'Skipping the NDA before the first checklist verdict is blocked — sign first or the verdict won’t save.',
+        'Rotating reviewers mid-DD without re-syncing notes loses context; keep the same lead reviewer where possible.',
+      ],
+      related: [
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+        { label: 'NDA flows', href: '#legal/nda' },
+      ],
+    },
+    {
+      id: 'advisors',
+      title: 'Advisors & booking sessions',
+      overview:
+        "Advisors are domain experts (operators, ex-founders, functional leaders) you can book time with. Browse the directory, filter by expertise, and book a 30- or 60-minute session that lands on both calendars.",
+      howto: [
+        'Open Advisors from the Network sidebar group.',
+        'Filter by expertise, sector, or availability.',
+        'Click an advisor to view their bio and open slots, then pick a time and book.',
+        'You’ll get a calendar invite with a join link; the advisor gets the same.',
+      ],
+      tips: [
+        'Send a one-paragraph context note when you book — advisors prepare better with a clear ask.',
+        'Write down the advisor’s feedback straight after the session so you don’t lose it.',
+      ],
+      pitfalls: [
+        'Booking without a calendar connected forces a manual ICS download — connect a calendar first.',
+        'No-shows count against your match score; cancel at least 24 hours ahead if you can’t make it.',
+      ],
+      related: [
+        { label: 'Office Hours', href: '#validate-grow/office-hours' },
+        { label: 'Calendar (Google / Microsoft)', href: '#integrations/calendar' },
+      ],
+    },
+    {
+      id: 'office-hours',
+      title: 'Office Hours',
+      overview:
+        "Office Hours are recurring open slots that advisors and partners publish. Drop in for a 15-minute conversation without the formality of a full advisor booking — great for quick questions or a second opinion.",
+      howto: [
+        'Open Office Hours and pick a host with availability this week.',
+        'Choose a 15-minute slot and confirm.',
+        'Show up with one specific question — the format rewards crisp asks.',
+      ],
+      tips: [
+        'Slots fill fast on Mondays — book on Friday for the following week.',
+        'Recurring problems? Convert to a full advisor booking instead.',
+      ],
+      pitfalls: [
+        'Showing up with five questions in a 15-minute slot wastes everyone’s time — book a full session if you need depth.',
+        'Booking back-to-back slots with the same host is rate-limited; spread them across hosts.',
+      ],
+      related: [
+        { label: 'Advisors', href: '#validate-grow/advisors' },
+        { label: 'Partners & Co-marketing', href: '#network/partners' },
+      ],
+    },
+    {
+      id: 'cofounder-match',
+      title: 'Co-founder Match',
+      overview:
+        "Co-founder Match introduces solo founders to candidates with complementary skills, time availability, and chemistry signals. Profiles are private until both sides opt in to a conversation.",
+      howto: [
+        'Open Co-founder Match in the Spin-Out Lab (Week 3) and read your founder match brief.',
+        'Review match suggestions, like or pass on each.',
+        'When two people both like each other a chat unlocks.',
+        'When you’re ready to commit, run the Cofounder Agreement flow.',
+      ],
+      tips: [
+        'Be honest about time commitment — mismatch here causes more breakups than equity.',
+        'Try a paid trial startup together before signing the agreement.',
+      ],
+      pitfalls: [
+        'Picking a co-founder for technical skills you can hire is a common, expensive mistake.',
+        'Skipping the trial-startup step locks two people into vesting that’s hard to unwind.',
+      ],
+      related: [
+        { label: 'Cofounder Agreement', href: '#legal/cofounder-agreement' },
+      ],
+    },
+    {
+      id: 'expert-profiles',
+      title: 'Expert profiles',
+      overview:
+        "Every advisor and operating expert has a public profile page showing their background, areas of expertise, languages, time zone, and open booking slots. Profiles are the entry point for booking sessions and for partner introductions.",
+      howto: [
+        'Open Advisors from the Network sidebar and click any name to land on the expert\'s profile.',
+        'Read the bio, expertise tags, and recent engagement signals (sessions completed, average rating).',
+        'Pick an open slot from the calendar on the right to book directly.',
+        'Use the "Share profile" link to send the page to a co-founder for a second opinion before booking.',
+      ],
+      tips: [
+        'Profiles with multiple languages list them in the header — useful for non-English founders.',
+        'Booking from the profile page automatically pre-fills the introductory context from your own profile.',
+      ],
+      pitfalls: [
+        'Expertise tags are self-reported — read the bio for nuance before booking, especially on niche topics.',
+        'A blank availability calendar usually means the expert is fully booked this week — check back later or open Office Hours instead.',
+      ],
+      related: [
+        { label: 'Advisors & booking sessions', href: '#validate-grow/advisors' },
+        { label: 'Office Hours', href: '#validate-grow/office-hours' },
+      ],
+    },
+    {
+      id: 'wellbeing',
+      title: 'Founder wellbeing',
+      overview:
+        "The Wellbeing tracker is a private, encrypted check-in (mood, sleep, stress, support) you can fill in weekly. Only you see the entries; the studio team sees aggregated, anonymized trends across the cohort.",
+      howto: [
+        'Open Wellbeing from the founder support group in the sidebar.',
+        'Take the 60-second weekly check-in.',
+        'Review your trend chart over the past 12 weeks.',
+        'If you flag distress, the platform offers a private link to schedule with the studio’s mental-health partner.',
+      ],
+      tips: [
+        'Set a weekly reminder — the value comes from a continuous trend, not single entries.',
+        'Use the “share with advisor” option only with people you trust to hold the data.',
+      ],
+      pitfalls: [
+        'Treating the check-in as a performance metric defeats it; honest entries beat optimistic ones.',
+        'The mental-health partner is the right resource for crisis support — don’t rely on chat or community channels.',
+      ],
+      related: [
+        { label: 'Advisors', href: '#validate-grow/advisors' },
+      ],
+    },
+  ],
+};

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Platform · Bank accounts</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Bank accounts</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">HQ’s registry of the four entities’ bank accounts, joined to each entity’s read-only Mercury. Every notice and invoice prints its payment instructions from here, or refuses and says why. Nothing on these boards moves money. Account numbers show as their last four; a full number appears only through Reveal, for 30 seconds. Balances are as of 21 Oct 2026, 08:00. The account drawer is drawn as a centred lightbox.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Bank Accounts Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['BNK1', 'Accounts · Super Admin · desktop 1440 · light', 'Where each payment goes, then each entity’s accounts joined to Mercury, the card account the registry does not hold, and Fund I with no account. Eadwyn’s rail is open.', [D('BNK1')]],
+      ['BNK2', 'Account · lightbox over Accounts', 'Payment instructions that never change, the payments it takes, how a notice prints it, its balance and latest lines from Mercury, and its history. The second frame is a savings account.', [D('BNK2'), D('BNK2s', 'A savings account', 760)]],
+      ['BNK3', 'Cash · light', 'Cash across entities, cash by entity over 90 days with a week not recorded, money in and out by month, and every balance with its time.', [D('BNK3')]],
+      ['BNK4', 'Cash · dark', 'BNK3 in the dark colours.', [D('BNK4')]],
+      ['BNK5', 'History', 'Every reveal and every change, newest first. A reveal row opens to its full reason.', [D('BNK5')]],
+      ['BNK6', 'Dialogs', 'Add, add from Mercury, relabel, change payments, retire, reveal and its after-state, the step-up, and the opening states of the Mercury sheet.', [D('BNK6', false, 1440)]],
+      ['BNK7', 'Entity card states', 'Connected and synced, needs attention, not connected, and a sync refused.', [D('BNK7', false, 1440)]],
+      ['BNK8', 'Empty', 'No account at all, and a history with no events.', [D('BNK8a', 'No account at all'), D('BNK8b', 'History with no events', 1440, 720)]],
+      ['BNK9', 'Loading', 'Header, strip and tabs at once; every card reads.', [D('BNK9')]],
+      ['BNK10', 'Error and partial', 'The registry could not be read; Mercury could not be read while the registry draws; paused after an account recovery.', [D('BNK10a', 'Registry unreadable', 1440, 720), D('BNK10b', 'Mercury unreadable'), D('BNK10c', 'Paused after recovery', 1440, 720)]],
+      ['BNK11', 'No permission', 'A studio admin, and a member who is not an admin.', [D('BNK11a', 'An Admin', 1440, 720), D('BNK11b', 'A member', 1440, 720)]],
+      ['BNK12', 'Phone · 390 wide', 'Accounts as blocks, one account full screen, Cash, and Reveal as a full-screen sheet.', [P('BNK12a', 'Accounts'), P('BNK12b', 'An account'), P('BNK12c', 'Cash'), P('BNK12d', 'Reveal')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

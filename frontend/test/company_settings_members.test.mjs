@@ -1,0 +1,399 @@
+/**
+ * Company Settings: members are rendered, and the empty state is a door (Wave 2).
+ *
+ * The P−1 census graded this canvas UPGRADE and called out one zone as a pure
+ * RESKIN: "Member CRUD already exists with no UI". That was understated in an
+ * interesting way — `GET /company/:uid` returns `members[]` on every load, and
+ * the page was already calling it and rendering the profile fields from the
+ * same response. The member list was **in the component's state and simply
+ * never drawn**. Nothing had to be fetched to fix it.
+ *
+ * Two things this pins beyond "the UI exists":
+ *
+ *   1. The add-member copy says what the backend actually does. It used to
+ *      read "does not send an invitation", because the worker resolved the
+ *      address to an EXISTING user and 404'd otherwise — no row, no mail.
+ *      **Task #121 built the missing half** (`company_invitations`, a hashed
+ *      14-day token, accept bound to the invited address), so the honest copy
+ *      is now the opposite one and this guard was rewritten to hold it. The
+ *      rule did not change; the backend did. `api.addCompanyMember` — the
+ *      direct add for an account that already exists — outlived this page
+ *      on `CompanyProfilePanel`'s "Add team member" modal until D434 retired
+ *      that surface, the method and the worker route together (D69 had kept
+ *      them for that one modal; the owner's direction for wave 8 retires an
+ *      old surface once a built one does its job, and the invitation does).
+ *   2. The last primary admin cannot be demoted or removed. The worker enforces
+ *      both; the UI must not offer a control that can only fail.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const root = resolve(process.cwd());
+const read = (p) => readFileSync(resolve(root, p), 'utf8');
+const PAGE = 'frontend/src/pages/CompanySettingsPage.jsx';
+
+test('the members list is actually rendered from the loaded company', () => {
+  const s = read(PAGE);
+  assert.match(s, /row\.members/, 'the page must read members off the company detail');
+  for (const field of ['is_primary_admin', 'role_in_company', 'user_id']) {
+    assert.ok(s.includes(field), `the member row must surface ${field}`);
+  }
+});
+
+test('every member mutation the backend offers has a control', () => {
+  const s = read(PAGE);
+  for (const m of ['updateCompanyMember', 'removeCompanyMember', 'inviteCompanyMember',
+                   'listCompanyInvitations', 'resendCompanyInvitation', 'revokeCompanyInvitation']) {
+    // #3841: the people methods live in lib/api/teams.js (teamsApi, D527).
+    assert.ok(s.includes(`teamsApi.${m}(`), `${m} has no UI — that was the RESKIN`);
+  }
+  // `addCompanyMember` was the whole defect: it joins an existing account to
+  // the company WITHOUT asking, and 404s anyone who has no account. Task #121
+  // replaced it here; D434 removed it everywhere (company_settings_d434 pins
+  // the panel, the client method and the worker route).
+  assert.doesNotMatch(s, /api\.addCompanyMember\(/,
+    'Company Settings is linking an account again instead of inviting one');
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /addCompanyMember:/,
+    'the direct-add client method is back');
+});
+
+test('the add-member copy promises exactly the invitation that now exists', () => {
+  const s = read(PAGE);
+  // The retired caveat. Leaving it would understate a flow that now works.
+  assert.doesNotMatch(s, /does not send an invitation/i,
+    'the page still says it sends no invitation, which is no longer true');
+  // The four facts the route actually implements, each of which someone
+  // decides something on: no account needed (so the address can be a stranger),
+  // fourteen days (migration 236's expires_at), bound to the address (accept
+  // compares the caller's email), and nothing happens until they accept (no
+  // user_company_links row is written at invite time).
+  assert.match(s, /do not need an Axal VC account/i, 'the no-account-needed promise is gone');
+  assert.match(s, /expires in 14 days/i, 'the 14-day expiry is not stated');
+  assert.match(s, /works only for this address/i, 'the address binding is not stated');
+  assert.match(s, /nothing changes here until they accept/i,
+    'the page does not say the member list is unchanged until acceptance');
+  assert.match(s, /Send invitation/, 'the button no longer says what it does');
+});
+
+test('an invitation that was never emailed is not reported as sent', () => {
+  const s = read(PAGE);
+  // `email_sent: false` is the ORDINARY outcome with no Gmail credentials, and
+  // the route returns 200 for it. A page that flashed success on the status
+  // code would leave someone waiting on an email that was never sent.
+  assert.match(s, /r\?\.email_sent/, 'the invite result no longer reads email_sent');
+  assert.match(s, /could not be sent/i, 'nothing tells the reader the email failed');
+  // ...and the link is handed over instead, once, because the server keeps
+  // only a hash and cannot show it again. BOTH senders, sliced apart: a single
+  // whole-file match passes while either one alone still calls setHandoff, and
+  // a resend whose mail failed strands the reader exactly as badly as a first
+  // invitation that did.
+  for (const [fn, from, to] of [
+    ['invite', '  const invite = async () => {', '  const inviteAction = async'],
+    ['inviteAction', '  const inviteAction = async (fn, okMsg, addr) => {', '\n  return ('],
+  ]) {
+    const a = s.indexOf(from);
+    assert.ok(a >= 0, `${fn}() is gone from the page`);
+    const b = s.indexOf(to, a + from.length);
+    assert.ok(b > a, `${fn}()'s end marker is gone — this slice would run past the function`);
+    assert.match(s.slice(a, b), /setHandoff\(\{ email: addr, path: r\?\.accept_path \|\| null \}\)/,
+      `${fn}() no longer hands the link over when the email did not send`);
+  }
+  assert.match(s, /cannot be recovered afterwards/i,
+    'the page does not say the link is shown only once');
+});
+
+test('pending invitations are drawn, and only for someone who may manage members', () => {
+  const s = read(PAGE);
+  // Without this list an invitation is a thing you do and then cannot see.
+  assert.match(s, /Invitations \(\{invites\.items\.filter/,
+    'the pending-invitation list is gone');
+  assert.match(s, /\{rights\.canEdit && \(\s*\n\s*<div className="mt-4">/,
+    'the invitation rows are not gated on canEdit — they carry other people’s email addresses');
+  // Failed, empty and loading are three different facts, exactly as the
+  // Companies zone had to learn.
+  assert.match(s, /invites\.state === 'failed'/, 'a failed invitation read has no state of its own');
+  assert.match(s, /invites\.state === 'ready' && invites\.items\.length > 0/,
+    'the list no longer distinguishes ready-and-empty from still-loading');
+  assert.doesNotMatch(s, /catch \{\s*setInvites\(\{ state: 'ready'/,
+    'a failed invitation read is being turned into an empty list');
+});
+
+test('the empty state offers the action its backend supports, and only that', () => {
+  const s = read(PAGE);
+  assert.ok(s.includes('api.createCompany('), 'POST /company/create has been live with no UI');
+  // Joining has no endpoint. The page must say so rather than render a button
+  // that cannot work.
+  assert.match(s, /no self-serve join request/i, 'the join caveat must stay until an endpoint exists');
+});
+
+test('the last primary admin cannot be removed from the UI', () => {
+  const s = read(PAGE);
+  assert.match(
+    s, /is_primary_admin && primaryAdmins <= 1/,
+    'the remove control must disable for the only primary admin — the worker rejects it',
+  );
+});
+
+test('the worker guards the new role endpoint exactly like the others', () => {
+  const w = read('cloudflare-worker/src/routes/company.ts');
+  const i = w.indexOf("r.patch('/company/:uid/members/:userId'");
+  assert.ok(i > 0, 'PATCH /company/:uid/members/:userId must exist');
+  const body = w.slice(i, w.indexOf("r.delete('/company/:uid/members/:userId'", i));
+
+  // D4960: the one write gate (a seat, never HQ's reach, never a support session) replaces `canEdit` on writes.
+  assert.match(body, /writeGate\(/, 'the route must gate on the company write gate');
+  assert.doesNotMatch(body, /canEdit\(/, 'a write no longer gates on the admin-passing canEdit');
+  assert.match(
+    body, /Only the primary admin can grant primary admin status/,
+    'granting primary-admin must require being one — same rule POST enforces',
+  );
+  assert.match(
+    body, /Cannot demote the only primary admin/,
+    'demoting the last primary admin must be rejected — a company with none has nobody who can appoint one',
+  );
+  // No id may come from the request body: the target is the URL param, and the
+  // company is resolved from its uid.
+  assert.ok(
+    !/body\.(company_id|user_id)/.test(body),
+    'the target must come from the URL, never from the request body',
+  );
+});
+
+test('the new api method exists on both sides of the drift boundary', () => {
+  assert.match(
+    read('frontend/src/lib/api/teams.js'),
+    /updateCompanyMember:\s*\(uid, userId, data\)/,
+    'lib/api/teams.js must expose updateCompanyMember',
+  );
+  assert.match(
+    read('cloudflare-worker/src/routes/company.ts'),
+    /r\.patch\('\/company\/:uid\/members\/:userId'/,
+    'the worker must serve it',
+  );
+});
+
+/* ------------------------------------------------------------------ *
+ * Settings: the two Account panes the canvas asked for (Wave 2)       *
+ * ------------------------------------------------------------------ */
+
+test('Settings renders Your companies and Documents & agreements', () => {
+  // Before Wave 2, SettingsPage.jsx made ZERO company or e-sign calls — both
+  // canvas panes were absent while both backends were live.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.ok(s.includes('api.listMyCompanies('), 'GET /company/memberships had no consumer');
+  assert.ok(s.includes('api.esignList('), 'GET /legal/esign had no consumer in Settings');
+  assert.ok(s.includes('<YourCompaniesSection'), 'the pane must be mounted, not just defined');
+  assert.ok(s.includes('<DocumentsAgreementsSection'), 'the pane must be mounted, not just defined');
+});
+
+test('Your companies reads the shape the worker actually returns', () => {
+  // Both of these were wrong in the first draft and would have failed SILENTLY
+  // — an unresolved field renders as nothing, so the pane would have looked
+  // fine while showing no roles at all. /company/memberships returns a BARE
+  // ARRAY and names the caller's role `my_role`.
+  const w = read('cloudflare-worker/src/routes/company.ts');
+  const i = w.indexOf("r.get('/company/memberships'");
+  assert.notEqual(i, -1, 'the memberships handler is gone');
+  // Read to the NEXT route registration, not a fixed byte count. This was
+  // `w.slice(i, i + 1200)`, which is a bet that the handler stays under 1200
+  // characters — a bet lost the moment a comment was added above the line
+  // being asserted, with nothing about the response shape having changed.
+  // Route registrations sit at column 0, so the next one is an exact bound and
+  // the window can never run into a neighbouring handler either.
+  const next = w.slice(i + 1).search(/\nr\.(get|post|put|patch|delete)\(/);
+  const body = next === -1 ? w.slice(i) : w.slice(i, i + 1 + next);
+  // Anchored on the trailing comma: without it the pattern is a PREFIX match
+  // and `link.role_in_company_WRONG` satisfies it, which is exactly what a
+  // canary of this line demonstrated.
+  assert.match(body, /my_role: link\.role_in_company,/, 'the worker exposes the role as my_role');
+  assert.match(body, /return c\.json\(out\)/, 'the worker returns a bare array, not {items}');
+
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.match(s, /Array\.isArray\(r\)/, 'the pane must handle the bare-array response');
+  assert.match(s, /c\.my_role/, 'the pane must read my_role, not role_in_company');
+});
+
+test('Settings does not become a second company switcher', () => {
+  // Company context changes through ui/CompanySwitcher.jsx and nowhere else.
+  // This pane reports membership and links out; it must not call setCompany.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const i = s.indexOf('function YourCompaniesSection');
+  const body = s.slice(i, s.indexOf('function DocumentsAgreementsSection'));
+  assert.ok(!/setCompany\(/.test(body), 'switching belongs to CompanySwitcher alone');
+  assert.ok(!/useActiveCompany\(/.test(body), 'the pane lists memberships; it does not own active context');
+});
+
+/* ------------------------------------------------------------------ *
+ * Notification presets (Wave 2)                                       *
+ * ------------------------------------------------------------------ */
+
+test('presets write the same prefs shape the grid writes', () => {
+  // No second storage shape and no migration: a preset patches
+  // `notification_prefs`, exactly as a checkbox does.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  // D568 — the grid and the presets write through ONE writer, `savePrefs`,
+  // which PUTs the whole prefs object to /notifications/prefs (the column the
+  // root PATCH used to write). Same shape, one route, one call site each.
+  assert.match(s, /await api\.putNotificationPrefs\(next\)/);
+  assert.ok((s.match(/savePrefs\(next\);/g) || []).length >= 2, 'the grid and the presets must share the one writer');
+  assert.ok(s.includes('const applyPreset'), 'presets must exist');
+  // in_app/inapp are mirrored by the grid for the legacy reader; a preset that
+  // set only one of them would desync the bell subsystem.
+  const i = s.indexOf('const NOTIFICATION_PRESETS');
+  const block = s.slice(i, s.indexOf('const ActivityPage'));
+  const applies = block.match(/in_app: (true|false), inapp: (true|false)/g) || [];
+  assert.ok(applies.length >= 4, 'every preset must set in_app and inapp together');
+  for (const a of applies) {
+    const [, x, y] = a.match(/in_app: (true|false), inapp: (true|false)/);
+    assert.equal(x, y, `preset desyncs in_app/inapp: ${a}`);
+  }
+});
+
+test('the per-event grid survives the presets', () => {
+  // The canvas says presets "replace" the matrix. They do not: the grid is the
+  // only way to express "email capital calls but not the digest", and dropping
+  // it to match a canvas would be a downgrade sold as a redesign.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.match(s, /renderTable\(NOTIFICATION_EVENTS\)/, 'the event grid must stay');
+  assert.match(s, /renderTable\(PARTNER_NOTIFICATION_EVENTS\)/, 'the partner grid must stay');
+  assert.match(s, /stays editable/i, 'the UI must say the switches remain editable');
+});
+
+test('a preset covers exactly the events the user can see', () => {
+  // Applying a preset must not leave the partner block out of step with the
+  // core grid — the stored prefs and the visible switches have to agree.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const i = s.indexOf('const applyPreset');
+  const body = s.slice(i, i + 700);
+  assert.match(body, /NOTIFICATION_EVENTS\.map/);
+  assert.match(body, /data\.role === 'partner' \? PARTNER_NOTIFICATION_EVENTS\.map/);
+});
+
+// ===========================================================================
+// The page now says who may edit, and refuses what it cannot do.
+//
+// Until this pass every member saw editable inputs on every field. A viewer
+// with a `role_in_company` of "CTO" — a label the worker does not recognise —
+// could type into the company name, blur, and watch the value snap back with
+// a red toast. The rule existed; only the page did not know it.
+// ===========================================================================
+
+test('the client edit rule is the worker rule, name for name', () => {
+  // TWO COPIES OF AN AUTHORISATION RULE DRIFT. This is the only thing standing
+  // between them. `canEdit` in services/companyAccess.ts is the boundary — a non-editor who
+  // gets past the UI still gets a 403 — but a client list that says something
+  // different draws inputs nobody can use, or hides inputs that would work.
+  const route = read('cloudflare-worker/src/routes/company.ts');
+  assert.match(route, /import \{[^}]*\bcanEdit\b[^}]*\} from '\.\.\/services\/companyAccess';/, 'the company route uses the shared edit gate');
+  const worker = read('cloudflare-worker/src/services/companyAccess.ts');
+  const m = worker.match(/\[([^\]]*)\]\.includes\(link\.role_in_company\)/);
+  assert.ok(m, 'companyAccess.ts must still gate on a literal list of role_in_company values');
+  const workerRoles = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+
+  const page = read(PAGE);
+  const c = page.match(/const EDIT_ROLES = \[([^\]]*)\]/);
+  assert.ok(c, 'the page must keep its EDIT_ROLES list where a reader can find it');
+  const clientRoles = [...c[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+
+  assert.deepEqual(clientRoles, workerRoles,
+    `the page offers editing to ${clientRoles.join('/')} but the worker allows ${workerRoles.join('/')}`);
+
+  // And the primary admin passes regardless of title, on both sides.
+  assert.match(worker, /link\.is_primary_admin \|\|/);
+  assert.match(page, /mine\.is_primary_admin \|\| EDIT_ROLES\.includes/);
+});
+
+test('a member who cannot edit is told why, not just disabled', () => {
+  const s = read(PAGE);
+  assert.match(s, /You can view this company, not edit it/);
+  // The sentence that actually answers the question people ask.
+  assert.match(s, /Any other title is a label and grants no edit rights/);
+  // And the read-only path renders the VALUE, not an input the server refuses.
+  assert.match(s, /function ReadOnlyValue/);
+  // THE HELPER SPECIFICALLY, not "a canEdit somewhere". `/canEdit \? \(/` was
+  // the first attempt and it survived replacing this very branch with `true` —
+  // four other fields branch on canEdit too, so the pattern still matched
+  // while every text input had quietly become unconditional.
+  assert.match(s, /const text = \(k, extra = \{\}\) => \(canEdit \? \(/,
+    'the shared text-field helper must branch on canEdit, not merely disable');
+  // Every field reaches a ReadOnlyValue on the false side.
+  const card = s.slice(s.indexOf('function CompanyProfileCard'), s.indexOf('function ViewOnlyNotice'));
+  const branches = [...card.matchAll(/canEdit \? \(/g)].length;
+  const readOnly = [...card.matchAll(/<ReadOnlyValue /g)].length;
+  assert.equal(branches, readOnly,
+    `${branches} fields branch on canEdit but only ${readOnly} render a read-only value`);
+});
+
+test('a successful company edit refreshes the shared profile and dropdown from the saved response', () => {
+  const s = read(PAGE);
+  const card = s.slice(s.indexOf('function CompanyProfileCard'), s.indexOf('function ViewOnlyNotice'));
+  assert.match(card, /const updateCompanyDetails = useUpdateCompanyDetails\(\)/);
+  assert.match(card, /const updated = await api\.updateCompany\(uid, \{ \[key\]: value \}\);\s*setRow\(updated\);[\s\S]*?updateCompanyDetails\(updated\);/);
+  assert.doesNotMatch(card, /setCompany\(/);
+});
+
+test('saving acknowledges the field, and names the field it refused', () => {
+  const s = read(PAGE);
+  assert.match(s, /function FieldStatus/);
+  assert.match(s, /state: 'saved'/);
+  // The one field the server will not accept empty. Refusing it here means the
+  // message lands beside the input rather than as a toast about "a" field.
+  assert.match(s, /k === 'company_name' && !String\(v\)\.trim\(\)/);
+  assert.match(s, /Can’t be empty — not saved/);
+  // The server's own sentence, not a generic one.
+  assert.match(s, /message: e\?\.message \|\| 'Not saved'/);
+});
+
+test('the danger zone ships the two actions that exist and refuses the one that does not', () => {
+  const page = read(PAGE);
+  const worker = read('cloudflare-worker/src/routes/company.ts');
+
+  // The premise. If someone adds DELETE /company/:uid later, this fails and
+  // the card should grow a real control — which is the right time to write one.
+  assert.doesNotMatch(worker, /r\.delete\('\/company\/:uid'/,
+    'a company-delete route now exists — the danger zone should stop saying it does not');
+
+  assert.match(page, /Danger zone/);
+  assert.match(page, /Leave company/);
+  assert.match(page, /Not available from here/,
+    'company deletion has no endpoint; the card must say so rather than draw a button');
+
+  // No type-to-confirm over a route that 404s. The canvas asks for one; a
+  // confirmation dialog is a promise that something will happen.
+  const dz = page.slice(page.indexOf('function DangerZoneCard'), page.indexOf('// ---------- Members'));
+  assert.doesNotMatch(dz, /api\.deleteCompany|\/company\/\$\{uid\}',\s*\{\s*method:\s*'DELETE'/,
+    'nothing in the danger zone may call a delete-company endpoint');
+  assert.match(dz, /await leaveCompany\(uid\)/,
+    'Leave must call the shared self-leave action for this company');
+});
+
+test('leaving is refused for the only primary admin, on both sides', () => {
+  const page = read(PAGE);
+  assert.match(page, /canLeave: !!mine && !\(mine\.is_primary_admin && primaryAdmins <= 1\)/);
+  assert.match(page, /You are the only primary admin/);
+  // The worker enforces it too — the UI is not the guard.
+  const worker = read('cloudflare-worker/src/routes/company.ts');
+  assert.match(worker, /is_primary_admin/,
+    'the last-primary-admin rule must still live in the worker');
+});
+
+test('the empty state promises only things that exist', () => {
+  const s = read(PAGE);
+  const block = s.slice(s.indexOf('const UNLOCKS = ['), s.indexOf('];', s.indexOf('const UNLOCKS = [')));
+  assert.ok(block.length > 200, 'the unlocks cards must still be there');
+  // Each claim maps to something real. The one worth guarding is multi-company,
+  // because it is the easiest to write and the easiest to get wrong.
+  assert.match(read('frontend/src/lib/api.js'), /listMyCompanies: \(\) => request\('\/company\/memberships'\)/,
+    'the "more than one company" card claims a list endpoint that must exist');
+  // A card may promise an invitation now, because one exists (task #121) —
+  // and D434 makes the first card say so. What no card may promise is the
+  // thing that still does not exist: a self-serve join request, or being
+  // added without asking.
+  assert.match(block, /Invite co-founders and hires by email/,
+    'the team card should describe the invitation that exists');
+  assert.match(block, /nobody is joined without asking/);
+  assert.doesNotMatch(block, /join request|request to join/i,
+    'no card may imply a self-serve join request; none exists');
+});

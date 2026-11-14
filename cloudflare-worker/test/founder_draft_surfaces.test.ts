@@ -1,0 +1,823 @@
+import { UOF_OPTIONS, UOF_PAGE } from '../src/services/useOfFunds/eadwyn.ts';
+import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
+import {d1Over} from './_d1_sqlite.mjs';
+import { withGuard } from './_guard_stub.mjs';
+/**
+ * The founder draft surfaces, and the one thing standing between them.
+ *
+ * `POST /api/research/drafts` authorises on `requireAuth` ALONE. Which surface
+ * you may draft over, and whose records it may read, is delegated entirely to
+ * that surface's own `gather` — which is what makes the mechanism role-agnostic
+ * and shareable between a partner and a founder, and what makes a gather that
+ * forgets to scope a cross-account read rather than a bug on one page. The
+ * twenty-two partner surfaces scope on `users.partner_id`; these scope on a
+ * PROJECT, and the `scope_key` naming that project comes straight off the wire.
+ *
+ * SO THE PROPERTY UNDER TEST IS SIMPLE AND WORTH TESTING BY EXECUTION rather
+ * than by reading the source: a founder who asks to draft over a project id
+ * that is not theirs gets nothing. Not a filtered draft, not an empty one —
+ * the same 409 as a founder with no records at all, because the route cannot
+ * tell those apart and must not.
+ *
+ * THE MODEL IS A STUB THAT KEEPS ITS PROMPT, which makes the gathered material
+ * observable. `nothing_to_draft` (409) is returned BEFORE the model is called,
+ * so a refusal is a 409 with no prompt at all and a draft is a 201 whose
+ * prompt is exactly what the surface decided to hand over — which is the thing
+ * worth asserting, since every rule these gathers carry ("never name an owner",
+ * "one snapshot is not a movement") only reaches the model through that text.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { SignJWT } from 'jose';
+import { readFileSync } from 'node:fs';
+
+import research, { FOUNDER_DRAFT_PAGES, SHARED_DRAFT_PAGES } from '../src/routes/research.ts';
+import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
+import { WORD_OPTION, WORD_PAGE } from '../src/services/buildPlanWord.ts';
+
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+
+const MINE = { user: 70, founder_id: 170 };     // our founder
+const THEIRS = { user: 71, founder_id: 171 };   // a different founder entirely
+const SOLO = { user: 72, founder_id: 172 };     // a founder with two startups
+const MY_PROJECT = 900;
+const THEIR_PROJECT = 901;
+const SOLO_A = 902;
+const SOLO_B = 903;
+
+function coerce(a: any[]): any[] {
+  return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
+}
+function makeD1(db: InstanceType<typeof DatabaseSync>) {
+ const DB=d1Over(db);
+ return {...DB,prepare(sql:string){const statement=DB.prepare(sql);const bind=statement.bind;statement.bind=(...args:any[])=>bind(...coerce(args));return statement;}};
+}
+
+function freshDb() {
+  const db = new DatabaseSync(':memory:', {
+    enableForeignKeyConstraints: false,
+    enableDoubleQuotedStringLiterals: true,
+  });
+  // Verbatim shapes: `founders`/`projects` from sql/schema_baseline.sql,
+  // `roadmap_okrs` from sql/migrations/001_progress_tables.sql, `mvp_tasks`
+  // from the baseline, and `project_metrics` from migration 249.
+  //
+  // THAT LAST ONE USED TO BE THE BUG, AND ITS OWN COMMENT SAID SO. It read
+  // "`project_metrics` in the shape `ensureMetricsSnapshotsSchema` creates
+  // (project_id, not the baseline dump's historical deal_id)" — calling the
+  // production shape "historical" and building the one production has never had.
+  // So this harness created a `project_metrics` with `project_id`, the route
+  // under test wrote to it happily, and the same route threw `no such column:
+  // project_id` against the real database. A fixture that is a schema production
+  // does not have is how a test passes over a broken feature, which is the rule
+  // `partner_pipeline_stores.test.ts` states and the reason migration 249 exists.
+  db.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, partner_id INTEGER,
+      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT
+    );
+    -- The founders table has NO user_id: the account behind a founder record
+    -- is found through users.founder_id. An earlier version of this harness
+    -- invented the column, which let a query naming it pass here and fail
+    -- against the canonical schema (see schema_guards).
+    -- No backticks in here: this comment sits inside a JS template literal.
+    CREATE TABLE founders (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, email TEXT);
+    CREATE TABLE projects (
+      id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT
+    );
+    CREATE TABLE roadmap_okrs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, objective TEXT NOT NULL,
+      key_results_json TEXT, kanban_status TEXT NOT NULL DEFAULT 'now', quarter TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE mvp_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL, title TEXT NOT NULL,
+      description TEXT, assigned_to INTEGER, status TEXT NOT NULL DEFAULT 'todo',
+      ai_generated INTEGER DEFAULT 0, due_date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE project_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, snapshot_date TEXT NOT NULL,
+      mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,
+      active_users INTEGER, new_users INTEGER, net_burn REAL, cash_balance REAL,
+      headcount INTEGER, nrr_pct REAL, paying_accounts INTEGER,
+      notes TEXT, source TEXT, created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE raise_rounds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      name TEXT, target_amount REAL, close_date TEXT, status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), pro_rata_reserved REAL, pre_money REAL
+    );
+    CREATE TABLE raise_prospects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      contact_id INTEGER, name TEXT, email TEXT, firm TEXT,
+      stage TEXT NOT NULL DEFAULT 'to_contact', notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      amount REAL, close_id INTEGER, commit_status TEXT, instrument TEXT
+    );
+    CREATE TABLE cap_table_scenarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, owner_user_id INTEGER NOT NULL,
+      project_id INTEGER, name TEXT NOT NULL, inputs_json TEXT NOT NULL, result_json TEXT,
+      computed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), is_variant INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, project_id INTEGER,
+      title TEXT NOT NULL, doc_type TEXT NOT NULL DEFAULT 'other',
+      status TEXT NOT NULL DEFAULT 'draft', content TEXT, template_name TEXT,
+      signed_by TEXT, signed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      name TEXT NOT NULL, parent_id INTEGER, visibility TEXT NOT NULL DEFAULT 'open',
+      display_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      folder_id INTEGER, name TEXT NOT NULL, r2_key TEXT NOT NULL, content_type TEXT,
+      size_bytes INTEGER, visibility TEXT NOT NULL DEFAULT 'open', uploaded_by_user_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL,
+      investor_user_id INTEGER NOT NULL, granted_by_user_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active', expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE data_room_access_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, file_id INTEGER,
+      user_id INTEGER NOT NULL, action TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE waitlist_signups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, landing_page_id INTEGER,
+      email TEXT NOT NULL, name TEXT, source TEXT, ip_hash TEXT,
+      created_at TEXT DEFAULT (datetime('now')), audience TEXT,
+      crm_status TEXT DEFAULT 'new', invited_at TEXT, followed_up_at TEXT,
+      promoted_at TEXT, promoted_interview_id INTEGER
+    );
+    CREATE TABLE pain_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, title TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE pain_group_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, group_id INTEGER NOT NULL,
+      phrase_norm TEXT NOT NULL, display_phrase TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE job_postings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL UNIQUE, host_user_id INTEGER,
+      project_id INTEGER, title TEXT NOT NULL, employment_type TEXT NOT NULL DEFAULT 'full_time',
+      location_text TEXT, remote INTEGER NOT NULL DEFAULT 0, seniority TEXT NOT NULL DEFAULT 'mid',
+      summary TEXT, description TEXT, status TEXT NOT NULL DEFAULT 'draft',
+      admin_published INTEGER NOT NULL DEFAULT 0, review_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE job_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, posting_id INTEGER NOT NULL, user_id INTEGER,
+      name TEXT, email TEXT NOT NULL, cover_note TEXT, linkedin_url TEXT, portfolio_url TEXT,
+      resume_key TEXT, resume_name TEXT, status TEXT NOT NULL DEFAULT 'submitted',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE research_zone_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      owner_user_id INTEGER NOT NULL, surface TEXT NOT NULL, scope_key TEXT,
+      body TEXT NOT NULL, model TEXT, cost_micro_usd INTEGER NOT NULL DEFAULT 0,
+      accepted_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  for (const who of [MINE, THEIRS, SOLO]) {
+    db.prepare('INSERT INTO users (id, role, founder_id) VALUES (?, ?, ?)').run(who.user, 'founder', who.founder_id);
+    db.prepare('INSERT INTO founders (id, name) VALUES (?, ?)').run(who.founder_id, `Founder ${who.user}`);
+  }
+  db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)').run(MY_PROJECT, 'Mine', MINE.founder_id);
+  db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)').run(THEIR_PROJECT, 'Theirs', THEIRS.founder_id);
+  db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)').run(SOLO_A, 'One', SOLO.founder_id);
+  db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)').run(SOLO_B, 'Two', SOLO.founder_id);
+
+  // Every founder surface has something to gather on EVERY project, so a 409
+  // in any test below is the ownership check and never a thin fixture.
+  for (const pid of [MY_PROJECT, THEIR_PROJECT, SOLO_A, SOLO_B]) {
+    db.prepare(`INSERT INTO roadmap_okrs (project_id, objective, key_results_json, kanban_status, quarter)
+                VALUES (?, ?, ?, 'now', 'Q3 2026')`)
+      .run(pid, `Objective for ${pid}`, JSON.stringify([{ text: 'Ship it', current: 1, target: 4, unit: '' }]));
+    db.prepare('INSERT INTO mvp_tasks (deal_id, title, status) VALUES (?, ?, ?)').run(pid, `Card for ${pid}`, 'todo');
+    db.prepare('INSERT INTO project_metrics (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
+      .run(pid, '2026-09-01', 4200);
+    db.prepare(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, pre_money, status)
+                VALUES (?, ?, ?, 1500000, 12000000, 'active')`).run(`r${pid}`, pid, `Round for ${pid}`);
+    db.prepare(`INSERT INTO raise_prospects (uid, project_id, name, firm, stage, amount, commit_status)
+                VALUES (?, ?, ?, ?, 'committed', 250000, 'signed')`)
+      .run(`p${pid}`, pid, `Prospect for ${pid}`, `Firm ${pid}`);
+    db.prepare(`INSERT INTO cap_table_scenarios (uid, owner_user_id, project_id, name, inputs_json, result_json, is_variant)
+                VALUES (?, 0, ?, ?, ?, ?, 0)`)
+      .run(`s${pid}`, pid, `Scenario for ${pid}`, '{"founders":89.5}', '{"post":66.1}');
+    db.prepare(`INSERT INTO documents (uid, project_id, title, doc_type, status, content)
+                VALUES (?, ?, ?, 'term_sheet', 'draft', ?)`)
+      .run(`d${pid}`, pid, `Term sheet for ${pid}`, `Clause body for ${pid}`);
+    db.prepare(`INSERT INTO data_room_folders (uid, project_id, name, visibility)
+                VALUES (?, ?, ?, 'open')`).run(`rf${pid}`, pid, `Folder for ${pid}`);
+    db.prepare(`INSERT INTO data_room_files (uid, project_id, name, r2_key, visibility)
+                VALUES (?, ?, ?, 'k', 'open')`).run(`rx${pid}`, pid, `File for ${pid}`);
+    db.prepare(`INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status)
+                VALUES (?, ?, 99, 1, 'active')`).run(`rg${pid}`, pid);
+    db.prepare(`INSERT INTO waitlist_signups (project_id, email, name, source, crm_status)
+                VALUES (?, ?, ?, ?, 'invited')`)
+      .run(pid, `signup${pid}@example.test`, `Signup for ${pid}`, `Source for ${pid}`);
+    db.prepare('INSERT INTO pain_groups (id, project_id, title) VALUES (?, ?, ?)')
+      .run(pid, pid, `Pain for ${pid}`);
+    db.prepare(`INSERT INTO pain_group_aliases (project_id, group_id, phrase_norm, display_phrase)
+                VALUES (?, ?, ?, ?)`).run(pid, pid, `phrase${pid}`, `Phrase for ${pid}`);
+    db.prepare(`INSERT INTO job_postings (id, slug, project_id, title, seniority, status)
+                VALUES (?, ?, ?, ?, 'senior', 'published')`)
+      .run(pid, `slug-${pid}`, pid, `Role for ${pid}`);
+    db.prepare(`INSERT INTO job_applications (posting_id, name, email, cover_note, resume_key)
+                VALUES (?, ?, ?, ?, 'k')`)
+      .run(pid, `Applicant for ${pid}`, `applicant${pid}@example.test`, `Cover note for ${pid}`);
+  }
+  db.exec(AI_LOG_SCHEMA+AI_BUDGET_MIGRATION);
+  return db;
+}
+
+async function token(userId: number, role: string): Promise<string> {
+  return new SignJWT({ user_id: userId, role })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+}
+
+/**
+ * POST /drafts as `who`, returning the status and the prompt the model saw.
+ *
+ * `prompt` is null when the route never reached the model — which is the only
+ * outcome a refusal may have.
+ */
+async function draft(
+  db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown, verdict?: (input: any) => string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; prompt: string | null; body: any }> {
+  let prompt: string | null = null;
+  // D763: the guard answers free, so `prompt` is the drafting model's. `verdict` is the guard's answer (safe by default).
+  const AI = withGuard({
+    run: async (_model: string, payload: any) => {
+      const messages = payload?.messages || [];
+      prompt = String(messages[messages.length - 1]?.content ?? '');
+      return { response: 'a drafted paragraph' };
+    },
+  }, verdict);
+  const res = await research.fetch(
+    new Request('http://x/drafts', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${await token(who.user, 'founder')}`,
+        'content-type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify({
+        surface,
+        ...(scopeKey === undefined ? {} : { scope_key: scopeKey }),
+        ...(page === undefined ? {} : { page }),
+      }),
+    }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db), AI } as any,
+  );
+  return { status: res.status, prompt, body: await res.json().catch(() => null) };
+}
+/** The status alone, for the many cases where only the refusal matters. */
+const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).status;
+
+const SURFACES = [
+  'build/this-week', 'build/roadmap', 'build/kpi', 'build/retro',
+  'raise/capital', 'raise/legal', 'raise/data-room', 'raise/liquidity',
+  'grow/talent', // D4493: grow/customers is retired
+];
+
+for (const surface of SURFACES) {
+  test(`${surface} drafts over the caller's own project, and only that one`, async () => {
+    const db = freshDb();
+    const { status, prompt } = await draft(db, MINE, surface, String(MY_PROJECT));
+    assert.equal(status, 201);
+    assert.ok(prompt, 'the model was never reached');
+    // The material is the caller's own project and nobody else's. Both
+    // projects carry records with their own id in the text, so a gather that
+    // read the wrong rows — or all of them — shows up here rather than in a
+    // count that happens to match.
+    assert.ok(String(prompt).includes(String(MY_PROJECT)) || surface === 'build/kpi',
+      `${surface} handed over no material from the caller's own project`);
+    // Every fixture row names its own project id, so a gather that read every
+    // project's rows — the shape a dropped WHERE produces — shows up as another
+    // founder's id in the text rather than as a count that happens to match.
+    assert.ok(!String(prompt).includes(String(THEIR_PROJECT)),
+      `${surface} handed another founder's records to the model`);
+  });
+
+  test(`${surface} refuses a project the caller does not own`, async () => {
+    const db = freshDb();
+    // The project exists, has records, and is not theirs. Identical to the
+    // empty case from the outside, which is the point.
+    const { status, prompt } = await draft(db, MINE, surface, String(THEIR_PROJECT));
+    assert.equal(status, 409);
+    assert.equal(prompt, null, 'a refused draft still reached the model');
+  });
+
+  test(`${surface} refuses a scope key that is not a project at all`, async () => {
+    const db = freshDb();
+    for (const junk of ['0', '-1', 'null', "1 OR 1=1", '999999']) {
+      assert.equal(await statusOf(db, MINE, surface, junk), 409, `scope_key ${junk} was not refused`);
+    }
+  });
+
+  test(`${surface} picks a lone project when no scope key is sent`, async () => {
+    const db = freshDb();
+    assert.equal(await statusOf(db, MINE, surface), 201);
+  });
+
+  test(`${surface} refuses to guess between two of the caller's projects`, async () => {
+    // A draft written about the wrong startup is worse than no draft, so an
+    // ambiguous request gets nothing rather than whichever sorted first.
+    const db = freshDb();
+    assert.equal(await statusOf(db, SOLO, surface), 409);
+    // Naming one resolves it, and to that one.
+    const { status, prompt } = await draft(db, SOLO, surface, String(SOLO_B));
+    assert.equal(status, 201);
+    assert.ok(!String(prompt).includes(String(SOLO_A)),
+      'naming one startup handed over the other one too');
+  });
+}
+
+test('a deleted project is not the caller’s project', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE projects SET deleted_at = ? WHERE id = ?').run('2026-09-01T00:00:00Z', MY_PROJECT);
+  for (const surface of SURFACES) {
+    assert.equal(await statusOf(db, MINE, surface, String(MY_PROJECT)), 409, `${surface} drafted over a deleted project`);
+  }
+});
+
+test('build/kpi says so rather than treating one snapshot as a movement', async () => {
+  // Two snapshots is the minimum for "burn jumped 31%" to mean anything. With
+  // one there is no movement, and the gather has to tell the model that in
+  // words — a single figure silently presented as a comparison is how an
+  // invented change reaches an investor update.
+  const db = freshDb();
+  const one = await draft(db, MINE, 'build/kpi', String(MY_PROJECT));
+  assert.equal(one.status, 201);
+  assert.match(String(one.prompt), /ONLY ONE SNAPSHOT EXISTS/,
+    'a lone snapshot went to the model with nothing saying it is not a movement');
+
+  db.prepare('INSERT INTO project_metrics (project_id, snapshot_date, mrr) VALUES (?, ?, ?)')
+    .run(MY_PROJECT, '2026-08-01', 3000);
+  const two = await draft(db, MINE, 'build/kpi', String(MY_PROJECT));
+  assert.doesNotMatch(String(two.prompt), /ONLY ONE SNAPSHOT EXISTS/,
+    'the single-snapshot warning survived a second snapshot');
+  assert.match(String(two.prompt), /2026-09-01[\s\S]*2026-08-01/,
+    'the two snapshots reach the model newest first, so "moved" has a direction');
+
+  db.prepare('DELETE FROM project_metrics WHERE project_id = ?').run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'build/kpi', String(MY_PROJECT)), 409,
+    'with no snapshot at all there is nothing to draft');
+});
+
+test('build/this-week hands over no owner and no status to invent one from', async () => {
+  // The artboard's own fixture is "+ Ship async digest v1 · Amara", and an
+  // owner is exactly what a model handed a Monday plan will supply. Neither is
+  // recorded, so neither may be in the material OR implied by the instruction.
+  const db = freshDb();
+  db.prepare('UPDATE mvp_tasks SET assigned_to = ? WHERE deal_id = ?').run(99, MY_PROJECT);
+  const { prompt } = await draft(db, MINE, 'build/this-week', String(MY_PROJECT));
+  assert.ok(prompt, 'the model was never reached');
+  assert.doesNotMatch(String(prompt), /assigned|owner:|\bwho\b/i,
+    'an owner reached the model from a column the product does not show');
+  assert.match(String(prompt), /Never name an owner and never call a commitment on track or at risk/,
+    'the instruction no longer forbids the two fields nothing records');
+});
+
+test('raise/liquidity tells the model no preference term is recorded', async () => {
+  // A model asked about exits will supply a preference stack, a participation
+  // multiple and a comparable outcome. None of the three is recorded for any
+  // company in this product, so the absence has to be IN the material — an
+  // instruction alone leaves the model reasoning over a silent gap.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'raise/liquidity', String(MY_PROJECT));
+  assert.match(String(prompt), /NO LIQUIDATION PREFERENCE, PARTICIPATION RIGHT OR EXIT MODEL IS RECORDED/);
+
+  // And with no cap table there is no ownership to pay out at all.
+  db.prepare('DELETE FROM cap_table_scenarios WHERE project_id = ?').run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'raise/liquidity', String(MY_PROJECT)), 409);
+});
+
+test('raise/legal reads the document body, not just its title', async () => {
+  // A clause read from a title is a guess about a document. The body is the
+  // material — and a document with a record but no text says so, rather than
+  // letting the model treat the title as the terms.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'raise/legal', String(MY_PROJECT));
+  assert.match(String(prompt), new RegExp(`Clause body for ${MY_PROJECT}`));
+  db.prepare('UPDATE documents SET content = NULL WHERE project_id = ?').run(MY_PROJECT);
+  const empty = await draft(db, MINE, 'raise/legal', String(MY_PROJECT));
+  assert.match(String(empty.prompt), /NO TEXT STORED/);
+});
+
+test('grow/talent never hands an applicant email to the model', async () => {
+  // The material is what a founder can check for themselves: a name, what the
+  // applicant wrote, and which attachments exist. An email address identifies a
+  // real person to a third-party model and adds nothing a ranking can use, so
+  // it is not in the SELECT at all — a rule that only holds while nobody
+  // widens the query to `SELECT *`.
+  const db = freshDb();
+  const { prompt } = await draft(db, MINE, 'grow/talent', String(MY_PROJECT));
+  assert.match(String(prompt), new RegExp(`Applicant for ${MY_PROJECT}`), 'the applicant is not in the material');
+  assert.match(String(prompt), new RegExp(`Cover note for ${MY_PROJECT}`), 'what they wrote is not in the material');
+  assert.doesNotMatch(String(prompt), /@example\.test/, 'an applicant email reached the model');
+  // A draft posting has no live applicants to rank.
+  db.prepare("UPDATE job_postings SET status = 'draft' WHERE project_id = ?").run(MY_PROJECT);
+  assert.equal(await statusOf(db, MINE, 'grow/talent', String(MY_PROJECT)), 409);
+});
+
+test('D4493: the retired grow/customers surface is refused like any unknown surface', async () => {
+  assert.equal(await statusOf(freshDb(), MINE, 'grow/customers', String(MY_PROJECT)), 400);
+});
+
+test('a gather never reads a record belonging to another founder', async () => {
+  // The whole property in one place: every founder surface, one founder, one
+  // pass over what the model saw.
+  const db = freshDb();
+  for (const surface of SURFACES) {
+    const { prompt } = await draft(db, MINE, surface, String(MY_PROJECT));
+    for (const foreign of [THEIR_PROJECT, SOLO_A, SOLO_B]) {
+      assert.ok(!String(prompt).includes(`for ${foreign}`) && !String(prompt).includes(`Objective for ${foreign}`),
+        `${surface} handed the model a record from project ${foreign}`);
+    }
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * D510 — the Friday retro, and every run recorded against its page
+ * ------------------------------------------------------------------ */
+
+/**
+ * A card with its clock set. `created`, `updated` and `due` are SQLite
+ * modifiers on 'now' (`'-12 days'`), so the week boundary is measured from
+ * the same clock the gather reads, with days of margin either side of it.
+ */
+function card(
+  db: any, pid: number, title: string, status: string,
+  when: { created: string; updated: string; due?: string },
+) {
+  db.prepare(
+    `INSERT INTO mvp_tasks (deal_id, title, status, created_at, updated_at, due_date)
+     VALUES (?, ?, ?, datetime('now', ?), datetime('now', ?), CASE WHEN ? IS NULL THEN NULL ELSE date('now', ?) END)`,
+  ).run(pid, title, status, when.created, when.updated, when.due ?? null, when.due ?? null);
+}
+
+test('D510: build/retro reads the week off the board, and only what the board records', async () => {
+  const db = freshDb();
+  // The fixture's own card was created and touched just now.
+  card(db, MY_PROJECT, 'Shipped card', 'done', { created: '-30 days', updated: '-2 days' });
+  card(db, MY_PROJECT, 'Quiet card', 'in_progress', { created: '-40 days', updated: '-20 days', due: '+10 days' });
+  card(db, MY_PROJECT, 'Late card', 'todo', { created: '-40 days', updated: '-12 days', due: '-3 days' });
+  card(db, MY_PROJECT, 'Done late card', 'done', { created: '-40 days', updated: '-15 days', due: '-5 days' });
+  // Another founder's late card: the past-due read is its own statement, and
+  // the fixture's cards carry no due date, so only this proves it is scoped.
+  card(db, THEIR_PROJECT, 'Their late card', 'todo', { created: '-40 days', updated: '-12 days', due: '-3 days' });
+
+  const { status, prompt } = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(status, 201);
+  const p = String(prompt);
+  assert.match(p, /The board holds 5 cards: 2 done, 1 in progress, 2 todo\./, 'the board count is not this board');
+  assert.match(p, new RegExp(`Touched this week: Card for ${MY_PROJECT} — now todo; added this week;`));
+  assert.match(p, /Touched this week: Shipped card — now done; added \d{4}-\d{2}-\d{2}; last touched \d{4}-\d{2}-\d{2}; no due date recorded/);
+  assert.doesNotMatch(p, /Touched this week: (Quiet card|Late card|Done late card)/,
+    'a card untouched for over a week was read as this week');
+  assert.match(p, /Past due and still open: Late card — todo; was due \d{4}-\d{2}-\d{2}; last touched/);
+  assert.doesNotMatch(p, /Past due and still open: (Done late card|Quiet card|Shipped card)/,
+    'a finished card, or one not yet due, was called late');
+  assert.doesNotMatch(p, /Their late card/, 'another founder’s card reached the model');
+  // What the board does not record reaches the model as a fact, and the
+  // instruction forbids the counts the canvas's fixture makes from it.
+  assert.match(p, /NO MOVE HISTORY IS STORED/);
+  assert.match(p, /never say how many times a card moved, slipped or carried over, and never say when a card was finished/);
+  assert.match(p, /Never name an owner, give a cause or state a decision/);
+});
+
+test('D510: a capped list says how many it left out, and never reads as complete', async () => {
+  // Raised in review on PR 1033: the past-due read stops at 20 while the
+  // instruction said "name every open card that is past its due date", so a
+  // board with more would have reached the model as a complete list. Each
+  // read now counts its whole match, and the material says what was cut.
+  const db = freshDb();
+  for (let i = 0; i < 21; i++) {
+    card(db, MY_PROJECT, `Overdue ${i}`, 'todo', { created: '-40 days', updated: '-12 days', due: `-${i + 2} days` });
+  }
+  const one = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.equal((one.match(/Past due and still open:/g) || []).length, 20);
+  assert.match(one, /1 more open card is past its due date and not listed here: only the 20 longest overdue are\./);
+  // The cut is the least overdue: the longest overdue are the ones listed.
+  assert.match(one, /Past due and still open: Overdue 20 — /);
+  assert.doesNotMatch(one, /Past due and still open: Overdue 0 — /);
+
+  card(db, MY_PROJECT, 'Overdue 21', 'todo', { created: '-40 days', updated: '-12 days', due: '-23 days' });
+  card(db, MY_PROJECT, 'Overdue 22', 'todo', { created: '-40 days', updated: '-12 days', due: '-24 days' });
+  for (let i = 0; i < 44; i++) {
+    card(db, MY_PROJECT, `Busy ${i}`, 'in_progress', { created: '-30 days', updated: '-1 days' });
+  }
+  const many = String((await draft(db, MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.match(many, /3 more open cards are past their due date and not listed here: only the 20 longest overdue are\./);
+  // The fixture's own card and 44 more were touched this week: 45, 40 listed.
+  assert.equal((many.match(/Touched this week:/g) || []).length, 40);
+  assert.match(many, /5 more cards were touched this week and are not listed here: only the 40 most recently touched are\./);
+  assert.match(many, /Where the material says more cards are not listed, say how many, and never present a list as complete when it is not\./);
+
+  // Within the caps nothing claims a cut.
+  const few = String((await draft(freshDb(), MINE, 'build/retro', String(MY_PROJECT))).prompt);
+  assert.doesNotMatch(few, /not listed here/);
+});
+
+test('D510: a card touched an hour before the week, written as ISO, is outside it', async () => {
+  // D124/D125: SQLite compares TEXT, and on one date an ISO string sorts above
+  // a space-separated one ('T' beats ' '), so a bare `updated_at >=` would
+  // count this card as this week's. Every writer of `mvp_tasks.updated_at`
+  // emits SQL format today; the wrap is what keeps the window right if one
+  // ever does not. (In the first hour after UTC midnight the two sides fall on
+  // different dates and a bare compare happens to agree, so this guards the
+  // other twenty-three.)
+  const db = freshDb();
+  db.prepare(`INSERT INTO mvp_tasks (deal_id, title, status, created_at, updated_at)
+              VALUES (?, 'Iso card', 'in_progress', datetime('now', '-30 days'),
+                      strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days', '-1 hours'))`).run(MY_PROJECT);
+  const { prompt } = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.doesNotMatch(String(prompt), /Touched this week: Iso card/, 'an ISO timestamp outside the week was read as inside it');
+});
+
+test('D510: a quiet week is said, and an empty board is nothing to draft', async () => {
+  const db = freshDb();
+  db.prepare(`UPDATE mvp_tasks SET created_at = datetime('now', '-30 days'), updated_at = datetime('now', '-20 days') WHERE deal_id = ?`)
+    .run(MY_PROJECT);
+  const quiet = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(quiet.status, 201, 'a board with cards and a quiet week was refused');
+  assert.match(String(quiet.prompt), /No card was touched in the seven days to \d{4}-\d{2}-\d{2}\./);
+  assert.doesNotMatch(String(quiet.prompt), /Touched this week:/);
+
+  db.prepare('DELETE FROM mvp_tasks WHERE deal_id = ?').run(MY_PROJECT);
+  const empty = await draft(db, MINE, 'build/retro', String(MY_PROJECT));
+  assert.equal(empty.status, 409, 'an empty board was drafted over');
+  assert.equal(empty.prompt, null, 'an empty board reached the model');
+});
+
+// Migration 319's shape, which the router's own bootstrap mirrors. Created
+// here rather than left to that bootstrap, so the assertion below reads the
+// declared table and not whatever a safety net happened to build.
+const USAGE_DDL = "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT)";
+const draftRuns = (db: any) => db.prepare(
+  `SELECT user_id, surface FROM ai_usage_logs WHERE task = 'workspace_explain' ORDER BY id`,
+).all() as Array<{ user_id: number; surface: string | null }>;
+
+test('D510: every draft run records the page it was asked from', async () => {
+  for (const surface of SURFACES) {
+    const db = freshDb();
+    db.exec(USAGE_DDL);
+    const { status } = await draft(db, MINE, surface, String(MY_PROJECT), '/build');
+    assert.equal(status, 201, `${surface} did not draft`);
+    const runs = draftRuns(db);
+    assert.equal(runs.length, 1, `${surface} wrote ${runs.length} usage rows for one run`);
+    assert.equal(runs[0].user_id, MINE.user);
+    // The page, never the draft key: the rail groups "This page this month"
+    // on the path it stands on, and no reader stands on `build/retro`.
+    assert.equal(runs[0].surface, '/build', `${surface}'s run did not record its page`);
+  }
+});
+
+test('D510: a run with no page, or one that is not a plain app path, records NULL', async () => {
+  for (const page of [undefined, '', 'build/retro', 'https://example.test/build', '/build?x=1', '/build#a', 42]) {
+    const db = freshDb();
+    db.exec(USAGE_DDL);
+    await draft(db, MINE, 'build/retro', String(MY_PROJECT), page);
+    const runs = draftRuns(db);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].surface, null, `${JSON.stringify(page)} was recorded as a page`);
+  }
+  // One page, not two: the trailing slash is the router's to strip.
+  const db = freshDb();
+  db.exec(USAGE_DDL);
+  await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build/');
+  assert.equal(draftRuns(db)[0].surface, '/build');
+});
+
+test('D510: a refused draft never reaches the model, so it records no run', async () => {
+  const db = freshDb();
+  db.exec(USAGE_DDL);
+  const { status } = await draft(db, MINE, 'build/retro', String(THEIR_PROJECT), '/build');
+  assert.equal(status, 409);
+  assert.deepEqual(draftRuns(db), [], 'a refused draft was recorded as a run against the page');
+});
+
+test('D770 (#2095): a draft the guard withholds, or cannot check, is never stored; the guard\'s own words go back', async () => {
+  const { GUARD_COPY } = await import('../src/services/ai/guard.ts');
+  // The output check sees the model's paragraph; the input check never does.
+  const onOutput = (answer: string) => (input: any) => (JSON.stringify(input).includes('a drafted paragraph') ? answer : 'safe');
+  for (const [answer, code, words] of [['unsafe\nS1', 'guard_blocked_output', GUARD_COPY.output], ['not a verdict', 'guard_unavailable', GUARD_COPY.unavailable]] as const) {
+    const db = freshDb();
+    const { status, prompt, body } = await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build', onOutput(answer));
+    assert.ok(prompt, 'the model ran');
+    assert.equal(status, 503, code);
+    assert.equal(body.detail, code);
+    assert.equal(body.message, words, 'the guard\'s own words, not "unavailable"');
+    assert.ok(!JSON.stringify(body).includes('a drafted paragraph'), 'the withheld text is never sent');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get().n, 0, 'and never stored');
+  }
+});
+
+// ---------------------------------------------------------------------------
+// D778 part 3 (#2103): the founder's draft bands run through the run path on
+// their inventoried page and option, and write nothing but the draft.
+// ---------------------------------------------------------------------------
+
+test('D778: each founder-only band\'s fallback page is the one D771\'s inventory gives it', () => {
+  const byKey = new Map(FOUNDER_OPTIONS.map((o: any) => [o.key, o]));
+  for (const [surface, page] of Object.entries(FOUNDER_DRAFT_PAGES)) {
+    const option = byKey.get(`draft:${surface}`) as any;
+    assert.ok(option, `draft:${surface} is not a founder option`);
+    assert.equal(page, option.page, `draft:${surface}`);
+  }
+  // Every other founder draft band is one another profile shares, so it keeps the page from its path.
+  // D1071: the build plan's wording is its own route, not a band; that route's fallback page is the inventory's.
+  assert.equal(WORD_PAGE, (byKey.get(WORD_OPTION) as any)?.page, WORD_OPTION);
+  // D1147: these two previews have their own mounted, input-only route; Keep alone persists.
+  const pmfPreviews = ['draft:raise/pmf-explain', 'draft:raise/pmf-questions'];
+  const uofPreviews = Object.values(UOF_OPTIONS).filter(k => k.startsWith('draft:'));
+  for (const option of uofPreviews) assert.equal((byKey.get(option) as any)?.page, UOF_PAGE);
+  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !pmfPreviews.includes(o.key) && !uofPreviews.includes(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
+  assert.deepEqual(others.map((o: any) => o.key).sort(),
+    ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
+});
+
+const railRuns = (db: any) => db.prepare(
+  `SELECT user_id, rail_page, rail_option FROM ai_usage_logs WHERE task = 'workspace_explain' ORDER BY id`,
+).all() as Array<{ user_id: number; rail_page: string | null; rail_option: string | null }>;
+
+/** Every table's row count, but the draft store and the run's own bookkeeping. */
+const BOOKKEEPING = /^(research_zone_drafts|ai_.*|sqlite_.*)$/;
+function businessCounts(db: any): Record<string, number> {
+  const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as Array<{ name: string }>)
+    .map((t) => t.name).filter((n) => !BOOKKEEPING.test(n)).sort();
+  return Object.fromEntries(tables.map((n) => [n, Number((db.prepare(`SELECT COUNT(*) AS n FROM "${n}"`).get() as any).n)]));
+}
+
+test('D778: a press with no rail context runs on the band\'s inventoried page and option, and writes only the draft', async () => {
+  // Mutation checked: fall back to the path's workspace → the page reads 'build', not the inventory's.
+  for (const surface of SURFACES) {
+    const db = freshDb();
+    const before = businessCounts(db);
+    const { status } = await draft(db, MINE, surface, String(MY_PROJECT), '/build');
+    assert.equal(status, 201, `${surface} did not draft`);
+    const runs = railRuns(db);
+    assert.equal(runs.length, 1, surface);
+    assert.deepEqual({ ...runs[0] }, { user_id: MINE.user, rail_page: FOUNDER_DRAFT_PAGES[surface], rail_option: `draft:${surface}` }, surface);
+    assert.deepEqual(businessCounts(db), before, `${surface} wrote a record before Accept`);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts WHERE accepted_at IS NULL').get() as any).n, 1, 'one draft, waiting');
+  }
+});
+
+test('D778: a mounted rail\'s page and the press\'s option win over the fallback', async () => {
+  const db = freshDb();
+  const { status } = await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build', undefined,
+    { 'X-Rail-Page': 'build', 'X-Rail-Option': encodeURIComponent('draft:build/retro') });
+  assert.equal(status, 201);
+  assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: 'build', rail_option: 'draft:build/retro' },
+    'the mounted page holds the member\'s Manual switch, so it is the one checked');
+});
+
+test('D778: a shared band does not borrow a founder-only inventory label', async () => {
+  assert.equal(FOUNDER_DRAFT_PAGES['research/ask'], undefined);
+  assert.equal(FOUNDER_DRAFT_PAGES['network/relationships'], undefined);
+});
+
+// D778 part 10: the four bands shared with other profiles. Fixtures use the
+// committed schemas, a stubbed provider, and only synthetic member content.
+function sharedDraftDb() {
+  const db = freshDb();
+  for (const name of ['213_research_library.sql', '221_research_ask_sessions.sql', '224_partner_book.sql', '465_ai_rail_preferences.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  }
+  for (const user of [MINE.user, THEIRS.user]) {
+    db.prepare('INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)').run(`session-${user}`, user);
+    const session = db.prepare('SELECT id FROM research_ask_sessions WHERE owner_user_id = ?').get(user) as any;
+    db.prepare("INSERT INTO research_ask_answers (uid, session_id, owner_user_id, question, answer, reason) VALUES (?, ?, ?, ?, ?, 'answered')")
+      .run(`answer-${user}`, session.id, user, `Question ${user}`, `Answer ${user}`);
+    db.prepare('INSERT INTO research_documents (uid, owner_user_id, title, r2_key) VALUES (?, ?, ?, ?)')
+      .run(`document-${user}`, user, `Document ${user}`, `synthetic/${user}`);
+    for (let n = 0; n < 2; n++) {
+      db.prepare('INSERT INTO partner_book_contacts (uid, owner_user_id, name, organization) VALUES (?, ?, ?, ?)')
+        .run(`contact-${user}-${n}`, user, `Contact ${user}-${n}`, `Organization ${user}`);
+      const contact = db.prepare('SELECT id FROM partner_book_contacts WHERE uid = ?').get(`contact-${user}-${n}`) as any;
+      db.prepare("INSERT INTO partner_book_interactions (uid, contact_id, owner_user_id, happened_at) VALUES (?, ?, ?, '2026-10-20')")
+        .run(`interaction-${user}-${n}`, contact.id, user);
+    }
+  }
+  return db;
+}
+
+const sharedScope = (surface: string) => surface === 'research/ask' ? `session-${MINE.user}` : '';
+
+test('D778 part 10: all four shared bands name their option and real workspace, not the phone lens pathname', async () => {
+  assert.deepEqual(SHARED_DRAFT_PAGES, {
+    'network/relationships': 'network', 'network/introductions': 'network',
+    'research/ask': 'research', 'research/library': 'research',
+  });
+  const keys = Object.keys(SHARED_DRAFT_PAGES).map((s) => `draft:${s}`).sort();
+  assert.deepEqual(keys, ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
+  for (const [surface, page] of Object.entries(SHARED_DRAFT_PAGES)) {
+    assert.ok(FOUNDER_OPTIONS.some((o: any) => o.key === `draft:${surface}`));
+    const db = sharedDraftDb();
+    try {
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio');
+      assert.equal(r.status, 201, surface);
+      assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: page, rail_option: `draft:${surface}` });
+      assert.equal(r.body.item.accepted, false);
+      assert.deepEqual(businessCounts(db), before, 'only an unaccepted draft and run bookkeeping are stored');
+      assert.doesNotMatch(r.prompt || '', /Question 71|Answer 71|Document 71|Contact 71/, 'another member is never source material');
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: Manual on the actual workspace refuses each shared band before a provider or charge', async () => {
+  for (const [surface, page] of Object.entries(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,?,'','manual')")
+        .run(`off-${surface}`, MINE.user, page);
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio');
+      assert.equal(r.status, 403, surface);
+      assert.equal(r.body.error, 'assist_off');
+      assert.equal(r.prompt, null, 'no drafting provider');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs').get() as any).n, 0, 'no guard or charged run');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get() as any).n, 0);
+      assert.deepEqual(businessCounts(db), before);
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: the mounted workspace and per-press option still win for every shared band', async () => {
+  for (const surface of Object.keys(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio', undefined,
+        { 'X-Rail-Page': 'mounted-workspace', 'X-Rail-Option': encodeURIComponent(`draft:${surface}`) });
+      assert.equal(r.status, 201);
+      assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: 'mounted-workspace', rail_option: `draft:${surface}` });
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: each shared draft waits for its owner to Accept, preserving the underlying records', async () => {
+  for (const surface of Object.keys(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface));
+      assert.equal(r.status, 201);
+      const uid = r.body.item.uid;
+      const acceptAs = async (user: number) => research.fetch(new Request(`http://x/drafts/${uid}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${await token(user, 'founder')}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ body: 'The member edited this draft.' }),
+      }), { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any);
+      assert.equal((await acceptAs(THEIRS.user)).status, 404);
+      assert.equal((db.prepare('SELECT accepted_at FROM research_zone_drafts WHERE uid = ?').get(uid) as any).accepted_at, null);
+      const accepted = await acceptAs(MINE.user);
+      assert.equal(accepted.status, 200);
+      const kept = await accepted.json() as any;
+      assert.equal(kept.item.accepted, true);
+      assert.equal(kept.item.body, 'The member edited this draft.');
+      assert.deepEqual(businessCounts(db), before, 'Accept keeps the draft; it sends no introduction and assigns nobody');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM partner_book_contacts WHERE firm_owner_user_id IS NOT NULL').get() as any).n, 0);
+    } finally { db.close(); }
+  }
+});
+
+test('#2447: the room brief counts downloads and only unexpired grants',async()=>{
+ const db=freshDb();
+ db.prepare("UPDATE data_room_grants SET expires_at='2000-01-01T12:00:00Z' WHERE project_id=?").run(MY_PROJECT);
+ db.prepare("DELETE FROM data_room_access_log WHERE project_id=?").run(MY_PROJECT);
+ const file=db.prepare('SELECT id FROM data_room_files WHERE project_id=? LIMIT 1').get(MY_PROJECT) as any;
+ db.prepare("INSERT INTO data_room_access_log(project_id,file_id,user_id,action) VALUES(?,?,?,'blocked')").run(MY_PROJECT,file.id,MINE.user);
+ let r=await draft(db,MINE,'raise/data-room',String(MY_PROJECT));assert.equal(r.status,201);assert.match(r.prompt!,/never opened/);assert.match(r.prompt!,/0 investors currently have access/);
+ db.prepare('UPDATE data_room_grants SET expires_at=NULL WHERE project_id=?').run(MY_PROJECT);
+ db.prepare("INSERT INTO data_room_access_log(project_id,file_id,user_id,action) VALUES(?,?,?,'download')").run(MY_PROJECT,file.id,MINE.user);
+ r=await draft(db,MINE,'raise/data-room',String(MY_PROJECT));assert.equal(r.status,201);assert.match(r.prompt!,/opened by 1 investor/);assert.match(r.prompt!,/1 investor currently have access/);
+});

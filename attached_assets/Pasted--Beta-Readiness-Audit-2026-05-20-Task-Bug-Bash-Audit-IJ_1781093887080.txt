@@ -1,0 +1,271 @@
+# Beta Readiness Audit — 2026-05-20
+
+**Task:** Bug Bash Audit (IJ) — establish ground truth before scoping the remaining 8 beta PRs (IB–II).
+**Method:** Live `curl` against the production Cloudflare Worker (`https://axal.vc`) and the dev FastAPI (`http://localhost:8000`), plus code inspection of `cloudflare-worker/src/` and `backend/app/`. No production writes.
+**Auditor:** Replit Agent (Task #1).
+**Re-audit:** Scheduled for 2026-06-03 via `.github/workflows/beta-readiness-reaudit.yml` (see Ops section).
+
+## Legend
+- 🟢 **green** — shipped and verified end-to-end
+- 🟡 **partial** — code path exists but a check failed, evidence is indirect, or coverage is incomplete
+- 🔴 **red** — not shipped or broken
+- Issue refs link to `BETA_READINESS_ISSUES_2026-05-20.md` (paste-ready bodies; GitHub integration not connected from this environment, so the issues are NOT auto-filed — see "Filing the issues" at the bottom)
+
+## Notes on the production topology
+- `https://axal.vc/` (root) is served by **GitHub Pages** (Jekyll marketing site — `x-github-request-id` header on the response). The React SPA lives elsewhere (e.g. `studio-os-vjstele.replit.app` or an app subdomain).
+- `https://axal.vc/api/*` is the Cloudflare Worker. `/api/health` returns 200 with all bindings green.
+- This means several "/marketing" URLs in the checklist (e.g. `/spinout-lab`, `/about`, `/directory`, `/insights`) return **404 from GitHub Pages** today because the Jekyll site hasn't been republished with those routes. The React SPA has those pages (see `frontend/src/App.jsx`), but they are not the public-facing surface.
+
+---
+
+## AUTH
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Magic-link signup live | 🔴 red | `POST https://axal.vc/api/auth/magic/start` | HTTP **404** `{"detail":"Not found"}`; route is not mounted in `cloudflare-worker/src/index.ts`. No matches for `magic/start` in `cloudflare-worker/src/routes/auth.ts`. | Ship magic-link route on the Worker (passwordless email start + verify). | BLOCK-AUTH-01 |
+| Passkey registration live | 🔴 red | `GET /api/auth/passkey/register-options` and `/registration-options` | Both 404 on prod. No passkey/WebAuthn routes in `cloudflare-worker/src/routes/`. | Add WebAuthn registration + assertion routes. | BLOCK-AUTH-02 |
+| TOTP off `password_hash` | 🟢 green | Code: `cloudflare-worker/src/routes/auth.ts` lines 465–471, 535–551, 754. Comment block: *"TOTP secrets live exclusively in `auth_totp` (encrypted). `users.password_hash` is deliberately untouched here."* `loadTotp()` migrates legacy rows on read. | Done — verified by code inspection. | — | — |
+| Step-up middleware enforced | 🔴 red | `rg "step.up\|stepUp\|recent.*auth"` in `cloudflare-worker/src/middleware/` returns no hits. No middleware re-prompts TOTP for admin or sensitive endpoints. | Add a `requireStepUp` middleware (≤ N minutes since last TOTP) and wrap admin + payments routes. | BLOCK-AUTH-03 |
+| `/api/auth/sign-out-everywhere` exists + bumps `jwt_min_iat` | 🟡 partial | Endpoint is **`POST /api/settings/sessions/revoke-all`** (not `/api/auth/sign-out-everywhere`), implemented in `cloudflare-worker/src/routes/settings.ts:489` with `UPDATE users SET jwt_min_iat = ${nowSec}`. Auth middleware honors `jwt_min_iat`. | Either rename the endpoint to match the spec or update the spec/docs to reference the existing path. | NICE-AUTH-04 |
+
+---
+
+## 500s FROM ERROR DASHBOARD
+
+All dev-FastAPI checks below are unauthenticated curls; **401 = route mounted and reachable** (the real "no 500" smoke test), **404 = route missing**, **500 = uncaught crash**. Where we can't verify the empty-list contract without auth, we mark partial.
+
+| Row | Status | Check (dev `http://localhost:8000`) | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| `/api/integrations` → 200 empty list on new account | 🟡 partial | `GET /api/integrations` | HTTP **401** (no 500) | Re-test with auth in IB; route is mounted and does not crash. | NICE-500-01 |
+| `/api/calendar/events` → 200 empty list | 🟡 partial | `GET /api/calendar/events` | HTTP **401** | Re-test with auth in IB. | NICE-500-01 |
+| `/api/financials/:projectId` → 200 hydrated default | 🟡 partial | `GET /api/financials/test-id` | HTTP **401** | Re-test with auth; confirm "missing project ⇒ hydrated default" branch fires. | NICE-500-02 |
+| `/api/progress/metrics/:projectId` → 200 hydrated default | 🟡 partial | `GET /api/progress/metrics/test-id` | HTTP **401** | Re-test with auth. | NICE-500-02 |
+| `/api/wellbeing/checkins` POST → 201 | 🟡 partial | Skipped (write path). Route exists in `backend/app/api/routes/wellbeing.py`. | Code present; not exercised. | Add an integration test in IC. | NICE-500-03 |
+| `/api/deals` → 200 on empty | 🟡 partial | `GET /api/deals` | HTTP **307** redirect (likely `/api/deals/`); not a 500. | Resolve trailing-slash with auth in IB. | NICE-500-01 |
+| `/api/projects` → 200 on empty | 🟡 partial | `GET /api/projects` | HTTP **307** | Same — trailing-slash + auth. | NICE-500-01 |
+| `/api/projects/:id` → 404 (not 500) for missing | 🟡 partial | `GET /api/projects/nonexistent-id-12345` | HTTP **401** (auth gate fires before lookup) | Re-test with auth; verify 404 contract. | NICE-500-04 |
+| `/api/partnernet/summary` → 200 default | 🟡 partial | `GET /api/partnernet/summary` | HTTP **401** | Re-test with auth. | NICE-500-01 |
+| `/api/capital/portfolio` → 200 hydrated default | 🟡 partial | `GET /api/capital/portfolio` | HTTP **401** | Re-test with auth. | NICE-500-01 |
+| `/api/monitoring/analytics/overview` → 200 (admin) | 🟡 partial | `GET /api/monitoring/analytics/overview` | HTTP **401** | Re-test with admin token. | NICE-500-01 |
+| `/api/pipeline/active` → 200 on empty | 🔴 red | `GET /api/pipeline/active` | HTTP **404** `{"message":"Not Found"}`. Route is **not mounted** on the dev FastAPI; backend serves `pipeline_votes.py` only. | Mount a `/api/pipeline/active` handler (or remove the row from the error dashboard if it was retired). | BLOCK-500-05 |
+| `/api/infra/queue` → 200 graceful default | 🟡 partial | `GET /api/infra/queue` | HTTP **401** (no 500) | Re-test with admin token. | NICE-500-01 |
+| `/api/legalcap/capital/lp-portal` → 200 hydrated default | 🔴 red | `GET /api/legalcap/capital/lp-portal` | HTTP **404** `{"message":"Not Found"}`. `legalcap.ts` route exists on the Worker but the FastAPI prefix is not mounted here. | Mount the FastAPI shim or align the dashboard URL with the Worker path. | BLOCK-500-06 |
+| `/api/pipeline/ws/overview` — WS upgrade succeeds | 🟡 partial | Durable Object binding `durable_pipeline` reports `true` on `/api/health`; full handshake not exercised in this audit (requires auth + Upgrade headers). | Spot-check the WS in IC during the empty-state pass. | NICE-500-08 |
+| `/api/onboarding/ws/*` — WS upgrade succeeds | 🟡 partial | Durable Object binding `durable_onboarding` reports `true` on `/api/health`; handshake not exercised. | Spot-check the WS in IC. | NICE-500-08 |
+| `/api/advisor/explain` → 200 with retry / KV cache | 🟡 partial | `POST https://axal.vc/api/advisor/explain` unauth → HTTP **401** (route present, auth gate fires). Code path in `services/advisor/aiClient.ts` confirms Workers AI primary + 8b fallback + KV budget. | Re-test with a real user token + cold/warm cache pair. | NICE-500-07 |
+
+---
+
+## ADVISOR
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Admin persona bank exists | 🟡 partial | `cloudflare-worker/src/services/advisor/questionBank.ts:168-174` — `ADMIN_BANK` exists but contains **only 1 question** (`admin.preferences.digest_freq`). | Bank exists but is stub-sized; below the spirit of "real persona bank." | Expand `ADMIN_BANK` to ≥10 admin-relevant questions. | NICE-ADV-01 |
+| Repeat-question test passes | 🔴 red | `npm test advisor.repeat` — no such test. `ls cloudflare-worker/test/` shows `advisor.scenarios.test.ts`, `advisor.stateMachine.test.ts`, `advisor_explain_router.test.mjs` but **no repeat-question test**. | Add a repeat-question regression test (ask the same id twice; expect dedupe + second call to use cached follow-up). | BLOCK-ADV-02 |
+| Workers AI invoked per turn — model + latency in response | 🟡 partial | Code: `services/advisor/aiClient.ts::runAdvisorTurn()` returns model + provider; route returns SSE `event: provider {model, provider, fallback_used, cached}` per `replit.md` gotcha. | Re-test with auth + capture an SSE transcript. | NICE-ADV-03 |
+| AI Gateway slug `advisor-ongoing` — curl returns gateway header | 🟡 partial | Code: `services/aiRouter.ts` injects `{ gateway: { id: slug } }` only for `advisor_turn` and `advisor_explain` tasks. Env-var driven (`CF_AI_GATEWAY_SLUG_ADVISOR`). `replit.md` notes the dashboard gateway slug must still be **created by the operator**. | Operator action: create the `advisor-ongoing` gateway in CF dashboard (per `replit.md` ops items). Until then, calls fall through un-gatewayed. | BLOCK-ADV-04 |
+| Free-form question handled — "what is TALC?" returns LLM reply | 🟡 partial | Route exists (`/api/advisor/explain`); response gated by auth. Code confirms LLM reply path + `stripVerbatimLeak`. | Re-test with auth. | NICE-ADV-05 |
+| Tool-call rate-limit enforced — burst returns 429 | 🟡 partial | KV-backed per-user daily turn cap exists in `services/advisor/aiClient.ts` (`ai_spend:advisor:{user_id}:{date}` with 80% soft warn / 100% hard 429). Burst (per-second) rate-limit middleware not separately verified. | Add an explicit per-second burst guard or document the daily cap as the only limiter. | NICE-ADV-06 |
+| Dynamic question generator — bank-empty user gets `dyn.*` question | 🔴 red | `rg "dyn\.\|generateDynamic\|dynamic.*question"` in `cloudflare-worker/src/services/advisor/` → **0 hits**. | Implement a dynamic-question generator that fires when the persona bank is exhausted. | BLOCK-ADV-07 |
+
+---
+
+## CONTRACTS / TRUST
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Admin > Contracts union | 🟢 green | Route `cloudflare-worker/src/routes/admin_contracts.ts` mounted; test `cloudflare-worker/test/admin_contracts_union.test.mjs` exists. | — | — | — |
+| Pairwise NDAs visible | 🟡 partial | Code: `cloudflare-worker/src/services/trustEnvelope.ts`, `services/trust.ts`, `routes/trust.ts` all reference `pairwise_ndas`. `replit.md` mentions a dev-only `dev_pairwise_ndas` table — green pending prod D1 schema confirmation. | Run a read-only `SELECT name FROM sqlite_master WHERE name='pairwise_ndas'` on prod D1; flip to green if present. | NICE-TRUST-01 |
+| Sanctions screening live | 🟢 green | `cloudflare-worker/src/services/sanctions.ts` exists; called from `routes/kyc.ts`, `services/trust.ts`, `services/dueDiligence.ts`. Regression test `cloudflare-worker/test/sanctions_match.test.mjs`. | — | — | — |
+| Founder ↔ Investor 3-way NDA — intro flow issues envelope | 🟢 green | Code: `services/trustEnvelope.ts` references three-party envelopes; `cloudflare-worker/test/trust_intro.test.mjs` exists. | — | — | — |
+
+---
+
+## INTEGRATIONS
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Stripe Connect OAuth — round-trip | 🟡 partial | Provider file `cloudflare-worker/src/integrations/providers/stripe.ts` exists; referenced from `routes/needs.ts` and `integrations/registry.ts`. No live round-trip test. | Manual round-trip in dev + capture redirect. | NICE-INT-01 |
+| Stripe MRR pulls into financials — `financial_models.source='stripe'` | 🔴 red | No `source='stripe'` write path found in `cloudflare-worker/src/routes/financials.ts`. Code for Stripe MRR ingest not located. | Wire the Stripe → `financial_models.source='stripe'` pull. | BLOCK-INT-02 |
+| Google Calendar OAuth callback (axal.vc redirect) | 🟢 green | `cloudflare-worker/src/services/calendar.ts` + `replit.md` gotcha names `GOOGLE_*_CALENDAR_REDIRECT_URI` env vars. Refresh tokens encrypted at rest. | — | — | — |
+| Outlook OAuth callback (axal.vc redirect) | 🟢 green | Same — `MICROSOFT_*_CALENDAR_REDIRECT_URI` documented in `replit.md`. | — | — | — |
+| LinkedIn OAuth redirect URI — `axal.vc` (not `workers.dev`) | 🟡 partial | `routes/linkedin.ts` exists; redirect URI not inspected in this audit. | Grep `routes/linkedin.ts` for the redirect; fix if `workers.dev`. | NICE-INT-03 |
+| HubSpot, Carta, Affinity, DocuSign — present on Integrations page | 🟡 partial | `cloudflare-worker/src/integrations/providers/` contains hubspot; Carta/Affinity providers not confirmed in code-grep. DocuSign present (`replit.md` mentions DocuSign OAuth keys). | Audit `frontend/src/pages/IntegrationsPage.jsx` provider list + add missing tiles. | NICE-INT-04 |
+
+---
+
+## MARKETING / PUBLIC
+
+All four pages 404 on prod because the public surface `https://axal.vc/` is currently the **GitHub Pages Jekyll site**, which has not been published with these routes. The React SPA (which has the pages — see `frontend/src/pages/{LandingPage,SpinoutLabPage,...}.jsx`) is not the public-facing host.
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Front-page content refresh — engines/layers/lanes | 🟡 partial | `curl https://axal.vc/` returns the Jekyll site with `<title>Global Venture Partner Network — One network. Three lanes.</title>`. The "lanes" copy is there but it's still Jekyll, not the React `LandingPage`. | Decide: keep Jekyll as marketing surface OR cut over to the SPA. Refresh whichever wins. | BLOCK-MKT-01 |
+| `/spinout-lab` expansion (4-week + what-founders-get) | 🔴 red | `curl https://axal.vc/spinout-lab` → **404** (size 1804B, the Jekyll 404). SPA has `SpinoutLabPage.jsx` but it isn't reachable from the public origin. | Publish `/spinout-lab` on the Jekyll site (or proxy to SPA). | BLOCK-MKT-02 |
+| `/about` — Guillaume's card | 🔴 red | `curl https://axal.vc/about` → 404. | Ship `/about` on the public origin with Guillaume's card. | BLOCK-MKT-03 |
+| `/insights` — seed articles | 🔴 red | `curl https://axal.vc/insights` → 404. Worker has `routes/insights.ts` (private) and `routes/market_intel_public.ts`, plus `frontend/src/pages/insights/PublicInsight.jsx` — none reachable via the public marketing origin. | Publish `/insights` (Jekyll listing or SPA passthrough). | BLOCK-MKT-04 |
+| `/directory` — public directory list | 🔴 red | `curl https://axal.vc/directory` → 404. `PublicDirectoryPage.jsx` + `routes/public.ts` exist but not exposed at the marketing origin. | Publish `/directory` on the public origin. | BLOCK-MKT-05 |
+| Hero adapt — no "Three lanes —" prefix | 🔴 red | Jekyll `<title>` still says **"One network. Three lanes."** | Update the Jekyll hero copy. | BLOCK-MKT-06 |
+| Contact form → GitHub Issue — submission round-trip | 🟡 partial | `cloudflare-worker/src/routes/tickets.ts` exists (the "contact form" mounts here in code). GitHub Issue creation path not confirmed in this audit. | Confirm `tickets` route writes to GitHub Issues via the configured app token. | NICE-MKT-07 |
+
+---
+
+## ADMIN UX
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| FOUNDER_ID + PARTNER_ID generated — `users.founder_public_id NOT NULL` | 🟢 green | Code: `cloudflare-worker/src/services/publicIds.ts`, `routes/esign.ts`, `routes/admin.ts` all reference `founder_public_id` / `partner_public_id`. | Verify backfill on prod D1 (read-only `SELECT COUNT(*) WHERE founder_public_id IS NULL`). | NICE-ADM-01 |
+| `users.last_active_at` populated | 🟢 green | Middleware `cloudflare-worker/src/middleware/lastActive.ts` mounted in `index.ts`. | — | — | — |
+| Admin onboarding transcripts visible — `/admin/users/:id` Onboarding tab | 🟡 partial | `cloudflare-worker/src/routes/admin.ts` is large; transcript surface not confirmed in this audit. UI side is `frontend/src/pages/AdminPage.jsx` + `pages/admin/*`. | UI walkthrough as admin in IG. | NICE-ADM-02 |
+| Admin ongoing advisor transcripts — Ongoing tab present | 🟡 partial | `cloudflare-worker/src/routes/admin_advisor_audit.ts` exists (auditable transcript route). Tab in UI not inspected. | UI walkthrough as admin in IG. | NICE-ADM-02 |
+
+---
+
+## PAYMENTS
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Stripe checkout end-to-end — test mode | 🟡 partial | `cloudflare-worker/src/routes/billing.ts` handles checkout + webhooks. Live test mode round-trip not run. | Run a test-mode checkout end-to-end in II. | NICE-PAY-01 |
+| Tier flips on `subscription.created` | 🟢 green | `routes/billing.ts:531` handles `customer.subscription.created/updated`. | — | — | — |
+| Tier flips on `subscription.deleted` | 🟢 green | `routes/billing.ts:654` handles `customer.subscription.deleted`. | — | — | — |
+| Refund flow — admin refund issues Stripe refund | 🔴 red | `rg "refund" cloudflare-worker/src/routes/billing.ts` → **0 hits**. No admin refund endpoint exists. | Implement `POST /api/admin/billing/refund` calling `stripe.refunds.create`. | BLOCK-PAY-02 |
+| Free-tier paywall — 402 returned + UI shows upgrade | 🟢 green | `frontend/src/components/PaywallModal.jsx` + `openPaywall(lockTier)` integrated into sidebar (`App.jsx:307-339`). | — | — | — |
+
+---
+
+## SETTINGS
+
+`frontend/src/pages/SettingsPage.jsx` (≥2300 lines) hosts all tabs. All tabs load from `/api/settings/*` (mounted on the Worker via `settings.ts`). No live walkthroughs were performed in this audit — each row is `partial` pending UI verification in IC.
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Profile > Identity | 🟡 partial | Code: `PersonalIdentityCard` at `SettingsPage.jsx:521`. | Manual save/load round-trip in IC. | NICE-SET-01 |
+| Profile details | 🟡 partial | Same file. | UI walkthrough in IC. | NICE-SET-01 |
+| Legal entity | 🟡 partial | `CorporateIdentityCard` at `SettingsPage.jsx:668`. | UI walkthrough in IC. | NICE-SET-01 |
+| Digest & quiet hours | 🟡 partial | Fields at `SettingsPage.jsx:2291-2342` save to `/api/settings/notifications`. | UI walkthrough in IC. | NICE-SET-01 |
+| Visibility | 🟡 partial | Code present. | UI walkthrough in IC. | NICE-SET-01 |
+| Integrations panel | 🟡 partial | Route mounted (401 on dev curl, no 500). | UI walkthrough in IC. | NICE-SET-01 |
+| Developer | 🟡 partial | `roles: ['admin']` filter applies. | UI walkthrough as admin in IC. | NICE-SET-01 |
+| Appearance — theme persists | 🟢 green | `SettingsContext` flips `data-theme` + `.dark` on `<html>`; persisted server-side per `replit.md`. | — | — | — |
+
+---
+
+## SECURITY HEADERS
+
+Source of truth: `curl -I https://axal.vc/api/health`.
+
+| Row | Status | Observed | Next action | Issue |
+|---|---|---|---|---|
+| CSP — A+ on securityheaders.com | 🟢 green | `content-security-policy: default-src 'self'; script-src 'nonce-…' 'strict-dynamic' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://axal.vc https://www.axal.vc; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'` — nonce-based, strict-dynamic, frame-ancestors none. | Run `securityheaders.com` against `axal.vc` to confirm the A+ rating after the next deploy. | — |
+| HSTS | 🟢 green | `strict-transport-security: max-age=63072000; includeSubDomains; preload` | — | — |
+| X-Frame-Options | 🟢 green | `x-frame-options: DENY` | — | — |
+| Referrer-Policy | 🟡 partial | Observed `referrer-policy: no-referrer` — **stricter** than the spec's `strict-origin-when-cross-origin`. Functionally fine, but it disagrees with the spec row. | Reconcile: either accept `no-referrer` and update the checklist, or relax to `strict-origin-when-cross-origin`. | NICE-SEC-01 |
+
+Extras observed (positive): `cross-origin-opener-policy: same-origin`, `cross-origin-resource-policy: same-site`, `permissions-policy` with payment/usb/bluetooth/etc. all disabled, `x-content-type-options: nosniff`, `report-to` + `nel` configured, `vary: Origin` present, `access-control-allow-credentials: true`.
+
+---
+
+## OPS
+
+| Row | Status | Check | Observed | Next action | Issue |
+|---|---|---|---|---|---|
+| Tail Worker forwarding to R2 | 🟢 green | Root `wrangler.toml:294-297` + `:408-412` declares `[[tail_consumers]] service = "studioos-tail"`. The tail worker lives at `cloudflare-worker-tail/` and writes to R2 bucket `studioos-logs` via `env.LOGS.put()` (see `cloudflare-worker-tail/src/index.ts:89`). | Operator: confirm R2 bucket has recent objects via dashboard or `wrangler r2 object list`. | — |
+| DLQ exists + visible in admin — `admin/monitoring/dlq` panel | 🟡 partial | `wrangler.toml:176-177` declares `max_retries=3, dead_letter_queue="studioos-job-queue-dlq"` (mirrored for prod at `:367-368`); queue plumbing in `cloudflare-worker/src/queue-consumer.ts` + `services/queue.ts`. **However**, no admin panel route surfaces DLQ contents (`rg "dlq" cloudflare-worker/src/routes/admin*.ts` → 0 hits). | Add an admin route + UI surface for `studioos-job-queue-dlq` content + retry. | BLOCK-OPS-02 |
+| `/api/health` deep check returns ok per binding | 🟢 green | Live: `{"status":"ok","app":"StudioOS API","runtime":"Cloudflare Workers","bindings":{"db":true,"kv_tokens":true,"kv_rate_limits":true,"durable_pipeline":true,"durable_onboarding":true}}` | — | — |
+| Cron triggers firing — recent runs visible | 🟡 partial | `wrangler.toml:263-270` declares 6 crons (`* * * * *`, `0 3 * * *`, `0 */6 * * *`, `0 4 * * *`, `0 9 * * *`, `0 9 * * 1`) — mirrored under `[env.production]` at `:413`. Cadences are firing per CF runtime, but no admin panel exposes "last run / next run" timestamps. | Add a last-run timestamp surface to the admin monitoring panel. | NICE-OPS-03 |
+| Workers Traces enabled — trace visible per request | 🔴 red | `wrangler.toml:283-286` explicitly sets `[observability.traces] enabled = false`. Logs are enabled (`[observability.logs] enabled = true`); traces are off. | Flip `[observability.traces].enabled = true` (and `[env.production.observability.traces]` if mirrored) and redeploy. | BLOCK-OPS-04 |
+
+---
+
+## ICP walkthroughs — deferred to IC/IG
+
+The task asks for a sign-up + walkthrough as each of the 5 ICPs (Founder, Investor, Operating Partner, Mentor, Admin). Since prod magic-link and passkey are 🔴 red (no `/api/auth/magic/start`, no passkey), real prod sign-up is blocked. Dev FastAPI has a "demo investor" + "demo founder" seed (per `backend/app/services/demo_seed.py`), but that only covers 2 of the 5 ICPs and doesn't represent prod auth.
+
+**Decision:** Defer the 5-ICP walkthrough to IC (empty/error/mobile/a11y) once IB lands magic-link + passkey on the Worker. Track as `BLOCK-WALKTHROUGH-01`.
+
+---
+
+## Punch list — red/partial rows grouped by owning PR
+
+### IB — Email + Notifications (also captures magic-link auth + auth gaps)
+- BLOCK-AUTH-01 — Magic-link signup on Worker
+- BLOCK-AUTH-02 — Passkey registration on Worker
+- BLOCK-AUTH-03 — Step-up middleware
+- NICE-AUTH-04 — Rename or document `/sessions/revoke-all` ↔ `/sign-out-everywhere`
+- NICE-500-01 / NICE-500-02 / NICE-500-07 — Re-test the empty-state + advisor `/explain` routes once auth tokens are issuable
+
+### IC — Empty/Error/Mobile/A11y
+- NICE-500-03 — Wellbeing checkins POST integration test
+- NICE-500-04 — Verify `/api/projects/:id` 404 contract under auth
+- NICE-SET-01 — Walk every Settings tab (Identity / Details / Legal entity / Digest / Visibility / Integrations / Developer)
+- BLOCK-WALKTHROUGH-01 — Run the 5-ICP walkthrough once IB lands auth
+
+### ID — Public Marketing
+- BLOCK-MKT-01 — Decide Jekyll vs SPA as the public origin + refresh front page
+- BLOCK-MKT-02 — Publish `/spinout-lab`
+- BLOCK-MKT-03 — Publish `/about` (Guillaume's card)
+- BLOCK-MKT-04 — Publish `/insights`
+- BLOCK-MKT-05 — Publish `/directory`
+- BLOCK-MKT-06 — Drop "Three lanes —" prefix
+- NICE-MKT-07 — Confirm contact form → GitHub Issue round-trip
+
+### IE — Backup + DR / Ops
+- BLOCK-OPS-02 — DLQ admin panel surface (queue + DLQ are wired in `wrangler.toml`; UI surface missing)
+- BLOCK-OPS-04 — Flip `[observability.traces].enabled` to `true`
+- NICE-OPS-03 — Surface cron last-run / next-run timestamps in admin
+- NICE-500-08 — WS upgrade spot-check (`/api/pipeline/ws/overview` + `/api/onboarding/ws/*`)
+
+### IF — Onboarding Checklist
+- BLOCK-500-05 — `/api/pipeline/active` 404 (referenced from the onboarding/dashboard error board)
+- BLOCK-500-06 — `/api/legalcap/capital/lp-portal` 404
+
+### IG — Cmd+K + Help + Chat (and admin UX)
+- NICE-ADM-01 — Confirm FOUNDER_ID / PARTNER_ID backfill on prod D1
+- NICE-ADM-02 — Admin Onboarding tab + Ongoing advisor transcripts UI
+
+### IH — Data Import (and integrations data pulls)
+- BLOCK-INT-02 — Stripe MRR → `financial_models.source='stripe'`
+- NICE-INT-01 — Stripe Connect OAuth live round-trip
+- NICE-INT-03 — LinkedIn OAuth redirect URI audit
+- NICE-INT-04 — Confirm HubSpot/Carta/Affinity/DocuSign tiles on Integrations page
+
+### II — Refer&Earn Payouts (and payments)
+- BLOCK-PAY-02 — Refund flow (admin endpoint + Stripe refund call)
+- NICE-PAY-01 — Stripe test-mode checkout end-to-end
+
+### Advisor follow-ups (not assigned to a beta PR — own track)
+- BLOCK-ADV-02 — Repeat-question regression test
+- BLOCK-ADV-04 — Create the `advisor-ongoing` AI Gateway slug (operator action per `replit.md`)
+- BLOCK-ADV-07 — Dynamic question generator (`dyn.*`)
+- NICE-ADV-01 — Expand `ADMIN_BANK`
+- NICE-ADV-03 — Capture an SSE transcript with model + latency
+- NICE-ADV-05 — Free-form `/explain` smoke with auth
+- NICE-ADV-06 — Per-second burst guard
+
+### Trust / Sec / Misc
+- NICE-TRUST-01 — Confirm `pairwise_ndas` table exists on prod D1 (not just dev)
+- NICE-SEC-01 — Reconcile `Referrer-Policy: no-referrer` vs spec
+
+---
+
+## Filing the issues
+
+The GitHub integration is **not connected** in the audit environment (verified via `listConnections('github')` → 0 results). Issue bodies are therefore staged in **`BETA_READINESS_ISSUES_2026-05-20.md`** in paste-ready form. Each row above with an Issue id (e.g. `BLOCK-AUTH-01`) has a matching section in that companion file.
+
+To file them once the integration is connected (or via the GitHub CLI):
+
+```bash
+# After connecting the GitHub integration in Replit (or `gh auth login`):
+gh repo set-default AxalNetwork/StudioOS
+# Then iterate through BETA_READINESS_ISSUES_2026-05-20.md and run:
+gh issue create --title "<title>" --body-file <(awk …) --label "beta-blocker"   # for BLOCK-*
+gh issue create --title "<title>" --body-file <(awk …) --label "beta-nice"      # for NICE-*
+```
+
+Once filed, replace the `BLOCK-*` / `NICE-*` placeholders in this audit's "Issue" column with the real `#NN` numbers.
+
+---
+
+## Re-audit schedule
+
+A GitHub Actions cron at `.github/workflows/beta-readiness-reaudit.yml` fires on 2026-06-03 (2 weeks out) and again every 14 days. The job opens a tracking issue titled `Beta Readiness re-audit — <YYYY-MM-DD>` referencing this file so the next pass has a clear hand-off.

@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  D3678 (#3678). CONSTRUCTED, NOT RECORDED (UNVERIFIED).
+
+  Google's sign-in page as src/adapters/meet/signin.ts reads it: the
+  `identifier` field and `#identifierNext`, the `Passwd` field and
+  `#passwordNext`, the `totpPin` field and `#totpNext`, the method list's
+  `data-challengetype`, and Google's own words for a refusal or a challenge.
+  It is not a copy of Google's page. The live check ("Diagnose Eadwyn AI",
+  #3588) confirms or corrects the hooks; this fixture then follows.
+
+  The test harness replaces __SCENARIO__ with one of:
+    ok, ok_method, bad_email, bad_password, challenge, code_refused,
+    code_once, no_method, unknown_after_password, session_alive.
+  window.__signin.log keeps what was typed, so a test can check it, and the
+  page goes to https://meet.google.com/ once signed in, as Google's continue does.
+  No real name, address or secret is in it.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Sign in – Google Accounts</title></head>
+<body>
+<main id="app"></main>
+
+<template id="email">
+  <h1>Sign in</h1><p>Use your Google Account</p>
+  <input type="email" name="identifier" id="identifierId" aria-label="Email or phone">
+  <div id="identifierNext"><button type="button">Next</button></div>
+</template>
+<template id="email_refused">
+  <h1>Sign in</h1>
+  <input type="email" name="identifier" id="identifierId" aria-label="Email or phone">
+  <p>Couldn’t find your Google Account</p>
+  <div id="identifierNext"><button type="button">Next</button></div>
+</template>
+<template id="password">
+  <h1>Welcome</h1>
+  <input type="password" name="Passwd" aria-label="Enter your password">
+  <div id="passwordNext"><button type="button">Next</button></div>
+</template>
+<template id="password_refused">
+  <h1>Welcome</h1>
+  <input type="password" name="Passwd" aria-label="Enter your password">
+  <p>Wrong password. Try again or click Forgot password to reset it.</p>
+  <div id="passwordNext"><button type="button">Next</button></div>
+</template>
+<template id="phone_prompt">
+  <h1>2-Step Verification</h1><p>Check your phone</p>
+  <button type="button" id="another">Try another way</button>
+</template>
+<template id="methods">
+  <h1>Choose how you want to sign in:</h1>
+  <ul>
+    <li><div role="link" data-challengetype="39">Tap Yes on your phone or tablet</div></li>
+    <li><div role="link" data-challengetype="6">Get a verification code from the Google Authenticator app</div></li>
+  </ul>
+</template>
+<template id="methods_without_code">
+  <h1>Choose how you want to sign in:</h1>
+  <ul><li><div role="link" data-challengetype="39">Tap Yes on your phone or tablet</div></li></ul>
+</template>
+<template id="code">
+  <h1>2-Step Verification</h1><p>Get a verification code from the Google Authenticator app</p>
+  <input type="tel" name="totpPin" id="totpPin" aria-label="Enter code">
+  <div id="totpNext"><button type="button">Next</button></div>
+</template>
+<template id="code_refused">
+  <h1>2-Step Verification</h1>
+  <input type="tel" name="totpPin" id="totpPin" aria-label="Enter code">
+  <p>Wrong code. Try again.</p>
+  <div id="totpNext"><button type="button">Next</button></div>
+</template>
+<template id="challenge"><h1>Verify it’s you</h1><p>This device isn’t recognized.</p></template>
+<template id="unknown"><h1>Something new</h1><p>A screen the bot has not seen.</p></template>
+
+<script>
+(() => {
+  const scenario = '__SCENARIO__';
+  const app = document.getElementById('app');
+  const log = { email: null, password: null, codes: [] };
+  let codesSeen = 0;
+  const done = () => { location.href = 'https://meet.google.com/landing'; };
+  const value = (sel) => app.querySelector(sel).value;
+  function render(state) {
+    app.replaceChildren(document.getElementById(state).content.cloneNode(true));
+    app.dataset.state = state;
+    app.querySelector('#identifierNext button')?.addEventListener('click', () => {
+      log.email = value('input[name="identifier"]');
+      if (scenario === 'bad_email') render('email_refused');
+      else if (scenario === 'challenge') render('challenge');
+      else render('password');
+    });
+    app.querySelector('#passwordNext button')?.addEventListener('click', () => {
+      log.password = value('input[name="Passwd"]');
+      if (scenario === 'bad_password') render('password_refused');
+      else if (scenario === 'ok_method') render('phone_prompt');
+      else if (scenario === 'no_method') render('phone_prompt');
+      else if (scenario === 'unknown_after_password') render('unknown');
+      else render('code');
+    });
+    app.querySelector('#another')?.addEventListener('click', () => render(scenario === 'no_method' ? 'methods_without_code' : 'methods'));
+    app.querySelector('[data-challengetype="6"]')?.addEventListener('click', () => render('code'));
+    app.querySelector('#totpNext button')?.addEventListener('click', () => {
+      log.codes.push(value('input[name="totpPin"]'));
+      codesSeen += 1;
+      if (scenario === 'code_refused' || (scenario === 'code_once' && codesSeen === 1)) render('code_refused');
+      else done();
+    });
+  }
+  window.__signin = { log, render };
+  if (scenario === 'session_alive') done(); else render('email');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+Objective
+  POST /api/wellbeing/checkins returns 500 (visible in the screenshot
+  "Internal server error" + previous error dashboard hits). Today's
+  check-in flow must succeed end-to-end.
+
+Diagnostic (do this first, log results in PR description)
+  1. wrangler tail (live worker logs) while reproducing the failure.
+     Capture the exact stack / error text.
+  2. Likely causes, in order:
+       a. wellbeing_checkins table missing or has different columns
+           than the handler expects. Verify with
+           PRAGMA table_info(wellbeing_checkins);
+       b. The "What's on your mind today?" tags array isn't JSON-
+           stringified before insert; D1 rejects.
+       c. Encryption of free_text fails because PII_KEK_HEX is
+           unset; the handler throws.
+       d. POST body shape doesn't match handler's Zod schema
+           (frontend sends fields named mood_1to10, handler expects
+           mood; mismatch).
+
+Fix
+  1. Schema (cloudflare-worker/sql/migrations/00xx_wellbeing.sql):
+       CREATE TABLE IF NOT EXISTS wellbeing_checkins (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         user_id INTEGER NOT NULL,
+         captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+         mood INTEGER NOT NULL,         -- 1..5
+         stress INTEGER NOT NULL,        -- 1..5
+         sleep INTEGER NOT NULL,         -- 1..5
+         energy INTEGER NOT NULL,        -- 1..5
+         focus INTEGER NOT NULL,         -- 1..5
+         connection INTEGER NOT NULL,    -- 1..5
+         tags_json TEXT,                 -- JSON array of strings
+         free_text_ciphertext TEXT,     -- nullable; encrypted if KEK set
+         free_text_plain TEXT             -- temporary backstop while
+                                          -- column cipher is in pilot
+       );
+       CREATE INDEX IF NOT EXISTS idx_wellbeing_checkins_user
+         ON wellbeing_checkins(user_id, captured_at DESC);
+
+  2. Route handler (cloudflare-worker/src/routes/wellbeing.ts):
+     wellbeing.post('/checkins', async (c) => {
+       const user = await requireAuth(c);
+       await ensureTablesExist(c.env);
+
+       // Accept both naming conventions for the next few weeks.
+       const raw = await c.req.json();
+       const body = {
+         mood:        raw.mood ?? raw.mood_1to10,
+         stress:      raw.stress ?? raw.stress_1to10,
+         sleep:       raw.sleep ?? raw.sleep_1to5 ?? raw.sleep_hours,
+         energy:      raw.energy ?? raw.energy_1to10,
+         focus:       raw.focus ?? raw.focus_1to10,
+         connection:  raw.connection ?? raw.connection_1to10 ??
+                       raw.social_1to10,
+         tags:        Array.isArray(raw.tags) ? raw.tags
+                       : Array.isArray(raw.tags_json) ? raw.tags_json
+                       : [],
+         free_text:   raw.free_text || raw.notes || null,
+       };
+
+       const validation = z.object({
+         mood: z.number().int().min(1).max(5),
+         stress: z.number().int().min(1).max(5),
+         sleep: z.number().int().min(1).max(5),
+         energy: z.number().int().min(1).max(5),
+         focus: z.number().int().min(1).max(5),
+         connection: z.number().int().min(1).max(5),
+         tags: z.array(z.string().max(40)).max(8),
+         free_text: z.string().max(4000).nullable(),
+       }).safeParse(body);
+       if (!validation.success) {
+         return c.json({ error: 'Invalid input',
+                          fields: validation.error.flatten() }, 400);
+       }
+
+       // Encrypt free_text if KEK is set; else store cleartext (with
+       // a server log warning).
+       let freeTextCiphertext = null, freeTextPlain = null;
+       if (body.free_text) {
+         if (c.env.PII_KEK_HEX) {
+           try {
+             freeTextCiphertext = await encryptColumn(
+               c.env, body.free_text,
+               `wellbeing_checkins:free_text:${user.id}:${Date.now()}`);
+           } catch (e) {
+             log('warn', 'wellbeing encryption failed; falling back',
+                  { user_id: user.id });
+             freeTextPlain = body.free_text;
+           }
+         } else {
+           freeTextPlain = body.free_text;
+         }
+       }
+
+       const sql = getSQL(c.env);
+       try {
+         const [row] = await sql`
+           INSERT INTO wellbeing_checkins
+             (user_id, mood, stress, sleep, energy, focus, connection,
+              tags_json, free_text_ciphertext, free_text_plain)
+           VALUES
+             (${user.id}, ${body.mood}, ${body.stress}, ${body.sleep},
+              ${body.energy}, ${body.focus}, ${body.connection},
+              ${JSON.stringify(body.tags)}, ${freeTextCiphertext},
+              ${freeTextPlain})
+           RETURNING id, captured_at
+         `;
+         return c.json({ ok: true, id: row.id,
+                          captured_at: row.captured_at }, 201);
+       } catch (e) {
+         log('error', 'wellbeing.checkins insert failed',
+              { user_id: user.id, err: redact(e) });
+         return c.json({ error: 'Could not save check-in' }, 500);
+       } finally {
+         await sql.end();
+       }
+     });
+
+  3. Frontend (WellbeingPage.jsx):
+     Submit body must use the canonical field names. Inline error
+     state replaces the generic "Internal server error" red text:
+       - 400 → field-level error display
+       - 500 → "Couldn't save — try again. If this persists, contact
+                 support."
+
+Tests
+  test/wellbeing.post.test.ts:
+    - valid body → 201
+    - missing field → 400 with field-level error
+    - oversized free_text → 400
+    - too many tags → 400
+    - no PII_KEK_HEX in env → 201 with plaintext fallback +
+      warn log
+
+Acceptance
+  - Submitting the form in the screenshot returns 201, not 500.
+  - Field-level validation errors surface inline.
+  - 30 days of check-ins render the chart on the page.

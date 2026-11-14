@@ -1,0 +1,25 @@
+// D920: synthetic D918 responses shared by the overview and desk integration tests.
+export const overviewFixture = () => ({
+  weeks: 12,
+  queue: { available: true, count: 3, oldest_hours: 80, overdue: 1, overdue_after_hours: 72, waiting_from_created_at: 1 },
+  upcoming_30d: { available: true, events: 8, seats_taken: 214, full: 2 },
+  waitlisted: { available: true, registrations: 37, events: 4 },
+  weekly: { available: true, weeks: [
+    { week_start: '2026-10-05', registrations: 0, checkins: 0 },
+    { week_start: '2026-10-12', registrations: 10, checkins: null },
+    { week_start: '2026-10-19', registrations: 8, checkins: 4, to_date: true },
+  ], registrations: { this_period: 18, previous_period: 12 } },
+  show_up: { available: true, events: 9, seats_taken: 100, attended: 61, rate: 0.61, recent: [{ id: 1, title: 'Synthetic ended event', attended: 6, seats_taken: 10, rate: 0.6 }] },
+  by_status: { available: true, counts: { draft: 1, pending_review: 3, published: 20, rejected: 2, cancelled: 4, other: 0 } },
+  by_type: { available: true, counts: { workshop: 7, demo_day: 3, office_hours: 0, lp_briefing: 0, networking: 0, roundtable: 0, fireside: 0, conference: 0, webinar: 0, meetup: 0, social: 0, other: 0 } },
+  by_format: { available: true, counts: { online: 3, in_person: 2, hybrid: 0, not_recorded: 0 } },
+  by_role: { available: true, counts: { founder: 12, investor: 5, advisor: 3, partner: 2, exploring: 1, guest: 2, admin: 1, not_recorded: 4 } },
+  by_source: { available: true, counts: { signed_up: 20, invitation: 7, free_seat: 3 }, added_by_admin: { recorded: false, reason: 'No path records an admin-added seat.' } },
+  paid: { available: true, count: 5, by_currency: [{ currency: 'usd', count: 3, amount_cents: 2400, amount_not_recorded: 0 }, { currency: 'eur', count: 2, amount_cents: 1800, amount_not_recorded: 0 }] },
+  payment_pending: { available: true, count: 4 },
+  free_seats: { available: true, count: 3 },
+  cancelled: { available: true, events: 2, with_paid_tickets: 1, counted_by: 'starts_at' },
+  needs_attention: { available: true, total: 9, items: ['overdue', 'full', 'low_signups', 'clash', 'changed_after_approval', 'paid_on_cancelled', 'full'].map((kind, i) => ({ kind, event_id: i + 1, title: `Synthetic attention ${i + 1}`, starts_at: '2026-11-01T12:00:00Z', waiting_hours: 80, paid_tickets: 5, seats_taken: 10, capacity: 10, waitlisted: 2 })) },
+  views: { recorded: false, reason: 'No store counts views of an event page, so the funnel starts at registration.' },
+  feedback: { recorded: false, reason: 'Events have no feedback form yet.' },
+});

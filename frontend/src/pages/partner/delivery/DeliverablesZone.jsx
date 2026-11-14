@@ -1,0 +1,602 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../../../lib/api';
+import {
+  ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
+  // `StatCard` went with the four tiles it drew: the strip is the artboard's
+  // own composition now, and `ShipTile` below can draw an absence as a chip
+  // rather than as an em dash a reader mistakes for zero.
+  Section, Field, SaveNote, NotComputable,
+  NoPartnerProfile, isNoPartnerProfile,
+  inputClass, buttonClass, ghostButtonClass, formatDay,
+} from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
+import { DeliveryNote } from './deliveryEdits';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+
+/**
+ * Delivery · Deliverables — `/delivery/deliverables`.
+ *
+ * THE ZONE'S POINT, AND THE THING IT CANNOT DO. A deliverable sent and never
+ * opened is the firm's most expensive state: invoiced, unreviewed, and blocking
+ * the next milestone. That is what this log is for.
+ *
+ * But `opened_at` and `signed_off_at` are the CLIENT'S TO SET — migration
+ * 208:160 is explicit that only the founder side can truthfully say a thing was
+ * read, and a partner-side write to either would be the firm reporting a metric
+ * about itself. No route accepts them and no control here offers them.
+ *
+ * SO ON THIS BUILD EVERY SENT DELIVERABLE READS *UNOPENED*, FOREVER. That is a
+ * real consequence and it goes on the page rather than being hidden: the count
+ * is true, the median time-to-open is refused outright, and the copy says the
+ * unopened state means "we do not know" rather than "the client ignored it".
+ * Rendering it the other way would turn a missing client-side surface into an
+ * accusation about clients.
+ *
+ * WHAT WOULD FIX IT is a founder-side surface that records an open — not a
+ * column here. #5314 part 1 built it: the client opens a shared deliverable
+ * from its engagement (`POST /api/client/deliverables/:uid/open`), which records
+ * the first open once. From then a sent deliverable with a link reads Opened
+ * or Never opened; one sent before, or with no link, still reads "Read status
+ * unavailable" and says which.
+ */
+
+function OpenedState({ row, readsUnavailable = false }) {
+  if (!row.sent_at) return <span className="text-axal-faint">Not sent yet</span>;
+  if (row.signed_off_at) return <Pill tone="ok">Signed off {formatDay(row.signed_off_at)}</Pill>;
+  // #5314 part 1: the open is the client's, recorded against the version they
+  // were shown; an edit after it is not passed off as what they read.
+  if (row.opened_at && row.opened_current === false) {
+    return <Pill tone="info">Opened an earlier version {formatDay(row.opened_at)}</Pill>;
+  }
+  if (row.opened_at) return <Pill tone="info">Opened {formatDay(row.opened_at)}</Pill>;
+  // NOT a red "ignored" pill. The absence is ours, not the client's — and while
+  // opens cannot be observed (#4690) it is not "unopened" at all.
+  if (row.read_state === 'unopened') return <Pill tone="warn">Unopened</Pill>;
+  return (
+    <NotComputable why={notRecordedWhy(row, readsUnavailable)}>
+      Read status unavailable
+    </NotComputable>
+  );
+}
+
+/**
+ * #5314 part 1: why one sent row's open cannot be read. Opens are recorded
+ * when the client follows the shared link, from the day that began; a row sent
+ * before then, or with no link, says so rather than "Never opened".
+ */
+function notRecordedSub(row, readsUnavailable = false) {
+  if (readsUnavailable || row?.read_state !== 'not_recorded') return 'client opens are not currently tracked';
+  return row.link_url
+    ? 'sent before client opens were recorded'
+    : 'sent without a link, so the client has nothing to open here';
+}
+
+function notRecordedWhy(row, readsUnavailable = false) {
+  const sub = notRecordedSub(row, readsUnavailable);
+  return `${sub.charAt(0).toUpperCase()}${sub.slice(1)}.`;
+}
+
+function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSave, onDelete, note }) {
+  const [edit, setEdit] = useState(false);
+  const [draft, setDraft] = useState(row);
+  const editButton = useRef(null);
+  // Re-seeded only when THIS record's saved values change. Keying on the row
+  // object reset the open editor on every refetch, including the one a save on
+  // another row triggers (#4698).
+  const seed = signature(row.title, row.version, row.link_url, row.sent_at);
+  useEffect(() => { setDraft(row); }, [seed]);
+  const busy = saving || deleting;
+
+  return (
+    <div className="border-t border-axal-hairline py-3 first:border-t-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-extrabold tracking-tight">{row.title}</span>
+            {row.version && <Pill tone="neutral">{row.version}</Pill>}
+            <OpenedState row={row} readsUnavailable={readsUnavailable} />
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11.5px] text-axal-faint">
+            <span>{row.founder_name || row.need_title || row.engagement_uid}</span>
+            {row.sent_at
+              ? <span>sent {formatDay(row.sent_at)}{row.days_since_sent != null && ` · ${row.days_since_sent}d ago`}</span>
+              : <span>not sent</span>}
+            {row.link_url && (
+              <a href={row.link_url} target="_blank" rel="noreferrer" className="text-amber-700 underline">
+                Open link
+              </a>
+            )}
+          </div>
+        </div>
+        <button type="button" ref={editButton} className={ghostButtonClass} aria-expanded={edit}
+          onClick={() => { if (edit) setDraft(row); setEdit((v) => !v); }}>
+          {edit ? 'Cancel' : 'Edit'}
+        </button>
+      </div>
+
+      {edit && (
+        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Title">
+              <input className={inputClass} value={draft.title || ''} maxLength={200}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+            </Field>
+            <Field label="Version" hint="Optional — v2, final, rev C.">
+              <input className={inputClass} value={draft.version || ''} maxLength={60}
+                onChange={(e) => setDraft({ ...draft, version: e.target.value })} />
+            </Field>
+            <Field label="Link">
+              <input className={inputClass} value={draft.link_url || ''} maxLength={600}
+                onChange={(e) => setDraft({ ...draft, link_url: e.target.value })} />
+            </Field>
+            <Field label="Sent on" hint="Empty means not sent. Clearing it un-sends the record.">
+              <input className={inputClass} value={draft.sent_at || ''} maxLength={40} placeholder="2026-09-04"
+                onChange={(e) => setDraft({ ...draft, sent_at: e.target.value })} />
+            </Field>
+          </div>
+          {/*
+            NO "mark opened" CONTROL, and its absence is the feature. Only the
+            client can say a thing was read; a button here would let the firm
+            record a metric about itself and would make every opened count in
+            the product worthless.
+          */}
+          <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
+            There is no control here for “opened” or “signed off”. Those are the
+            client’s to set, and this product has no surface where they can —
+            so every sent item reads unopened, and that reflects us rather than
+            them.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* aria-disabled, not disabled, while a request is out: a disabled
+                button drops keyboard focus, and the person is still here when
+                the save is refused. The handler's own guard is what stops a
+                second request. */}
+            <button type="button" className={buttonClass} aria-disabled={busy || undefined}
+              onClick={async () => {
+                if (busy) return;
+                const ok = await onSave(row, draft);
+                // Close only on a confirmed save: a refused one leaves the
+                // typed values in the open editor, ready for another go.
+                if (ok) { setEdit(false); editButton.current?.focus?.(); }
+              }}>{saving ? 'Saving…' : 'Save'}</button>
+            <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
+              aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(row); }}>Delete</button>
+          </div>
+          <DeliveryNote note={note?.scope === `dl:${row.id}` ? note : null} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The strip tile, in the anatomy the artboards share. */
+function ShipTile({ label, value, note, nr = false }) {
+  return (
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1.5">
+        {nr ? <NotRecorded /> : (
+          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
+        )}
+      </div>
+      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+    </div>
+  );
+}
+
+export default function PartnerDeliverablesZone() {
+  const { state: read, load } = useZoneRead(async () => {
+    // The engagement list comes from the health read — it is the one endpoint
+    // that already returns every engagement this firm holds, and a second
+    // list route would be a third place the same set is assembled.
+    const [d, h] = await Promise.all([
+      api.listPartnerDeliverables(),
+      api.getPartnerDeliveryHealth(),
+    ]);
+    return { data: d || {}, engagements: Array.isArray(h?.items) ? h.items : [] };
+  }, 'The deliverables log did not load.');
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    engagements: read.data?.engagements ?? null,
+  };
+  const [view, setView] = useState('never_opened');
+  const [note, setNote] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const EMPTY_ITEM = { engagement_id: '', title: '', version: '', link_url: '', sent_at: '' };
+  const [newItem, setNewItem] = useState(EMPTY_ITEM);
+  const { run: runMutation, isPending } = useMutations();
+  const addToggle = useRef(null);
+  const [focusAdd, setFocusAdd] = useState(0);
+
+  // One operation, one key: a second click on the same operation while its
+  // request is out starts nothing, and a different row is not held up by it.
+  // Resolves true only for a CONFIRMED success, which is what lets a caller
+  // close or reset its editor afterwards.
+  const act = useCallback(async (key, fn, ok, scope) => {
+    setNote(null);
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => act(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
+      return false;
+    }
+    setNote({ ok: true, text: ok, scope });
+    load();
+    if (fn.retried) fn.after?.();
+    return true;
+  }, [runMutation, load]);
+
+  // After a confirmed create the form is gone; focus goes to the control that
+  // reopens it, so a keyboard user is not dropped onto the page.
+  useEffect(() => {
+    if (focusAdd) addToggle.current?.focus?.();
+  }, [focusAdd, read.data]);
+
+  const d = state.data;
+  // D4822 part 2: `?engagement=` (from the engagement Sheet) narrows the log to one engagement; every figure below
+  // is then that engagement's, and the bar above the log says so.
+  const focus = useEngagementFocus();
+  const allItems = Array.isArray(d?.items) ? d.items : [];
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
+  const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allItems], focus.key);
+  useEffect(() => {
+    if (focusId) setNewItem((n) => (n.engagement_id ? n : { ...n, engagement_id: focusId }));
+  }, [focusId]);
+  // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE LOG ═══════════════
+  // Never over `visible`: a figure that changes because a chip was clicked is
+  // not reporting what its label claims.
+  // #4690: UNOPENED IS A CLAIM, so it needs an instrument. `is_unopened` is true
+  // only when opens can be observed; while they cannot it is null, the count is
+  // null and nothing below calls a client's silence ours to chase.
+  const readsUnavailable = d?.read_tracking?.available === false;
+  const unopened = items.filter((r) => r.is_unopened === true);
+  const signedOff = items.filter((r) => r.signed_off_at);
+  const shippedThisMonth = items.filter((r) => r.days_since_sent != null && r.days_since_sent <= 31);
+  const clientCount = new Set(items.map((r) => r.founder_name || r.need_title).filter(Boolean)).size;
+  const oldestUnopened = useMemo(() => {
+    const sent = items.filter((x) => x.is_unopened && x.days_since_sent != null);
+    if (!sent.length) return null;
+    return sent.reduce((a, b) => (b.days_since_sent > a.days_since_sent ? b : a));
+  }, [items]);
+
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  // ══ THE `pd2` CHIP ROW ═══════════════════════════════════════════════════
+  // `Never opened` IS THE DEFAULT because the artboard selects it (`fil([…],
+  // 0)`): sent-and-not-opened is the firm's most expensive state, and a log
+  // that opens on everything buries it. `By client` is an ORDERING rather than
+  // a subset — it groups the same rows instead of removing any.
+  const visible = (() => {
+    if (view === 'never_opened') return items.filter((r) => r.sent_at && !r.opened_at);
+    if (view === 'signed_off') return items.filter((r) => r.signed_off_at);
+    if (view === 'by_client') {
+      return [...items].sort((a, b) => String(a.founder_name || '').localeCompare(String(b.founder_name || ''))
+        || String(a.title || '').localeCompare(String(b.title || '')));
+    }
+    if (view === 'all') return items;
+    return items;
+  })();
+
+  // THE ARTBOARD'S OWN ORDER — "unopened first, oldest first within it" — and
+  // it is the instrument's meta line, so the page must actually do it rather
+  // than trust whatever order the read returned. `By client` is the one chip
+  // that replaces this ordering, because that is what the chip IS.
+  const ordered = view === 'by_client' ? visible : [...visible].sort((a, b) => {
+    // #5314: rows the client could have opened and has not lead; a
+    // "Not recorded" row follows them, then the rest.
+    const au = a.is_unopened === true ? 0 : (a.sent_at && !a.opened_at ? 1 : 2);
+    const bu = b.is_unopened === true ? 0 : (b.sent_at && !b.opened_at ? 1 : 2);
+    return au - bu || (b.days_since_sent ?? -1) - (a.days_since_sent ?? -1);
+  });
+
+  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Client', 'Deliverable', 'Version', 'Sent', 'Age', 'Opened', 'Signed off'], rows: ordered, cells: (r) => [r.founder_name, r.title, r.version, r.sent_at, r.days_since_sent, r.opened_at, r.signed_off_at] } });
+
+  // NOT AN EARLY RETURN ANY MORE. This was
+  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
+  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
+  // reading this workspace saw twelve copies of one card and never a page.
+  // `ZoneBody` takes the line as a `notice` above its states, and the zone
+  // renders underneath in its own empty state, which is also the state that
+  // says what this zone holds. The gate itself is untouched: the read still
+  // 400s, so `isEmpty` is forced rather than inferred from rows that never
+  // arrived, and `error` is cleared so the shared "This did not load" card —
+  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  // The "log a deliverable" form. A function of state rather than a block in
+  // the populated body, because the FIRST deliverable is logged from the empty
+  // state, where the populated body is not drawn (#4698).
+  const creating = isPending('create');
+  const addForm = (
+    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="deliverable-add-form">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Engagement">
+          <select className={inputClass} value={newItem.engagement_id}
+            onChange={(e) => setNewItem({ ...newItem, engagement_id: e.target.value })}>
+            <option value="">Choose one</option>
+            {engagements.map((e) => (
+              <option key={e.engagement_id} value={e.engagement_id}>
+                {e.founder_name || e.need_title || e.engagement_uid}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Title">
+          <input className={inputClass} value={newItem.title} maxLength={200}
+            onChange={(e) => setNewItem({ ...newItem, title: e.target.value })} />
+        </Field>
+        <Field label="Version">
+          <input className={inputClass} value={newItem.version} maxLength={60}
+            onChange={(e) => setNewItem({ ...newItem, version: e.target.value })} />
+        </Field>
+        <Field label="Sent on" hint="Leave empty if it is not out yet.">
+          <input className={inputClass} value={newItem.sent_at} maxLength={40} placeholder="2026-09-04"
+            onChange={(e) => setNewItem({ ...newItem, sent_at: e.target.value })} />
+        </Field>
+      </div>
+      <button
+        type="button" className={`${buttonClass} mt-3`}
+        disabled={!newItem.title.trim() || !newItem.engagement_id}
+        aria-disabled={creating || undefined}
+        onClick={async () => {
+          if (creating) return;
+          const sending = newItem;
+          const ok = await act(
+            'create',
+            () => api.createPartnerDeliverable(sending.engagement_id, sending),
+            'Logged.', 'new',
+          );
+          // Reset and close only once the Worker has confirmed it. A refusal
+          // leaves every field as typed.
+          if (ok) {
+            setNewItem(EMPTY_ITEM);
+            setAdding(false);
+            setFocusAdd((n) => n + 1);
+          }
+        }}
+      >
+        {creating ? 'Logging…' : 'Log it'}
+      </button>
+      <SaveNote note={note?.scope === 'new' ? note : null} />
+    </div>
+  );
+
+  const unlinked = isNoPartnerProfile(state.error);
+  // The confirmation for a create outlives the form it was made in: the form
+  // closes on success, and an announcement inside it would go with it.
+  const createdNote = !adding && note?.scope === 'new' ? <SaveNote note={note} /> : null;
+  const refreshNote = read.refreshError ? (
+    <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+      The log could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+    </p>
+  ) : null;
+
+  return (
+    <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={unlinked ? [] : partnerZoneFilters('delivery/deliverables', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
+    <ZoneBody
+      loading={state.loading}
+      error={unlinked ? null : state.error}
+      onRetry={load}
+      notice={unlinked ? <NoPartnerProfile /> : null}
+      isEmpty={unlinked || (items.length === 0)}
+      empty={(
+        <div className="space-y-4">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={0} total={allItems.length} noun="deliverables" onClear={focus.clear} />
+        {/* D4822 (canvas `First deliverable`): one line of purpose and the action that is reachable from here. */}
+        <NothingYet
+          title="No deliverables yet"
+          body="Keep a record of work handed to clients."
+          action={engagements.length > 0
+            ? <button type="button" ref={addToggle} className={buttonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>{adding ? 'Cancel' : 'Log first deliverable'}</button>
+            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
+        />
+        {refreshNote}
+        {createdNote}
+        {adding && engagements.length > 0 && addForm}
+        </div>
+      )}
+    >
+      <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+        {refreshNote}
+        {createdNote}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={items.length} total={allItems.length} noun="deliverables" onClear={focus.clear} />
+        <ZoneHeading
+          title="Shipped work"
+          blurb="Keep the durable log of work handed to clients and what happened next."
+          action={engagements.length > 0 && (
+            <button type="button" ref={addToggle} className={ghostButtonClass} aria-expanded={adding} onClick={() => setAdding((v) => !v)}>
+              {adding ? 'Cancel' : 'Log deliverable'}
+            </button>
+          )}
+        />
+
+        {/* ══ THE `pd2` STRIP ══════════════════════════════════════════════
+            `Never opened · Signed off · Shipped this month · Median days to
+            open`. The fourth reads absent, and the artboard says why in its own
+            instNote: averaging a handful of opens "would look like a metric".
+            Here the reason is stronger still — `opened_at` is the CLIENT'S
+            column and no founder-side surface writes it, so the sample is not
+            small, it is empty. */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <ShipTile
+            label="Never opened"
+            value={String(unopened.length)}
+            nr={readsUnavailable}
+            note={readsUnavailable
+              ? 'read status unavailable: client opens are not currently tracked'
+              : (oldestUnopened
+                ? `oldest ${oldestUnopened.days_since_sent} days out`
+                : 'nothing sent and unopened')}
+          />
+          <ShipTile
+            label="Signed off"
+            value={String(signedOff.length)}
+            note={signedOff.length ? 'the client marked it accepted' : 'nothing signed off yet'}
+          />
+          <ShipTile
+            label="Shipped this month"
+            value={String(shippedThisMonth.length)}
+            note={`across ${clientCount} client${clientCount === 1 ? '' : 's'}`}
+          />
+          <ShipTile
+            label="Median days to open"
+            nr={readsUnavailable || d?.median_days_to_open == null}
+            value={d?.median_days_to_open == null ? undefined : String(d.median_days_to_open)}
+            note={readsUnavailable || !d?.median_days_to_open_note
+              ? 'Read time unavailable · client opens are not currently tracked'
+              : d.median_days_to_open_note}
+          />
+        </div>
+
+        {d?.unopened_note && (
+          <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.unopened_note}</p>
+        )}
+
+        {adding && addForm}
+
+        <Instrument
+          testid="shipped-log"
+          title="Shipped log"
+          meta="Unopened first, oldest first within it"
+          cols="1fr 2.1fr .8fr .9fr 1.1fr"
+          head={['Client', 'Deliverable', 'Sent', 'Age', 'Acknowledgment']}
+          rows={ordered.map((row) => {
+            const isUnopened = row.is_unopened === true;
+            return {
+              key: row.id,
+              rowClass: isUnopened ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+              cells: [
+                row.founder_name ? { text: row.founder_name } : { nr: true },
+                { text: row.title, sub: row.version ? `v${row.version}` : undefined },
+                row.sent_at ? { text: formatDay(row.sent_at) } : { nr: true },
+                // AGE IS SINCE SENDING, and it is the number the row is sorted
+                // by. An unsent draft has no age, which is not the same as an
+                // age of zero.
+                row.days_since_sent == null
+                  ? { nr: true }
+                  : { text: `${row.days_since_sent} d ago` },
+                // THE ONE COLUMN THIS PRODUCT CANNOT FILL FROM ITS OWN SIDE.
+                // `opened_at` and `signed_off_at` are the CLIENT'S to set —
+                // migration 208 says so and no route here accepts either — so a
+                // sent-and-unopened row says exactly that rather than claiming
+                // the client ignored it.
+                row.signed_off_at
+                  ? { pill: 'Signed off', pillTone: 'ok' }
+                  : (row.opened_at
+                    ? { pill: 'Opened', pillTone: 'info' }
+                    : (row.sent_at
+                      ? (row.read_state === 'not_recorded'
+                        ? { pill: 'Read status unavailable', pillTone: 'neutral', sub: notRecordedSub(row, readsUnavailable) }
+                        : { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' })
+                      : { pill: 'Not sent', pillTone: 'neutral' })),
+              ],
+            };
+          })}
+          note={readsUnavailable
+            ? 'Unopened rows lead, oldest first, only where opens can be observed. Client opens are not currently tracked, so a sent deliverable reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d \u2014 and the median time to open stays empty rather than averaging a record nobody writes.'
+            // #5314 part 1: opens are recorded when the client follows the shared link.
+            : 'Unopened rows lead, oldest first, only where opens can be observed: an open is recorded when the client follows the shared link. A deliverable sent before that began, or with no link, reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d.'}
+        />
+
+        <ZoneDraft
+          surface="delivery/deliverables"
+          railOption="draft:chases"
+          label="Draft · unopened chase"
+          accept="Accept drafts"
+          run="Draft the chases"
+          foot={readsUnavailable
+            ? 'Opens are not recorded.'
+            : `${unopened.length} note${unopened.length === 1 ? '' : 's'}; a human sends each.`}
+          empty="A chase note per unopened deliverable — the item, the date it went out, and what the review unblocks, for a person to send from the account that shipped it."
+          nothingToDraft={readsUnavailable
+            ? 'Opens are not recorded, so no deliverable can be called unopened and there is nothing to chase.'
+            : 'Nothing is sent and unopened, so there is nothing to chase.'}
+        />
+
+        <Section title="Log">
+          <div>
+            {ordered.map((row) => (
+              <DeliverableRow
+                key={row.id}
+                row={row}
+                readsUnavailable={readsUnavailable}
+                saving={isPending(`save:${row.id}`)}
+                deleting={isPending(`delete:${row.id}`)}
+                note={note}
+                onSave={(r, draft) => act(
+                  `save:${r.id}`,
+                  (rev) => api.updatePartnerDeliverable(r.id, {
+                    title: draft.title, version: draft.version,
+                    link_url: draft.link_url, sent_at: draft.sent_at || null,
+                    expected_revision: stated(rev, r.revision),
+                  }),
+                  'Saved.', `dl:${r.id}`,
+                )}
+                onDelete={(r) => act(
+                  `delete:${r.id}`,
+                  (rev) => api.deletePartnerDeliverable(r.id, stated(rev, r.revision)),
+                  'Deleted.', `dl:${r.id}`,
+                )}
+              />
+            ))}
+          </div>
+        </Section>
+
+        <StatedLimit title="What “unopened” means here, and what it does not">
+          <p>
+            <strong>It means we do not know.</strong>{' '}
+            {d?.median_days_to_open_note
+              || 'Nothing in this product records an open, so every sent deliverable reads unopened.'}{' '}
+            While opens cannot be observed the count above is Not recorded, not a number, and no health rating uses it. The reason is ours:
+            only the client can say they opened something, and there is no place for them to say it yet.
+            Reading it as “the client ignored it” would turn a gap in our product
+            into an accusation about them.
+          </p>
+          <p className="mt-2">
+            <strong>No control here can mark one opened.</strong> Only the
+            founder side can truthfully say a thing was read. A button on this
+            page would let the firm record a metric about itself, which would
+            make every opened figure in the product worth nothing — the same rule
+            that governs consent on{' '}
+            <Link to="/offers/proof" className="text-amber-700 underline">Offers · Proof</Link>.
+          </p>
+          <p className="mt-2">
+            <strong>No median, and no chart of one.</strong> A median over a
+            record nobody writes is a number about our own silence, not about
+            client behaviour. Read time stays unavailable until clients can record
+            an open.
+          </p>
+        </StatedLimit>
+      </div>
+    </ZoneBody>
+    </>
+  );
+}

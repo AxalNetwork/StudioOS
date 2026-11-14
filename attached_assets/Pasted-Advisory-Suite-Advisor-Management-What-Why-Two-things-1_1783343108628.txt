@@ -1,0 +1,45 @@
+Advisory Suite Advisor Management
+What & Why
+Two things: (1) rename the founder "AI Advisory Suite" nav item to Advisory and the page heading to Advisory Suite; (2) add an Advisor profiles management area inside the suite where founders keep a directory of their advisors and promote advisors from their Brand & Landing pages waitlist (the Contacts hub, audience = 'advisor') into that directory. Promoting creates the advisor's profile AND emails them an invitation to join as an Advisor.
+Today the Advisory Suite (/advisory) only has three tabs — AI Advisor, Financial Planner, Diligence Checker — and the Contacts promote flow only handles customer → Customer Discovery and investor → Raise pipeline. Advisors captured on landing pages currently have nowhere to go.
+Done looks like
+* Founder sidebar shows Advisory (was "AI Advisory Suite"); the page heading reads Advisory Suite.
+* The suite has a new Advisors tab with an advisor directory: each card shows name, expertise, sectors, and bio.
+* A "From your waitlist" section lists the founder's waitlist signups tagged Advisor that haven't been promoted yet, each with a Promote to Advisory action.
+* Promoting a waitlist advisor: creates their advisor profile in the directory, sends them an invitation email to join as an Advisor, and marks the source waitlist contact as promoted (so it stops showing as pending and can't be double-promoted).
+* Founders can edit an advisor's profile details, assign an advisor to one or more of their startups, and archive/remove an advisor from the directory.
+* Email privacy: the directory always shows profile info, but an advisor's email is only visible when they arrived through one of the trusted pipelines (Brand & Landing waitlist / Referrals / Axal VC staff recommendation). Profiles with no such origin show the profile but hide the email.
+* Promotion also works from the Contacts page drawer for advisor contacts (routes to Advisory), consistent with the existing customer/investor promote buttons.
+* Both changelogs get a matching entry (CHANGELOG.md + frontend/public/CHANGELOG-user.md).
+Out of scope
+* Building the Referrals and Axal VC staff recommendation intake pipelines themselves — this task only builds the Brand & Landing waitlist → Advisory pipeline. The advisor profile model must carry a source/origin field so those other pipelines can populate it later, and the email-visibility rule must key off that field, but no new referral/staff-rec UI is built here.
+* Renaming the admin sidebar's "AI Advisory Suite" entry — the request is founder-only. (The shared page heading still becomes "Advisory Suite" for all roles.)
+* Any changes to the AI Advisor / Financial Planner / Diligence Checker tabs.
+* Advisor-side experience (what an advisor sees after accepting the invite) beyond the existing invite/registration flow beng reused.
+Steps
+1. Rename labels. Change the founder sidebar item label to "Advisory" and the Advisory page heading to "Advisory Suite" (keep the subtitle sensible for the expanded scope). Leave the admin sidebar label unchanged.
+2. Advisor profile data model + migration. Add founder-scoped advisor-profile storage plus an advisor↔startup assignment relationship. Profiles carry at minimum: name, email, bio, sectors, expertise, LinkedIn, optional hourly rate, source/origin (e.g. brand-landing | referral | staff-rec), status (active/archived), link back to the source waitlist contact, timestamps. Add the D1 migration under the migrations dir and mirror the schema in the dev FastAPI/SQLite backend so the feature works in both environments. Follow the existing promote-target pattern (discovery_interviews, raise_prospects) and the existing curated-roster shape (network_profiles) for field naming.
+3. Promote-to-Advisory backend. Extend the contacts promote endpoint to handle audience = 'advisor': create the advisor profile from the contact, send the invitation email (reuse the existing invite-email path used by /contacts/invite — invite them to join as an Advisor), stamp the contact promoted_to = 'advisory' with the new profile's ref id, and apply the same idempotency/concurrency guard the other branches use.
+4. Advisor directory backend. Add founder-scoped endpoints to list advisor profiles (with the email-visibility rule applied server-side — never return the email unless the profile's source is a trusted pipeline), edit a profile, assign/unassign a profile to the founder's startups, and archive/restore. Mount the routes and add matching dev-backend endpoints.
+5. Advisors tab UI. Add the new tab to the Advisory Suite: a directory of advisor cards (name, expertise, sectors, bio; email shown only when returned), a "From your waitlist" section listing un-promoted advisor contacts with a Promote action, an edit drawer/modal, a startup-assignment control (multi-select over the founder's startups), and archive/remove. Match the suite's existing violet/brand styling and include dark: variants. Add the needed api client methods.
+6. Contacts drawer parity. Allow promoting advisor contacts from the Contacts page drawer (button routes to Advisory), alongside the existing customer/investor promote buttons.
+7. Changelogs + drift check. Add matching entries to CHANGELOG.md and frontend/public/CHANGELOG-user.md, and make sure npm run test:drift passes (new endpoints wired into the drift/typecheck).
+Relevant files
+* frontend/src/sidebarConfig.js:203
+* frontend/src/sidebarConfig.js:92
+* frontend/src/pages/AdvisoryPage.jsx:17-50
+* frontend/src/pages/ContactsPage.jsx:7,77-81,171-224
+* frontend/src/App.jsx:74,1346
+* frontend/src/lib/api.js:962,2346-2352
+* cloudflare-worker/src/routes/contacts.ts:236-281,432-543
+* cloudflare-worker/src/services/networkProfilesSchema.ts:43-57
+* cloudflare-worker/src/routes/admin_network_profiles.ts
+* cloudflare-worker/src/index.ts
+* cloudflare-worker/sql/migrations/
+* backend/
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md
+Dependencies
+Rename Mentor Role to Advisor
+
+Open task

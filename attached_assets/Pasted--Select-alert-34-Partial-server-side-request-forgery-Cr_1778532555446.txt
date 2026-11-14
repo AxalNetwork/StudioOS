@@ -1,0 +1,151 @@
+
+Select alert #34
+Partial server-side request forgery
+Critical
+#34 opened 5 days ago • Detected by CodeQL in backend/.../services/github_service.py :136
+main
+
+Select alert #33
+Partial server-side request forgery
+Critical
+#33 opened 5 days ago • Detected by CodeQL in backend/.../services/github_service.py :123
+main
+
+Select alert #32
+Partial server-side request forgery
+Critical
+#32 opened 5 days ago • Detected by CodeQL in backend/.../services/file_storage.py :229
+main
+
+Select alert #31
+Partial server-side request forgery
+Critical
+#31 opened 5 days ago • Detected by CodeQL in backend/.../services/file_storage.py :221
+main
+
+Select alert #241
+Polynomial regular expression used on uncontrolled data
+High
+#241 opened 7 hours ago • Detected by CodeQL in cloudflare-worker/.../services/notify.ts :176
+main
+
+Select alert #240
+Polynomial regular expression used on uncontrolled data
+High
+#240 opened 7 hours ago • Detected by CodeQL in cloudflare-worker/.../services/notify.ts :149
+main
+
+Select alert #239
+Incomplete URL substring sanitization
+High
+Test
+#239 opened 7 hours ago • Detected by CodeQL in cloudflare-worker/test/market_intel_digest.test... :280
+main
+
+Select alert #238
+Polynomial regular expression used on uncontrolled data
+High
+#238 opened 13 hours ago • Detected by CodeQL in cloudflare-worker/.../market_intel/digest.ts :380
+main
+
+Select alert #224
+Polynomial regular expression used on uncontrolled data
+High
+#224 opened yesterday • Detected by CodeQL in cloudflare-worker/.../services/notify.ts :447
+main
+
+Select alert #219
+Polynomial regular expression used on uncontrolled data
+High
+#219 opened yesterday • Detected by CodeQL in cloudflare-worker/.../providers/calendly.ts :405
+main
+
+Select alert #17
+Clear-text logging of sensitive information
+High
+#17 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/linkedin.ts :209
+main
+
+Select alert #16
+Double escaping or unescaping
+High
+#16 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../services/market-data.ts :109
+main
+
+Select alert #15
+Incomplete multi-character sanitization
+High
+#15 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../services/market-data.ts :109
+main
+
+Select alert #14
+Incomplete multi-character sanitization
+High
+#14 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/brand.ts :81
+main
+
+Select alert #13
+Incomplete multi-character sanitization
+High
+#13 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/brand.ts :80
+main
+
+Select alert #12
+Incomplete multi-character sanitization
+High
+#12 opened 5 days ago • Detected by CodeQL in cloudflare-worker/.../routes/brand.ts :79
+main
+
+Select alert #11
+Reflected server-side cross-site scripting
+High
+#11 opened 5 days ago • Detected by CodeQL in backend/.../routes/email.py :60
+main
+
+Select alert #10
+Uncontrolled data used in path expression
+High
+#10 opened 5 days ago • Detected by CodeQL in backend/.../routes/settings.py :419
+main
+
+Select alert #9
+Uncontrolled data used in path expression
+High
+#9 opened 5 days ago • Detected by CodeQL in backend/app/main.py :627
+main
+
+Select alert #8
+Uncontrolled data used in path expression
+High
+#8 opened 5 days ago • Detected by CodeQL in backend/app/main.py :626
+main
+
+Select alert #7
+Clear-text logging of sensitive information
+High
+#7 opened 5 days ago • Detected by CodeQL in backend/.../routes/calendar.py :427
+main
+
+Select alert #4
+Polynomial regular expression used on uncontrolled data
+High
+#4 opened 5 days ago • Detected by CodeQL in backend/.../services/email_service.py :294
+main
+
+Select alert #3
+Polynomial regular expression used on uncontrolled data
+High
+#3 opened 5 days ago • Detected by CodeQL in backend/.../routes/brand.py :404
+main
+
+Select alert #2
+Polynomial regular expression used on uncontrolled data
+High
+#2 opened 5 days ago • Detected by CodeQL in backend/.../routes/brand.py :284
+main
+
+Select alert #1
+Polynomial regular expression used on uncontrolled data
+High
+#1 opened 5 days ago • Detected by CodeQL in backend/.../routes/brand.py :283
+main

@@ -1,0 +1,36 @@
+{
+  "skill": "cap-table-change-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "cap_table.read": {
+        "changes": [
+          {
+            "holder": "Lena Ortiz",
+            "security": "Options",
+            "shares": 40000,
+            "date": "2026-10-01"
+          }
+        ],
+        "fully_diluted": {
+          "before": 10000000,
+          "after": 10040000
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Lena Ortiz",
+      "40000"
+    ],
+    "must_say_not_recorded": [
+      "board consent"
+    ],
+    "must_not_include": [
+      "approved by the board"
+    ]
+  }
+}

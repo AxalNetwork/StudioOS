@@ -1,0 +1,34 @@
+{
+  "skill": "channel-partner-strategy",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "skill_name": "Channel and Partnership Strategy",
+        "task_scope": "Assesses channel partners and designs partner motions, incentives, economics, enablement and governance.",
+        "evidence": [
+          "mutual value and partner incentive model"
+        ],
+        "omitted_field": "partner-sourced pipeline"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for mutual value and partner incentive model."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "mutual value and partner incentive model"
+    ],
+    "must_say_not_recorded": [
+      "partner-sourced pipeline"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#ebe9f0} a{color:#7c3aed;text-decoration:none} a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="box-sizing:border-box;min-height:100vh;padding:56px 64px 120px;background:#ebe9f0;color:#18181b;font-family:'Space Grotesk',system-ui,sans-serif">
+  <div style="max-width:960px">
+    <div style="font:600 11px/1 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · axal.vc · from terms agreed to money in the account</div>
+    <h1 style="margin:12px 0 0;font:800 40px/1.05 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">Closing room</h1>
+    <p style="margin:14px 0 0;max-width:780px;font:400 15px/1.6 'Space Grotesk',system-ui,sans-serif;color:#4a4553;text-wrap:pretty">One room per deal round, shared by the founder and the investors, with an admin desk. The platform prepares the paper, records signatures, shows payment instructions and matches bank lines people accept. It never moves money.</p>
+  </div>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+    <section style="margin-top:72px">
+      <div style="display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid #d9d6e0">
+        <h2 style="margin:0;font:800 24px/1.1 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">{{ g.t }}</h2>
+        <span style="font:500 12px/1 'Roboto Mono',ui-monospace,monospace;color:#6b6577">{{ g.n }}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:56px 48px;margin-top:28px;align-items:flex-start">
+        <sc-for list="{{ g.boards }}" as="d" hint-placeholder-count="3">
+          <div id="{{ d.b }}" style="display:grid;gap:12px">
+            <div style="{{ d.head }}">
+              <span style="flex:none;height:24px;padding:0 9px;border-radius:999px;background:#18181b;color:#ffffff;display:inline-flex;align-items:center;font:700 11px/1 'Roboto Mono',ui-monospace,monospace">{{ d.b }}</span>
+              <span style="font:700 15px/1.3 'Space Grotesk',system-ui,sans-serif">{{ d.lab }}</span>
+            </div>
+            <sc-if value="{{ d.note }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ d.noteS }}">{{ d.note }}</div>
+            </sc-if>
+            <div style="{{ d.box }}"><dc-import name="Closing Room Page" b="{{ d.b }}" hint-size="100%,100%"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;All&quot;,&quot;The room&quot;,&quot;Paper and route&quot;,&quot;The four routes&quot;,&quot;Money, cap table and reporting&quot;,&quot;The admin desk&quot;,&quot;States&quot;,&quot;Phone and dark&quot;],&quot;default&quot;:&quot;All&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sec = this.props.section ?? 'All';
+    const showN = this.props.showNotes ?? true;
+    const F = (b, lab, w, h, note) => ({
+      b, lab,
+      note: showN && note ? note : false,
+      head: 'display:flex;align-items:center;gap:10px;max-width:' + w + 'px',
+      noteS: "max-width:" + Math.min(w, 760) + "px;font:400 13px/1.55 'Space Grotesk',system-ui,sans-serif;color:#4a4553",
+      box: 'position:relative;width:' + w + 'px;height:' + h + 'px;overflow:hidden;border-radius:14px;border:1px solid #dcd8e4;background:#ffffff;box-shadow:0 1px 2px rgba(24,24,27,.05),0 12px 32px rgba(24,24,27,.07)'
+    });
+    const G = [
+      { t: 'The room', boards: [
+        F('CP1', 'Closing room · Founder', 1440, 1300, 'Every line in the round, with who acts next. The receiving account is set, so the header has no primary button; the strip below shows the header before it is set.'),
+        F('CP2', 'Closing room · Investor (direct)', 1440, 960, "[Name]'s own line on 14 Oct, before the company's bank confirmed it. The round shows only its total, never another investor.")
+      ] },
+      { t: 'Paper and route', boards: [
+        F('CP3', 'Prepare the paper · Admin', 1440, 1540, "A counsel draft can be previewed, not sent. Eadwyn proposed the governing law and the signer's title; the empty money field has no Eadwyn mark."),
+        F('CP4', 'Review and sign · shared', 1440, 1530, "The founder signs [Harbor Ventures III]'s SAFE. Below, the countersign step as the Super Admin and as an Admin see it."),
+        F('CP5', 'Choose the route · dialog', 1440, 1000, 'Each route lists what it needs. Syndicate (SPV) is chosen for [Northwind Syndicate SPV].')
+      ] },
+      { t: 'The four routes', boards: [
+        F('CP6', 'Syndicate (SPV) · lead investor view', 1440, 1330, "Members paid the SPV in full; the SPV's one payment to the company is sent, not yet confirmed. Invitees are not members until their identity check is approved."),
+        F('CP7', 'Axal VC fund route · Super Admin and Admin', 1440, 900, 'The same card for both. The money is committed and the call is open; the release is next. The dashed box shows the commit step before it was taken.'),
+        F('CP8', 'Third-party fund · drawer', 1440, 1100, 'A record and its evidence only. No credit has arrived yet.')
+      ] },
+      { t: 'Money, cap table and reporting', boards: [
+        F('CP9', 'Payment instructions · investor', 1440, 1260, 'The drawer, the reveal dialog, and the notice an investor with an unpaid line sees when the account changes.'),
+        F('CP10', 'Receipt · line drawer · Admin', 1440, 1500, "Both pieces of evidence are for $400,000.00. Only the receiving side's turns the line Received."),
+        F('CP11', 'Cap table change · founder dialog', 1440, 820, "Shown for [Name]'s line, the one already received; [Fund I] has not paid yet. The priced-round variant opens Model a round."),
+        F('CP12', 'Reporting duties · card and dialog', 1440, 760, 'After Closed. Two terms the paper left blank wait for both sides to confirm.')
+      ] },
+      { t: 'The admin desk', boards: [
+        F('CP13', 'Closings desk · Admin', 1440, 1300, 'Sorted by deadline. Two deadlines are under 14 days. May has nothing recorded.'),
+        F('CP14', 'One closing · Super Admin', 1440, 2030, 'The HQ view of the same closing. The release is the one Axal act left. Below, the panel as an Admin sees it.'),
+        F('CP15', 'Activity · drawer', 1440, 1000, 'Append-only, newest first, filtered by step.')
+      ] },
+      { t: 'States', boards: [
+        F('CP16', 'Empty', 1440, 660, 'The desk, a room and a line with nothing yet.'),
+        F('CP17', 'Loading', 1440, 920, 'The header and the stepper draw at once; everything else reads.'),
+        F('CP18', 'Error and partial', 1440, 680, 'One failed block never blanks the room.'),
+        F('CP19', 'No permission', 1440, 980, "Explorer, Advisor, another investor's line, and an Operating Partner who may tick the checklist only.")
+      ] },
+      { t: 'Phone and dark', boards: [
+        F('CP20', 'Phone · investor', 1290, 924, 'Sign, see the payment instructions with the warning first, and accept a match from a bottom sheet.'),
+        F('CP21', 'Closings desk · dark', 1440, 1300, 'CP13 in the dark colours.')
+      ] }
+    ];
+    return { groups: G.filter(g => sec === 'All' || g.t === sec).map(g => Object.assign({}, g, { n: g.boards.length + (g.boards.length === 1 ? ' board' : ' boards') })) };
+  }
+}
+</script>
+</body></html>

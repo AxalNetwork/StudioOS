@@ -1,0 +1,205 @@
+You are working inside AxalNetwork/StudioOS. This task is BACKEND ONLY.
+
+Hard constraints (do not violate):
+- Keep FastAPI (Python) + Cloudflare Workers/Hono + D1 architecture.
+- Keep TOTP auth, Turnstile, Gmail OAuth2, Cloudflare Zero Trust on admin.
+- All money stays in integer cents. No floats anywhere.
+- Preserve idempotency on /api/liquidity/execute-exit and
+  /api/funds/distributions/execute.
+- Do not introduce new frameworks, new ORMs, or new hosting targets.
+- Do not touch the frontend except for test stubs.
+
+===========================================================
+PHASE A — DATA-LAYER HARDENING  (ship first, zero downtime)
+===========================================================
+A1. `vc_fund` entity deprecation
+   - Add CHECK constraint on `entities.type` forbidding 'vc_fund'
+     on INSERT/UPDATE going forward.
+   - Audit every write path in backend/ and cloudflare-worker/.
+     Replace with `vc_funds` table writes.
+   - Emit a one-time metric `deprecated_vc_fund_writes_blocked`
+     to activity_logs.
+
+A2. `lp_investors` write-seal
+   - Grep all INSERT INTO lp_investors in Python + TS trees.
+     Rewrite to `limited_partners`.
+   - Add a pytest that fails if `lp_investors` is inserted into.
+   - Keep the legacy read path for archived rows only.
+
+A3. Capital-call FK consolidation
+   - Backfill `capital_calls.limited_partner_id` from the legacy
+     `lp_investor_id` via migration.
+   - Add NOT NULL constraint on `limited_partner_id` after backfill.
+   - Keep `lp_investor_id` nullable for archival read-joins.
+
+A4. Cross-fund fan-out guard
+   - Server-side: reject /api/funds/distributions/execute payloads
+     missing explicit `fund_id` with 422. This already exists for
+     /execute-exit — mirror the exact pattern.
+   - Add structured error code ERR_DISTRIBUTION_FUND_ID_REQUIRED.
+
+A5. JWT_SECRET fail-fast
+   - In backend/app/main.py and cloudflare-worker/src/auth.ts,
+     raise on boot if env is production and JWT_SECRET is unset
+     or < 32 bytes of entropy.
+   - Update replit.md to state the real behavior.
+
+===========================================================
+PHASE B — EDGE ⇄ ORIGIN BOUNDARY
+===========================================================
+B1. Name the source of truth per resource.
+   - Edge-first (Worker owns writes, FastAPI is read-only mirror):
+     deals, projects, pipeline votes, scoring, memos, liquidity,
+     capital calls, distributions, LPA.
+   - Origin-first (FastAPI owns writes): admin console, integrations,
+     GitHub issue sync, advisory (OpenAI), contract generation.
+   - Document this in docs/BOUNDARY.md with a table.
+
+B2. Shared DTO schema
+   - Add `shared/schemas/` with JSON Schema files for Deal,
+     Project, Fund, LimitedPartner, CapitalCall, Distribution,
+     LiquidityListing.
+   - Generate Python Pydantic models and TS interfaces from these
+     via a build step in `scripts/gen-schemas.{py,ts}`.
+   - CI fails if either side drifts.
+
+B3. Cross-surface contract tests
+   - Add tests/contract/ with cases that hit both edges using
+     the same fixture and assert response equivalence modulo
+     timestamps.
+
+===========================================================
+PHASE C — RATE-LIMIT & SECURITY PARITY
+===========================================================
+C1. Port Worker rate-limit buckets to FastAPI.
+   - user 60/min, ai 10/min, spinout 5/hr, global 1000/min.
+   - Use slowapi + Redis (or the existing RATE_LIMITS KV via
+     an HTTP adapter on the Worker). Same bucket names and 429
+     shape as Worker.
+
+C2. Add `/api/csp-report` endpoint on FastAPI.
+   - Accept application/csp-report and store in `error_logs`
+     with severity='csp_violation'.
+   - Surface in /api/monitoring/errors.
+
+C3. Tighten CSP in backend/app/main.py security headers:
+   default-src 'self' https://axal.vc;
+   img-src 'self' data: https:;
+   connect-src 'self' https://*.workers.dev https://api.github.com
+     https://api.openai.com;
+   script-src 'self';
+   style-src 'self' 'unsafe-inline';
+   report-uri /api/csp-report
+   (Tune down unsafe-inline once Tailwind JIT output is audited.)
+
+C4. Password-less registration abuse.
+   - Rate-limit /api/auth/register at 5/min/IP and 3/day/email.
+   - Add captcha-less honeypot field for bots ( `_axl_hp` ).
+   - Log bot attempts to activity_logs with source='honeypot'.
+
+===========================================================
+PHASE D — FOUNDER THROUGHPUT (the 4-week pipeline backend)
+===========================================================
+D1. New table `pipeline_cycles`:
+   - id, project_id, started_at, expected_close_at (=started_at+28d),
+     current_week (1..4), status (active|completed|paused|failed),
+     week_checklist JSON (per-week required deliverables).
+   - On Tier-1 score → auto-create a cycle and set status='active'.
+
+D2. Per-week gate enforcement.
+   - Cron job (Cloudflare Cron Trigger) runs daily:
+     for each active cycle, check if expected deliverables for the
+     current week are met. If not, log a `cycle_gate_missed` event
+     and notify assigned partner via Gmail.
+
+D3. Auto-advance to next week.
+   - When all current-week deliverables are marked `done`, advance
+     current_week and emit a `pipeline_week_advanced` event to the
+     overview Durable Object room.
+
+D4. Founder-visible API.
+   - GET /api/pipeline/cycles/me — founder sees their own cycle,
+     current week, outstanding deliverables, projected close.
+   - POST /api/pipeline/cycles/:id/deliverables/:key/complete —
+     marks a deliverable done, with auditor check that the uploading
+     user is the founder or an admin.
+
+===========================================================
+PHASE E — GLOBAL NETWORK FOR FOUNDERS (match-engine v2)
+===========================================================
+E1. Extend `partners` with: thesis_sectors (json array),
+    geographies (json array), stage_focus (json array),
+    average_check_cents (int), intro_response_rate (float).
+
+E2. New endpoint POST /api/partners/match-for-founder
+    body: { project_id, needs: ["intro","co_invest","customer","operator"] }
+    returns ranked partners. Ranking features:
+      - sector overlap
+      - geography overlap (founder's target_markets ∩ partner.geographies)
+      - stage overlap
+      - historical intro_response_rate
+      - conviction accuracy (from PartnerScorecard view)
+    Role gate: founder can only match for their own project_id.
+
+E3. `intros` table:
+    id, project_id, from_user_id, to_partner_id, reason, status
+    (requested|accepted|declined|expired), created_at,
+    responded_at. Expires after 14 days.
+
+E4. Intro response SLA badge.
+    Add `partners.intro_response_rate` computed weekly from the
+    `intros` table. Expose on /api/partners/match-for-founder
+    for transparency.
+
+===========================================================
+PHASE F — OBSERVABILITY UPGRADES
+===========================================================
+F1. Add `request_id` middleware (UUIDv7) on both FastAPI and
+    Worker. Propagate across edge→origin calls via `X-Request-Id`.
+    Include in every error_logs and activity_logs row.
+
+F2. Add a `/api/monitoring/pipeline-health` endpoint: cycles in
+    each week, avg days-to-fund, missed-gate rate, Tier-1 hit rate.
+
+F3. Anomaly summary job runs hourly (was already hourly on Worker)
+    — add a founder-side version that flags founder-specific signals:
+    zero logins in 7 days during active cycle, missed deliverable,
+    scoring delta > 15 pts between re-scores.
+
+===========================================================
+PHASE G — CLEANUP
+===========================================================
+G1. Delete netlify.toml. Deployment path is GitHub Pages + Cloudflare.
+G2. Close the 4 "test" GitHub issues. Add `origin:prod|staging|dev`
+    label to the auto-create in routes/tickets.py and the Worker
+    version. Filter dev/staging out of support inbox by default.
+G3. Rewrite root README.md — describe StudioOS, not the Jekyll theme.
+    Move theme docs to docs/legacy-jekyll-theme.md.
+G4. Run POST /api/search/backfill once against prod D1 and record
+    the migration ID in PRODUCTION.md.
+
+===========================================================
+ACCEPTANCE
+===========================================================
+- All existing tests pass.
+- New tests cover:
+    * vc_fund insert blocked
+    * lp_investors insert blocked
+    * cross-fund distribution without fund_id → 422
+    * JWT_SECRET missing in prod → boot fail
+    * CSP report endpoint accepts and stores
+    * Pipeline cycle auto-creates on Tier-1 score
+    * Weekly gate cron flags missed deliverables
+    * match-for-founder respects RBAC
+- replit.md updated with Phases A–G.
+- PRODUCTION.md updated with deploy checklist:
+    1) apply schema migrations
+    2) run search backfill
+    3) roll FastAPI
+    4) deploy Worker
+    5) verify /api/monitoring/pipeline-health returns 200
+
+Non-goals:
+- No frontend route additions here (covered separately).
+- No new third-party hosting.
+- No schema drops — only additive migrations and CHECK constraints.

@@ -1,0 +1,25 @@
+/** D1263: Raise evidence reads, refresh and versioned accept or dismiss decisions (`/api/cycles/raise/evidence`). */
+import { request } from '../api.js';
+
+const query = (projectId, { limit, offset } = {}) => new URLSearchParams({ project: String(projectId), ...(limit != null ? { limit: String(limit) } : {}), ...(offset != null ? { offset: String(offset) } : {}) });
+export const raiseEvidenceApi = {
+  read: (projectId, page) => request(`/cycles/raise/evidence?${query(projectId, page)}`),
+  refresh: (projectId, page) => request(`/cycles/raise/evidence/refresh?${query(projectId, page)}`, { method: 'POST' }),
+  accept: (projectId, id, snapshotHash) => request(`/cycles/raise/evidence/items/${encodeURIComponent(id)}/accept?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ snapshot_hash: snapshotHash }) }),
+  dismiss: (projectId, id) => request(`/cycles/raise/evidence/items/${encodeURIComponent(id)}/dismiss?${query(projectId)}`, { method: 'POST' }),
+  // D5073: many decisions in one request, one authoritative result per row (`{ id, ok, code?, message? }`), at most 50;
+  // a refusal on one row does not stop the others. `items` are `{ id, snapshot_hash }` (accept), `{ id }` (dismiss)
+  // or `{ id, version, visibility }` (share).
+  batch: (projectId, action, items) => request(`/cycles/raise/evidence/items/batch?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ action, items }) }),
+  update: (projectId, id, version, body) => request(`/cycles/raise/evidence/items/${encodeURIComponent(id)}?${query(projectId)}`, { method: 'PATCH', body: JSON.stringify({ ...body, version }) }),
+  link: (projectId, claimId, itemId, itemVersion, proposalUid) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/link?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ item_id: itemId, item_version: itemVersion, ...(proposalUid != null ? { proposal_uid: proposalUid } : {}) }) }),
+  unlink: (projectId, claimId, itemId) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/link?${query(projectId)}`, { method: 'DELETE', body: JSON.stringify({ item_id: itemId }) }),
+  // D900 (#2679): "Keep mine, with a note" on a Mismatch, and clearing it.
+  note: (projectId, claimId, note) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/note?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ note }) }),
+  clearNote: (projectId, claimId) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/note?${query(projectId)}`, { method: 'DELETE' }),
+  // D1266 (#3289): See as an investor — the investor's projection before or after the NDA, never logged as an open.
+  preview: (projectId, nda) => request(`/cycles/raise/evidence/preview?${new URLSearchParams({ project: String(projectId), nda: nda ? '1' : '0' })}`),
+  // D1265 (#3288): the investor's read — coverage before the NDA, shared items after it.
+  shared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}/evidence`),
+  forDeal: (dealId) => request(`/deals/${encodeURIComponent(dealId)}/evidence`),
+};

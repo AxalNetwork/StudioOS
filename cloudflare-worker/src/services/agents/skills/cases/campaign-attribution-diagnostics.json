@@ -1,0 +1,34 @@
+{
+  "skill": "campaign-attribution-diagnostics",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Campaign Attribution Diagnostics",
+        "task_scope": "Diagnoses attribution quality, source tagging, conversion paths, attribution windows and double-counted credit.",
+        "evidence": [
+          "attribution window and event integrity"
+        ],
+        "omitted_field": "conversion event coverage"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for attribution window and event integrity."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "attribution window and event integrity"
+    ],
+    "must_say_not_recorded": [
+      "conversion event coverage"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

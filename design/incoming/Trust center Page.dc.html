@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Public+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}dl,dd{margin:0}button:focus-visible,a:focus-visible,[role=switch]:focus-visible,[role=radio]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}</style>
+</helmet>
+<div style="{{ v.root }}">
+  <sc-if value="{{ v.side }}" hint-placeholder-val="{{ true }}">
+    <aside style="{{ v.asideS }}">
+      <div style="padding:4px 16px 12px;display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><span style="font-weight:800;font-size:14px;letter-spacing:-.01em">Axal VC</span></div>
+      <span style="{{ v.groupS }}">{{ v.group }}</span>
+      <nav aria-label="Main" style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ v.rows }}" as="s" hint-placeholder-count="9"><a href="{{ s.href }}" style="{{ s.st }}">{{ s.t }}</a></sc-for>
+      </nav>
+    </aside>
+  </sc-if>
+  <main style="{{ v.mainS }}"><sc-if value="{{ v.pubnav }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pubnavS }}"><span style="display:flex;align-items:center;gap:8px"><span style="{{ v.logoS }}"></span><b style="{{ v.pubBrandS }}">Axal VC</b></span><nav aria-label="Site" style="display:flex;gap:22px;align-items:center"><sc-for list="{{ v.pubnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}">{{ pn.t }}</a></sc-for></nav><span style="display:flex;gap:9px;align-items:center"><sc-for list="{{ v.pubBtns }}" as="pb" hint-placeholder-count="2"><a href="#" style="{{ pb.s }}">{{ pb.t }}</a></sc-for></span></div></sc-if>
+    <sc-if value="{{ v.top }}" hint-placeholder-val="{{ true }}">
+      <div style="{{ v.topS }}">
+        <div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>Search StudioOS</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="{{ v.badgeS }}">{{ v.badge }}</span>
+          <span role="img" aria-label="Notifications" style="{{ v.iconS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span>
+          <span aria-label="Account" style="{{ v.avS }}">[N]</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ v.ptop }}" hint-placeholder-val="{{ false }}"><div style="{{ v.ptopS }}"><span style="display:flex;align-items:center;gap:7px"><span style="{{ v.logoS }}"></span><b style="font-size:13px">Axal VC</b></span><span style="font-size:13px;font-weight:700">{{ v.company }}</span><span style="display:flex;align-items:center"><span role="img" aria-label="Studio" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.studioI }}"></span><span role="img" aria-label="Notifications" style="{{ v.picoS }}" dangerouslySetInnerHTML="{{ v.bell }}"></span></span></div></sc-if>
+    <div style="{{ v.bodyS }}">
+      <sc-if value="{{ v.head }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;flex-direction:column;gap:8px">
+          <sc-if value="{{ v.crumb }}" hint-placeholder-val="{{ true }}"><a href="{{ v.crumbHref }}" style="{{ v.crumbS }}">{{ v.crumb }}</a></sc-if>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:7px;min-width:0">
+              <h1 style="{{ v.h1S }}">{{ v.title }}</h1>
+              <sc-if value="{{ v.hpills }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ v.hpills }}" as="p" hint-placeholder-count="3"><span style="{{ p.s }}">{{ p.t }}</span></sc-for></div></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <sc-for list="{{ v.hbtns }}" as="b" hint-placeholder-count="2">
+                <sc-if value="{{ b.txt }}" hint-placeholder-val="{{ false }}"><span style="{{ b.s }}">{{ b.t }}</span></sc-if>
+                <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-if>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ v.hlines }}" as="l" hint-placeholder-count="1"><p style="{{ l.s }}">{{ l.t }}</p></sc-for>
+          <sc-if value="{{ v.scope }}" hint-placeholder-val="{{ false }}"><div><span title="{{ v.scopeTip }}" style="{{ v.scopeS }}">{{ v.scope }}</span></div></sc-if>
+          <sc-if value="{{ v.gate }}" hint-placeholder-val="{{ false }}"><nav aria-label="Raise modules" style="{{ v.gateS }}"><sc-for list="{{ v.gate }}" as="g" hint-placeholder-count="9"><a href="{{ g.href }}" style="{{ g.s }}">{{ g.t }}</a></sc-for></nav></sc-if><sc-if value="{{ v.msel }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Raise modules" style="{{ v.mselS }}"><span style="{{ v.eyeS }}">Module</span><b style="flex:1;text-align:left">{{ v.title }}</b><span aria-hidden="true">▾</span></button></sc-if><sc-if value="{{ v.moved }}" hint-placeholder-val="{{ false }}"><div role="status" style="{{ v.movedS }}"><span aria-hidden="true" style="{{ v.infoS }}">i</span><span style="flex:1">{{ v.moved }}</span><button type="button" style="{{ v.dismissS }}">Dismiss</button></div></sc-if><sc-if value="{{ v.tbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.tbarS }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ v.tbarChips }}" as="g" hint-placeholder-count="4"><span title="{{ g.tip }}" style="{{ g.s }}">{{ g.t }}</span></sc-for></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap"><sc-if value="{{ v.tbarNote }}" hint-placeholder-val="{{ false }}"><span style="{{ v.tbarNoteS }}">{{ v.tbarNote }}</span></sc-if><sc-for list="{{ v.tbarBtns }}" as="b" hint-placeholder-count="2"><button type="button" aria-label="{{ b.al }}" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></div></sc-if>
+        </header>
+      </sc-if>
+      <sc-if value="{{ v.tabs }}" hint-placeholder-val="{{ true }}">
+        <nav aria-label="{{ v.tabsL }}" style="{{ v.tabRowS }}">
+          <sc-for list="{{ v.tabs }}" as="tb" hint-placeholder-count="4"><a aria-current="{{ tb.sel }}" href="{{ tb.href }}" style="{{ tb.s }}">{{ tb.t }}<sc-if value="{{ tb.n }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.ns }}">{{ tb.n }}</span></sc-if></a></sc-for>
+        </nav>
+      </sc-if>
+      <sc-if value="{{ v.period }}" hint-placeholder-val="{{ false }}">
+        <div role="radiogroup" aria-label="Period" style="{{ v.segS }}"><sc-for list="{{ v.period }}" as="pp" hint-placeholder-count="3"><span role="radio" tabindex="0" aria-checked="{{ pp.on }}" style="{{ pp.s }}">{{ pp.t }}</span></sc-for></div>
+      </sc-if>
+      <sc-if value="{{ v.banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="{{ v.bannerS }}"><span aria-hidden="true" style="{{ v.bannerI }}">!</span><span style="flex:1">{{ v.banner }}</span><button type="button" style="{{ v.btnS }}">Try again</button></div>
+      </sc-if>
+      <div style="{{ v.gridS }}">
+        <sc-for list="{{ v.cols }}" as="col" hint-placeholder-count="3">
+          <div style="{{ col.s }}">
+            <sc-for list="{{ col.blocks }}" as="k" hint-placeholder-count="1">
+              <sc-if value="{{ k.isTiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ k.gs }}">
+                  <sc-for list="{{ k.items }}" as="t" hint-placeholder-count="4">
+                    <div style="{{ k.ts }}">
+                      <span style="{{ v.eyeS }}">{{ t.k }}</span>
+                      <span style="{{ t.vs }}">{{ t.v }}</span>
+                      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                        <sc-if value="{{ t.fl }}" hint-placeholder-val="{{ false }}"><span style="{{ t.fls }}">{{ t.fl }}</span></sc-if>
+                        <sc-if value="{{ t.d }}" hint-placeholder-val="{{ false }}"><span style="{{ t.ds }}">{{ t.d }}</span></sc-if>
+                        <span style="{{ t.ss }}">{{ t.sub }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ k.isCard }}" hint-placeholder-val="{{ true }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.glyph }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ v.glyphS }}">{{ k.glyph }}</span></sc-if>
+                  <sc-if value="{{ k.cover }}" hint-placeholder-val="{{ false }}"><div style="{{ k.cover }}"><span style="{{ v.coverT }}">Cover image</span></div></sc-if>
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ true }}">
+                    <div style="{{ k.ths }}">
+                      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                        <sc-if value="{{ k.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ k.es }}">{{ k.eye }}</span></sc-if>
+                        <h3 style="{{ k.hs }}">{{ k.title }}</h3>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><sc-if value="{{ k.lock }}" hint-placeholder-val="{{ false }}"><span style="{{ v.lockS }}"><span aria-hidden="true" style="display:inline-flex" dangerouslySetInnerHTML="{{ v.lockI }}"></span>Set by HQ</span></sc-if>
+                        <sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if>
+                        <sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.note }}" hint-placeholder-val="{{ false }}"><p style="{{ k.ns }}">{{ k.note }}</p></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.legend }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ k.legend }}" as="lg" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                  </sc-if>
+                  <sc-if value="{{ k.svg }}" hint-placeholder-val="{{ false }}"><div dangerouslySetInnerHTML="{{ k.svg }}"></div></sc-if>
+                  <sc-if value="{{ k.refL }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refLs }}">{{ k.refL }}</span></sc-if>
+                  <sc-if value="{{ k.bars }}" hint-placeholder-val="{{ false }}">
+                    <div role="img" aria-label="{{ k.sum }}" style="display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ k.bars }}" as="it" hint-placeholder-count="4"><div title="{{ it.tip }}" style="{{ k.bgs }}"><span style="{{ it.ls }}">{{ it.l }}</span><span style="{{ it.trs }}"><span style="{{ it.fs }}"></span><sc-if value="{{ k.refS }}" hint-placeholder-val="{{ false }}"><span style="{{ k.refS }}"></span></sc-if></span><span style="{{ it.vs }}">{{ it.v }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.stacks }}" hint-placeholder-val="{{ false }}">
+                    <sc-for list="{{ k.stacks }}" as="st" hint-placeholder-count="2">
+                      <div style="display:flex;flex-direction:column;gap:7px">
+                        <span style="{{ v.eyeS }}">{{ st.lab }}</span>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px"><sc-for list="{{ st.leg }}" as="lg" hint-placeholder-count="4"><span style="display:inline-flex;align-items:center;gap:6px"><span style="{{ lg.sw }}"></span>{{ lg.t }}</span></sc-for></div>
+                        <div role="img" aria-label="{{ st.sum }}" style="{{ v.stackS }}"><sc-for list="{{ st.segs }}" as="sg" hint-placeholder-count="4"><span title="{{ sg.tip }}" style="{{ sg.s }}"></span></sc-for></div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
+                  <sc-if value="{{ k.facts }}" hint-placeholder-val="{{ false }}">
+                    <dl style="{{ v.factsS }}"><sc-for list="{{ k.facts }}" as="f" hint-placeholder-count="6"><div style="display:flex;flex-direction:column;gap:3px;min-width:0"><dt style="{{ v.eyeS }}">{{ f.k }}</dt><dd style="{{ v.ddS }}">{{ f.v }}</dd><sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ v.fsubS }}">{{ f.sub }}</span></sc-if></div></sc-for></dl>
+                  </sc-if>
+                  <sc-if value="{{ k.cal }}" hint-placeholder-val="{{ false }}">
+                    <div role="grid" aria-label="November 2026" style="{{ v.calS }}">
+                      <sc-for list="{{ k.cal.head }}" as="hd" hint-placeholder-count="7"><span role="columnheader" style="{{ v.calH }}">{{ hd.t }}</span></sc-for>
+                      <sc-for list="{{ k.cal.days }}" as="d" hint-placeholder-count="35">
+                        <div role="gridcell" style="{{ d.s }}">
+                          <div style="display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="{{ d.ns }}">{{ d.n }}</span><sc-if value="{{ d.ov }}" hint-placeholder-val="{{ false }}"><span style="{{ v.ovS }}"><span aria-hidden="true" style="{{ v.ovD }}"></span>{{ d.ov }}</span></sc-if></div>
+                          <sc-for list="{{ d.chips }}" as="ch" hint-placeholder-count="1"><span style="{{ ch.s }}">{{ ch.t }}</span></sc-for>
+                          <sc-if value="{{ d.more }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ v.moreS }}">{{ d.more }}</a></sc-if>
+                          <sc-if value="{{ d.pop }}" hint-placeholder-val="{{ false }}"><div role="dialog" aria-label="Event" style="{{ v.popS }}"><b style="font-size:13px;line-height:1.35">{{ d.pop.t }}</b><sc-for list="{{ d.pop.lines }}" as="pl" hint-placeholder-count="3"><span style="{{ v.popL }}">{{ pl.t }}</span></sc-for><span style="{{ d.pop.st.s }}">{{ d.pop.st.t }}</span><button type="button" style="{{ v.btnS }}">Open event</button></div></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ k.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-for list="{{ k.tags }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  <div style="{{ k.rowsS }}">
+                    <sc-for list="{{ k.rows }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.rs }}">
+                        <sc-if value="{{ r.db }}" hint-placeholder-val="{{ false }}"><span style="{{ v.dbS }}"><span style="{{ v.dbM }}">{{ r.db.m }}</span><b style="{{ v.dbD }}">{{ r.db.d }}</b><span style="{{ v.dbM }}">{{ r.db.w }}</span></span></sc-if>
+                        <sc-if value="{{ r.lead }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="{{ r.ls }}">{{ r.lead }}</span></sc-if>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                          <sc-if value="{{ r.eye }}" hint-placeholder-val="{{ false }}"><span style="{{ r.es }}">{{ r.eye }}</span></sc-if>
+                          <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+                            <sc-if value="{{ r.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ r.pill.s }}">{{ r.pill.t }}</span></sc-if>
+                            <span style="{{ r.ts }}">{{ r.t }}</span>
+                          </div>
+                          <sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.ss }}">{{ r.sub }}</span></sc-if>
+                          <sc-if value="{{ r.tags }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><sc-for list="{{ r.tags }}" as="g" hint-placeholder-count="2"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                          <sc-if value="{{ r.bar }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="{{ r.bar.trs }}"><span style="{{ r.bar.fs }}"></span></span><span style="{{ v.monoS }}">{{ r.bar.t }}</span><sc-if value="{{ r.bar.w }}" hint-placeholder-val="{{ false }}"><span style="{{ v.waitS }}">{{ r.bar.w }}</span></sc-if></div></sc-if>
+                          <sc-if value="{{ r.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ r.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                        </div>
+                        <sc-if value="{{ r.v }}" hint-placeholder-val="{{ false }}"><span style="{{ r.vs }}">{{ r.v }}</span></sc-if>
+                        <sc-if value="{{ r.st }}" hint-placeholder-val="{{ false }}"><span style="{{ r.st.s }}">{{ r.st.t }}</span></sc-if>
+                        <sc-if value="{{ r.tg }}" hint-placeholder-val="{{ false }}"><span role="switch" tabindex="0" aria-checked="{{ r.on }}" aria-label="{{ r.t }}" style="{{ r.tg }}"><span style="{{ r.tk }}"></span></span></sc-if>
+                        <sc-if value="{{ r.act }}" hint-placeholder-val="{{ false }}"><button type="button" style="{{ r.as }}">{{ r.act }}</button></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <sc-if value="{{ k.btns }}" hint-placeholder-val="{{ false }}"><div style="{{ k.bs }}"><sc-for list="{{ k.btns }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+              <sc-if value="{{ k.isTable }}" hint-placeholder-val="{{ false }}">
+                <section style="{{ k.cs }}">
+                  <sc-if value="{{ k.title }}" hint-placeholder-val="{{ false }}"><div style="{{ k.ths }}"><h3 style="{{ k.hs }}">{{ k.title }}</h3><div style="display:flex;align-items:center;gap:9px"><sc-if value="{{ k.meta }}" hint-placeholder-val="{{ false }}"><span style="{{ k.ms }}">{{ k.meta }}</span></sc-if><sc-if value="{{ k.tog }}" hint-placeholder-val="{{ false }}"><span role="radiogroup" aria-label="View" style="{{ v.segS }}"><sc-for list="{{ k.tog }}" as="o" hint-placeholder-count="2"><span role="radio" tabindex="0" aria-checked="{{ o.on }}" style="{{ o.s }}">{{ o.t }}</span></sc-for></span></sc-if></div></div></sc-if>
+                  <sc-if value="{{ k.tbar }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><sc-if value="{{ k.tbar.search }}" hint-placeholder-val="{{ false }}"><div style="{{ v.searchS }}"><span aria-hidden="true">⌕</span>{{ k.tbar.search }}</div></sc-if><sc-for list="{{ k.tbar.chips }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div>
+                    <sc-if value="{{ k.tbar.views }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center"><span style="{{ v.eyeS }}">Saved views</span><sc-for list="{{ k.tbar.views }}" as="g" hint-placeholder-count="4"><span style="{{ g.s }}">{{ g.t }}</span></sc-for></div></sc-if>
+                  </sc-if>
+                  <div role="table" style="overflow-x:auto">
+                    <div style="{{ k.ins }}">
+                      <div role="row" style="{{ k.hrs }}"><sc-for list="{{ k.cols }}" as="h" hint-placeholder-count="5"><span role="columnheader" style="{{ h.s }}">{{ h.t }}</span></sc-for></div>
+                      <sc-for list="{{ k.rows }}" as="row" hint-placeholder-count="4">
+                        <div role="row" style="{{ row.s }}"><sc-for list="{{ row.cells }}" as="cl" hint-placeholder-count="5"><div role="cell" title="{{ cl.tip }}" style="{{ cl.s }}"><sc-if value="{{ cl.pill }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.pill.s }}">{{ cl.pill.t }}</span></sc-if><span style="{{ cl.ts }}">{{ cl.t }}</span><sc-if value="{{ cl.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ cl.ss }}">{{ cl.sub }}</span></sc-if></div></sc-for></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <sc-if value="{{ k.pager }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:11px;flex-wrap:wrap"><span style="{{ v.countS }}">{{ k.count }}</span><span style="display:flex;gap:6px;align-items:center"><span style="{{ v.countS }}">Rows per page</span><span style="{{ v.pageS }}">25 ▾</span><button type="button" aria-label="Previous page" style="{{ v.pageS }}">‹</button><button type="button" aria-current="page" style="{{ v.pageS }}">1</button><button type="button" style="{{ v.pageS }}">2</button><button type="button" aria-label="Next page" style="{{ v.pageS }}">›</button></span></div>
+                  </sc-if>
+                  <sc-if value="{{ k.foot }}" hint-placeholder-val="{{ false }}"><p style="{{ k.fs }}">{{ k.foot }}</p></sc-if>
+                </section>
+              </sc-if>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <sc-if value="{{ v.pbar }}" hint-placeholder-val="{{ false }}"><div style="{{ v.pbarS }}"><sc-for list="{{ v.pbar }}" as="b" hint-placeholder-count="2"><button type="button" style="{{ b.s }}">{{ b.t }}</button></sc-for></div></sc-if>
+  <sc-if value="{{ v.pubfoot }}" hint-placeholder-val="{{ false }}"><footer style="{{ v.pubfootS }}"><span style="{{ v.pubfootTop }}">Axal VC · site footer, drawn on its own canvas</span><nav aria-label="Legal" style="{{ v.legalS }}"><sc-for list="{{ v.pubfoot }}" as="lf" hint-placeholder-count="6"><a href="{{ lf.href }}" style="{{ lf.s }}">{{ lf.t }}<sc-if value="{{ lf.n }}" hint-placeholder-val="{{ false }}"><span style="{{ lf.ns }}">{{ lf.n }}</span></sc-if></a></sc-for></nav><span style="{{ v.copyS }}">© 2026 Axal VC Management LLC</span></footer></sc-if><sc-if value="{{ v.pnav }}" hint-placeholder-val="{{ false }}"><nav aria-label="Cycles" style="{{ v.pnavS }}"><sc-for list="{{ v.pnav }}" as="pn" hint-placeholder-count="5"><a href="{{ pn.href }}" style="{{ pn.s }}"><span aria-hidden="true" style="{{ pn.ds }}"></span>{{ pn.t }}</a></sc-for></nav></sc-if></main>
+  <sc-if value="{{ v.spine }}" hint-placeholder-val="{{ true }}">
+    <aside aria-label="Eadwyn" title="{{ v.spineTip }}" style="{{ v.spineS }}"><span style="{{ v.eadS }}">E</span><span style="{{ v.spineT }}">Eadwyn</span></aside>
+  </sc-if><sc-if value="{{ v.rail }}" hint-placeholder-val="{{ false }}"><aside aria-label="Eadwyn" style="{{ v.railS }}"><div style="display:flex;align-items:center;gap:9px"><span style="{{ v.eadS }}">E</span><b style="font-size:14px;flex:1">Eadwyn</b><button type="button" aria-label="Collapse Eadwyn" style="{{ v.railX }}">›</button></div><p style="{{ v.railP }}">{{ v.rail.line }}</p><button type="button" style="{{ v.railB }}">{{ v.rail.btn }}</button><sc-for list="{{ v.rail.items }}" as="ri" hint-placeholder-count="3"><div style="{{ v.railI }}"><span style="{{ v.eyeS }}">{{ ri.e }}</span><span style="font-size:12.5px;line-height:1.5">{{ ri.t }}</span></div></sc-for></aside></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;1440px&quot;,&quot;height&quot;:&quot;900px&quot;},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;TRU1&quot;,&quot;options&quot;:[&quot;TRU1&quot;,&quot;TRU1s&quot;,&quot;TRU2&quot;,&quot;TRU3&quot;,&quot;TRU4&quot;,&quot;TRU4v&quot;,&quot;TRU5&quot;,&quot;TRU6&quot;,&quot;TRU6d&quot;,&quot;TRU7&quot;,&quot;TRU8&quot;,&quot;TRU9a&quot;,&quot;TRU9b&quot;,&quot;TRU9c&quot;,&quot;TRU10a&quot;,&quot;TRU10b&quot;,&quot;TRU10c&quot;,&quot;TRU11&quot;,&quot;TRU11v&quot;,&quot;TRU12&quot;,&quot;TRU13&quot;,&quot;TRU14&quot;,&quot;TRU14d&quot;,&quot;TRU15a&quot;,&quot;TRU15b&quot;,&quot;TRU15c&quot;,&quot;TRU16&quot;,&quot;TRU17a&quot;,&quot;TRU17b&quot;,&quot;TRU17c&quot;,&quot;TRU18a&quot;,&quot;TRU18b&quot;,&quot;TRU19a&quot;,&quot;TRU19b&quot;,&quot;TRU19c&quot;,&quot;TRU20&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'TRU1';
+    const dark = B === 'TRU20', phone = /^TRU19/.test(B);
+    const crop = ['TRU1s', 'TRU4v', 'TRU6d', 'TRU9a', 'TRU9b', 'TRU9c', 'TRU10a', 'TRU10b', 'TRU10c', 'TRU11v', 'TRU14d', 'TRU15a', 'TRU15b', 'TRU15c', 'TRU17a', 'TRU17b', 'TRU17c'].indexOf(B) >= 0;
+    const pub = ['TRU1', 'TRU1s', 'TRU2', 'TRU3', 'TRU4', 'TRU4v', 'TRU5', 'TRU6', 'TRU15c', 'TRU16', 'TRU17a', 'TRU18a', 'TRU19a'].indexOf(B) >= 0;
+    const c = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', fa: '#6b7280', hair: '#374151', vi: '#a78bfa', vt: '#a78bfa', lav: '#211f3d', lavE: '#4c3a8a', pos: '#34d399', posBg: 'rgba(52,211,153,.12)', posE: 'rgba(52,211,153,.45)', neg: '#f87171', negBg: 'rgba(248,113,113,.12)', negE: 'rgba(248,113,113,.5)', amT: '#fcd34d', amBg: 'rgba(252,211,77,.1)', amE: 'rgba(252,211,77,.55)', dim: 'rgba(3,7,18,.62)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', fa: '#a1a1aa', hair: '#ececf1', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd0fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', dim: 'rgba(24,24,27,.34)', skel: '#ececf1' };
+    if (pub) Object.assign(c, { bg: '#faf9fc', ink: '#141118', vi: '#6d28d9', vt: '#6d28d9' });
+    const MO = "'Roboto Mono',ui-monospace,monospace", SG = pub ? "'Public Sans',system-ui,sans-serif" : "'Space Grotesk',system-ui,sans-serif", HF = "font-family:'Bricolage Grotesque',system-ui,sans-serif";
+    const S = [c.vi, '#0ea5e9', '#f59e0b', '#10b981', '#6b6577'];
+    const eyeS = 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu;
+    const CARD = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;box-sizing:border-box';
+    const PLAIN = 'display:flex;flex-direction:column;gap:8px;min-width:0';
+    const SEC = 'display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:14px;border-top:1px solid ' + c.hair;
+    const BTN = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:' + (phone ? 44 : 34) + 'px;padding:0 14px;border-radius:9px;font:700 13px ' + SG + ';cursor:pointer;white-space:nowrap;box-sizing:border-box;';
+    const btnP = BTN + 'border:1px solid ' + (pub ? '#6d28d9' : '#7c3aed') + ';background:' + (pub ? '#6d28d9' : '#7c3aed') + ';color:#fff';
+    const btnS = BTN + 'border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const btnG = BTN + 'border:1px solid transparent;background:transparent;color:' + c.vt + ';padding:0 6px';
+    const btnD = BTN + 'border:1px solid ' + c.negE + ';background:' + c.card + ';color:' + c.neg;
+    const btnSm = BTN + 'min-height:' + (phone ? 44 : 30) + 'px;padding:0 11px;font-size:12px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink;
+    const TN = { n: [c.mu, c.raised, c.hair], v: [c.vt, c.lav, c.lavE], g: [c.pos, c.posBg, c.posE], r: [c.neg, c.negBg, c.negE], a: [c.amT, c.amBg, c.amE] };
+    const pl = (ic, t, tone) => { const x = TN[tone || 'n']; return { t: (ic ? ic + ' ' : '') + t, s: 'display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font:700 11px ' + SG + ';line-height:1.5;white-space:nowrap;color:' + x[0] + ';background:' + x[1] + ';border:1px solid ' + x[2] }; };
+    const tag = (t, sel) => ({ t, s: 'display:inline-flex;align-items:center;gap:5px;min-height:' + (phone ? 40 : 28) + 'px;padding:0 11px;border-radius:999px;box-sizing:border-box;font:' + (sel ? 700 : 600) + ' 12px ' + SG + ';white-space:nowrap;cursor:pointer;' + (sel ? 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE : 'color:' + c.ink + ';background:' + c.card + ';border:1px solid ' + c.hair) });
+    const seg = (opts, cur) => opts.map(t => ({ t, on: t === cur ? 'true' : 'false', s: 'display:inline-flex;align-items:center;min-height:' + (phone ? 40 : 28) + 'px;padding:0 12px;border-radius:7px;font:' + (t === cur ? 700 : 600) + ' 12px ' + SG + ';cursor:pointer;white-space:nowrap;' + (t === cur ? 'background:' + c.card + ';color:' + c.ink + ';box-shadow:0 0 0 1px ' + c.hair : 'color:' + c.mu) }));
+    const TOG = () => seg(['Chart', 'Table'], 'Chart');
+    const RS = 'display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-top:1px solid ' + c.hair;
+    const R = (o) => Object.assign({ rs: RS, db: false, lead: false, ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.mu, eye: false, es: eyeS, pill: false, t: '', ts: 'font-size:13px;font-weight:600;line-height:1.45', sub: false, ss: 'font-size:12px;color:' + c.mu + ';line-height:1.5', tags: false, bar: false, btns: false, v: false, vs: 'font:700 13px ' + MO + ';white-space:nowrap;color:' + c.ink, st: false, tg: false, tk: '', on: 'false', act: false, as: btnSm }, o);
+    const K = (o) => Object.assign({ isCard: true, isTiles: false, isTable: false, cs: CARD, glyph: false, cover: false, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', eye: false, es: eyeS, hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, lock: false, note: false, ns: 'margin:0;font-size:12.5px;line-height:1.55;color:' + c.mu, tbar: false, legend: false, svg: false, refL: false, refLs: '', bars: false, sum: '', bgs: 'display:grid;grid-template-columns:180px minmax(0,1fr) 150px;gap:11px;align-items:center;font-size:12.5px', refS: false, stacks: false, facts: false, tags: false, cal: false, rows: [], rowsS: 'display:flex;flex-direction:column', btns: false, bs: 'display:flex;gap:7px;flex-wrap:wrap', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+    const TL = (items, n) => ({ isCard: false, isTiles: true, isTable: false, gs: 'display:grid;grid-template-columns:repeat(' + (n || (phone ? 2 : 4)) + ',minmax(0,1fr));gap:' + (phone ? 10 : 14) + 'px', ts: CARD + ';gap:6px;padding:' + (phone ? '12px 13px' : '14px 16px'), items: items.map(x => ({ k: x[0], v: x[1], sub: x[2] || '', d: x[3] || false, ds: 'font:700 12px ' + MO + ';color:' + c.pos, fl: x[5] || false, fls: 'display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px ' + SG + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, vs: x[1] === '' ? 'display:block;height:24px;width:60%;border-radius:6px;background:' + c.skel : 'font:700 ' + (x[6] ? 15 : (phone ? 20 : 24)) + 'px ' + (x[6] ? SG : MO) + ';letter-spacing:-.02em;color:' + (x[6] || c.ink), ss: 'font-size:12px;color:' + c.mu + ';line-height:1.45' })) });
+    const CL = (t, o) => Object.assign({ t: t == null ? '' : t, tip: '', s: 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0', ts: 'line-height:1.4', pill: false, sub: false, ss: 'font-size:11px;color:' + c.mu + ';line-height:1.4' }, o || {});
+    const MN = { ts: 'font-family:' + MO + ';font-weight:600' }, MU = { ts: 'color:' + c.mu }, LK = { ts: 'font-weight:700;color:' + c.vt + ';cursor:pointer' }, BD = { ts: 'font-weight:700;line-height:1.35' };
+    const DOTS = CL('⋯', { ts: 'font-size:16px;color:' + c.mu + ';cursor:pointer', tip: 'More actions' });
+    const TB = (o) => { const t = Object.assign({ isCard: false, isTiles: false, isTable: true, cs: CARD, title: false, ths: 'display:flex;align-items:center;justify-content:space-between;gap:11px;flex-wrap:wrap', hs: 'margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em', meta: false, ms: 'font-size:12px;color:' + c.mu, tog: false, tbar: false, gc: '1fr', minW: 0, cols: [], rows: [], pager: true, count: '', foot: false, fs: 'margin:0;font-size:12px;color:' + c.mu + ';line-height:1.55' }, o);
+      if (t.tbar && !t.tbar.views) t.tbar.views = false;
+      t.ins = 'min-width:' + t.minW + 'px'; t.hrs = 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:8px 0;border-bottom:1px solid ' + c.hair + ';' + eyeS;
+      t.cols = t.cols.map(x => typeof x === 'string' ? ({ t: x, s: '' }) : x); t.rows = t.rows.map(cells => ({ s: 'display:grid;grid-template-columns:' + t.gc + ';gap:8px;padding:9px 0;border-bottom:1px solid ' + c.hair + ';align-items:center;font-size:12px', cells: cells.map(x => typeof x === 'string' ? CL(x) : x) })); return t; };
+    const H18 = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.3';
+    const FIN = 'display:block;box-sizing:border-box;width:100%;padding:9px 11px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';font:600 13px ' + SG + ';line-height:1.45;color:' + c.ink;
+    const FIE = FIN + ';color:' + c.fa + ';font-weight:500';
+    const TGS = (on) => 'position:relative;display:inline-block;width:34px;height:20px;border-radius:999px;flex:none;margin-top:2px;cursor:pointer;background:' + (on ? '#7c3aed' : c.hair) + ';border:1px solid ' + (on ? '#7c3aed' : c.mu);
+    const TKS = (on) => 'position:absolute;top:2px;left:' + (on ? 16 : 2) + 'px;width:14px;height:14px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)';
+    const NOTE = (tone) => { const x = { n: [c.raised, c.hair], v: [c.lav, c.lavE], a: [c.amBg, c.amE], r: [c.negBg, c.negE] }[tone]; return 'display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;background:' + x[0] + ';border:1px solid ' + x[1]; };
+    const INFO = 'display:grid;place-items:center;width:18px;height:18px;border-radius:999px;background:#7c3aed;color:#fff;font:700 11px ' + SG + ';flex:none';
+    const dotSw = (col) => 'width:10px;height:10px;border-radius:3px;flex:none;background:' + col;
+    const LEG = (names) => names.map((t, i) => ({ t, sw: dotSw(S[i]) }));
+    const FILL = (w, col) => 'display:block;height:100%;border-radius:3px;width:' + w + ';background:' + (col || S[0]);
+    const TRK = 'position:relative;display:block;height:14px;border-radius:4px;background:' + c.raised + ';border:1px solid ' + c.hair;
+    const BAR = (l, val, w, o) => Object.assign({ l, v: val, tip: l + ' · ' + val, ls: 'line-height:1.35', trs: TRK, fs: FILL(w), vs: 'font:600 12px ' + MO + ';white-space:nowrap' }, o || {});
+    const COL = (span) => 'display:flex;flex-direction:column;gap:14px;min-width:0;grid-column:span ' + (span || 6);
+    const col = (blocks, span) => ({ s: COL(span), blocks });
+    const G6 = 'display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;align-items:start';
+    const STACK = 'display:flex;flex-direction:column;gap:14px';
+    const DIMC = { s: 'position:absolute;inset:0;background:' + c.dim + ';z-index:3', blocks: [] };
+    const DLGS = 'background:' + c.card + ';border:1px solid ' + c.hair + ';border-radius:16px;box-shadow:0 30px 80px rgba(24,24,27,.28);padding:22px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box;';
+    const dlgCol = (blocks, abs, w) => ({ s: abs ? DLGS + 'position:absolute;top:110px;left:50%;transform:translateX(-50%);width:' + (w || 560) + 'px;z-index:4' : DLGS + 'width:100%;max-width:580px;margin:0 auto', blocks });
+    const dlg = (title, note, mid, btns) => [K({ cs: PLAIN, title, hs: H18, meta: 'Esc to close', note })].concat(mid).concat([K({ cs: SEC, btns, bs: 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap' })]);
+    const bul = (t) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: '•', ls: 'font-size:14px;line-height:1.35;color:' + c.vt, t, ts: 'font-size:13px;font-weight:500;line-height:1.5' });
+    const field = (eye, val, o) => R(Object.assign({ rs: 'display:flex;flex-direction:column;gap:6px;padding:4px 0', eye, t: val, ts: FIN }, o || {}));
+    const SW = (t, on, sub) => R({ rs: 'display:flex;gap:11px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, t, sub: sub || false, tg: TGS(on), tk: TKS(on), on: on ? 'true' : 'false' });
+    const RAD = (t, on, sub) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:6px 0', lead: on ? '◉' : '○', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t, sub: sub || false });
+    const CHK = (t, on) => R({ rs: 'display:flex;gap:9px;align-items:flex-start;padding:5px 0', lead: on ? '☑' : '☐', ls: 'font-size:15px;line-height:1.2;flex:none;color:' + (on ? c.vt : c.mu), t });
+    const STEPS = (list, cur) => list.map((t, i) => ({ t: (i ? '→ ' : '') + t, s: 'font-size:12px;white-space:nowrap;font-weight:' + (i === cur ? 800 : 600) + ';color:' + (i === cur ? c.vt : c.mu) }));
+    const MOVED = (t) => K({ cs: PLAIN, rows: [R({ rs: NOTE('v') + ';align-items:center;padding:9px 12px', lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.45', act: 'Dismiss', as: btnG })] });
+    const INFOROW = (t, tone, act) => R({ rs: NOTE(tone || 'v'), lead: 'i', ls: INFO, t, ts: 'font-size:13px;font-weight:600;line-height:1.5', act: act || false, as: btnG });
+    const SKR = (w) => R({ rs: 'display:block;height:12px;border-radius:6px;margin:9px 0;background:' + c.skel + ';width:' + w });
+    const sk = (n) => K({ title: 'Reading…', hs: 'margin:0;font-size:13px;font-weight:600;color:' + c.mu, rows: ['92%', '74%', '86%', '60%', '70%'].slice(0, n).map(SKR) });
+    const CENTER = (glyph, t, note, btns, extra) => K({ cs: CARD + ';align-items:center;text-align:center;padding:34px 28px' + (extra || ''), glyph, title: t, ths: 'display:flex;justify-content:center', hs: 'margin:0;font-size:16px;font-weight:800;text-align:center;line-height:1.35', note, ns: 'margin:0;font-size:13px;color:' + c.mu + ';text-align:center;line-height:1.55', btns, bs: 'display:flex;gap:7px;justify-content:center;flex-wrap:wrap' });
+    const svgOpen = (W, H, sum, f) => '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + sum + '" style="display:block;overflow:visible;font-family:' + (f || 'Roboto Mono,monospace') + '">';
+    const lineSvg = (o) => { const W = o.w || 1080, H = o.h || 260, L = 50, Rt = o.rp == null ? 200 : o.rp, T = 26, Bm = 30, iw = W - L - Rt, ih = H - T - Bm, n = o.n;
+      const X = (i) => +(L + i * iw / (n - 1)).toFixed(1), Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + (o.yf ? o.yf(v) : v) + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.xl.forEach((t, i) => { if (i % (o.xe || 1) === 0 || i === n - 1) s += '<text x="' + X(i) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + t + '</text>'; });
+      const labs = [];
+      o.series.forEach((se) => { let d = '', pen = false, li = -1; se.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + X(i) + ' ' + Y(v); pen = true; li = i; });
+        s += '<path d="' + d + '" fill="none" stroke="' + se.col + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        se.vals.forEach((v, i) => { if (v == null) return; const sf = o.soFar && i === n - 1; s += '<circle cx="' + X(i) + '" cy="' + Y(v) + '" r="' + (sf ? 4.5 : 3) + '" fill="' + (sf ? c.card : se.col) + '" stroke="' + se.col + '" stroke-width="2"><title>' + o.xl[i] + ' · ' + se.name + ' ' + v + (sf ? ' so far' : '') + '</title></circle>'; });
+        if (Rt > 40) labs.push({ y: Y(se.vals[li]) + 4, t: se.name + (o.soFar ? ' · ' + se.vals[li] + ' so far' : ''), col: se.col }); });
+      labs.sort((a, b) => a.y - b.y); for (let i = 1; i < labs.length; i++) if (labs[i].y < labs[i - 1].y + 15) labs[i].y = labs[i - 1].y + 15;
+      labs.forEach((l) => { s += '<circle cx="' + (L + iw + 14) + '" cy="' + (l.y - 4) + '" r="4" fill="' + l.col + '"/><text x="' + (L + iw + 23) + '" y="' + l.y + '" font-size="11.5" fill="' + c.ink + '">' + l.t + '</text>'; });
+      if (o.soFar) s += '<text x="' + X(n - 1) + '" y="' + (T - 10) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>';
+      return { __html: s + '</svg>' }; };
+    const colSvg = (o) => { const W = o.w || 560, H = o.h || 230, L = 40, T = 26, Bm = 30, iw = W - L - 8, ih = H - T - Bm, n = o.data.length, step = iw / n, bw = step * .6;
+      const Y = (v) => +(T + ih - v / o.ymax * ih).toFixed(1);
+      let s = svgOpen(W, H, o.sum);
+      for (let v = 0; v <= o.ymax; v += o.ystep) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + c.hair + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="11" font-size="11" fill="' + c.mu + '">' + o.yl + '</text>';
+      o.data.forEach((arr, i) => { const x = +(L + i * step + (step - bw) / 2).toFixed(1), cur = i === n - 1; let acc = 0;
+        arr.forEach((v, j) => { if (!v) return; s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw.toFixed(1) + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '"' + (cur ? ' fill-opacity=".4"' : '') + ' stroke="' + c.card + '"><title>' + o.xl[i] + ' · ' + o.names[j] + ' ' + v + (cur ? ' so far' : '') + '</title></rect>'; acc += v; });
+        if (i % 3 === 0 || cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">' + o.xl[i] + '</text>';
+        if (cur) s += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="10.5" fill="' + c.mu + '">so far</text>'; });
+      return { __html: s + '</svg>' }; };
+    const hstackSvg = (o) => { const W = o.w || 560, rh = 32, L = o.lw || 182, Rr = 112, H = o.rows.length * rh + 4, iw = W - L - Rr;
+      let s = svgOpen(W, H, o.sum, 'Space Grotesk,sans-serif');
+      o.rows.forEach((r, i) => { const y = i * rh + 4; let acc = 0; s += '<text x="0" y="' + (y + 14) + '" font-size="12" fill="' + c.ink + '">' + r[0] + '</text>';
+        r[1].forEach((v, j) => { if (!v) return; s += '<rect x="' + (L + acc / o.max * iw).toFixed(1) + '" y="' + (y + 2) + '" width="' + (v / o.max * iw - 1.5).toFixed(1) + '" height="16" rx="2" fill="' + S[j] + '"><title>' + r[0] + ' · ' + o.names[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (L + acc / o.max * iw + 8).toFixed(1) + '" y="' + (y + 14) + '" font-family="Roboto Mono,monospace" font-size="11.5" fill="' + c.ink + '">' + r[2] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const divSvg = () => { const W = 560, H = 250, L = 52, T = 16, Bm = 28, iw = W - L - 12, ih = H - T - Bm, y1 = 1600, y0 = -1200;
+      const Y = (v) => +(T + (y1 - v) / (y1 - y0) * ih).toFixed(1);
+      const G = [[600, 250, 350, 200], [550, 300, 400, 150], [500, 350, 450, 100]], SP = [800, 850, 950], M = ['[Aug]', '[Sep]', '[Oct]'], GN = ['Lab milestones', 'Bounties', 'Referrals', 'Granted by HQ'];
+      let s = svgOpen(W, H, 'Credits granted and spent, August to October: 1,400 granted each month; 800, 850 and 950 spent on perk claims.');
+      for (let v = y0; v <= y1; v += 400) s += '<line x1="' + L + '" x2="' + (L + iw) + '" y1="' + Y(v) + '" y2="' + Y(v) + '" stroke="' + (v === 0 ? c.mu : c.hair) + '"/><text x="' + (L - 8) + '" y="' + (Y(v) + 4) + '" text-anchor="end" font-size="11" fill="' + c.mu + '">' + v + '</text>';
+      s += '<text x="' + L + '" y="9" font-size="11" fill="' + c.mu + '">credits</text>';
+      const bw = 70, gap = iw / 3;
+      G.forEach((g, i) => { const x = +(L + i * gap + (gap - bw) / 2).toFixed(1); let acc = 0;
+        g.forEach((v, j) => { s += '<rect x="' + x + '" y="' + Y(acc + v) + '" width="' + bw + '" height="' + (Y(acc) - Y(acc + v)).toFixed(1) + '" fill="' + S[j] + '" stroke="' + c.card + '"><title>' + M[i] + ' · ' + GN[j] + ' ' + v + '</title></rect>'; acc += v; });
+        s += '<text x="' + (x + bw / 2) + '" y="' + (Y(acc) - 6) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">+' + acc + '</text>';
+        s += '<rect x="' + x + '" y="' + Y(0) + '" width="' + bw + '" height="' + (Y(-SP[i]) - Y(0)).toFixed(1) + '" fill="' + S[4] + '"><title>' + M[i] + ' · Spent on perk claims ' + SP[i] + '</title></rect><text x="' + (x + bw / 2) + '" y="' + (Y(-SP[i]) + 14) + '" text-anchor="middle" font-size="11" fill="' + c.ink + '">−' + SP[i] + '</text>';
+        s += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="11" fill="' + c.mu + '">' + M[i] + '</text>'; });
+      return { __html: s + '</svg>' }; };
+    const PSM = { Live: ['✓', 'g'], 'Partly built': ['◐', 'v'], 'Not built yet': ['○', 'n'], Proposed: ['✎', 'n'], Paused: ['‖', 'a'] };
+    const ps = (s) => pl(PSM[s][0], s, PSM[s][1]);
+    const gb = (s) => { const m = { Requested: ['◷', 'a'], 'Paused by HQ': ['‖', 'a'], Ended: ['–', 'n'], 'Not granted': ['○', 'n'], 'Runs at HQ': ['⌂', 'n'], 'Not offered yet': ['–', 'n'], 'HQ-held': ['⌂', 'n'], 'HQ only': ['⌂', 'n'] }[s] || ['◆', 'v']; return pl(m[0], s, m[1]); };
+    const SM = { Draft: ['✎', 'n'], 'Sent to HQ': ['◷', 'a'], Approved: ['✓', 'g'], 'Sent back': ['↩', 'n'], Declined: ['✕', 'r'], Submitted: ['↑', 'n'], 'Under review': ['◷', 'a'], 'More info needed': ['?', 'a'], Qualified: ['✓', 'v'], 'In conversation': ['⇄', 'v'], Converted: ['✓', 'g'], 'Reward issued': ['✓', 'g'], Rejected: ['✕', 'r'], Closed: ['–', 'n'], 'In review': ['◷', 'a'], Live: ['✓', 'g'], Paused: ['‖', 'a'], Published: ['✓', 'g'], Active: ['✓', 'g'], Ended: ['–', 'n'], Sent: ['◷', 'a'], 'Not sent': ['○', 'n'], Expired: ['–', 'n'], Verified: ['✓', 'g'], 'Not verified': ['○', 'n'], Done: ['✓', 'g'], 'Not yet': ['○', 'n'] };
+    const sp = (s, lab) => { const m = SM[s] || ['–', 'n']; return pl(m[0], lab || s, m[1]); };
+    const PC = (s, lab) => CL('', { pill: sp(s, lab) });
+    const HB = (t, s) => ({ t, s, btn: true, txt: false, al: t });
+    const HT = (t) => ({ t, s: 'font:500 12px ' + MO + ';color:' + c.mu, btn: false, txt: true, al: t });
+    const ICON = (t, al) => ({ t, s: BTN + 'width:34px;padding:0;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink, btn: true, txt: false, al });
+    TN.s = [dark ? '#38bdf8' : '#0369a1', dark ? 'rgba(14,165,233,.12)' : '#f0f9ff', dark ? 'rgba(14,165,233,.45)' : '#bae6fd'];
+    const MN3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const LINE = 'font-size:13px;font-weight:500;line-height:1.5', NS1 = 'margin:0;font-size:13.5px;line-height:1.6;color:' + c.ink, BTNR = 'display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap', CEN = ';max-width:560px;margin:60px auto 0;width:100%';
+    const btnX = BTN + 'border:1px solid ' + c.hair + ';background:' + c.raised + ';color:' + c.fa + ';cursor:not-allowed';
+    const PILL = 'display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;font:700 10.5px ' + SG + ';line-height:1.6;white-space:nowrap;';
+    const NRP = { t: 'Not recorded', s: PILL + 'color:' + c.mu + ';background:' + c.card + ';border:1px dashed ' + c.mu };
+    const FRS = 'display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-top:1px solid ' + c.hair, CKS = 'font:500 11px ' + MO + ';color:' + c.mu, H2S = 'margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em';
+    const FL = (t, d) => R({ rs: FRS, lead: '✓', ls: 'font-size:13px;line-height:1.5;flex:none;color:' + c.pos, t, ts: LINE, sub: 'Checked [' + (d || '14 Oct 2026') + ']', ss: CKS });
+    const NRL = (t, why) => R({ rs: FRS, lead: '○', ls: 'font-size:13px;line-height:1.5;flex:none;color:' + c.mu, t, ts: LINE + ';font-weight:600', sub: why, st: NRP });
+    const TX = (t) => R({ rs: FRS, lead: '•', ls: 'font-size:14px;line-height:1.3;flex:none;color:' + c.vt, t, ts: LINE });
+    const RQ = { todo: ['○', 'To do', 'v'], rev: ['◷', 'In review', 's'], done: ['✓', 'Done', 'g'], nr: ['–', 'Not required', 'n'], exp: ['◷', 'Expires in [12] days', 'a'], expd: ['!', 'Expired', 'r'], ns: ['○', 'Not started', 'n'], wait: ['◷', 'Waiting', 'a'], ni: ['?', 'Needs information', 'a'], ap: ['✓', 'Approved', 'g'], ws: ['◷', 'Waiting for signatures', 'a'], inf: ['✓', 'In force', 'g'], end: ['–', 'Ended', 'n'] };
+    const rq = (k, lab) => pl(RQ[k][0], lab || RQ[k][1], RQ[k][2]);
+    const REQ = (t, k, sub, act, lab, o) => R(Object.assign({ t, ts: 'font-size:13.5px;font-weight:700;line-height:1.4', sub: sub || false, st: rq(k, lab), act: act || false, as: btnSm }, o || {}));
+    const ERR = (t, tone, btns) => R({ rs: NOTE(tone || 'r'), lead: '!', ls: 'font-weight:800;flex:none;color:' + (tone === 'a' ? c.amT : c.neg), t, ts: 'font-size:13px;font-weight:700;line-height:1.5;color:' + (tone === 'a' ? c.amT : c.neg), btns: btns || false });
+    const PAGER = (t) => R({ rs: 'display:flex;gap:11px;align-items:center;padding:12px 0 0;border-top:1px solid ' + c.hair, t, ts: 'font:500 12px ' + MO + ';color:' + c.mu, act: 'Next page ›', as: btnSm });
+    const TRL = (list) => list.map(t => ({ t, s: 'display:inline-flex;align-items:center;min-height:24px;padding:0 9px;border-radius:999px;box-sizing:border-box;font:600 11px ' + MO + ';color:' + c.mu + ';background:' + c.raised + ';border:1px solid ' + c.hair }));
+    const PRC = { f: dark ? '#a78bfa' : '#7c3aed', i: '#0ea5e9', a: '#f59e0b', p: '#10b981', e: '#6b6577' };
+    const PRT = dark ? { f: 'rgba(167,139,250,.14)', i: 'rgba(14,165,233,.14)', a: 'rgba(245,158,11,.14)', p: 'rgba(16,185,129,.14)', e: '#1f2937' } : { f: '#f4f0fe', i: '#f0f9ff', a: '#fffbeb', p: '#ecfdf5', e: '#f8f7fb' };
+    const PRN = { f: 'Founder', i: 'Investor', a: 'Advisor', p: 'Operating Partner', e: 'Explorer' };
+    const PPS = (k) => PILL + 'justify-self:start;padding-left:20px;color:' + c.ink + ';border:1px solid ' + c.hair + ';background:radial-gradient(circle at 10px 50%,' + PRC[k] + ' 0 3.5px,transparent 4px) ' + PRT[k];
+    const pp = (k, lab) => ({ t: lab || PRN[k], s: PPS(k) });
+    const one = (b) => [{ s: STACK, blocks: b }];
+    const over = (blocks, w) => [DIMC, dlgCol(blocks, true, w || 600)];
+    const FX = (a) => a.map(x => Object.assign({ sub: false }, x));
+    const TILES = [['Status', '● All systems operational', 'Checked [2 min] ago · Status page ›', false, false, false, c.pos], ['Certifications', 'None held', 'We list a certification here only after an auditor issues it.', false, false, false, c.ink], ['Security contact', '[security mailbox]', 'Critical reports acknowledged within 4 business hours.', false, false, false, c.ink], ['Subprocessors', '[5] listed', 'Last change [2 Sep 2026]'], ['Your data', 'Download or delete it any time', 'From your account.', false, false, false, c.ink]];
+    const tilesO = () => TL(TILES, phone ? 2 : 5);
+    const STRIP = (nr) => { const W = 450, H = 26, st0 = Date.UTC(2026, 6, 24); let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="' + (nr ? 'Since records began on 2 September: no incident reported on 49 of 50 recorded days, and a degraded day on 3 September. The 40 days before are not recorded.' : 'The last 90 days: no incident reported on 88, a degraded day on 3 September and a major outage on 19 August.') + '" style="display:block">';
+      for (let i = 0; i < 90; i++) { const d = new Date(st0 + i * 864e5), lab = '[' + d.getUTCDate() + ' ' + MN3[d.getUTCMonth()] + ']', x = i * 5, k = nr && i < 40 ? 0 : lab === '[3 Sep]' ? 2 : lab === '[19 Aug]' ? 3 : 1;
+        s += k ? '<rect x="' + x + '" y="1" width="4" height="' + (H - 2) + '" rx="1" fill="' + ['', '#10b981', '#f59e0b', c.neg][k] + '"><title>' + lab + ' · ' + ['', 'No incident reported', 'Degraded · [Incident title]', 'Major outage · [Incident title]'][k] + '</title></rect>' : '<rect x="' + (x + .5) + '" y="1.5" width="3" height="' + (H - 3) + '" rx="1" fill="none" stroke="' + c.mu + '" stroke-dasharray="2 2"><title>' + lab + ' · Not recorded</title></rect>'; }
+      return { __html: s + '</svg>' }; };
+    const SLEG = [{ t: 'No incident reported', sw: dotSw('#10b981') }, { t: 'Degraded', sw: dotSw('#f59e0b') }, { t: 'Major outage', sw: dotSw(c.neg) }, { t: 'Not recorded', sw: 'width:10px;height:10px;border-radius:3px;flex:none;box-sizing:border-box;border:1px dashed ' + c.mu }];
+    const statusK = (nr) => K({ title: nr ? 'Status · records began on [2 Sep]' : 'Status', tog: TOG(), legend: SLEG, svg: STRIP(nr), rows: [R({ rs: 'display:flex;padding:0', t: '[24 Jul]', ts: CKS, v: '[21 Oct]', vs: CKS }), R({ rs: FRS, t: nr ? 'Days with no incident reported: [49] of [50] recorded' : 'Days with no incident reported: [88] of [90]', ts: 'font:700 12.5px ' + MO })], btns: [{ t: 'Status page ›', s: btnG }] });
+    const pK = (t, lines) => K({ title: t, rows: lines.map(l => FL(l)), btns: [{ t: 'Read more ›', s: btnG }] });
+    const protect = () => [pK('Security', ['HTTPS everywhere, with HSTS.', 'Sign in with an authenticator app or a passkey.', 'Sensitive actions ask for a fresh code.']), pK('Data and privacy', ['Axal VC Management LLC is the data controller.', 'No third-party analytics run on the platform.', 'You are told of a breach within 30 days.']), pK('Money', ['Card payments go through a payment processor’s checkout.', 'Investors pass an identity check before they invest.', 'Agreements are signed electronically, with a signing trail.']), pK('Subprocessors', ['[5] companies process data for us.', 'Each is listed with its purpose and location.', 'You get [10] days’ notice before a new one.']), statusK(), pK('Disclosure', ['Report a vulnerability privately.', 'We answer by severity, within set times.', 'We will not take legal action against good-faith research.'])];
+    const DSH = CL('—', { ts: 'color:' + c.mu, tip: 'Not asked of this profile' }), RQD = CL('Required', { ts: 'font-weight:600' }), CT = (t) => CL(t, { ts: 'font-size:12px;font-weight:600;line-height:1.4' });
+    const checkT = () => TB({ title: 'What we check, and for whom', pager: false, gc: '1.3fr repeat(5,minmax(0,1fr))', minW: 940, cols: ['Requirement'].concat(['f', 'i', 'a', 'p', 'e'].map(k => ({ t: PRN[k], s: PPS(k) }))), rows: [[CL('Terms of Service', BD), RQD, RQD, RQD, RQD, RQD], [CL('Privacy Policy', BD), RQD, RQD, RQD, RQD, RQD], [CL('Role NDA', BD), CT('Renew every 24 months'), CT('Renew every 24 months'), CT('Renew every 24 months'), CT('After a partner deal'), DSH], [CL('Advisor disclaimer', BD), DSH, DSH, RQD, DSH, DSH], [CL('Identity check', BD), DSH, RQD, DSH, DSH, DSH], [CL('Accreditation', BD), DSH, RQD, DSH, DSH, DSH], [CL('Entity check', BD), CT('Required, per company'), CT('When investing through a company'), DSH, CT('After a partner deal'), DSH]], foot: 'A dash means the requirement is not asked of that profile.' });
+    const changesK = () => K({ title: 'Changes to this page', rows: [['SEP', '02', '2026', 'Subprocessors · [Vendor E] added for support routing.'], ['AUG', '14', '2026', 'Security · Passkeys added to sign-in.'], ['JUL', '08', '2026', 'Documents · Terms of Service [v3] published.']].map(([m, d, w, t]) => R({ rs: 'display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid ' + c.hair, db: { m, d, w }, t, ts: LINE })), btns: [{ t: 'All changes ›', s: btnG }] });
+    const overview = () => [col([tilesO()]), col([K({ cs: PLAIN, title: 'How we protect you', hs: H2S })])].concat(protect().map(k => col([k], 2))).concat(phone ? [] : [col([checkT()])]).concat([col([changesK()])]);
+    const secCols = () => [['Hosting and network', [FL('One production deployment, on a global edge network.'), FL('HTTPS only, with HSTS for two years and preload.'), FL('Pages cannot be framed by other sites.'), FL('A content security policy limits what scripts can run.')]], ['Signing in', [FL('Password plus an authenticator app.'), FL('Passkeys.'), FL('Sign in with Google.'), FL('SMS codes.'), FL('Account recovery with a cool-off before sensitive changes.')]], ['Inside the team', [FL('Sensitive admin actions ask for a fresh code.'), FL('Support sessions in a member’s account need a reason and end on a timer.'), FL('Admin actions are written to an audit log.')]], ['Encryption', [FL('Phone numbers, connector credentials, due-diligence files and signed documents are encrypted with AES-GCM before storage.'), NRL('Storage-level encryption by our host', 'Our host’s statement on encryption at rest is not on file yet.')]], ['Backups and recovery', [FL('Backups: taken.'), NRL('Last recovery drill', 'No recovery drill has been recorded yet.')]], ['Testing', [NRL('Independent penetration test', 'No independent test has been run yet.'), FL('Certifications: none held.')]]].map(([t, rows]) => col([K({ title: t, rows })], 3)).concat([col([K({ cs: PLAIN, note: 'These are the controls the platform runs today. Nothing here is a certification.', ns: NS1 })])]);
+    const NRC = CL('', { pill: NRP, tip: 'We have not set this yet.' }), WH = (t, s) => CL(t, { ts: 'font-weight:700', sub: s });
+    const dataCols = () => [col([K({ title: 'Who holds your data', rows: [FL('Axal VC Management LLC, a Delaware company, is the data controller.'), FL('Axal VC GP LLC receives investor data only to run the fund.')] })], 3), col([K({ title: 'Matching is off until you turn it on', rows: [FL('You appear in match lists only after you opt in.')] }), K({ title: 'If something goes wrong', rows: [FL('We tell you of a significant breach within 30 days of finding it.')] })], 3), col([TB({ title: 'What we collect and why', pager: false, gc: '1.5fr 1.3fr 1.4fr 1fr', minW: 860, cols: ['What', 'Why', 'Who sees it', 'How long we keep it'], rows: [[WH('Account', 'Name, email, role'), 'To run your account and sign you in', 'You and the studio team', 'While your account is open'], [WH('Identity check', 'Legal name, date of birth, nationality, ID document'), 'To check who invests before money moves', 'The identity provider and the compliance team', NRC], [WH('Company records', 'What you record about your company'), 'To build and report on your company', 'Your team, and the people you share with', 'While the company is on the platform'], [WH('Investment records', 'Commitments, signed documents, payments'), 'To record what was invested and signed', 'You, the company and the fund team', NRC], [WH('Recorded interviews', 'Interview notice ›'), 'To turn interviews into findings', 'You and your team', NRC]], foot: 'A cell we have not set says Not recorded.' })]), col([K({ title: 'Your rights', note: 'We answer within 30 days.', rows: [['Download your data', 'Your profile, companies, agreements and activity.', 'Sign in to do this'], ['Delete your account', 'We keep only what the law makes us keep.', 'Sign in to do this'], ['Ask a question', 'Write to [privacy mailbox].', 'Copy address']].map(([t, s, a]) => R({ t, ts: 'font-size:13.5px;font-weight:700', sub: s, act: a, as: btnSm })) })])];
+    const SUBP = [['[Vendor A]', 'Hosting, database and file storage', 'Account, company and file data', 'United States and global edge', '[Jan 2025]'], ['[Vendor B]', 'Payments', 'Name, email and payment details', 'United States', '[Jan 2025]'], ['[Vendor C]', 'Sign-in, email and calendar', 'Name, email, and events you share', 'United States', '[Mar 2025]'], ['[Vendor D]', 'Calendar sync, where you connect it', 'Calendar events you sync', 'United States', 0], ['[Vendor E]', 'Support routing', 'Name, email and the ticket you send', 'United States', '[2 Sep 2026]']];
+    const SUBR = (r, e) => [CL(r[0], BD), r[1], r[2], r[3], r[4] ? CL(r[4], MN) : CL('', { pill: NRP })].concat(e ? [CL('Edit', LK)] : []);
+    const subCols = () => [col([K({ cs: PLAIN, note: 'Companies that process personal data for us, to run StudioOS. Connectors you switch on yourself are listed apart.', ns: NS1 }), TB({ tbar: { search: 'Search subprocessors', chips: [tag('Sort: Since ▾')] }, gc: '1fr 1.5fr 1.5fr 1.3fr .8fr', minW: 0, cols: ['Company', 'What they do for us', 'Data they see', 'Where', 'Since'], rows: SUBP.map(r => SUBR(r)), count: '1–5 of [5]' }), K({ title: 'Connectors you choose', note: 'When you connect a tool (a calendar, a CRM, a bank), that company receives what you send it. See Account › Connectors.', ns: NS1 })], 4), col([K({ title: 'Subscribe to changes', rows: [field('EMAIL', 'name@example.com', { ts: FIE })], btns: [{ t: 'Subscribe', s: btnS }], foot: 'We email you [10] days before a new subprocessor starts.' }), K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, eye: 'AFTER YOU SUBSCRIBE', title: 'Check your inbox to confirm.', note: 'You are subscribed once you open the link we sent.', ns: NS1 })], 2)];
+    const docT = () => TB({ tbar: { search: 'Search documents', chips: [tag('Applies to ▾')] }, gc: '1.7fr .9fr 1fr 1.2fr .5fr', minW: 820, cols: ['Document', 'Version', 'Last updated', 'Applies to', ''], rows: [[CL('Terms of Service', BD), CL('[v3]', MN), CL('[8 Jul 2026]', MN), 'Everyone', CL('Read', LK)], [CL('Privacy Policy', BD), CL('[v2]', MN), CL('[31 Mar 2026]', MN), 'Everyone', CL('Read', LK)], [CL('Risk Disclosures', BD), CL('', { pill: NRP }), CL('[31 Mar 2026]', MN), 'Investors', CL('Read', LK)], [CL('Interview notice', BD), CL('', { pill: NRP }), CL('', { pill: NRP }), 'Recorded sessions', CL('Read', LK)], [CL('Cookie preferences', BD), CL('—', MU), CL('—', MU), 'Everyone', CL('Open', LK)], [CL('Data Processing Addendum', { ts: 'font-weight:700', sub: 'Being reviewed by counsel.' }), CL('', { pill: { t: 'Not published yet', s: NRP.s } }), CL('—', MU), 'Companies sharing personal data', CL('—', MU)], [CL('security.txt', { ts: 'font-family:' + MO + ';font-weight:700' }), CL('—', MU), CL('Expires [1 Jul 2027]', MN), 'Security researchers', CL('Open', LK)]], count: '1–7 of [7]', foot: 'Read opens the existing legal page. Cookie preferences opens the cookie dialog.' });
+    const discCols = () => [['PREFERRED FOR CODE ISSUES', 'Private advisory on the code host', 'Open a private security advisory on our code repository.', 'Open an advisory'], ['ANY ISSUE', 'Email', 'Write to [security mailbox].', 'Copy address'], ['MEMBERS', 'Signed in', 'Report a security issue opens a private ticket only HQ sees.', 'Report a security issue']].map(([e, t, n, b]) => col([K({ eye: e, title: t, note: n, ns: NS1, btns: [{ t: b, s: btnS }] })], 2)).concat([col([TB({ title: 'How fast we answer', pager: false, gc: '1fr 1.2fr 1.3fr 1fr', cols: ['Severity', 'We acknowledge', 'Updates', 'Fix target'], rows: [['Critical', '4 business hours', 'Every 24 hours', '7 days'], ['High', '1 business day', 'Every 3 business days', '30 days'], ['Medium', '3 business days', 'Weekly', '90 days'], ['Low', '5 business days', 'At milestones', 'Best effort']].map(r => [CL(r[0], BD), CL(r[1], MN), r[2], CL(r[3], MN)]) })], 4), col([K({ title: 'Safe harbour', rows: ['We will not take legal action against good-faith research.', 'Stay within your own accounts and data, and stop if you reach anyone else’s.', 'Give us time to fix an issue before you publish it.'].map(TX), btns: [{ t: 'Read the full policy ›', s: btnG }] })], 2), col([K({ title: 'Coordinated disclosure', note: '90 days from our acknowledgement.', ns: NS1 })], 2), col([K({ title: 'Encrypted reports', rows: [NRL('PGP key', 'Ask by email and we reply with one.')] })], 2), col([K({ title: 'Researchers we thank', rows: [NRL('Credits', 'No report has been credited yet. There is no paid bounty.')] })], 2)]);
+    const SUBT = (cur) => K({ cs: PLAIN, tags: ['Overview', 'Agreements', 'Verifications', 'Your data'].map(t => tag(t, t === cur)) });
+    const metSvg = (n, d, last) => { const W = 900, H = 22, X = (k) => (k / d * W).toFixed(1); let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="none" role="img" aria-label="Requirements met: ' + n + ' of ' + d + (last != null ? '. Last month: ' + last + ' of ' + d : '. First month on record') + '." style="display:block">';
+      s += '<rect x=".5" y="4.5" width="' + (W - 1) + '" height="13" rx="6.5" fill="' + c.raised + '" stroke="' + c.hair + '"/><rect x="0" y="4" width="' + X(n) + '" height="14" rx="7" fill="' + c.vi + '"/>';
+      if (last != null) s += '<line x1="' + X(last) + '" x2="' + X(last) + '" y1="0" y2="' + H + '" stroke="' + c.ink + '" stroke-width="2.5" stroke-dasharray="2 2.5"><title>Last month [' + last + '] of [' + d + ']</title></line>';
+      return { __html: s + '</svg>' }; };
+    const summaryK = (n, d, last) => K({ title: 'Requirements met: [' + n + '] of [' + d + ']', hs: 'margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em;color:' + c.vt, svg: metSvg(n, d, last), legend: [{ t: 'This month [' + n + '] of [' + d + ']', sw: dotSw(c.vi) }, last != null ? { t: 'Last month [' + last + '] of [' + d + ']', sw: 'width:0;height:12px;flex:none;border-left:2.5px dotted ' + c.ink } : { t: 'First month on record', sw: 'display:none' }] });
+    const invNeeds = () => K({ title: 'Needs you', meta: '[2]', ms: 'font:700 12px ' + MO + ';color:' + c.amT, rows: [R({ pill: rq('exp'), t: 'Your accreditation evidence expires on [2 Nov 2026].', ts: LINE, act: 'Renew' }), R({ pill: rq('todo'), t: 'Sign the Investor NDA before founders share their data room.', ts: LINE, act: 'Sign' })] });
+    const investK = () => K({ title: 'Before you can invest', rows: [REQ('Identity check', 'ap', 'Synced from your identity check', 'Open identity check', 'Approved [12 Mar 2026]'), REQ('Investor NDA', 'todo', 'Asked at sign-up', 'Sign'), REQ('Accreditation', 'exp', 'Evidence on file until [2 Nov 2026]', 'Ask the fund team'), REQ('Entity check · [Sample Capital GmbH]', 'wait', 'Submitted [9 Oct 2026]')], foot: 'Capital calls and commitments open once every line is Done.' });
+    const VER = { t: 'Version: Not recorded', s: NRP.s };
+    const acceptedK = () => K({ title: 'Agreements you accepted', rows: [REQ('Terms of Service', 'done', 'Accepted [3 Jan 2026] at sign-up', false, false, { tags: [VER] }), R({ rs: NOTE('n') + ';margin:4px 0 6px;align-items:center', t: 'A newer version was published on [8 Jul 2026].', ts: 'font-size:12.5px;font-weight:600', act: 'Read what changed', as: btnG }), REQ('Privacy Policy', 'done', 'Accepted [3 Jan 2026] at sign-up', false, false, { tags: [VER] })] });
+    const memberK = (f) => K({ title: f ? 'Investors who signed an NDA with you' : 'Agreements with other members', note: f ? 'An NDA is sent when an investor asks to meet you.' : 'NDAs with founders you asked to meet.', rows: [R({ t: f ? '[Northwind Capital] · [Name]' : '[Acme Robotics] · [Name]', ts: 'font-size:13.5px;font-weight:700', sub: 'Mutual NDA · you signed, they have not', st: rq('ws'), tags: TRL(['Sent [9 Oct]', 'Viewed by you [9 Oct]', 'Signed by you [10 Oct]', 'Waiting for [Name]']), act: 'History ▴', as: btnG }), R({ t: f ? '[Harbor Seed Fund] · [Name]' : '[Northwind Labs] · [Name]', ts: 'font-size:13.5px;font-weight:700', sub: 'Mutual NDA · signed [3 Jun 2026]', st: rq('inf', 'In force until [3 Jun 2028]'), act: 'History ▾', as: btnG })] });
+    const trustInv = () => [col([SUBT('Overview'), summaryK(4, 6, 3)]), col([invNeeds()]), col([investK()], 3), col([acceptedK()], 3), col([memberK()])];
+    const trustFounder = () => [col([SUBT('Overview'), summaryK(2, 3, null)]), col([K({ title: 'Requirements', rows: [REQ('Terms of Service', 'done', 'Accepted [14 Feb 2026] at sign-up'), REQ('Privacy Policy', 'done', 'Accepted [14 Feb 2026] at sign-up'), REQ('Founder NDA', 'todo', 'Asked at sign-up', 'Sign')] }), K({ title: 'Verifications', rows: [REQ('Identity check', 'nr', 'Not required for founders today.')] })], 3), col([K({ title: 'Your companies', rows: [REQ('[Acme Robotics] · Entity check', 'wait', 'Submitted [9 Oct 2026]'), REQ('[Northwind Labs] · Entity check', 'ns', 'Opens the company’s page in Account › Companies and projects', 'Start the entity check')] }), memberK(1)], 3)];
+    const MI = ['Account', 'Usage', 'Connectors', 'Trust Center', 'Perks', 'Calendar', 'Events', 'Learning', 'Help Center', 'Plans & Pricing'];
+    const acctMenu = { s: DLGS + 'position:absolute;top:50px;right:30px;width:250px;z-index:5;padding:8px;gap:0', blocks: [K({ cs: PLAIN + ';gap:0', rows: MI.map(t => { const cur = t === 'Trust Center'; return R({ rs: 'display:flex;gap:9px;align-items:center;min-height:36px;padding:0 10px;border-radius:8px' + (cur ? ';background:' + c.lav : ''), t, ts: 'font-size:13px;font-weight:' + (cur ? 800 : 600) + ';color:' + (cur ? c.vt : c.ink), v: cur ? 'Current' : false, vs: 'font:700 10px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.vt }); }).concat([R({ rs: 'display:flex;align-items:center;min-height:36px;padding:0 10px;margin-top:4px;border-top:1px solid ' + c.hair, t: 'Sign out', ts: 'font-size:13px;font-weight:600;color:' + c.mu })]) })] };
+    const reqDlg = () => [K({ cs: PLAIN, eye: 'REQUIREMENT', title: 'Investor NDA', hs: H18, meta: 'Esc to close', tags: [rq('todo')] }), K({ cs: SEC, title: 'What this is', hs: eyeS, note: 'Keeps what founders show you confidential. Lasts 24 months.', ns: NS1 }), K({ cs: SEC, title: 'Why you are asked', hs: eyeS, note: 'Required for investors, before founders share their data room.', ns: NS1 }), K({ cs: SEC, title: 'Where it stands', hs: eyeS, facts: FX([{ k: 'Asked on', v: '[3 Jan 2026]' }, { k: 'Done on', v: 'Not yet' }, { k: 'Expires on', v: 'Set when you sign', sub: '24 months after signing' }, { k: 'State from', v: 'Asked at sign-up as an investor' }]) }), K({ cs: SEC, btns: [{ t: 'Close', s: btnS }, { t: 'Sign', s: btnP }], bs: BTNR, foot: 'Sign opens the agreement. The state changes when the signed envelope comes back.' })];
+    const varK = (e, t, st, line, btns, err) => K({ eye: e, title: t, tags: [st], rows: [err ? ERR(line, 'r') : R({ rs: 'display:flex;padding:0', t: line, ts: LINE })], btns: btns || false });
+    const agrCols = () => [col([SUBT('Agreements'), K({ title: 'Agreements with other members', tbar: { search: 'Search by company', chips: [tag('State ▾'), tag('With ▾'), tag('Sort: Newest ▾')] }, rows: [R({ t: '[Acme Robotics] · [Name]', ts: 'font-size:13.5px;font-weight:700', sub: 'Mutual NDA · you signed, they have not', st: rq('ws'), tags: TRL(['Sent [9 Oct]', 'Viewed by you [9 Oct]', 'Signed by you [10 Oct]', 'Waiting for [Name]']), act: 'History ▴', as: btnG }), R({ t: '[Northwind Labs] · [Name]', ts: 'font-size:13.5px;font-weight:700', sub: 'Mutual NDA · signed [3 Jun 2026]', st: rq('inf', 'In force until [3 Jun 2028]'), act: 'History ▾', as: btnG }), R({ t: '[Halyard Systems] · [Name]', ts: 'font-size:13.5px;font-weight:700', sub: 'Mutual NDA · signed [1 Sep 2024]', st: rq('end', 'Ended [1 Sep 2026]'), act: 'History ▾', as: btnG }), PAGER('1–3 of [3]')] })], 4), col([K({ eye: 'WHEN IT IS YOUR TURN', title: '[Bluefern Health] · [Name]', tags: [rq('ws')].concat(TRL(['Sent [20 Oct]', 'Signed by [Name] [20 Oct]', 'Waiting for you'])), btns: [{ t: 'Open to sign', s: btnP }], foot: 'How a row reads when a founder has signed and the agreement waits for you.' })], 2)];
+    const dataMeCols = () => [col([SUBT('Your data')]), col([K({ title: 'Download your data', note: 'Your profile, companies, agreements and activity.', ns: NS1, btns: [{ t: 'Download', s: btnS }] }), K({ title: 'Matching', note: 'You are not in match lists.', ns: NS1, btns: [{ t: 'Change in Settings › Privacy', s: btnG }] }), K({ title: 'Apps and keys with access to your account', note: 'Listed in Account › Developer, where you can revoke one.', ns: NS1, btns: [{ t: 'Open Account › Developer', s: btnG }] })], 3), col([K({ title: 'Delete your account', note: 'We keep only what the law makes us keep.', ns: NS1, rows: [R({ rs: 'display:flex;padding:0', btns: [{ t: 'Ask to delete', s: btnD }] }), R({ rs: NOTE('n') + ';margin-top:8px;align-items:center', eye: 'AFTER YOU ASK', t: 'Deletion requested [9 Oct 2026].', ts: 'font-size:13px;font-weight:600', act: 'Cancel request', as: btnG })] }), K({ title: 'Who at Axal VC looked at your identity record', rows: [NRL('View log', 'We log each view; showing that log to you is coming.')] })], 3)];
+    const hqCols = () => { const sub = TB({ title: 'Subprocessors · editing', pager: false, gc: '1fr 1.4fr 1.3fr 1.1fr .9fr .4fr', cols: ['Company', 'What they do for us', 'Data they see', 'Where', 'Since', ''], rows: SUBP.map(r => SUBR(r, 1)).concat([[CL('[Vendor F]', { ts: 'font-weight:700', pill: pl('✎', 'Draft', 'v') }), 'Error monitoring', 'Error reports, with no names or emails', 'United States', CL('From [24 Oct 2026]', MN), CL('Edit', LK)]]) }); sub.rows[5].s += ';background:' + c.lav;
+      return [col([K({ title: 'Blocks', rows: [['At a glance', '[14 Oct 2026]'], ['Security', '[14 Aug 2026]'], ['Data and privacy', '[31 Mar 2026]'], ['Subprocessors', '[2 Sep 2026]', 1, 1], ['Certifications', 'never · none held'], ['Documents', '[8 Jul 2026]'], ['Disclosure', '[14 Oct 2026]', 1]].map(([t, d, dr, sel]) => R({ rs: 'display:flex;gap:9px;align-items:center;padding:9px 10px;border-radius:9px;' + (sel ? 'background:' + c.lav + ';border:1px solid ' + c.lavE : 'border:1px solid transparent;border-top-color:' + c.hair), t, ts: 'font-size:13px;font-weight:700', sub: 'Last published ' + d, ss: CKS, st: dr ? pl('✎', 'Draft', 'v') : false })), rowsS: 'display:flex;flex-direction:column;gap:2px' })], 2), col([sub, K({ cs: PLAIN, rows: [R({ rs: 'display:flex;gap:11px;align-items:center;padding:0', t: 'Adding one: subscribers are emailed now, and it is listed as active on [24 Oct 2026], 10 days after you publish.', ts: 'font-size:12.5px;font-weight:600;line-height:1.5', act: 'Add a subprocessor', as: btnSm })] }), K({ title: 'Certifications', note: 'None held. Add one only with the auditor’s report on file.', ns: NS1, rows: [field('NAME', '[Certification name]', { ts: FIE }), field('AUDITOR’S REPORT · REQUIRED', 'Attach the report', { ts: FIE })], btns: [{ t: 'Save', s: btnX }], foot: 'Save opens once the auditor’s report is attached.' }), K({ title: 'Change note', meta: 'Required', tags: [{ t: '✦ Draft by Eadwyn', s: PILL + 'color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE }], rows: [field('CHANGE NOTE', '[Subprocessors: Vendor F added for error monitoring. Disclosure: response times restated.]', { ts: FIN + ';min-height:60px;font-weight:500' })], btns: [{ t: 'Draft a note', s: btnS }], foot: 'Eadwyn drafts the note from your changes. Nothing is published until a Super Admin presses Publish changes.' })], 4)]; };
+    const TT = [['Overview', '/trust'], ['Security', '/trust/security'], ['Data and privacy', '/trust/data'], ['Subprocessors', '/trust/subprocessors'], ['Documents', '/trust/documents'], ['Disclosure', '/trust/disclosure']];
+    let shell = pub ? 'pub' : 'investor', head = true, lit = '', crumb = 'Trust center', crumbHref = '/trust', title = 'How we protect your data and your money', h1px = phone ? 22 : 28, hpills = false, hbtns = phone ? [] : [HT('Last reviewed [14 Oct 2026]'), HB('Subscribe to changes', btnS)], hlines = [{ t: 'Facts we can show, with the date we last checked them. Anything we cannot show yet says Not recorded.' }], tabsOn = true, tabCur = 'Overview', yourN = '[2]', grid = G6, cols = [], minH = 900, pbar = false;
+    const YT = (sub) => { tabCur = 'Your trust'; crumb = 'Trust center › Your trust' + (sub ? ' › ' + sub : ''); };
+    const roleHead = (k, n, d) => K({ cs: PLAIN, tags: [k.length > 1 ? pl('', k, 'n') : pp(k)], title: 'Requirements met: [' + n + '] of [' + d + ']', hs: 'margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em;color:' + c.vt });
+    const TP = () => [REQ('Terms of Service', 'done', 'Accepted at sign-up'), REQ('Privacy Policy', 'done', 'Accepted at sign-up')];
+    if (B === 'TRU1') cols = overview();
+    else if (B === 'TRU2') { tabCur = 'Security'; cols = secCols(); }
+    else if (B === 'TRU3') { tabCur = 'Data and privacy'; cols = dataCols(); }
+    else if (B === 'TRU4') { tabCur = 'Subprocessors'; cols = subCols(); }
+    else if (B === 'TRU5') { tabCur = 'Documents'; cols = [col([docT()])]; }
+    else if (B === 'TRU6') { tabCur = 'Disclosure'; cols = discCols(); }
+    else if (B === 'TRU7') { lit = 'Trust'; YT(); cols = trustInv(); }
+    else if (B === 'TRU8') { shell = 'founder'; yourN = '[1]'; YT(); cols = trustFounder().concat([acctMenu]); }
+    else if (B === 'TRU11') { lit = 'Trust'; YT(); cols = trustInv().concat(over(reqDlg(), 600)); minH = 1300; }
+    else if (B === 'TRU12') { lit = 'Trust'; YT('Agreements'); cols = agrCols(); }
+    else if (B === 'TRU13') { lit = 'Trust'; YT('Your data'); cols = dataMeCols(); }
+    else if (B === 'TRU14') { shell = 'hq'; lit = 'Security'; tabsOn = false; crumb = 'Security › Trust center content'; crumbHref = '/admin/security'; title = 'Trust center content'; h1px = 24; hpills = [pl('⌂', 'HQ only', 'n')]; hlines = [{ t: 'What the public trust center shows. Visitors see a change only after you publish it.' }]; hbtns = [HB('Publish changes', btnP)]; cols = hqCols(); }
+    else if (B === 'TRU16') cols = [col([TL(TILES.map(x => [x[0], '', 'Reading…']), 5)]), col([sk(3)], 2), col([sk(3)], 2), col([sk(3)], 2), col([sk(5)])];
+    else if (B === 'TRU18a') { tabCur = ''; cols = [col([CENTER('⊘', 'Sign in to see what is asked of you.', 'Your trust lists your own agreements, verifications and data.', [{ t: 'Sign in', s: btnP }, { t: 'Read the public trust center', s: btnS }], CEN)])]; }
+    else if (B === 'TRU18b') { lit = 'Trust'; YT(); cols = trustInv().concat(over([CENTER('⊘', 'Only the member and studio admins can see this.', 'This requirement belongs to another member.', [{ t: 'Close', s: btnS }], ';border:0;padding:6px 0')], 480)); minH = 1000; }
+    else if (B === 'TRU20') { shell = 'founder'; yourN = '[1]'; cols = overview(); }
+    else if (crop) { head = false; tabsOn = false; grid = STACK;
+      if (B === 'TRU1s') cols = one([statusK(1)]);
+      else if (B === 'TRU4v') cols = one([K({ cs: CARD + ';background:' + c.lav + ';border-color:' + c.lavE, title: 'Subprocessors', rows: [R({ rs: 'display:flex;gap:10px;align-items:center;padding:0', lead: 'i', ls: INFO, t: 'Our subprocessor list is being reviewed by counsel. Ask [privacy mailbox] for it.', ts: 'font-size:13.5px;font-weight:600;line-height:1.5' })] })]);
+      else if (B === 'TRU6d') cols = [dlgCol(dlg('Report a security issue', 'Only the security team can read this. Do not include other people’s data.', [K({ cs: SEC, rows: [field('WHAT IS AFFECTED', 'Choose a page or feature ▾'), field('WHAT HAPPENED', 'Describe it…', { ts: FIE + ';min-height:60px' }), field('HOW TO REPRODUCE', 'The steps, in order…', { ts: FIE + ';min-height:60px' }), field('ATTACHMENTS', 'Add files', { ts: FIE })] })], [{ t: 'Cancel', s: btnS }, { t: 'Send privately', s: btnP }]))];
+      else if (B === 'TRU9a') cols = one([roleHead('a', 3, 4), K({ rows: TP().concat([REQ('Advisor NDA', 'done', 'Signed [3 Mar 2025]', false, 'Done · in force until [Mar 2027]'), REQ('Advisor disclaimer', 'todo', 'Asked of advisors', 'Read and accept')]) })]);
+      else if (B === 'TRU9b') cols = one([roleHead('p', 2, 2), K({ rows: TP().concat([INFOROW('A Partner MSA and an entity check are added when you sign a partner deal.')]) })]);
+      else if (B === 'TRU9c') cols = one([roleHead('p', 2, 4), K({ rows: TP().concat([REQ('Partner MSA', 'rev', 'Sent with your partner deal · [Name] at the studio is checking it'), REQ('Entity check · [Sample Partners Ltd]', 'ni', 'The compliance team asked for [proof of address]', 'Add documents')]) })]);
+      else if (B === 'TRU10a') cols = one([roleHead('e', 2, 2), K({ rows: TP(), foot: 'Nothing else is asked of you until you choose a profile.' })]);
+      else if (B === 'TRU10b' || B === 'TRU10c') { const hq = B === 'TRU10c'; cols = one([roleHead(hq ? 'Super Admin' : 'Admin', 2, 2), K({ rows: TP() }), K({ cs: CARD + ';background:' + c.raised, title: 'Studio tools moved', note: 'Sanctions screening is in Approvals › KYC & KYB. Every NDA between members is in Contracts.', ns: NS1, btns: [{ t: 'Open KYC & KYB', s: btnG }, { t: 'Open Contracts', s: btnG }] })].concat(hq ? [K({ title: 'Public trust center', note: 'Last published [14 Oct 2026]', ns: 'margin:0;font:600 12.5px ' + MO + ';color:' + c.mu, btns: [{ t: 'Edit public content', s: btnS }] })] : [])); }
+      else if (B === 'TRU11v') { grid = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start'; cols = [varK('EXPIRED', 'Investor NDA', rq('expd'), 'Your Investor NDA ended on [3 Jan 2028]. Sign it again to keep opening data rooms.', [{ t: 'Renew', s: btnS }], 1), varK('IN REVIEW', 'Entity check · [Sample Capital GmbH]', rq('rev'), '[Name] at the studio is checking it. Asked [9 Oct 2026].'), varK('NOT REQUIRED', 'Advisor disclaimer', rq('nr'), 'Not asked of your profile.'), varK('ACCREDITATION', 'Accreditation', rq('exp'), 'Upload is not available yet. The fund team tells you what they need.', [{ t: 'Ask the fund team', s: btnS }])].map(k => ({ s: 'display:flex;flex-direction:column;min-width:0', blocks: [k] })); }
+      else if (B === 'TRU14d') cols = [dlgCol(dlg('Publish?', '[2] blocks change. Subprocessor subscribers are emailed.', [K({ cs: SEC, rows: [bul('Subprocessors · [Vendor F] added, active from [24 Oct 2026]'), bul('Disclosure · response times restated')] }), K({ cs: PLAIN, note: 'The change note appears under Changes to this page.' })], [{ t: 'Back', s: btnS }, { t: 'Publish', s: btnP }]))];
+      else if (B === 'TRU15a') cols = one([CENTER('✓', 'Nothing is asked of you right now.', 'Shown only when your requirements were read. New ones appear here when you join a deal or a program.', false)]);
+      else if (B === 'TRU15b') cols = one([CENTER('○', 'No agreements with other members yet.', 'An NDA is sent when an investor asks to meet a founder.', false)]);
+      else if (B === 'TRU15c') cols = one([CENTER('○', 'No changes published yet.', 'Changes to the trust center appear here with their date.', false)]);
+      else if (B === 'TRU17a') cols = one([TL([['Status', 'Status could not be read.', 'The rest of the page reads as usual · Status page ›', false, false, false, c.mu]].concat(TILES.slice(1)), 5)]);
+      else if (B === 'TRU17b') cols = one([SUBT('Overview'), K({ rows: [ERR('Your requirements could not be read. That is not the same as having none.', 'r', [{ t: 'Try again', s: btnS }])] })]);
+      else if (B === 'TRU17c') cols = one([K({ title: 'Before you can invest', rows: [REQ('Identity check', 'ap', 'State from your requirements', false, 'Approved [12 Mar 2026]'), ERR('Your identity check could not be read just now. The requirement state above comes from a different read.', 'a', [{ t: 'Try again', s: btnS }]), REQ('Investor NDA', 'todo', 'Asked at sign-up', 'Sign')] })]); }
+    else if (phone) { grid = STACK; const PG = (b) => [{ s: STACK, blocks: b }];
+      if (B === 'TRU19a') cols = PG([tilesO(), K({ cs: PLAIN, title: 'How we protect you', hs: H2S })].concat(protect()));
+      else if (B === 'TRU19b') { YT(); cols = PG([SUBT('Overview'), summaryK(4, 6, 3), invNeeds(), investK()]); }
+      else if (B === 'TRU19c') { tabsOn = false; crumb = '‹ Your trust'; crumbHref = '/trust/me'; title = 'Investor NDA'; hlines = [{ t: 'Requirement · To do' }]; cols = PG(reqDlg().slice(1, -1)); pbar = [{ t: 'Sign', s: btnP + ';flex:1' }]; } }
+    if (pub) cols.forEach(cl => (cl.blocks || []).forEach(k => { if (k && typeof k.hs === 'string' && k.hs.indexOf('Bricolage') < 0) k.hs += ';' + HF; }));
+    const SIDES = { founder: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'], investor: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'], advisor: ['Studio', 'Spin-Out Lab', 'Practice', 'Cohorts', 'Expertise', 'Network', 'Research'], partner: ['Studio', 'Spin-Out Lab', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'], explorer: ['Studio', 'Spin-Out Lab', 'Messages', '§Account', 'My Profile'], admin: ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences'], hq: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] };
+    const signed = shell !== 'pub', adm = shell === 'admin' || shell === 'hq';
+    const rows = signed ? SIDES[shell].map(t => t[0] === '§' ? { t: t.slice(1), href: '#', st: 'display:block;padding:12px 20px 4px;text-decoration:none;' + eyeS } : { t, href: t === 'Trust' ? '/trust/me' : (adm ? '/admin/' : '/') + t.toLowerCase().replace(/ /g, '-'), st: 'display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;text-decoration:none;' + (t === lit ? 'background:' + c.lav + ';color:' + c.vt + ';font-weight:800' : 'color:' + c.ink + ';font-weight:600') }) : [];
+    const bell = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' };
+    const studioI = { __html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>' };
+    const isShell = !phone && !crop;
+    const FONT = 'font-family:' + SG + ';background:' + c.bg + ';color:' + c.ink + ';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;box-sizing:border-box';
+    const BADGE = { admin: ['[Studio Lisbon]', '#334155'], hq: ['HQ', '#881337'] }[shell];
+    const TABS = tabsOn ? TT.concat(signed ? [['Your trust', '/trust/me']] : []) : [];
+    const LEGAL = [['Terms', '/terms'], ['Privacy', '/privacy'], ['Cookie preferences', '#cookies'], ['Risk Disclosures', '/risk-disclosures'], ['Trust center', '/trust', 1], ['Status', '/status', 1]];
+    const PUBL = 'display:inline-flex;align-items:center;min-height:' + (phone ? 44 : 36) + 'px;padding:0 14px;border-radius:9px;box-sizing:border-box;font:700 13px ' + SG + ';text-decoration:none;';
+    const v = {
+      eyeS, btnS,
+      root: isShell ? FONT + ';display:' + (signed ? 'grid;grid-template-columns:196px minmax(0,1fr)' : 'flex;flex-direction:column') + ';min-height:' + minH + 'px' : phone ? FONT + ';width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden' : FONT + ';padding:28px;background:' + (dark ? '#060a14' : '#e6e4eb'),
+      side: isShell && signed, asideS: 'background:' + c.card + ';border-right:1px solid ' + c.hair + ';padding:14px 0;display:flex;flex-direction:column;gap:2px',
+      logoS: 'width:20px;height:20px;border-radius:6px;flex:none;background:#7c3aed',
+      group: { founder: '[Acme Robotics] ▾', explorer: 'Home', admin: 'Admin', hq: 'HQ' }[shell] || '', groupS: shell === 'founder' ? 'display:flex;align-items:center;margin:0 8px 10px;padding:8px 12px;border-radius:9px;border:1px solid ' + c.hair + ';background:' + c.raised + ';font:700 12.5px ' + SG + ';color:' + c.ink : 'padding:6px 20px 4px;' + eyeS, rows,
+      mainS: 'min-width:0;display:flex;flex-direction:column' + (phone ? ';flex:1;min-height:0' : '') + (isShell && !signed ? ';flex:1' : ''),
+      top: isShell && signed, topS: 'height:52px;border-bottom:1px solid ' + c.hair + ';background:' + c.card + ';display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px',
+      searchS: 'display:flex;align-items:center;gap:8px;min-height:' + (phone ? 44 : 32) + 'px;padding:0 12px;border:1px solid ' + c.hair + ';border-radius:7px;background:' + c.card + ';color:' + c.mu + ';font-size:12.5px;width:280px;max-width:100%;box-sizing:border-box',
+      badge: BADGE ? BADGE[0] : '', badgeS: BADGE ? 'padding:4px 9px;border-radius:999px;font:700 10px ' + MO + ';letter-spacing:.06em;color:#fff;background:' + BADGE[1] : 'display:none',
+      iconS: 'display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid ' + c.hair + ';color:' + c.ink, bell,
+      avS: 'display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 10px ' + MO,
+      ptop: phone && signed, ptopS: 'height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 14px;border-bottom:1px solid ' + c.hair + ';background:' + c.card, picoS: 'display:grid;place-items:center;width:44px;height:44px;color:' + c.ink, company: 'Trust center', studioI,
+      pubnav: pub && !crop ? (phone ? [] : ['Platform', 'Programs', 'Network', 'Pricing', 'Articles'].map(t => ({ t, href: '/' + t.toLowerCase(), s: 'font:600 14px ' + SG + ';color:#4a4553;text-decoration:none' }))) : false,
+      pubnavS: 'display:flex;align-items:center;justify-content:space-between;gap:20px;flex:none;height:' + (phone ? 56 : 64) + 'px;padding:0 ' + (phone ? 14 : 64) + 'px;background:#ffffff;border-bottom:1px solid ' + c.hair + ';box-sizing:border-box',
+      pubBrandS: "font:800 17px 'Bricolage Grotesque',system-ui,sans-serif;color:" + c.ink,
+      pubBtns: phone ? [{ t: '☰ Menu', s: PUBL + 'border:1px solid ' + c.hair + ';color:' + c.ink }] : [{ t: 'Sign in', s: PUBL + 'border:1px solid ' + c.hair + ';color:' + c.ink }, { t: 'Join', s: PUBL + 'background:#6d28d9;color:#ffffff' }],
+      pubfoot: pub && isShell ? LEGAL.map(([t, href, n]) => ({ t, href, n: n ? 'New' : false, ns: PILL + 'margin-left:6px;color:' + c.vt + ';background:' + c.lav + ';border:1px solid ' + c.lavE, s: 'display:inline-flex;align-items:center;font:600 13px ' + SG + ';color:' + (t === 'Trust center' ? c.ink : '#4a4553') + ';text-decoration:' + (t === 'Trust center' ? 'underline' : 'none') })) : false,
+      pubfootS: 'margin-top:auto;display:flex;flex-direction:column;gap:12px;padding:26px 64px 30px;background:#ffffff;border-top:1px solid ' + c.hair, pubfootTop: 'font:600 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;color:' + c.mu, legalS: 'display:flex;gap:22px;flex-wrap:wrap;align-items:center', copyS: 'font-size:12px;color:' + c.mu,
+      bodyS: isShell ? (signed ? 'padding:22px 30px 30px;display:flex;flex-direction:column;gap:14px;min-width:0' : 'padding:34px 0 44px;width:100%;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px;min-width:0;box-sizing:border-box') : phone ? 'padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;min-height:0;overflow-y:auto' : 'display:flex;flex-direction:column;gap:14px;min-width:0',
+      head: (isShell || phone) && head, crumb, crumbHref, crumbS: 'font:700 11px ' + MO + ';letter-spacing:.07em;text-transform:uppercase;text-decoration:none;color:' + (crumb === 'Trust center' ? c.vt : c.mu) + (phone ? ';min-height:44px;display:inline-flex;align-items:center' : ''),
+      title, h1S: 'margin:0;font-size:' + h1px + 'px;font-weight:800;letter-spacing:-.02em;line-height:1.2' + (pub ? ';' + HF : ''), hpills, hbtns, hlines: hlines.map(l => ({ t: l.t, s: 'margin:0;font-size:' + (pub ? 15 : 13) + 'px;line-height:1.55;color:' + c.mu })),
+      scope: false, scopeTip: '', scopeS: '', gate: false, gateS: '', msel: false, mselS: '', moved: false, movedS: '', infoS: INFO, dismissS: btnG,
+      tbar: false, tbarS: '', tbarChips: [], tbarBtns: [], tbarNote: false, tbarNoteS: '',
+      tabsL: 'Trust center', tabs: TABS.length ? TABS.map(([t, href]) => { const yt = t === 'Your trust'; return { t, href, n: yt && yourN ? '● ' + yourN : false, sel: t === tabCur ? 'page' : 'false', ns: 'display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;font:700 10.5px ' + MO + ';color:' + c.amT + ';background:' + c.amBg + ';border:1px solid ' + c.amE, s: 'display:inline-flex;align-items:center;gap:6px;min-height:' + (phone ? 44 : 38) + 'px;padding:0 2px;margin-bottom:-1px;font-size:' + (pub ? 14 : 13) + 'px;text-decoration:none;white-space:nowrap;border-bottom:2px solid ' + (t === tabCur ? c.vi : 'transparent') + ';color:' + (t === tabCur ? c.ink : c.mu) + ';font-weight:' + (t === tabCur ? 800 : 600) + (yt && !phone ? ';margin-left:auto' : '') }; }) : false,
+      tabRowS: 'display:flex;gap:22px;border-bottom:1px solid ' + c.hair + (phone ? ';overflow-x:auto;flex:none' : ''),
+      period: false, segS: 'display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:' + c.raised + ';border:1px solid ' + c.hair + ';align-self:flex-start',
+      banner: false, bannerS: '', bannerI: '', gridS: grid, cols,
+      pbar, pbarS: 'display:flex;gap:8px;padding:10px 14px;border-top:1px solid ' + c.hair + ';background:' + c.card + ';flex:none',
+      pnav: phone && signed ? ['Deals', 'Portfolio', 'Axal VC Fund', 'Trust', 'More'].map(t => ({ t, href: '/' + t.toLowerCase().replace(/ /g, '-'), s: 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:60px;min-height:48px;font-size:11px;text-decoration:none;font-weight:' + (t === 'Trust' ? 800 : 600) + ';color:' + (t === 'Trust' ? c.vt : c.mu), ds: 'width:18px;height:18px;border-radius:5px;box-sizing:border-box;' + (t === 'Trust' ? 'background:' + c.lav + ';border:1.5px solid ' + c.vt : 'border:1.5px solid ' + c.mu) })) : false,
+      pnavS: 'display:flex;justify-content:space-around;border-top:1px solid ' + c.hair + ';background:' + c.card + ';padding:2px 0 4px;flex:none',
+      spine: false, spineTip: '', spineS: '', eadS: '', spineT: '', rail: false, railS: '', railX: '', railP: '', railB: '', railI: '',
+      glyphS: 'display:grid;place-items:center;width:44px;height:44px;border-radius:999px;background:' + c.lav + ';color:' + c.vt + ';font:700 18px ' + SG + ';border:1px solid ' + c.lavE,
+      coverT: '', stackS: '', factsS: 'display:grid;grid-template-columns:' + (phone ? '1fr' : '1fr 1fr') + ';gap:12px 20px', ddS: 'font-size:13px;font-weight:600;line-height:1.45;color:' + c.ink, fsubS: 'font-size:12px;color:' + c.mu, calS: '', calH: '', ovS: '', ovD: '', moreS: '', popS: '', popL: '',
+      dbS: 'display:flex;flex-direction:column;align-items:center;justify-content:center;width:48px;flex:none;padding:5px 0;border-radius:10px;background:' + c.raised + ';border:1px solid ' + c.hair, dbM: 'font:700 9.5px ' + MO + ';letter-spacing:.07em;color:' + c.mu, dbD: 'font:700 17px ' + MO + ';color:' + c.ink + ';line-height:1.2',
+      monoS: 'font:600 12px ' + MO + ';color:' + c.ink, waitS: 'font:600 11.5px ' + MO + ';color:' + c.amT, countS: 'font:500 12px ' + MO + ';color:' + c.mu, pageS: 'display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:7px;border:1px solid ' + c.hair + ';background:' + c.card + ';color:' + c.ink + ';font:600 12px ' + MO + ';cursor:pointer;box-sizing:border-box', lockS: '', lockI: { __html: '' }
+    };
+    return { v };
+  }
+}
+</script>
+</body></html>

@@ -1,0 +1,984 @@
+import StorageRefusal from '../account/StorageRefusal.jsx';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import Lightbox from '../../ui/Lightbox.jsx';
+import BrandIcon from '../../ui/BrandIcon.jsx';
+import { api as defaultApi, readRefusal } from '../../lib/api.js';
+import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
+import { channelsApi } from '../../lib/api/channels.js';
+import { liveRefusal } from '../../lib/activeRecording.js';
+import { onTokensAdded, openAddTokens, tokenRefusal } from '../../lib/aiTokens.js';
+import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
+import { AssistantEntry } from './AssistantEntry';
+import { WhatsAppEntry, useWhatsAppLink } from '../account/WhatsAppWayB';
+import { botPlatform, botRefusal } from './meetingBotSession.js';
+import MeetingBotConsentNotice from './MeetingBotConsentNotice.jsx';
+import { SchedulePanel } from './InterviewChannels';
+import { assignedSentence, threadRow } from './channelThreads.js';
+import { recordSourceLine } from '../../lib/validateSourceWording.js';
+import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
+import {
+  CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
+  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingAppHref, meetingLinkProblem, phoneOs, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE, TOKENS_ADDED_START,
+  teamsChipStatus,
+} from './recordSetup.js';
+import { clearRecordDraft, readRecordDraft, saveRecordDraft } from './recordDraft.js';
+import { useAuth } from '../../hooks/useAuthSync';
+
+/**
+ * Validate › Record a session (D685 §5.5, #1587), as a lightbox over the page
+ * the founder is on, at `/validate/record`. It replaces the right-hand sheet
+ * D660 built. Design: `design/canvases/integrated/Cycle Overview.dc.html`,
+ * `lbOpen`; the rules and the copy are in `recordSetup.js`.
+ *
+ * ONE SETUP CALL (D685 §5.1). Start makes one `POST /sessions`: the Worker
+ * creates the interview from Who (or takes the one picked from the recruiting
+ * pipeline) and opens its session, under this lightbox's `client_key`, so a
+ * repeated Start answers the same pair and a refused one leaves nothing. An
+ * interview the lightbox was opened on may already be held, which that call
+ * refuses: it opens on `POST /interviews/:id/sessions`, with the same fields.
+ *   · Audio hands the draft to the app's recorder (`recorder`), and the caller
+ *     opens `/validate/record/live`. Without a recorder, the session's page.
+ *   · Text chat pastes the conversation into the same call, or imports a
+ *     waiting WhatsApp or Telegram chat (`POST /channels/threads/:uid/assign`).
+ *   · 409 `session_active`: the founder is already recording. The Worker's
+ *     sentence is printed, with a link back to that recording.
+ *
+ * ONE SEND PER START: `busy` holds the button, and a refusal prints in the
+ * Worker's own words. Closing makes no server call.
+ */
+
+const CHIP = 'rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:cursor-not-allowed disabled:opacity-50';
+const chip = (on) => `${CHIP} ${on ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-ink hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'}`;
+const TILE = 'rounded-[9px] border px-2 py-2 text-center text-[12px] font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet';
+const tile = (on) => `${TILE} ${on ? 'border-axal-violet bg-axal-lavender text-axal-violet-deep dark:border-violet-400 dark:bg-violet-900/40 dark:text-violet-200' : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`;
+const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
+const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+/**
+ * A radio group of buttons: one tab stop, arrow keys move and choose. An
+ * option may carry an `icon`, drawn before its label (D687 step 10: only the
+ * Provider group passes one). A disabled chip dims its icon with it. Beside an
+ * icon the label is its own <span>, so a status change re-renders it as text
+ * content rather than as a bare sibling text node.
+ */
+export function Radios({ label, options, value, onChange, className = 'flex flex-wrap gap-1.5', style = chip, testId }) {
+  const enabled = options.filter((o) => !o.disabled);
+  const stop = enabled.find((o) => o.value === value) || enabled[0];
+  const onKey = (e) => {
+    const dir = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!dir || enabled.length === 0) return;
+    e.preventDefault();
+    const at = enabled.findIndex((o) => o.value === value);
+    const next = enabled[(at + dir + enabled.length) % enabled.length];
+    onChange(next.value);
+    const buttons = Array.from(e.currentTarget.parentNode?.querySelectorAll?.('[role="radio"]:not([disabled])') || []);
+    buttons[enabled.indexOf(next)]?.focus?.();
+  };
+  return (
+    <div role="radiogroup" aria-label={label} className={className} data-testid={testId}>
+      {options.map((o) => (
+        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} aria-disabled={o.disabled || undefined}
+          disabled={o.disabled} data-value={o.value} data-testid={testId ? `${testId}-${o.value}` : undefined}
+          tabIndex={stop && stop.value === o.value ? 0 : -1} onKeyDown={onKey}
+          onClick={() => !o.disabled && onChange(o.value)} className={`${style(o.value === value)}${o.icon ? ' inline-flex items-center gap-1.5' : ''}`} title={o.title}>
+          {o.icon}{o.icon ? <span>{o.label}</span> : o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * D754 (#1980) §11: a chat that waits for consent. "Ask <Name> in WhatsApp"
+ * sends Axal's notice once the chat is linked, and is offered only while the
+ * chat's 24-hour window is open; "<Name> already agreed" is the member's
+ * word, which the Worker takes once the notice reached the chat.
+ */
+function ChatConsentPick({ consent, name, provider, value, onChange }) {
+  const choices = consentChoices(name, provider);
+  if (consent.status === 'declined' || consent.status === 'withdrawn') return null;
+  return (
+    <div className="flex flex-col gap-1.5 pt-1" data-testid="record-chat-consent">
+      <p className={`m-0 ${LABEL}`}>Recording consent</p>
+      <Radios label="Recording consent" testId="record-chat-consents" value={value} onChange={onChange} className="flex flex-col gap-1.5"
+        style={(on) => `${chip(on)} !rounded-[9px] text-left`}
+        options={[
+          { value: 'ask', label: choices.ask.label, disabled: !consent.window_open },
+          ...choices.agreed.methods.map((m) => ({ value: m.value, label: `${choices.agreed.label}: ${m.label}` })),
+        ]} />
+      {!consent.window_open && <p className="m-0 text-[11.5px] text-amber-800 dark:text-amber-300" data-testid="record-chat-window">{windowClosedSentence(name, provider)}</p>}
+      <p className="m-0 text-[11.5px] text-axal-faint">Nothing from the chat enters the interview until it is given.</p>
+    </div>
+  );
+}
+
+/**
+ * D756 (#1981) §1.5: a Telegram chat's consent before import. Its state, and
+ * "Ask for consent in Telegram" (the consent-request route) while the bot may
+ * reply and the window is open; otherwise the reason, and "Copy the notice"
+ * when the Worker sends its text. No "already agreed" (ruling 6).
+ */
+function TelegramConsentAsk({ thread, consent, name, source, onAsked }) {
+  const [state, setState] = useState({ busy: false, error: '', copied: false });
+  const blocked = noticeBlocked(thread, consent);
+  const line = consentLine(consent, name, { provider: 'telegram' });
+  const open = consent.status === 'not_asked' || consent.status === 'requested';
+  const ask = async () => {
+    if (state.busy || typeof source?.requestConsent !== 'function') return;
+    setState({ busy: true, error: '', copied: false });
+    try { const r = await source.requestConsent(thread.uid); if (r?.consent) onAsked(r.consent); setState({ busy: false, error: '', copied: false }); }
+    catch (e) { if (e?.data?.consent) onAsked(e.data.consent); setState({ busy: false, error: e?.message || 'The notice could not be sent.', copied: false }); }
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(consent.notice_text); setState((s) => ({ ...s, copied: true, error: '' })); }
+    catch { setState((s) => ({ ...s, copied: false, error: 'The notice could not be copied. Select it and copy it by hand.' })); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 pt-1" data-testid="record-telegram-consent" data-status={consent.status}>
+      <p className={`m-0 ${LABEL}`}>Recording consent</p>
+      <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-telegram-consent-state">{line.text}</p>
+      {open && !blocked && (
+        <button type="button" onClick={ask} disabled={state.busy || !consent.can_request} className="self-start text-[12px] font-semibold text-axal-violet underline disabled:opacity-50 dark:text-violet-300" data-testid="record-telegram-ask">Ask for consent in Telegram</button>
+      )}
+      {open && blocked && (
+        <div className="flex flex-col gap-1" data-testid="record-telegram-copy">
+          <p className="m-0 text-[11.5px] text-amber-800 dark:text-amber-300" data-testid="record-telegram-copy-reason">{`${blocked}, so Axal cannot send the notice. Paste it into the chat yourself.`}</p>
+          {consent.notice_text && <button type="button" onClick={copy} className="self-start text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-telegram-copy-button">Copy the notice</button>}
+          {state.copied && <p role="status" className="m-0 text-[11.5px] text-emerald-700 dark:text-emerald-300">Copied. Paste it into the Telegram chat.</p>}
+        </div>
+      )}
+      {state.error && <p role="alert" className="m-0 text-[11.5px] font-semibold text-red-700 dark:text-red-400">{state.error}</p>}
+      <p className="m-0 text-[11.5px] text-axal-faint">Start waits for their YES in the chat. Their notes are not downloaded before it.</p>
+    </div>
+  );
+}
+
+function Section({ title, children, testId }) {
+  return (
+    <section className="flex flex-col gap-1.5 px-5 py-3" data-testid={testId}>
+      <h3 className={`m-0 ${LABEL}`}>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+// A Meet link the Worker cannot import (a call started from Meet itself, so on
+// no Calendar event; another account's event; Calendar not answering) is still
+// a call Eadwyn AI can join: Start sends the bot to it instead of refusing. A
+// timeout is not among these: the attach may have been saved, and a second
+// session would send a second bot.
+const BOT_INSTEAD = new Set(['meeting_not_in_calendar', 'meeting_not_hosted', 'meeting_no_time', 'meet_unreachable']);
+
+export default function RecordLightbox({
+  projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
+  initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
+  initialClientKey = null,
+  cycle = cycleValidateApi,
+  // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
+  recorder = null,
+  // D703 (#1665): the cycle route's page mode below 1024px ({ pageBelow, bar, pageClass }), spread on the Lightbox.
+  asPage,
+  // D1346 (#3554): `GET /founder/validate/meetings/bot`, when the caller has read it already.
+  initialBot,
+  // D5811 (#5811): `GET /founder/validate/meetings/capabilities`, when the caller has read it already.
+  initialCaps,
+  // D5811: the signed-in member the kept setup belongs to; a test hands one in.
+  memberId,
+}) {
+  // D5811: Cancel and a Start that lands forget any kept setup; leaving for Account keeps it.
+  const close = () => { clearRecordDraft(); onClose?.(); };
+  const startedWith = (...args) => { clearRecordDraft(); return onStarted?.(...args); };
+  // D1346 (#3663): a connector can change while this form stays open in
+  // another tab. Refresh on return without resetting the interview fields.
+  const [channels, setChannels] = useState(initialChannels === undefined ? null : initialChannels);
+  useEffect(() => {
+    if (initialChannels !== undefined) { setChannels(initialChannels); return undefined; }
+    if (!fields.channels) return undefined;
+    let alive = true;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const result = await channelsSource.overview();
+        if (alive && current === request) setChannels(result || null);
+      } catch {
+        if (alive && current === request) setChannels(null);
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [channelsSource, initialChannels, fields.channels]);
+  // D1346 (#3554): whether Eadwyn AI can join, read on open so Send is disabled up front, not refused
+  // after the press. undefined is still reading; null is unreadable (Try again reads it once more).
+  const [botRead, setBotRead] = useState(initialBot);
+  const [botTick, setBotTick] = useState(0);
+  useEffect(() => {
+    if (initialBot !== undefined && botTick === 0) return undefined;
+    if (typeof channelsSource?.botAvailability !== 'function') { setBotRead(null); return undefined; }
+    let alive = true;
+    setBotRead(undefined);
+    channelsSource.botAvailability().then((r) => { if (alive) setBotRead(r ?? null); }).catch(() => { if (alive) setBotRead(null); });
+    return () => { alive = false; };
+  }, [channelsSource, initialBot, botTick]);
+  // D5811 (#5811): the member's own meeting capabilities (Teams' row decides its chip, its
+  // create button and its connect link). Read on open and again whenever the tab comes back,
+  // so a return from Account › Connectors shows the new state; a stale answer is dropped.
+  // undefined is still reading; null is unreadable (Try again reads it once more).
+  const [caps, setCaps] = useState(initialCaps);
+  const [capsTick, setCapsTick] = useState(0);
+  useEffect(() => {
+    if (initialCaps !== undefined && capsTick === 0) return undefined;
+    if (typeof channelsSource?.meetingCapabilities !== 'function') { setCaps(null); return undefined; }
+    let alive = true;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const r = await channelsSource.meetingCapabilities();
+        if (alive && current === request) setCaps(r ?? null);
+      } catch {
+        if (alive && current === request) setCaps(null);
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [channelsSource, initialCaps, capsTick]);
+  // D5811: the setup kept while the member was in Account › Connectors (`recordDraft.js`),
+  // this member's and this venture's only, read once and then forgotten. Nothing starts from it.
+  const authId = useAuth()?.user?.id ?? null;
+  const userId = memberId !== undefined ? memberId : authId;
+  const [draft] = useState(() => {
+    const d = readRecordDraft(userId, { projectId });
+    return d && (d.interviewId ?? null) === (interview?.id != null ? Number(interview.id) : null) ? d : null;
+  });
+  useEffect(() => { if (draft) clearRecordDraft(); }, [draft]);
+  const nameRef = useRef(null);
+  const sending = useRef(false); // a second press in the same render must not send again
+  const startKey = useRef(null);
+  if (startKey.current === null) startKey.current = initialClientKey || newStartKey();
+  const setupKey = (bot) => initialClientKey || `${startKey.current}${bot ? '-bot' : ''}`;
+  const [name, setName] = useState(interview?.interviewee_name || draft?.name || '');
+  const [company, setCompany] = useState(interview?.interviewee_company || draft?.company || '');
+  const [mode, setMode] = useState(draft?.mode || initialMode);
+  const [provider, setProvider] = useState(() => (draft?.provider && (PROVIDERS[draft.mode] || []).some((c) => c.value === draft.provider) ? draft.provider : defaultProvider(draft?.mode || initialMode, channels)));
+  const [link, setLink] = useState(draft?.link || '');
+  const [consent, setConsent] = useState(initialConsent);
+  const [conversation, setConversation] = useState('');
+  const [models, setModels] = useState(initialModels);
+  const [live, setLive] = useState(initialModels?.defaults?.live ?? null);
+  const [final, setFinal] = useState(initialModels?.defaults?.final ?? null);
+  const [language, setLanguage] = useState('');
+  const [minutes, setMinutes] = useState(draft?.minutes || 30);
+  const supportsOutputs = typeof sessions.outputs === 'function';
+  const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
+  const [outputsLoaded, setOutputsLoaded] = useState(false);
+  const [outputQuote, setOutputQuote] = useState(undefined);
+  const [outputIssue, setOutputIssue] = useState('');
+  const unavailableOutputs = (message) => { setOutputs([]); setOutputQuote(null); setOutputIssue(message || 'The extraction estimate is unavailable.'); };
+  useEffect(() => {
+    if (!supportsOutputs || !projectId) return undefined;
+    let alive = true;
+    setOutputsLoaded(false); setOutputQuote(undefined); setOutputIssue('');
+    sessions.outputs(projectId).then((r) => {
+      if (alive) {
+        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { unavailableOutputs('The output choices could not be read.'); return; }
+        setOutputs(r.outputs); setOutputsLoaded(true);
+      }
+    }).catch(() => { if (alive) unavailableOutputs('The output choices could not be read.'); });
+    return () => { alive = false; };
+  }, [sessions, projectId, supportsOutputs]);
+  useEffect(() => {
+    if (!supportsOutputs || !outputsLoaded) return undefined;
+    if (!outputs.length) { setOutputQuote(0); return undefined; }
+    let alive = true;
+    setOutputQuote(undefined);
+    const timer = setTimeout(() => sessions.outputs(projectId, minutes, outputs).then((r) => {
+      if (alive) { if (r.quote?.ok && Number.isFinite(r.quote.microusd)) { setOutputQuote(r.quote.microusd); setOutputIssue(''); } else unavailableOutputs(r.quote?.message); }
+    }).catch(() => { if (alive) unavailableOutputs('The extraction estimate could not be read.'); }), 200);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [sessions, projectId, minutes, outputs, outputsLoaded, supportsOutputs]);
+  const [board, setBoard] = useState(initialBoard);
+  const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
+  const [assistant, setAssistant] = useState(false);
+  // D754 way B (#1939): "From WhatsApp", read only once the founder opens it.
+  const [fromWhatsApp, setFromWhatsApp] = useState(false);
+  const whatsappLink = useWhatsAppLink(channelsSource, { enabled: fromWhatsApp });
+  // Who, picked from the recruiting pipeline (§5.1.7): booked first. Closed until asked for.
+  const [picked, setPicked] = useState(null);
+  const [pipeline, setPipeline] = useState({ open: false, status: 'idle', rows: [] });
+  // A WhatsApp or Telegram chat waiting in the inbox, imported inline under the Text chips.
+  const [threads, setThreads] = useState({ status: 'idle', items: [] });
+  const [thread, setThread] = useState(null);
+  // D754 (#1980): how a chat that waits for consent gets it — 'ask', or the member's word (a method).
+  const [chatChoice, setChatChoice] = useState(null);
+  useEffect(() => { setChatChoice(null); }, [thread]);
+  // D756 (#1981): a Telegram chat asked from here carries the Worker's answer, until the list is read again.
+  const [askedConsent, setAskedConsent] = useState({});
+  // D684's call for later. A new person is added to the pipeline first, since a call needs an interview.
+  const [scheduleLater, setScheduleLater] = useState(false);
+  const [planning, setPlanning] = useState({ busy: false, error: null });
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  const [assigned, setAssigned] = useState(null);
+  const { company: active } = useActiveCompany() || {};
+  // D1363: a Start refused for AI tokens is topped up here, never on another page. Once the
+  // tokens land, a refused Eadwyn AI send is made again on the same session; any other Start
+  // is ready to press again.
+  useEffect(() => {
+    if (!refusal?.topUp) return undefined;
+    return onTokensAdded(() => {
+      if (typeof refusal.resume === 'function') { refusal.resume(); return; }
+      setRefusal(null); setAssigned(TOKENS_ADDED_START);
+    });
+  }, [refusal]);
+
+  useEffect(() => {
+    if (initialModels !== undefined) return undefined;
+    let alive = true;
+    sessions.models().then((r) => {
+      if (!alive) return;
+      setModels(r); setLive(r?.defaults?.live ?? null); setFinal(r?.defaults?.final ?? null);
+    }).catch(() => { if (alive) setModels(null); });
+    return () => { alive = false; };
+  }, [sessions, initialModels]);
+
+  useEffect(() => {
+    if (initialBoard !== undefined || !projectId) return undefined;
+    let alive = true;
+    api.getValidationBoard(projectId).then((r) => { if (alive) setBoard(r); }).catch(() => { if (alive) setBoard(null); });
+    return () => { alive = false; };
+  }, [api, projectId, initialBoard]);
+
+  const who = interview || picked; // the interview Start lands on; none makes one from Who
+  const m = modeOf(mode);
+  const chips = PROVIDERS[mode] || [];
+  const chosen = chips.find((c) => c.value === provider) || null;
+  const status = chosen ? chipStatus(mode, chosen, channels) : null;
+  const points = useMemo(() => talkingPoints(board?.hypotheses), [board]);
+  const isOn = (p) => (selected ? selected.has(p.id) : p.on);
+  const chosenPoints = points.filter(isOn);
+  const eta = estimate(models, live, final, minutes);
+  // Importing: a Text chip for an app whose chats can be read (not paste, not disabled).
+  const importing = mode === 'text' && provider !== 'paste' && !!status && !status.disabled;
+  // While importing, the chat is the content: the paste box is not asked for.
+  const state = startState({ mode, consent, name, interview: who, conversation, hasThread: importing });
+  // D754 §11: a chat that waits for consent starts only once it is asked for, or the member gives their word.
+  const pickedThread = importing && thread ? threads.items.find((t) => t.uid === thread) || null : null;
+  const chatC = !pickedThread ? { required: false }
+    : Object.hasOwn(askedConsent, pickedThread.uid) ? chatConsentOf({ consent: askedConsent[pickedThread.uid] }) : chatConsentOf(pickedThread);
+  const chatName = (who?.interviewee_name || name || (pickedThread ? threadRow(pickedThread).name : '')).trim();
+  const chatBlock = pickedThread ? chatConsentBlock(chatC, chatChoice, chatName, provider) : null;
+  const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : state.ok ? chatBlock : null;
+  const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
+  const meeting = hasMeetingLink(mode, provider);
+  const bot = botState(botRead, botPlatform(link) || (meeting ? provider : null));
+  // D1358: a meeting is captured by Eadwyn AI or imported from the provider after
+  // it ends, never by this browser's microphone or a shared tab.
+  const capture = callCapture({ mode, provider, link, channels, bot, botLink: !!botPlatform(link) });
+  const offer = createMeetingOffer(mode, provider, channels, caps);
+  // D1362: a meeting has one Start. It creates the meeting when no link is
+  // pasted, saves the call, sends Eadwyn AI where it can join, and opens the
+  // meeting; the transcript is imported when the call ends.
+  const plan = meeting ? callStartPlan({ mode, provider, link, channels, bot, botLink: !!botPlatform(link), offer }) : null;
+  const planNote = callStartNote(plan, provider);
+  const botReady = meeting ? plan?.kind === 'bot' : capture.kind === 'bot';
+  const importReady = meeting ? plan?.kind === 'import' : capture.kind === 'import';
+  const botJoins = meeting ? !!plan?.bot : botReady;
+  const captureKind = meeting ? (plan?.kind ?? 'none') : capture.kind;
+  const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
+  const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
+    && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
+  const label = refusal?.retrySetup ? 'Try again' : howOf(mode) === 'call' ? 'Start Call' : m.start;
+  const languages = languageOptions(models, live);
+
+  // The chats waiting for this app, read when its chip is chosen.
+  useEffect(() => {
+    if (!importing) return undefined;
+    let alive = true;
+    setThreads({ status: 'loading', items: [] }); setThread(null);
+    Promise.resolve().then(() => channelsSource.threads('pending'))
+      .then((r) => { if (alive) setThreads({ status: 'ready', items: threadsFor(r, provider) }); })
+      .catch(() => { if (alive) setThreads({ status: 'unreadable', items: [] }); });
+    return () => { alive = false; };
+  }, [importing, provider, channelsSource]);
+
+  const openPipeline = () => {
+    const open = !pipeline.open;
+    setPipeline((p) => ({ ...p, open }));
+    if (!open || pipeline.status === 'ready' || pipeline.status === 'loading' || !projectId) return;
+    setPipeline({ open: true, status: 'loading', rows: [] });
+    cycle.module(projectId, 'customer-research', { filter: 'stage:pipeline', sort: 'booked' })
+      .then((r) => setPipeline({ open: true, status: 'ready', rows: pipelineRows(r) }))
+      .catch(() => setPipeline({ open: true, status: 'unreadable', rows: [] }));
+  };
+  const pick = (row) => { setPicked(row); setPipeline((p) => ({ ...p, open: false })); setRefusal(null); };
+
+  // How's Call (2026-10-21): its channel is the default chip's, and a chip from the other
+  // channel moves the call to it, so the link, the tab share and the microphone follow the chip.
+  const pickMode = (next) => {
+    const first = next === 'call' ? defaultProvider('video', channels) : defaultProvider(next, channels);
+    setMode(next === 'call' ? callChannel(first) || 'video' : next); setProvider(first); setLink(''); setRefusal(null); setThread(null);
+  };
+  // D5811: kept for this member before leaving for Account › Connectors › Microsoft Teams.
+  const keepDraft = () => {
+    saveRecordDraft(userId, { projectId, interviewId: who?.id ?? null, name, company, mode, provider, link, minutes });
+  };
+  // D5811: "Create the meeting for me" for Teams fills the link and nothing else: no session, no bot.
+  // A refusal keeps every field; a personal account is told to paste the link from Teams.
+  const [creating, setCreating] = useState({ busy: false, error: '' });
+  const createTeams = async () => {
+    if (creating.busy || typeof channelsSource?.instantMeeting !== 'function') return;
+    setCreating({ busy: true, error: '' });
+    try {
+      const url = createdLink('teams', await channelsSource.instantMeeting('teams', minutes));
+      if (!url) throw new Error('The meeting could not be created. Create it in Microsoft Teams and paste its link.');
+      if (provider === 'teams') setLink((prev) => (String(prev).trim() ? prev : url));
+      setCreating({ busy: false, error: '' });
+    } catch (e) {
+      setCreating({ busy: false, error: (typeof e?.message === 'string' && e.message.trim()) || 'The meeting could not be created. Create it in Microsoft Teams and paste its link.' });
+      if (e?.code === 'teams_reconnect' || e?.code === 'teams_not_connected') setCapsTick((n) => n + 1);
+    }
+  };
+  const pickProvider = (next) => {
+    setProvider(next);
+    const channel = howOf(mode) === 'call' ? callChannel(next) : null;
+    if (channel && channel !== mode) { setMode(channel); setLink(''); }
+  };
+  // Flux transcribes English only: choosing it takes a language it cannot take back to Detect.
+  const pickLive = (v) => { const next = v || null; setLive(next); if (!languageOptions(models, next).some((l) => l.code === language)) setLanguage(''); };
+
+  const togglePoint = (p) => setSelected((prev) => {
+    const next = new Set(prev ?? points.filter((x) => x.on).map((x) => x.id));
+    if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
+    return next;
+  });
+
+  /**
+   * "Schedule the call for later". A call needs an interview: a new person is
+   * added to the pipeline, booked, and becomes Who's pick, so Start does not
+   * make a second one.
+   */
+  const scheduleCall = async () => {
+    if (scheduleLater) { setScheduleLater(false); return; }
+    if (who) { setScheduleLater(true); return; }
+    const named = name.trim();
+    if (!named) { setPlanning({ busy: false, error: 'Add who you are talking to first.' }); return; }
+    setPlanning({ busy: true, error: null });
+    let made = null;
+    try {
+      made = await api.createInterview(projectId, { interviewee_name: named, interviewee_company: company.trim() || null });
+      await cycle.setInterviewStage(projectId, made.id, 'booked');
+      setPicked({ id: made.id, interviewee_name: made.interviewee_name ?? named, interviewee_company: made.interviewee_company ?? (company.trim() || null), stage: 'booked' });
+      setPlanning({ busy: false, error: null });
+      setScheduleLater(true);
+    } catch (e) {
+      // Not left half-made: an interview with no stage would count as held.
+      if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
+      setPlanning({ busy: false, error: e?.message || 'The call could not be planned.' });
+    }
+  };
+
+  /**
+   * D1358: a Zoom or Google Meet call on the member's connected account, saved
+   * for import after it ends. The call needs an interview, made as "Schedule
+   * the call for later" makes one (and removed if the save is refused). The
+   * Worker opens the call's own session; nothing is recorded here.
+   */
+  const saveForImport = async (url, opened, botInstead = false) => {
+    sending.current = true;
+    setBusy(true); setRefusal(null); setAssigned(null);
+    const named = (who?.interviewee_name || name).trim();
+    let made = null;
+    try {
+      let target = who;
+      if (!target) {
+        made = await api.createInterview(projectId, { interviewee_name: named, interviewee_company: company.trim() || null });
+        await cycle.setInterviewStage(projectId, made.id, 'booked');
+        target = { id: made.id, interviewee_name: made.interviewee_name ?? named, interviewee_company: made.interviewee_company ?? (company.trim() || null) };
+      }
+      const given = { status: 'given', method: consent };
+      const r = provider === 'zoom'
+        ? await channelsSource.saveZoomCall(target.id, { join_url: url, consent: given })
+        : await channelsSource.attachCalendarMeet(target.id, { join_url: url, consent: given });
+      if (r?.session_id == null) throw new Error('The call could not be saved. Try again.');
+      opened?.();
+      // D1360: the Worker also sends Eadwyn AI when it can join (`r.bot`).
+      startedWith({ id: r.session_id, submitted_via: r.bot ? 'meeting_bot' : provider }, {
+        id: target.id, interviewee_name: target.interviewee_name ?? named, interviewee_company: target.interviewee_company ?? null,
+      });
+    } catch (e) {
+      // Not left half-made: an interview with no call would count as held.
+      if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
+      if (botInstead && provider === 'google_meet' && BOT_INSTEAD.has(e?.code)) return 'bot';
+      setRefusal(startRefusal(e));
+      setBusy(false); sending.current = false;
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * D1362: Start for a meeting. A tab is opened inside the click, before
+   * anything is awaited, so the browser lets it through. D1382: on a computer it is
+   * pointed at the meeting as soon as the link is known, and the call is saved while
+   * the founder joins; a refused save then leaves the founder's own meeting open and
+   * says what was not saved. A tab never pointed at a meeting is closed on refusal.
+   * On a phone the app still opens only once the call is saved: handing the page to
+   * the app would stop the save.
+   */
+  const startCall = async () => {
+    if (!ready || sending.current) return;
+    sending.current = true;
+    setBusy(true); setRefusal(null); setAssigned(null);
+    // D1377: on a phone the call opens in the Zoom or Meet app, so no browser tab is opened for it.
+    const os = phoneOs(globalThis.navigator);
+    const inApp = !!os && (provider === 'zoom' || (provider === 'google_meet' && os === 'android'));
+    let tab = null;
+    if (!inApp) {
+      try { tab = typeof window !== 'undefined' && typeof window.open === 'function' ? window.open('', '_blank') : null; } catch { tab = null; }
+      try { if (tab) tab.opener = null; } catch { /* a cross-origin tab keeps its own opener */ }
+    }
+    let early = false;
+    const closeUnused = () => { if (!early) { try { tab?.close?.(); } catch { /* already closed */ } } };
+    const refuse = (e) => {
+      closeUnused();
+      setRefusal(startRefusal(e)); setBusy(false); sending.current = false;
+    };
+    let url = String(link).trim();
+    if (!url) {
+      try {
+        url = createdLink(provider, await channelsSource.instantMeeting(provider, minutes)) || '';
+        if (!url) throw new Error(`The meeting could not be created. Create it in ${chosen?.label || 'the app'} and paste its link.`);
+        setLink(url);
+      } catch (e) { refuse(e); return; }
+    }
+    const href = meetingHref(provider, url);
+    let shown = false;
+    const opened = () => {
+      if (!href || shown) return;
+      shown = true;
+      const app = inApp ? meetingAppHref(provider, url, os) : null;
+      if (app) { try { globalThis.location?.assign?.(app); return; } catch { /* the session page offers the link */ } }
+      try { if (tab && !tab.closed) { tab.location.href = href; return; } } catch { /* fall through */ }
+      try { window.open(href, '_blank', 'noopener'); } catch { /* the session page offers the link */ }
+    };
+    // D1382: the founder joins now; the interview, session and Eadwyn AI are saved meanwhile.
+    if (!inApp && href && tab && !tab.closed) { opened(); early = true; }
+    if (plan?.kind === 'import') {
+      sending.current = false;
+      const ok = await saveForImport(url, opened, !!plan.bot && botPlatform(url) === provider);
+      if (ok === true) return;
+      if (ok !== 'bot') { closeUnused(); return; }
+      // Not importable, but Eadwyn AI can join it: the bot path below.
+      sending.current = true; setBusy(true);
+    }
+    // Eadwyn AI only (Teams, or a call Axal cannot import).
+    const named = (who?.interviewee_name || name).trim();
+    const into = (r) => ({ id: r?.id ?? who?.id, interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? named, interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null) });
+    try {
+      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
+      const botFields = { ...fields, meeting_url: false };
+      const r = interview
+        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: setupKey(true) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(true) }, botFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
+      // D1363: refused for AI tokens, the member tops up here and the send is made again on
+      // the same session once the tokens land; the meeting then opens (or the session page offers it).
+      const send = async () => {
+        try {
+          await sessions.sendBot(r.session.id, { meeting_url: url });
+        } catch (e) {
+          closeUnused();
+          setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
+            ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
+          setBusy(false); sending.current = false;
+          return;
+        }
+        opened();
+        startedWith({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
+      };
+      await send();
+    } catch (e) { refuse(e); }
+  };
+
+  const submit = async () => {
+    const useBot = botReady;
+    if (!ready || sending.current) return;
+    if (meeting) { await startCall(); return; }
+    // The browser recorder is for in person and a call on this phone's speaker
+    // only. A meeting never reaches it (D1358).
+    const handsOver = !!recorder && m.audio && mode !== 'video' && !useBot;
+    // #1588: while this tab still records (or saves) another session, a second
+    // Start is refused before the microphone opens or a session is made, and
+    // offers that recording, as the Worker's 409 does.
+    const held = handsOver ? liveRefusal(recorder.getSnapshot?.(), recorder.isCapturing?.()) : null;
+    if (held) { setRefusal({ text: held.text, liveHref: `/validate/record/live?session=${encodeURIComponent(held.sessionId)}` }); return; }
+    sending.current = true;
+    setBusy(true); setRefusal(null); setAssigned(null);
+    // In person and Audio call: the microphone and the AudioContext are asked
+    // for inside this click, before anything is awaited, so iOS Safari does not
+    // start the context suspended (D685 §5.6.5). A video call asks in its own
+    // second click, "Share the call's tab" (§5.8.1).
+    if (handsOver) recorder.prepare();
+    const person = (r) => ({
+      id: r?.id ?? who?.id,
+      interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? name.trim(),
+      interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null),
+    });
+    try {
+      if (importing) {
+        // Telegram reaches here only once its YES is given (`chatConsentBlock`), so its assign carries no consent.
+        const asks = chatC.required && chatC.status !== 'given' ? chatChoice : null;
+        const r = await channelsSource.assign(thread, assignTarget({ name, company, consent, chatConsent: asks }, { projectId, interview: who }));
+        const into = person({ id: r?.interview_id });
+        if (r?.session_id != null) { startedWith({ id: r.session_id }, into); return; }
+        setAssigned(assignedSentence(r, into.interviewee_name));
+        setBusy(false); sending.current = false;
+        return;
+      }
+      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, ...(supportsOutputs && m.audio ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      // An interview it was opened on (a row's "Record a session") may already
+      // be held, which the setup call refuses: it opens on that interview's own
+      // route, with the same fields. A pick from the pipeline, or a new person,
+      // is the one setup call.
+      const captureFields = useBot ? { ...fields, meeting_url: false } : fields;
+      const r = interview
+        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: setupKey(useBot) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(useBot) }, captureFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
+      const into = person(r.interview);
+      if (useBot) {
+        const url = link.trim();
+        const send = async () => {
+          try {
+            await sessions.sendBot(r.session.id, { meeting_url: url });
+            startedWith({ ...r.session, submitted_via: 'meeting_bot' }, into);
+          } catch (e) {
+            setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
+              ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
+            setBusy(false); sending.current = false;
+          }
+        };
+        await send();
+        return;
+      }
+      if (handsOver) {
+        // begin()'s own check, read in the same tick it runs: a Start opened
+        // meanwhile (the mic still opening elsewhere) is refused here, in words.
+        const late = liveRefusal(recorder.getSnapshot?.(), recorder.isCapturing?.());
+        if (late) {
+          recorder.release?.();
+          setRefusal({ text: late.text, liveHref: `/validate/record/live?session=${encodeURIComponent(late.sessionId)}` });
+          setBusy(false); sending.current = false;
+          return;
+        }
+        recorder.begin({
+          attach: null,
+          session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: false,
+          // The Worker's link (a pasted one, or a scheduled call's): "Start the call" opens it (§5.8.1).
+          meetingUrl: r.meeting_url ?? null,
+        });
+        startedWith(r.session, into, 'live');
+        return;
+      }
+      startedWith(r.session, into);
+    } catch (e) {
+      if (handsOver) recorder?.release();
+      setRefusal(startRefusal(e));
+      setBusy(false);
+      sending.current = false;
+    }
+  };
+
+  const consentNoteId = 'record-consent-note';
+
+  return (
+    <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" sub="It lands in Interviews when you stop."
+      onClose={close} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox" {...asPage}
+      footer={(
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={close} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
+            <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : captureReason ? 'record-capture-reason' : 'record-start-reason')}
+              disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
+          </div>
+        </div>
+      )}>
+      <div className="divide-y divide-axal-hairline dark:divide-gray-800">
+        <Section title="Who" testId="record-who">
+          {who ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="record-who-picked">
+                {[who.interviewee_name, who.interviewee_company].filter(Boolean).join(' · ') || 'Name not recorded'}
+                {who.stage && STAGE_WORD[who.stage] ? <span className="ml-1.5 text-[11.5px] text-axal-faint">{`· ${STAGE_WORD[who.stage]}`}</span> : null}
+              </p>
+              {!interview && <button type="button" onClick={() => { setPicked(null); setScheduleLater(false); }} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-who-clear">Someone else</button>}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Name
+                  <input ref={nameRef} className={FIELD} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-name" />
+                </label>
+                <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Company
+                  <input className={FIELD} value={company} onChange={(e) => setCompany(e.target.value)} maxLength={120} autoComplete="off" data-testid="record-company" />
+                </label>
+              </div>
+              <button type="button" aria-expanded={pipeline.open} aria-controls="record-pipeline" onClick={openPipeline}
+                className="w-fit text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-pipeline-link">or pick from Recruiting pipeline ▾</button>
+              {pipeline.open && (
+                <div id="record-pipeline" data-testid="record-pipeline">
+                  {pipeline.status === 'loading' && <p className="m-0 text-[12px] text-axal-faint">Reading your recruiting pipeline…</p>}
+                  {pipeline.status === 'unreadable' && <p className="m-0 text-[12px] text-axal-faint" data-testid="record-pipeline-unreadable">Unreadable: your recruiting pipeline could not be read. This is not a claim that it is empty.</p>}
+                  {pipeline.status === 'ready' && pipeline.rows.length === 0 && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-pipeline-none">Nobody is in your recruiting pipeline. Name the person above.</p>}
+                  {pipeline.status === 'ready' && pipeline.rows.length > 0 && (
+                    <ul className="m-0 list-none divide-y divide-axal-hairline overflow-hidden rounded-[9px] border border-axal-hairline p-0 dark:divide-gray-800 dark:border-gray-700">
+                      {pipeline.rows.map((r) => (
+                        <li key={r.id}>
+                          <button type="button" onClick={() => pick(r)} data-testid={`record-pipeline-${r.id}`}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[13px] text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800">
+                            <span className="min-w-0 truncate">{[r.interviewee_name || 'Name not recorded', r.interviewee_company].filter(Boolean).join(' · ')}</span>
+                            <span className="shrink-0 text-[11.5px] text-axal-faint">{STAGE_WORD[r.stage]}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </Section>
+
+        <Section title="How" testId="record-how">
+          <Radios label="How" options={HOW_OPTIONS} value={howOf(mode)} onChange={pickMode} testId="record-mode"
+            className="grid grid-cols-3 gap-1.5" style={tile} />
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode)}</p>
+          {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
+          {chips.length > 0 && (
+            <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
+              options={chips.map((c) => { const st = howOf(mode) === 'call' && c.value === 'teams' ? teamsChipStatus(caps) : howOf(mode) === 'call' && ['signal', 'whatsapp', 'telegram'].includes(c.value) ? { word: 'Coming soon', disabled: true } : chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
+                // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
+                // Owner-requested Teams mark: official Teams favicon, saved locally (2026-10-28).
+                // Source: https://teams.public.onecdn.static.microsoft/evergreen-assets/icons/microsoft_teams_logo_refresh_v2025.ico
+                icon: c.value === 'teams'
+                  ? <img src="/microsoft-teams.ico" width={16} height={16} alt="" aria-hidden="true" className="shrink-0" />
+                  : <BrandIcon provider={c.value} size={16} variant="bare" fallback="none" /> }; })} />
+          )}
+          {status?.connectHref && (
+            <Link to={status.connectHref} className="w-fit text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-connect-link">Connect {chosen.label} in Connectors</Link>
+          )}
+          {hasMeetingLink(mode, provider) && (
+            <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Meeting link
+              <input className={FIELD} value={link} onChange={(e) => setLink(e.target.value)} disabled={!fields.meeting_url} placeholder={provider === 'teams' ? (offer?.button ? 'Paste the Teams link, or create the meeting below' : 'Paste the Teams meeting link') : offer?.kind === 'create' ? 'Paste a link, or leave it empty: Start creates the meeting' : 'https://…'} inputMode="url" autoComplete="off" data-testid="record-link" aria-invalid={linkProblem ? true : undefined} />
+              {!fields.meeting_url ? <span className="font-normal text-axal-faint" data-testid="record-link-note">{NOT_STORED}</span>
+                : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
+            </label>
+          )}
+          {meeting && offer && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-create-meeting">
+              {offer.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} onClick={provider === 'teams' ? keepDraft : undefined} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center" data-testid="record-create-connect">{offer.connectLabel}</Link>}
+              {offer.button && !String(link).trim() && (
+                <button type="button" onClick={createTeams} disabled={creating.busy || !fields.meeting_url} className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-bold text-axal-ink hover:border-gray-300 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 max-sm:min-h-[44px]" data-testid="record-create-teams">{creating.busy ? 'Creating…' : 'Create the meeting for me'}</button>
+              )}
+              {offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}
+                {offer.kind === 'unreadable' && <button type="button" onClick={() => setCapsTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-caps-retry">Try again</button>}</p>}
+              {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-teams-error">{creating.error}</p>}
+              {offer.kind === 'create' && offer.note && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-teams-note">{offer.note}</p>}
+            </div>
+          )}
+          {meeting && planNote && <p className="m-0 text-[12px] text-axal-ink dark:text-gray-100" data-testid="record-start-plan">{planNote}</p>}
+          {meeting && provider === 'teams' && !!String(link).trim() && !linkProblem && captureKind === 'none' && bot.state !== 'loading' && (
+            // D5811: no way to capture this Teams call here: after it, its recording or transcript.
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-teams-after">
+              <Link to="/validate/record/calls/upload" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center" data-testid="record-teams-upload">Upload the recording</Link>
+              <button type="button" onClick={() => pickMode('text')} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300 max-sm:min-h-[44px]" data-testid="record-teams-paste">Paste the transcript</button>
+            </div>
+          )}
+          {meeting && bot.state === 'unreadable' && (
+            <p id="record-bot-state" className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-bot-state" data-state={bot.state}>
+              {bot.sentence}
+              <button type="button" onClick={() => setBotTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-bot-retry">Try again</button>
+            </p>
+          )}
+          {botJoins && <><MeetingBotConsentNotice /><p className="m-0 text-[12px] text-axal-faint" data-testid="bot-billing-note">Eadwyn AI uses your AI tokens for bot time and transcription. Your balance is checked before sending. The call limit is 30 minutes on a free plan and two hours on a paid plan.</p></>}
+          {mode === 'text' && provider === 'paste' && (
+            <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">The conversation
+              <textarea className={FIELD} rows={6} value={conversation} onChange={(e) => setConversation(e.target.value)} data-testid="record-conversation" />
+              <span className="font-normal text-axal-faint">One line each, as “Name: what they said”.</span>
+            </label>
+          )}
+          {mode === 'text' && provider !== 'paste' && !importing && (
+            <p className="m-0 text-[12px] text-axal-faint" data-testid="record-import-note">Importing from this app is not available yet. Paste the conversation instead.</p>
+          )}
+          {importing && (
+            <div className="flex flex-col gap-1.5" data-testid="record-threads">
+              {threads.status === 'loading' && <p className="m-0 text-[12px] text-axal-faint">Reading the chats waiting in your inbox…</p>}
+              {threads.status === 'unreadable' && <p className="m-0 text-[12px] text-axal-faint" data-testid="record-threads-unreadable">Unreadable: your waiting chats could not be read. This is not a claim that none is waiting.</p>}
+              {threads.status === 'ready' && threads.items.length === 0 && (
+                <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-threads-none">{status.word === 'Connected'
+                  ? `No ${chosen.label} chat is waiting. When a customer writes to your connected ${chosen.label}, the chat appears here.`
+                  : `Connect ${chosen.label} first: its chats arrive once it is connected.`}</p>
+              )}
+              {threads.status === 'ready' && threads.items.length > 0 && (
+                <Radios label="The chat to import" testId="record-thread" value={thread} onChange={setThread} className="flex flex-col gap-1.5"
+                  style={(on) => `${chip(on)} !rounded-[9px] text-left`}
+                  options={threads.items.map((t) => { const row = threadRow(t); return { value: t.uid, label: `${row.name} · ${row.count} · ${row.when}` }; })} />
+              )}
+              {pickedThread && chatC.required && chatC.status !== 'given' && (
+                provider === 'telegram'
+                  ? <TelegramConsentAsk key={pickedThread.uid} thread={pickedThread} consent={chatC} name={chatName} source={channelsSource}
+                    onAsked={(c) => setAskedConsent((m) => ({ ...m, [pickedThread.uid]: c }))} />
+                  : <ChatConsentPick consent={chatC} name={chatName} provider={provider} value={chatChoice} onChange={setChatChoice} />
+              )}
+              <p className="m-0 text-[11.5px] text-axal-faint">{`Its messages become this interview’s Text session, and new messages in the chat follow.`}</p>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
+            <button type="button" aria-expanded={assistant} aria-controls="record-assistant" onClick={() => setAssistant((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-assistant-link">Send it from your AI assistant</button>
+            <button type="button" aria-expanded={fromWhatsApp} aria-controls="record-whatsapp" onClick={() => setFromWhatsApp((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-whatsapp-link">Send it from WhatsApp</button>
+            <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={scheduleCall} disabled={planning.busy} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">{planning.busy ? 'Adding them to your pipeline…' : 'Schedule the call for later'}</button>
+          </div>
+          {planning.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="record-schedule-error">{planning.error}</p>}
+          {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
+          {fromWhatsApp && <div id="record-whatsapp" className="-mx-1"><WhatsAppEntry read={whatsappLink.read} projectId={projectId} api={channelsSource} onChanged={whatsappLink.reload} /></div>}
+          {who && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={who} /></div>}
+        </Section>
+
+        <Section title="Talking points" testId="record-points">
+          {board === undefined ? <p className="m-0 text-[12px] text-axal-faint">Reading your hypotheses…</p>
+            : board === null ? <p className="m-0 text-[12px] text-axal-faint" data-testid="record-points-unreadable">Unreadable: your hypotheses could not be read.</p>
+              : points.length === 0 ? <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-points-none">No hypothesis yet. <Link to="/validate/experiments" className="font-semibold text-axal-violet underline dark:text-violet-300">Add one in Experiments</Link>.</p>
+                : (
+                  <div className="flex flex-wrap gap-1.5" data-testid="record-point-chips">
+                    {points.map((p) => {
+                      const on = isOn(p);
+                      return <button key={p.id} type="button" aria-pressed={on} disabled={!fields.points} onClick={() => togglePoint(p)} className={chip(on)} data-testid={`record-point-${p.id}`}>{p.text}</button>;
+                    })}
+                  </div>
+                )}
+          <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-points-note">{fields.points ? 'The hypotheses you pick appear in the Talking points drawer while you record.' : NOT_STORED}</p>
+        </Section>
+
+        {m.audio && botJoins && (
+          <Section title="Transcript" testId="record-transcript">
+            <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-bot-transcript">{botTranscriptLine(botRead).transcript}</p>
+            <p className="m-0 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-bot-price">{botTranscriptLine(botRead).price}</p>
+            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
+          </Section>
+        )}
+        {mode === 'video' && !botJoins && (
+          <Section title="Transcript" testId="record-transcript">
+            {importReady
+              ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-import-note">{IMPORT_NOTE[provider]}</p>
+              : <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="record-capture-none">No capture is set up for this call yet. Axal never records a meeting from this browser.</p>}
+            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
+          </Section>
+        )}
+        {m.audio && !botReady && mode !== 'video' && (
+          <Section title="Transcript" testId="record-transcript">
+            {models === undefined ? <p className="m-0 text-[12px] text-axal-faint">Reading models…</p>
+              : models === null ? <p className="m-0 text-[12px] text-axal-faint" data-testid="record-models-unreadable">Unreadable: the model list could not be read.</p>
+                : (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]"><span className="text-axal-muted dark:text-gray-300">Live captions</span>
+                      <Radios label="Live captions" testId="record-live" value={live === null ? '' : live} onChange={pickLive}
+                        options={[{ value: '', label: 'Off' }, ...(models.live || []).map((x) => ({ value: x.model, label: `${x.label} · ${Number.isFinite(x.price_usd_per_minute) ? `$${x.price_usd_per_minute.toFixed(4)}/min` : 'Not priced'}`, disabled: !x.choosable }))]} />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[13px]"><span className="text-axal-muted dark:text-gray-300">Final transcript</span>
+                      <Radios label="Final transcript" testId="record-final" value={final} onChange={setFinal}
+                        options={(models.final || []).map((x) => ({ value: x.model, label: `${x.label} · ${Number.isFinite(x.price_usd_per_minute) ? `$${x.price_usd_per_minute.toFixed(4)}/min` : 'Not priced'}`, disabled: !x.choosable }))} />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[13px]"><label htmlFor="record-language" className="text-axal-muted dark:text-gray-300">Language</label>
+                      <select id="record-language" disabled={!fields.language} className={`${FIELD} !w-auto`} data-testid="record-language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                        {languages.map((l) => <option key={l.code || 'detect'} value={l.code}>{l.name}</option>)}
+                      </select>
+                    </div>
+                    {!fields.language && <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-language-note">{NOT_STORED}</p>}
+                    <div className="flex items-center justify-between gap-2 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-estimate">
+                      <span>{eta.text}</span>
+                      <label className="flex items-center gap-1.5 text-[11.5px]"><span className="sr-only">Estimated length</span>
+                        <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className="rounded-md border border-axal-lavender-edge bg-white px-1.5 py-0.5 text-[11.5px] dark:border-violet-800 dark:bg-gray-900" data-testid="record-minutes">
+                          {DURATIONS.map((d) => <option key={d} value={d}>{d} min</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  </>
+                )}
+          </Section>
+        )}
+
+        {m.audio && supportsOutputs && (
+          <Section title="What do you want from this call?" testId="record-outputs">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                ['problem-discovery', 'Problem discovery'], ['customer-research', 'Customer research'],
+                ['ideal-customer-profile', 'Ideal customer profile'], ['market-intelligence', 'Market intelligence'],
+                ['demand-signals', 'Demand and urgency signals'], ['experiments', 'Experiments and evidence'],
+                ['verdict', 'Verdict'], ['pain-points', 'Pain points'], ['icp-fit', 'ICP fit'],
+                ['feature-requests-quotes', 'Feature requests & quotes'],
+              ].map(([id, label]) => <label key={id} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+                <input type="checkbox" checked={outputs.includes(id)} disabled={!outputsLoaded || busy} onChange={(e) => {
+                  setOutputQuote(undefined); setOutputIssue('');
+                  setOutputs((old) => e.target.checked ? [...old, id] : old.filter((x) => x !== id));
+                }} />{label}
+              </label>)}
+            </div>
+            <p role="status" className="m-0 text-[12px] text-axal-muted dark:text-gray-300" data-testid="record-outputs-cost">
+              {outputIssue ? `${outputIssue} No outputs selected. You can still start recording.` : outputQuote === undefined ? 'Estimating AI tokens… Recording can start without outputs.' : outputQuote === null ? 'The extraction estimate is unavailable. Recording can start without outputs.'
+                : `Estimated extraction: $${(outputQuote / 1000000).toFixed(6)} of AI tokens · based on ${minutes} minutes. Actual usage depends on the final transcript.`}
+            </p>
+            <p className="m-0 text-[11.5px] text-axal-faint">After the call only. Eadwyn proposes each selected output for you to Accept. Quotable lines need Quotes OK.</p>
+          </Section>
+        )}
+
+        <Section title="Consent" testId="record-consent">
+          <Radios label="Consent" testId="record-consents" value={consent} onChange={setConsent} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" style={tile}
+            options={CONSENTS.map(([value, text]) => ({ value, label: text }))} />
+          <p id={consentNoteId} className={`m-0 text-[11.5px] ${m.audio && !consent ? 'font-semibold text-amber-800 dark:text-amber-300' : 'text-axal-faint'}`} data-testid="record-consent-note">{consentNote(mode, consent)}</p>
+        </Section>
+      </div>
+      <div className="px-5 pb-3">
+        {!ready && !(m.audio && !consent) && (state.reason || blockedReason) && <p id="record-start-reason" className="m-0 text-[11.5px] text-axal-faint" data-testid="record-start-reason">{state.reason || blockedReason}</p>}
+        {!busy && captureReason && <p id="record-capture-reason" className="m-0 text-[11.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="record-capture-reason">{captureReason}</p>}
+        {refusal?.storage && <div className="mt-1"><StorageRefusal refusal={refusal.storage} recording testId="record-storage-full" /></div>}
+        {refusal && !refusal.storage && (
+          <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">
+            {refusal.text}
+            {refusal.sessionHref && !refusal.topUp && <Link to={refusal.sessionHref} className="ml-1 underline">Open the session to check its status</Link>}{refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
+          </p>
+        )}
+        {refusal?.topUp && (
+          <button type="button" onClick={() => openAddTokens({ from: 'Record a session' })} data-testid="record-top-up"
+            className="mt-1 self-start rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Top up and continue</button>
+        )}
+        {assigned && <p role="status" className="m-0 mt-1 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="record-assigned">{assigned}</p>}
+      </div>
+    </Lightbox>
+  );
+}

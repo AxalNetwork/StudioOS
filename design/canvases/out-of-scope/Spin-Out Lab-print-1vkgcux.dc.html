@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style data-omelette-print-defaults>
+@media print {
+  @page { margin: 0.5in; }
+  h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+  figure, table, pre, blockquote, img, svg, tr, [class~="card" i] { break-inside: avoid; }
+  img, svg { max-width: 100%; }
+  p { orphans: 3; widows: 3; }
+}
+</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+  .tnum{font-variant-numeric:tabular-nums}
+  a{color:#7c3aed;text-decoration:none}
+  a:hover{color:#6d28d9}
+  input,textarea,select{font-family:inherit}
+  ::-webkit-scrollbar{height:8px;width:8px}
+  ::-webkit-scrollbar-thumb{background:#d4d4d8;border-radius:8px}
+  @keyframes soLabPulse{0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.5)}50%{box-shadow:0 0 0 6px rgba(139,92,246,0)}}
+  @keyframes soFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes soOverlay{from{opacity:0}to{opacity:1}}
+  @keyframes soSheet{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+  .so-scroll{scrollbar-width:thin}
+  @media (max-width:1080px){.so-sidebar{display:none!important}.so-main{padding-left:0!important}}
+  @media (max-width:960px){.so-pipeline{flex-direction:column!important;gap:12px!important}.so-phase{flex:none!important}.so-phase-conn{display:none!important}}
+  @media print{.so-sidebar,.so-topbar,.so-noprint{display:none!important}.so-main{padding-left:0!important}body{background:#fff}.so-slide{break-inside:avoid;box-shadow:none!important;border:1px solid #e4e4e7!important}}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:#F8F8FA">
+
+  <!-- SIDEBAR -->
+  <aside class="so-sidebar" style="width:256px;flex:none;position:fixed;inset:0 auto 0 0;background:#ffffff;border-right:1px solid #ececf1;display:flex;flex-direction:column;z-index:20">
+    <div style="height:60px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px;border-bottom:1px solid #f1f1f5">
+      <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px">M</div>
+      <div style="font-weight:700;font-size:15px;letter-spacing:-.01em">Meridian</div>
+    </div>
+    <nav class="so-scroll" style="flex:1;overflow-y:auto;padding:14px 12px">
+      <sc-for list="{{ navGroups }}" as="group" hint-placeholder-count="4">
+        <div style="margin-bottom:18px">
+          <div style="font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;padding:0 10px;margin-bottom:6px">{{ group.label }}</div>
+          <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="4">
+            <div onClick="{{ item.onClick }}" style="{{ item.style }}">
+              <span style="width:18px;height:18px;flex:none;display:flex;align-items:center;justify-content:center" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+              <span>{{ item.name }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="flex:none;padding:12px;border-top:1px solid #f1f1f5;display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">AK</div>
+      <div style="line-height:1.2"><div style="font-size:13px;font-weight:600">Ana Krause</div><div style="font-size:11px;color:#a1a1aa">Founder</div></div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="so-main" style="flex:1;min-width:0;padding-left:256px">
+
+    <!-- TOP BAR -->
+    <header class="so-topbar" style="height:60px;position:sticky;top:0;z-index:15;background:rgba(248,248,250,.85);backdrop-filter:blur(8px);border-bottom:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;padding:0 32px">
+      <div style="display:flex;align-items:center;gap:9px">
+        <div style="width:24px;height:24px;border-radius:7px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed" dangerouslySetInnerHTML="{{ flaskIcon }}"></div>
+        <span style="font-size:13.5px;font-weight:600;color:#3f3f46">Spin-Out Lab</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:34px;height:34px;border-radius:9px;border:1px solid #ececf1;background:#fff;display:flex;align-items:center;justify-content:center;color:#71717a" dangerouslySetInnerHTML="{{ bellIcon }}"></div>
+        <div style="width:34px;height:34px;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center">AK</div>
+      </div>
+    </header>
+
+    <!-- ============ PROGRAM VIEW ============ -->
+    <sc-if value="{{ isProgram }}" hint-placeholder-val="{{ true }}">
+    <main style="padding:32px 32px 64px;max-width:100%;margin:0 auto">
+
+      <!-- PAGE HEADER -->
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;justify-content:space-between;margin-bottom:22px">
+        <div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:40px;height:40px;border-radius:11px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed" dangerouslySetInnerHTML="{{ flaskIcon }}"></div>
+            <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Spin-Out Lab</h1>
+            <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:#ecfdf5;border:1px solid #d1fae5;font-size:12px;font-weight:600;color:#047857">
+              <span style="width:7px;height:7px;border-radius:50%;background:#10b981"></span>Cohort 3 · Applications Open
+            </span>
+          </div>
+          <p style="margin:10px 0 0 52px;font-size:15px;color:#71717a">From idea to incorporated in 30 days.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button onClick="{{ openBrief }}" style="height:40px;padding:0 16px;border-radius:10px;border:1px solid #e4e4e7;background:#fff;color:#3f3f46;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px"><span style="width:15px;height:15px" dangerouslySetInnerHTML="{{ docIcon }}"></span>Download Program Brief</button>
+          <button onClick="{{ openApply }}" style="height:40px;padding:0 18px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;box-shadow:0 1px 2px rgba(124,58,237,.4)">Apply to Next Cohort <span style="font-size:15px">→</span></button>
+        </div>
+      </div>
+
+      <!-- JURISDICTION SELECTOR -->
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;background:#fff;border:1px solid #ececf1;border-radius:14px;padding:12px 16px;margin-bottom:28px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="width:18px;height:18px;color:#7c3aed" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:13px;font-weight:700;color:#27272a">Incorporation jurisdiction</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ jurisOptions }}" as="j" hint-placeholder-count="4">
+            <button onClick="{{ j.onClick }}" disabled="{{ j.disabled }}" style="{{ j.style }}">{{ j.label }}<sc-if value="{{ j.soon }}"><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#f4f4f5;color:#a1a1aa;border-radius:5px;padding:2px 5px">Soon</span></sc-if></button>
+          </sc-for>
+        </div>
+        <span style="font-size:12px;color:#a1a1aa;margin-left:auto">Entity &amp; equity filing update across the program →</span>
+      </div>
+
+      <!-- SECTION 1 — PROGRAM HERO -->
+      <section style="border-radius:20px;background:radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%);color:#fff;padding:38px 40px;margin-bottom:36px;overflow:hidden;position:relative">
+        <div style="display:flex;flex-wrap:wrap;gap:40px;justify-content:space-between;align-items:center">
+          <div style="min-width:300px;flex:1">
+            <div class="tnum" style="font-size:76px;line-height:.9;font-weight:900;letter-spacing:-.04em;background:linear-gradient(90deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;color:transparent">30 days</div>
+            <p style="margin:14px 0 22px;font-size:16px;color:#cbc4e8;font-weight:500">Idea <span style="color:#8b5cf6">→</span> {{ juris.entity }} <span style="color:#8b5cf6">→</span> Funded</p>
+            <div style="display:flex;flex-wrap:wrap;gap:9px">
+              <sc-for list="{{ outcomeBadges }}" as="b" hint-placeholder-count="4">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-size:12.5px;font-weight:600;color:#ede9fe">{{ b }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:1px;min-width:230px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden">
+            <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="3">
+              <div style="padding:16px 20px;display:flex;flex-direction:column;gap:2px;{{ s.border }}">
+                <div class="tnum" style="font-size:26px;font-weight:800;letter-spacing:-.02em">{{ s.value }}</div>
+                <div style="font-size:12.5px;color:#a89fce">{{ s.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 2 — 30-DAY PIPELINE -->
+      <section style="margin-bottom:44px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+          <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">The 30-day pipeline</h2>
+          <span style="font-size:12.5px;color:#a1a1aa">5 phases · sequential gates</span>
+        </div>
+        <p style="margin:0 0 20px;font-size:13.5px;color:#71717a">Each phase ends at a gate. Companies advance only on completion.</p>
+
+        <div class="so-pipeline" style="display:flex;align-items:stretch;gap:0">
+          <sc-for list="{{ phases }}" as="p" hint-placeholder-count="5">
+            <div class="so-phase" style="display:flex;align-items:stretch;flex:1 1 0;min-width:0">
+              <div style="flex:1;min-width:0;border-radius:16px;background:{{ p.bg }};border:1px solid {{ p.border }};padding:18px;display:flex;flex-direction:column;{{ p.activeRing }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                  <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                    <div style="width:30px;height:30px;flex:none;border-radius:9px;background:{{ p.chip }};color:{{ p.ink }};font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center">{{ p.num }}</div>
+                    <div style="font-size:15px;font-weight:800;color:#27272a;letter-spacing:-.01em">{{ p.name }}</div>
+                  </div>
+                  <span style="width:24px;height:24px;flex:none;display:flex;align-items:center;justify-content:center;{{ p.statusStyle }}" dangerouslySetInnerHTML="{{ p.statusIcon }}"></span>
+                </div>
+                <span class="tnum" style="align-self:flex-start;white-space:nowrap;padding:3px 9px;border-radius:7px;background:{{ p.chip }};color:{{ p.ink }};font-size:11px;font-weight:700;margin-bottom:13px">{{ p.days }}</span>
+                <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+                  <sc-for list="{{ p.items }}" as="d" hint-placeholder-count="4">
+                    <li style="display:flex;gap:8px;font-size:12.5px;line-height:1.35;color:#3f3f46">
+                      <span style="color:{{ p.ink }};flex:none;font-weight:700">·</span><span>{{ d }}</span>
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+              <div class="so-phase-conn" style="width:26px;flex:none;display:flex;align-items:center;justify-content:center;{{ p.connectorHide }}">
+                <span style="color:#c4b5fd;width:20px;height:20px;display:block" dangerouslySetInnerHTML="{{ arrowIcon }}"></span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:16px 0 0;font-size:12.5px;color:#a1a1aa;display:flex;align-items:center;gap:8px">
+          <span style="width:16px;height:16px;flex:none;color:#8b5cf6" dangerouslySetInnerHTML="{{ badgeIcon }}"></span>
+          All Spin-Out Lab graduates receive a verified "Spin-Out Lab Alumni" badge on their Meridian founder profile.
+        </p>
+      </section>
+
+      <!-- SECTION 3 — WHAT YOU GET -->
+      <section style="margin-bottom:44px">
+        <h2 style="margin:0 0 20px;font-size:20px;font-weight:800;letter-spacing:-.02em">What you leave with.</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+          <sc-for list="{{ deliverables }}" as="d" hint-placeholder-count="8">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+              <div style="width:40px;height:40px;border-radius:11px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;margin-bottom:14px" dangerouslySetInnerHTML="{{ d.icon }}"></div>
+              <div style="font-size:14.5px;font-weight:700;color:#27272a;margin-bottom:5px">{{ d.name }}</div>
+              <div style="font-size:12.7px;line-height:1.45;color:#71717a">{{ d.desc }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- SECTION 4 — COHORT TRACKER -->
+      <section style="margin-bottom:44px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+          <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Active cohort.</h2>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#71717a">
+            <span style="width:7px;height:7px;border-radius:50%;background:#10b981;animation:soLabPulse 2s infinite"></span>Live tracker
+          </span>
+        </div>
+        <p style="margin:0 0 18px;font-size:13.5px;color:#71717a" class="tnum">Cohort 3 · Started July 1, 2026 · 6 companies</p>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+          <div class="so-scroll" style="overflow-x:auto">
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;min-width:820px">
+              <sc-for list="{{ board }}" as="col" hint-placeholder-count="5">
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px 10px;border-bottom:2px solid {{ col.accent }};margin-bottom:12px">
+                    <span style="font-size:12.5px;font-weight:700;color:#3f3f46;text-transform:uppercase;letter-spacing:.03em">{{ col.name }}</span>
+                    <span class="tnum" style="font-size:11.5px;font-weight:700;color:#a1a1aa;background:#f4f4f5;border-radius:6px;padding:2px 7px">{{ col.count }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:10px;min-height:40px">
+                    <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="1">
+                      <div style="background:#fafafa;border:1px solid #eeeef2;border-radius:12px;padding:12px">
+                        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
+                          <div style="width:30px;height:30px;border-radius:8px;flex:none;background:{{ c.avatarBg }};color:{{ c.avatarInk }};font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center">{{ c.initials }}</div>
+                          <div style="min-width:0">
+                            <div style="font-size:13px;font-weight:700;color:#27272a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</div>
+                            <div style="font-size:11px;color:#a1a1aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.desc }}</div>
+                          </div>
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between">
+                          <span class="tnum" style="font-size:11px;font-weight:700;color:{{ col.accent }};background:{{ col.tint }};border-radius:6px;padding:3px 8px">{{ c.day }}</span>
+                          <div style="display:flex;align-items:center;gap:5px">
+                            <span style="font-size:10.5px;color:#a1a1aa">Lead</span>
+                            <div title="{{ c.advisor }}" style="width:22px;height:22px;border-radius:50%;background:#e4e4e7;color:#52525b;font-weight:700;font-size:9.5px;display:flex;align-items:center;justify-content:center">{{ c.advisorInitials }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 5 — ALUMNI -->
+      <section style="margin-bottom:44px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px">
+          <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Graduate companies.</h2>
+          <span style="font-size:12.5px;color:#a1a1aa">Select a company to view its profile</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
+          <sc-for list="{{ alumni }}" as="a" hint-placeholder-count="6">
+            <div onClick="{{ a.onOpen }}" role="button" tabindex="0" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(24,24,27,.03);cursor:pointer;transition:box-shadow .15s,transform .15s,border-color .15s" style-hover="border-color:#ddd6fe;box-shadow:0 8px 24px -12px rgba(124,58,237,.35);transform:translateY(-2px)">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                <div style="width:42px;height:42px;border-radius:11px;background:{{ a.avatarBg }};color:{{ a.avatarInk }};font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center">{{ a.initials }}</div>
+                <span class="tnum" style="font-size:11px;font-weight:700;color:#7c3aed;background:#f5f3ff;border:1px solid #ede9fe;border-radius:999px;padding:3px 10px">Cohort {{ a.cohort }}</span>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#27272a">{{ a.name }}</div>
+              <div style="font-size:12px;color:#a1a1aa;margin-bottom:14px">{{ a.sector }}</div>
+              <div class="tnum" style="font-size:19px;font-weight:800;color:#18181b;letter-spacing:-.01em">{{ a.raised }}</div>
+              <div style="font-size:12px;color:#71717a;margin-top:4px;line-height:1.4">{{ a.outcome }}</div>
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid #f4f4f5;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#7c3aed">View profile <span style="font-size:13px">→</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- SECTION 6 — APPLICATION CTA -->
+      <section style="border-radius:20px;background:radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed);color:#fff;padding:40px;text-align:center;position:relative;overflow:hidden">
+        <h2 style="margin:0;font-size:32px;font-weight:900;letter-spacing:-.03em">Apply to Cohort 4.</h2>
+        <p class="tnum" style="margin:12px 0 24px;font-size:15px;color:#e9d5ff">Applications close August 1, 2026. 8 spots available.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <button onClick="{{ openApply }}" style="height:44px;padding:0 22px;border-radius:11px;border:none;background:#fff;color:#6d28d9;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px">Apply Now <span style="font-size:16px">→</span></button>
+          <button onClick="{{ talkToPM }}" style="height:44px;padding:0 22px;border-radius:11px;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Talk to a Program Manager</button>
+        </div>
+        <p style="margin:24px 0 0;font-size:12px;color:#c4b5fd">Spin-Out Lab is open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</p>
+      </section>
+
+    </main>
+    </sc-if>
+
+    <!-- ============ APPLY VIEW ============ -->
+    <sc-if value="{{ isApply }}">
+    <main style="padding:24px 32px 64px;max-width:1080px;margin:0 auto;animation:soFade .25s ease">
+      <button onClick="{{ backToProgram }}" style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 8px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:22px"><span style="font-size:15px">←</span> Back to Spin-Out Lab</button>
+
+      <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+        <!-- FORM -->
+        <div style="flex:1 1 460px;min-width:320px">
+          <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:20px;padding:32px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+            <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:#ecfdf5;border:1px solid #d1fae5;font-size:11.5px;font-weight:600;color:#047857;margin-bottom:16px"><span style="width:7px;height:7px;border-radius:50%;background:#10b981"></span>Cohort 4 · Applications Open</span>
+            <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em">Apply to Cohort 4</h1>
+            <p class="tnum" style="margin:8px 0 22px;font-size:14px;color:#71717a">Applications close August 1, 2026. 8 spots available.</p>
+
+            <!-- Signed-in account -->
+            <div style="display:flex;align-items:center;gap:12px;background:#faf9ff;border:1px solid #ede9fe;border-radius:12px;padding:12px 14px;margin-bottom:22px">
+              <div style="width:38px;height:38px;flex:none;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center">AK</div>
+              <div style="min-width:0;flex:1"><div style="font-size:13.5px;font-weight:700;color:#27272a">Ana Krause</div><div style="font-size:12px;color:#71717a">ana.krause@meridian.co</div></div>
+              <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #ede9fe;border-radius:999px;padding:3px 10px">Signed in</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <label>
+                <div style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">Company / working name</div>
+                <input type="text" placeholder="e.g. Northwind Labs" style="width:100%;height:42px;padding:0 13px;border:1px solid #e4e4e7;border-radius:10px;font-size:14px;color:#18181b;outline:none" style-focus="border-color:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.15)" />
+              </label>
+              <label>
+                <div style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">Describe your idea or project</div>
+                <textarea rows="4" placeholder="What are you building, who is it for, and why now?" style="width:100%;padding:11px 13px;border:1px solid #e4e4e7;border-radius:10px;font-size:14px;color:#18181b;outline:none;resize:vertical" style-focus="border-color:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.15)"></textarea>
+              </label>
+
+              <div>
+                <div style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:8px">Are you already incorporated?</div>
+                <div style="display:flex;gap:8px">
+                  <sc-for list="{{ incOptions }}" as="o" hint-placeholder-count="2">
+                    <button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:14px;flex-wrap:wrap">
+                <label style="flex:1 1 200px;min-width:0">
+                  <div style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">Current stage</div>
+                  <select style="width:100%;height:42px;padding:0 13px;border:1px solid #e4e4e7;border-radius:10px;font-size:14px;color:#18181b;outline:none;background:#fff" style-focus="border-color:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.15)">
+                    <option>Idea / pre-formation</option>
+                    <option>Prototype in progress</option>
+                    <option>Early revenue</option>
+                  </select>
+                </label>
+                <label style="flex:1 1 200px;min-width:0">
+                  <div style="font-size:12.5px;font-weight:600;color:#3f3f46;margin-bottom:6px">{{ jurisLabel }}</div>
+                  <select onChange="{{ onJurisSelect }}" value="{{ jurisKey }}" style="width:100%;height:42px;padding:0 13px;border:1px solid #e4e4e7;border-radius:10px;font-size:14px;color:#18181b;outline:none;background:#fff" style-focus="border-color:#a78bfa;box-shadow:0 0 0 3px rgba(139,92,246,.15)">
+                    <sc-for list="{{ jurisSelectOptions }}" as="o" hint-placeholder-count="2">
+                      <option value="{{ o.key }}">{{ o.entity }} — {{ o.label }}</option>
+                    </sc-for>
+                  </select>
+                </label>
+              </div>
+              <button onClick="{{ submitApply }}" style="height:46px;border-radius:11px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:14.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 1px 2px rgba(124,58,237,.4)">Submit Application <span style="font-size:16px">→</span></button>
+              <p style="margin:0;font-size:11.5px;color:#a1a1aa;text-align:center">No equity taken by Meridian. Acceptance is selective.</p>
+            </div>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ submitted }}">
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:20px;padding:40px 32px;box-shadow:0 1px 2px rgba(24,24,27,.03);text-align:center;animation:soFade .25s ease">
+            <div style="width:56px;height:56px;border-radius:16px;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;margin:0 auto 18px" dangerouslySetInnerHTML="{{ bigCheckIcon }}"></div>
+            <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em">Application received</h1>
+            <p style="margin:10px auto 22px;font-size:14px;color:#71717a;max-width:380px;line-height:1.5">Your Cohort 4 application is in review. A program manager will respond within 5 business days. Selected founders begin with the Validate gate.</p>
+            <button onClick="{{ backToProgram }}" style="height:42px;padding:0 20px;border-radius:11px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">Back to Spin-Out Lab</button>
+          </div>
+          </sc-if>
+        </div>
+
+        <!-- SIDE PANEL -->
+        <div style="flex:1 1 300px;min-width:280px;display:flex;flex-direction:column;gap:16px">
+          <div style="background:#1e1b3a;background:linear-gradient(140deg,#241f45,#3b1d6e);color:#fff;border-radius:18px;padding:24px">
+            <div class="tnum" style="font-size:40px;font-weight:900;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;color:transparent">30 days</div>
+            <p style="margin:6px 0 18px;font-size:13.5px;color:#cbc4e8">Idea to {{ juris.entity }}, funded and venture-ready.</p>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ applyOutcomes }}" as="o" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:#ede9fe">
+                  <span style="width:16px;height:16px;flex:none;color:#a78bfa" dangerouslySetInnerHTML="{{ checkSmall }}"></span>{{ o }}
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#fff;border:1px solid #ececf1;border-radius:18px;padding:22px">
+            <div style="font-size:14px;font-weight:700;color:#27272a;margin-bottom:14px">What happens next</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <sc-for list="{{ applySteps }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:12px">
+                  <div class="tnum" style="width:24px;height:24px;flex:none;border-radius:7px;background:#f5f3ff;color:#7c3aed;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center">{{ s.n }}</div>
+                  <div><div style="font-size:13px;font-weight:600;color:#27272a">{{ s.title }}</div><div style="font-size:12px;color:#71717a;line-height:1.4;margin-top:2px">{{ s.body }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ BRIEF VIEW (PDF presentation) ============ -->
+    <sc-if value="{{ isBrief }}">
+    <main style="padding:24px 32px 64px;max-width:960px;margin:0 auto;animation:soFade .25s ease">
+      <div class="so-noprint" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px">
+        <button onClick="{{ backToProgram }}" style="display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px 0 8px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer"><span style="font-size:15px">←</span> Back to Spin-Out Lab</button>
+        <button onClick="{{ printBrief }}" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 18px;border-radius:10px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(124,58,237,.4)"><span style="width:15px;height:15px" dangerouslySetInnerHTML="{{ docIcon }}"></span>Save as PDF</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <!-- Slide 1 — cover -->
+        <div class="so-slide" style="aspect-ratio:16/9;border-radius:16px;background:radial-gradient(1000px 400px at 15% -10%,rgba(139,92,246,.5),transparent 60%),linear-gradient(120deg,#1e1b3a,#3b1d6e);color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 1px 2px rgba(24,24,27,.04);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:auto">
+            <div style="width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;color:#fff" dangerouslySetInnerHTML="{{ flaskIcon }}"></div>
+            <span style="font-weight:700;font-size:15px">Meridian · Spin-Out Lab</span>
+          </div>
+          <div class="tnum" style="font-size:64px;font-weight:900;letter-spacing:-.04em;line-height:.95;background:linear-gradient(90deg,#fff,#c4b5fd);-webkit-background-clip:text;background-clip:text;color:transparent">Program Brief</div>
+          <p style="margin:14px 0 0;font-size:18px;color:#cbc4e8;font-weight:500">From idea to {{ juris.entity }}, funded in 30 days.</p>
+          <div style="margin-top:auto;display:flex;gap:9px;flex-wrap:wrap">
+            <sc-for list="{{ outcomeBadges }}" as="b" hint-placeholder-count="4">
+              <span style="padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-size:12px;font-weight:600;color:#ede9fe">{{ b }}</span>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Slide 2 — pipeline -->
+        <div class="so-slide" style="border-radius:16px;background:#fff;border:1px solid #ececf1;padding:36px;box-shadow:0 1px 2px rgba(24,24,27,.04)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:6px">The program</div>
+          <h2 style="margin:0 0 22px;font-size:26px;font-weight:800;letter-spacing:-.02em">The 30-day pipeline</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+            <sc-for list="{{ phases }}" as="p" hint-placeholder-count="5">
+              <div style="border-radius:12px;background:{{ p.bg }};border:1px solid {{ p.border }};padding:14px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                  <div style="width:24px;height:24px;flex:none;border-radius:7px;background:{{ p.chip }};color:{{ p.ink }};font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center">{{ p.num }}</div>
+                  <div style="font-size:13.5px;font-weight:800;color:#27272a">{{ p.name }}</div>
+                </div>
+                <span class="tnum" style="white-space:nowrap;font-size:10.5px;font-weight:700;color:{{ p.ink }};background:{{ p.chip }};border-radius:6px;padding:2px 7px">{{ p.days }}</span>
+                <ul style="margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px">
+                  <sc-for list="{{ p.items }}" as="d" hint-placeholder-count="4">
+                    <li style="display:flex;gap:6px;font-size:11px;line-height:1.3;color:#52525b"><span style="color:{{ p.ink }};font-weight:700">·</span><span>{{ d }}</span></li>
+                  </sc-for>
+                </ul>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Slide 3 — deliverables -->
+        <div class="so-slide" style="border-radius:16px;background:#fff;border:1px solid #ececf1;padding:36px;box-shadow:0 1px 2px rgba(24,24,27,.04)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:6px">Deliverables</div>
+          <h2 style="margin:0 0 22px;font-size:26px;font-weight:800;letter-spacing:-.02em">What you leave with</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+            <sc-for list="{{ deliverables }}" as="d" hint-placeholder-count="8">
+              <div style="display:flex;gap:12px;align-items:flex-start">
+                <div style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ d.icon }}"></div>
+                <div><div style="font-size:13.5px;font-weight:700;color:#27272a">{{ d.name }}</div><div style="font-size:11.5px;color:#71717a;line-height:1.4;margin-top:2px">{{ d.desc }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- Slide 4 — outcomes + apply -->
+        <div class="so-slide" style="border-radius:16px;background:linear-gradient(115deg,#5b21b6,#7c3aed);color:#fff;padding:44px;box-shadow:0 1px 2px rgba(24,24,27,.04);overflow:hidden">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#d8b4fe;margin-bottom:6px">Track record</div>
+          <h2 style="margin:0 0 24px;font-size:26px;font-weight:800;letter-spacing:-.02em">Outcomes to date</h2>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px">
+            <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="3">
+              <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:18px">
+                <div class="tnum" style="font-size:24px;font-weight:800">{{ s.value }}</div>
+                <div style="font-size:12px;color:#e9d5ff;margin-top:2px">{{ s.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border-top:1px solid rgba(255,255,255,.18);padding-top:22px">
+            <div><div style="font-size:18px;font-weight:800">Apply to Cohort 4</div><div class="tnum" style="font-size:13px;color:#e9d5ff;margin-top:2px">Applications close August 1, 2026 · 8 spots</div></div>
+            <div style="font-size:12px;color:#c4b5fd;max-width:280px">Open to all Meridian users. Acceptance is selective. No equity taken by Meridian.</div>
+          </div>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+  </div>
+
+  <!-- ============ COMPANY PROFILE MODAL ============ -->
+  <sc-if value="{{ selectedCompany }}">
+  <div onClick="{{ closeCompany }}" style="position:fixed;inset:0;z-index:60;background:rgba(24,24,27,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto;animation:soOverlay .18s ease">
+    <div onClick="{{ stop }}" style="width:100%;max-width:640px;background:#fff;border-radius:22px;overflow:hidden;box-shadow:0 30px 80px -20px rgba(24,24,27,.5);animation:soSheet .22s ease">
+      <div style="padding:26px 28px;background:{{ selectedCompany.heroBg }};color:#fff;position:relative">
+        <button onClick="{{ closeCompany }}" style="position:absolute;top:18px;right:18px;width:32px;height:32px;border-radius:9px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+        <div style="display:flex;align-items:center;gap:15px">
+          <div style="width:56px;height:56px;flex:none;border-radius:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);font-weight:800;font-size:20px;display:flex;align-items:center;justify-content:center">{{ selectedCompany.initials }}</div>
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">{{ selectedCompany.name }}</h2>
+              <span class="tnum" style="font-size:11px;font-weight:700;background:rgba(255,255,255,.16);border-radius:999px;padding:3px 10px">Cohort {{ selectedCompany.cohort }}</span>
+            </div>
+            <div style="font-size:13px;color:rgba(255,255,255,.82);margin-top:3px">{{ selectedCompany.sector }} · {{ selectedCompany.location }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:24px 28px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px">
+          <sc-for list="{{ selectedCompany.stats }}" as="st" hint-placeholder-count="3">
+            <div style="background:#fafafa;border:1px solid #eeeef2;border-radius:12px;padding:12px 14px">
+              <div class="tnum" style="font-size:16px;font-weight:800;color:#18181b;letter-spacing:-.01em">{{ st.value }}</div>
+              <div style="font-size:11px;color:#a1a1aa;margin-top:2px">{{ st.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:7px">Outcome</div>
+        <p style="margin:0 0 22px;font-size:14px;line-height:1.55;color:#3f3f46">{{ selectedCompany.summary }}</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:24px">
+          <div style="flex:1 1 230px;min-width:0">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:10px">Founders</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ selectedCompany.founders }}" as="f" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:30px;height:30px;flex:none;border-radius:50%;background:#ede9fe;color:#7c3aed;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center">{{ f.initials }}</div>
+                  <div><div style="font-size:13px;font-weight:600;color:#27272a">{{ f.name }}</div><div style="font-size:11.5px;color:#a1a1aa">{{ f.role }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex:1 1 230px;min-width:0">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;margin-bottom:10px">Program milestones</div>
+            <div style="display:flex;flex-direction:column;gap:0">
+              <sc-for list="{{ selectedCompany.milestones }}" as="m" hint-placeholder-count="3">
+                <div style="display:flex;gap:10px;padding-bottom:12px;position:relative">
+                  <div style="width:12px;flex:none;display:flex;flex-direction:column;align-items:center">
+                    <span style="width:9px;height:9px;border-radius:50%;background:#8b5cf6;flex:none;margin-top:3px"></span>
+                    <span style="width:2px;flex:1;background:#ececf1"></span>
+                  </div>
+                  <div style="padding-bottom:2px"><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ m.label }}</div><div class="tnum" style="font-size:11px;color:#a1a1aa">{{ m.date }}</div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:22px;padding-top:20px;border-top:1px solid #f1f1f5">
+          <button style="flex:1;height:42px;border-radius:11px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer">View founder profile</button>
+          <button onClick="{{ closeCompany }}" style="height:42px;padding:0 18px;border-radius:11px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ PROGRAM MANAGER TICKET MODAL ============ -->
+  <sc-if value="{{ pmSent }}">
+  <div onClick="{{ closePM }}" style="position:fixed;inset:0;z-index:70;background:rgba(24,24,27,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px;animation:soOverlay .18s ease">
+    <div onClick="{{ stop }}" style="width:100%;max-width:440px;background:#fff;border-radius:20px;padding:32px;text-align:center;box-shadow:0 30px 80px -20px rgba(24,24,27,.5);animation:soSheet .22s ease">
+      <div style="width:54px;height:54px;border-radius:15px;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;margin:0 auto 18px" dangerouslySetInnerHTML="{{ bigCheckIcon }}"></div>
+      <h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">Request sent</h2>
+      <p style="margin:10px auto 6px;font-size:13.5px;color:#71717a;line-height:1.5;max-width:340px">A ticket has been raised with the Spin-Out Lab admin team. A program manager will reach out to <strong style="color:#3f3f46;font-weight:600">ana.krause@meridian.co</strong> within one business day.</p>
+      <p class="tnum" style="margin:0 0 22px;font-size:12px;color:#a1a1aa">Ticket #SOL-4471 · Priority: Standard</p>
+      <button onClick="{{ closePM }}" style="height:42px;padding:0 22px;border-radius:11px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;width:100%">Done</button>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { view: 'program', juris: 'us', submitted: false, selectedCompany: null, pmSent: false, incorporated: 'no' };
+
+  renderVals() {
+    const ic = (p, sw=1.7) => ({ __html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` });
+
+    const navIcon = {
+      home: ic('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>'),
+      grid: ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      flask: ic('<path d="M9 3h6"/><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3"/><path d="M7 15h10"/>'),
+      deals: ic('<path d="M3 6h18"/><path d="M6 6v13a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6"/><path d="M9 10h6"/>'),
+      cap: ic('<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/>'),
+      docs: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      people: ic('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 11a3 3 0 0 0 0-6"/><path d="M21 20c0-2.5-1.3-4-3.5-4.6"/>'),
+      settings: ic('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 4.6 15H4a2 2 0 1 1 0-4h.2a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 11 4.6V4a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21 11h.2a2 2 0 1 1 0 4H21"/>'),
+    };
+    const goProgram = () => this.setState({ view: 'program', selectedCompany: null, pmSent: false });
+    const item = (name, icon, active=false, onClick) => ({
+      name, icon, onClick: onClick || (() => {}),
+      style: `display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:${active?600:500};margin-bottom:2px;cursor:pointer;${active?'background:#f5f3ff;color:#6d28d9':'color:#52525b'}`
+    });
+    const navGroups = [
+      { label: 'Workspace', items: [ item('Dashboard', navIcon.home), item('People', navIcon.people) ] },
+      { label: 'Products', items: [ item('All Products', navIcon.grid), item('Spin-Out Lab', navIcon.flask, true, goProgram), item('Deal Flow', navIcon.deals), item('Cap Table', navIcon.cap) ] },
+      { label: 'Resources', items: [ item('Data Room', navIcon.docs), item('Settings', navIcon.settings) ] },
+    ];
+
+    // ---- Jurisdictions ----
+    const jurisdictions = {
+      us: { key:'us', label:'Delaware, USA', entity:'Delaware C-Corp',
+        incLine:'Delaware C-Corp incorporation', entityDesc:'Fully incorporated entity with EIN and registered agent.',
+        filingBadge:'83(b) Filed', filingName:'83(b) Election', filingInc:'83(b) election filing',
+        filingDesc:'Filed within the 30-day IRS window, archived in your data room.' },
+      wy: { key:'wy', label:'Wyoming, USA', entity:'Wyoming C-Corp',
+        incLine:'Wyoming C-Corp incorporation', entityDesc:'Fully incorporated Wyoming entity with EIN and registered agent.',
+        filingBadge:'83(b) Filed', filingName:'83(b) Election', filingInc:'83(b) election filing',
+        filingDesc:'Filed within the 30-day IRS window, archived in your data room.' },
+      sg: { key:'sg', label:'Singapore', soon:true, entity:'Singapore Pte Ltd',
+        incLine:'Singapore Pte Ltd incorporation', entityDesc:'Private Limited entity with ACRA registration and a company secretary.',
+        filingBadge:'ACRA Lodged', filingName:'ACRA Share Allotment', filingInc:'ACRA share allotment lodgement',
+        filingDesc:'Founder shares allotted and lodged with ACRA within the statutory window.' },
+      uk: { key:'uk', label:'London, UK', soon:true, entity:'UK Ltd',
+        incLine:'UK Ltd incorporation', entityDesc:'Private Limited company filed with Companies House.',
+        filingBadge:'EMI Registered', filingName:'EMI Option Scheme', filingInc:'EMI option scheme setup',
+        filingDesc:'HMRC-valued EMI scheme registered for founders and early hires.' },
+      ee: { key:'ee', label:'Estonia', soon:true, entity:'Estonia OÜ',
+        incLine:'Estonia OÜ incorporation', entityDesc:'Private Limited (OÜ) via e-Residency with Business Register entry.',
+        filingBadge:'Registry Filed', filingName:'e-Residency Registry', filingInc:'Business Register entry',
+        filingDesc:'Founder holdings entered in the Estonian Business Register.' },
+      dubai: { key:'dubai', label:'Dubai, UAE', soon:true, entity:'ADGM entity',
+        incLine:'ADGM incorporation', entityDesc:'ADGM company with registered agent.',
+        filingBadge:'ADGM Filed', filingName:'ADGM Share Filing', filingInc:'ADGM share filing',
+        filingDesc:'Founder shares filed with the ADGM registrar.' },
+      alberta: { key:'alberta', label:'Alberta, Canada', soon:true, entity:'Alberta Corp',
+        incLine:'Alberta Corp incorporation', entityDesc:'Canadian corporation with registered agent.',
+        filingBadge:'CRA Filed', filingName:'Section 7 Filing', filingInc:'Section 7 equity filing',
+        filingDesc:'Founder equity documented under CRA rules.' },
+    };
+    let jurisKey = this.state.juris;
+    if (!jurisdictions[jurisKey] || jurisdictions[jurisKey].soon) jurisKey = 'us';
+    const juris = jurisdictions[jurisKey];
+    const setJuris = (k) => { if (jurisdictions[k] && !jurisdictions[k].soon) this.setState({ juris: k }); };
+    const jurisOptions = Object.values(jurisdictions).map(j => ({
+      key: j.key, label: j.label, soon: !!j.soon, disabled: !!j.soon, onClick: () => setJuris(j.key),
+      style: `display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;font-family:inherit;font-size:12.5px;font-weight:600;transition:all .12s;${j.soon ? 'background:#fafafa;color:#a1a1aa;border:1px solid #eeeef2;cursor:not-allowed' : (j.key===jurisKey ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer' : 'background:#fff;color:#52525b;border:1px solid #e4e4e7;cursor:pointer')}`,
+    }));
+    const jurisSelectOptions = Object.values(jurisdictions).filter(j => !j.soon).map(j => ({ key:j.key, label:j.label, entity:j.entity }));
+
+    const outcomeBadges = [juris.entity, 'Vesting Cap Table', juris.filingBadge, 'Pitch Deck Ready'];
+    const heroStats = [
+      { value: '12 companies', label: 'Built to date', border: '' },
+      { value: '$2.4M', label: 'Total capital raised by graduates', border: 'border-top:1px solid rgba(255,255,255,.1)' },
+      { value: '30 days', label: 'Average time to incorporation', border: 'border-top:1px solid rgba(255,255,255,.1)' },
+    ];
+
+    // ---- Pipeline ----
+    const checkIcon = ic('<path d="M20 6 9 17l-5-5"/>', 2.4);
+    const lockIcon = ic('<rect x="4.5" y="10" width="15" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>');
+    const dotIcon = { __html: '<span style="width:10px;height:10px;border-radius:50%;background:#8b5cf6;display:block;box-shadow:0 0 0 4px rgba(139,92,246,.22)"></span>' };
+
+    const phaseDefs = [
+      { num:1, name:'Validate', days:'Days 1–5', tone:'#8b5cf6', bg:'#f7f5ff', border:'#ece8fb', chip:'#ede9fe', ink:'#6d28d9', status:'done',
+        items:['Problem/solution definition workshop','Market sizing and TAM analysis','Competitor landscape mapping','Go/no-go decision gate'] },
+      { num:2, name:'Structure', days:'Days 6–12', tone:'#3b82f6', bg:'#f2f8ff', border:'#e2effc', chip:'#dbeafe', ink:'#1d4ed8', status:'done',
+        items:[juris.incLine,'Co-founder equity split and vesting schedule',juris.filingInc,'IP assignment agreements'] },
+      { num:3, name:'Build', days:'Days 13–19', tone:'#0d9488', bg:'#f0fbf9', border:'#d9f3ee', chip:'#ccfbf1', ink:'#0f766e', status:'active',
+        items:['MVP scope definition','Prototype or landing page live','First design sprint (3 days)','Advisor onboarding (1–2 advisors)'] },
+      { num:4, name:'Pitch', days:'Days 20–25', tone:'#d97706', bg:'#fffaf0', border:'#f9edd6', chip:'#fef3c7', ink:'#b45309', status:'future',
+        items:['Pitch deck (12 slides, venture-standard)','Financial model (3-year projection)','Cap table modeling','Warm intro prep with partner network'] },
+      { num:5, name:'Fund', days:'Days 26–30', tone:'#db2777', bg:'#fdf4f9', border:'#f9e2ef', chip:'#fce7f3', ink:'#be185d', status:'future',
+        items:['Partner pitch sessions (3–5 investors)','Term sheet review support','First close or bridge round','Graduate: venture-ready company'] },
+    ];
+    const phases = phaseDefs.map((p, i) => {
+      let statusIcon, statusStyle;
+      if (p.status === 'done') { statusIcon = checkIcon; statusStyle = `color:#fff;background:${p.tone};border-radius:50%;padding:3px`; }
+      else if (p.status === 'active') { statusIcon = dotIcon; statusStyle = 'display:flex;align-items:center;justify-content:center'; }
+      else { statusIcon = lockIcon; statusStyle = 'color:#a1a1aa'; }
+      return { ...p, statusIcon, statusStyle,
+        activeRing: p.status === 'active' ? `box-shadow:0 0 0 2px ${p.tone},0 8px 24px -8px rgba(13,148,136,.4)` : '',
+        connectorHide: i === phaseDefs.length - 1 ? 'display:none' : '' };
+    });
+
+    // ---- Deliverables ----
+    const dIcon = {
+      corp: ic('<path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/><path d="M9 11h.01M15 11h.01"/>'),
+      cap: ic('<circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/>'),
+      file83: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>'),
+      deck: ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>'),
+      model: ic('<path d="M3 3v18h18"/><path d="M7 15l3-4 3 3 5-7"/>'),
+      intro: ic('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 11a3 3 0 0 0 0-6"/><path d="M21 20c0-2.5-1.3-4-3.5-4.6"/>'),
+      advisor: ic('<path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 21l-4.9-2.6.9-5.5-4-3.9L9.5 8z"/>'),
+      dataroom: ic('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+    };
+    const deliverables = [
+      { icon: dIcon.corp, name: juris.entity, desc: juris.entityDesc },
+      { icon: dIcon.cap, name:'Vesting Cap Table', desc:'Founder equity with 4-year vest, 1-year cliff on Carta.' },
+      { icon: dIcon.file83, name: juris.filingName, desc: juris.filingDesc },
+      { icon: dIcon.deck, name:'Pitch Deck', desc:'12-slide venture-standard deck, designed and reviewed.' },
+      { icon: dIcon.model, name:'Financial Model', desc:'3-year P&L, revenue model, and unit economics.' },
+      { icon: dIcon.intro, name:'Warm Introductions', desc:'5–10 curated intros to the Meridian investor network.' },
+      { icon: dIcon.advisor, name:'Advisor Network', desc:'2 matched advisors with equity agreements in place.' },
+      { icon: dIcon.dataroom, name:'Data Room', desc:'Organized deal room ready for investor due diligence.' },
+    ];
+
+    // ---- Cohort board ----
+    const av = (bg, ink) => ({ avatarBg: bg, avatarInk: ink });
+    const stageMeta = {
+      Validate:{accent:'#7c3aed',tint:'#f5f3ff'}, Structure:{accent:'#2563eb',tint:'#eff6ff'},
+      Build:{accent:'#0d9488',tint:'#f0fdfa'}, Pitch:{accent:'#d97706',tint:'#fffbeb'}, Funded:{accent:'#059669',tint:'#ecfdf5'},
+    };
+    const companies = {
+      Validate:[{ name:'Halyard', initials:'HL', desc:'Ops copilot for shipyards', day:'Day 4', ...av('#ede9fe','#6d28d9'), advisor:'Rae Osei', advisorInitials:'RO' }],
+      Structure:[{ name:'Cindershift', initials:'CS', desc:'Wildfire risk models', day:'Day 9', ...av('#dbeafe','#1d4ed8'), advisor:'Marcus Lin', advisorInitials:'ML' }],
+      Build:[
+        { name:'Tessella', initials:'TS', desc:'Composable data grids', day:'Day 14', ...av('#ccfbf1','#0f766e'), advisor:'Priya Nair', advisorInitials:'PN' },
+        { name:'Northbeam', initials:'NB', desc:'Grid-scale battery ops', day:'Day 16', ...av('#d1fae5','#047857'), advisor:'Sam Ortiz', advisorInitials:'SO' },
+      ],
+      Pitch:[{ name:'Quill', initials:'QL', desc:'AI contract review', day:'Day 22', ...av('#fef3c7','#b45309'), advisor:'Dana Whit', advisorInitials:'DW' }],
+      Funded:[{ name:'Verda', initials:'VD', desc:'Clinical trial matching', day:'Day 29', ...av('#fce7f3','#be185d'), advisor:'Leo Park', advisorInitials:'LP' }],
+    };
+    const board = ['Validate','Structure','Build','Pitch','Funded'].map(name => ({
+      name, accent: stageMeta[name].accent, tint: stageMeta[name].tint,
+      count: (companies[name]||[]).length, cards: companies[name]||[],
+    }));
+
+    // ---- Alumni + profiles ----
+    const openCompany = (c) => this.setState({ selectedCompany: c });
+    const closeCompany = () => this.setState({ selectedCompany: null });
+    const alumniDefs = [
+      { initials:'AB', ...av('#ede9fe','#6d28d9'), heroBg:'linear-gradient(135deg,#6d28d9,#8b5cf6)', name:'Arborline', sector:'Climate · MRV', location:'Austin, TX', cohort:2, raised:'$450K pre-seed', outcome:'Closed pre-seed · Now on AngelList',
+        summary:'Arborline built a satellite-backed carbon MRV pipeline during the Lab, incorporated as a Delaware C-Corp, and closed a $450K pre-seed within eight weeks of graduation. Now listed on AngelList and hiring.',
+        stats:[{value:'$450K',label:'Pre-seed raised'},{value:'Day 27',label:'Incorporated'},{value:'6',label:'Team today'}],
+        founders:[{initials:'ER',name:'Elena Ruiz',role:'CEO'},{initials:'TC',name:'Tom Chen',role:'CTO'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Mar 2026'},{label:'Pre-seed first close',date:'Apr 2026'},{label:'Listed on AngelList',date:'May 2026'}] },
+      { initials:'PX', ...av('#dbeafe','#1d4ed8'), heroBg:'linear-gradient(135deg,#1d4ed8,#3b82f6)', name:'Pyxis Health', sector:'Digital health', location:'Boston, MA', cohort:2, raised:'$1.1M seed', outcome:'Seed led by Foundry Group',
+        summary:'Pyxis Health entered the Lab with a triage prototype and left with a signed cap table and a warm intro that converted into a $1.1M seed led by Foundry Group.',
+        stats:[{value:'$1.1M',label:'Seed raised'},{value:'Day 25',label:'Incorporated'},{value:'9',label:'Team today'}],
+        founders:[{initials:'AN',name:'Aisha Noor',role:'CEO'},{initials:'JP',name:'Jon Park',role:'Head of Product'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Mar 2026'},{label:'Partner intro to Foundry',date:'Mar 2026'},{label:'Seed round closed',date:'Jun 2026'}] },
+      { initials:'KT', ...av('#ccfbf1','#0f766e'), heroBg:'linear-gradient(135deg,#0f766e,#14b8a6)', name:'Kettle', sector:'Fintech · SMB', location:'Denver, CO', cohort:1, raised:'$600K pre-seed', outcome:'Pre-seed · 3 angel checks',
+        summary:'Kettle formalized its SMB cash-flow product and equity structure in the Lab, then stacked three angel checks into a $600K pre-seed.',
+        stats:[{value:'$600K',label:'Pre-seed raised'},{value:'Day 28',label:'Incorporated'},{value:'5',label:'Team today'}],
+        founders:[{initials:'MB',name:'Maya Bell',role:'CEO'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Dec 2025'},{label:'First angel check',date:'Jan 2026'},{label:'Pre-seed closed',date:'Feb 2026'}] },
+      { initials:'MR', ...av('#fef3c7','#b45309'), heroBg:'linear-gradient(135deg,#b45309,#f59e0b)', name:'Meridian Robotics', sector:'Industrial AI', location:'Detroit, MI', cohort:1, raised:'$250K angel', outcome:'Bridge round · Revenue positive',
+        summary:'Meridian Robotics reached revenue during the program and used a $250K angel bridge to extend runway while scaling pilots.',
+        stats:[{value:'$250K',label:'Angel bridge'},{value:'Day 30',label:'Incorporated'},{value:'7',label:'Team today'}],
+        founders:[{initials:'DK',name:'Dmitri Kova',role:'CEO'},{initials:'LS',name:'Lena Shaw',role:'COO'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Dec 2025'},{label:'First paid pilot',date:'Jan 2026'},{label:'Angel bridge closed',date:'Mar 2026'}] },
+      { initials:'SV', ...av('#fce7f3','#be185d'), heroBg:'linear-gradient(135deg,#be185d,#ec4899)', name:'Solvent', sector:'Dev tools', location:'Seattle, WA', cohort:1, raised:'$820K seed', outcome:'Seed · YC W26 admit',
+        summary:'Solvent left the Lab incorporated and pitch-ready, was admitted to YC W26, and closed an $820K seed on the back of it.',
+        stats:[{value:'$820K',label:'Seed raised'},{value:'Day 24',label:'Incorporated'},{value:'8',label:'Team today'}],
+        founders:[{initials:'RV',name:'Raj Verma',role:'CEO'},{initials:'HK',name:'Hana Kim',role:'CTO'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Dec 2025'},{label:'Admitted to YC W26',date:'Jan 2026'},{label:'Seed round closed',date:'Apr 2026'}] },
+      { initials:'GL', ...av('#e0e7ff','#4338ca'), heroBg:'linear-gradient(135deg,#4338ca,#6366f1)', name:'Glassline', sector:'Prop-tech', location:'Miami, FL', cohort:2, raised:'$300K pre-seed', outcome:'Pre-seed · Piloting 4 REITs',
+        summary:'Glassline structured its entity and cap table in the Lab and is now piloting with four REITs on the back of a $300K pre-seed.',
+        stats:[{value:'$300K',label:'Pre-seed raised'},{value:'Day 26',label:'Incorporated'},{value:'4',label:'Team today'}],
+        founders:[{initials:'CF',name:'Carla Frei',role:'CEO'}],
+        milestones:[{label:'Graduated Spin-Out Lab',date:'Mar 2026'},{label:'First REIT pilot',date:'Apr 2026'},{label:'Pre-seed closed',date:'May 2026'}] },
+    ];
+    const alumni = alumniDefs.map(a => ({ ...a, onOpen: () => openCompany(a) }));
+
+    // ---- Apply page ----
+    const setIncorporated = (v) => this.setState({ incorporated: v });
+    const incorporated = this.state.incorporated;
+    const incBtn = (label, val) => ({ label, onClick: () => setIncorporated(val),
+      style: `flex:1;height:42px;border-radius:10px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .12s;${incorporated===val ? 'background:#f5f3ff;color:#6d28d9;border:1px solid #c4b5fd' : 'background:#fff;color:#52525b;border:1px solid #e4e4e7'}` });
+    const incOptions = [ incBtn('Not yet', 'no'), incBtn('Already incorporated', 'yes') ];
+    const jurisLabel = incorporated === 'yes' ? 'Current jurisdiction' : 'Preferred jurisdiction';
+
+    const applyOutcomes = [juris.entity + ' incorporated', 'Vesting cap table on Carta', juris.filingName + ' handled', '12-slide venture pitch deck'];
+    const applySteps = [
+      { n:1, title:'Application review', body:'A program manager reviews within 5 business days.' },
+      { n:2, title:'Founder interview', body:'A 30-minute call to align on scope and readiness.' },
+      { n:3, title:'Cohort onboarding', body:'Accepted founders start at the Validate gate on day one.' },
+    ];
+
+    return {
+      // routing / state
+      isProgram: this.state.view === 'program',
+      isApply: this.state.view === 'apply',
+      isBrief: this.state.view === 'brief',
+      notSubmitted: !this.state.submitted,
+      submitted: this.state.submitted,
+      selectedCompany: this.state.selectedCompany,
+      pmSent: this.state.pmSent,
+      openApply: () => this.setState({ view: 'apply', submitted: false, selectedCompany: null, pmSent: false }),
+      openBrief: () => this.setState({ view: 'brief', selectedCompany: null, pmSent: false }),
+      backToProgram: goProgram,
+      submitApply: () => this.setState({ submitted: true }),
+      printBrief: () => window.print(),
+      talkToPM: () => this.setState({ pmSent: true }),
+      closePM: () => this.setState({ pmSent: false }),
+      closeCompany, stop: (e) => e.stopPropagation(),
+      // jurisdiction
+      juris, jurisKey, jurisOptions, jurisSelectOptions, jurisLabel,
+      onJurisSelect: (e) => setJuris(e.target.value),
+      // apply
+      incOptions, applyOutcomes, applySteps,
+      // data
+      navGroups, outcomeBadges, heroStats, phases, deliverables, board, alumni,
+      // icons
+      bellIcon: ic('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>'),
+      flaskIcon: ic('<path d="M9 3h6"/><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3"/><path d="M7 15h10"/>'),
+      globeIcon: ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/>'),
+      docIcon: ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/>'),
+      arrowIcon: ic('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>', 2),
+      badgeIcon: ic('<circle cx="12" cy="9" r="6"/><path d="M9 14.5 8 22l4-2 4 2-1-7.5"/>'),
+      bigCheckIcon: ic('<path d="M20 6 9 17l-5-5"/>', 2.2),
+      checkSmall: ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+    };
+  }
+}
+</script>
+<script>
+(async () => {
+  if (!document.title || !document.title.trim()) document.title = "Spin-Out Lab";
+  // rAF raced with a short timeout: inside a cross-origin iframe (PrintMode),
+  // rAF can be throttled or paused even while the tab is focused, which would
+  // hang the scroll loop and never reach print(). Same pattern as
+  // buildExportSettleScript (export/shared.ts).
+  var raf = function () {
+    return Promise.race([
+      new Promise(function (r) { requestAnimationFrame(r); }),
+      new Promise(function (r) { setTimeout(r, 50); }),
+    ]);
+  };
+  var t0 = performance.now();
+  var mark = function (phase) {
+    var ms = Math.round(performance.now() - t0);
+    console.info('[autoprint]', phase, ms + 'ms');
+    try { parent.postMessage({ __omelette_autoprint: { phase: phase, ms: ms } }, '*'); } catch (e) {}
+  };
+  mark('start');
+  // Prepend so page-supplied @page / break rules (deck-stage's margin:0,
+  // author CSS) keep source-order precedence over the baseline.
+  const baseCss = document.createElement('style');
+  baseCss.textContent = "@media print {\n  figure, table { break-inside: avoid; }\n  *, *::before, *::after {\n    print-color-adjust: exact; -webkit-print-color-adjust: exact;\n    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;\n    animation-delay: -99s !important; animation-duration: .001s !important;\n    animation-iteration-count: 1 !important; animation-fill-mode: both !important;\n    animation-play-state: running !important; transition-duration: 0s !important;\n  }\n}";
+  document.head.prepend(baseCss);
+  if (document.readyState === 'loading') {
+    await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
+  }
+  let ds = document.querySelector('deck-stage');
+  // whenDefined never resolves when nothing registers the element, so only
+  // await it when a <deck-stage> tag exists (and race a timeout regardless).
+  if (ds && !customElements.get('deck-stage')) {
+    try {
+      await Promise.race([
+        customElements.whenDefined('deck-stage'),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
+    } catch (e) {}
+    ds = document.querySelector('deck-stage');
+  }
+  // dc-runtime assigns window.DCLogic at init and mounts into #dc-root on
+  // DOMContentLoaded; settle on that subtree so React has rendered before
+  // print(). Non-DC pages fall through to weighing body.
+  const isDc = !ds && 'DCLogic' in window;
+  const settleRoot = ds || (isDc ? document.getElementById('dc-root') : null) || document.body;
+  if (settleRoot) {
+    // Weigh only content children — skip script/style/template so inline
+    // Babel/CSS doesn't register as stable "content" before the framework
+    // has mounted anything.
+    const MEDIA = 'img,svg,canvas,video,picture,iframe,embed,object';
+    const weigh = () => {
+      let text = 0, media = 0;
+      for (const c of settleRoot.children) {
+        const t = c.tagName;
+        if (t === 'SCRIPT' || t === 'STYLE' || t === 'TEMPLATE') continue;
+        text += (c.textContent || '').trim().length;
+        media += c.querySelectorAll(MEDIA).length + (c.matches(MEDIA) ? 1 : 0);
+      }
+      return text + media * 100;
+    };
+    // "Non-zero and stable" alone is not sufficient to mean rendered: generic
+    // body can carry a static shell while async main content is pending, and
+    // #dc-root can carry the root DC's static text while child refs are still
+    // .sc-placeholder boxes. Gate generic on readyState 'complete', and never
+    // accept stability while a dc-runtime placeholder is present.
+    const isGeneric = settleRoot === document.body;
+    // A placeholder whose fetch failed (.sc-placeholder-error inside) keeps
+    // .sc-placeholder forever — don't wait on it. JS loop, not :has(), so an
+    // engine without :has() support can't throw out of the while and skip
+    // print() entirely.
+    var pendingPlaceholders = function () {
+      var all = settleRoot.querySelectorAll('.sc-placeholder'), n = 0;
+      for (var i = 0; i < all.length; i++)
+        if (!all[i].querySelector('.sc-placeholder-error')) n++;
+      return n;
+    };
+    const deadline = Date.now() + 15000;
+    let last = -1, stable = 0;
+    while (Date.now() < deadline) {
+      const n = weigh();
+      const ready =
+        (!isGeneric || document.readyState === 'complete') &&
+        pendingPlaceholders() === 0;
+      if (n > 0 && n === last && ready) { if (++stable >= 2) break; } else { stable = 0; }
+      last = n;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  mark('settle-done' + (settleRoot ? ' (errs=' + settleRoot.querySelectorAll('.sc-placeholder-error').length + ' pending=' + pendingPlaceholders() + ')' : ''));
+  // Project support.js may predate runtime default-seeding; push via bridge.
+  if (isDc && window.__dcSetProps && window.__dcRootName) {
+    try {
+      const dpEl = document.querySelector('script[data-dc-script]');
+      const meta = JSON.parse((dpEl && dpEl.getAttribute('data-props')) || '{}');
+      const bag = {};
+      for (const k in meta)
+        if (k[0] !== '$' && meta[k] && meta[k].default !== undefined)
+          bag[k] = meta[k].default;
+      if (Object.keys(bag).length) {
+        window.__dcSetProps(window.__dcRootName(), bag);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    } catch (e) {}
+  }
+  // Reveal content gated on scroll or visibility before printing. Lazy <img>,
+  // IntersectionObserver fade-ins, and collapsed <details> don't render while
+  // off-screen, so a long page would print with them blank or closed. Open
+  // every <details>, force native-lazy images eager, and scroll the document
+  // through its full height to trip lazy-load + IO; then wait (bounded) for the
+  // newly-triggered images. Inert for deck-stage (slides aren't scroll-gated).
+  try {
+    for (const d of document.querySelectorAll('details')) d.open = true;
+    for (const img of document.querySelectorAll('img[loading="lazy"]'))
+      img.loading = 'eager';
+    const scroller = document.scrollingElement || document.documentElement;
+    const full = Math.max(scroller.scrollHeight, document.body.scrollHeight);
+    const step = window.innerHeight || 800;
+    var scrollDeadline = Date.now() + 4000;
+    for (let y = 0; y <= full && Date.now() < scrollDeadline; y += step) {
+      window.scrollTo(0, y);
+      await raf();
+    }
+    window.scrollTo(0, 0);
+    await Promise.race([
+      Promise.all(
+        [...document.images].map((img) =>
+          img.complete
+            ? null
+            : new Promise((res) => {
+                img.addEventListener('load', res, { once: true });
+                img.addEventListener('error', res, { once: true });
+              })
+        )
+      ),
+      new Promise((r) => setTimeout(r, 4000)),
+    ]);
+  } catch (e) {}
+  mark('scroll-done');
+  try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 3000))]); } catch (e) {}
+  mark('fonts-done');
+  // Jump every animation to its end state so print() never captures a slide
+  // mid-entrance. Ordering matters: the 0s-transition style must be live
+  // BEFORE data-deck-active is set so attribute-keyed transitions don't
+  // start a (now-0s) run from the pre-active base.
+  const st = document.createElement('style');
+  st.textContent = '*,*::before,*::after{animation-delay:-99s !important;animation-duration:.001s !important;animation-iteration-count:1 !important;animation-fill-mode:both !important;animation-play-state:running !important;transition-duration:0s !important}';
+  document.head.appendChild(st);
+  for (const d of document.querySelectorAll('deck-stage')) {
+    for (const c of d.children) {
+      const t = c.tagName;
+      if (t === 'SCRIPT' || t === 'STYLE' || t === 'TEMPLATE') continue;
+      c.setAttribute('data-deck-active', '');
+    }
+  }
+  // Re-append deck-stage's @page last so no author @page can add a margin and
+  // spill each full-bleed slide onto two sheets. Backstop for old copies.
+  if (ds) {
+    let pg = document.getElementById('deck-stage-print-page');
+    if (!pg) {
+      pg = document.createElement('style');
+      pg.textContent = '@page{size:' + (+ds.getAttribute('width') || 1920) +
+        'px ' + (+ds.getAttribute('height') || 1080) + 'px;margin:0}';
+    }
+    document.body.appendChild(pg);
+  }
+  try {
+    const sweep = () => {
+      for (const a of document.getAnimations()) {
+        try { a.finish(); } catch (e) {
+          try { a.currentTime = (a.effect && a.effect.getComputedTiming().duration) || 0; a.pause(); } catch (e2) {}
+        }
+      }
+    };
+    sweep();
+    await raf();
+    sweep();
+    await raf();
+  } catch (e) {}
+  // A document that owns its print CSS (the doc-page starter injects the
+  // meta at runtime; hand-rolled print designs author it) gets no automatic
+  // page geometry and keeps its forced breaks: strip the injected default
+  // @page — write time cannot see a runtime-injected meta — skip the frame
+  // override below, and skip the fakepage-flattening further down. What
+  // still applies: the print baseline and break-hygiene defaults (no @page
+  // in either; low specificity, so the document's own print CSS wins) and
+  // the break-inside relaxation on >page elements (avoid on those cannot
+  // be honored whoever authored it).
+  var ownsPrint = !!document.querySelector('meta[name="omelette-owns-print" i]');
+  if (ownsPrint) {
+    var dst = document.querySelector('style[data-omelette-print-defaults]');
+    if (dst && dst.textContent) {
+      dst.textContent = dst.textContent.replace(/@page\b[^{}]*\{[^}]*\}/, '');
+    }
+  }
+  // Size the PDF page to the rendered design unless the file opted into
+  // standard paper via @page{size:letter|A4|…} or declared print ownership
+  // via the meta above. Decks own their own @page.
+  // Wrappers (body, …) lose padding+margin so the frame sits at (0,0); the
+  // frame itself loses only margin — its padding is INSIDE the measured
+  // rect and must stay, or content shifts and leaves a gap at bottom/right.
+  var __m = null;
+  try { __m = (() => {
+  var STAMP = true;
+  var docEl = document.documentElement;
+  var doc = { width: docEl.scrollWidth, height: docEl.scrollHeight };
+  // Name-presence check, case-insensitive — the same contract as the
+  // instant-PDF path's runtime check in deck-stage-export.ts. The name is
+  // a string literal here because that file interpolates this script into
+  // its print script, so importing a shared constant from it would be a
+  // cycle; measure.test.ts pins the literal so the two cannot drift apart
+  // silently.
+  var ownsPrint = !!document.querySelector('meta[name="omelette-owns-print" i]');
+
+  var ds = document.querySelector('deck-stage');
+  if (ds) {
+    var dw = Number(ds.getAttribute('width')) || 1920;
+    var dh = Number(ds.getAttribute('height')) || 1080;
+    var n = typeof ds.length === 'number' ? ds.length : ds.children.length;
+    var idx = typeof ds.index === 'number' ? ds.index : 0;
+    var frames = [];
+    for (var i = 0; i < n; i++) frames.push({ left: 0, top: 0, width: dw, height: dh });
+    return { kind: 'deck', source: 'declared', doc: doc, frames: frames,
+      authored: frames.map(function(){return{width:true,height:true}}),
+      deck: { width: dw, height: dh, slideCount: n, index: idx },
+      signals: { paperPage: false, pxPage: false, ownsPrint: ownsPrint } };
+  }
+
+  // Declared kind: a doc-page tag names the kind outright, so no signal
+  // heuristics run (like the deck branch above, signals report false —
+  // they describe inferred classifications only). The tag alone is not
+  // trusted: the element must have upgraded (shadowRoot present), so a
+  // leftover tag whose script was deleted falls through to the heuristics
+  // that handle plain markup.
+  var stageSx = window.scrollX || 0, stageSy = window.scrollY || 0;
+  var dp = document.querySelector('doc-page');
+  if (dp && dp.shadowRoot) {
+    // Crop to the sheet, not the host — the desk around it is screen-only
+    // chrome that must not land in PNG exports.
+    var sheet = dp.shadowRoot.querySelector('.sheet');
+    var sr = (sheet || dp).getBoundingClientRect();
+    return { kind: 'paper-doc', source: 'declared', doc: doc,
+      frames: [{ left: sr.left + stageSx, top: sr.top + stageSy,
+        width: sr.width, height: sr.height }],
+      authored: [{ width: false, height: false }],
+      signals: { paperPage: false, pxPage: false, ownsPrint: ownsPrint } };
+  }
+  var paperPage = false, pxPage = false;
+  var eachRule = function (fn) {
+    for (var s = 0; s < document.styleSheets.length; s++) {
+      var rs; try { rs = document.styleSheets[s].cssRules; } catch (e) { continue; }
+      for (var r = 0; r < rs.length; r++) {
+        fn(rs[r]);
+        if (rs[r].cssRules) for (var n = 0; n < rs[r].cssRules.length; n++) fn(rs[r].cssRules[n]);
+      }
+    }
+  };
+  eachRule(function (r) {
+    if (r.type !== 6) return;
+    var m = /\bsize\s*:\s*([^;}]+)/i.exec(r.cssText || '');
+    if (!m) return;
+    if (/\b(letter|a[3-5]|legal|ledger)\b/i.test(m[1])) paperPage = true;
+    if (/\d+(?:\.\d+)?px\b/i.test(m[1])) pxPage = true;
+  });
+  var signals = { paperPage: paperPage, pxPage: pxPage, ownsPrint: ownsPrint };
+
+  var pxVal = function (v) {
+    var m = /^(\d+(?:\.\d+)?)px$/.exec(v || ''); return m ? +m[1] : 0;
+  };
+  var authoredPx = function (el, prop) {
+    if (pxVal(el.style[prop])) return true;
+    var attr = el.getAttribute(prop);
+    if (attr && /^\d+$/.test(attr)) return true;
+    var hit = false;
+    eachRule(function (r) {
+      if (hit || r.type !== 1 || !r.style) return;
+      try { if (el.matches(r.selectorText) && pxVal(r.style[prop])) hit = true; } catch (e) {}
+    });
+    return hit;
+  };
+
+  var el = document.body, rootPxW = false;
+  for (;;) {
+    var kids = [];
+    for (var c = 0; c < el.children.length; c++) {
+      var t = el.children[c].tagName;
+      if (t !== 'SCRIPT' && t !== 'STYLE' && t !== 'TEMPLATE') kids.push(el.children[c]);
+    }
+    if (kids.length !== 1 || !(kids[0] instanceof HTMLElement)) break;
+    if (STAMP) el.setAttribute('data-om-frame-wrap', '');
+    el = kids[0];
+    rootPxW = authoredPx(el, 'width');
+    if (rootPxW) break;
+  }
+  if (!rootPxW) rootPxW = authoredPx(el, 'width');
+
+  // @page{size:letter} alone is a flowing doc; with a px-width root it's a
+  // fixed sheet pretending to be paper — fall through and size to render.
+  if (paperPage && !rootPxW) {
+    return { kind: 'paper-doc', source: 'inferred', doc: doc, signals: signals,
+      frames: [{ left: 0, top: 0, width: doc.width, height: doc.height }],
+      authored: [{ width: false, height: false }] };
+  }
+
+  var sx = window.scrollX || 0, sy = window.scrollY || 0;
+  var rectOf = function (e) {
+    var r = e.getBoundingClientRect();
+    var oy; try { oy = getComputedStyle(e).overflowY; } catch (err) {}
+    var h = oy === 'visible' ? Math.max(r.height, e.scrollHeight || 0) : r.height;
+    return { left: r.left + sx, top: r.top + sy, width: r.width, height: h };
+  };
+
+  // Multi-frame: off unless the page opts in via data-om-multi-frame on the
+  // stop element — the explicit opt-in is what guards against card grids
+  // and pricing tables that match the geometry but aren't separate
+  // canvases. Two ways to name the frames, explicit first:
+  // 1. Descendants marked data-om-frame-export (the social-frames starter
+  //    marks each asset frame; shells/panels around them are presentation,
+  //    so nesting is expected). Document order.
+  // 2. Fallback, no marked descendants: direct children with an authored px
+  //    width AND height (the original geometry heuristic).
+  // Frames may be different sizes (a gallery mixes 1080×1920 stories with
+  // 728×90 banners); data-om-frame-label rides along for export filenames.
+  if (el.hasAttribute('data-om-multi-frame')) {
+    var visOk = function (e) {
+      var cs; try { cs = getComputedStyle(e); } catch (err) { return false; }
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.position !== 'fixed';
+    };
+    // A frame's crop is its VISUAL box — never the scrollHeight-inflated
+    // rect that rectOf computes for page roots. Shadow-DOM hover controls
+    // (image-slot's Replace bar parks 29px below its host) and similar
+    // escaping UI contribute scrollable overflow to the frame, and the
+    // inflated height both squashes the nominal-size resize and drags
+    // content below the frame into the crop. Zoom-independent; bit every
+    // slot-bearing frame.
+    var frameRectOf = function (e) {
+      var r = e.getBoundingClientRect();
+      return { left: r.left + sx, top: r.top + sy, width: r.width, height: r.height };
+    };
+    var pushCand = function (list, e) {
+      if (!visOk(e)) return;
+      var rc = frameRectOf(e);
+      if (rc.width < 2 || rc.height < 2) return;
+      var lbl = e.getAttribute('data-om-frame-label');
+      if (lbl) rc.label = lbl;
+      list.push(rc);
+    };
+    var cands = [];
+    var marked = el.querySelectorAll('[data-om-frame-export]');
+    if (marked.length) {
+      for (var mk = 0; mk < marked.length; mk++) pushCand(cands, marked[mk]);
+    } else {
+      for (var k = 0; k < el.children.length; k++) {
+        var ch = el.children[k];
+        if (!authoredPx(ch, 'width') || !authoredPx(ch, 'height')) continue;
+        pushCand(cands, ch);
+      }
+    }
+    if (cands.length >= 2) {
+      return { kind: 'multi-frame', source: 'inferred', doc: doc, signals: signals,
+        frames: cands, authored: cands.map(function(){return{width:true,height:true}}) };
+    }
+  }
+
+  if (STAMP) el.setAttribute('data-om-frame', '');
+  return { kind: 'single-canvas', source: 'inferred', doc: doc, signals: signals,
+    frames: [rectOf(el)],
+    authored: [{ width: rootPxW, height: authoredPx(el, 'height') }] };
+})(); } catch (e) {}
+  var frame = null;
+  if (!ownsPrint && __m && __m.kind === 'single-canvas') {
+    var f = __m.frames && __m.frames[0];
+    if (f && f.width >= 200 && f.height >= 200) {
+      frame = f;
+      var fst = document.createElement('style');
+      fst.textContent = '@media print{@page{size:' + Math.ceil(f.width) + 'px ' +
+        Math.ceil(f.height) + 'px;margin:0}' +
+        'html,body,[data-om-frame-wrap]{padding:0!important;margin:0!important;background:none!important}' +
+        '[data-om-frame]{margin:0!important}}';
+      document.body.appendChild(fst);
+    }
+  }
+  // Relax break-inside on oversized elements. An element taller than a
+  // printable page can't honor break-inside: avoid — browsers either overflow
+  // it or push it whole to the next page, leaving a blank gap, then break it
+  // anyway at an arbitrary point. After the final layout (content revealed,
+  // animations jumped), find elements taller than a page that still compute
+  // break-inside: avoid and reset them to auto, so the browser breaks them at
+  // their children's boundaries instead (children keep their own avoid). PAGE_PX
+  // is a conservative portrait estimate at 96 CSS px/in — Letter/A4 usable
+  // height minus our 0.5in margins — so only clearly-oversized elements are
+  // touched and under-page elements still stay whole. Skipped for decks (slides
+  // are sized to the page) and for fixed-size canvases (frame set, or an author
+  // px-based @page) — runs as before for flowing docs on letter/A4.
+  try {
+    if (!ds && !frame && !(__m && __m.signals && __m.signals.pxPage)) {
+      const PAGE_PX = 1024;
+      // Our print defaults add a real @page margin only when the source has
+      // no @page of its own; computed style can't tell us (it reports screen
+      // media), so read the injected rule directly.
+      const defaults = document.querySelector('style[data-omelette-print-defaults]');
+      const pageInset = /@page\s*\{[^}]*margin/.test(defaults ? defaults.textContent || '' : '');
+      const SEL = 'section,article,figure,table,pre,blockquote,[class~="card" i],[class~="page" i],[class~="sheet" i]';
+      for (const el of document.body.querySelectorAll(SEL)) {
+        if (el instanceof HTMLElement && el.offsetHeight > PAGE_PX) {
+          el.setAttribute('data-om-oversized', '');
+          // Fake-paged docs simulate sheets with over-tall break-after:page
+          // boxes; honoring the break spills half-blank pages and ends a
+          // colored box mid-sheet. Flow them, and (only when we own the page
+          // inset) drop the redundant padding/background via the rule below.
+          const cs = getComputedStyle(el);
+          // An owns-print doc's forced breaks are intentional sheet
+          // boundaries, never fake-paged simulation — don't strip them.
+          // The break-inside relaxation above still applies: avoid on a
+          // >page element is impossible to honor whoever authored it.
+          if (
+            !ownsPrint &&
+            (cs.breakAfter === 'page' || cs.pageBreakAfter === 'always')
+          ) {
+            el.setAttribute('data-om-fakepage', '');
+          }
+        }
+      }
+      const ost = document.createElement('style');
+      ost.textContent = '@media print{' +
+        '[data-om-oversized]{break-inside:auto !important;page-break-inside:auto !important}' +
+        '[data-om-fakepage]{break-after:auto !important;page-break-after:auto !important}' +
+        (pageInset ? '[data-om-fakepage]{padding:0 !important;background:none !important}' : '') +
+        '}';
+      document.head.appendChild(ost);
+    }
+  } catch (e) {}
+  // macOS Preview renders Skia-PDF Luminosity soft-masks as opaque grey boxes;
+  // swap the CSS that triggers them for Preview-safe forms.
+  try {
+    for (const el of document.body.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+
+      if (cs.boxShadow !== 'none' && cs.filter === 'none') {
+        const outs = [], kept = [];
+        for (const s of cs.boxShadow.split(/,(?![^(]*[)])/)) {
+          const t = s.trim();
+          const m = t.match(/^(rgba?[(][^)]+[)]) (-?[0-9.]+px) (-?[0-9.]+px) ([0-9.]+px) -?[0-9.]+px$/);
+          if (m && parseFloat(m[4]) > 0) outs.push('drop-shadow(' + m[2] + ' ' + m[3] + ' ' + m[4] + ' ' + m[1] + ')');
+          else kept.push(t);
+        }
+        if (outs.length) {
+          el.style.setProperty('filter', outs.join(' '), 'important');
+          el.style.setProperty('box-shadow', kept.join(', ') || 'none', 'important');
+        }
+      }
+
+      const mask = cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
+      if (mask && mask !== 'none' && cs.filter === 'none') el.style.setProperty('filter', 'opacity(1)', 'important');
+    }
+  } catch (e) {}
+  mark('print-calling');
+  setTimeout(() => { try { window.print(); } catch (e) {} }, 200);
+})();
+</script>
+</body>
+</html>

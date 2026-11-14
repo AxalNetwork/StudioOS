@@ -1,0 +1,67 @@
+{
+  "skill": "revenue-quality-reconciliation",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "stripe.revenue": {
+        "record_id": "BILL-09",
+        "entity": "Synthetic Venture",
+        "period": "2026-09",
+        "currency": "USD",
+        "receipts": [
+          {
+            "receipt_id": "R-01",
+            "invoice_id": "I-ANNUAL",
+            "collected_cents": 6000000
+          },
+          {
+            "receipt_id": "R-02",
+            "invoice_id": "I-MONTH",
+            "collected_cents": 3500000
+          }
+        ]
+      },
+      "grow.records": {
+        "record_id": "REC-09",
+        "entity": "Synthetic Venture",
+        "period": "2026-09",
+        "currency": "USD",
+        "recognition_entries": [
+          {
+            "entry_id": "REV-01",
+            "invoice_id": "I-ANNUAL",
+            "recognized_revenue_cents": 500000,
+            "recorded_basis": "Annual service allocated over 12 months"
+          },
+          {
+            "entry_id": "REV-02",
+            "invoice_id": "I-MONTH",
+            "recognized_revenue_cents": 3500000,
+            "recorded_basis": "Service delivered in September"
+          }
+        ],
+        "mrr_cents": null,
+        "arr_cents": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "USD 40,000.00",
+      "USD 95,000.00",
+      "USD 55,000.00",
+      "I-ANNUAL"
+    ],
+    "must_say_not_recorded": [
+      "MRR",
+      "ARR"
+    ],
+    "must_not_include": [
+      "USD 1,140,000.00 ARR",
+      "Cash and recognized revenue are equal",
+      "I audited the revenue"
+    ]
+  }
+}

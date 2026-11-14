@@ -1,0 +1,516 @@
+name: Cloudflare Worker deploy
+
+# `axal.vc` and `app.axal.vc` are both whole-host custom domains of the
+# `studioos` Worker (wrangler.toml [[routes]] / [[env.production.routes]],
+# since 1d320dda9 on 2026-09-01), served from its [assets] copy of docs/ plus
+# the API. A `wrangler deploy` — this job on every push to main, or root
+# `npm run deploy` by hand — is the only thing that changes what either host
+# serves: one deploy ships the SPA and the API together, so the two hosts
+# cannot sit at different builds, and nothing else ships a build anywhere —
+# the Cloudflare Pages mirror and its workflow were retired on 2026-09-03
+# (documentation/architecture/DECISIONS.md D36) after its dashboard showed
+# "Production" rows for commits whose run here had failed in the migration
+# step. Who serves a host is settled by this job's closing "Deployed studioos
+# triggers" lines. The static security headers on SPA responses come from
+# docs/_headers, built with the SPA below and asserted after this deploy and
+# by post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
+# over the previous deploy's assets restored from the actions cache.
+#
+# D5501 gates D1 writes and publication on the trusted candidate, queue
+# inventory and packaged Worker startup. The manual deploy command dispatches
+# this same workflow on main.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit AND D1:Edit
+#   CLOUDFLARE_ACCOUNT_ID — the Cloudflare account containing `studioos`
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# D5501: a pending candidate waits for checks without holding the write lock.
+permissions:
+  contents: read
+
+jobs:
+  admission:
+    name: Verify the exact main candidate
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Wait for all six required checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
+
+  deploy:
+    name: build and deploy studioos Worker
+    needs: admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: studioos-production-release
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: Recheck candidate under the production lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-evidence"
+          node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once | tee "$RUNNER_TEMP/release-evidence/admission.json"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      # D529 — docs/ IS NOT COMMITTED, SO THE OLD-BUNDLE WINDOW COMES FROM
+      # HERE. A tab opened before this deploy still asks for the previous
+      # build's hashed chunks; scripts/build-frontend.mjs keeps the last 72
+      # hours of deployed assets, at least three builds, within its file cap
+      # (D1364), provided the previous tree is on disk when the build runs.
+      # This restores what the last successful deploy saved
+      # (its docs/assets and retention ledger) into the empty docs/ the
+      # checkout leaves. `restore-keys` picks the newest `spa-assets-` entry.
+      #
+      # A miss (the first run, or an entry GitHub evicted after 7 days unused)
+      # is not a failure: the deploy still ships, and the build log says
+      # "retention restarted". The warning below says it in the run summary.
+      - name: Restore the previous deploy's assets
+        id: retention
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+
+      - name: Say when retention restarted
+        if: steps.retention.outputs.cache-matched-key == ''
+        run: echo "::warning::No saved build to restore (first deploy, or the cache entry was evicted). Retention restarted - tabs opened before this deploy may need a reload."
+
+      # #3590: capture generation 0 BEFORE the build replaces the ledger.
+      # The manifest stays outside docs/, so Vite cannot wipe or publish it.
+      - name: Capture the previous deploy's lazy entry
+        continue-on-error: true
+        env:
+          SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json"
+
+      # --seed-restored-tree (D252, D529): seed everything restored above, not
+      # only one generation, because production serves the LAST deploy's
+      # build. Only this workflow passes it; CI and previews do not.
+      # The release beside the logo (frontend/src/lib/release.js): the newest
+      # PUBLISHED release's tag, drafts excluded, so the badge never names a
+      # version that was not released. No release yet, or the API unavailable,
+      # leaves it empty and the badge shows the stage alone. It never fails
+      # the deploy.
+      - name: Resolve the published release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""' 2>/dev/null || true)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Release beside the logo: ${tag:-none yet (the stage alone)}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build production SPA
+        env:
+          VITE_AXAL_RELEASE: ${{ steps.release.outputs.tag }}
+        run: npm run build -- --seed-restored-tree
+
+      # Capture/upload failures belong to the later smoke job, never the
+      # publication gate. Transfer identities from THIS run, not a newer cache.
+      - name: Capture the current build's lazy entry
+        continue-on-error: true
+        env:
+          SMOKE_CACHE_RESTORED: 'built'
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-current.json"
+
+      # Stable within this run so re-running only smoke still finds the inputs;
+      # a full deploy retry replaces them with what that attempt will publish.
+      - name: Transfer this deploy's smoke inputs
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spa-smoke-inputs
+          path: |
+            ${{ runner.temp }}/spa-smoke-current.json
+            ${{ runner.temp }}/spa-smoke-previous.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 3
+
+      - name: Verify required production queues
+        id: queues
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/check-production-queues.mjs "$GITHUB_SHA" | tee "$RUNNER_TEMP/release-evidence/queues.json"
+
+      - name: Check the prepared Worker startup budget
+        id: startup
+        run: bash scripts/prepare-production-worker.sh "$GITHUB_SHA" "$RUNNER_TEMP/release-evidence"
+
+      - name: Record migration plan and previous Worker version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          node scripts/migrate-d1.mjs --remote --dry-run | tee "$RUNNER_TEMP/release-evidence/migration-plan.log"
+          cd cloudflare-worker
+          node node_modules/wrangler/bin/wrangler.js deployments list --config ../wrangler.toml --env production --json > "$RUNNER_TEMP/release-evidence/previous-deployments.json"
+
+      - name: Confirm the candidate still owns the production release
+        id: admitted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --quiet HEAD --
+          node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once | tee "$RUNNER_TEMP/release-evidence/final-admission.json"
+
+      - name: Apply pending D1 migrations
+        id: migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/migrate-d1.mjs --remote
+
+      # D251 — A BOUNDED RETRY, ON THE ONE TRANSIENT CODE WE HAVE SEEN. On
+      # D202's merge (run 35852624173) this step uploaded the Worker, updated
+      # its cron triggers and one queue consumer, then failed on the DLQ
+      # consumer with Cloudflare error 10013 ("An unknown error has occurred").
+      # Wrangler says "Successful trigger changes were not rolled back", so
+      # main was half-deployed until the next merge re-ran every step.
+      # Re-running is safe: `wrangler deploy` converges on the config and the
+      # migrations above finished before this step began.
+      #
+      # ONLY 10013 IS RETRIED. A build or configuration error retried is the
+      # same error three times, and a later, more confusing one. Add a code
+      # to the pattern only with a run that shows it. `set -o pipefail` keeps
+      # `tee` from turning a failed deploy into a green step.
+      - name: Deploy to Cloudflare Worker
+        id: publish
+        working-directory: cloudflare-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          for attempt in 1 2 3; do
+            if npx --no-install wrangler deploy --config ../wrangler.toml --env production --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee deploy.log; then
+              exit 0
+            fi
+            if ! grep -qE '\[code: 10013\]' deploy.log; then
+              echo "::error::wrangler deploy failed with an error that is not a known transient code; not retried"
+              exit 1
+            fi
+            if [ "$attempt" = 3 ]; then break; fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed with Cloudflare error 10013; retrying in 15s"
+            sleep 15
+          done
+          echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
+          exit 1
+
+      # D1364 (#3591): stamp the build that just shipped, from the repo root,
+      # before it is cached. The stamp step itself has no if, so a failed
+      # stamp stays red. The save below still runs when publish succeeded,
+      # so a failed timestamp does not drop the tree already serving.
+      # A failed or skipped publish never saves. Building alone never
+      # advances the clock.
+      - name: Record successful asset deployment
+        run: node scripts/record-asset-deploy.mjs
+
+      # D529 — save what production now serves for the next deploy to restore.
+      # always() plus the publish outcome: a failed stamp does not skip this,
+      # and a failed publish does. Smoke runs afterward as a dependent job,
+      # so a failed probe cannot lose the tree that shipped. One entry per
+      # run; the restore takes the newest by prefix.
+
+      - name: Save the deployed assets for the next deploy
+        if: always() && steps.publish.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Record release phase outcomes
+        if: always()
+        env:
+          QUEUES: ${{ steps.queues.outcome }}
+          STARTUP: ${{ steps.startup.outcome }}
+          ADMITTED: ${{ steps.admitted.outcome }}
+          MIGRATIONS: ${{ steps.migrations.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-evidence"
+          # Wrangler can collect a local profiler trace when Cloudflare rejects startup.
+          if [ -d cloudflare-worker/.wrangler/tmp ]; then
+            find cloudflare-worker/.wrangler/tmp -type f -name worker.cpuprofile -exec cp {} "$RUNNER_TEMP/release-evidence/publish-startup.cpuprofile" \;
+          fi
+          {
+            printf 'Candidate `%s`\n\n' "$GITHUB_SHA"
+            printf '| Phase | Outcome |\n| --- | --- |\n'
+            printf '| Queue inventory | %s |\n| Startup | %s |\n| Final admission | %s |\n| D1 migrations | %s |\n| Worker publication | %s |\n' \
+              "$QUEUES" "$STARTUP" "$ADMITTED" "$MIGRATIONS" "$PUBLISH"
+            if [ -f cloudflare-worker/deploy.log ]; then
+              grep -E 'Current Version ID: [0-9a-f-]+' cloudflare-worker/deploy.log | tail -1 || true
+            fi
+          } | tee "$RUNNER_TEMP/release-evidence/outcome.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain release evidence on success or failure
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release-evidence/**
+            !${{ runner.temp }}/release-evidence/worker.bundle
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Sibling of schema-drift and branches: smoke must make the run red without
+  # skipping their work or rolling back the production version already shipped.
+  spa-smoke:
+    name: live current and previous lazy chunks
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Restore this deploy's smoke inputs
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: spa-smoke-inputs
+          path: ${{ runner.temp }}/spa-smoke
+      # Even a failed input transfer must run the existing public probes.
+      # Missing/corrupt manifests fail this check; no failure is softened here.
+      - name: Check current and previous lazy chunks on both hosts
+        env:
+          SMOKE_HOSTS: 'https://axal.vc https://app.axal.vc'
+          SMOKE_CURRENT_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-current.json
+          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-previous.json
+          SKIP_LIVE_SMOKE: '0'
+        run: node scripts/check-spa-live.mjs
+
+  # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
+  # still turns the workflow red on a disagreement, but it no longer shares a
+  # job with the branch redeploys: each of them depends on `deploy` alone, so
+  # neither can skip the other.
+  schema-drift:
+    name: repo can still rebuild production's schema
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      # Can the repo still rebuild the database it operates? The invariant is
+      # `schema_baseline.sql` + every migration above the cutoff == production —
+      # not equality with the baseline alone, which would go red on the first
+      # migration anyone shipped and then get switched off. `schema.sql` drifted
+      # from production for four months with nothing able to notice it
+      # (DECISIONS D60); this is what notices.
+      #
+      # AFTER the deploy, and deliberately not `continue-on-error`. A
+      # disagreement does not make the worker that just shipped unsafe, so it
+      # must not hold the release — but it does mean a fresh environment would
+      # come up wrong, which is worth a red workflow. GOTCHAS records what
+      # `continue-on-error` did to the Semgrep job: a green check that means only
+      # that the scan ran.
+      - name: Repo can still rebuild production's schema
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/check-baseline-drift.mjs
+
+  # D253 — EVERY BRANCH RUNS MAIN'S CODE, NOT THE CODE IT WAS PROVISIONED WITH.
+  # Until this job, branch-provision.yml deployed a branch Worker once and
+  # nothing deployed it again (task 356), so a fix merged here never reached
+  # a subsidiary. After HQ ships, each branch listed by
+  # scripts/list-deployable-branches.mjs (status provisioning or live; never
+  # an `_` fixture, `example` or `suspended`) is:
+  #   1. rendered: gen-branch-wrangler writes wrangler.branch.<code>.toml;
+  #   2. migrated: migrate-d1 --branch <code>, against that branch's own D1;
+  #   3. deployed with D251's loop, retrying only 10013.
+  # Every wrangler call names --config wrangler.branch.<code>.toml. Never
+  # wrangler.toml, never --env production: those carry the apex custom
+  # domains, and deploying a branch with them would move axal.vc onto it.
+  # No `secret put` either: a branch's secrets were put at provisioning and
+  # persist across deploys.
+  #
+  # THE SPA IS REBUILT HERE with D252's --seed-restored-tree rather than
+  # handed over from the deploy job, over the assets the deploy job just
+  # saved (D529): a branch serves the same SPA HQ does, with the same window.
+  # This job restores but never saves; only HQ's deploy writes the entry.
+  #
+  # One branch failing does not stop the others. The job summary names each
+  # outcome, and the job goes red if any failed.
+  branches:
+    name: redeploy every provisioned branch
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: studioos-branch-rollout
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+
+      - name: List the branches to redeploy
+        id: list
+        run: |
+          codes=$(node scripts/list-deployable-branches.mjs | tr '\n' ' ')
+          echo "codes=${codes}" >> "$GITHUB_OUTPUT"
+          if [ -z "${codes// /}" ]; then
+            echo "No branch to redeploy: infra/branches holds no provisioning or live entry." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install frontend dependencies
+        if: steps.list.outputs.codes != ''
+        run: npm ci --prefix frontend
+
+      - name: Install Worker dependencies
+        if: steps.list.outputs.codes != ''
+        run: npm ci --prefix cloudflare-worker
+
+      - name: Restore the assets HQ's deploy saved
+        if: steps.list.outputs.codes != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+
+      - name: Build the SPA
+        if: steps.list.outputs.codes != ''
+        run: npm run build -- --seed-restored-tree
+
+      - name: Recheck the candidate under the branch rollout lock
+        if: steps.list.outputs.codes != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
+
+      - name: Render, migrate and deploy each branch
+        if: steps.list.outputs.codes != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CODES: ${{ steps.list.outputs.codes }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -o pipefail
+          deploy_branch() {
+            local code="$1" attempt
+            for attempt in 1 2 3; do
+              if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${code}.toml" --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee "deploy.${code}.log"; then
+                return 0
+              fi
+              if ! grep -qE '\[code: 10013\]' "deploy.${code}.log"; then
+                echo "::error::${code}: wrangler deploy failed with an error that is not a known transient code; not retried"
+                return 1
+              fi
+              if [ "$attempt" = 3 ]; then break; fi
+              echo "::warning::${code}: wrangler deploy attempt ${attempt} of 3 failed with Cloudflare error 10013; retrying in 15s"
+              sleep 15
+            done
+            echo "::error::${code}: wrangler deploy failed three times with Cloudflare error 10013"
+            return 1
+          }
+          failed=0
+          {
+            echo "### Branch redeploys"
+            echo
+            echo "| Branch | Outcome |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for code in $CODES; do
+            if ! node scripts/gen-branch-wrangler.mjs "$code"; then
+              outcome="failed: config did not render"
+            elif ! node scripts/migrate-d1.mjs --branch "$code"; then
+              outcome="failed: migrations"
+            elif ! deploy_branch "$code"; then
+              outcome="failed: deploy"
+            else
+              outcome="deployed"
+            fi
+            echo "| ${code} | ${outcome} |" >> "$GITHUB_STEP_SUMMARY"
+            [ "$outcome" = deployed ] || failed=1
+          done
+          exit "$failed"

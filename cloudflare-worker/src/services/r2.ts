@@ -1,0 +1,252 @@
+/**
+ * R2 helpers for KYC document storage.
+ *
+ * Design choices:
+ *  - Bucket is private. We do NOT generate S3-style presigned URLs (that would
+ *    require separate R2 access keys + a public URL surface). Instead, an
+ *    auth-gated Worker route streams bytes from R2 on demand.
+ *  - Keys: `kyc/{user_id}/{uuid}.{ext}` so we can list-by-prefix per user
+ *    when handling deletions / GDPR requests.
+ *  - We compute and store the SHA-256 of the bytes so admins can verify
+ *    integrity and detect tampering.
+ */
+import type { Env } from '../types';
+import { assertStorageRoom, noteStorageLanded } from './storageRoom';
+
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+};
+
+export interface KycDocumentMeta {
+  file_key: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  uploaded_at: string;
+}
+
+function bytesFromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Decode a `data:` URI, upload the raw bytes to R2, return file metadata.
+ * Throws if R2 binding is missing — callers should fall back gracefully
+ * (e.g. dev environments without an R2 bucket configured).
+ */
+export async function putKycDocumentFromDataUri(
+  env: Env,
+  userId: number,
+  dataUri: string,
+): Promise<KycDocumentMeta> {
+  if (!env.FILES) throw new Error('R2 binding FILES not configured');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:')) throw new Error('Invalid data URI');
+  const meta = dataUri.slice(5, commaIdx); // strip "data:"
+  const contentType = meta.replace(';base64', '').trim();
+  const ext = EXT_BY_MIME[contentType];
+  if (!ext) throw new Error(`Unsupported content type: ${contentType}`);
+  const bytes = bytesFromBase64(dataUri.slice(commaIdx + 1));
+  const sha256 = await sha256Hex(bytes);
+  const uuid = crypto.randomUUID();
+  const fileKey = `kyc/${userId}/${uuid}.${ext}`;
+  await env.FILES.put(fileKey, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { user_id: String(userId), sha256 },
+  });
+  return {
+    file_key: fileKey,
+    content_type: contentType,
+    size: bytes.byteLength,
+    sha256,
+    uploaded_at: new Date().toISOString(),
+  };
+}
+
+/** Fetch a KYC document from R2 for streaming back to an admin. */
+export async function getKycDocument(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith('kyc/')) return null; // hard guard: never serve outside kyc/ prefix
+  return await env.FILES.get(fileKey);
+}
+
+/** Delete a KYC document (e.g. on user deletion / GDPR request). */
+export async function deleteKycDocument(env: Env, fileKey: string): Promise<void> {
+  if (!env.FILES) return;
+  if (!fileKey.startsWith('kyc/')) return;
+  await env.FILES.delete(fileKey);
+}
+
+// ---------------------------------------------------------------------------
+// Headshots — public-readable profile images stored under headshots/{user_id}/.
+// We reuse the FILES R2 bucket with a separate key prefix so KYC and headshot
+// objects never collide and the privacy guards in routes/settings.ts remain
+// the single source of truth for who can view what.
+// ---------------------------------------------------------------------------
+
+const HEADSHOT_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+
+export interface HeadshotMeta {
+  file_key: string;
+  content_type: string;
+  size: number;
+  uploaded_at: string;
+}
+
+export async function putHeadshotFromDataUri(
+  env: Env,
+  userId: number,
+  dataUri: string,
+): Promise<HeadshotMeta> {
+  if (!env.FILES) throw new Error('R2 binding FILES not configured');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:')) throw new Error('Invalid data URI');
+  const meta = dataUri.slice(5, commaIdx);
+  const contentType = meta.replace(';base64', '').trim();
+  const ext = HEADSHOT_MIME[contentType];
+  if (!ext) throw new Error(`Unsupported image type: ${contentType} (allowed: jpeg, png, webp)`);
+  const bytes = bytesFromBase64(dataUri.slice(commaIdx + 1));
+  // 3MB hard ceiling at the byte level — `routes/settings.ts` already
+  // ceilings the data-URI length but raw bytes are the truthful number.
+  if (bytes.byteLength > 3 * 1024 * 1024) throw new Error('Image exceeds 3MB limit');
+  const uuid = crypto.randomUUID();
+  const fileKey = `headshots/${userId}/${uuid}.${ext}`;
+  // D1170 — a profile photo counts to its member (D1169 §1). The refusal is
+  // thrown as the 413 Response; callers pass a thrown Response through.
+  const storage = await assertStorageRoom(env, { userId }, bytes.byteLength, { id: userId });
+  await env.FILES.put(fileKey, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { user_id: String(userId) },
+  });
+  await noteStorageLanded(env, storage);
+  return {
+    file_key: fileKey,
+    content_type: contentType,
+    size: bytes.byteLength,
+    uploaded_at: new Date().toISOString(),
+  };
+}
+
+export async function getHeadshot(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith('headshots/')) return null;
+  return await env.FILES.get(fileKey);
+}
+
+// ---------------------------------------------------------------------------
+// Resumes (Task #68 — Job Board) — private applicant CVs stored under
+// resumes/{posting_id}/{uuid}.pdf. Same private-bucket model as KYC: no public
+// URL; a founder/admin fetches bytes only via a signed one-time download token
+// (services/signedDownload.ts). PDF-only initially.
+// ---------------------------------------------------------------------------
+
+const RESUME_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+};
+
+const RESUME_MAX_BYTES = 5 * 1024 * 1024; // 5MB hard ceiling.
+
+export interface ResumeMeta {
+  file_key: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  uploaded_at: string;
+}
+
+export async function putResumeFromDataUri(
+  env: Env,
+  postingId: number,
+  dataUri: string,
+): Promise<ResumeMeta> {
+  if (!env.FILES) throw new Error('R2 binding FILES not configured');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:')) throw new Error('Invalid data URI');
+  const meta = dataUri.slice(5, commaIdx); // strip "data:"
+  const contentType = meta.replace(';base64', '').trim();
+  const ext = RESUME_MIME[contentType];
+  if (!ext) throw new Error(`Unsupported resume type: ${contentType} (allowed: PDF)`);
+  const b64 = dataUri.slice(commaIdx + 1);
+  // Cheap pre-check on the base64 length so we never atob() a multi-MB string
+  // just to reject it: 4 base64 chars ≈ 3 bytes.
+  if (Math.floor((b64.length * 3) / 4) > RESUME_MAX_BYTES) throw new Error('Resume exceeds 5MB limit');
+  const bytes = bytesFromBase64(b64);
+  if (bytes.byteLength > RESUME_MAX_BYTES) throw new Error('Resume exceeds 5MB limit');
+  const sha256 = await sha256Hex(bytes);
+  const uuid = crypto.randomUUID();
+  const fileKey = `resumes/${postingId}/${uuid}.${ext}`;
+  await env.FILES.put(fileKey, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { posting_id: String(postingId), sha256 },
+  });
+  return {
+    file_key: fileKey,
+    content_type: contentType,
+    size: bytes.byteLength,
+    sha256,
+    uploaded_at: new Date().toISOString(),
+  };
+}
+
+export async function getResume(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith('resumes/')) return null; // hard guard: never serve outside resumes/ prefix
+  return await env.FILES.get(fileKey);
+}
+
+// ---------------------------------------------------------------------------
+// D4294 (#4294, D4289 P5) — influencer tax forms (W-9 / W-8BEN), private,
+// under taxforms/{user_id}/{uuid}.{ext}. Same private-bucket model as KYC:
+// no public URL, and only the Super Admin's route streams the bytes back.
+// ---------------------------------------------------------------------------
+
+const TAX_FORM_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+export const TAX_FORM_MAX_BYTES = 5 * 1024 * 1024;
+export const TAX_FORM_PREFIX = 'taxforms/';
+
+export interface TaxFormMeta { file_key: string; content_type: string; size: number; sha256: string }
+
+/** Decode the data URI and store it. Throws a short reason for a type or size the form does not take. */
+export async function putTaxFormFromDataUri(env: Env, userId: number, dataUri: string): Promise<TaxFormMeta> {
+  if (!env.FILES) throw new Error('storage_unavailable');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:') || !dataUri.slice(0, commaIdx).endsWith(';base64')) throw new Error('not_a_file');
+  const contentType = dataUri.slice(5, commaIdx).replace(';base64', '').trim();
+  const ext = TAX_FORM_MIME[contentType];
+  if (!ext) throw new Error('unsupported_type');
+  const b64 = dataUri.slice(commaIdx + 1);
+  if (Math.floor((b64.length * 3) / 4) > TAX_FORM_MAX_BYTES) throw new Error('too_large');
+  let bytes: Uint8Array;
+  try { bytes = bytesFromBase64(b64); } catch { throw new Error('not_a_file'); }
+  if (!bytes.byteLength) throw new Error('not_a_file');
+  if (bytes.byteLength > TAX_FORM_MAX_BYTES) throw new Error('too_large');
+  const sha256 = await sha256Hex(bytes);
+  const fileKey = `${TAX_FORM_PREFIX}${userId}/${crypto.randomUUID()}.${ext}`;
+  await env.FILES.put(fileKey, bytes, { httpMetadata: { contentType }, customMetadata: { user_id: String(userId), sha256 } });
+  return { file_key: fileKey, content_type: contentType, size: bytes.byteLength, sha256 };
+}
+
+export async function getTaxForm(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith(TAX_FORM_PREFIX)) return null; // hard guard: never serve outside taxforms/
+  return await env.FILES.get(fileKey);
+}

@@ -1,0 +1,113 @@
+**✅ Fresh scan completed (April 19, 2026)**
+
+The GitHub repo `https://github.com/AxalNetwork/StudioOS` remains a **static frontend marketing-site skeleton**. It has:
+- Component library (headers, nav, footers, etc.)
+- Basic Cloudflare Workers / D1 setup
+- No real dynamic **Settings page**, no notification preferences, no role-specific controls, and no email/deal settings logic.
+
+All the user profile, role, and notification logic lives in your Replit environment (the full platform we’ve built).
+
+---
+
+### Recommended Settings Page Structure
+
+**Page**: `/settings.html`
+
+**Tabs / Sections** (role-aware where needed):
+
+1. **Profile Information** (all users)
+   - Edit name, bio, avatar (R2 upload), LinkedIn, Twitter, website
+
+2. **Email & Notifications** (core request)
+   - Toggle switches for:
+     - New deal opportunities
+     - Voting requests / community votes
+     - Spin-out / Growth Sprint alerts
+     - Market Intelligence updates
+     - Referral & commission notifications
+     - Partner matching suggestions
+     - Admin / Studio Ops messages
+
+3. **Deal Preferences** (Partners/Investors & Founders)
+   - Select sectors, stages, geographies, check size range
+   - “Receive email deals” frequency (Daily / Weekly / None)
+
+4. **Security**
+   - Change email
+   - Change password
+   - TOTP / 2FA management
+   - Active sessions
+
+5. **Role-Specific** (dynamic based on user role)
+   - Founders: PMF signal sharing, startup visibility
+   - Partners/Investors: Investment thesis, co-investment preferences
+   - Operators: Availability, expertise tags
+   - Service Providers: Services & pricing
+
+---
+
+**Ready-to-copy prompt for Replit Agent**
+
+Paste this **exactly** into the Agent tab:
+
+```
+You are the senior product engineer for Axal StudioOS. Build a comprehensive, role-aware **Settings page** (/settings.html) that allows users to control their profile, email notifications, deal preferences, and account settings.
+
+Exact requirements:
+
+1. **Layout**
+   - Sidebar navigation with "Settings" active
+   - Main content with clear sections/tabs: Profile, Notifications, Deal Preferences, Security
+
+2. **Profile Section**
+   - Editable name, bio, avatar upload (use existing R2 helper)
+   - LinkedIn, Twitter, website fields
+
+3. **Notifications Section**
+   - Toggle switches for:
+     - New deal opportunities
+     - Voting requests & community votes
+     - Spin-out / Growth Sprint alerts
+     - Market Intelligence updates
+     - Referral & commission notifications
+     - Partner matching suggestions
+   - Email frequency selector for deals (Daily / Weekly / None)
+
+4. **Deal Preferences** (show for Partners/Investors & Founders)
+   - Sector selection (multi-select)
+   - Stage preference (Seed, Series A, Growth, etc.)
+   - Geographic interest
+   - Minimum check size / deal type
+
+5. **Security Section**
+   - Change email (with verification)
+   - Change password
+   - TOTP / 2FA toggle
+   - Active sessions list
+
+6. **Role-Specific Settings**
+   - Dynamically show extra fields based on user role (Founder, Partner, Operator, Service Provider)
+
+7. **Backend**
+   - Extend or create `backend/routers/settings.py`
+   - GET /api/settings → return current settings by role
+   - PATCH /api/settings → update any field (profile, notifications, preferences)
+
+Build this step-by-step:
+1. First create the backend router and API endpoints for settings.
+2. Then build the full /settings.html page with all sections and role-based visibility.
+3. Then connect the page to the existing sidebar navigation in dashboards.
+4. Finally test with different user roles (Founder, Partner, Admin).
+
+After each major step, show me the exact code changes (diff style) and ask for confirmation before continuing.
+
+Start now.
+```
+
+---
+
+This prompt will give you a clean, professional Settings page that users will actually use.
+
+Would you like me to also include **avatar upload to R2** and **email change with verification** in a follow-up prompt, or shall we start with this one first?
+
+Just say the word and I’ll adjust or give the next step.

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Companies directory</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#6d28d9;text-decoration:none}
+a:hover{color:#4c1d95;text-decoration:underline}
+:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.f-d{font-family:'Space Grotesk','Inter',system-ui,sans-serif}
+.f-m{font-family:'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+.eye{font-family:Inter,system-ui,sans-serif;font-size:11px;line-height:1.3;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6b6577}
+.h2{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:21px;line-height:1.25;font-weight:600;letter-spacing:-.015em;color:#18181b}
+.h3{margin:0;font-family:'Space Grotesk','Inter',system-ui,sans-serif;font-size:16px;line-height:1.3;font-weight:600;letter-spacing:-.01em;color:#18181b}
+.sub{margin:0;font-size:14px;line-height:1.55;color:#6b6577;max-width:760px}
+.cap{margin:0;font-size:12px;line-height:1.5;color:#6b6577}
+.cap .f-m{font-size:11.5px;color:#3f3a49}
+.card{background:#ffffff;border:1px solid #ececf1;border-radius:12px;box-sizing:border-box}
+.nr{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#f4f4f6;color:#52525b;border:1px solid #e4e4e8;font-size:11.5px;font-weight:600;line-height:1;white-space:nowrap}
+.ur{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:6px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;font-size:11.5px;font-weight:700;line-height:1;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;min-height:26px;padding:0 10px;border-radius:999px;background:#f4f3f7;color:#3f3a49;border:1px solid #e7e5ee;font-size:12px;font-weight:600;line-height:1;white-space:nowrap}
+.chip-v{background:#f4f0fe;color:#6d28d9;border-color:#ddd0fb}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:9px;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:600;line-height:1;cursor:pointer;white-space:nowrap;box-sizing:border-box}
+.btn-p{background:#7c3aed;color:#ffffff;border:1px solid #7c3aed}
+.btn-g{background:#ffffff;color:#18181b;border:1px solid #e2e1e8}
+a.btn:hover{text-decoration:none}
+.lnk{font-size:14px;font-weight:600;color:#6d28d9}
+.inp,.sel{box-sizing:border-box;width:100%;min-height:44px;border:1px solid #e2e1e8;border-radius:9px;background:#ffffff;font-family:Inter,system-ui,sans-serif;font-size:14px;font-weight:500;color:#18181b}
+.inp{padding:0 14px}
+.inp::placeholder{color:#6b6577}
+.sel{appearance:none;-webkit-appearance:none;padding:0 38px 0 12px;cursor:pointer}
+.lbl{display:block;margin:0 0 6px;padding:0;font-size:12.5px;font-weight:600;line-height:1.3;color:#3f3a49}
+.tog{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 14px;border:1px solid #e2e1e8;border-radius:999px;background:#ffffff;font-size:13px;font-weight:600;color:#3f3a49;cursor:pointer;box-sizing:border-box}
+.tog input{width:16px;height:16px;margin:0;accent-color:#7c3aed}
+.th{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#6b6577}
+.trow{border-bottom:1px solid #f1f0f4}
+.trow:hover{background:#faf8ff}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.r-narrow{display:none !important}
+@media (max-width:760px){
+.r-topnav{order:3;flex-basis:100% !important}
+.h1{font-size:28px !important}
+.r-narrow{display:block !important}
+.r-flt{display:none !important}
+.r-flt.is-open{display:grid !important}
+}
+</style>
+</helmet>
+<div style="background:#f4f3f7;color:#18181b;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased">
+
+<header style="background:#ffffff;border-bottom:1px solid #ececf1">
+<div style="max-width:1240px;margin:0 auto;padding:10px clamp(16px,4vw,32px);display:flex;flex-wrap:wrap;align-items:center;gap:6px 28px">
+<a href="Main.dc.html" data-route="/research" style="display:flex;align-items:center;gap:10px;min-height:44px;color:#18181b;text-decoration:none">
+<img src="/_blob/4d1a19f3daba48c312b4e17b9df70aea" alt="" width="24" height="24" style="display:block;width:24px;height:24px;object-fit:contain">
+<span class="f-d" style="font-size:17px;font-weight:700;letter-spacing:-0.01em">StudioOS</span>
+<span style="font-size:14px;font-weight:500;color:#6b6577">Research</span>
+</a>
+<nav aria-label="Research sections" class="r-topnav" style="display:flex;gap:4px;flex:1 1 auto;min-width:0;overflow-x:auto">
+<a href="Main.dc.html" data-route="/research" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Overview</a>
+<a href="Companies.dc.html" data-route="/research/companies" aria-current="page" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#6d28d9;background:#f4f0fe;box-shadow:inset 0 0 0 1px #ddd0fb">Companies</a>
+<a href="Markets.dc.html" data-route="/research/markets" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Markets</a>
+<a href="Geography.dc.html" data-route="/research/geographies" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Geographies</a>
+<a href="Funds.dc.html" data-route="/research/funds" style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;font-size:14px;font-weight:600;white-space:nowrap;text-decoration:none;color:#3f3a49">Funds</a>
+</nav>
+<a href="#" data-route="/login" class="btn btn-g" style="margin-left:auto">Sign in</a>
+</div>
+</header>
+
+<main style="max-width:1240px;margin:0 auto;padding:28px clamp(16px,4vw,32px) 64px;display:flex;flex-direction:column;gap:28px">
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<nav aria-label="Breadcrumb"><ol style="display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;font-size:13px;color:#6b6577"><li><a href="Main.dc.html" data-route="/research">Research</a></li><li aria-hidden="true">/</li><li aria-current="page" style="color:#18181b;font-weight:600">Companies</li></ol></nav>
+<h1 class="f-d h1" style="margin:0;font-size:34px;line-height:1.15;font-weight:600;letter-spacing:-0.025em">Companies</h1>
+<p class="sub" style="font-size:15px;color:#3f3a49">300 companies in 49 countries from Wikidata, as of 2026-09-30. Search by name or website, then narrow by sector, country and founding year.</p>
+</div>
+
+<section aria-labelledby="co-cov" class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 20px">
+<h2 id="co-cov" class="h3">What the directory records</h2>
+<p class="cap">Companies with each field filled, of 300 · <span class="f-m">research_company_directory</span> · as of 2026-09-30</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px 28px">
+<sc-for list="{{ coverage }}" as="c" hint-placeholder-count="8">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="color:#3f3a49">{{ c.k }}</span><span class="f-m" style="color:#18181b">{{ c.n }}<span style="color:#6b6577"> / 300</span></span></div>
+<div style="height:8px;border-radius:4px;background:#efedf4;overflow:hidden"><div style="height:100%;width:{{ c.w }};min-width:2px;background:#7c3aed;border-radius:4px"></div></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section aria-label="Search and filter companies" class="card" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px">
+<div style="flex:1 1 420px;min-width:0">
+<label for="co-q" class="lbl">Search</label>
+<div style="position:relative">
+<span aria-hidden="true" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg></span>
+<input id="co-q" class="inp" type="search" placeholder="Company name or website" style="padding-left:42px">
+</div>
+</div>
+<div style="flex:0 1 270px;min-width:200px">
+<label for="co-sort" class="lbl">Sort by</label>
+<div style="position:relative">
+<select id="co-sort" class="sel"><option>Name, A to Z</option><option>Founded, newest first</option><option>Founded, oldest first</option><option>Funding total, highest first</option></select>
+<span aria-hidden="true" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577;pointer-events:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+</div>
+</div>
+<div class="r-narrow" style="flex:1 1 100%">
+<button type="button" class="btn btn-g" onClick="{{ toggleFilters }}" aria-expanded="{{ fltExpanded }}" aria-controls="co-filters" style="width:100%;justify-content:space-between"><span style="display:inline-flex;align-items:center;gap:8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16"></path><path d="M7 12h10"></path><path d="M10 18h4"></path></svg>Filters</span><span style="font-size:13px;color:#6b6577;font-weight:500">{{ fltHint }}</span></button>
+</div>
+</div>
+<div id="co-filters" class="r-flt {{ fltClass }}" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px">
+<div style="flex:1 1 240px;min-width:0">
+<label for="co-sector" class="lbl">Sector label</label>
+<div style="position:relative">
+<select id="co-sector" class="sel"><option>All sector labels (154)</option><option>[Sector label]</option><option>No sector label (49)</option></select>
+<span aria-hidden="true" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577;pointer-events:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+</div>
+</div>
+<div style="flex:1 1 220px;min-width:0">
+<label for="co-country" class="lbl">Country</label>
+<div style="position:relative">
+<select id="co-country" class="sel"><option>All countries (49)</option><option>[Country]</option></select>
+<span aria-hidden="true" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577;pointer-events:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+</div>
+</div>
+<fieldset style="flex:1 1 280px;min-width:0;border:0;margin:0;padding:0">
+<legend class="lbl">Founded between</legend>
+<div style="display:flex;align-items:center;gap:8px">
+<label for="co-from" class="sr">Founded in or after</label>
+<input id="co-from" class="inp" type="text" placeholder="From year">
+<span aria-hidden="true" style="color:#6b6577">–</span>
+<label for="co-to" class="sr">Founded in or before</label>
+<input id="co-to" class="inp" type="text" placeholder="To year">
+</div>
+</fieldset>
+<fieldset style="flex:1 1 100%;min-width:0;border:0;margin:0;padding:0">
+<legend class="lbl">Only companies with</legend>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<label class="tog"><input type="checkbox">Funding total recorded<span class="f-m" style="font-weight:500;color:#6b6577">16</span></label>
+<label class="tog"><input type="checkbox">Revenue recorded<span class="f-m" style="font-weight:500;color:#6b6577">27</span></label>
+<label class="tog"><input type="checkbox">Headcount recorded<span class="f-m" style="font-weight:500;color:#6b6577">52</span></label>
+</div>
+</fieldset>
+</div>
+</section>
+
+<section aria-labelledby="co-results" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px">
+<h2 id="co-results" class="h3" style="font-size:15px"><span class="f-m">1–25</span> of <span class="f-m">300</span> companies</h2>
+<div style="display:flex;align-items:center;gap:10px">
+<label for="co-size" style="font-size:13px;font-weight:600;color:#3f3a49">Rows per page</label>
+<div style="position:relative;width:96px">
+<select id="co-size" class="sel f-m"><option>25</option><option>50</option><option>100</option></select>
+<span aria-hidden="true" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);display:flex;color:#6b6577;pointer-events:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+</div>
+</div>
+</div>
+<div class="card" style="overflow:hidden">
+<div style="overflow-x:auto">
+<div role="table" aria-labelledby="co-results" style="min-width:920px">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,1.5fr) minmax(0,1.1fr) 84px minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:end;padding:12px 18px;background:#fafafb;border-bottom:1px solid #ececf1">
+<span role="columnheader" class="th">Company</span>
+<span role="columnheader" class="th">Sector label</span>
+<span role="columnheader" class="th">Country</span>
+<span role="columnheader" class="th" style="text-align:right">Founded</span>
+<span role="columnheader"><span class="th">Last round</span><span style="display:block;margin-top:2px;font-size:11.5px;color:#6b6577">recorded for 18</span></span>
+<span role="columnheader" style="text-align:right"><span class="th">Employees</span><span style="display:block;margin-top:2px;font-size:11.5px;color:#6b6577">recorded for 52</span></span>
+</div>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="25">
+<div role="row" class="trow" style="display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,1.5fr) minmax(0,1.1fr) 84px minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:center;padding:10px 18px;min-height:60px;box-sizing:border-box">
+<span role="cell" style="display:flex;flex-direction:column;min-width:0"><a href="Company.dc.html" data-route="/research/companies/[company]" style="font-weight:600;color:#18181b">[Company name]</a><span style="font-size:12.5px;color:#6b6577">[website]</span></span>
+<span role="cell" style="min-width:0"><sc-if value="{{ r.sector }}" hint-placeholder-val="{{ true }}"><span style="color:#3f3a49">[Sector label]</span></sc-if><sc-if value="{{ r.noSector }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:#6b6577">Not recorded</span></sc-if></span>
+<span role="cell"><a href="Geography.dc.html" style="color:#3f3a49">[Country]</a></span>
+<span role="cell" class="f-m" style="text-align:right;color:#18181b">[year]</span>
+<span role="cell"><sc-if value="{{ r.round }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column"><span class="f-m" style="color:#18181b">[amount]</span><span style="font-size:12px;color:#6b6577">[round type] · [date]</span></span></sc-if><sc-if value="{{ r.noRound }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#6b6577">Not recorded</span></sc-if></span>
+<span role="cell" style="text-align:right"><sc-if value="{{ r.emp }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;align-items:flex-end"><span class="f-m" style="color:#18181b">[count]</span><span class="f-m" style="font-size:12px;color:#6b6577">[±%] growth</span></span></sc-if><sc-if value="{{ r.noEmp }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:#6b6577">Not recorded</span></sc-if></span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+<nav aria-label="Pages of companies" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-top:4px">
+<p class="cap" style="font-size:13px">Page <span class="f-m" style="color:#18181b">1</span> of <span class="f-m" style="color:#18181b">12</span></p>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<a href="#" class="btn btn-g" aria-disabled="true" style="opacity:.5;pointer-events:none">‹ Previous</a>
+<a href="#" class="btn f-m" aria-current="page" style="min-width:44px;padding:0 12px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb">1</a>
+<a href="#" class="btn btn-g f-m" style="min-width:44px;padding:0 12px">2</a>
+<a href="#" class="btn btn-g f-m" style="min-width:44px;padding:0 12px">3</a>
+<span aria-hidden="true" style="display:inline-flex;align-items:center;min-height:44px;padding:0 6px;color:#6b6577">…</span>
+<a href="#" class="btn btn-g f-m" style="min-width:44px;padding:0 12px">12</a>
+<a href="#" class="btn btn-g">Next ›</a>
+</div>
+</nav>
+</section>
+
+<section aria-labelledby="co-states" style="display:flex;flex-direction:column;gap:14px;padding:20px;border:1.5px dashed #d4d2dc;border-radius:14px;background:#fbfbfc">
+<div>
+<div class="eye">Other states of the results</div>
+<h2 id="co-states" class="h3" style="margin-top:4px">Loading, no results and Unreadable</h2>
+<p class="sub" style="margin-top:4px">Each one replaces the count line and the table. Search and filters stay usable in all three.</p>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px">
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+<div class="eye">Loading</div>
+<p style="margin:0;font-weight:600">Loading companies…</p>
+<div aria-hidden="true" style="display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ skeleton }}" as="k" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:2fr 1.2fr 1fr .6fr;gap:12px"><span style="display:block;height:12px;border-radius:4px;background:#efedf4"></span><span style="display:block;height:12px;border-radius:4px;background:#efedf4"></span><span style="display:block;height:12px;border-radius:4px;background:#efedf4"></span><span style="display:block;height:12px;border-radius:4px;background:#efedf4"></span></div>
+</sc-for>
+</div>
+<p class="cap">No count is shown until the read answers.</p>
+</div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+<div class="eye">No results</div>
+<p style="margin:0;font-weight:600">No company matches “[search text]” with these filters.</p>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<button type="button" class="chip chip-v" style="min-height:44px;padding:0 14px;gap:8px;cursor:pointer">Country: [Country]<span aria-hidden="true">×</span><span class="sr">Remove filter</span></button>
+<button type="button" class="chip chip-v" style="min-height:44px;padding:0 14px;gap:8px;cursor:pointer">Revenue recorded<span aria-hidden="true">×</span><span class="sr">Remove filter</span></button>
+</div>
+<p style="margin:0;font-size:13.5px;color:#3f3a49">Remove a filter, or search by website instead of name.</p>
+<button type="button" class="btn btn-g" style="align-self:flex-start">Clear all filters</button>
+</div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px;border-color:#fecaca;background:#fffafa">
+<div style="display:flex;align-items:center;gap:8px"><span class="ur">Unreadable</span><span class="eye">Read failed</span></div>
+<p style="margin:0;font-weight:600">The company directory did not answer.</p>
+<p style="margin:0;font-size:13.5px;color:#3f3a49">No rows and no count are shown, because a failed read is not zero companies.</p>
+<button type="button" class="btn btn-g" style="align-self:flex-start">Try again</button>
+</div>
+</div>
+</section>
+
+</main>
+
+<footer style="border-top:1px solid #e7e5ee;background:#ffffff">
+<div style="max-width:1240px;margin:0 auto;padding:24px clamp(16px,4vw,32px) 32px">
+<p class="cap" style="max-width:820px">Company records come from Wikidata (CC0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const st = this.state || {};
+    const open = !!st.filtersOpen;
+    // Coverage is real: production counts from 2026-10-04, of 300 companies.
+    const COVER = [
+      ['Name, website, country, founded', 300], ['Sector label', 251], ['Employees and growth', 52],
+      ['Revenue', 27], ['Last round', 18], ['Funding total', 16], ['Valuation', 12], ['Market share', 1]
+    ];
+    // Placeholder rows. The mix of Not recorded mirrors the real coverage (sector 84%, last round 6%, employees 17%).
+    const NO_SECTOR = [4, 11, 17, 22], ROUND = [3, 15], EMP = [3, 8, 15, 20];
+    const rows = Array.from({ length: 25 }, (_, i) => {
+      const n = i + 1;
+      return {
+        sector: !NO_SECTOR.includes(n), noSector: NO_SECTOR.includes(n),
+        round: ROUND.includes(n), noRound: !ROUND.includes(n),
+        emp: EMP.includes(n), noEmp: !EMP.includes(n)
+      };
+    });
+    return {
+      coverage: COVER.map(([k, n]) => ({ k, n: String(n), w: (n / 300 * 100).toFixed(1) + '%' })),
+      rows,
+      skeleton: [1, 2, 3, 4].map((k) => ({ k })),
+      fltClass: open ? 'is-open' : '',
+      fltExpanded: open ? 'true' : 'false',
+      fltHint: open ? 'Hide' : 'None active',
+      toggleFilters: () => this.setState({ filtersOpen: !open })
+    };
+  }
+}
+</script>
+</body>
+</html>

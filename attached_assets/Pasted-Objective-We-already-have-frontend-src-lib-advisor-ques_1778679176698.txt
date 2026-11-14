@@ -1,0 +1,50 @@
+Objective
+  We already have frontend/src/lib/advisor/questionBank.ts (~125
+  questions). Widen it so every user has ≥ 60 minutes of meaningful
+  conversation available, and every MI section has enough source
+  questions to produce a non-trivial signal.
+
+Targets
+  newFounder              ≥ 80 questions (currently ~50)
+  existingFounder         ≥ 120 questions (currently ~40)
+  investor                ≥ 60 questions (currently ~20)
+  opPartner* (4 sub-types) ≥ 50 each
+  mentor                  ≥ 30 (currently ~10)
+
+New questions must include:
+  1. At least one question per existing MI section per persona that's
+     tagged sentiment_eligible OR talc_eligible OR has a known
+     page_target that feeds an aggregator.
+  2. Follow-up branches: every "hard" answer (financial, claim,
+     attestation) has a follow-up asking for evidence or context.
+  3. Conditional questions based on previous answers (e.g. "you said
+     MRR is $5k — what's your average ACV?").
+  4. Sector-specific deep-dives: when a founder picks fintech, ask
+     about KYC vendor, regulatory regime, license needs. When AI infra,
+     ask about model providers, inference cost, latency targets. Etc.
+  5. Stage-specific deep-dives: pre-seed asks about LOIs; Series A
+     asks about cohort retention; Series B asks about expansion vs
+     new-logo split.
+
+Server mirror
+  Move QUESTION_BANK to a shared package
+  `packages/advisor-bank/` (or duplicate-and-test-equal) so both the
+  frontend and the Cloudflare Worker write-router consume the same
+  bank. CI test asserts identical content.
+
+  Add a typegen script that, from the question bank, generates the
+  union type of question_id strings used in:
+    - advisor_answers.question_id (validated at write time)
+    - writeRouter map (Prompt CD)
+    - market_intel extractor switch (Prompt CE)
+  Compile-time guarantee that every bank question has a write target
+  OR is explicitly marked `write_target: null` (chat-only).
+
+Acceptance
+  - Bank doubled in size for existing founders, 50% larger for other
+    personas.
+  - Every MI section has ≥ 3 source questions across personas.
+  - Type-gen check in CI fails if a question_id appears in code but
+    not in the bank, or vice versa.
+  - At least 30 follow-up branches added (questions with `followups`
+    arrays).

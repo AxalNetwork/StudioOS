@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#F7F7F5; font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  .tabular { font-variant-numeric: tabular-nums; font-family:'IBM Plex Mono','Inter',monospace; }
+  a { color:#5B4EE5; }
+  a:hover { color:#4638C7; }
+  ::-webkit-scrollbar { height:8px; width:8px; }
+  ::-webkit-scrollbar-thumb { background:#D8D6D1; border-radius:4px; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes slideIn { from{ transform:translateX(100%); } to { transform:translateX(0); } }
+  @keyframes overlayIn { from{ opacity:0; } to{ opacity:1; } }
+</style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+
+  <!-- Top nav -->
+  <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 40px; background:#FFFFFF; border-bottom:1px solid #EBEAE6;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div style="width:28px; height:28px; border-radius:7px; background:#151417; display:flex; align-items:center; justify-content:center;">
+        <div style="width:12px; height:12px; border-radius:3px; background:#5B4EE5;"></div>
+      </div>
+      <span style="font-weight:700; font-size:15px; color:#151417; letter-spacing:-0.01em;">Meridian</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:20px;">
+      <button style="position:relative; width:36px; height:36px; border-radius:10px; border:1px solid #EBEAE6; background:#FAFAF9; display:flex; align-items:center; justify-content:center; cursor:pointer;" style-hover="background:#F1F0EC;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5B5952" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <div style="position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%; background:#E0574C; border:1.5px solid #fff;"></div>
+      </button>
+      <div style="width:1px; height:22px; background:#EBEAE6;"></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:32px; height:32px; border-radius:50%; background:#EDE9FF; color:#5B4EE5; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center;">JC</div>
+        <div style="display:flex; flex-direction:column; line-height:1.2;">
+          <span style="font-size:12.5px; font-weight:600; color:#151417;">Jordan Cho</span>
+          <span style="font-size:11px; color:#8B8A85;">LP · Investor</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1; padding:36px 40px 56px; max-width:1440px; margin:0 auto; width:100%;">
+
+    <!-- Header -->
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px;">
+      <div>
+        <h1 style="margin:0; font-size:28px; font-weight:800; color:#151417; letter-spacing:-0.02em;">Deal Flow Pipeline</h1>
+        <p style="margin:6px 0 0; font-size:14.5px; color:#8B8A85;">Track deals from application to funding</p>
+      </div>
+      <sc-if value="{{ canSubmit }}">
+        <button onClick="{{ openSubmitModal }}" style="display:flex; align-items:center; gap:7px; padding:11px 18px; border-radius:10px; background:#151417; color:#fff; border:none; font-size:14px; font-weight:600; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.05);" style-hover="background:#2B2A2E;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          Submit Deal
+        </button>
+      </sc-if>
+    </div>
+
+    <!-- Funnel Overview -->
+    <div style="display:grid; grid-template-columns:1fr auto 1fr auto 1fr auto 1fr; align-items:center; gap:0; margin-bottom:32px;">
+      <sc-for list="{{ funnelStages }}" as="stage" hint-placeholder-count="4">
+        <div style="display:contents;">
+          <div style="background:{{ stage.bg }}; border-radius:16px; padding:22px 24px; display:flex; flex-direction:column; gap:14px; min-height:150px; animation:fadeIn 0.4s ease both;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:12.5px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; color:{{ stage.fg }}; opacity:0.75;">{{ stage.name }}</span>
+              <div style="display:flex; align-items:center; gap:3px; background:rgba(255,255,255,0.55); border-radius:20px; padding:3px 8px 3px 6px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="{{ stage.trendColor }}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="{{ stage.trendStyle }}"><path d="M7 17L17 7M17 7H9M17 7V15"/></svg>
+                <span class="tabular" style="font-size:11px; font-weight:700; color:{{ stage.trendColor }};">{{ stage.trend }}</span>
+              </div>
+            </div>
+            <div>
+              <div class="tabular" style="font-size:34px; font-weight:800; color:{{ stage.fg }}; letter-spacing:-0.02em; line-height:1;">{{ stage.count }}</div>
+              <div class="tabular" style="font-size:13.5px; font-weight:600; color:{{ stage.fg }}; opacity:0.7; margin-top:6px;">{{ stage.metric }}</div>
+            </div>
+          </div>
+          <sc-if value="{{ stage.showArrow }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; align-items:center; justify-content:center; width:36px;">
+              <svg width="20" height="14" viewBox="0 0 20 14" fill="none"><path d="M1 7H18M18 7L12 1M18 7L12 13" stroke="#C9C7C0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- Toolbar: tabs + search/filter -->
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:6px; background:#F0EFEB; padding:5px; border-radius:12px; flex-wrap:wrap;">
+        <sc-for list="{{ tabs }}" as="tab" hint-placeholder-count="6">
+          <button onClick="{{ tab.onClick }}" style="{{ tab.style }}">
+            {{ tab.label }}
+            <span style="{{ tab.badgeStyle }}" class="tabular">{{ tab.count }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="position:relative; display:flex; align-items:center;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8B8A85" stroke-width="2" stroke-linecap="round" style="position:absolute; left:12px;"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input value="{{ searchQuery }}" onChange="{{ onSearchChange }}" placeholder="Search companies..." style="width:220px; padding:9px 14px 9px 34px; border-radius:10px; border:1px solid #EBEAE6; background:#fff; font-size:13.5px; color:#151417; outline:none;" />
+        </div>
+        <button onClick="{{ toggleFilterMenu }}" style="position:relative; display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:10px; border:1px solid #EBEAE6; background:#fff; font-size:13.5px; font-weight:600; color:#5B5952; cursor:pointer;" style-hover="background:#FAFAF9;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B5952" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          Filter
+          <sc-if value="{{ activeFilterCount }}" hint-placeholder-val="{{ false }}">
+            <span class="tabular" style="background:#5B4EE5; color:#fff; border-radius:20px; font-size:10.5px; font-weight:700; padding:1px 6px;">{{ activeFilterCount }}</span>
+          </sc-if>
+        </button>
+        <button onClick="{{ exportData }}" style="display:flex; align-items:center; gap:6px; padding:9px 14px; border-radius:10px; border:1px solid #EBEAE6; background:#fff; font-size:13.5px; font-weight:600; color:#5B5952; cursor:pointer;" style-hover="background:#FAFAF9;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B5952" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M12 15l-4-4M12 15l4-4M4 21h16"/></svg>
+          Export
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter panel -->
+    <sc-if value="{{ filterMenuOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; gap:24px; align-items:flex-end; background:#fff; border:1px solid #EBEAE6; border-radius:12px; padding:16px 20px; margin-bottom:16px; animation:fadeIn 0.2s ease both;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11.5px; font-weight:700; color:#8B8A85; text-transform:uppercase; letter-spacing:0.03em;">Lead Partner</label>
+          <select value="{{ partnerFilter }}" onChange="{{ onPartnerFilterChange }}" style="padding:8px 10px; border-radius:8px; border:1px solid #EBEAE6; font-size:13.5px; color:#151417; background:#fff; min-width:160px;">
+            <option value="">All partners</option>
+            <sc-for list="{{ partnerOptions }}" as="p" hint-placeholder-count="5">
+              <option value="{{ p }}">{{ p }}</option>
+            </sc-for>
+          </select>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11.5px; font-weight:700; color:#8B8A85; text-transform:uppercase; letter-spacing:0.03em;">Raise Size</label>
+          <select value="{{ raiseFilter }}" onChange="{{ onRaiseFilterChange }}" style="padding:8px 10px; border-radius:8px; border:1px solid #EBEAE6; font-size:13.5px; color:#151417; background:#fff; min-width:160px;">
+            <option value="">Any size</option>
+            <option value="small">Under $2M</option>
+            <option value="mid">$2M – $5M</option>
+            <option value="large">Over $5M</option>
+          </select>
+        </div>
+        <button onClick="{{ clearFilters }}" style="padding:8px 14px; border-radius:8px; border:none; background:transparent; color:#5B4EE5; font-size:13px; font-weight:600; cursor:pointer;">Clear filters</button>
+      </div>
+    </sc-if>
+
+    <!-- Table -->
+    <div style="background:#fff; border:1px solid #EBEAE6; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(20,20,20,0.04);">
+      <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}">
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; min-width:920px;">
+          <thead>
+            <tr style="background:#FAFAF9; border-bottom:1px solid #EBEAE6;">
+              <sc-for list="{{ columns }}" as="col" hint-placeholder-count="7">
+                <th onClick="{{ col.onSort }}" style="{{ col.thStyle }}">
+                  <div style="display:flex; align-items:center; gap:5px; justify-content:{{ col.justify }};">
+                    {{ col.label }}
+                    <sc-if value="{{ col.sortable }}" hint-placeholder-val="{{ false }}">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style="{{ col.sortIconStyle }}"><path d="M12 5v14M12 5l-5 5M12 5l5 5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </sc-if>
+                  </div>
+                </th>
+              </sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ visibleDeals }}" as="deal" hint-placeholder-count="6">
+              <tr onClick="{{ deal.onOpen }}" style="border-bottom:1px solid #F1F0EC; cursor:pointer; transition:background 0.12s;" style-hover="background:#FAFAF9;">
+                <td style="padding:15px 20px;">
+                  <div style="display:flex; align-items:center; gap:11px;">
+                    <div style="width:34px; height:34px; border-radius:9px; background:{{ deal.logoBg }}; color:{{ deal.logoFg }}; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ deal.initials }}</div>
+                    <div style="display:flex; flex-direction:column;">
+                      <span style="font-size:14px; font-weight:600; color:#151417;">{{ deal.company }}</span>
+                      <span style="font-size:12px; color:#8B8A85;">{{ deal.sector }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td style="padding:15px 20px;">
+                  <span style="display:inline-flex; align-items:center; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700; background:{{ deal.stageBg }}; color:{{ deal.stageFg }};">{{ deal.stage }}</span>
+                </td>
+                <td class="tabular" style="padding:15px 20px; font-size:13.5px; font-weight:600; color:#151417; text-align:right;">{{ deal.targetRaise }}</td>
+                <td style="padding:15px 20px; min-width:150px;">
+                  <div style="display:flex; flex-direction:column; gap:5px;">
+                    <div style="display:flex; align-items:baseline; justify-content:space-between;">
+                      <span class="tabular" style="font-size:12.5px; font-weight:600; color:#151417;">{{ deal.committedAmount }}</span>
+                      <span class="tabular" style="font-size:11px; font-weight:600; color:#8B8A85;">{{ deal.committedPct }}%</span>
+                    </div>
+                    <div style="height:6px; background:#F0EFEB; border-radius:4px; overflow:hidden;">
+                      <div style="height:100%; border-radius:4px; background:{{ deal.progressColor }}; width:{{ deal.progressWidth }};"></div>
+                    </div>
+                  </div>
+                </td>
+                <td style="padding:15px 20px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <div style="width:22px; height:22px; border-radius:50%; background:#EDE9FF; color:#5B4EE5; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ deal.partnerInitials }}</div>
+                    <span style="font-size:13.5px; color:#3D3C39;">{{ deal.partner }}</span>
+                  </div>
+                </td>
+                <td class="tabular" style="padding:15px 20px; font-size:13.5px; color:#3D3C39; text-align:right;">{{ deal.daysInStage }}</td>
+                <td style="padding:15px 20px; text-align:center;">
+                  <button onClick="{{ deal.onOpen }}" style="width:32px; height:32px; border-radius:8px; border:none; background:transparent; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; color:#8B8A85;" style-hover="background:#F0EFEB; color:#151417;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        </div>
+      </sc-if>
+      <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}">
+      </sc-if>
+      <!-- Empty state -->
+      <sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 24px; gap:18px; text-align:center;">
+          <div style="width:64px; height:64px; border-radius:18px; background:#F0EFEB; display:flex; align-items:center; justify-content:center;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#B3B1AA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+          </div>
+          <div>
+            <div style="font-size:16px; font-weight:700; color:#151417; margin-bottom:6px;">{{ emptyTitle }}</div>
+            <div style="font-size:13.5px; color:#8B8A85; max-width:320px;">{{ emptyMessage }}</div>
+          </div>
+          <sc-if value="{{ canSubmit }}">
+            <button onClick="{{ openSubmitModal }}" style="display:flex; align-items:center; gap:7px; padding:10px 18px; border-radius:10px; background:#151417; color:#fff; border:none; font-size:13.5px; font-weight:600; cursor:pointer; margin-top:4px;" style-hover="background:#2B2A2E;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Submit your first deal
+            </button>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="margin-top:14px; font-size:12.5px; color:#B3B1AA; text-align:center;">Showing {{ visibleCount }} of {{ totalCount }} deals</div>
+  </div>
+</div>
+
+<!-- Deal detail drawer -->
+<sc-if value="{{ selectedDeal }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed; inset:0; background:rgba(21,20,23,0.35); z-index:40; animation:overlayIn 0.2s ease both;"></div>
+  <div style="position:fixed; top:0; right:0; height:100vh; width:420px; max-width:92vw; background:#fff; z-index:41; box-shadow:-8px 0 32px rgba(0,0,0,0.12); display:flex; flex-direction:column; animation:slideIn 0.25s cubic-bezier(0.16,1,0.3,1) both;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid #EBEAE6;">
+      <span style="font-size:15px; font-weight:700; color:#151417;">Deal Details</span>
+      <button onClick="{{ closeDrawer }}" style="width:30px; height:30px; border-radius:8px; border:none; background:#F0EFEB; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#5B5952;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:24px;">
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:20px;">
+        <div style="width:48px; height:48px; border-radius:12px; background:{{ selectedDeal.logoBg }}; color:{{ selectedDeal.logoFg }}; font-weight:700; font-size:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ selectedDeal.initials }}</div>
+        <div>
+          <div style="font-size:18px; font-weight:800; color:#151417;">{{ selectedDeal.company }}</div>
+          <div style="font-size:13px; color:#8B8A85;">{{ selectedDeal.sector }}</div>
+        </div>
+      </div>
+      <div style="display:inline-flex; align-items:center; padding:5px 12px; border-radius:20px; font-size:12.5px; font-weight:700; background:{{ selectedDeal.stageBg }}; color:{{ selectedDeal.stageFg }}; margin-bottom:22px;">{{ selectedDeal.stage }}</div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:22px;">
+        <div style="background:#FAFAF9; border-radius:12px; padding:14px 16px;">
+          <div style="font-size:11px; font-weight:700; color:#8B8A85; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px;">Target Raise</div>
+          <div class="tabular" style="font-size:17px; font-weight:800; color:#151417;">{{ selectedDeal.targetRaise }}</div>
+        </div>
+        <div style="background:#FAFAF9; border-radius:12px; padding:14px 16px;">
+          <div style="font-size:11px; font-weight:700; color:#8B8A85; text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px;">Days in Stage</div>
+          <div class="tabular" style="font-size:17px; font-weight:800; color:#151417;">{{ selectedDeal.daysInStage }}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:22px;">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
+          <span style="font-size:13px; font-weight:600; color:#151417;">Capital Committed</span>
+          <span class="tabular" style="font-size:13px; font-weight:700; color:#151417;">{{ selectedDeal.committedAmount }} · {{ selectedDeal.committedPct }}%</span>
+        </div>
+        <div style="height:8px; background:#F0EFEB; border-radius:4px; overflow:hidden;">
+          <div style="height:100%; border-radius:4px; background:{{ selectedDeal.progressColor }}; width:{{ selectedDeal.progressWidth }};"></div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #F1F0EC; padding-top:18px; display:flex; flex-direction:column; gap:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-size:13px; color:#8B8A85;">Lead Partner</span>
+          <div style="display:flex; align-items:center; gap:7px;">
+            <div style="width:22px; height:22px; border-radius:50%; background:#EDE9FF; color:#5B4EE5; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ selectedDeal.partnerInitials }}</div>
+            <span style="font-size:13.5px; font-weight:600; color:#151417;">{{ selectedDeal.partner }}</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-size:13px; color:#8B8A85;">Sourced</span>
+          <span style="font-size:13.5px; font-weight:600; color:#151417;">{{ selectedDeal.sourcedDate }}</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-size:13px; color:#8B8A85;">Vehicle Type</span>
+          <span style="font-size:13.5px; font-weight:600; color:#151417;">SPV</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:20px 24px; border-top:1px solid #EBEAE6;">
+      <a href="{{ dealRoomHref }}" target="_blank" style="display:block; text-align:center; width:100%; padding:12px; border-radius:10px; background:#151417; color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; box-sizing:border-box;" style-hover="background:#2B2A2E;">View Full Deal Room</a>
+    </div>
+  </div>
+</sc-if>
+
+<!-- Submit Deal Modal -->
+<sc-if value="{{ submitModalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeSubmitModal }}" style="position:fixed; inset:0; background:rgba(21,20,23,0.4); z-index:50; display:flex; align-items:center; justify-content:center; animation:overlayIn 0.2s ease both;">
+    <div onClick="{{ stopClickPropagation }}" style="background:#fff; border-radius:18px; width:460px; max-width:92vw; box-shadow:0 24px 64px rgba(0,0,0,0.2); animation:fadeIn 0.2s ease both;">
+      <div style="padding:22px 26px; border-bottom:1px solid #EBEAE6; display:flex; align-items:center; justify-content:space-between;">
+        <span style="font-size:16px; font-weight:800; color:#151417;">Submit a Deal</span>
+        <button onClick="{{ closeSubmitModal }}" style="width:30px; height:30px; border-radius:8px; border:none; background:#F0EFEB; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#5B5952;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="padding:24px 26px; display:flex; flex-direction:column; gap:16px;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12.5px; font-weight:700; color:#5B5952;">Company Name</label>
+          <input placeholder="e.g. Nimbus Robotics" style="padding:10px 12px; border-radius:9px; border:1px solid #EBEAE6; font-size:14px; outline:none;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12.5px; font-weight:700; color:#5B5952;">Target Raise</label>
+          <input placeholder="$2,000,000" style="padding:10px 12px; border-radius:9px; border:1px solid #EBEAE6; font-size:14px; outline:none;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:12.5px; font-weight:700; color:#5B5952;">Notes</label>
+          <textarea placeholder="Brief context on the opportunity..." rows="3" style="padding:10px 12px; border-radius:9px; border:1px solid #EBEAE6; font-size:14px; outline:none; resize:none; font-family:inherit;"></textarea>
+        </div>
+      </div>
+      <div style="padding:18px 26px 24px; display:flex; gap:10px; justify-content:flex-end;">
+        <button onClick="{{ closeSubmitModal }}" style="padding:10px 18px; border-radius:10px; border:1px solid #EBEAE6; background:#fff; font-size:13.5px; font-weight:600; color:#5B5952; cursor:pointer;">Cancel</button>
+        <button onClick="{{ closeSubmitModal }}" style="padding:10px 18px; border-radius:10px; border:none; background:#151417; color:#fff; font-size:13.5px; font-weight:700; cursor:pointer;">Submit for Review</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000},&quot;canSubmit&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Access&quot;}}">
+const STAGE_STYLES = {
+  Applied: { bg:'#E3EEFC', fg:'#1D4ED8', chipBg:'#DCE9FB', chipFg:'#1D4ED8' },
+  Scored: { bg:'#FCF3D8', fg:'#92660A', chipBg:'#FBEEC4', chipFg:'#92660A' },
+  Active: { bg:'#DFF3E6', fg:'#0F7A44', chipBg:'#D3EFDD', chipFg:'#0F7A44' },
+  Funded: { bg:'#EDE6FB', fg:'#6B2FBE', chipBg:'#E6DBF9', chipFg:'#6B2FBE' },
+  Rejected: { bg:'#F5E6E5', fg:'#B3261E', chipBg:'#F6D9D7', chipFg:'#B3261E' },
+};
+
+const RAW_DEALS = [
+  { company:'Nimbus Robotics', sector:'Industrial Automation', stage:'Active', target:3200000, committed:2150000, partner:'A. Reyes', days:14, sourced:'Apr 2, 2026' },
+  { company:'Fernline Bio', sector:'Biotech', stage:'Scored', target:5000000, committed:0, partner:'M. Okafor', days:6, sourced:'Jun 18, 2026' },
+  { company:'Ledgerly', sector:'Fintech Infra', stage:'Funded', target:2000000, committed:2000000, partner:'A. Reyes', days:2, sourced:'Feb 9, 2026' },
+  { company:'Solace Health', sector:'Digital Health', stage:'Active', target:4500000, committed:3100000, partner:'K. Lin', days:21, sourced:'Mar 27, 2026' },
+  { company:'Vantage Space', sector:'Aerospace', stage:'Applied', target:8000000, committed:0, partner:'M. Okafor', days:1, sourced:'Jul 12, 2026' },
+  { company:'Grainhouse', sector:'AgTech', stage:'Rejected', target:1500000, committed:0, partner:'K. Lin', days:45, sourced:'Jan 30, 2026' },
+  { company:'Circuitry AI', sector:'Enterprise AI', stage:'Active', target:6000000, committed:4800000, partner:'A. Reyes', days:9, sourced:'May 15, 2026' },
+  { company:'Portside Logistics', sector:'Supply Chain', stage:'Scored', target:3000000, committed:0, partner:'K. Lin', days:11, sourced:'Jun 5, 2026' },
+  { company:'Heliotrope Energy', sector:'Clean Energy', stage:'Funded', target:7500000, committed:7500000, partner:'M. Okafor', days:3, sourced:'Feb 22, 2026' },
+  { company:'Cadence Legal', sector:'LegalTech', stage:'Applied', target:1800000, committed:0, partner:'A. Reyes', days:4, sourced:'Jul 8, 2026' },
+  { company:'Northstar Freight', sector:'Logistics', stage:'Active', target:5200000, committed:2600000, partner:'K. Lin', days:17, sourced:'Apr 20, 2026' },
+  { company:'Brightleaf Foods', sector:'Consumer', stage:'Scored', target:2500000, committed:0, partner:'M. Okafor', days:8, sourced:'Jun 25, 2026' },
+];
+
+function initialsOf(name) {
+  return name.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+}
+function fmtMoney(n) {
+  if (n >= 1000000) return '$' + (n/1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + 'M';
+  if (n >= 1000) return '$' + Math.round(n/1000) + 'K';
+  return '$' + n;
+}
+const LOGO_PALETTE = ['#FCE7DA|#B5651D','#DCEAFB|#1D4ED8','#E1F5EA|#0F7A44','#F3E6FB|#6B2FBE','#FDF0D6|#92660A','#E6ECFB|#3B4EC8'];
+
+class Component extends DCLogic {
+  state = {
+    activeTab: 'All',
+    searchQuery: '',
+    filterMenuOpen: false,
+    partnerFilter: '',
+    raiseFilter: '',
+    sortCol: null,
+    sortDir: 'asc',
+    selectedDealId: null,
+    submitModalOpen: false,
+    canSubmit: false, // LP read-only default view
+  };
+
+  getDeals() {
+    return RAW_DEALS.map((d, i) => {
+      const st = STAGE_STYLES[d.stage];
+      const pct = d.target > 0 ? Math.round((d.committed / d.target) * 100) : 0;
+      const palette = LOGO_PALETTE[i % LOGO_PALETTE.length].split('|');
+      return {
+        id: i,
+        company: d.company,
+        sector: d.sector,
+        initials: initialsOf(d.company),
+        logoBg: palette[0],
+        logoFg: palette[1],
+        stage: d.stage,
+        stageBg: st.chipBg,
+        stageFg: st.chipFg,
+        targetRaiseNum: d.target,
+        targetRaise: fmtMoney(d.target),
+        committedNum: d.committed,
+        committedAmount: fmtMoney(d.committed),
+        committedPct: pct,
+        progressWidth: pct + '%',
+        progressColor: pct >= 100 ? '#0F7A44' : '#5B4EE5',
+        partner: d.partner,
+        partnerInitials: initialsOf(d.partner.replace('.', '')),
+        daysInStage: d.days,
+        sourcedDate: d.sourced,
+      };
+    });
+  }
+
+  setTab = (tab) => this.setState({ activeTab: tab });
+  toggleFilterMenu = () => this.setState(s => ({ filterMenuOpen: !s.filterMenuOpen }));
+  clearFilters = () => this.setState({ partnerFilter: '', raiseFilter: '' });
+  onSearchChange = (e) => this.setState({ searchQuery: e.target.value });
+  onPartnerFilterChange = (e) => this.setState({ partnerFilter: e.target.value });
+  onRaiseFilterChange = (e) => this.setState({ raiseFilter: e.target.value });
+  openSubmitModal = () => this.setState({ submitModalOpen: true });
+  closeSubmitModal = () => this.setState({ submitModalOpen: false });
+  stopClickPropagation = (e) => e.stopPropagation();
+  openDrawer = (id) => this.setState({ selectedDealId: id });
+  closeDrawer = () => this.setState({ selectedDealId: null });
+  setSort = (col) => this.setState(s => ({
+    sortCol: col,
+    sortDir: s.sortCol === col && s.sortDir === 'asc' ? 'desc' : 'asc',
+  }));
+  exportData = () => {};
+
+  renderVals() {
+    const s = this.state;
+    let deals = this.getDeals();
+
+    const counts = {};
+    deals.forEach(d => { counts[d.stage] = (counts[d.stage] || 0) + 1; });
+    const totalAll = deals.length;
+
+    // Filter by tab
+    if (s.activeTab !== 'All') deals = deals.filter(d => d.stage === s.activeTab);
+    // Search
+    if (s.searchQuery.trim()) {
+      const q = s.searchQuery.trim().toLowerCase();
+      deals = deals.filter(d => d.company.toLowerCase().includes(q));
+    }
+    // Partner filter
+    if (s.partnerFilter) deals = deals.filter(d => d.partner === s.partnerFilter);
+    // Raise filter
+    if (s.raiseFilter === 'small') deals = deals.filter(d => d.targetRaiseNum < 2000000);
+    if (s.raiseFilter === 'mid') deals = deals.filter(d => d.targetRaiseNum >= 2000000 && d.targetRaiseNum <= 5000000);
+    if (s.raiseFilter === 'large') deals = deals.filter(d => d.targetRaiseNum > 5000000);
+
+    // Sort
+    if (s.sortCol) {
+      const dir = s.sortDir === 'asc' ? 1 : -1;
+      const key = {
+        company: d => d.company,
+        targetRaise: d => d.targetRaiseNum,
+        committed: d => d.committedPct,
+        partner: d => d.partner,
+        days: d => d.daysInStage,
+      }[s.sortCol];
+      if (key) deals = [...deals].sort((a, b) => {
+        const av = key(a), bv = key(b);
+        if (typeof av === 'string') return av.localeCompare(bv) * dir;
+        return (av - bv) * dir;
+      });
+    }
+
+    deals = deals.map(d => ({ ...d, onOpen: () => this.openDrawer(d.id) }));
+
+    const allDeals = this.getDeals();
+    const funnelDef = [
+      { key:'Applied', trend:'+3', trendUp:true, metricFn:(list)=> fmtMoney(list.reduce((a,d)=>a+d.targetRaiseNum,0)) + ' requested' },
+      { key:'Scored', trend:'+1', trendUp:true, metricFn:(list)=> fmtMoney(list.reduce((a,d)=>a+d.targetRaiseNum,0)) + ' requested' },
+      { key:'Active', trend:'+2', trendUp:true, metricFn:(list)=> fmtMoney(list.reduce((a,d)=>a+d.committedNum,0)) + ' committed' },
+      { key:'Funded', trend:'+2', trendUp:true, metricFn:(list)=> fmtMoney(list.reduce((a,d)=>a+d.committedNum,0)) + ' raised' },
+    ];
+    const funnelStages = funnelDef.map((f, i) => {
+      const list = allDeals.filter(d => d.stage === f.key);
+      const st = STAGE_STYLES[f.key];
+      return {
+        name: f.key,
+        bg: st.bg,
+        fg: st.fg,
+        count: list.length,
+        metric: list.length ? f.metricFn(list) : '—',
+        trend: f.trend,
+        trendColor: f.trendUp ? '#0F7A44' : '#B3261E',
+        trendStyle: f.trendUp ? '' : 'transform:scaleY(-1)',
+        showArrow: i < funnelDef.length - 1,
+      };
+    });
+
+    const tabDefs = ['All', 'Applied', 'Scored', 'Active', 'Funded', 'Rejected'];
+    const tabs = tabDefs.map(t => {
+      const active = s.activeTab === t;
+      const count = t === 'All' ? totalAll : (counts[t] || 0);
+      return {
+        label: t,
+        count,
+        onClick: () => this.setTab(t),
+        style: `display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:9px; border:none; font-size:13.5px; font-weight:600; cursor:pointer; background:${active ? '#5B4EE5' : 'transparent'}; color:${active ? '#fff' : '#5B5952'};`,
+        badgeStyle: `font-size:11px; font-weight:700; padding:1px 7px; border-radius:20px; background:${active ? 'rgba(255,255,255,0.25)' : '#E4E2DD'}; color:${active ? '#fff' : '#8B8A85'};`,
+      };
+    });
+
+    const columns = [
+      { key:'company', label:'Company Name', sortable:true, justify:'flex-start' },
+      { key:'stage', label:'Stage', sortable:false, justify:'flex-start' },
+      { key:'targetRaise', label:'Target Raise', sortable:true, justify:'flex-end' },
+      { key:'committed', label:'Capital Committed', sortable:true, justify:'flex-start' },
+      { key:'partner', label:'Lead Partner', sortable:true, justify:'flex-start' },
+      { key:'days', label:'Days in Stage', sortable:true, justify:'flex-end' },
+      { key:'action', label:'', sortable:false, justify:'center' },
+    ].map(c => ({
+      ...c,
+      onSort: c.sortable ? () => this.setSort(c.key) : undefined,
+      thStyle: `padding:12px 20px; font-size:11.5px; font-weight:700; color:#8B8A85; text-transform:uppercase; letter-spacing:0.03em; text-align:${c.justify === 'flex-end' ? 'right' : c.justify === 'center' ? 'center' : 'left'}; cursor:${c.sortable ? 'pointer' : 'default'}; user-select:none;`,
+      sortIconStyle: `color:${s.sortCol === c.key ? '#151417' : '#C9C7C0'}; transform:${s.sortCol === c.key && s.sortDir === 'desc' ? 'scaleY(-1)' : 'none'};`,
+    }));
+
+    const selectedDeal = s.selectedDealId != null ? allDeals.find(d => d.id === s.selectedDealId) : null;
+
+    const activeFilterCount = (s.partnerFilter ? 1 : 0) + (s.raiseFilter ? 1 : 0);
+
+    return {
+      canSubmit: s.canSubmit,
+      openSubmitModal: this.openSubmitModal,
+      closeSubmitModal: this.closeSubmitModal,
+      submitModalOpen: s.submitModalOpen,
+      stopClickPropagation: this.stopClickPropagation,
+      funnelStages,
+      tabs,
+      searchQuery: s.searchQuery,
+      onSearchChange: this.onSearchChange,
+      toggleFilterMenu: this.toggleFilterMenu,
+      filterMenuOpen: s.filterMenuOpen,
+      activeFilterCount,
+      partnerFilter: s.partnerFilter,
+      onPartnerFilterChange: this.onPartnerFilterChange,
+      raiseFilter: s.raiseFilter,
+      onRaiseFilterChange: this.onRaiseFilterChange,
+      partnerOptions: ['A. Reyes', 'M. Okafor', 'K. Lin'],
+      clearFilters: this.clearFilters,
+      exportData: this.exportData,
+      columns,
+      hasRows: deals.length > 0,
+      showEmpty: deals.length === 0,
+      emptyTitle: s.searchQuery || s.activeTab !== 'All' || activeFilterCount ? 'No matching deals' : 'No deals yet',
+      emptyMessage: s.searchQuery || s.activeTab !== 'All' || activeFilterCount ? 'Try adjusting your filters or search terms.' : 'Deals submitted for review will appear here once sourced.',
+      visibleDeals: deals,
+      visibleCount: deals.length,
+      totalCount: totalAll,
+      selectedDeal,
+      dealRoomHref: selectedDeal ? ('Deal Room.dc.html?deal=' + selectedDeal.id) : '#',
+      closeDrawer: this.closeDrawer,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

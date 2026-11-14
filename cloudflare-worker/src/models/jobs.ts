@@ -1,0 +1,213 @@
+/**
+ * Job queue model — D1-backed async work.
+ *
+ * Lifecycle: pending → processing → (completed | failed)
+ *   - failed jobs with attempts < max_retries are re-pickup-able
+ *   - failed jobs with attempts >= max_retries are dead-lettered
+ */
+import type { Env } from '../types';
+import { dlqDepth } from '../services/deadLetters';
+
+export type JobType =
+  | 'dataroom_extract'
+  | 'ai_scoring'
+  | 'spinout_processing'
+  | 'metrics_aggregation'
+  | 'capital_call'
+  | 'traction_review'
+  | 'liquidity_valuation'
+  | 'liquidity_matching'
+  | 'lpa_generation'
+  | 'capital_call_notice'
+  | 'returns_distribution'
+  | 'embed_entity'
+  | 'embed_delete'
+  // Epic 5: nightly re-verification of every non-sandbox score snapshot's
+  // HMAC. Mismatches surface in MonitoringPage and `error_logs`.
+  | 'score_hash_audit'
+  // Retired by D671: nothing enqueues it; a leftover job drains as a no-op.
+  | 'flagged_score_digest'
+  // Task #6 (AT-1) — MI extractor fan-out per advisor answer + nightly reducer.
+  | 'mi_extract'
+  | 'mi_reduce'
+  // Task #2 (IB) — unified transactional email pipeline. Payload is the
+  // rendered MIME-ready envelope produced by services/email/send.ts.
+  | 'email_send'
+  // Task #11 — incorporation packet start (Stripe Checkout paid flow).
+  | 'incorporation_packet_start'
+  // D684 — interview channels' slow work, dispatched by the payload's
+  // `provider` through services/channels/jobs.ts.
+  | 'channel_followup'
+  | 'meeting_import'
+  // D684 — a session's transcript structured by the Worker AI as soon as it
+  // arrives (services/sessionAutoStructure.ts); proposals still await review.
+  | 'interview_output' // D4412: one selected output after the call
+  | 'session_structure'
+  // D685 §5.9 — a stopped recording's upload → transcribe → summarise → place
+  // findings, as one resumable job (services/interviewProcessing.ts).
+  | 'interview_process'
+  // D794 — one member's auto-reload of AI tokens, queued when a settled run takes
+  // the top-up balance below their threshold (services/aiAutoReload.ts).
+  | 'ai_auto_reload'
+  // D1131 — bounded event-calendar cleanup and provider retry.
+  | 'event_calendar_cleanup'
+  // D1490 — one action on one event listing (services/eventSyndication/jobs.ts).
+  | 'event_syndication';
+
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface QueueJob {
+  id: number;
+  job_type: JobType;
+  payload: string | null;
+  status: JobStatus;
+  attempts: number;
+  max_retries: number;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  dead_at: string | null;
+}
+
+export const Jobs = {
+  async enqueue(env: Env, jobType: JobType, payload: any, opts?: { max_retries?: number }) {
+    const r = await env.DB.prepare(
+      `INSERT INTO queue_jobs (job_type, payload, status, attempts, max_retries)
+       VALUES (?, ?, 'pending', 0, ?) RETURNING *`
+    ).bind(jobType, JSON.stringify(payload ?? {}), opts?.max_retries ?? 3).first<QueueJob>();
+    return r;
+  },
+
+  /**
+   * Batch-enqueue many jobs of the same type in a single D1 round-trip.
+   * Used by high-volume producers (e.g. the hourly axal-search re-embed
+   * sweep) to avoid hundreds of sequential single-row INSERTs hammering
+   * D1 at the top of the hour. No-op on an empty list.
+   */
+  async enqueueMany(env: Env, jobType: JobType, payloads: any[], opts?: { max_retries?: number }) {
+    if (!payloads.length) return;
+    const maxRetries = opts?.max_retries ?? 3;
+    const stmts = payloads.map((p) =>
+      env.DB.prepare(
+        `INSERT INTO queue_jobs (job_type, payload, status, attempts, max_retries)
+         VALUES (?, ?, 'pending', 0, ?)`
+      ).bind(jobType, JSON.stringify(p ?? {}), maxRetries)
+    );
+    await env.DB.batch(stmts);
+  },
+
+  /** Atomically claim up to `n` pending jobs. Uses UPDATE...RETURNING (D1 supports it). */
+  async claimBatch(env: Env, n = 10): Promise<QueueJob[]> {
+    // SQLite/D1 lacks SKIP LOCKED, so we do a guarded UPDATE on rowids we just read.
+    const pending = await env.DB.prepare(
+      `SELECT id FROM queue_jobs WHERE status = 'pending' ORDER BY id ASC LIMIT ?`
+    ).bind(n).all<{ id: number }>();
+    const ids = (pending.results || []).map(r => r.id);
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const claimed = await env.DB.prepare(
+      `UPDATE queue_jobs
+       SET status = 'processing', attempts = attempts + 1,
+           started_at = datetime('now'), updated_at = datetime('now')
+       WHERE id IN (${placeholders}) AND status = 'pending'
+       RETURNING *`
+    ).bind(...ids).all<QueueJob>();
+    return claimed.results || [];
+  },
+
+  async markCompleted(env: Env, id: number) {
+    await env.DB.prepare(
+      `UPDATE queue_jobs SET status = 'completed',
+       completed_at = datetime('now'), updated_at = datetime('now')
+       WHERE id = ?`
+    ).bind(id).run();
+  },
+
+  async markFailed(env: Env, id: number, errMsg: string) {
+    // If attempts >= max_retries → dead-letter; else mark failed (will be retried by re-claim logic if you choose).
+    const job = await env.DB.prepare(`SELECT * FROM queue_jobs WHERE id = ?`).bind(id).first<QueueJob>();
+    if (!job) return;
+    const exhausted = job.attempts >= job.max_retries;
+    await env.DB.prepare(
+      `UPDATE queue_jobs SET status = ?, error = ?, dead_at = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(exhausted ? 'failed' : 'pending', errMsg.slice(0, 1000), exhausted ? new Date().toISOString() : null, id).run();
+    if (exhausted) {
+      await env.DB.prepare(
+        `INSERT INTO dead_letter_queue (original_job_id, job_type, payload, last_error, attempts)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(id, job.job_type, job.payload, errMsg.slice(0, 1000), job.attempts).run();
+    }
+  },
+
+  async stats(env: Env) {
+    const r = await env.DB.prepare(
+      `SELECT status, COUNT(*) as n FROM queue_jobs GROUP BY status`
+    ).all<{ status: JobStatus; n: number }>();
+    const byType = await env.DB.prepare(
+      `SELECT job_type, status, COUNT(*) as n FROM queue_jobs
+       WHERE created_at > datetime('now', '-1 day')
+       GROUP BY job_type, status`
+    ).all<{ job_type: string; status: string; n: number }>();
+    const recent = await env.DB.prepare(
+      `SELECT id, job_type, status, attempts, error, created_at, started_at, completed_at
+       FROM queue_jobs ORDER BY id DESC LIMIT 50`
+    ).all<QueueJob>();
+    const depth = await dlqDepth(env);
+    return {
+      by_status: r.results || [],
+      by_type: byType.results || [],
+      recent: recent.results || [],
+      dlq_count: depth.available ? depth.total : null,
+      dlq_reason: depth.available ? null : depth.reason,
+    };
+  },
+
+  async cleanup(env: Env) {
+    await env.DB.prepare(
+      `DELETE FROM queue_jobs WHERE status IN ('completed','failed') AND created_at < datetime('now','-7 days')`
+    ).run();
+    await env.DB.prepare(
+      `DELETE FROM dead_letter_queue WHERE moved_at < datetime('now','-30 days')`
+    ).run();
+    // D1508 (#3759): deck images nothing references leave R2 (discarded ones after 24 hours,
+    // proposals nobody kept after 14 days, 500 at most a day). Its own failure never stops the rest.
+    try {
+      const { sweepDeckImages } = await import('../services/decks/imageSweep');
+      await sweepDeckImages(env);
+    } catch {
+      console.error('[cron] deck image sweep unreadable');
+    }
+    // D1590 (#3837): a walkthrough take whose row left by a cascade (deck, venture or account) leaves R2.
+    try {
+      const { sweepOrphanRecordings } = await import('../services/decks/recordings');
+      await sweepOrphanRecordings(env);
+    } catch {
+      console.error('[cron] deck recording sweep unreadable');
+    }
+    // D1569 (#3816): an AI voice-over nobody accepted or discarded leaves R2 after seven days.
+    try {
+      const { sweepOrphanAudio, sweepPendingVoice } = await import('../services/decks/cardAudio');
+      await sweepPendingVoice(env);
+      // A clip no version or proposal names any more (its deck, venture or account went) leaves R2 too.
+      await sweepOrphanAudio(env);
+    } catch {
+      console.error('[cron] deck voice sweep unreadable');
+    }
+    // D4374 (#4374): a deck generation run whose driver died is stopped (timed out) and its hold settled at what it placed.
+    try {
+      const { sweepStuckBatches } = await import('../services/decks/batchSweep');
+      await sweepStuckBatches(env);
+    } catch {
+      console.error('[cron] deck batch sweep unreadable');
+    }
+    // D1512 (#3764): an area proposal nobody decided expires after 14 days, with the image proposals it holds.
+    try {
+      const { expireAreaProposals } = await import('../services/decks/areaExpiry');
+      await expireAreaProposals(env);
+    } catch {
+      console.error('[cron] deck area proposal expiry unreadable');
+    }
+  },
+};

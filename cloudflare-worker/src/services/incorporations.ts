@@ -1,0 +1,263 @@
+import type { Env } from '../types';
+import { enqueueJob } from './queue';
+import { bindingKey } from '../util/schemaBootstrap';
+import { syncIncorporationMilestoneForOrder } from './labIncorporationMilestone';
+
+const MIGRATED = new WeakMap<object, boolean>();
+
+export async function ensureIncorporationsSchema(env: Env): Promise<void> {
+  if (MIGRATED.get(bindingKey(env))) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS incorporations (
+      id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id                INTEGER NOT NULL,
+      project_id             INTEGER NOT NULL,
+      jurisdiction_id        TEXT NOT NULL,
+      company_name           TEXT NOT NULL,
+      registered_agent_name  TEXT,
+      registered_agent_address TEXT,
+      amount_cents           INTEGER NOT NULL,
+      currency               TEXT NOT NULL DEFAULT 'usd',
+      stripe_session_id      TEXT UNIQUE,
+      stripe_payment_intent  TEXT,
+      status                 TEXT NOT NULL DEFAULT 'pending_payment',
+      created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      paid_at                TIMESTAMP
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_incorporations_user_status ON incorporations(user_id, status)`,
+    // Migration 411 (D601) — the packet and the filing, recorded by an admin.
+    // Declared there; these are the D235 safety net for a database the runner
+    // has not reached yet. "duplicate column" is swallowed below.
+    'ALTER TABLE incorporations ADD COLUMN packet_document_id INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN packet_ready_by INTEGER',
+    'ALTER TABLE incorporations ADD COLUMN filed_on TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_recorded_at TEXT',
+    'ALTER TABLE incorporations ADD COLUMN filed_by INTEGER',
+    // Migration 685 (D1415) — the company a filed incorporation created or filled.
+    'ALTER TABLE incorporations ADD COLUMN company_id INTEGER',
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); }
+    catch (e) {
+      const msg = (e as Error).message || '';
+      if (!/duplicate column|already exists/i.test(msg)) throw e;
+    }
+  }
+  MIGRATED.set(bindingKey(env), true);
+}
+
+export interface CreatePendingArgs {
+  user_id: number;
+  project_id: number;
+  jurisdiction_id: string;
+  company_name: string;
+  registered_agent_name?: string | null;
+  registered_agent_address?: string | null;
+  amount_cents: number;
+  currency: string;
+  stripe_session_id: string;
+}
+
+export async function createPendingIncorporation(env: Env, args: CreatePendingArgs): Promise<number> {
+  await ensureIncorporationsSchema(env);
+  const res = await env.DB.prepare(
+    `INSERT INTO incorporations (user_id, project_id, jurisdiction_id, company_name,
+      registered_agent_name, registered_agent_address, amount_cents, currency,
+      stripe_session_id, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
+  ).bind(
+    args.user_id, args.project_id, args.jurisdiction_id, args.company_name,
+    args.registered_agent_name ?? null,
+    args.registered_agent_address ?? null,
+    args.amount_cents, args.currency, args.stripe_session_id,
+  ).run();
+  // D1 auto-increment primary key
+  return Number(res.meta?.last_row_id ?? res.meta?.lastRowId ?? 0);
+}
+
+export async function recordPaidIncorporation(
+  env: Env,
+  obj: {
+    id: string;
+    metadata?: Record<string, string>;
+    payment_status?: string;
+    amount_total?: number;
+    currency?: string;
+    payment_intent?: string;
+  },
+): Promise<void> {
+  const meta = obj.metadata ?? {};
+  const incorporationId = Number(meta.incorporation_id ?? 0);
+  if (!incorporationId) return;
+  if (obj.payment_status !== 'paid') return;
+
+  await ensureIncorporationsSchema(env);
+  const amountCents = typeof obj.amount_total === 'number' ? Math.round(obj.amount_total) : 0;
+  const currency = obj.currency || 'usd';
+
+  const r = await env.DB.prepare(
+    `UPDATE incorporations
+     SET status = 'paid',
+         stripe_payment_intent = COALESCE(?, stripe_payment_intent),
+         amount_cents = COALESCE(?, amount_cents),
+         currency = COALESCE(?, currency),
+         paid_at = datetime('now'),
+         updated_at = datetime('now')
+     WHERE id = ? AND status = 'pending_payment'`,
+  ).bind(
+    obj.payment_intent ?? null, amountCents || null, currency || null, incorporationId,
+  ).run();
+
+  // Only enqueue if the row actually transitioned from pending_payment -> paid.
+  if ((r.meta?.changes ?? 0) > 0) {
+    await enqueueJob(env, 'incorporation_packet_start', {
+      incorporation_id: incorporationId,
+    }, {
+      idempotency_key: `incorp_packet:${incorporationId}`,
+    });
+    // D585: payment is the moment a Lab founder's formation milestone is
+    // recorded (the owner's answer A). Never throws; a replay records nothing.
+    await syncIncorporationMilestoneForOrder(env, incorporationId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task #6 — embedded-terminal incorporation orders.
+//
+// The same `incorporations` table is the order/filing row for the embedded
+// PaymentIntent flow (no Stripe Checkout redirect). We create a pending row
+// FIRST so we have an id to stamp onto the PaymentIntent metadata, then attach
+// the PI id once Stripe mints it. On `payment_intent.succeeded` the webhook
+// marks the row paid (idempotently) and enqueues the same packet pipeline the
+// legacy Checkout flow uses, so the filing workflow advances identically.
+//
+// `stripe_session_id` is left NULL for these embedded orders (SQLite/D1 allows
+// multiple NULLs under a UNIQUE column); idempotency rides on the PI id and the
+// `status = 'pending_payment'` guard in the paid recorder.
+// ---------------------------------------------------------------------------
+export interface CreateOrderArgs {
+  user_id: number;
+  project_id: number;
+  jurisdiction_id: string;
+  company_name: string;
+  registered_agent_name?: string | null;
+  registered_agent_address?: string | null;
+  amount_cents: number;
+  currency: string;
+}
+
+export async function createPendingIncorporationOrder(env: Env, args: CreateOrderArgs): Promise<number> {
+  await ensureIncorporationsSchema(env);
+  const res = await env.DB.prepare(
+    `INSERT INTO incorporations (user_id, project_id, jurisdiction_id, company_name,
+      registered_agent_name, registered_agent_address, amount_cents, currency, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_payment')`,
+  ).bind(
+    args.user_id, args.project_id, args.jurisdiction_id, args.company_name,
+    args.registered_agent_name ?? null,
+    args.registered_agent_address ?? null,
+    args.amount_cents, args.currency,
+  ).run();
+  return Number(res.meta?.last_row_id ?? res.meta?.lastRowId ?? 0);
+}
+
+/** Attach the Stripe PaymentIntent id to a pending order row. */
+export async function attachIncorporationPaymentIntent(
+  env: Env,
+  incorporationId: number,
+  paymentIntentId: string,
+): Promise<void> {
+  await ensureIncorporationsSchema(env);
+  await env.DB.prepare(
+    `UPDATE incorporations
+     SET stripe_payment_intent = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).bind(paymentIntentId, incorporationId).run();
+}
+
+/**
+ * Mark an incorporation order paid from a `payment_intent.succeeded` event and
+ * advance the filing workflow. The PI carries `metadata.incorporation_id` (set
+ * when the order endpoint stamped the invoice's PaymentIntent). Idempotent: the
+ * UPDATE only fires on the pending→paid transition, so a re-delivered webhook
+ * is a no-op and the packet job is enqueued exactly once.
+ */
+export async function recordPaidIncorporationFromPaymentIntent(
+  env: Env,
+  obj: {
+    id?: string;
+    metadata?: Record<string, string>;
+    amount?: number;
+    amount_received?: number;
+    currency?: string;
+  },
+): Promise<void> {
+  const meta = obj.metadata ?? {};
+  const incorporationId = Number(meta.incorporation_id ?? 0);
+  if (!incorporationId) return;
+
+  await ensureIncorporationsSchema(env);
+  const amountCents = typeof obj.amount_received === 'number'
+    ? Math.round(obj.amount_received)
+    : (typeof obj.amount === 'number' ? Math.round(obj.amount) : 0);
+  const currency = obj.currency || 'usd';
+
+  const r = await env.DB.prepare(
+    `UPDATE incorporations
+     SET status = 'paid',
+         stripe_payment_intent = COALESCE(?, stripe_payment_intent),
+         amount_cents = COALESCE(?, amount_cents),
+         currency = COALESCE(?, currency),
+         paid_at = datetime('now'),
+         updated_at = datetime('now')
+     WHERE id = ? AND status = 'pending_payment'`,
+  ).bind(
+    obj.id ?? null, amountCents || null, currency || null, incorporationId,
+  ).run();
+
+  if ((r.meta?.changes ?? 0) > 0) {
+    await enqueueJob(env, 'incorporation_packet_start', {
+      incorporation_id: incorporationId,
+    }, {
+      idempotency_key: `incorp_packet:${incorporationId}`,
+    });
+    await syncIncorporationMilestoneForOrder(env, incorporationId);
+  }
+}
+
+export async function startIncorporationPacket(env: Env, incorporationId: number): Promise<void> {
+  await ensureIncorporationsSchema(env);
+  await env.DB.prepare(
+    `UPDATE incorporations
+     SET status = 'packet_processing',
+         updated_at = datetime('now')
+     WHERE id = ? AND status = 'paid'`,
+  ).bind(incorporationId).run();
+  // The downstream packet-build pipeline (eSign PDF assembler) will run here in a future task.
+  // For now, the status advances to 'packet_processing' so the queue can advance.
+}
+
+export async function getIncorporationForUser(
+  env: Env,
+  id: number,
+  userId: number,
+): Promise<Record<string, unknown> | null> {
+  await ensureIncorporationsSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT * FROM incorporations WHERE id = ? AND user_id = ?`,
+  ).bind(id, userId).first<Record<string, unknown>>();
+  return row ?? null;
+}
+
+export async function getIncorporationBySessionId(
+  env: Env,
+  sessionId: string,
+): Promise<Record<string, unknown> | null> {
+  await ensureIncorporationsSchema(env);
+  const row = await env.DB.prepare(
+    `SELECT * FROM incorporations WHERE stripe_session_id = ?`,
+  ).bind(sessionId).first<Record<string, unknown>>();
+  return row ?? null;
+}

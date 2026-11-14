@@ -1,0 +1,53 @@
+name: Isolated Worker release rehearsal
+
+# D5501: run the same candidate preflight on a fresh hosted runner. All
+# application requests stay inside disposable workerd, with outbound I/O stubbed.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-rehearsal.yml'
+      - '.github/workflows/cloudflare-worker-deploy.yml'
+      - 'scripts/check-production-queues.mjs'
+      - 'scripts/check-worker-startup.mjs'
+      - 'scripts/prepare-production-worker.sh'
+      - 'scripts/verify-production-candidate.mjs'
+      - 'scripts/lib/productionAdmission.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    name: Isolated release rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix frontend && npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+      - name: Rehearse admitted and blocked release paths with synthetic inventory
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-rehearsal"
+          node --test scripts/lib/productionAdmission.test.mjs scripts/lib/productionQueues.test.mjs \
+            | tee "$RUNNER_TEMP/release-rehearsal/admission.tap"
+      - run: npm run build
+      - name: Check the prepared Worker in an isolated hosted runtime
+        run: bash scripts/prepare-production-worker.sh "$GITHUB_SHA" "$RUNNER_TEMP/release-rehearsal"
+      - name: Keep hosted rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: isolated-release-rehearsal-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/release-rehearsal/**
+            !${{ runner.temp }}/release-rehearsal/worker.bundle
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,57 @@
+You are working in the StudioOS monorepo (see CLAUDE.md). Brand kit
+upgrades + landing templates are merged.
+
+CONTEXT — Today only the Spin-Out template auto-themes from the brand kit
+(cloudflare-worker/src/services/decks/branding.ts; pitch deck templates
+are registered in frontend/src/decks/templates/index.ts:42). The other 12
+templates ignore brand colors / fonts / logo, so a founder who carefully
+sets up their brand still sees default Axal styling in every other deck.
+
+GOAL — Inject the brand kit (logo, theme_color, palette_bg, palette_ink,
+palette_secondary, palette_accent, font_pairing) into all deck templates,
+not just Spin-Out. Each template chooses how aggressively to theme:
+  - `theme: 'full'` — backgrounds + text + accents driven by brand kit.
+  - `theme: 'accent_only'` — neutral background, brand color only on
+    headings + CTAs.
+  - `theme: 'off'` — investor templates that intentionally stay neutral
+    (e.g. `sequoia_classic`, `series_a_growth`) — still inject logo
+    cover-slide-only.
+
+FILES TO EDIT:
+  - frontend/src/decks/templates/index.ts — extend each template's metadata
+    with `brandTheme: 'full' | 'accent_only' | 'off'`. Defaults:
+      • narrative_brand, one_pager_teaser, partnership_bd,
+        sales_commercial → 'full'
+      • yc_seed, kawasaki_10_20_30, minimal_seed, investor_appendix,
+        axal_spinout_demoday, demo_day → 'accent_only'
+      • sequoia_classic, series_a_growth, series_b_diligence → 'off'
+  - cloudflare-worker/src/services/decks/branding.ts — replace the
+    Spin-Out-specific branding with a generic `applyBrandKit(slides,
+    landingRow, brandTheme)` that runs for every template. The
+    Spin-Out-specific path stays as a special case if needed.
+  - Wherever decks are rendered (find via grep for the existing Spin-Out
+    branding call) — call `applyBrandKit` for every template, reading the
+    landing_pages row for the deck's project.
+  - frontend/src/decks/ — update slide templates that hard-code colors to
+    read from a `brand` prop / context. Where templates use inline style
+    objects, replace literals with `brand.palette_bg`, `brand.palette_ink`,
+    `brand.theme_color`, etc.
+
+ADDITIONALLY — Deck cover slide:
+  - Inject the brand logo into the cover slide of every deck regardless
+    of `brandTheme`. If no logo is set, fall back to the project name in
+    the font_pairing typeface.
+
+VALIDATION:
+  - `npm run test:drift` must pass.
+  - Generate a deck from each of the 13 templates against a project that
+    has a brand kit set; confirm visual theming matches the declared
+    brandTheme. Generate the same decks against a project with NO brand
+    kit; confirm graceful fallback (no NaN colors, no broken layouts).
+  - Existing deck export paywall (free-tier footer, growth+ removal) must
+    still work — verify per
+    cloudflare-worker/src/services/decks/branding.ts existing logic.
+
+COMMIT MESSAGE: "Pitch decks: inject brand kit across all 13 templates"
+
+Push to branch {branch} and open a draft PR.

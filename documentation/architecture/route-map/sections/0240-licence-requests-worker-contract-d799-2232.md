@@ -1,0 +1,12 @@
+### Licence requests Worker contract (D799, #2232)
+
+An Administrator requests and HQ decides (D795, D-d). The requests are escalations (migration 259): four new kinds, `renewal` (72 h), `terms_change` (120 h), `delegate` (72 h) and `non_renewal` (72 h), beside `moderation`, `content`, `seat_increase` and `other`. Each request kind's fields are `services/escalationRequests.ts`'s, one rule and one refusal sentence per kind, and they travel in `detail` as `{ v: 1, request, note }`, so no migration was needed. HQ's answer writes one `notifications_inbox` row for the raiser (`services/escalationAnswerNotice.ts`): `in_app` and `email`, category `compliance`, type `licence_request_answered`, link `/admin/my-licence/requests`. There is no UI yet: the page is D800's and HQ's answer screen D801's. The SPA's client is `lib/api/licenceRequests.js`.
+
+| Method and path | Who | Worker | What |
+| --- | --- | --- | --- |
+| `GET /api/licence/mine/requests` | an Administrator (`licence_admins`); anyone else `no_licence` 404 | `routes/licence_requests.ts` → `listLicenceRequests` | On HQ: the caller's own licence's requests (`branch_code = 'hq'`, `subject_ref` = the licence uid), each with `request`, `note` and `sla`, plus the kinds it offers and hides, each kind's response hours, the requestable terms and the seat types. On a branch: the branch lane's `GET /api/branch/escalations`. |
+| `POST /api/licence/mine/requests` | the same | `routes/licence_requests.ts` → `recordLicenceRequest` | On HQ: writes one row, open while the licence is suspended; refuses a hidden kind (D206), a request kind without its fields, an unknown field, a client notice date, and a 21st open request (409 `too_many_open`), each with its sentence and no row. On a branch: the branch lane's `POST /api/branch/escalations`. |
+| `POST /api/branch/escalations` | a branch admin | `routes/branch_escalations.ts` | Now also takes `request`: required for the four new kinds, checked when sent for `seat_increase`, refused on any other kind; stored in `detail` and sent to HQ, which checks it again (`recordEscalation`). |
+| `GET /api/admin/escalations` | Super Admin | `routes/admin_escalations.ts` | Each row also carries `request` and `note`. |
+| `PATCH /api/admin/escalations/:uid`, `POST …/:uid/resend` | Super Admin | `routes/admin_escalations.ts` | On an `hq` row the decision is the raiser's bell notice, reported as `notified`, not pushed. A branch's raiser is told by the branch when the decision lands (`applyEscalationAnswer`). |
+

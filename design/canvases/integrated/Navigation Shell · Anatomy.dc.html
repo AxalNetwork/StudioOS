@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}
+    .ab{padding:42px 46px 36px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 16px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',ui-monospace,monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#6b6577}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#6b6577}
+    .cap{font-size:12px;line-height:1.65;color:#6b6577;margin-top:14px;max-width:1080px}
+    .spec{background:#fff;border:1px solid #e8e6ee;border-radius:12px;padding:17px 19px}
+    /* app frame */
+    .app{width:1180px;min-width:1180px;box-sizing:border-box;flex:none;background:#fff;border:1px solid #dedbe8;border-radius:12px;box-shadow:0 3px 18px rgba(36,31,56,.09);overflow:hidden}
+    .hdr{height:58px;box-sizing:border-box;padding:0 20px;border-bottom:1px solid #e8e6ee;display:flex;align-items:center;justify-content:space-between;gap:18px;background:#fff}
+    .sb{width:236px;flex:none;box-sizing:border-box;border-right:1px solid #e8e6ee;background:#fff;display:flex;flex-direction:column}
+    .sbscroll{flex:1;min-height:0;overflow:hidden;padding:6px 0 10px}
+    .row{display:flex;align-items:center;gap:10px;height:34px;padding:0 16px;font-size:13px;font-weight:500;color:#332e45;box-sizing:border-box}
+    .grp{display:flex;align-items:center;gap:7px;padding:0 16px;height:30px;box-sizing:border-box}
+    .cset{border-top:1px solid #e8e6ee;padding:11px 0}
+    .icn{width:16px;height:16px;flex:none;display:block}
+    .canvas{flex:1;min-width:0;background:#faf9fc;padding:22px 24px}
+    .drop{position:absolute;left:12px;right:12px;top:46px;background:#fff;border:1px solid #dedbe8;border-radius:10px;box-shadow:0 8px 26px rgba(36,31,56,.16);padding:6px;z-index:5}
+  </style>
+</helmet>
+
+<!-- ══════════ N1 · SHELL ANATOMY ══════════ -->
+<section class="ab" id="n1">
+  <div class="ab-hd"><a class="ab-id" href="#n1">N1</a><span class="ab-nm">Shell anatomy — one chrome, six role fills</span><span class="ab-sub">1180px · header + 236pt sidebar</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-4px 0 18px">The chrome is identical for every persona: logo, company switcher, search, <strong>Studio</strong> as the home row, collapsible groups, and <strong>Company Settings</strong> pinned to the bottom rail. What differs is only which groups appear and which accent marks the active row — so a founder who also holds an investor licence does not learn two layouts.</div>
+
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <div class="app" style="width:640px;min-width:640px">
+      <div class="hdr">
+        <div style="display:flex;align-items:center;gap:10px">
+          <img src="3349f49c-8d96-4494-ac4d-2697ac47329b" alt="Axal VC" style="width:26px;height:26px;object-fit:contain;display:block">
+          <span style="font-size:15px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <sc-for list="{{ hdrIcons }}" as="i" hint-placeholder-count="2">
+            <span class="icn" style="color:#6b6577" dangerouslySetInnerHTML="{{ i }}"></span>
+          </sc-for>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;padding:7px 13px;border-radius:9px;border:1px solid #e8e6ee;background:#fff">
+            <span class="icn" style="width:14px;height:14px;color:#6d28d9" dangerouslySetInnerHTML="{{ giftIcon }}"></span>Refer &amp; Earn
+          </span>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#332e45">Guillaume L. <span style="color:#6b6577">⌄</span></span>
+        </div>
+      </div>
+      <div style="display:flex;height:372px">
+        <div class="sb" style="position:relative">
+          <div style="padding:12px">
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid #dedbe8;border-radius:9px;background:#fbfaff">
+              <span class="mono" style="font-size:9.5px;font-weight:700;color:#6d28d9;background:#f4f0fe;border-radius:5px;padding:3px 5px">NL</span>
+              <span style="font-size:13px;font-weight:600;flex:1">Novacraft Labs</span>
+              <span style="font-size:11px;color:#6b6577">⌄</span>
+            </div>
+          </div>
+          <div style="padding:0 12px 10px;display:flex;align-items:center;gap:8px">
+            <div style="flex:1;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e8e6ee;border-radius:8px">
+              <span class="icn" style="width:13px;height:13px;color:#6b6577" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+              <span style="font-size:12px;color:#6b6577">Search…</span>
+            </div>
+            <span style="font-size:12px;color:#6b6577">‹</span>
+          </div>
+          <div class="sbscroll">
+            <div class="row" style="color:#6d28d9;font-weight:700;background:#f7f4ff;box-shadow:inset 2px 0 0 #7c3aed">
+              <span class="icn" dangerouslySetInnerHTML="{{ studioIcon }}"></span>Studio
+            </div>
+            <div class="grp" style="margin-top:6px"><span style="font-size:10px;color:#6b6577">⌄</span><span class="lbl" style="font-size:9.5px">Group</span></div>
+            <div class="row"><span class="icn" style="color:#6b6577" dangerouslySetInnerHTML="{{ dotIcon }}"></span>Row</div>
+            <div class="row"><span class="icn" style="color:#6b6577" dangerouslySetInnerHTML="{{ dotIcon }}"></span>Row</div>
+            <div class="grp" style="margin-top:4px"><span style="font-size:10px;color:#6b6577">›</span><span class="lbl" style="font-size:9.5px">Collapsed group</span></div>
+          </div>
+          <div class="cset"><div class="row"><span class="icn" style="color:#6b6577" dangerouslySetInnerHTML="{{ bldgIcon }}"></span>Company Settings</div></div>
+        </div>
+        <div class="canvas" style="display:flex;align-items:center;justify-content:center">
+          <span class="lbl">Page canvas</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:300px;display:grid;gap:12px">
+      <div class="spec">
+        <div class="lbl">Fixed across all six</div>
+        <div style="display:grid;gap:10px;margin-top:11px">
+          <sc-for list="{{ fixed }}" as="f" hint-placeholder-count="5">
+            <div style="border-left:2px solid #7c3aed;padding-left:11px">
+              <div style="font-size:12.5px;font-weight:700">{{ f.k }}</div>
+              <div style="font-size:11.5px;color:#4a4459;margin-top:4px;line-height:1.55">{{ f.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="spec">
+        <div class="lbl">Accent per persona</div>
+        <div style="display:grid;gap:8px;margin-top:11px">
+          <sc-for list="{{ accents }}" as="a" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span style="width:12px;height:12px;border-radius:4px;background:{{ a.fill }};flex:none"></span>
+                <span style="font-size:12.5px;font-weight:600">{{ a.name }}</span>
+              </div>
+              <span class="mono" style="font-size:11px;color:#6b6577">{{ a.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:12px 0 0;font-size:11.5px;color:#6b6577;line-height:1.6">{{ accentNote }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ n1Cap }}</div>
+</section>
+
+<!-- ══════════ N2 · COMPANY SWITCHER ══════════ -->
+<section class="ab" id="n2">
+  <div class="ab-hd"><a class="ab-id" href="#n2">N2</a><span class="ab-nm">Company switcher — three states</span><span class="ab-sub">the one control that changes what every other row means</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-4px 0 18px">Everything below the switcher is scoped to whatever it names. That makes it the most consequential control in the shell and the reason it sits above search rather than in the account menu — a user who edits the wrong company has been failed by this dropdown.</div>
+  <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+    <sc-for list="{{ switcher }}" as="s" hint-placeholder-count="3">
+      <div>
+        <div style="width:260px;background:#fff;border:1px solid #dedbe8;border-radius:12px;box-shadow:0 3px 16px rgba(36,31,56,.08);padding:12px;position:relative;height:210px;box-sizing:border-box">
+          <div style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid {{ s.edge }};border-radius:9px;background:{{ s.bg }}">
+            <sc-if value="{{ s.badge }}"><span class="mono" style="font-size:9.5px;font-weight:700;color:#6d28d9;background:#f4f0fe;border-radius:5px;padding:3px 5px">{{ s.badge }}</span></sc-if>
+            <span style="font-size:13px;font-weight:600;flex:1;color:{{ s.nameInk }}">{{ s.name }}</span>
+            <span style="font-size:11px;color:#6b6577">{{ s.chev }}</span>
+          </div>
+          <sc-if value="{{ s.items }}">
+            <div class="drop">
+              <sc-if value="{{ s.empty }}"><div style="padding:9px 11px;font-size:12.5px;color:#6b6577">No company yet.</div></sc-if>
+              <sc-for list="{{ s.items }}" as="it" hint-placeholder-count="2">
+                <div style="{{ it.style }}">
+                  <sc-if value="{{ it.badge }}"><span class="mono" style="font-size:9px;font-weight:700;color:#6d28d9;background:#f4f0fe;border-radius:4px;padding:2px 5px">{{ it.badge }}</span></sc-if>
+                  <span style="flex:1">{{ it.label }}</span>
+                  <sc-if value="{{ it.check }}"><span style="color:#6d28d9;font-size:12px">✓</span></sc-if>
+                </div>
+              </sc-for>
+              <div style="height:1px;background:#f0eef5;margin:5px 6px"></div>
+              <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;font-size:12.5px;font-weight:600;color:#6d28d9">
+                <span style="font-size:13px">+</span>Add a new company
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        <div style="font-size:12px;font-weight:700;margin-top:11px">{{ s.title }}</div>
+        <div style="font-size:11.5px;color:#6b6577;margin-top:4px;line-height:1.6;max-width:260px">{{ s.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div class="cap">{{ n2Cap }}</div>
+</section>
+
+<!-- ══════════ N3–N5 · SIX SIDEBARS ══════════ -->
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="3">
+  <section class="ab" id="{{ b.id }}">
+    <div class="ab-hd"><a class="ab-id" href="{{ b.href }}">{{ b.tag }}</a><span class="ab-nm">{{ b.name }}</span><span class="ab-sub">{{ b.sub }}</span></div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+      <sc-for list="{{ b.personas }}" as="p" hint-placeholder-count="2">
+        <div>
+          <div style="width:252px;background:#fff;border:1px solid #dedbe8;border-radius:12px;box-shadow:0 3px 16px rgba(36,31,56,.08);overflow:hidden">
+            <div style="height:44px;box-sizing:border-box;padding:0 14px;border-bottom:1px solid #e8e6ee;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <img src="3349f49c-8d96-4494-ac4d-2697ac47329b" alt="Axal VC" style="width:20px;height:20px;object-fit:contain;display:block">
+                <span style="font-size:13px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+              </div>
+              <span style="{{ p.rolePill }}">{{ p.role }}</span>
+            </div>
+            <div style="padding:10px">
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #dedbe8;border-radius:8px;background:#fbfaff">
+                <span class="mono" style="font-size:9px;font-weight:700;color:#6d28d9;background:#f4f0fe;border-radius:4px;padding:2px 5px">{{ p.badge }}</span>
+                <span style="font-size:12.5px;font-weight:600;flex:1">{{ p.company }}</span>
+                <span style="font-size:10px;color:#6b6577">⌄</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:8px">
+                <div style="flex:1;display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid #e8e6ee;border-radius:7px">
+                  <span class="icn" style="width:12px;height:12px;color:#6b6577" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+                  <span style="font-size:11.5px;color:#6b6577">Search…</span>
+                </div>
+                <span style="font-size:11px;color:#6b6577">‹</span>
+              </div>
+            </div>
+            <div style="padding:2px 0 8px">
+              <div class="row" style="color:{{ p.ink }};font-weight:700;background:{{ p.tint }};box-shadow:inset 2px 0 0 {{ p.fill }}">
+                <span class="icn" dangerouslySetInnerHTML="{{ studioIcon }}"></span>Studio
+              </div>
+              <sc-for list="{{ p.groups }}" as="g" hint-placeholder-count="3">
+                <div>
+                  <div class="grp" style="margin-top:5px">
+                    <span style="font-size:10px;color:#6b6577">{{ g.chev }}</span>
+                    <span class="lbl" style="font-size:9.5px">{{ g.name }}</span>
+                    <sc-if value="{{ g.count }}"><span class="mono" style="font-size:10px;color:#6b6577;margin-left:auto">{{ g.count }}</span></sc-if>
+                  </div>
+                  <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                    <div class="row" style="{{ r.style }}">
+                      <span class="icn" style="color:{{ r.iconInk }}" dangerouslySetInnerHTML="{{ r.icon }}"></span>{{ r.label }}
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+            <div class="cset"><div class="row"><span class="icn" style="color:#6b6577" dangerouslySetInnerHTML="{{ bldgIcon }}"></span>Company Settings</div></div>
+          </div>
+          <div style="font-size:12.5px;font-weight:700;margin-top:11px">{{ p.title }}</div>
+          <div style="font-size:11.5px;color:#6b6577;margin-top:4px;line-height:1.6;max-width:252px">{{ p.note }}</div>
+        </div>
+      </sc-for>
+      <div class="spec" style="flex:1;min-width:270px">
+        <div class="lbl">{{ b.specLabel }}</div>
+        <p style="margin:10px 0 0;font-size:12px;color:#332e45;line-height:1.65">{{ b.spec }}</p>
+        <div style="display:grid;gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid #f0eef5">
+          <sc-for list="{{ b.facts }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:11.5px;color:#6b6577">{{ f.k }}</span>
+              <span class="mono" style="font-size:11.5px;font-weight:700;text-align:right">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="cap">{{ b.cap }}</div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      studio: this.ic('<rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/>'),
+      search: this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      bldg:   this.ic('<path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-6h6v6"/>'),
+      heart:  this.ic('<path d="M12 20s-7-4.4-7-9.4A4 4 0 0 1 12 8a4 4 0 0 1 7 2.6C19 15.6 12 20 12 20Z"/>'),
+      bell:   this.ic('<path d="M18 15V10a6 6 0 0 0-12 0v5l-1.5 2.5h15Z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
+      gift:   this.ic('<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 12h18M12 8v13"/><path d="M8.5 8a2.5 2.5 0 1 1 0-5C10 3 12 5 12 8c0-3 2-5 3.5-5a2.5 2.5 0 1 1 0 5"/>'),
+      dot:    this.ic('<circle cx="12" cy="12" r="3.2"/>'),
+      shield: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/>'),
+      check:  this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      lic:    this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'),
+      fund:   this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      doc:    this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      users:  this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      sup:    this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.5 1c0 1.9-2.7 2.4-2.7 4M12 17.5h.01"/>'),
+      spark:  this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8"/>'),
+      chart:  this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>'),
+      globe:  this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      net:    this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      cal:    this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      briefc: this.ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+      pipe:   this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      box:    this.ic('<path d="M3 8 12 3l9 5v8l-9 5-9-5Z"/><path d="M3 8l9 5 9-5"/>'),
+      bank:   this.ic('<path d="M3 10 12 4l9 6M5 10v10h14V10"/>'),
+      flask:  this.ic('<path d="M9 3h6v5l4 9a2 2 0 0 1-1.8 3H6.8A2 2 0 0 1 5 17l4-9Z"/>')
+    };
+
+    // ══ THE REAL TAXONOMY, transcribed from the supplied sidebar screenshots. Personas subset
+    // these six groups; no persona renames a group or invents a row. ══
+    const G = {
+      ADMIN: [['Admin Console', I.shield], ['Due Diligence', I.check], ['Assessment Studio', I.flask],
+              ['Best-Fit Console', I.spark], ['Event Admin', I.cal], ['Job Board Admin', I.briefc],
+              ['Communities Admin', I.net], ['Exploring Users', I.users], ['LP Applications', I.doc],
+              ['Monitoring', I.chart], ['Telegram Channels', I.spark], ['Content Queue', I.doc]],
+      STUDIO: [['Startups', I.spark], ['Pipeline Board', I.pipe], ['Scoring Engine', I.chart],
+               ['Risk Matrix', I.shield], ['Market Intelligence', I.globe], ['Signals', I.spark],
+               ['AI Advisory Suite', I.users], ['AI Matches', I.spark], ['Deal Flow', I.pipe]],
+      CAPLEG: [['Capital & Investment', I.bank], ['Liquidity & Exits', I.chart], ['Portfolio Health', I.heart],
+               ['Portfolio Coverage', I.net], ['Reserve Allocation', I.box], ['Exit Waterfall', I.chart],
+               ['Watchlist & Journal', I.doc], ['Legal & Capital', I.lic], ['Incorporate', I.lic],
+               ['Compliance Calendar', I.cal]],
+      NETGRO: [['Partners', I.users], ['Network', I.net], ['Network Effects', I.chart], ['Jobs', I.briefc],
+               ['Marketplace', I.briefc], ['Service Catalogue', I.box], ['Needs Board', I.doc],
+               ['Demand Insights', I.chart], ['Partner Office Hours', I.cal], ['Co-Marketing Review', I.spark]],
+      RESEARCH: [['Market', I.globe], ['Companies', I.globe], ['Funds', I.fund], ['AI Research', I.spark],
+                 ['News', I.doc], ['Documents', I.doc]],
+      MORE: [['Co-Founder Agreement', I.users], ['83(b) Tracker', I.cal], ['Partner / Investor Portal', I.lic]]
+    };
+    // pick(group, ...labels) → the real rows, in the screenshot's order.
+    const pick = (key, labels) => G[key].filter(r => labels.indexOf(r[0]) >= 0);
+
+    // ══ ONE persona record: accent + which groups appear. The chrome is not per-persona. ══
+    const P = {
+      admin:   { name:'Subsidiary Admin', fill:'#64748b', ink:'#475569', tint:'#f1f5f9', role:'ADMIN' },
+      super:   { name:'Super Admin',      fill:'#9f1239', ink:'#881337', tint:'#fff5f7', role:'HQ' },
+      founder: { name:'Founder',          fill:'#7c3aed', ink:'#6d28d9', tint:'#f7f4ff', role:'FOUNDER' },
+      investor:{ name:'Investor / LP',    fill:'#4f46e5', ink:'#4338ca', tint:'#f5f5ff', role:'INVESTOR' },
+      advisor: { name:'Advisor',          fill:'#059669', ink:'#047857', tint:'#f2fdf7', role:'ADVISOR' },
+      partner: { name:'Service Partner',  fill:'#d97706', ink:'#b45309', tint:'#fffbf2', role:'PARTNER' }
+    };
+
+    const rowStyle = (active, p) => active
+      ? 'color:' + P[p].ink + ';font-weight:700;background:' + P[p].tint + ';box-shadow:inset 2px 0 0 ' + P[p].fill
+      : '';
+    const mkRows = (rows, p) => rows.map(([label, icon, active]) => ({
+      label, icon, style: rowStyle(active, p), iconInk: active ? P[p].ink : '#6b6577' }));
+    // A group is [name, rows, open?, activeLabel?]. Collapsed groups show their row count.
+    const mkGroups = (gs, p) => gs.map(g => ({
+      name:g[0], chev: g[2] === false ? '›' : '⌄',
+      count: g[2] === false ? String(g[1].length) : null,
+      rows: g[2] === false ? [] : mkRows(g[1].map(r => [r[0], r[1], r[0] === g[3]]), p) }));
+
+    // Group and row counts are computed from the persona's own group list, so a fact cannot
+    // outlive the data it describes — the defect this rewrite is fixing.
+    const gNames = (p) => p.groups.map(g => g[0]);
+    const rowCount = (p) => p.groups.reduce((a, g) => a + (g[2] === false ? 0 : g[1].length), 0);
+    const shared = (a, b) => gNames(a).filter(n => gNames(b).indexOf(n) >= 0);
+    const onlyIn = (a, b) => gNames(a).filter(n => gNames(b).indexOf(n) < 0);
+
+    const persona = (key, opts) => ({
+      role:P[key].role, badge:opts.badge, company:opts.company,
+      fill:P[key].fill, ink:P[key].ink, tint:P[key].tint,
+      rolePill:'font-size:8.5px;font-weight:800;letter-spacing:.07em;padding:3px 7px;border-radius:4px;background:'
+        + P[key].tint + ';color:' + P[key].ink + ';border:1px solid ' + P[key].fill + '33;white-space:nowrap',
+      groups: mkGroups(opts.groups, key),
+      title:opts.title, note:opts.note, _g:opts.groups
+    });
+    // Structural prose derived from the group records, so it cannot assert an arrangement
+    // the sidebar does not render.
+    const openIn = (p) => p._g.filter(g => g[2] !== false).map(g => g[0]);
+    const shutIn = (p) => p._g.filter(g => g[2] === false).map(g => g[0]);
+    const structure = (a, b) => {
+      const bothOpen = openIn(a).filter(n => openIn(b).indexOf(n) >= 0);
+      const bothShut = shutIn(a).filter(n => shutIn(b).indexOf(n) >= 0);
+      const split = openIn(a).filter(n => shutIn(b).indexOf(n) >= 0);
+      return 'Both open ' + bothOpen.join(' and ') + ', and both keep ' + bothShut.join(' and ')
+        + ' collapsed at the foot — the shared spine.'
+        + (split.length ? ' ' + split.join(' and ') + ' is the split: open for the first, collapsed for the second.' : '');
+    };
+
+    const factsFor = (board) => {
+      const A = { groups:board.personas[0]._g }, B = { groups:board.personas[1]._g };
+      return [
+        { k:'Groups', v:A.groups.length + ' · ' + B.groups.length },
+        { k:board.factsLabel + '-only groups', v: onlyIn(A, B).join(' · ') || 'none' },
+        { k:'Rows shown', v:rowCount(A) + ' · ' + rowCount(B) }
+      ];
+    };
+
+    const BOARDS = [
+        { id:'n3', href:'#n3', tag:'N3', name:'Admin tiers — Subsidiary and HQ', sub:'slate · oxblood',
+          specLabel:'Why the admin tiers differ',
+          spec:'Both tiers lead with ADMIN, which is the only group either one opens by default — it is the day job. The subsidiary shows nine of the twelve ADMIN rows, omitting the three HQ owns outright (Monitoring, Telegram Channels, Best-Fit Console), and collapses STUDIO, NETWORK & GROWTH and RESEARCH because a territory reads those rather than operating them. HQ instead carries CAPITAL & LEGAL and MORE, the two groups a subsidiary never sees, and shows ADMIN in full.',
+          factsLabel:'Subsidiary',
+          cap:'HQ shows more rows than the subsidiary, which is the opposite of what tenancy intuition suggests — but ADMIN in full is twelve rows, and oversight means seeing every one of them. The subsidiary\u2019s omissions are the interesting part: the three ADMIN rows it does not get are exactly the three that reach across tenants, and nothing is rendered greyed to advertise their absence. A locked row is an invitation to ask, and the answer is no.',
+          personas:[
+            persona('admin', { badge:'AF', company:'Axal France', title:'Subsidiary Admin · FR, BE, LU',
+              note:'Territory badge lives in the page header, not the sidebar — the sidebar already answers "which company", and two scopes in one rail is one too many.',
+              groups:[
+                ['ADMIN', pick('ADMIN', ['Admin Console','Due Diligence','Assessment Studio','Event Admin','Job Board Admin','Communities Admin','Exploring Users','LP Applications','Content Queue']), true, 'LP Applications'],
+                ['STUDIO', pick('STUDIO', ['Startups','Pipeline Board','Scoring Engine','Signals']), false],
+                ['NETWORK & GROWTH', pick('NETGRO', ['Partners','Network','Jobs','Marketplace','Needs Board','Partner Office Hours']), false],
+                ['RESEARCH', G.RESEARCH, false]
+              ]}),
+            persona('super', { badge:'HQ', company:'Axal VC HQ', title:'Super Admin · all tenants',
+              note:'The tenant switcher sits in the page header for this tier, so the sidebar company control names HQ itself rather than the tenant being viewed.',
+              groups:[
+                ['ADMIN', G.ADMIN, true, 'Admin Console'],
+                ['STUDIO', G.STUDIO, false],
+                ['CAPITAL & LEGAL', G.CAPLEG, false],
+                ['MORE', G.MORE, false]
+              ]})
+          ]},
+
+        { id:'n4', href:'#n4', tag:'N4', name:'Founder and Investor / LP', sub:'violet · indigo',
+          specLabel:'The two licence products',
+          specHead:'These are the two sidebars a dual-licence holder switches between, which is the case the accent exists for. ',
+          specTail:' What differs is which rows sit inside: the founder\u2019s STUDIO is Startups and Signals, the investor\u2019s is Pipeline Board and Deal Flow. Same group, same place, different contents, which is what makes the switch legible.',
+          factsLabel:'Founder',
+          cap:'The seam between the two products is visible at row level rather than in the structure. Capital & Investment appears in both CAPITAL & LEGAL groups and is the same round seen from either end; the founder pairs it with Incorporate and Compliance Calendar, the investor with Portfolio Health and Exit Waterfall. Only the founder carries NETWORK & GROWTH, because a founder is sourcing partners and jobs while an investor is sourcing deals — and deals live in STUDIO.',
+          personas:[
+            persona('founder', { badge:'NL', company:'Novacraft Labs', title:'Founder · one company',
+              note:'Four groups open, one collapsed. Market Intelligence sits in STUDIO rather than RESEARCH because a founder uses it to position a company, not to research one.',
+              groups:[
+                ['STUDIO', pick('STUDIO', ['Startups','Signals','AI Advisory Suite','Market Intelligence']), true, 'Startups'],
+                ['CAPITAL & LEGAL', pick('CAPLEG', ['Capital & Investment','Legal & Capital','Incorporate','Compliance Calendar']), true],
+                ['NETWORK & GROWTH', pick('NETGRO', ['Partners','Network','Jobs','Marketplace','Service Catalogue','Needs Board','Partner Office Hours','Co-Marketing Review']), false],
+                ['RESEARCH', G.RESEARCH, false],
+                ['MORE', pick('MORE', ['Co-Founder Agreement','83(b) Tracker']), false]
+              ]}),
+            persona('investor', { badge:'TC', company:'Thornbury Capital', title:'Investor / LP · one firm',
+              note:'CAPITAL & LEGAL is collapsed despite holding seven rows — it is the deepest group in the family, and an investor opens it deliberately rather than living in it.',
+              groups:[
+                ['STUDIO', pick('STUDIO', ['Pipeline Board','Scoring Engine','Risk Matrix','Deal Flow','AI Matches']), true, 'Deal Flow'],
+                ['CAPITAL & LEGAL', pick('CAPLEG', ['Capital & Investment','Liquidity & Exits','Portfolio Health','Portfolio Coverage','Reserve Allocation','Exit Waterfall','Watchlist & Journal']), false],
+                ['RESEARCH', G.RESEARCH, false],
+                ['MORE', pick('MORE', ['Partner / Investor Portal']), false]
+              ]})
+          ]},
+
+        { id:'n5', href:'#n5', tag:'N5', name:'Advisor and Service Partner', sub:'emerald · amber',
+          specLabel:'The two service licences',
+          spec:'Both sell time rather than capital, and neither carries CAPITAL & LEGAL — there is no entity to form and no cap table to hold. The advisor leads with STUDIO (the AI advisory surfaces they actually work in), the firm with NETWORK & GROWTH (where demand arrives). For an advisor the company switcher names their practice rather than a portfolio company: same control, different kind of subject.',
+          factsLabel:'Advisor',
+          cap:'These are the two shallowest sidebars in the family by group count, deliberately so — each licence is one business, and padding the nav with borrowed rows would misrepresent what was bought. The advisor keeps NETWORK & GROWTH open because Partner Office Hours is how they get booked; the firm keeps it open because Needs Board is how they get found. Same group, opened for opposite reasons.',
+          personas:[
+            persona('advisor', { badge:'PR', company:'Raghunathan Advisory', title:'Advisor · own practice',
+              note:'The switcher names a practice, not a portfolio company. Same control, same position — the subject differs because the licence does.',
+              groups:[
+                ['STUDIO', pick('STUDIO', ['AI Advisory Suite','AI Matches','Assessment Studio']), true, 'AI Advisory Suite'],
+                ['NETWORK & GROWTH', pick('NETGRO', ['Partner Office Hours','Network','Partners','Jobs']), true],
+                ['RESEARCH', G.RESEARCH, false]
+              ]}),
+            persona('partner', { badge:'SV', company:'Studio Vireo', title:'Service Partner · own firm',
+              note:'Offers is the storefront and sits with Pipeline and Delivery because winning, shipping and packaging are one loop for a firm this size.',
+              groups:[
+                ['NETWORK & GROWTH', pick('NETGRO', ['Partners','Marketplace','Service Catalogue','Needs Board','Demand Insights','Partner Office Hours','Co-Marketing Review','Jobs']), true, 'Needs Board'],
+                ['RESEARCH', G.RESEARCH, false],
+                ['MORE', pick('MORE', ['Partner / Investor Portal']), false]
+              ]})
+          ]}
+      ];
+
+    return {
+      hdrIcons: [I.heart, I.bell], giftIcon: I.gift,
+      searchIcon: I.search, studioIcon: I.studio, bldgIcon: I.bldg, dotIcon: I.dot,
+
+      // ── N1 ──
+      fixed: [
+        { k:'Axal VC logo, top-left', v:'The real mark, never a lettermark substitute. It is the only element that is identical pixel-for-pixel in all six.' },
+        { k:'Company switcher above search', v:'Scope first, then find. Searching before you have chosen a company is how a user reads the wrong data confidently.' },
+        { k:'Studio is home', v:'Not "Dashboard" and not "Home" — the row is named for the thing it opens, so the label survives the page being rebuilt.' },
+        { k:'Groups collapse, rows do not', v:'One level of nesting. A second level is how a nav becomes a sitemap.' },
+        { k:'Company Settings on the bottom rail', v:'Separated by a hairline and outside the scroll, because administration is not a workspace and should not compete with one.' }
+      ],
+      accents: Object.keys(P).map(k => ({ name:P[k].name, fill:P[k].fill, text:P[k].ink })),
+      accentNote:'Six accents, one job: tell a dual-licence holder which product they are in without reading a word. The two admin tiers are deliberately the least saturated — slate for a subsidiary, oxblood for HQ — because an operator console should feel like infrastructure rather than a product.',
+      n1Cap:'Every group and row below is transcribed from the live sidebar, not invented — the six groups are ADMIN, STUDIO, CAPITAL & LEGAL, NETWORK & GROWTH, RESEARCH and MORE, and each persona shows a subset rather than a rename. The shell is chrome, not content: a founder and a super admin see the same five structural elements in the same five places. That is what makes the accent load-bearing — it is the only signal that changes, so it can be trusted. Note the active row treatment is a tint plus a 2pt inset bar rather than a filled pill: a filled row at this size fights the logo for attention, and the bar reads at a glance in peripheral vision.',
+
+      // ── N2 ──
+      switcher: [
+        { name:'Novacraft Labs', badge:'NL', chev:'⌄', edge:'#dedbe8', bg:'#fbfaff', nameInk:'#241f38',
+          title:'Closed · one company', items:null,
+          note:'The resting state. The initials badge is generated, not uploaded, so the switcher never waits on a logo that may not exist.' },
+        { name:'Novacraft Labs', badge:'NL', chev:'⌃', edge:'#c4b5fd', bg:'#f7f4ff', nameInk:'#241f38',
+          title:'Open · multiple companies',
+          items:[
+            { label:'Novacraft Labs', badge:'NL', check:true },
+            { label:'Meridian Robotics', badge:'MR', check:false }
+          ],
+          note:'A tick rather than a highlight marks the current one, because the highlight is already spent on hover. "Add a new company" sits below a divider so it cannot be mis-clicked as a company.' },
+        { name:'My Company', badge:null, chev:'⌃', edge:'#c4b5fd', bg:'#f7f4ff', nameInk:'#6b6577',
+          title:'Empty · no company yet', empty:true, items:[],
+          note:'The honest empty state: the trigger reads as a placeholder rather than naming a company that does not exist, and the only action offered is the one that resolves it.' }
+      ],
+      n2Cap:'Three states because the middle one is the reason the control exists and the third is the one that ships broken most often. The empty state matters more than it looks: a user with no company still sees every group below, so the switcher is where the shell admits that the workspace is not yet pointed at anything — better there than in five separate empty pages.',
+
+      // ── N3–N5 ──
+      boards: BOARDS.map(b => Object.assign({}, b, {
+        facts: factsFor(b),
+        spec: b.spec || (b.specHead + structure(b.personas[0], b.personas[1]) + b.specTail)
+      }))
+
+    };
+  }
+}
+</script>
+</body>
+</html>

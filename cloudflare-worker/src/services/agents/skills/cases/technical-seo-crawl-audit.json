@@ -1,0 +1,34 @@
+{
+  "skill": "technical-seo-crawl-audit",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "synthetic_fixture": true,
+        "skill_name": "Technical SEO Crawl Audit",
+        "task_scope": "Audits crawl and indexability evidence across site structure, metadata, canonicalization, redirects and performance.",
+        "evidence": [
+          "canonicalization and indexability issue"
+        ],
+        "omitted_field": "crawl coverage"
+      },
+      "vercel.deployments": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for canonicalization and indexability issue."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "canonicalization and indexability issue"
+    ],
+    "must_say_not_recorded": [
+      "crawl coverage"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

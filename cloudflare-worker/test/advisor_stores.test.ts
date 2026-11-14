@@ -1,0 +1,1294 @@
+/**
+ * The advisor's own stores — migrations 201–206 and the routes over them.
+ *
+ * WHAT THESE TESTS ARE FOR. Every one of them pins a decision that could
+ * plausibly have gone the other way and would be invisible if it did:
+ *
+ *   * a price that was never set reads as ABSENT, not as zero;
+ *   * a profile POST from one surface does not blank the fields another surface
+ *     owns (`/office-hours` sends `headline` and `timezone` and nothing else,
+ *     and must not wipe stages, languages, country or the headshot);
+ *   * "attested" is derived from a consent row, so an advisor cannot assert it
+ *     about themselves;
+ *   * a cohort read without an assignment is refused whatever the role says;
+ *   * ending an assignment keeps the record that it existed.
+ *
+ * HARNESS. Same shape as `advisor_company_scope.test.ts`: the real router
+ * against real in-memory SQLite, with the tables built from the migration
+ * files THEMSELVES rather than hand-copied. Copying a shape into a test is how
+ * a test ends up passing against a schema production does not have — the whole
+ * class of bug migrations 196 and 200 were spent on.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { SignJWT } from 'jose';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import advisors from '../src/routes/advisors.ts';
+import { attestationMailer } from '../src/services/advisorProofAttestation.ts';
+import { d1Over } from './_d1_sqlite.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SQL = resolve(HERE, '../sql');
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+
+const ADVISOR_USER = 70;
+const OTHER_ADVISOR_USER = 71;
+const FOUNDER_USER = 72;
+const ADMIN_USER = 73;
+// A founder with no part in any booking — the reader the reviews endpoint
+// used to answer, and the reason `grace` alone is not enough of a test: an
+// advisor missing the advisor half of the predicate and a founder missing the
+// founder half are two different ways for the WHERE clause to be wrong.
+const OUTSIDER_USER = 74;
+const CYCLE = 9;
+const OTHER_CYCLE = 10;
+
+function coerce(a: any[]): any[] {
+  return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
+}
+function makeD1(db: InstanceType<typeof DatabaseSync>) {
+  return {
+    prepare(sql: string) {
+      let b: any[] = [];
+      const api: any = {
+        bind: (...x: any[]) => { b = coerce(x); return api; },
+        async first() { return db.prepare(sql).get(...b) ?? null; },
+        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async run() {
+          const r = db.prepare(sql).run(...b);
+          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
+        },
+      };
+      return api;
+    },
+    async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
+    async batch(x: any[]) {
+      const out = [];
+      for (const st of x || []) out.push(await st.run().catch(() => ({})));
+      return out;
+    },
+  };
+}
+
+const migration = (name: string) => readFileSync(`${SQL}/migrations/${name}.sql`, 'utf8');
+
+function freshDb() {
+  const db = new DatabaseSync(':memory:', {
+    enableForeignKeyConstraints: false,
+    enableDoubleQuotedStringLiterals: true,
+  });
+  db.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY, role TEXT NOT NULL, advisor_id INTEGER,
+      is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT
+    );
+    CREATE TABLE cohort_cycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, year INTEGER NOT NULL, month INTEGER NOT NULL,
+      start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled'
+    );
+    CREATE TABLE week_windows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER NOT NULL,
+      week_number INTEGER NOT NULL, unlock_at TEXT NOT NULL, deadline_at TEXT NOT NULL,
+      UNIQUE(cohort_cycle_id, week_number)
+    );
+    CREATE TABLE company_week_status (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+      cohort_cycle_id INTEGER NOT NULL, week_number INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      deliverables_done INTEGER NOT NULL DEFAULT 0,
+      deliverables_required INTEGER NOT NULL DEFAULT 0,
+      -- Migration 156's decision columns, which production has had all along
+      -- and the weeks read returns since D4813.
+      grace_until TEXT, grace_reason TEXT, decided_at TEXT, decided_by TEXT, decision_reason TEXT
+    );
+    -- advisor_office_hour_slots and advisor_bookings in the LIVE (t13) shape:
+    -- scripts/sqlite-table-collisions-baseline.json records that schema.sql's
+    -- six-column advisor_bookings is the dead one, because the booking flow
+    -- works and it writes advisor_id / founder_user_id.
+    CREATE TABLE advisor_office_hour_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      advisor_id INTEGER NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT NOT NULL,
+      capacity INTEGER NOT NULL DEFAULT 1, meeting_url TEXT, notes TEXT,
+      is_cancelled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE advisor_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      slot_id INTEGER NOT NULL, advisor_id INTEGER NOT NULL,
+      founder_user_id INTEGER NOT NULL, topic TEXT, notes TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', cancel_reason TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (slot_id, founder_user_id)
+    );
+    -- Verbatim from sql/historical/t13_t14_t15.sql:69. Present because
+    -- GET /bookings/:id/reviews is read here, and a read whose ownership
+    -- check is the thing under test has to be able to return a row.
+    CREATE TABLE advisor_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      booking_id INTEGER NOT NULL, reviewer_user_id INTEGER NOT NULL,
+      reviewer_role TEXT NOT NULL, rating INTEGER NOT NULL, comment TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (booking_id, reviewer_role)
+    );
+  `);
+  // The new schema comes from the migration files verbatim. If one of them
+  // stops parsing, these tests stop running — which is the point.
+  db.exec(migration('201_advisors_table_in_ledger'));
+  db.exec(migration('202_advisor_profile_fields'));
+  db.exec(migration('203_advisor_services'));
+  db.exec(migration('204_advisor_proof'));
+  db.exec(migration('202611062216_advisor_proof_attestation'));
+  db.exec(migration('205_advisor_booking_amounts'));
+  db.exec(migration('206_advisor_cohort_assignments'));
+  // 241 — `PATCH /me/bookings/:id/billing` now stamps `platform_cut_cents`
+  // and `take_rate_bps` beside the amount, and reads the rate out of
+  // `platform_settings`. A fixture that stopped at 205 made every price write
+  // in this file fail on a missing column, which is the fixture being stale
+  // rather than the route being wrong — the tests below assert 205's
+  // behaviour and still do.
+  db.exec(migration('241_advisor_money_model'));
+  db.exec(migration('369_advisor_client_notes'));
+  db.exec(migration('202611071558_advisor_booking_decision')); // #4702: the advisor's answer, apart from the status
+  // D4472: the assignable picker includes active additional Advisor grants.
+  const licenceMigration=readdirSync(`${SQL}/migrations`).find(name=>name.endsWith('_account_licences.sql'))!;
+  db.exec(readFileSync(`${SQL}/migrations/${licenceMigration}`,'utf8'));
+
+  const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
+  u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
+  u.run(OTHER_ADVISOR_USER, 'advisor', 2, 'Grace', 'grace@example.com');
+  u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  u.run(ADMIN_USER, 'admin', null, 'Root', 'root@example.com');
+  u.run(OUTSIDER_USER, 'founder', null, 'Otto', 'otto@example.com');
+
+  const a = db.prepare(
+    'INSERT INTO advisors (id, uid, user_id, display_name, email) VALUES (?,?,?,?,?)');
+  a.run(1, 'adv-1', ADVISOR_USER, 'Ada', 'ada@example.com');
+  a.run(2, 'adv-2', OTHER_ADVISOR_USER, 'Grace', 'grace@example.com');
+
+  const cy = db.prepare(
+    'INSERT INTO cohort_cycles (id, year, month, start_at, end_at, status) VALUES (?,?,?,?,?,?)');
+  cy.run(CYCLE, 2026, 9, '2026-09-01T04:00:00Z', '2026-09-29T04:00:00Z', 'active');
+  cy.run(OTHER_CYCLE, 2026, 10, '2026-10-01T04:00:00Z', '2026-10-29T04:00:00Z', 'scheduled');
+
+  const w = db.prepare(
+    'INSERT INTO company_week_status (user_id, cohort_cycle_id, week_number) VALUES (?,?,?)');
+  w.run(FOUNDER_USER, CYCLE, 1);
+  w.run(FOUNDER_USER, CYCLE, 2);   // same founder twice — DISTINCT must collapse it
+  w.run(ADVISOR_USER, OTHER_CYCLE, 1);
+
+  // Two windows already unlocked, two still ahead — so `current_week` has a
+  // real answer to compute rather than a trivial one.
+  const past = new Date(Date.now() - 86400000).toISOString();
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const ww = db.prepare(
+    'INSERT INTO week_windows (cohort_cycle_id, week_number, unlock_at, deadline_at) VALUES (?,?,?,?)');
+  ww.run(CYCLE, 1, past, past);
+  ww.run(CYCLE, 2, past, future);
+  ww.run(CYCLE, 3, future, future);
+
+  return db;
+}
+
+function env(db: InstanceType<typeof DatabaseSync>) {
+  return { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) };
+}
+
+async function token(userId: number, role: string): Promise<string> {
+  return new SignJWT({ user_id: userId, role })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+}
+
+async function call(
+  e: any, method: string, path: string, who: { user: number; role: string }, body?: any,
+): Promise<{ status: number; body: any }> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${await token(who.user, who.role)}`,
+  };
+  const init: RequestInit = { method, headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    (init as any).body = JSON.stringify(body);
+  }
+  // The fourth argument is the ExecutionContext. Without it Hono's
+  // `c.executionCtx` getter THROWS rather than returning undefined, so
+  // `c.executionCtx?.waitUntil` — the guard the cancel and booking paths use
+  // to defer their calendar-sync hooks — turns into a 500 in tests and only
+  // in tests. Production always has one; passing a no-op here means these
+  // tests exercise the same branch production does.
+  const res = await advisors.request(path, init, e, {
+    waitUntil() {}, passThroughOnException() {},
+  } as any);
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+const ada = { user: ADVISOR_USER, role: 'advisor' };
+const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
+const fran = { user: FOUNDER_USER, role: 'founder' };
+const root = { user: ADMIN_USER, role: 'admin' };
+const otto = { user: OUTSIDER_USER, role: 'founder' };
+
+test('private roster notes stay with their advisor, separate from shared bookings', async () => {
+  const db = freshDb();
+  const e = env(db);
+  try {
+    db.exec(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id, topic, notes)
+      VALUES ('client-ada', 1, 1, ${FOUNDER_USER}, 'Public topic', 'Client message'),
+             ('client-grace', 2, 2, ${FOUNDER_USER}, 'Another topic', 'Another client message')`);
+    const path = `/me/client-notes/${FOUNDER_USER}`;
+    assert.equal((await call(e, 'GET', path, ada)).body.note, null);
+    const first = await call(e, 'PUT', path, ada, { body: 'Ada private note', advisor_user_id: OTHER_ADVISOR_USER });
+    assert.equal(first.status, 200);
+    assert.equal(first.body.note.body, 'Ada private note');
+    assert.equal((await call(e, 'GET', path, grace)).body.note, null, 'another booked advisor does not inherit the note');
+    await call(e, 'PUT', path, grace, { body: 'Grace private note' });
+    const edited = await call(e, 'PUT', path, ada, { body: 'Ada edited note' });
+    assert.equal(edited.body.note.uid, first.body.note.uid, 'editing keeps one note');
+    assert.equal((await call(e, 'GET', path, grace)).body.note.body, 'Grace private note');
+    await call(e, 'DELETE', path, grace);
+    assert.equal((await call(e, 'GET', path, ada)).body.note.body, 'Ada edited note');
+    for (const who of [fran, root, otto]) {
+      for (const method of ['GET', 'PUT', 'DELETE']) {
+        assert.equal((await call(e, method, path, who, method === 'PUT' ? { body: 'Forbidden edit' } : undefined)).status, 403);
+      }
+    }
+    assert.equal((await advisors.request(path, {}, e as any)).status, 401);
+    const clientBookings = await call(e, 'GET', '/bookings/me', fran);
+    assert.equal(clientBookings.status, 200);
+    assert.ok(!JSON.stringify(clientBookings.body).includes('Ada edited note'));
+    assert.equal(db.prepare('SELECT notes FROM advisor_bookings WHERE uid = ?').get('client-ada')?.notes, 'Client message');
+    assert.equal((await call(e, 'DELETE', path, ada)).body.note, null);
+    assert.equal((await call(e, 'GET', path, ada)).body.note, null);
+  } finally { db.close(); }
+});
+
+test('private notes require a roster client, valid text and an owned advisor profile', async () => {
+  const db = freshDb();
+  const e = env(db);
+  try {
+    db.exec(`INSERT INTO advisor_bookings (uid, slot_id, advisor_id, founder_user_id)
+      VALUES ('client-validation', 1, 1, ${FOUNDER_USER})`);
+    const path = `/me/client-notes/${FOUNDER_USER}`;
+    await call(e, 'PUT', path, ada, { body: 'Keep this note' });
+    for (const payload of [{}, { body: '' }, { body: '   ' }, { body: 7 }, { body: 'x'.repeat(8001) }]) {
+      assert.equal((await call(e, 'PUT', path, ada, payload)).status, 400);
+    }
+    assert.equal((await call(e, 'GET', path, ada)).body.note.body, 'Keep this note');
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      assert.equal((await call(e, method, `/me/client-notes/${OUTSIDER_USER}`, ada, method === 'PUT' ? { body: 'Wrong client' } : undefined)).status, 403);
+    }
+    for (const id of ['abc', '0', '-1', '1.5', '9007199254740992']) {
+      assert.equal((await call(e, 'GET', `/me/client-notes/${id}`, ada)).status, 400);
+    }
+    db.prepare('UPDATE users SET advisor_id = 1 WHERE id = ?').run(OTHER_ADVISOR_USER);
+    assert.equal((await call(e, 'GET', path, grace)).status, 403, 'a mismatched profile pointer cannot borrow another roster');
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run('partner', ADVISOR_USER);
+    assert.equal((await call(e, 'GET', path, ada)).status, 403, 'current role is checked, not the old token role');
+  } finally { db.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// 202 — profile fields
+// ---------------------------------------------------------------------------
+test('D573: saving a partial profile preserves every omitted core field', async () => {
+  const db = freshDb();
+  try {
+    const e = env(db);
+    await call(e, 'POST', '/me', ada, {
+      display_name: 'Practice name', bio: 'Existing biography', linkedin_url: 'https://example.com/profile',
+      hourly_rate_usd: 175, expertise: ['Product'], sectors: ['Energy'],
+    });
+    const saved = await call(e, 'POST', '/me', ada, { headline: 'Updated headline' });
+    assert.deepEqual({ status: saved.status, name: saved.body.display_name, bio: saved.body.bio,
+      linkedin: saved.body.linkedin_url, rate: saved.body.hourly_rate_usd,
+      expertise: saved.body.expertise, sectors: saved.body.sectors }, {
+      status: 200, name: 'Practice name', bio: 'Existing biography', linkedin: 'https://example.com/profile',
+      rate: 175, expertise: ['Product'], sectors: ['Energy'],
+    });
+    const cleared = await call(e, 'POST', '/me', ada, { hourly_rate_usd: null, bio: null, expertise: [] });
+    assert.deepEqual([cleared.status, cleared.body.hourly_rate_usd, cleared.body.bio, cleared.body.expertise],
+      [200, null, null, []]);
+  } finally { db.close(); }
+});
+test('the profile fields the office-hours ProfileCard sends are no longer discarded', async () => {
+  const e = env(freshDb());
+  const saved = await call(e, 'POST', '/me', ada, { headline: 'ex-Stripe payments PM', timezone: 'America/New_York' });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.headline, 'ex-Stripe payments PM');
+  assert.equal(saved.body.timezone, 'America/New_York');
+  const read = await call(e, 'GET', '/me', ada);
+  assert.equal(read.body.headline, 'ex-Stripe payments PM', 'and it survives the round trip');
+});
+
+test('one surface saving its own fields does not blank another surface’s', async () => {
+  const e = env(freshDb());
+  await call(e, 'POST', '/me', ada, {
+    stages: ['pre-seed', 'seed'], languages: ['en', 'fr'],
+    country: 'CA', headshot_url: 'https://example.com/a.png',
+  });
+  // Now the office-hours ProfileCard saves, sending only what it knows about.
+  await call(e, 'POST', '/me', ada, { headline: 'Payments', timezone: 'America/Toronto' });
+  const read = await call(e, 'GET', '/me', ada);
+  assert.deepEqual(read.body.stages, ['pre-seed', 'seed'], 'stages survived a save that never mentioned them');
+  assert.deepEqual(read.body.languages, ['en', 'fr']);
+  assert.equal(read.body.country, 'CA');
+  assert.equal(read.body.headshot_url, 'https://example.com/a.png');
+  assert.equal(read.body.headline, 'Payments');
+});
+
+test('an explicit null clears a field; an absent key does not', async () => {
+  const e = env(freshDb());
+  await call(e, 'POST', '/me', ada, { headshot_url: 'https://example.com/a.png', country: 'CA' });
+  await call(e, 'POST', '/me', ada, { headshot_url: null });
+  const read = await call(e, 'GET', '/me', ada);
+  assert.equal(read.body.headshot_url, null, 'null removed it');
+  assert.equal(read.body.country, 'CA', 'and left the key that was not mentioned alone');
+});
+
+test('an unanswered list reads as absent, not as an empty list', async () => {
+  const e = env(freshDb());
+  const read = await call(e, 'GET', '/me', ada);
+  assert.equal(read.body.stages, null, 'never asked is null');
+  await call(e, 'POST', '/me', ada, { stages: [] });
+  const after = await call(e, 'GET', '/me', ada);
+  assert.deepEqual(after.body.stages, [], 'answered-and-empty is []');
+});
+
+// ---------------------------------------------------------------------------
+// 203 — services
+// ---------------------------------------------------------------------------
+test('a service with no price reads as unpriced, never as free', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Fractional CTO day' });
+  assert.equal(made.status, 200);
+  assert.equal(made.body.price_cents, null, 'not 0');
+  assert.equal(made.body.kind, 'fixed');
+  assert.equal(made.body.currency, 'USD');
+});
+
+test('a price is whole cents or it is rejected', async () => {
+  const e = env(freshDb());
+  for (const bad of [12.5, -1, 'free']) {
+    const r = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: bad });
+    assert.equal(r.status, 400, `rejected ${JSON.stringify(bad)}`);
+  }
+  const ok = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'x', price_cents: 250000 });
+  assert.equal(ok.body.price_cents, 250000);
+});
+
+test('units_sold is null because nothing links a booking to a service', async () => {
+  const e = env(freshDb());
+  await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Advisory hour' });
+  const list = await call(e, 'GET', '/me/services', ada);
+  assert.equal(list.body.items[0].units_sold, null,
+    'a topic-string match would be a guess presented as a count');
+});
+
+test('an advisor cannot edit or delete another advisor’s service', async () => {
+  const e = env(freshDb());
+  const mine = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Mine' });
+  assert.equal((await call(e, 'PATCH', `/me/services/${mine.body.id}`, grace, { title: 'Hers' })).status, 404);
+  assert.equal((await call(e, 'DELETE', `/me/services/${mine.body.id}`, grace)).status, 404);
+  assert.equal((await call(e, 'GET', '/me/services', grace)).body.items.length, 0);
+  assert.equal((await call(e, 'GET', '/me/services', ada)).body.items[0].title, 'Mine');
+});
+
+test('a service edit merges — an unmentioned price is not cleared', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
+  const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
+  assert.equal(edited.body.price_cents, 500000);
+  assert.equal(edited.body.scope, 'Two weeks');
+  const cleared = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { price_cents: null });
+  assert.equal(cleared.body.price_cents, null, 'but an explicit null does clear it');
+});
+
+test('D4681: one edit changes every field at once, without delete and recreate', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
+  const edited = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, {
+    title: 'Design sprint', kind: 'package', price_cents: 650000, currency: 'eur',
+    duration_note: 'Two weeks', scope: 'Discovery and a prototype', is_active: false,
+  });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.id, made.body.id, 'the same record, edited in place');
+  assert.equal(edited.body.uid, made.body.uid);
+  assert.deepEqual(
+    [edited.body.title, edited.body.kind, edited.body.price_cents, edited.body.currency, edited.body.duration_note, edited.body.scope, edited.body.is_active],
+    ['Design sprint', 'package', 650000, 'EUR', 'Two weeks', 'Discovery and a prototype', false]);
+});
+
+test('D4681: a blank title or a malformed currency is refused, and nothing changes', async () => {
+  // Mutation checked: the blank-title guard removed → 200 with the old title kept;
+  // parseCurrency accepting anything → 'DOLLARS' stored.
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { currency: 'USD', title: 'Sprint', price_cents: 500000 });
+  for (const body of [{ title: '   ' }, { currency: 'dollars' }, { currency: 'US' }, { kind: 'subscription' }]) {
+    const r = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { ...body, scope: 'should not land' });
+    assert.equal(r.status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'usd$' })).status, 400);
+  const row = (await call(e, 'GET', '/me/services', ada)).body.items.find((s: any) => s.id === made.body.id);
+  assert.deepEqual([row.title, row.currency, row.scope], ['Sprint', 'USD', null]);
+});
+
+// ---------------------------------------------------------------------------
+// 204 — proof and consent
+// ---------------------------------------------------------------------------
+test('a proof item an advisor wrote about themselves is self-stated, not attested', async () => {
+  const e = env(freshDb());
+  const item = await call(e, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild', organization: 'Stripe' });
+  assert.equal(item.body.attested, false);
+  assert.equal(item.body.status, 'self_stated');
+});
+
+// D4670: answering needs a code mailed to the named address. The mailer is
+// swapped so a test reads the code it would have sent, and to whom.
+const mailed: Array<{ to: string; code: string }> = [];
+attestationMailer.send = async (_env: any, to: string, _name: string, code: string) => { mailed.push({ to, code }); return true; };
+async function answer(e: any, tok: string, body: any) {
+  const sent = await advisors.request(`/proof-consents/${tok}/code`, { method: 'POST' }, e);
+  assert.equal(sent.status, 200, 'the attester asks for a code');
+  const res = await advisors.request(`/proof-consents/${tok}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, code: mailed.at(-1)!.code }),
+  }, e);
+  return res;
+}
+
+test('only the attester can make a claim attested: the link the advisor holds is not enough (D4670)', async () => {
+  const e = env(freshDb());
+  const item = await call(e, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild' });
+  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, {
+    attester_name: 'Sam Reviewer', attester_email: 'sam@example.com',
+  });
+  assert.equal(req.status, 200);
+  assert.equal(req.body.delivered, false, 'recorded, not sent');
+  const tok = req.body.invite_token;
+  assert.ok(tok, 'the advisor gets the link to hand over');
+
+  const listed = await call(e, 'GET', '/me/proof', ada);
+  assert.equal(listed.body.items[0].attested, false, 'asking is not being told yes');
+  assert.equal(listed.body.items[0].consents[0].invite_token, tok, 'and can read the link again after a refresh');
+
+  const bare = await advisors.request(`/proof-consents/${tok}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ consent_text: 'I confirm Ada led this work.' }),
+  }, e);
+  assert.equal(bare.status, 400, 'the link alone answers nothing');
+  assert.equal((await bare.json() as any).error, 'code_required');
+
+  const res = await answer(e, tok, { consent_text: 'I confirm Ada led this work.', statement: 'She ran it end to end.' });
+  assert.equal(res.status, 200);
+  assert.equal(mailed.at(-1)!.to, 'sam@example.com', 'the code went to the person named');
+
+  const after = await call(e, 'GET', '/me/proof', ada);
+  assert.equal(after.body.items[0].attested, true);
+  assert.equal(after.body.items[0].status, 'attested');
+  assert.equal(after.body.items[0].consents[0].statement, 'She ran it end to end.');
+  assert.equal(after.body.items[0].consents[0].invite_token, null, 'an answered request no longer offers its link');
+});
+
+test('consent without recorded wording is refused', async () => {
+  const e = env(freshDb());
+  const item = await call(e, 'POST', '/me/proof', ada, { title: 'A claim' });
+  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam', attester_email: 'sam@example.com' });
+  const res = await answer(e, req.body.invite_token, {});
+  assert.equal(res.status, 400, 'consent_text must say what was agreed to');
+});
+
+test('a withdrawn consent leaves the record that it was given', async () => {
+  const e = env(freshDb());
+  const item = await call(e, 'POST', '/me/proof', ada, { title: 'A claim' });
+  const req = await call(e, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam', attester_email: 'sam@example.com' });
+  await answer(e, req.body.invite_token, { consent_text: 'Confirmed.' });
+  await answer(e, req.body.invite_token, { consent_given: false });
+  const after = await call(e, 'GET', '/me/proof', ada);
+  assert.equal(after.body.items[0].attested, false, 'the claim is no longer attested');
+  assert.equal(after.body.items[0].consents.length, 1, 'and the row is still there');
+  assert.ok(after.body.items[0].consents[0].withdrawn_at, 'saying when it was withdrawn');
+  assert.equal(after.body.items[0].consents[0].state, 'withdrawn');
+});
+
+/**
+ * D4681 (#4681): deleting a proof item is one transaction. `d1Over` runs a
+ * batch the way D1 does, all or nothing; the item's DELETE is made to fail
+ * here, after the consent DELETE has run inside the same batch.
+ */
+function failingItemDelete(db: InstanceType<typeof DatabaseSync>) {
+  const real = d1Over(db);
+  return {
+    ...real,
+    prepare(sql: string) {
+      const st = real.prepare(sql);
+      if (!/^DELETE FROM advisor_proof_items/.test(sql)) return st;
+      const fail = () => { throw new Error('D1_ERROR: injected failure'); };
+      return { ...st, bind: () => ({ ...st, run: async () => fail(), runSync: fail }) };
+    },
+  };
+}
+
+test('D4681: a failed proof delete keeps the claim and every consent behind it', async () => {
+  // Mutation checked: the two awaited DELETEs restored → the consents are gone and the item stays.
+  const db = freshDb();
+  const ok = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  const item = await call(ok, 'POST', '/me/proof', ada, { title: 'Led the payments rebuild' });
+  // D4670: the attester is named by address and answers with the emailed code.
+  const req = await call(ok, 'POST', `/me/proof/${item.body.id}/consent-request`, ada, { attester_name: 'Sam Example', attester_email: 'sam@example.com' });
+  assert.equal((await answer(ok, req.body.invite_token, { consent_text: 'I confirm this.' })).status, 200);
+
+  const broken = { ...ok, DB: failingItemDelete(db) };
+  const res = await call(broken, 'DELETE', `/me/proof/${item.body.id}`, ada);
+  assert.notEqual(res.status, 200, 'the failure is reported');
+  const after = await call(ok, 'GET', '/me/proof', ada);
+  assert.equal(after.body.items.length, 1, 'the claim stands');
+  assert.equal(after.body.items[0].consents.length, 1, 'and so does its consent');
+  assert.equal(after.body.items[0].status, 'attested', 'still attested: nothing half-deleted');
+
+  const done = await call(ok, 'DELETE', `/me/proof/${item.body.id}`, ada);
+  assert.equal(done.status, 200);
+  assert.equal(done.body.consents_removed, 1);
+  assert.equal((await call(ok, 'GET', '/me/proof', ada)).body.items.length, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisor_proof_consents').get() as any).n, 0, 'no stranger left behind');
+});
+
+test('a proof item an advisor does not own is not theirs to delete', async () => {
+  const e = env(freshDb());
+  const item = await call(e, 'POST', '/me/proof', ada, { title: 'Mine' });
+  assert.equal((await call(e, 'DELETE', `/me/proof/${item.body.id}`, grace)).status, 404);
+});
+
+// ---------------------------------------------------------------------------
+// 205 — session amounts and earnings
+// ---------------------------------------------------------------------------
+function seedBooking(
+  db: InstanceType<typeof DatabaseSync>, id: number, advisorId = 1, status = 'completed',
+) {
+  db.prepare('INSERT INTO advisor_office_hour_slots (id, uid, advisor_id, starts_at, ends_at) VALUES (?,?,?,?,?)')
+    .run(id, `slot-${id}`, advisorId, '2026-09-10T15:00:00Z', '2026-09-10T16:00:00Z');
+  db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
+    .run(id, `bk-${id}`, id, advisorId, FOUNDER_USER, status);
+}
+
+test('an existing booking starts unpriced, and unpriced is not zero', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const earnings = await call(e, 'GET', '/me/earnings', ada);
+  assert.equal(earnings.body.unpriced_count, 1, 'reported, not hidden');
+  assert.equal(earnings.body.collected_cents, 0);
+  assert.equal(earnings.body.settlement, 'none', 'no money moves through Axal');
+});
+
+test('a billing state cannot be recorded against an amount that does not exist', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const r = await call(e, 'PATCH', '/me/bookings/1/billing', ada, { billing_state: 'collected' });
+  assert.equal(r.status, 400, 'there is no figure for "collected" to refer to');
+});
+
+test('pricing a session with nothing else said means billed', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const r = await call(e, 'PATCH', '/me/bookings/1/billing', ada, { amount_cents: 30000 });
+  assert.equal(r.body.amount_cents, 30000);
+  assert.equal(r.body.billing_state, 'billed');
+  const earnings = await call(e, 'GET', '/me/earnings', ada);
+  assert.equal(earnings.body.billed_cents, 30000);
+  assert.equal(earnings.body.outstanding_cents, 30000);
+  assert.equal(earnings.body.collected_cents, 0);
+});
+
+test('an unknown billing state is refused rather than stored', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const r = await call(e, 'PATCH', '/me/bookings/1/billing', ada,
+    { amount_cents: 100, billing_state: 'paid_out' });
+  assert.equal(r.status, 400);
+});
+
+test('an advisor cannot price a booking that is not theirs', async () => {
+  const db = freshDb(); seedBooking(db, 1, 1);
+  const e = env(db);
+  assert.equal((await call(e, 'PATCH', '/me/bookings/1/billing', grace, { amount_cents: 1 })).status, 404);
+});
+
+test('earnings separate collected from written off', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedBooking(db, 2);
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada, { amount_cents: 40000, billing_state: 'collected' });
+  await call(e, 'PATCH', '/me/bookings/2/billing', ada, { amount_cents: 15000, billing_state: 'written_off' });
+  const g = await call(e, 'GET', '/me/earnings', ada);
+  assert.equal(g.body.collected_cents, 40000);
+  assert.equal(g.body.written_off_cents, 15000);
+  assert.equal(g.body.outstanding_cents, 0, 'a written-off session is not outstanding');
+});
+
+// ---------------------------------------------------------------------------
+// 205, second half — the money has to survive the LIST, and stop at the
+// advisor.
+//
+// EVERY TEST ABOVE ASSERTS THE PATCH RESPONSE, AND THAT IS WHY THE BUG LIVED.
+// `PATCH /me/bookings/:id/billing` named both columns in its own reply, so a
+// suite built around it went green while `bookingDto` — the whitelist every
+// list goes through — dropped them. `SessionsZone.jsx` reads the LIST, so it
+// showed "Not recorded" over stored prices, an empty state pill, and an
+// editor that opened blank and overwrote the price on save.
+//
+// The second half of the pair is the audience. Three DTO call sites answer
+// the founder or either party, and migration 205 calls `billing_state` the
+// advisor's own bookkeeping note; `written_off` reaching the client would
+// tell them their advisor gave up collecting. So these tests pin BOTH
+// directions: present on the advisor's read, absent on everyone else's.
+// ---------------------------------------------------------------------------
+test("a session's price survives the trip to the advisor's own list", async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada,
+    { amount_cents: 30000, billing_state: 'collected' });
+  const list = await call(e, 'GET', '/me/bookings', ada);
+  assert.equal(list.body.items.length, 1);
+  assert.equal(list.body.items[0].amount_cents, 30000, 'the stored price, not undefined');
+  assert.equal(list.body.items[0].billing_state, 'collected');
+});
+
+test('an unpriced session says unpriced in the list rather than saying nothing', async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  const item = (await call(e, 'GET', '/me/bookings', ada)).body.items[0];
+  // `in` rather than a value check: an absent key and a null one both read as
+  // `undefined` on the page, and only one of them is the contract.
+  assert.ok('amount_cents' in item, 'the key is there even when the price is not');
+  assert.ok('billing_state' in item);
+  assert.equal(item.amount_cents, null, 'absent, never 0 — zero is a price');
+  assert.equal(item.billing_state, 'unpriced');
+});
+
+test("the client's own list does not carry the advisor's bookkeeping", async () => {
+  const db = freshDb(); seedBooking(db, 1);
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada,
+    { amount_cents: 22000, billing_state: 'written_off' });
+  const item = (await call(e, 'GET', '/bookings/me', fran)).body.items[0];
+  assert.ok(item, 'the founder still sees their booking');
+  assert.equal('billing_state' in item, false,
+    'a client must not learn their advisor wrote the session off');
+  assert.equal('amount_cents' in item, false);
+});
+
+test('moving a booking through its lifecycle does not answer with the money', async () => {
+  // `confirmed`, because cancel only accepts `pending|confirmed` — a
+  // `completed` booking 409s and the assertions below would then be passing
+  // against an error body that has no billing keys for the trivial reason.
+  const db = freshDb(); seedBooking(db, 1, 1, 'confirmed');
+  const e = env(db);
+  await call(e, 'PATCH', '/me/bookings/1/billing', ada, { amount_cents: 9900 });
+  // `cancel` is `whoCan: 'either'`, so this same response shape goes to the
+  // client when the client cancels.
+  const moved = await call(e, 'POST', '/bookings/1/cancel', fran, { reason: 'Conflict' });
+  assert.equal(moved.status, 200, 'the move landed — not a 409 with no keys on it');
+  assert.equal(moved.body.status, 'cancelled');
+  assert.equal('amount_cents' in moved.body, false);
+  assert.equal('billing_state' in moved.body, false);
+});
+
+// ---------------------------------------------------------------------------
+// The reviews on a booking belong to the two people on it
+//
+// `GET /bookings/:id/reviews` had `requireAuth` and no ownership check at all,
+// so any signed-in account could name any booking id and read both sides'
+// ratings and free-text comments about a session they had no part in. Booking
+// ids are small integers, so the whole table was walkable.
+// ---------------------------------------------------------------------------
+function seedReview(db: InstanceType<typeof DatabaseSync>, bookingId: number) {
+  db.prepare(
+    'INSERT INTO advisor_reviews (uid, booking_id, reviewer_user_id, reviewer_role, rating, comment) VALUES (?,?,?,?,?,?)',
+  ).run(`rv-${bookingId}`, bookingId, FOUNDER_USER, 'founder', 2, 'Turned up late and rambled.');
+}
+
+test('both people on a booking can read its reviews', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  for (const who of [ada, fran]) {
+    const r = await call(e, 'GET', '/bookings/1/reviews', who);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.items.length, 1);
+  }
+});
+
+test('nobody else can, whichever half of the booking they are missing', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  // grace is an advisor, but not THIS booking's advisor; otto is a founder,
+  // but not THIS booking's founder.
+  for (const who of [grace, otto]) {
+    const r = await call(e, 'GET', '/bookings/1/reviews', who);
+    assert.equal(r.status, 404, 'and 404, not 403 — a stranger learns nothing');
+    assert.equal(r.body?.items, undefined, 'no rows leak alongside the refusal');
+  }
+});
+
+test('an admin can read them, and an id nobody owns answers the same 404', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  const e = env(db);
+  assert.equal((await call(e, 'GET', '/bookings/1/reviews', root)).status, 200);
+  // A booking that does not exist and a booking that is not yours are
+  // indistinguishable on purpose: otherwise the 404/200 split is an oracle
+  // for which ids are real.
+  assert.equal((await call(e, 'GET', '/bookings/999/reviews', fran)).status, 404);
+});
+
+test('a non-numeric booking id is refused before the lookup runs', async () => {
+  const db = freshDb(); seedBooking(db, 1); seedReview(db, 1);
+  // THE DATABASE IS THE WITNESS HERE, not the status code. Asserting only
+  // that `/bookings/abc/reviews` returns 404 passes with the `Number.isFinite`
+  // guard DELETED: `Number('abc')` is NaN, node:sqlite binds it happily,
+  // no row comes back and the ownership check 404s for the wrong reason.
+  // That mutant escaped. Real D1 rejects a NaN bind, so deleting the guard
+  // trades a 404 for a 500 in production and nowhere else — which is exactly
+  // the kind of divergence a test that only reads the status cannot see.
+  const real = makeD1(db);
+  const e = {
+    JWT_SECRET, ENVIRONMENT: 'development',
+    DB: {
+      ...real,
+      prepare(sql: string) {
+        if (sql.includes('FROM advisor_bookings b')) throw new Error('the booking lookup ran');
+        return real.prepare(sql);
+      },
+    },
+  };
+  assert.equal((await call(e, 'GET', '/bookings/abc/reviews', fran)).status, 404);
+  // ...and the poison is live: the same env on a numeric id DOES reach the
+  // lookup and blows up. 400 rather than 500 because `mapError` only ever
+  // answers 400/401/403 for a thrown Error — the point is that it is not the
+  // 404 above.
+  assert.equal((await call(e, 'GET', '/bookings/1/reviews', fran)).status, 400);
+});
+
+// ---------------------------------------------------------------------------
+// 206 — cohort assignment
+// ---------------------------------------------------------------------------
+test('an advisor with no assignment sees no cohort and cannot open one', async () => {
+  const e = env(freshDb());
+  assert.deepEqual((await call(e, 'GET', '/me/cohort', ada)).body.items, []);
+  const founders = await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada);
+  assert.equal(founders.status, 403, 'having the advisor role is not having a batch');
+});
+
+test('an admin assigns; the advisor then reads that batch and no other', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE, note: 'September batch',
+  });
+  assert.equal(made.status, 200);
+  assert.equal(made.body.assigned_by_admin_id, ADMIN_USER, 'who decided is on the record');
+
+  const mine = await call(e, 'GET', '/me/cohort', ada);
+  assert.equal(mine.body.items.length, 1);
+  assert.equal(mine.body.items[0].cohort.year, 2026);
+  assert.equal(mine.body.items[0].cohort.month, 9);
+
+  const founders = await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada);
+  assert.equal(founders.status, 200);
+  assert.equal(founders.body.source, 'spinout_lab', 'seam-marked as the founder’s own record');
+  assert.equal(founders.body.items.length, 1, 'two week rows, one founder');
+  assert.equal(founders.body.items[0].user_id, FOUNDER_USER);
+
+  assert.equal((await call(e, 'GET', `/me/cohort/${OTHER_CYCLE}/founders`, ada)).status, 403,
+    'an assignment to one cycle is not an assignment to the next');
+  assert.deepEqual((await call(e, 'GET', '/me/cohort', grace)).body.items, [],
+    'and it is not an assignment for another advisor');
+});
+
+test('a user who is not an advisor cannot be assigned a batch', async () => {
+  const e = env(freshDb());
+  // The parameter is named `advisor_user_id`. It used to accept any existing
+  // user id — `role` was SELECTed and never read — so a mistyped id that
+  // happened to exist became a grant of another cohort's founder names and
+  // emails. 400, not 403: the admin IS authorised; the subject is ineligible.
+  const r = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: FOUNDER_USER, cohort_cycle_id: CYCLE,
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.body.detail, /advisor role/);
+
+  // And nothing was written, so the founder gained nothing.
+  assert.deepEqual((await call(e, 'GET', '/me/cohort', fran)).body.items, []);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, fran)).status, 403);
+  assert.equal((await call(e, 'GET', '/admin/cohort-assignments', root)).body.items.length, 0);
+});
+
+test('an assignment written before the check still cannot open a batch', async () => {
+  // THE LOAD-BEARING TEST. The write-side check is point-in-time and cannot
+  // see rows that already exist — including any written by hand before it
+  // landed. This inserts one directly, bypassing the route entirely, and the
+  // read must still refuse. Without this test, someone reads the two checks,
+  // concludes the second is redundant, and deletes the one that actually holds.
+  const db = freshDb();
+  db.prepare(`INSERT INTO advisor_cohort_assignments
+                (uid, advisor_user_id, cohort_cycle_id, is_active)
+              VALUES ('legacy', ?, ?, 1)`).run(FOUNDER_USER, CYCLE);
+  const e = env(db);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, fran)).status, 403);
+});
+
+test('a demoted advisor loses the batch without anyone ending the assignment', async () => {
+  // `requireAuth` reloads the user row on every request, so the role check at
+  // read time is the CURRENT role — which makes the refusal continuous rather
+  // than point-in-time. A check only at assignment would leave a demoted
+  // advisor reading founder names and emails indefinitely.
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  assert.equal(made.status, 200);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada)).status, 200);
+
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run('founder', ADVISOR_USER);
+  const demoted = { user: ADVISOR_USER, role: 'founder' };
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, demoted)).status, 403,
+    'access ends the moment the role does, with no admin action');
+
+  // But the row is still THERE and still active, and the admin can see both
+  // that fact and the reason — otherwise nobody would ever come and end it.
+  const admin = await call(e, 'GET', '/admin/cohort-assignments', root);
+  assert.equal(admin.body.items.length, 1);
+  assert.equal(admin.body.items[0].is_active, true);
+  assert.equal(admin.body.items[0].advisor_role, 'founder',
+    'the list reports the CURRENT role, so a stale grant is visible');
+});
+
+test('a malformed cycle id is refused with a sentence, not an error path', async () => {
+  const e = env(freshDb());
+  const r = await call(e, 'GET', '/me/cohort/not-a-number/founders', ada);
+  assert.equal(r.status, 400);
+});
+
+test('only an admin may assign', async () => {
+  const e = env(freshDb());
+  for (const who of [ada, fran, grace]) {
+    const r = await call(e, 'POST', '/admin/cohort-assignments', who, {
+      advisor_user_id: who.user, cohort_cycle_id: CYCLE,
+    });
+    assert.equal(r.status, 403, `${who.role} cannot grant themselves a batch`);
+  }
+});
+
+test('assigning the same pair twice reactivates one row rather than stacking two', async () => {
+  const e = env(freshDb());
+  const body = { advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE };
+  const first = await call(e, 'POST', '/admin/cohort-assignments', root, body);
+  await call(e, 'DELETE', `/admin/cohort-assignments/${first.body.id}`, root);
+  const again = await call(e, 'POST', '/admin/cohort-assignments', root, body);
+  assert.equal(again.body.id, first.body.id, 'the same row');
+  assert.equal(again.body.is_active, true);
+  assert.equal(again.body.unassigned_at, null, 'reactivated, not duplicated');
+  assert.equal((await call(e, 'GET', '/admin/cohort-assignments', root)).body.items.length, 1);
+});
+
+test('ending an assignment keeps the record that it existed', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const gone = await call(e, 'DELETE', `/admin/cohort-assignments/${made.body.id}`, root);
+  assert.equal(gone.status, 200);
+  assert.ok(gone.body.unassigned_at, 'saying when access ended');
+
+  assert.deepEqual((await call(e, 'GET', '/me/cohort', ada)).body.items, [], 'the advisor loses the batch');
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada)).status, 403);
+
+  const admin = await call(e, 'GET', '/admin/cohort-assignments', root);
+  assert.equal(admin.body.items.length, 1, 'and the admin can still see who had it');
+  assert.equal(admin.body.items[0].is_active, false);
+});
+
+test('assigning to a user or cycle that does not exist fails with a sentence', async () => {
+  const e = env(freshDb());
+  assert.equal((await call(e, 'POST', '/admin/cohort-assignments', root,
+    { advisor_user_id: 9999, cohort_cycle_id: CYCLE })).status, 404);
+  assert.equal((await call(e, 'POST', '/admin/cohort-assignments', root,
+    { advisor_user_id: ADVISOR_USER, cohort_cycle_id: 9999 })).status, 404);
+});
+
+// ---------------------------------------------------------------------------
+// The Lab is not touched
+// ---------------------------------------------------------------------------
+test('the weeks read is refused without an assignment, and by a non-advisor with one', async () => {
+  const db = freshDb();
+  const e = env(db);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada)).status, 403,
+    'the same two-part gate as founders — this returns the same people');
+
+  // A hand-written row for someone ineligible must not open it either.
+  db.prepare(`INSERT INTO advisor_cohort_assignments
+                (uid, advisor_user_id, cohort_cycle_id, is_active)
+              VALUES ('legacy-w', ?, ?, 1)`).run(FOUNDER_USER, CYCLE);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, fran)).status, 403);
+});
+
+test('the weeks read reports the cycle, its windows and each founder’s week', async () => {
+  const e = env(freshDb());
+  await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const r = await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.available, true);
+  assert.equal(r.body.source, 'spinout_lab', 'seam-marked on the wire');
+  assert.equal(r.body.windows_recorded, true);
+  // Computed server-side, once — two pages must never disagree about which
+  // week it is. Weeks 1 and 2 have unlocked; 3 has not.
+  assert.equal(r.body.current_week, 2);
+  assert.equal(r.body.weeks.length, 3);
+  assert.equal(r.body.founders.length, 1, 'one founder, two week rows');
+  assert.ok(r.body.founders[0].weeks['1']);
+  assert.ok(r.body.founders[0].weeks['2']);
+});
+
+test('a cycle with no recorded windows says so rather than defaulting to week one', async () => {
+  const db = freshDb();
+  db.prepare('DELETE FROM week_windows WHERE cohort_cycle_id = ?').run(CYCLE);
+  const e = env(db);
+  await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const r = await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
+  assert.equal(r.body.windows_recorded, false);
+  assert.equal(r.body.current_week, null, 'not 1 — nobody recorded which week it is');
+});
+
+test('the assignable list offers advisors and nobody else', async () => {
+  const e = env(freshDb());
+  const r = await call(e, 'GET', '/admin/cohort-assignments/assignable', root);
+  assert.equal(r.status, 200);
+  const ids = r.body.items.map((x: any) => x.id).sort();
+  assert.deepEqual(ids, [ADVISOR_USER, OTHER_ADVISOR_USER].sort(),
+    'the picker can only ever offer what the POST will accept');
+  assert.equal((await call(e, 'GET', '/admin/cohort-assignments/assignable', ada)).status, 403);
+});
+
+test('the cohort read writes nothing to the Spin-Out Lab', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const before = {
+    cycles: db.prepare('SELECT * FROM cohort_cycles ORDER BY id').all(),
+    weeks: db.prepare('SELECT * FROM company_week_status ORDER BY id').all(),
+    windows: db.prepare('SELECT * FROM week_windows ORDER BY id').all(),
+  };
+  await call(e, 'GET', '/me/cohort', ada);
+  await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada);
+  await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
+  assert.deepEqual(db.prepare('SELECT * FROM cohort_cycles ORDER BY id').all(), before.cycles);
+  assert.deepEqual(db.prepare('SELECT * FROM company_week_status ORDER BY id').all(), before.weeks);
+  assert.deepEqual(db.prepare('SELECT * FROM week_windows ORDER BY id').all(), before.windows);
+});
+
+// ---------------------------------------------------------------------------
+// D4703 (#4703) — practice integrations converge on one state
+// ---------------------------------------------------------------------------
+
+/** A request whose deferred work is collected, so a test can await it. */
+async function callCollecting(e: any, method: string, path: string, who: { user: number; role: string }) {
+  const deferred: Promise<unknown>[] = [];
+  const init: RequestInit = { method, headers: { Authorization: `Bearer ${await token(who.user, who.role)}` } };
+  const res = await advisors.request(path, init, e, { waitUntil(p: Promise<unknown>) { deferred.push(p); }, passThroughOnException() {} } as any);
+  await Promise.allSettled(deferred);
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+test('D4703: a cancelled or missed session is not payable, whatever price it carries', async () => {
+  // Mutation checked: the BOOKING_PAYABLE_STATUSES check removed → a cancelled booking falls through to 503 "charging is not on".
+  const db = freshDb();
+  seedBooking(db, 5, 1, 'cancelled');
+  seedBooking(db, 6, 1, 'no_show');
+  seedBooking(db, 7, 1, 'completed');
+  db.exec("UPDATE advisor_bookings SET billing_state = 'billed', amount_cents = 30000");
+  const e = env(db);
+  const cancelled = await call(e, 'POST', '/bookings/5/pay', fran);
+  assert.equal(cancelled.status, 409, JSON.stringify(cancelled.body));
+  assert.match(cancelled.body.detail, /cancelled, so there is nothing to pay\. No cancellation fee applies\./);
+  const missed = await call(e, 'POST', '/bookings/6/pay', fran);
+  assert.equal(missed.status, 409);
+  assert.match(missed.body.detail, /did not take place/);
+  // A session that happened is still payable in principle: it reaches the
+  // charging switch, which is off here.
+  assert.equal((await call(e, 'POST', '/bookings/7/pay', fran)).status, 503);
+});
+
+test('D4703: a cancel or confirm writes only from the status it read', async () => {
+  // Mutation checked: the UPDATE's `AND status = ?` removed → the confirm overwrites the cancel and answers 200.
+  const db = freshDb();
+  seedBooking(db, 9, 1, 'pending');
+  const base = env(db);
+  // The founder cancels between the advisor's read and the advisor's write.
+  const racing = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    if (sql.startsWith('UPDATE advisor_bookings SET status = ?')) db.exec("UPDATE advisor_bookings SET status = 'cancelled' WHERE id = 9");
+    return base.DB.prepare(sql);
+  } } };
+  const r = await call(racing, 'POST', '/bookings/9/confirm', ada);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.detail, /changed while you were looking at it/);
+  assert.equal((db.prepare('SELECT status FROM advisor_bookings WHERE id = 9').get() as any).status, 'cancelled', 'the cancel stands');
+  // Without a race, the same press works.
+  seedBooking(db, 10, 1, 'pending');
+  assert.equal((await call(base, 'POST', '/bookings/10/confirm', ada)).status, 200);
+});
+
+test('D4703: cancelling a slot cleans up every booking’s calendar copy, as one cancel does', async () => {
+  // Mutation checked: the slot delete's deferCalendarCancel removed → no calendar lookup for either booking.
+  const db = freshDb();
+  seedBooking(db, 11, 1, 'confirmed');
+  db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
+    .run(12, 'bk-12', 11, 1, OUTSIDER_USER, 'pending');
+  db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status) VALUES (?,?,?,?,?,?)')
+    .run(13, 'bk-13', 11, 1, ADMIN_USER, 'cancelled');
+  const base = env(db);
+  const looked: number[] = [];
+  const watching = { ...base, DB: { ...base.DB, prepare(sql: string) {
+    const st = base.DB.prepare(sql);
+    if (!/FROM calendar_sync_records/.test(sql)) return st;
+    return { ...st, bind: (...b: any[]) => { looked.push(Number(b[1])); return st.bind(...b); } };
+  } } };
+  const r = await callCollecting(watching, 'DELETE', '/me/slots/11', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.bookings_cancelled, 2, 'the two open bookings, not the one already cancelled');
+  assert.deepEqual(looked.sort(), [11, 12], 'each cancelled booking got the calendar cleanup a single cancel gets');
+  const statuses = db.prepare('SELECT id, status FROM advisor_bookings WHERE slot_id = 11 ORDER BY id').all() as any[];
+  assert.deepEqual(statuses.map((s) => s.status), ['cancelled', 'cancelled', 'cancelled']);
+});
+
+test('D4703: two payout onboarding starts make one provider account, and a stored one wins', async () => {
+  // Mutation checked: no idempotency key → two accounts created at the provider;
+  // the attach made unconditional → the later start overwrites the stored account.
+  const db = freshDb();
+  const e = { ...env(db), STRIPE_SECRET_KEY: 'sk_test_synthetic' };
+  const created = new Map<string, string>();
+  const linkedFor: string[] = [];
+  let raceAttach: string | null = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: any) => {
+    const u = String(url);
+    if (u.endsWith('/v1/accounts')) {
+      const key = String(init.headers['Idempotency-Key'] || `none-${created.size}`);
+      if (!created.has(key)) created.set(key, `acct_synthetic_${created.size + 1}`);
+      if (raceAttach) db.prepare('UPDATE advisor_payout_accounts SET provider_account_id = ? WHERE advisor_id = 1').run(raceAttach);
+      return new Response(JSON.stringify({ id: created.get(key) }), { status: 200 });
+    }
+    if (u.endsWith('/v1/account_links')) {
+      linkedFor.push(new URLSearchParams(init.body).get('account') || '');
+      return new Response(JSON.stringify({ url: 'https://connect.example.test/onboard' }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch ${u}`);
+  }) as any;
+  try {
+    const [a, b] = await Promise.all([
+      call(e, 'POST', '/me/payout-account/connect', ada),
+      call(e, 'POST', '/me/payout-account/connect', ada),
+    ]);
+    assert.equal(a.status, 200, JSON.stringify(a.body));
+    assert.equal(b.status, 200, JSON.stringify(b.body));
+    assert.equal(new Set(created.values()).size, 1, 'one account at the provider, not one per start');
+    assert.ok([...created.keys()][0].startsWith('connect:advisory:'));
+    const stored = (db.prepare('SELECT provider_account_id FROM advisor_payout_accounts WHERE advisor_id = 1').get() as any).provider_account_id;
+    assert.equal(stored, 'acct_synthetic_1');
+    assert.deepEqual(linkedFor, ['acct_synthetic_1', 'acct_synthetic_1']);
+
+    // Another start attached its account while this one was at the provider:
+    // the stored one stands, and this start onboards into it.
+    db.exec('UPDATE advisor_payout_accounts SET provider_account_id = NULL');
+    created.clear(); linkedFor.length = 0;
+    created.set('placeholder', 'acct_unused');
+    raceAttach = 'acct_synthetic_winner';
+    const c = await call(e, 'POST', '/me/payout-account/connect', ada);
+    assert.equal(c.status, 200, JSON.stringify(c.body));
+    assert.equal((db.prepare('SELECT provider_account_id FROM advisor_payout_accounts WHERE advisor_id = 1').get() as any).provider_account_id,
+      'acct_synthetic_winner', 'the account attached first is not overwritten');
+    assert.deepEqual(linkedFor, ['acct_synthetic_winner']);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+// ---------------------------------------------------------------------------
+// D4674 — prices, currencies, limits and concurrent edits
+// ---------------------------------------------------------------------------
+test('D4674: a service is created with a stated, supported currency; CHF 123.45 stays CHF 123.45', async () => {
+  const e = env(freshDb());
+  const missing = await call(e, 'POST', '/me/services', ada, { title: 'x', price_cents: 100 });
+  assert.equal(missing.status, 400);
+  assert.equal(missing.body.error, 'currency_required', 'no silent USD');
+  const odd = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'XYZ' });
+  assert.equal(odd.status, 400);
+  assert.equal(odd.body.error, 'currency_unsupported');
+  const ok = await call(e, 'POST', '/me/services', ada, { title: 'Audit', currency: 'chf', price_cents: 12345 });
+  assert.equal(ok.status, 200);
+  assert.deepEqual([ok.body.price_cents, ok.body.currency], [12345, 'CHF']);
+  const list = await call(e, 'GET', '/me/services', ada);
+  assert.deepEqual([list.body.items[0].price_cents, list.body.items[0].currency], [12345, 'CHF']);
+});
+
+test('D4674: a price that could change magnitude is refused, not guessed', async () => {
+  const e = env(freshDb());
+  for (const bad of ['12,50', '1,5', '1.234,56', '1e3', 12.5, '12.50', ' ', 'NaN']) {
+    if (bad === ' ') continue;
+    const r = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: bad });
+    assert.equal(r.status, 400, JSON.stringify(bad));
+    assert.equal(r.body.error, 'price_invalid');
+  }
+  const digits = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', price_cents: '1250' });
+  assert.equal(digits.body.price_cents, 1250);
+});
+
+test('D4674: changing the currency of a priced service needs the price in the same edit', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const bare = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR' });
+  assert.equal(bare.status, 400);
+  assert.equal(bare.body.error, 'price_required_with_currency');
+  const both = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { currency: 'EUR', price_cents: 450000 });
+  assert.deepEqual([both.body.currency, both.body.price_cents], ['EUR', 450000]);
+});
+
+test('D4674: text over its limit is refused with the field named; nothing is cut and saved', async () => {
+  const e = env(freshDb());
+  const long = await call(e, 'POST', '/me/services', ada, { title: 'x', currency: 'USD', scope: 'a'.repeat(2001) });
+  assert.equal(long.status, 400);
+  assert.equal(long.body.error, 'too_long');
+  assert.match(long.body.message, /scope is at most 2000/);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', scope: 'a'.repeat(2000) });
+  assert.equal(made.body.scope.length, 2000, 'exactly at the limit is fine');
+  const edit = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { title: 't'.repeat(201) });
+  assert.equal(edit.status, 400);
+  assert.equal((await call(e, 'GET', '/me/services', ada)).body.items[0].title, 'Sprint');
+  const profile = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'b'.repeat(4001) });
+  assert.equal(profile.status, 400);
+  assert.equal(profile.body.error, 'too_long');
+  const tags = await call(e, 'POST', '/me', ada, { display_name: 'Ada', expertise: Array.from({ length: 33 }, (_, i) => `t${i}`) });
+  assert.equal(tags.body.error, 'too_many');
+});
+
+test('D4674: two edits to different fields of one service both persist', async () => {
+  const e = env(freshDb());
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  // Both editors opened the same row; each sends only the field it changed.
+  const a = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'Two weeks' });
+  const b = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { price_cents: 600000 });
+  assert.equal(a.status, 200); assert.equal(b.status, 200);
+  const row = (await call(e, 'GET', '/me/services', ada)).body.items[0];
+  assert.deepEqual([row.scope, row.price_cents], ['Two weeks', 600000]);
+});
+
+test('D4674: an edit made on a stale revision is a 409 with the current row, and saves nothing', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me/services', ada, { title: 'Sprint', currency: 'USD', price_cents: 500000 });
+  const opened = made.body.updated_at;
+  db.prepare("UPDATE advisor_services SET updated_at = '2099-01-01T00:00:00.000Z', scope = 'someone else' WHERE id = ?").run(made.body.id);
+  const stale = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: opened });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.error, 'revision_conflict');
+  assert.equal(stale.body.current.scope, 'someone else');
+  const fresh = await call(e, 'PATCH', `/me/services/${made.body.id}`, ada, { scope: 'mine', revision: stale.body.current.updated_at });
+  assert.equal(fresh.status, 200);
+  assert.equal(fresh.body.scope, 'mine');
+});
+
+test('D4674: the profile writes only the fields it names, and a stale revision is a 409', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/me', ada, { display_name: 'Ada', bio: 'Original bio', headline: 'Original headline' });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  await call(e, 'POST', '/me', ada, { headline: 'New headline' });
+  const second = await call(e, 'POST', '/me', ada, { bio: 'New bio' });
+  assert.deepEqual([second.body.headline, second.body.bio], ['New headline', 'New bio'], 'neither edit lost the other');
+  db.prepare("UPDATE advisors SET updated_at = '2099-01-01T00:00:00.000Z' WHERE user_id = ?").run(ADVISOR_USER);
+  const stale = await call(e, 'POST', '/me', ada, { bio: 'late', revision: second.body.updated_at });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.current.bio, 'New bio');
+});
+
+// ── #4702 (D4702): the advisor's answer is its own fact ─────────────────────
+
+const answerOf = (db: InstanceType<typeof DatabaseSync>, id: number) =>
+  ({ ...(db.prepare('SELECT status, advisor_decision, advisor_decided_at, cancelled_by FROM advisor_bookings WHERE id = ?').get(id) as any) });
+
+test('#4702: a confirm records the accept; a client cancelling afterwards leaves it accepted, cancelled by the client', async () => {
+  // Mutation checked: the cancel UPDATE writing advisor_decision = 'declined' → the accept is overwritten.
+  const db = freshDb();
+  seedBooking(db, 41, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/41/confirm', ada)).status, 200);
+  const accepted = answerOf(db, 41);
+  assert.deepEqual([accepted.status, accepted.advisor_decision, accepted.cancelled_by], ['confirmed', 'accepted', null]);
+  assert.ok(accepted.advisor_decided_at, 'when the advisor answered');
+  const cancelled = await call(e, 'POST', '/bookings/41/cancel', fran, { reason: 'Schedule clash' });
+  assert.equal(cancelled.status, 200, JSON.stringify(cancelled.body));
+  assert.deepEqual(answerOf(db, 41), { ...accepted, status: 'cancelled', cancelled_by: 'client' }, 'still accepted; the client cancelled');
+  assert.equal(cancelled.body.advisor_decision, undefined, 'the founder\'s own read does not carry the advisor\'s answer');
+  const mine = (await call(e, 'GET', '/me/bookings', ada)).body.items.find((b: any) => b.id === 41);
+  assert.deepEqual([mine.status, mine.advisor_decision, mine.cancelled_by], ['cancelled', 'accepted', 'client']);
+});
+
+test('#4702: the advisor cancelling a request still waiting is a decline; the client withdrawing one is not; the system\'s cancel is neither', async () => {
+  // Mutation checked: treating every pending cancel as a decline → the client's withdrawal records 'declined'.
+  const db = freshDb();
+  seedBooking(db, 42, 1, 'pending'); seedBooking(db, 43, 1, 'pending'); seedBooking(db, 44, 1, 'pending');
+  const e = env(db);
+  assert.equal((await call(e, 'POST', '/bookings/42/cancel', ada, { reason: 'Not a fit' })).status, 200);
+  assert.deepEqual([answerOf(db, 42).advisor_decision, answerOf(db, 42).cancelled_by], ['declined', 'advisor']);
+  assert.equal((await call(e, 'POST', '/bookings/43/cancel', fran, { reason: 'Changed my mind' })).status, 200);
+  assert.deepEqual([answerOf(db, 43).advisor_decision, answerOf(db, 43).cancelled_by], [null, 'client'], 'withdrawn before any answer');
+  const slot = (db.prepare('SELECT slot_id FROM advisor_bookings WHERE id = 44').get() as any).slot_id;
+  assert.equal((await callCollecting(e, 'DELETE', `/me/slots/${slot}`, ada)).status, 200);
+  assert.deepEqual([answerOf(db, 44).advisor_decision, answerOf(db, 44).cancelled_by], [null, 'system']);
+});
+
+test('#4702: the migration backfills only what the row proves', () => {
+  const db = freshDb();
+  db.exec("DELETE FROM advisor_bookings");
+  const ins = db.prepare('INSERT INTO advisor_bookings (id, uid, slot_id, advisor_id, founder_user_id, status, cancel_reason) VALUES (?,?,?,?,?,?,?)');
+  ins.run(1, 'b1', 1, 1, FOUNDER_USER, 'confirmed', null);
+  ins.run(2, 'b2', 2, 1, FOUNDER_USER, 'completed', null);
+  ins.run(3, 'b3', 3, 1, FOUNDER_USER, 'no_show', null);
+  ins.run(4, 'b4', 4, 1, FOUNDER_USER, 'cancelled', 'slot_cancelled');
+  ins.run(5, 'b5', 5, 1, FOUNDER_USER, 'cancelled', 'a reason somebody typed');
+  ins.run(6, 'b6', 6, 1, FOUNDER_USER, 'pending', null);
+  db.exec("UPDATE advisor_bookings SET advisor_decision = NULL, cancelled_by = NULL");
+  db.exec(readFileSync(`${SQL}/migrations/202611071558_advisor_booking_decision.sql`, 'utf8').split('\n').filter((l) => /^UPDATE/.test(l)).join('\n'));
+  const got = (db.prepare('SELECT id, advisor_decision AS d, cancelled_by AS c FROM advisor_bookings ORDER BY id').all() as any[]).map((r) => [r.id, r.d, r.c]);
+  assert.deepEqual(got, [[1, 'accepted', null], [2, 'accepted', null], [3, 'accepted', null], [4, null, 'system'], [5, null, null], [6, null, null]],
+    'a cancelled row with a typed reason stays unknown: it may be a decline or a client leaving');
+});
+
+// ── #4702: review coverage in one read, over every held session ─────────────
+
+test('#4702: review coverage counts EVERY held session in one read, not the first twenty', async () => {
+  // Mutation checked: the coverage query capped at 20 sessions → held is 20, not 25.
+  const db = freshDb();
+  for (let id = 100; id < 125; id += 1) seedBooking(db, id, 1, 'completed');
+  const rv = db.prepare('INSERT INTO advisor_reviews (uid, booking_id, reviewer_user_id, reviewer_role, rating) VALUES (?,?,?,?,?)');
+  rv.run('r1', 100, FOUNDER_USER, 'founder', 5);       // oldest sessions reviewed: the ones a "newest 20" read would never reach
+  rv.run('r2', 100, ADVISOR_USER, 'advisor', 4);
+  rv.run('r3', 101, FOUNDER_USER, 'founder', 3);
+  const e = env(db);
+  const r = await call(e, 'GET', '/me/review-coverage', ada);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual([r.body.held, r.body.reviewed, r.body.awaiting], [25, 2, 23]);
+  assert.deepEqual(r.body.ratings, { count: 3, sum: 12 });
+  assert.equal(r.body.items.length, 25);
+  const one = r.body.items.find((i: any) => i.booking_id === 100);
+  assert.deepEqual([one.reviews, one.advisor_filed, one.rating], [2, true, 4.5]);
+  assert.equal(r.body.items.find((i: any) => i.booking_id === 101).advisor_filed, false);
+  assert.equal(r.body.items_complete, true);
+  assert.equal((await call(e, 'GET', '/me/review-coverage', grace)).body.held, 0, 'another advisor\'s sessions are not counted');
+  const list = await call(e, 'GET', '/me/bookings?status=completed', ada);
+  assert.deepEqual([list.body.total, list.body.items.length], [25, 25], 'the list says how many there are');
+});

@@ -1,0 +1,190 @@
+/**
+ * Data room: the gate is real, and the UI does not promise more than the
+ * backend does (Wave 4).
+ *
+ * This is the first NEW surface in the integration — everything before it was
+ * wiring a page onto a backend that already existed. So the risk is the
+ * opposite one: a UI that describes protections the worker does not implement.
+ *
+ * Three claims a data room could make and must not:
+ *
+ *   1. "Watermarked." There is no PDF pipeline. What actually protects a file
+ *      is a per-investor, single-use, two-minute link that is logged.
+ *   2. "Invitation sent." The worker resolves an existing account and 404s
+ *      otherwise. Nothing is mailed.
+ *   3. A locked row for an NDA-gated file. A filename is itself information
+ *      ("Series B term sheet — Acme.pdf"), so those are withheld, not greyed
+ *      out — the investor gets a count.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { apiMethodNames, apiCallsIn } from './_apiMethods.mjs';
+import { routeBlock } from './_routes.mjs';
+
+const root = resolve(process.cwd());
+const read = (p) => readFileSync(resolve(root, p), 'utf8');
+// D1109 (#2989): the founder's room is the Data room tool (`raise/dataroom/`); the old page is retired.
+const TOOL_DIR = 'frontend/src/pages/raise/dataroom';
+const TOOL = () => readdirSync(resolve(root, TOOL_DIR)).filter((f) => f.endsWith('.jsx')).map((f) => read(`${TOOL_DIR}/${f}`)).join('\n');
+const ROUTE = 'cloudflare-worker/src/routes/data_room.ts';
+
+test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
+  // D4631 part 2: the route asks the shared deal policy (services/dealAccess.ts)
+  // whether an NDA is in force, so the rule is read where it now lives.
+  const route = read(ROUTE);
+  assert.match(route, /import \{ hasActiveVentureNda \} from '\.\.\/services\/dealAccess'/,
+    'the data room must ask the shared NDA rule, not keep its own');
+  assert.match(route, /return hasActiveVentureNda\(env, projectId, investorUserId\)/);
+  assert.match(route, /await projectNdaActive\(c\.env, project\.id, investorId\)/);
+  const w = read('cloudflare-worker/src/services/dealAccess.ts');
+  assert.match(w, /FROM pairwise_ndas/, 'the gate must use the existing e-sign NDA table');
+  // Migration 025 fixes party_a as the founder. Accepting either ordering
+  // would take rows the rest of the system treats as malformed.
+  assert.match(w, /owner\.id = n\.party_a_user_id[^`]*?n\.party_b_user_id = \?/);
+  assert.ok(!/party_b_user_id = \? AND party_a_user_id = \?/.test(w + route),
+    'the reversed ordering must not be accepted');
+  // THE COLUMN IS NORMALISED, NOT JUST THE CLOCK (D124). This read
+  // `valid_until > datetime('now')` until 2026-09-16, and that form does not
+  // do what it says: `valid_until` is written as a JS ISO string
+  // (`services/trust.ts:349-355`), SQLite compares timestamps as TEXT, and an
+  // ISO string beats a space-separated one at position 10 — so a lapsed NDA
+  // read as live until the UTC date rolled over. Wrapping only the right-hand
+  // side is the plausible fix and changes nothing; the stored value is what
+  // has to be normalised. `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts`
+  // owns the general rule and proves this gate closes against a real database.
+  assert.match(w, /(n\.)?valid_until IS NULL OR datetime\((n\.)?valid_until\) > datetime\('now'\)/,
+    'a lapsed NDA must not open a file');
+});
+
+test('the gate is re-checked at download, not inherited from the listing', () => {
+  const w = read(ROUTE);
+  const dl = w.slice(w.indexOf("r.post('/shared/:projectUid/files/:uid/download'"));
+  // #2461: the NDA is the venture founder's, whoever issued the grant.
+  assert.match(dl, /file\.visibility === 'nda' && !\(await projectNdaActive\(c\.env, project\.id, user\.id\)\)/,
+    'a uid captured while an NDA was live must stop working when it lapses');
+});
+
+test('nothing NDA-gated is listed to an investor who cannot open it', () => {
+  const w = read(ROUTE);
+  const shared = w.slice(w.indexOf("r.get('/shared/:projectUid'"), w.indexOf('function folderUid'));
+  // D691 decision 6 (#1700): the tier and expiry come first, through the one
+  // shared predicate, and the NDA gate applies to what they admit.
+  // D1103 (#2983): the filter is `investorView`, which the founder's preview
+  // shares, and it applies the grant's folders through the same predicate.
+  assert.match(shared, /const view = await investorView\(c\.env, project, grant, user\.id\)/);
+  assert.match(shared, /const committed = await investorCommitted\(env, project\.id, investorUserId\)/);
+  assert.match(shared, /const scope: FolderScope = await grantFolderScope\(env, grant\.id\)/);
+  assert.match(shared, /const admitted = all\.filter\(\(f\) => tierAdmits\(f, committed, now, scope\)\)/);
+  assert.match(shared, /delete room\.hidden_from_grant/, 'the investor never learns how much the grant hides');
+  assert.match(shared, /const openFiles = admitted\.filter\(\(f\) => visible\(f\.visibility\)\)/);
+  assert.match(shared, /const withheld = admitted\.length - openFiles\.length/);
+  assert.match(shared, /const visible = \(v: string\) => v === 'open' \|\| nda/);
+  assert.match(shared, /withheld_behind_nda: withheld/,
+    'the investor is told SOMETHING is withheld, so the gate is not invisible');
+  // …but never the names.
+  assert.ok(!/withheld_files|locked_files|hidden_names/.test(shared));
+});
+
+test('a room with no grant is indistinguishable from one that does not exist', () => {
+  // Otherwise the 404-vs-403 split tells an investor which companies are on
+  // the platform.
+  const w = read(ROUTE);
+  assert.match(w, /if \(!project \|\| !grant\) return c\.json\(\{ detail: 'Data room not found' \}, 404\)/);
+});
+
+test('every founder mutation is scoped by project, not by uid alone', () => {
+  // A uid-only WHERE lets one founder patch or delete another's row.
+  const w = read(ROUTE);
+  for (const frag of [
+    'UPDATE data_room_folders SET ${sets.join(\', \')} WHERE uid = ? AND project_id = ?',
+    'DELETE FROM data_room_folders WHERE uid = ? AND project_id = ?',
+    'UPDATE data_room_files SET ${sets.join(\', \')} WHERE uid = ? AND project_id = ?',
+  ]) {
+    assert.ok(w.includes(frag), `missing project scoping: ${frag}`);
+  }
+  assert.match(w, /projectOwnerScope/, 'ownership goes through the tenancy module');
+});
+
+test('the R2 key is derived, never taken from the request', () => {
+  const w = read(ROUTE);
+  assert.match(w, /const key = `data-room\/\$\{project\.uid\}\/\$\{uid\}`/);
+  assert.ok(!/body\.r2_key|body\.key\b/.test(w),
+    'a caller-supplied key is a path-traversal write into another project');
+  // And deletion only touches an object inside this project's prefix.
+  assert.match(w, /file\.r2_key\.startsWith\(`data-room\/\$\{project\.uid\}\/`\)/);
+});
+
+test('the UI does not claim a watermark', () => {
+  // D311 — an investor downloads from the room and document pages under
+  // Research · Diligence now; the drawer that used to carry this copy is gone,
+  // and the founder page's docblock would satisfy a read of it by accident.
+  for (const page of ['frontend/src/pages/research/DiligenceRoom.jsx', 'frontend/src/pages/research/DiligenceFile.jsx']) {
+    const s = read(page);
+    assert.match(s, /Not watermarked/, `${page}: the absence must be stated, not left to be assumed`);
+    assert.ok(!/watermark(ed)?[^.]{0,20}(applied|protect)/i.test(s), page);
+    // What DOES protect the file is described instead.
+    assert.match(s, /work once|single-use/i, page);
+    assert.match(s, /expire/i, page);
+  }
+});
+
+test('sharing does not promise an invitation', () => {
+  const s = read(`${TOOL_DIR}/DataRoomAccess.jsx`);
+  assert.match(s, /Nobody is invited by email\./);
+  // D1109: and the line after Share does not claim access the Worker's answer cannot confirm.
+  assert.ok(s.includes('If ${chosen.email} has a StudioOS account'));
+  const w = read(ROUTE);
+  // #2461: an unknown address gets the same answer as a known one, so the
+  // form cannot be used to learn who has an account. No row, no invitation.
+  assert.doesNotMatch(w, /No account with that address/, 'the worker must not say whether an address has an account');
+  assert.match(w, /if \(!investor\) return c\.json\(\{ ok: true \}, 201\)/, 'an unknown address is answered like a known one');
+});
+
+test('the page is routed, role-branched, and never a second root', () => {
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/raise\/data-room"/, 'defining the page is not shipping it');
+  // Read the route's own BLOCK rather than pinning guard-to-page adjacency: the
+  // founder shell wraps this route in FounderWorkspaceTabs (Raise owns the Data
+  // room zone), which sits between them. The guard list and the page it renders
+  // are what this test is about.
+  //
+  // This used to read a single line. `724dfc9f` wrapped the element across six
+  // lines when the investor branch and the ?mode=workspace ternary landed, so
+  // the single-line read stopped seeing a guard list that is still exactly
+  // where it was. routeBlock stops at the next <Route, so widening the read
+  // cannot let a neighbour's markup satisfy these assertions.
+  const route = routeBlock(app, '/raise/data-room');
+  assert.ok(route, 'no /raise/data-room route');
+  assert.match(route, /guard\(\['admin', 'founder', 'investor'\],/);
+  // D1109: the founder's arm is the tool's Home; the retired modes forward to its tabs.
+  assert.match(route, /<CycleRoute cycle="raise" slug="data-room" \/>/);
+  assert.match(route, /<DataRoomMovedRedirect kind=\{movedKind\(location\.search\)\} \/>/);
+  assert.doesNotMatch(route, /DataRoomPage|FounderRaiseDataRoom/);
+  // The persona is a branch inside one route, not a /founder or /investor root.
+  assert.ok(!/path="\/investor\/data-room"|path="\/founder\/data-room"/.test(app));
+});
+
+test('every api.* the tool calls exists on both sides', () => {
+  // apiMethodNames parses api.js ONCE and exactly (a top-level property at two
+  // spaces of indent). The previous form built a regex per method name, which
+  // Semgrep flagged as non-literal-regexp; see _apiMethods.mjs for why that
+  // finding was not reachable and why the loop was still the weaker design.
+  const called = apiCallsIn(TOOL());
+  const defined = apiMethodNames(read('frontend/src/lib/api.js'));
+  const missing = [...called].filter((m) => !defined.has(m));
+  assert.deepEqual(missing, [], `api.js does not define: ${missing.join(', ')}`);
+  assert.ok(called.size >= 8, 'the tool should exercise most of the route');
+});
+
+test('the four tables exist and nothing else creates them', () => {
+  const dir = resolve(root, 'cloudflare-worker/sql/migrations');
+  const sql = readdirSync(dir).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+  for (const t of ['data_room_folders', 'data_room_files', 'data_room_grants', 'data_room_access_log']) {
+    assert.ok(sql.includes(`CREATE TABLE IF NOT EXISTS ${t}`), `${t} must be created by a migration`);
+  }
+  // The migration is additive and idempotent — no ALTER, no backfill.
+  const mig = read('cloudflare-worker/sql/migrations/184_data_room.sql');
+  assert.ok(!/ALTER TABLE|UPDATE |INSERT /i.test(mig), 'migration 184 must be create-only');
+});

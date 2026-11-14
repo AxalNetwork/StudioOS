@@ -1,0 +1,37 @@
+{
+  "Header": {
+    "Time": "2026-11-01T09:12:44-07:00",
+    "ReportName": "BalanceSheet",
+    "ReportBasis": "Accrual",
+    "StartPeriod": "2026-01-01",
+    "EndPeriod": "2026-09-30",
+    "SummarizeColumnsBy": "Total",
+    "Currency": "USD",
+    "Option": [{ "Name": "AccountingStandard", "Value": "GAAP" }, { "Name": "NoReportData", "Value": "false" }]
+  },
+  "Columns": { "Column": [{ "ColTitle": "", "ColType": "Account" }, { "ColTitle": "Total", "ColType": "Money" }] },
+  "Rows": { "Row": [
+    { "Header": { "ColData": [{ "value": "ASSETS" }, { "value": "" }] }, "type": "Section", "group": "TotalAssets",
+      "Rows": { "Row": [
+        { "Header": { "ColData": [{ "value": "Current Assets" }, { "value": "" }] }, "type": "Section", "group": "CurrentAssets",
+          "Rows": { "Row": [
+            { "Header": { "ColData": [{ "value": "Bank Accounts" }, { "value": "" }] }, "type": "Section", "group": "BankAccounts",
+              "Rows": { "Row": [
+                { "ColData": [{ "value": "Checking", "id": "35" }, { "value": "184210.07" }], "type": "Data" },
+                { "ColData": [{ "value": "Savings", "id": "36" }, { "value": "50000.00" }], "type": "Data" },
+                { "ColData": [{ "value": "Card clearing", "id": "37" }, { "value": "-1250.40" }], "type": "Data" }
+              ] },
+              "Summary": { "ColData": [{ "value": "Total Bank Accounts" }, { "value": "232959.67" }] } },
+            { "ColData": [{ "value": "Accounts Receivable (A/R)", "id": "84" }, { "value": "0.00" }], "type": "Data" }
+          ] },
+          "Summary": { "ColData": [{ "value": "Total Current Assets" }, { "value": "232959.67" }] } }
+      ] },
+      "Summary": { "ColData": [{ "value": "TOTAL ASSETS" }, { "value": "232959.67" }] } },
+    { "Header": { "ColData": [{ "value": "LIABILITIES AND EQUITY" }, { "value": "" }] }, "type": "Section", "group": "TotalLiabilitiesAndEquity",
+      "Rows": { "Row": [
+        { "ColData": [{ "value": "Accounts Payable (A/P)", "id": "33" }, { "value": "" }], "type": "Data" },
+        { "ColData": [{ "value": "Retained Earnings", "id": "2" }, { "value": "232959.67" }], "type": "Data" }
+      ] },
+      "Summary": { "ColData": [{ "value": "TOTAL LIABILITIES AND EQUITY" }, { "value": "232959.67" }] } }
+  ] }
+}

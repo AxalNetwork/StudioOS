@@ -1,0 +1,27 @@
+/*
+ * D1317 — the detail sheet (`Sheet.jsx`): where it docks, how it moves, and
+ * its phone forms. Its colours are Tailwind classes on the element.
+ */
+
+/* The dock. With no rail the sheet meets the window's edge. A mounted
+   `WorkerRail` sets `data-eadwyn-rail="docked"`, and at 1024px and up, where
+   the rail is a column, the sheet and its scrim stop at the rail's spine. */
+.axs-layer { right: var(--axs-dock, 0px); }
+@media (min-width: 1024px) {
+  :root[data-eadwyn-rail="docked"] { --axs-dock: 44px; }
+}
+
+/* The slide, from the rail's edge. No fill mode: when it ends the sheet has
+   no transform, so a fixed dialog inside it is not clipped to it. */
+@keyframes axs-sheet-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.axs-sheet { animation: axs-sheet-in 200ms cubic-bezier(.2, .8, .2, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .axs-sheet { animation: none; }
+}
+
+/* A phone: a full-screen page, or a bottom sheet (`phone="sheet"`). */
+@media (max-width: 639.98px) {
+  .axs-layer { right: 0; }
+  .axs-sheet { width: 100% !important; max-width: none !important; border-radius: 0; border-left-width: 0; box-shadow: none; animation: none; }
+  .axs-layer[data-phone="sheet"] .axs-sheet { top: auto; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+}

@@ -1,0 +1,99 @@
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # #4107: `scan` is a required check, so it runs on each merge queue entry.
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+# Catches accidental secret commits before they hit production. Runs on every
+# PR + push to main so we never have a window where main contains a leaked
+# credential.
+#
+# NOTE: We invoke the gitleaks CLI directly instead of `gitleaks/gitleaks-action`.
+# As of 2024 the Action requires a paid `GITLEAKS_LICENSE` secret for org
+# repos. The CLI is unchanged and remains free + open-source.
+jobs:
+  scan:
+    name: scan
+    runs-on: ubuntu-latest
+    # Full history of every branch. Five minutes cancelled a slow fetch
+    # before gitleaks ran, and the check then reads as a failed secret scan.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history so gitleaks can scan any commit that touched the PR.
+          fetch-depth: 0
+      - name: Install gitleaks
+        # RETRY, AND DOWNLOAD BEFORE EXTRACTING. This step fetched the release
+        # tarball straight into `tar` with no retry, so any hiccup between the
+        # runner and GitHub's release CDN failed the whole secret scan — with
+        # `gzip: stdin: unexpected end of file` as the visible error, which
+        # reads like a corrupt archive rather than a network fault. It happened
+        # twice on 2026-09-07 alone: a connection reset on #460 and a 504 on
+        # #473. Neither run scanned a single commit; the job died at install.
+        #
+        # A red secret-scan that means "the CDN blinked" is worse than noise —
+        # it trains a reader to wave the check through. Five attempts with
+        # backoff, and the archive lands on disk first so a truncated body is
+        # caught by curl as a failed download rather than by tar as a bad gzip.
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION=8.21.2
+          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          for attempt in 1 2 3 4 5; do
+            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
+              exit 1
+            fi
+            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Determine scan range
+        id: range
+        run: |
+          # Scan only the commits introduced by this push / PR rather than the
+          # entire public history. A new secret is still caught on the commit
+          # that introduces it, but CI no longer fails forever on historical
+          # leaks that cannot be rewritten without breaking every fork, open
+          # Dependabot PR and the backup mirror (see the `commits` allowlist in
+          # .gitleaks.toml for the running list of those unchangeable findings).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "logopts=--log-opts=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            # #4107: the queue entry is main (base_sha) plus the queued PRs, so
+            # the range is every commit the queue would merge.
+            echo "logopts=--log-opts=${{ github.event.merge_group.base_sha }}..${{ github.event.merge_group.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "logopts=--log-opts=-1" >> "$GITHUB_OUTPUT"
+            else
+              echo "logopts=--log-opts=${BEFORE}..${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - name: Run gitleaks
+        run: |
+          # Uses the project-specific config which extends the upstream default
+          # ruleset and adds project allowlists. Commit range scoped above.
+          gitleaks detect \
+            --config=.gitleaks.toml \
+            --source=. \
+            ${{ steps.range.outputs.logopts }} \
+            --redact \
+            --verbose \
+            --no-banner \
+            --exit-code=1

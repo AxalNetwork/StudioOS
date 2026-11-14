@@ -1,0 +1,30 @@
+{
+  "skill": "deck-claims-check",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "deck_claims": [
+          "$40k MRR",
+          "Used by Acme Fixtures"
+        ]
+      },
+      "stripe.revenue": {
+        "mrr_usd": 38000,
+        "month": "2026-10"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "38,000",
+      "No record found"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "verified true"
+    ]
+  }
+}

@@ -1,0 +1,146 @@
+Objective
+  Two related problems:
+  1. "Could not start Google OAuth" on Calendar — fix the /start
+     endpoint preflight (Prompt JG, finalized here).
+  2. Sessions booked between users on the platform (mentor sessions,
+     office hours, founder check-ins, IC meetings, partner office
+     hours, calendly-booked events) do NOT show on the /calendar
+     page. They must — that's the whole point of the page.
+
+Architecture
+  /calendar page shows ONE unified timeline of:
+    a. Axal-platform sessions (created server-side when users book
+       through the platform)
+    b. External events from the user's connected Google or Outlook
+       calendar (read-only mirror, dimmed visually)
+    c. (Optional, future) Calendly-pulled events when Calendly is
+       connected
+
+  Two-way sync for (a):
+    Axal session created  → Worker calls Google Calendar API to
+                             create the event on the user's calendar
+                             via the connected token. Stores the
+                             returned event_id in calendar_events_
+                             sync.
+    Axal session updated  → patch the Google event by event_id.
+    Axal session cancelled → delete the Google event by event_id.
+
+  One-way sync for (b):
+    Cron + watch channel pulls the user's Google calendar primary
+    list since the last sync_token; mirrors into calendar_events
+    rows tagged source='google_external'. These appear muted, are
+    not editable from Axal, and never round-trip back to Google.
+
+Fix Google OAuth /start (re-stated, definitive)
+
+  Pre-flight check in cloudflare-worker/src/routes/calendar.ts:
+    GET /google/start
+      const missing = [];
+      if (!c.env.GOOGLE_CAL_CLIENT_ID)     missing.push('GOOGLE_CAL_CLIENT_ID');
+      if (!c.env.GOOGLE_CAL_CLIENT_SECRET) missing.push('GOOGLE_CAL_CLIENT_SECRET');
+      if (!c.env.JWT_SECRET)                missing.push('JWT_SECRET');
+      if (!c.env.PUBLIC_BASE_URL)           missing.push('PUBLIC_BASE_URL');
+      if (missing.length) {
+        return c.json({ error: { code:'oauth_config_missing', missing } }, 500);
+      }
+      // ... build authorize URL ...
+
+  Use a DIFFERENT OAuth client for Calendar than for sign-in (Prompt
+  KE). Different scopes, different consent screen text:
+    Authorized redirect URI:
+      https://app.axal.vc/api/calendar/google/callback
+    Scopes:
+      https://www.googleapis.com/auth/calendar.events
+      https://www.googleapis.com/auth/calendar.readonly
+      openid email profile
+
+  Token refresh helper runs on every /calendar/* request: refreshes
+  5 min before expiry. Persists encrypted refresh_token in
+  calendar_google_tokens.
+
+Booked-session sync
+  Schema:
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      source TEXT NOT NULL,           -- 'axal_session' |
+                                      -- 'google_external' |
+                                      -- 'outlook_external' |
+                                      -- 'calendly_external'
+      axal_kind TEXT,                  -- 'mentor_session' |
+                                      -- 'office_hours' |
+                                      -- 'founder_checkin' |
+                                      -- 'ic_meeting' |
+                                      -- 'partner_oh' |
+                                      -- 'investor_meeting'
+      counterparty_user_id INTEGER,
+      external_event_id TEXT,
+      external_calendar TEXT,         -- 'google' | 'outlook' |
+                                      -- 'calendly'
+      title TEXT, description TEXT, location TEXT,
+      start_at DATETIME, end_at DATETIME,
+      meeting_url TEXT,                -- Google Meet / Zoom / etc.
+      status TEXT,                     -- 'scheduled' | 'confirmed' |
+                                      -- 'cancelled' | 'completed'
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX idx_calendar_user_start ON calendar_events(user_id,start_at);
+    CREATE TABLE IF NOT EXISTS calendar_external_sync (
+      user_id INTEGER PRIMARY KEY,
+      provider TEXT NOT NULL,
+      sync_token TEXT,
+      watch_channel_id TEXT,
+      watch_resource_id TEXT,
+      watch_expires_at DATETIME,
+      last_synced_at DATETIME
+    );
+
+  Service cloudflare-worker/src/services/calendar/sync.ts:
+    onAxalSessionCreated(user, session) → create event in Google/Outlook
+                                            via provider API; store
+                                            external_event_id on
+                                            calendar_events.
+    onAxalSessionUpdated(...)            → patch.
+    onAxalSessionCancelled(...)         → delete.
+    pullExternalSince(user)              → list events with sync_token,
+                                            upsert into calendar_events
+                                            tagged source='google_external'.
+    Cron: every 15 min for all connected users; Google watch
+          channel webhook short-circuits this when push notifications
+          are enabled.
+
+  Hooks: every Axal session creation path
+    /api/mentors/:uid/book → onAxalSessionCreated
+    /api/office-hours/book → onAxalSessionCreated
+    /api/founder-checkins/create → onAxalSessionCreated
+    /api/ic-meetings → onAxalSessionCreated
+    /api/partner-office-hours/book → onAxalSessionCreated
+    /api/investor-meetings → onAxalSessionCreated
+
+UI updates (frontend/src/pages/CalendarPage.jsx)
+  - List endpoint: GET /api/calendar/events?from=&to=&source=
+    Returns unified rows; client groups by day.
+  - Per-event card:
+      Title, counterparty, meeting_url, source badge (Axal / Google
+      / Outlook / Calendly), edit/cancel actions where the source
+      is Axal.
+  - "Connect Google" / "Connect Outlook" panels remain prominent
+    until at least one is connected.
+  - Add an "Add to my external calendar" link for any Axal event
+    that hasn't been pushed (e.g. if the user connected Google
+    after the booking happened): triggers a one-shot push.
+
+Acceptance
+  - /api/calendar/google/start returns redirect_url for a user with
+    secrets set; returns oauth_config_missing for a misconfigured
+    env.
+  - End-to-end: book a mentor session → it appears on the founder's
+    /calendar page AND on the mentor's /calendar page AND on both
+    users' Google Calendars within 30 seconds.
+  - Cancelling the session removes it from both Axal and Google
+    Calendar.
+  - External Google events appear on /calendar dimmed and read-only.
+  - Outlook flow mirrors Google.
+  - Connect → disconnect → reconnect lifecycle leaves no dangling
+    rows.

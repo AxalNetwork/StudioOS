@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f8f8fa;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}
+    .us-num{font-variant-numeric:tabular-nums}
+    .us-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#615c6e}
+    .us-in{width:100%;box-sizing:border-box;font:inherit;font-size:13.5px;padding:9px 12px;border:1px solid #e2e1e8;border-radius:9px;background:#fff;color:#18181b}
+    .us-in:focus{outline:none;border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    .us-in::placeholder{color:#a8a4b4}
+    .us-nav:hover{background:#f4f2fa}
+    .us-row:hover{background:#fcfcfd}
+    .us-link{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#7c3aed;white-space:nowrap;cursor:pointer}
+    .us-link:hover{color:#6d28d9}
+    .us-btn{font:inherit;font-size:13px;font-weight:700;padding:9px 15px;border-radius:9px;border:1px solid #e2e1e8;background:#fff;color:#18181b;cursor:pointer;white-space:nowrap}
+    .us-btn:hover{border-color:#d4d2dc;background:#fbfbfc}
+    .us-btnp{font:inherit;font-size:13px;font-weight:700;padding:9px 16px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer;white-space:nowrap}
+    .us-btnp:hover{background:#6d28d9;border-color:#6d28d9}
+    @media (max-width:960px){
+      .us-shell{grid-template-columns:1fr!important}
+      .us-navwrap{position:static!important}
+      .us-nav-list{display:flex!important;overflow-x:auto;gap:6px!important;padding-bottom:4px}
+      .us-nav{white-space:nowrap}
+      .us-2{grid-template-columns:1fr!important}
+      .us-3{grid-template-columns:1fr!important}
+      .us-bridge{flex-direction:column!important;align-items:flex-start!important}
+      .us-row{flex-direction:column!important;align-items:flex-start!important;gap:10px!important}
+      .us-rowr{width:100%!important;justify-content:flex-start!important}
+    }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;padding:0 0 80px">
+
+  <!-- ============ HEADER ============ -->
+  <div style="background:#fff;border-bottom:1px solid #ececf1;padding:26px 28px 22px">
+    <div style="max-width:1320px;margin:0 auto">
+      <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em">Account</h1>
+      <div style="font-size:13.5px;color:#4a4553;margin-top:5px">Account, security, notifications, and preferences for your Axal VC profile.</div>
+
+      <!-- COMPLIANCE BRIDGE — the write-side counterpart to Trust Center -->
+      <div class="us-bridge" style="display:flex;align-items:center;gap:18px;margin-top:18px;background:{{ bridgeBg }};border:1px solid {{ bridgeEdge }};border-radius:14px;padding:15px 18px">
+        <div style="display:flex;align-items:center;gap:13px;flex:none">
+          <div style="position:relative;width:44px;height:44px;flex:none">
+            <svg viewBox="0 0 44 44" width="44" height="44" style="display:block;transform:rotate(-90deg)">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="#e8e6ee" stroke-width="5"></circle>
+              <circle cx="22" cy="22" r="18" fill="none" stroke="{{ bridgeInk }}" stroke-width="5" stroke-linecap="round" stroke-dasharray="{{ bridgeDash }}"></circle>
+            </svg>
+            <div class="us-num" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:800;color:{{ bridgeInk }}">{{ trustScore }}</div>
+          </div>
+          <div>
+            <div class="us-lbl" style="color:{{ bridgeInk }};opacity:.9">Trust score</div>
+            <div style="font-size:14px;font-weight:800;color:{{ bridgeInk }};margin-top:2px">{{ trustVerdict }}</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;font-size:13px;color:#3f3a49;line-height:1.55">{{ bridgeLine }}</div>
+        <a href="#trust-center" class="us-btn" style="text-decoration:none;flex:none">Open Trust Center →</a>
+      </div>
+
+      <!-- COMPLETENESS — real checklist, not a vague "+7 more" -->
+      <div style="margin-top:12px;background:#faf9fc;border:1px solid #ececf1;border-radius:14px;padding:15px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:12px;min-width:0">
+            <div class="us-num" style="font-size:15px;font-weight:800;color:{{ pctInk }}">{{ pct }}%</div>
+            <div style="font-size:13px;color:#3f3a49;line-height:1.5">{{ pctLine }}</div>
+          </div>
+          <div style="height:6px;flex:1;min-width:160px;max-width:280px;background:#eceaf2;border-radius:999px;overflow:hidden">
+            <div style="height:100%;width:{{ pct }}%;background:{{ pctInk }};border-radius:999px"></div>
+          </div>
+        </div>
+        <sc-if value="{{ hasMissing }}">
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:13px">
+            <sc-for list="{{ missingChips }}" as="m" hint-placeholder-count="6">
+              <div onClick="{{ m.go }}" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;background:#fff;border:1px solid #fde68a;color:#92400e;cursor:pointer">
+                <span>{{ m.label }}</span>
+                <span style="font-size:10px;color:#a16207;font-weight:700">{{ m.where }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <div class="us-shell" style="max-width:1320px;margin:0 auto;padding:22px 28px 0;display:grid;grid-template-columns:214px 1fr;gap:24px;align-items:start">
+
+    <!-- ============ NAV ============ -->
+    <div class="us-navwrap" style="position:sticky;top:18px">
+      <div class="us-nav-list" style="display:grid;gap:2px">
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="11">
+          <div onClick="{{ n.go }}" class="us-nav" style="{{ n.style }}">
+            <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span>
+            <span style="flex:1">{{ n.label }}</span>
+            <sc-if value="{{ n.badge }}"><span style="{{ n.badgeStyle }}">{{ n.badge }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ============ PANES ============ -->
+    <div style="min-width:0;display:grid;gap:16px">
+
+      <!-- ---- PROFILE ---- -->
+      <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ true }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Public profile</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">How you appear across the platform and on your author page. Nothing here is used for compliance.</div>
+          <div style="display:flex;align-items:flex-start;gap:18px;margin-top:20px;flex-wrap:wrap">
+            <div style="text-align:center;flex:none">
+              <div style="width:78px;height:78px;border-radius:50%;background:#ede9fe;border:1px solid #e6dcff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#6d28d9">GL</div>
+              <div class="us-link" style="margin-top:9px;justify-content:center">Change photo</div>
+            </div>
+            <div style="flex:1;min-width:240px;display:grid;gap:14px">
+              <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px">Display name</div>
+                  <input class="us-in" value="Guillaume Lauzier" />
+                </div>
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px">Headline</div>
+                  <input class="us-in" value="General Partner, Axal VC" />
+                </div>
+              </div>
+              <div>
+                <div class="us-lbl" style="margin-bottom:6px">Bio</div>
+                <textarea class="us-in" rows="3" placeholder="Up to 2,000 characters."></textarea>
+              </div>
+              <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px">Username</div>
+                  <input class="us-in" placeholder="guillaume-lauzier" />
+                  <div style="font-size:11px;color:#7d7889;margin-top:5px">Becomes /u/&lt;slug&gt;</div>
+                </div>
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px">Pronouns</div>
+                  <input class="us-in" placeholder="they/them" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Social links</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Optional. Shown on your public author profile.</div>
+          <div class="us-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px">
+            <sc-for list="{{ socials }}" as="s" hint-placeholder-count="5">
+              <div>
+                <div class="us-lbl" style="margin-bottom:6px">{{ s }}</div>
+                <input class="us-in" placeholder="https://…" />
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Locale &amp; jurisdictions</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Timezone drives digests and quiet hours. Jurisdictions filter deal flow and compliance prompts.</div>
+          <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+            <div><div class="us-lbl" style="margin-bottom:6px">Timezone</div><input class="us-in" value="America/Los_Angeles" /></div>
+            <div><div class="us-lbl" style="margin-bottom:6px">Locale</div><input class="us-in" value="English (US)" /></div>
+          </div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:16px">
+            <sc-for list="{{ jurisdictions }}" as="j" hint-placeholder-count="8">
+              <div onClick="{{ j.go }}" style="{{ j.style }}">{{ j.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- IDENTITY & TAX ---- -->
+      <sc-if value="{{ isIdentity }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:22px 22px 18px;border-bottom:1px solid #f2f1f5">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Identity &amp; tax</div>
+                <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">The source of record for KYC, contract auto-fill, and 83(b) filings. Sensitive fields are encrypted at rest.</div>
+              </div>
+              <span style="{{ kycPill }}"><span style="{{ kycDot }}"></span>KYC · {{ kycStatus }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#fffdf5;border:1px solid #fde68a;border-radius:11px;padding:12px 14px;margin-top:16px;flex-wrap:wrap">
+              <span style="width:15px;height:15px;display:block;flex:none;color:#92400e" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+              <span style="font-size:12.5px;color:#78350f;line-height:1.5;flex:1;min-width:200px">{{ kycGate }}</span>
+              <a href="#trust-center" class="us-link">See what this blocks →</a>
+            </div>
+          </div>
+
+          <div style="padding:20px 22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+              <div class="us-lbl">Legal identity</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div class="us-btn">Import from LinkedIn</div>
+                <div class="us-btn">Upload LinkedIn PDF</div>
+              </div>
+            </div>
+            <div class="us-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <sc-for list="{{ idFields }}" as="f" hint-placeholder-count="9">
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                    <span>{{ f.label }}</span>
+                    <sc-if value="{{ f.required }}"><span style="font-size:9.5px;font-weight:800;color:#6d28d9">REQ</span></sc-if>
+                  </div>
+                  <input class="us-in" style="{{ f.inStyle }}" value="{{ f.value }}" placeholder="{{ f.ph }}" />
+                  <sc-if value="{{ f.hint }}"><div style="font-size:11px;color:#7d7889;margin-top:5px">{{ f.hint }}</div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="padding:0 22px 22px">
+            <div class="us-lbl" style="margin-bottom:13px">Government ID</div>
+            <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div><div class="us-lbl" style="margin-bottom:6px">ID type</div><input class="us-in" value="Passport" /></div>
+              <div><div class="us-lbl" style="margin-bottom:6px">ID number</div><input class="us-in" placeholder="Encrypted at rest" /></div>
+            </div>
+            <div style="border:1px dashed #d4d2dc;border-radius:12px;padding:20px;text-align:center;margin-top:12px;background:#fbfbfc">
+              <div style="font-size:13px;font-weight:700">Upload your ID document</div>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:5px">JPG, PNG, WEBP or PDF · up to 6&nbsp;MB · reviewed by our verification partner</div>
+              <div class="us-btn" style="margin-top:12px;display:inline-block">Choose file</div>
+            </div>
+            <div style="display:grid;gap:9px;margin-top:16px">
+              <sc-for list="{{ consents }}" as="c" hint-placeholder-count="2">
+                <div style="{{ c.rowStyle }}">
+                  <div onClick="{{ c.go }}" style="{{ c.boxStyle }}" dangerouslySetInnerHTML="{{ c.mark }}"></div>
+                  <div style="min-width:0">
+                    <div style="font-size:13px;font-weight:700">{{ c.label }}</div>
+                    <div style="font-size:11.5px;color:#615c6e;margin-top:3px;line-height:1.5">{{ c.meta }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;padding-top:16px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+              <div style="font-size:11.5px;color:#7d7889">Submitting locks these fields until verification completes.</div>
+              <div class="us-btnp">Submit for verification</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- LEGAL ENTITIES (multi-company) ---- -->
+      <sc-if value="{{ isEntity }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Your companies</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">One account, many entities. Each company has its own KYB state, cap table and sidebar workspace — this is where you add and switch between them.</div>
+            </div>
+            <div class="us-btnp" style="flex:none">+ Add a company</div>
+          </div>
+          <sc-for list="{{ companies }}" as="c" hint-placeholder-count="3">
+            <div onClick="{{ c.go }}" class="us-row" style="{{ c.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div style="width:34px;height:34px;border-radius:10px;background:{{ c.avBg }};color:{{ c.avInk }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">{{ c.initials }}</div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ c.name }}</span>
+                    <sc-if value="{{ c.active }}"><span style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#6d28d9;background:#f5f2ff;border:1px solid #e6dcff;border-radius:5px;padding:2px 6px">ACTIVE WORKSPACE</span></sc-if>
+                  </div>
+                  <div style="font-size:12px;color:#615c6e;margin-top:4px;line-height:1.5">{{ c.meta }}</div>
+                  <div style="font-size:11px;color:#7d7889;margin-top:5px">{{ c.role }}</div>
+                </div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="{{ c.pill }}"><span style="{{ c.dot }}"></span>KYB · {{ c.kyb }}</span>
+                <span class="us-link">{{ c.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+          <div style="padding:14px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;font-size:11.5px;color:#7d7889;line-height:1.5">
+            Switching the active workspace changes what the sidebar shows — Spin-Out Lab, cap table, raise tooling and documents all follow the selected company. Your personal identity and tax data stay account-wide.
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:22px 22px 18px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">{{ selCompany }}</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Feeds KYB, incorporation documents, and this company's cap table.</div>
+            </div>
+            <span style="{{ kybPill }}"><span style="{{ kybDot }}"></span>KYB · {{ kybStatus }}</span>
+          </div>
+          <div style="padding:20px 22px">
+            <div class="us-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <sc-for list="{{ entityFields }}" as="f" hint-placeholder-count="6">
+                <div>
+                  <div class="us-lbl" style="margin-bottom:6px">{{ f.label }}</div>
+                  <input class="us-in" style="{{ f.inStyle }}" value="{{ f.value }}" placeholder="{{ f.ph }}" />
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;padding-top:16px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+              <div style="font-size:11.5px;color:#7d7889">Registry match runs automatically on save.</div>
+              <div class="us-btnp">Save entity</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Accreditation</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Required to participate in a fund as an LP. Only shown when your role calls for it.</div>
+          </div>
+          <div style="padding:20px 22px">
+            <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div><div class="us-lbl" style="margin-bottom:6px">Basis</div><input class="us-in" value="Income-based" /></div>
+              <div><div class="us-lbl" style="margin-bottom:6px">Verification method</div><input class="us-in" value="Third-party letter" /></div>
+            </div>
+            <div style="border:1px dashed #d4d2dc;border-radius:12px;padding:18px;text-align:center;margin-top:12px;background:#fbfbfc">
+              <div style="font-size:13px;font-weight:700">Supporting evidence</div>
+              <div style="font-size:11.5px;color:#615c6e;margin-top:5px">PDF · up to 8&nbsp;MB · reviewed within 3 business days</div>
+              <div class="us-btn" style="margin-top:12px;display:inline-block">Choose file</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- ONBOARDING ---- -->
+      <sc-if value="{{ isOnboarding }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Onboarding</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Resume the setup wizard, or redo any step.</div>
+            </div>
+            <div class="us-btnp">Resume wizard</div>
+          </div>
+          <sc-for list="{{ onboardingSteps }}" as="s" hint-placeholder-count="5">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5">
+              <div style="display:flex;align-items:flex-start;gap:12px;min-width:0">
+                <div style="{{ s.markStyle }}" dangerouslySetInnerHTML="{{ s.mark }}"></div>
+                <div style="min-width:0">
+                  <div style="font-size:13.5px;font-weight:700">{{ s.title }}</div>
+                  <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ s.meta }}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex:none">
+                <span style="{{ s.pill }}"><span style="{{ s.dot }}"></span></span>
+                <span class="us-link">Redo</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ---- ROLES & ACCESS ---- -->
+      <sc-if value="{{ isRoles }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:22px 22px 18px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Your roles</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">You can hold more than one role at once — a founder who also advises, or an investor who also runs a service practice. Each active role decides which obligations apply to you and which parts of the platform you see.</div>
+          </div>
+          <sc-for list="{{ roles }}" as="r" hint-placeholder-count="4">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div onClick="{{ r.toggle }}" style="{{ r.boxStyle }}" dangerouslySetInnerHTML="{{ r.mark }}"></div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="font-size:13.5px;font-weight:700">{{ r.label }}</span>
+                    <sc-if value="{{ r.on }}"><span style="{{ r.planPill }}">{{ r.plan }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ r.meta }}</div>
+                </div>
+              </div>
+              <sc-if value="{{ r.on }}"><a href="#plans" class="us-link" style="flex:none">Manage license</a></sc-if>
+            </div>
+          </sc-for>
+          <div style="padding:14px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div style="font-size:11.5px;color:#7d7889">Some roles require a paid license before they fully unlock.</div>
+            <a href="#plans" class="us-link">View plans &amp; pricing →</a>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Plans &amp; pricing</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">One license per active role. Purchasing unlocks that role's tools immediately.</div>
+          </div>
+          <sc-for list="{{ plans }}" as="p" hint-placeholder-count="4">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:700">{{ p.role }}</span>
+                  <span class="us-num" style="font-size:12.5px;color:#3f3a49">{{ p.price }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.includes }}</div>
+              </div>
+              <div style="flex:none">
+                <sc-if value="{{ p.owned }}"><span style="{{ p.ownedPill }}">Active</span></sc-if>
+                <sc-if value="{{ p.buyable }}"><div class="us-btnp">Purchase</div></sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Delegates</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px">People who can act on your behalf, and exactly how far that reaches.</div>
+            </div>
+            <div class="us-btn">Invite a delegate</div>
+          </div>
+          <sc-for list="{{ delegates }}" as="d" hint-placeholder-count="2">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5">
+              <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:700">{{ d.name }}</div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ d.meta }}</div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="{{ d.pill }}">{{ d.scope }}</span>
+                <span class="us-link" style="color:#b91c1c">Revoke</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ---- SECURITY ---- -->
+      <sc-if value="{{ isSecurity }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Sign-in &amp; factors</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Summarised as status rows — each opens its own flow rather than sitting as a permanent form.</div>
+          </div>
+          <sc-for list="{{ factors }}" as="f" hint-placeholder-count="5">
+            <div class="us-row" style="{{ f.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div style="width:31px;height:31px;border-radius:9px;background:{{ f.chipBg }};color:{{ f.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ f.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ f.label }}</div>
+                  <div style="font-size:12px;color:#615c6e;margin-top:4px;line-height:1.5">{{ f.meta }}</div>
+                </div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="{{ f.pill }}"><span style="{{ f.dot }}"></span>{{ f.status }}</span>
+                <span class="us-link">{{ f.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Email address</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">The new address must confirm within 24 hours. The old address can revoke the change within that window.</div>
+          <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+            <div>
+              <div class="us-lbl" style="margin-bottom:6px">Current email</div>
+              <input class="us-in" value="guillaume.lauzier@axal.vc" disabled />
+            </div>
+            <div>
+              <div class="us-lbl" style="margin-bottom:6px">New email</div>
+              <div style="display:flex;gap:8px">
+                <input class="us-in" placeholder="you@company.com" />
+                <div class="us-btn" style="flex:none">Send confirmation</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Trusted contacts (recovery)</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Two trusted contacts together can vouch for you if you lose your authenticator. Both must confirm before access is restored.</div>
+            </div>
+            <div class="us-btn">Add trusted contact</div>
+          </div>
+          <sc-for list="{{ trustedContacts }}" as="t" hint-placeholder-count="2">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5">
+              <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:700">{{ t.name }}</div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ t.meta }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex:none">
+                <span style="{{ t.pill }}">{{ t.status }}</span>
+                <span class="us-link" style="color:#b91c1c">Remove</span>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ trustedContactsEmpty }}">
+            <div style="padding:24px 22px;border-top:1px solid #f2f1f5;font-size:12.5px;color:#615c6e">No trusted contacts yet — you'd rely solely on recovery codes if you lost your authenticator.</div>
+          </sc-if>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Active sessions</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px">New — you previously had no way to see or end a session from another device.</div>
+            </div>
+            <div class="us-btn" style="color:#b91c1c;border-color:#fecaca">Sign out everywhere</div>
+          </div>
+          <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="3">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5">
+              <div style="min-width:0">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:700">{{ s.device }}</span>
+                  <sc-if value="{{ s.current }}"><span style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:5px;padding:2px 6px">THIS DEVICE</span></sc-if>
+                </div>
+                <div class="us-num" style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ s.meta }}</div>
+              </div>
+              <sc-if value="{{ s.revocable }}"><span class="us-link" style="color:#b91c1c;flex:none">Revoke</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">API keys</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Scoped tokens for programmatic access. Also new.</div>
+            </div>
+            <div class="us-btn">Create key</div>
+          </div>
+          <sc-for list="{{ keys }}" as="k" hint-placeholder-count="2">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5">
+              <div style="min-width:0">
+                <div style="font-size:13.5px;font-weight:700">{{ k.name }}</div>
+                <div class="us-num" style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ k.meta }}</div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec">{{ k.scope }}</span>
+                <span class="us-link" style="color:#b91c1c">Revoke</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ---- NOTIFICATIONS ---- -->
+      <sc-if value="{{ isNotif }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 18px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Notifications</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Start from a preset instead of ticking a 17-row grid. Critical alerts can't be switched off.</div>
+            <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+              <sc-for list="{{ presets }}" as="p" hint-placeholder-count="3">
+                <div onClick="{{ p.go }}" style="{{ p.style }}">
+                  <div style="font-size:13px;font-weight:800">{{ p.label }}</div>
+                  <div style="font-size:11.5px;margin-top:4px;opacity:.85;line-height:1.45">{{ p.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="padding:6px 22px 20px">
+            <sc-for list="{{ notifGroups }}" as="g" hint-placeholder-count="4">
+              <div style="padding:17px 0;border-bottom:1px solid #f6f5f9">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+                  <div style="min-width:0">
+                    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                      <span style="font-size:13.5px;font-weight:700">{{ g.title }}</span>
+                      <sc-if value="{{ g.locked }}"><span style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:5px;padding:2px 6px">ALWAYS ON</span></sc-if>
+                    </div>
+                    <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ g.events }}</div>
+                  </div>
+                  <div style="display:flex;gap:7px;flex:none;flex-wrap:wrap">
+                    <sc-for list="{{ g.channels }}" as="c" hint-placeholder-count="3">
+                      <div onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+
+            <div class="us-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px">
+              <div>
+                <div class="us-lbl" style="margin-bottom:6px">Digest frequency</div>
+                <input class="us-in" value="Daily at 09:00" />
+              </div>
+              <div>
+                <div class="us-lbl" style="margin-bottom:6px">Quiet hours</div>
+                <input class="us-in" value="20:00 – 07:00 · America/Los_Angeles" />
+                <div style="font-size:11px;color:#7d7889;margin-top:5px">Critical alerts always come through.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- DOCUMENTS ---- -->
+      <sc-if value="{{ isDocs }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Documents &amp; agreements</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Trust Center reports whether these are signed; here you retrieve the files. New — copies were previously unreachable.</div>
+          </div>
+          <sc-for list="{{ docs }}" as="d" hint-placeholder-count="5">
+            <div class="us-row" style="{{ d.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div style="width:31px;height:31px;border-radius:9px;background:{{ d.chipBg }};color:{{ d.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ d.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ d.label }}</div>
+                  <div class="us-num" style="font-size:12px;color:#615c6e;margin-top:4px;line-height:1.5">{{ d.meta }}</div>
+                </div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="{{ d.pill }}"><span style="{{ d.dot }}"></span>{{ d.status }}</span>
+                <span class="us-link">{{ d.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Account &amp; data</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Export everything we hold, or start deletion. Deletion has a 30-day grace period.</div>
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+            <div class="us-btn">Download my data (JSON)</div>
+            <div class="us-btn" style="color:#b91c1c;border-color:#fecaca">Request account deletion</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- INTEGRATIONS ---- -->
+      <sc-if value="{{ isIntegrations }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Integrations</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Grouped by what they do, with the data each one reads or writes stated plainly.</div>
+          </div>
+          <sc-for list="{{ integrations }}" as="i" hint-placeholder-count="6">
+            <div class="us-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div style="width:31px;height:31px;border-radius:9px;background:#f4f2fa;color:#6d28d9;display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ i.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:700;letter-spacing:-.01em">{{ i.name }}</span>
+                    <span style="font-size:10px;font-weight:800;letter-spacing:.06em;color:#615c6e;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:5px;padding:2px 6px">{{ i.kind }}</span>
+                  </div>
+                  <div style="font-size:12px;color:#615c6e;margin-top:4px;line-height:1.5">{{ i.meta }}</div>
+                </div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:12px;flex:none;justify-content:flex-end">
+                <span style="{{ i.pill }}"><span style="{{ i.dot }}"></span>{{ i.status }}</span>
+                <span class="us-link" style="{{ i.actionStyle }}">{{ i.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- ---- BILLING ---- -->
+      <sc-if value="{{ isBilling }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Plan</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px">What you're on, and what it gates.</div>
+            </div>
+            <div class="us-btn">Change plan</div>
+          </div>
+          <div style="padding:18px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#f5f2ff;border:1px solid #e6dcff;border-radius:6px;padding:4px 9px">STUDIO</span>
+            <div class="us-num" style="font-size:13px;color:#3f3a49">$240 / month · renews Sep 12, 2026</div>
+          </div>
+          <div style="padding:0 22px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #e6dcff;background:#f5f2ff;border-radius:11px;padding:14px 16px;flex-wrap:wrap">
+              <div>
+                <div class="us-lbl" style="color:#6d28d9;opacity:.9">Referral credits</div>
+                <div class="us-num" style="font-size:19px;font-weight:800;color:#4c1d95;margin-top:4px">{{ referralCredits }} credits</div>
+              </div>
+              <div style="font-size:12px;color:#4c1d95;flex:1;min-width:160px">Earned through Refer &amp; Earn · redeemable against your plan or perks marketplace claims.</div>
+              <a href="#refer-earn" class="us-link">Open Refer &amp; Earn →</a>
+            </div>
+          </div>
+          <div style="padding:0 22px 20px">
+            <div class="us-lbl" style="margin-bottom:12px">Payment method</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:11px;padding:14px 16px;flex-wrap:wrap">
+              <div class="us-num" style="font-size:13px;font-weight:700">Visa •••• 4242 <span style="font-weight:400;color:#615c6e">· expires 04/2029</span></div>
+              <div style="display:flex;gap:14px"><span class="us-link">Replace</span><span class="us-link">Add backup</span></div>
+            </div>
+          </div>
+          <div style="padding:0 22px 22px">
+            <div class="us-lbl" style="margin-bottom:12px">Receipts</div>
+            <sc-for list="{{ receipts }}" as="r" hint-placeholder-count="3">
+              <div class="us-row" style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid #f6f5f9">
+                <div class="us-num" style="font-size:12.5px;color:#3f3a49">{{ r.date }} · {{ r.amount }}</div>
+                <div style="display:flex;align-items:center;gap:14px">
+                  <span style="{{ r.pill }}">{{ r.status }}</span>
+                  <span class="us-link">PDF</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ---- APPEARANCE ---- -->
+      <sc-if value="{{ isAppearance }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Appearance</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px">Three choices on one card rather than three stacked cards.</div>
+          <div style="display:grid;gap:18px;margin-top:18px">
+            <sc-for list="{{ prefs }}" as="p" hint-placeholder-count="3">
+              <div>
+                <div style="font-size:13.5px;font-weight:700">{{ p.title }}</div>
+                <div style="font-size:11.5px;color:#615c6e;margin-top:4px">{{ p.note }}</div>
+                <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:10px;padding:3px;margin-top:10px">
+                  <sc-for list="{{ p.opts }}" as="o" hint-placeholder-count="2">
+                    <div onClick="{{ o.go }}" style="{{ o.style }}">{{ o.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Dismissed explainers</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px">{{ explainerCount }} hidden. Restore them all, or search for one.</div>
+            </div>
+            <div class="us-btn">Restore all</div>
+          </div>
+          <input class="us-in" style="margin-top:14px" placeholder="Search explainers…" />
+        </div>
+      </sc-if>
+
+      <!-- ---- ACTIVITY ---- -->
+      <sc-if value="{{ isActivity }}">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Security &amp; account events</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Things that changed your account or touched your data — written for a person. Raw API traffic is separated out below.</div>
+            </div>
+            <div class="us-btn">Export log (CSV)</div>
+          </div>
+          <sc-for list="{{ events }}" as="e" hint-placeholder-count="6">
+            <div class="us-row" style="{{ e.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <div style="width:31px;height:31px;border-radius:9px;background:{{ e.chipBg }};color:{{ e.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ e.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="font-size:13.5px;font-weight:700;letter-spacing:-.01em">{{ e.label }}</div>
+                  <div class="us-num" style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ e.meta }}</div>
+                </div>
+              </div>
+              <div class="us-rowr" style="display:flex;align-items:center;gap:10px;flex:none;justify-content:flex-end">
+                <span style="{{ e.pill }}">{{ e.severity }}</span>
+                <span class="us-num" style="font-size:11.5px;color:#7d7889;white-space:nowrap">{{ e.when }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">API request traffic</div>
+              <div class="us-num" style="font-size:12.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ apiCount }} requests in the last 30 days. Diagnostic only — collapsed by default so it can't bury the events above.</div>
+            </div>
+            <div class="us-btn">Open raw stream</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="margin-top:10px;padding-top:18px;border-top:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="font-size:11.5px;color:#7d7889">© Copyright 2026, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.</div>
+        <div style="display:flex;gap:18px;font-size:11.5px"><a href="#terms">Terms of service</a><a href="#privacy">Privacy policy</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { pane:'profile', preset:'essentials', theme:'light', density:'comfy', sidebar:'expanded',
+            juris:['US','CH'], consents:[false,false], chans:{}, company:0,
+            roles:{ founder:true, investor:false, partner:true, advisor:false } };
+
+  ic(p, sw){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  tone(t){
+    const M = {
+      ok:      { bg:'#ecfdf5', ink:'#047857', edge:'#a7f3d0', bar:'#10b981' },
+      prog:    { bg:'#fffbeb', ink:'#92400e', edge:'#fde68a', bar:'#f59e0b' },
+      bad:     { bg:'#fef2f2', ink:'#b91c1c', edge:'#fecaca', bar:'#ef4444' },
+      neutral: { bg:'#f4f4f6', ink:'#615c6e', edge:'#e4e4e8', bar:'#d4d4d8' }
+    };
+    return M[t] || M.neutral;
+  }
+  toneOf(s){
+    const x = String(s).toLowerCase();
+    if (['satisfied','signed','verified','connected','active','configured','clear','paid'].indexOf(x) >= 0) return 'ok';
+    if (['in review','pending','self-attested','review','syncing'].indexOf(x) >= 0) return 'prog';
+    if (['expired','rejected','failed','revoked','blocked'].indexOf(x) >= 0) return 'bad';
+    return 'neutral';
+  }
+  pill(s){
+    const c = this.tone(this.toneOf(s));
+    return 'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:'+c.bg+';color:'+c.ink+';border:1px solid '+c.edge+';white-space:nowrap';
+  }
+  dot(s){
+    const c = this.tone(this.toneOf(s));
+    return 'width:5px;height:5px;border-radius:50%;background:'+c.ink+';flex:none';
+  }
+  rowStyle(s){
+    const c = this.tone(this.toneOf(s)), t = this.toneOf(s);
+    return 'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5;border-left:3px solid '+c.bar+';'
+      + (t === 'bad' ? 'background:#fffbfb;' : '');
+  }
+  seg(on){
+    return 'font-size:12.5px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(24,24,27,.07)' : 'color:#4a4553');
+  }
+
+  renderVals() {
+    const S = this.state, pane = S.pane;
+    const I = {
+      user:    this.ic('<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4S18.3 16.4 19.5 20"/>'),
+      id:      this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="12" r="2.2"/><path d="M14 10h5M14 14h3"/>'),
+      building:this.ic('<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>'),
+      key:     this.ic('<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8 2 2-2 2 2 2-3 3-2-2"/>'),
+      shield:  this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      bell:    this.ic('<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/>'),
+      doc:     this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      plug:    this.ic('<path d="M9 2v6M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-12 0Z"/><path d="M12 17v5"/>'),
+      card:    this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>'),
+      palette: this.ic('<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2s-.6-2-2-2c-1.7 0-3-1.3-3-3s1.3-3 3-3h4a5 5 0 0 0-4-8Z"/>'),
+      pulse:   this.ic('<path d="M3 12h4l2.5-7 4 14 2.5-7h5"/>'),
+      pen:     this.ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
+      alert:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'),
+      check:   this.ic('<path d="M20 6 9 17l-5-5"/>'),
+      device:  this.ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/>'),
+      mail:    this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'),
+      cal:     this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      chart:   this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>')
+    };
+
+    // ---- ONE source of truth for completeness; missing chips and the % derive from it ----
+    const FIELDS = [
+      { label:'Display name', value:'Guillaume Lauzier', pane:'profile', where:'Profile' },
+      { label:'Headline', value:'General Partner, Axal VC', pane:'profile', where:'Profile' },
+      { label:'Username', value:null, pane:'profile', where:'Profile' },
+      { label:'Full legal name', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Date of birth', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Nationality', value:'CA', pane:'identity', where:'Identity', req:true },
+      { label:'Tax residency', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Tax ID', value:null, pane:'identity', where:'Identity' },
+      { label:'Phone', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Address', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Government ID', value:null, pane:'identity', where:'Identity', req:true },
+      { label:'Entity name', value:'Novacraft Labs, Inc.', pane:'entity', where:'Entity' },
+      { label:'Registration ID', value:null, pane:'entity', where:'Entity' },
+      { label:'Timezone', value:'America/Los_Angeles', pane:'profile', where:'Profile' }
+    ];
+    const filled = FIELDS.filter(f => f.value);
+    const missing = FIELDS.filter(f => !f.value);
+    const pct = Math.round(filled.length / FIELDS.length * 100);
+    const pctInk = pct >= 90 ? '#047857' : (pct >= 50 ? '#92400e' : '#b91c1c');
+
+    // ---- Trust score: derived from the same field set, so Settings and Trust Center agree ----
+    const reqFields = FIELDS.filter(f => f.req);
+    const reqDone = reqFields.filter(f => f.value).length;
+    const kycReady = reqDone === reqFields.length;
+    // "In review" means submitted for verification — not merely part-filled.
+    const kycSubmitted = false;
+    const kycStatus = kycReady ? 'Verified' : (kycSubmitted ? 'In review' : 'Not started');
+    // ---- Multi-company: one account can hold several entities ----
+    const COMPANIES = [
+      { name:'Novacraft Labs, Inc.', initials:'NL', active:true, kyb:'In review',
+        meta:'Delaware C-Corp · incorporated Mar 2026 · Spin-Out Lab cohort 4',
+        role:'You are Founder & CEO · 62.4% fully diluted',
+        fields:[
+          { label:'Legal entity name', value:'Novacraft Labs, Inc.' },
+          { label:'Registration ID', value:null },
+          { label:'Country of incorporation', value:'United States (DE)' },
+          { label:'Entity type', value:'C-Corporation' },
+          { label:'Registered agent', value:'Harvard Business Services' },
+          { label:'EIN', value:null }
+        ] },
+      { name:'Halverton Systems Ltd', initials:'HS', active:false, kyb:'Verified',
+        meta:'UK private limited · incorporated Nov 2024 · not in a cohort',
+        role:'You are Co-founder · 34.0% fully diluted',
+        fields:[
+          { label:'Legal entity name', value:'Halverton Systems Ltd' },
+          { label:'Registration ID', value:'14892211' },
+          { label:'Country of incorporation', value:'United Kingdom (GB)' },
+          { label:'Entity type', value:'Private limited company' },
+          { label:'Registered agent', value:'Wilberforce Secretarial' },
+          { label:'EIN', value:'GB 412 8891 03' }
+        ] },
+      { name:'Kelp Bio SA', initials:'KB', active:false, kyb:'Not started',
+        meta:'Swiss SA · incorporated Jun 2026 · research spin-out',
+        role:'You are Advisor · 1.5% advisory grant',
+        fields:[
+          { label:'Legal entity name', value:'Kelp Bio SA' },
+          { label:'Registration ID', value:null },
+          { label:'Country of incorporation', value:'Switzerland (CH)' },
+          { label:'Entity type', value:'Société anonyme' },
+          { label:'Registered agent', value:null },
+          { label:'EIN', value:null }
+        ] }
+    ];
+    const selIdx = Math.min(S.company || 0, COMPANIES.length - 1);
+    const SEL = COMPANIES[selIdx];
+    const kybStatus = SEL.kyb;
+
+    // Trust Center scores OBLIGATIONS, not identity fields. Same rows, same weights,
+    // same penalties — so the two surfaces cannot print different numbers.
+    const OBLIGATIONS = [
+      { label:'Terms of Service', req:true, status:'Satisfied' },
+      { label:'Founder NDA', req:true, status:'Signed' },
+      { label:'Identity verification (KYC)', req:true, status:kycStatus },
+      // Obligation follows the ACTIVE workspace company, not whichever row is open for editing.
+      { label:'Entity verification (KYB)', req:false, status:(COMPANIES.filter(c => c.active)[0] || SEL).kyb },
+      { label:'83(b) election on file', req:false, status:'Expired' }
+    ];
+    const oReq = OBLIGATIONS.filter(o => o.req);
+    const weightOf = (o) => {
+      const t = this.toneOf(o.status);
+      return t === 'ok' ? 1 : (t === 'prog' ? 0.5 : 0);
+    };
+    const oBase = Math.round(oReq.reduce((a,o) => a + weightOf(o), 0) / oReq.length * 100);
+    const oGates = oReq.filter(o => this.toneOf(o.status) !== 'ok').length * 10;
+    const oPenalty = OBLIGATIONS.filter(o => !o.req && this.toneOf(o.status) === 'bad').length * 5;
+    const trustScore = Math.max(0, Math.min(100, oBase - oGates - oPenalty));
+    const tBand = trustScore >= 90 ? 'ok' : (trustScore >= 60 ? 'prog' : 'bad');
+    const tC = this.tone(tBand);
+    const trustVerdict = trustScore >= 90 ? 'Compliant' : (trustScore >= 60 ? 'Action needed' : 'Not compliant');
+    const reqMissing = reqFields.length - reqDone;
+    const bridgeLine = kycReady
+      ? 'Every required obligation is satisfied. Trust Center reports on the data held here.'
+      : reqMissing + ' required ' + (reqMissing === 1 ? 'field' : 'fields') + ' below still block identity verification — and KYC gates wires, the cap table and your 83(b) filing.';
+
+    const c2 = 2 * Math.PI * 18;
+    const goPane = (p) => () => this.setState({ pane:p });
+
+    const NAV = [
+      { k:'profile', label:'Profile', icon:I.user },
+      { k:'identity', label:'Identity & tax', icon:I.id, badge: reqMissing ? String(reqMissing) : null },
+      { k:'entity', label:'Legal entity', icon:I.building },
+      { k:'onboarding', label:'Onboarding', icon:I.check },
+      { k:'roles', label:'Roles & access', icon:I.key },
+      { k:'security', label:'Security', icon:I.shield },
+      { k:'notif', label:'Notifications', icon:I.bell },
+      { k:'docs', label:'Documents', icon:I.doc },
+      { k:'integrations', label:'Integrations', icon:I.plug },
+      { k:'billing', label:'Billing', icon:I.card },
+      { k:'appearance', label:'Appearance', icon:I.palette },
+      { k:'activity', label:'Activity', icon:I.pulse }
+    ];
+
+    const toggleJuris = (code) => () => {
+      const on = S.juris.indexOf(code) >= 0;
+      this.setState({ juris: on ? S.juris.filter(x => x !== code) : S.juris.concat([code]) });
+    };
+
+    const fld = (f) => ({
+      label:f.label, required:!!f.req, value:f.value || '', ph: f.value ? '' : 'Required for KYC',
+      hint: f.label === 'Date of birth' ? 'Must be 18 or older.' : (f.label === 'Phone' ? 'E.164, e.g. +14155551234' : null),
+      inStyle: f.value ? '' : 'border-color:#fde68a;background:#fffdf5'
+    });
+
+    return {
+      nav: NAV.map(n => ({
+        label:n.label, icon:n.icon, badge:n.badge,
+        badgeStyle:'font-size:10px;font-weight:800;color:#fff;background:#dc2626;border-radius:999px;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px',
+        go: goPane(n.k),
+        style:'display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:'+(pane === n.k ? '700' : '600')+';padding:9px 12px;border-radius:9px;cursor:pointer;'
+          + (pane === n.k ? 'background:#f4f2fa;color:#7c3aed' : 'color:#3f3a49')
+      })),
+
+      trustScore: String(trustScore), trustVerdict,
+      bridgeBg: tC.bg, bridgeEdge: tC.edge, bridgeInk: tC.ink, bridgeLine,
+      bridgeDash: (c2 * trustScore / 100).toFixed(1) + ' ' + c2.toFixed(1),
+
+      pct: String(pct), pctInk,
+      pctLine: pct === 100 ? 'Your profile is complete.' : 'Profile ' + pct + '% complete — ' + missing.length + ' ' + (missing.length === 1 ? 'field' : 'fields') + ' left.',
+      hasMissing: missing.length > 0,
+      missingChips: missing.map(m => ({ label:m.label, where:m.where, go: goPane(m.pane) })),
+
+      isProfile: pane === 'profile', isIdentity: pane === 'identity', isEntity: pane === 'entity',
+      isOnboarding: pane === 'onboarding',
+      isRoles: pane === 'roles', isSecurity: pane === 'security', isNotif: pane === 'notif',
+      isDocs: pane === 'docs', isIntegrations: pane === 'integrations', isBilling: pane === 'billing',
+      isAppearance: pane === 'appearance', isActivity: pane === 'activity',
+
+      alertIcon: I.alert,
+      socials: ['LinkedIn','X / Twitter','Website','GitHub','AngelList','Crunchbase','Substack'],
+      jurisdictions: [
+        ['US','United States'],['CA','Canada'],['GB','United Kingdom'],['CH','Switzerland'],
+        ['DE','Germany'],['FR','France'],['SG','Singapore'],['AE','UAE'],['KY','Cayman Islands']
+      ].map(([code,name]) => {
+        const on = S.juris.indexOf(code) >= 0;
+        return { label: code + ' · ' + name, go: toggleJuris(code),
+          style:'font-size:12px;font-weight:600;padding:6px 13px;border-radius:999px;cursor:pointer;'
+            + (on ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed' : 'background:#fff;color:#3f3a49;border:1px solid #e2e1e8') };
+      }),
+
+      kycStatus, kycPill: this.pill(kycStatus), kycDot: this.dot(kycStatus),
+      kycGate: kycReady ? 'Verified — no action needed.' : 'Identity verification cannot start until every field marked REQ is filled.',
+      idFields: FIELDS.filter(f => f.pane === 'identity').map(fld),
+      consents: [
+        { label:'I am not a politically exposed person', meta:'A PEP declaration is required before screening.' },
+        { label:'I consent to sanctions screening and third-party verification', meta:'OFAC SDN, EU CFSP and UK HMT consolidated lists.' }
+      ].map((c, i) => ({
+        label:c.label, meta:c.meta,
+        go: () => { const n = S.consents.slice(); n[i] = !n[i]; this.setState({ consents:n }); },
+        mark: S.consents[i] ? I.check : { __html:'' },
+        boxStyle:'width:19px;height:19px;border-radius:6px;flex:none;cursor:pointer;padding:3px;box-sizing:border-box;'
+          + (S.consents[i] ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed' : 'background:#fff;border:1px solid #d4d2dc'),
+        rowStyle:'display:flex;align-items:flex-start;gap:11px;border:1px solid '+(S.consents[i] ? '#f0eff4' : '#fde68a')
+          +';background:'+(S.consents[i] ? '#fbfbfc' : '#fffdf5')+';border-radius:11px;padding:13px 15px'
+      })),
+
+      kybStatus, kybPill: this.pill(kybStatus), kybDot: this.dot(kybStatus),
+      companies: COMPANIES.map((c, i) => {
+        const sel = i === selIdx;
+        return {
+          name:c.name, initials:c.initials, meta:c.meta, role:c.role, kyb:c.kyb,
+          active: c.active, go: () => this.setState({ company:i }),
+          avBg: sel ? '#ede9fe' : '#f4f4f6', avInk: sel ? '#6d28d9' : '#615c6e',
+          pill:this.pill(c.kyb), dot:this.dot(c.kyb),
+          action: sel ? 'Editing below' : 'Manage',
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5;cursor:pointer;border-left:3px solid '
+            + (sel ? '#7c3aed' : 'transparent') + (sel ? ';background:#fdfcff' : '')
+        };
+      }),
+      selCompany: SEL.name,
+      entityFields: SEL.fields.map(f => ({ label:f.label, value:f.value || '', ph: f.value ? '' : 'Not provided',
+        inStyle: f.value ? '' : 'border-color:#fde68a;background:#fffdf5' })),
+
+      roles: [
+        { k:'founder', label:'Founder', plan:'Studio', meta:'Novacraft Labs, Inc. · unlocks Spin-Out Lab, cap table and raise tooling.' },
+        { k:'investor', label:'Investor / LP', plan:'LP Access', meta:'Unlocks fund portfolio views, capital calls and LP reporting.' },
+        { k:'partner', label:'Service partner', plan:'Partner Pro', meta:'Unlocks the sourcing board, office hours booking and co-marketing.' },
+        { k:'advisor', label:'Advisor', plan:'Advisor', meta:'Unlocks the advisor directory, matched founders and office hours.' }
+      ].map(r => {
+        const on = !!S.roles[r.k];
+        return { label:r.label, meta:r.meta, plan:r.plan, on,
+          toggle: () => { const n = Object.assign({}, S.roles); n[r.k] = !on; this.setState({ roles:n }); },
+          mark: on ? I.check : { __html:'' },
+          boxStyle:'width:19px;height:19px;border-radius:6px;flex:none;cursor:pointer;padding:3px;box-sizing:border-box;margin-top:1px;'
+            + (on ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed' : 'background:#fff;border:1px solid #d4d2dc'),
+          planPill:'font-size:10px;font-weight:800;letter-spacing:.06em;color:#6d28d9;background:#f5f2ff;border:1px solid #e6dcff;border-radius:5px;padding:2px 6px' };
+      }),
+      plans: [
+        { role:'Founder — Studio', price:'$240 / mo', includes:'Spin-Out Lab, cap table, raise tooling, pitch deck builder.', owned: S.roles.founder },
+        { role:'Investor — LP Access', price:'$0 · invite-only', includes:'Portfolio views, capital calls, quarterly LP statements.', owned: S.roles.investor },
+        { role:'Service partner — Partner Pro', price:'$120 / mo', includes:'Sourcing board, business development console, co-marketing.', owned: S.roles.partner },
+        { role:'Advisor — Advisor', price:'$0 · equity-based', includes:'Advisor directory, matched founders, office hours booking.', owned: S.roles.advisor }
+      ].map(p => ({ role:p.role, price:p.price, includes:p.includes, owned:p.owned, buyable:!p.owned,
+        ownedPill:'font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0' })),
+
+      delegates: [
+        { name:'Marisol Vega · Thornbury Capital', meta:'Invited Aug 12, 2026 · accepted Aug 13', scope:'Read only',
+          pill:'font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec' },
+        { name:'Priya Raghunathan · counsel', meta:'Invited Jul 2, 2026 · accepted Jul 2', scope:'Documents',
+          pill:'font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:#f5f2ff;color:#6d28d9;border:1px solid #e6dcff' }
+      ],
+
+      factors: [
+        { label:'Password', status:'Configured', meta:'Last changed Apr 18, 2026', action:'Change', icon:I.key },
+        { label:'Authenticator app (TOTP)', status:'Configured', meta:'Paired Feb 3, 2026 · required for sensitive actions', action:'Re-pair', icon:I.shield },
+        { label:'Passkey', status:'Active', meta:'MacBook Touch ID · added Jun 10, 2026 · last used Aug 24', action:'Manage', icon:I.id },
+        { label:'Recovery codes', status:'Not started', meta:'No codes generated — you could be locked out if you lose your authenticator.', action:'Generate', icon:I.alert },
+        { label:'Google sign-in', status:'Connected', meta:'guillaume.lauzier@axal.vc · counts as one factor', action:'Unlink', icon:I.mail }
+      ].map(f => ({ label:f.label, status:f.status, meta:f.meta, action:f.action, icon:f.icon,
+        pill:this.pill(f.status), dot:this.dot(f.status), rowStyle:this.rowStyle(f.status),
+        chipBg:this.tone(this.toneOf(f.status)).bg, chipInk:this.tone(this.toneOf(f.status)).ink })),
+
+      sessions: [
+        { device:'MacBook Pro · Chrome 141', meta:'San Francisco, US · 24.16.9.x · active now', current:true, revocable:false },
+        { device:'iPhone 17 · Safari', meta:'San Francisco, US · last seen Aug 24, 2026, 7:12 PM', current:false, revocable:true },
+        { device:'Windows · Edge 130', meta:'Geneva, CH · last seen Aug 11, 2026, 9:02 AM', current:false, revocable:true }
+      ],
+
+      keys: [
+        { name:'metrics-sync', meta:'Created Jun 4, 2026 · last used Aug 25, 2026 · ak_live_•••• 8f21', scope:'Read metrics' },
+        { name:'zapier-webhook', meta:'Created Mar 22, 2026 · last used Aug 19, 2026 · ak_live_•••• 41c7', scope:'Write events' }
+      ],
+
+      presets: [
+        { k:'all', label:'Everything', note:'Every event, every channel.' },
+        { k:'essentials', label:'Essentials', note:'Money, signatures, compliance and mentions.' },
+        { k:'critical', label:'Critical only', note:'Security and billing failures. Nothing else.' }
+      // Picking a preset clears per-group overrides, so the preset always takes effect.
+      ].map(p => ({ label:p.label, note:p.note, go: () => this.setState({ preset:p.k, chans:{} }),
+        style:'flex:1;min-width:170px;border-radius:12px;padding:13px 15px;cursor:pointer;'
+          + (S.preset === p.k ? 'background:#f5f2ff;border:1px solid #7c3aed;color:#4c1d95' : 'background:#fff;border:1px solid #e2e1e8;color:#3f3a49') })),
+
+      notifGroups: [
+        { title:'Security & billing', events:'Sign-in from a new device · payment failed · 2FA changed', locked:true, on:['Email','In-app'] },
+        { title:'Signatures & compliance', events:'Agreement ready to sign · KYC status change · 83(b) deadline', on: S.preset === 'critical' ? [] : ['Email','In-app'] },
+        { title:'Capital & deal flow', events:'Capital call issued · deal stage change · term sheet received', on: S.preset === 'all' ? ['Email','In-app','Slack'] : (S.preset === 'essentials' ? ['In-app'] : []) },
+        { title:'Mentions & comments', events:'Someone mentions you · replies on your threads', on: S.preset === 'all' ? ['Email','In-app','Slack'] : (S.preset === 'essentials' ? ['In-app'] : []) },
+        { title:'Digests & announcements', events:'Weekly digest · product announcements · followed companies', on: S.preset === 'all' ? ['Email'] : [] }
+      ].map(g => ({
+        title:g.title, events:g.events, locked:!!g.locked,
+        channels: ['Email','In-app','Slack','SMS'].map(ch => {
+          // Preset seeds the value; a per-group override in state wins once set.
+          const okey = g.title + '|' + ch;
+          const seeded = g.on.indexOf(ch) >= 0;
+          const on = Object.prototype.hasOwnProperty.call(S.chans, okey) ? S.chans[okey] : seeded;
+          const disabled = ch === 'SMS' || (g.locked && on);
+          return { label: ch === 'SMS' ? 'SMS · soon' : ch,
+            go: disabled ? (() => {}) : (() => {
+              const next = Object.assign({}, S.chans); next[okey] = !on; this.setState({ chans: next });
+            }),
+            style:'font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;'
+              + (disabled ? 'cursor:default;' : 'cursor:pointer;')
+              + (on ? 'background:#f5f2ff;color:#6d28d9;border:1px solid #d8c9ff'
+                    : (ch === 'SMS' ? 'background:#fafafa;color:#a8a4b4;border:1px solid #f0eff4'
+                                    : 'background:#fff;color:#615c6e;border:1px solid #e2e1e8')) };
+        })
+      })),
+
+      docs: [
+        { label:'Platform Terms of Service', status:'Signed', meta:'v4.2 · accepted Mar 12, 2026', action:'Download PDF' },
+        { label:'Founder NDA', status:'Signed', meta:'Envelope AX-1183 · signed Mar 14, 2026 · renews Mar 14, 2027', action:'Download PDF' },
+        { label:'Mutual NDA · Thornbury Capital', status:'Signed', meta:'Envelope AX-1290 · signed Aug 12, 2026', action:'Download PDF' },
+        { label:'Mutual NDA · Latitude Seed', status:'Pending', meta:'Envelope AX-1305 · sent Aug 19 · awaiting counterparty', action:'Resend' },
+        { label:'83(b) election', status:'Expired', meta:'IRS 30-day window closed Aug 2, 2026', action:'See options' }
+      ].map(d => ({ label:d.label, status:d.status, meta:d.meta, action:d.action, icon:I.pen,
+        pill:this.pill(d.status), dot:this.dot(d.status), rowStyle:this.rowStyle(d.status),
+        chipBg:this.tone(this.toneOf(d.status)).bg, chipInk:this.tone(this.toneOf(d.status)).ink })),
+
+      integrations: [
+        { name:'Google', kind:'IDENTITY / CALENDAR', status:'Connected', meta:'Reads calendar and Gmail event invites · guillaume.lauzier@axal.vc', action:'Disconnect', icon:I.mail, danger:true },
+        { name:'Microsoft 365', kind:'CALENDAR', status:'Connected', meta:'Two-way calendar sync · guillaumelauzier@gmail.com', action:'Disconnect', icon:I.cal, danger:true },
+        { name:'LinkedIn', kind:'CONTACTS', status:'Connected', meta:'Identity sign-in and CSV contact import for referrals', action:'Import CSV', icon:I.user },
+        { name:'Stripe', kind:'DATA FEED', status:'Connected', meta:'Reads MRR, ARR, customer count and churn into Metrics · read-only', action:'View logs', icon:I.chart },
+        { name:'Slack', kind:'MESSAGING', status:'Not connected', meta:'One-way deal-flow alerts into a channel you choose', action:'Connect', icon:I.bell },
+        { name:'HubSpot', kind:'CRM', status:'Not connected', meta:'Two-way sync of deals, contacts and notes', action:'Connect', icon:I.plug }
+      ].map(x => ({ name:x.name, kind:x.kind, status:x.status, meta:x.meta, action:x.action, icon:x.icon,
+        pill:this.pill(x.status), dot:this.dot(x.status),
+        actionStyle: x.danger ? 'color:#b91c1c' : '' })),
+
+      receipts: [
+        { date:'Aug 12, 2026', amount:'$240.00', status:'Paid' },
+        { date:'Jul 12, 2026', amount:'$240.00', status:'Paid' },
+        { date:'Jun 12, 2026', amount:'$240.00', status:'Paid' }
+      ].map(r => ({ date:r.date, amount:r.amount, status:r.status,
+        pill:'font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0' })),
+
+      prefs: [
+        { title:'Theme', note:'Currently rendering as light.', key:'theme', opts:['Light','Dark','System'] },
+        { title:'Density', note:'Tighter spacing reclaims vertical space on dashboards.', key:'density', opts:['Comfy','Compact'] },
+        { title:'Sidebar default', note:'How the sidebar starts on each visit.', key:'sidebar', opts:['Expanded','Collapsed'] }
+      ].map(p => ({
+        title:p.title, note:p.note,
+        opts: p.opts.map(o => ({ label:o, go: () => this.setState({ [p.key]: o.toLowerCase() }),
+          style: this.seg(S[p.key] === o.toLowerCase()) }))
+      })),
+      explainerCount: '18',
+
+      events: [
+        { label:'Signed in from a new device', severity:'Review', meta:'Windows · Edge 130 · Geneva, CH · 84.226.11.x', when:'Aug 11, 9:02 AM' },
+        { label:'Admin impersonation session', severity:'Review', meta:'Support agent A. Brennan · 14 min · viewed billing and documents', when:'Aug 9, 2:41 PM' },
+        { label:'Two-factor authenticator re-paired', severity:'Normal', meta:'From MacBook Pro · Chrome 141 · San Francisco, US', when:'Aug 4, 11:20 AM' },
+        { label:'Data export downloaded', severity:'Normal', meta:'Full account JSON · 4.2 MB', when:'Jul 29, 8:15 AM' },
+        { label:'Email address changed', severity:'Normal', meta:'guillaumelauzier@gmail.com → guillaume.lauzier@axal.vc', when:'Jul 14, 4:03 PM' },
+        { label:'Role granted: Founder', severity:'Normal', meta:'Approved by admin · Novacraft Labs, Inc.', when:'Mar 12, 10:00 AM' }
+      ].map(e => {
+        const t = e.severity === 'Review' ? 'prog' : 'neutral', c = this.tone(t);
+        return { label:e.label, meta:e.meta, when:e.when, severity:e.severity,
+          icon: t === 'prog' ? I.alert : I.check, chipBg:c.bg, chipInk:c.ink,
+          pill:'font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:'+c.bg+';color:'+c.ink+';border:1px solid '+c.edge,
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:15px 22px;border-top:1px solid #f2f1f5;border-left:3px solid '+c.bar };
+      }),
+      apiCount: '61,584',
+
+      trustedContacts: [
+        { name:'Priya Raghunathan', meta:'priya@raghunathan.law · confirmed Jun 4, 2026', status:'Confirmed' }
+      ].map(t => ({ name:t.name, meta:t.meta, status:t.status, pill:this.pill(t.status) })),
+      trustedContactsEmpty: false,
+
+      referralCredits: '3',
+
+      onboardingSteps: [
+        { title:'Company profile', done:true, meta:'One-liner, sector, and stage captured.' },
+        { title:'Founder identity', done:false, meta:'Legal name, DOB and address — same fields as Identity & tax.' },
+        { title:'Connect a calendar', done:true, meta:'Google Calendar connected Jun 4, 2026.' },
+        { title:'Invite a co-founder or teammate', done:false, meta:'Optional — you can skip and add people later.' },
+        { title:'Choose your first workspace', done:true, meta:'Spin-Out Lab selected as your active company.' }
+      ].map(s => ({ title:s.title, meta:s.meta,
+        mark: s.done ? I.check : { __html:'' },
+        markStyle:'width:19px;height:19px;border-radius:6px;flex:none;margin-top:1px;padding:3px;box-sizing:border-box;'
+          + (s.done ? 'background:#10b981;color:#fff' : 'background:#f4f4f6;border:1px solid #d4d2dc'),
+        pill: s.done ? this.pill('Done') : this.pill('Not started'),
+        dot: s.done ? this.dot('Done') : this.dot('Not started') }))
+    };
+  }
+}
+</script>
+</body>
+</html>

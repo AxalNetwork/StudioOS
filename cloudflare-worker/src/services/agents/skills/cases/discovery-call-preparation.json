@@ -1,0 +1,34 @@
+{
+  "skill": "discovery-call-preparation",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Discovery Call Preparation",
+        "task_scope": "Builds an evidence-led discovery question tree with hypotheses, qualification branches, impact probes and exit signals.",
+        "evidence": [
+          "discovery question tree and qualification branch"
+        ],
+        "omitted_field": "decision criteria"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for discovery question tree and qualification branch."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "discovery question tree and qualification branch"
+    ],
+    "must_say_not_recorded": [
+      "decision criteria"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

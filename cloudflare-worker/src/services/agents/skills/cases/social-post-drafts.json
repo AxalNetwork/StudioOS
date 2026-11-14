@@ -1,0 +1,30 @@
+{
+  "skill": "social-post-drafts",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "launches": [
+          "Waitlist auto-fill"
+        ]
+      },
+      "research.library": [
+        {
+          "title": "No-shows cost clinics a day a week"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Waitlist auto-fill",
+      "No-shows cost clinics a day a week"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "#1 app"
+    ]
+  }
+}

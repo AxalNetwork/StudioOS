@@ -1,0 +1,37 @@
+To operate a venture capital firm with partners—like your **Axal.vc** project—you need a legal stack that covers three distinct "layers": the management of the firm itself, the relationship with your investors (LPs), and the investments you make into startups.
+
+Since you are working with partners, the **internal governance** is the most critical starting point to prevent future "divorce" issues.
+
+### 1. Internal Management Layer (The GP Level)
+This is the "brain" of the operation. These documents define how you and your partners make decisions, split profits (carried interest), and what happens if someone leaves.
+
+* **Operating Agreement (LLC) or Partnership Agreement (LP):** This is your internal "constitution." It details voting power, capital contributions, and the "buy-sell" provisions for partners.
+* **Founder/Partnership Agreement:** Specifically outlines the vesting of **Carried Interest** (the 20% profit share). Partners usually vest their carry over 4–10 years to ensure long-term commitment.
+* **Employment or Service Agreements:** Defines the roles, responsibilities, and salaries (from the management fee) for each partner.
+* **Investment Committee (IC) Charter:** A formal document describing the process for approving a deal. Does it require a unanimous vote or a simple majority?
+
+### 2. Fund Formation Layer (The LP Level)
+If you are raising a pool of capital from outside investors (Limited Partners) to invest under the Axal.vc brand, you need:
+
+* **Limited Partnership Agreement (LPA):** The main contract between the VC (General Partner) and the investors (Limited Partners). It sets the "2 and 20" fee structure and the fund's lifespan (usually 10 years).
+* **Private Placement Memorandum (PPM):** A disclosure document that outlines the risks, strategy, and legal nuances of the fund for potential investors.
+* **Subscription Agreement:** The "order form" an investor signs to legally commit a specific dollar amount to your fund.
+* **Management Company Agreement:** A contract where the Fund hires your Management Company (Axal.vc) to run the day-to-day operations.
+
+### 3. Investment Execution Layer (The Portfolio Level)
+These are the templates shown in your screenshot. These are used when Axal.vc actually sends money to a startup.
+
+* **SAFE (Simple Agreement for Future Equity):** Best for early-stage/pre-seed. It’s fast and avoids immediate valuation talks.
+* **Term Sheet:** A non-binding summary of the main points of a deal (Valuation, Board Seats, Protective Provisions).
+* **Stock Purchase Agreement (SPA):** The heavy-duty contract for "Priced Rounds" (Series A, etc.) where you are buying actual shares.
+* **Voting & Investors’ Rights Agreements:** Ensures Axal.vc has a say in major company decisions (e.g., selling the company or hiring/firing the CEO).
+
+### 4. Compliance & Regulatory (The "Must-Haves")
+* **Form ADV:** If you are in the US, you likely need to register as an **Exempt Reporting Adviser (ERA)** with the SEC.
+* **AML/KYC Policy:** Procedures to verify that your partners and investors aren't involved in money laundering.
+* **Section 83(b) Election:** A critical tax form for partners to file within 30 days of receiving their equity/carry to avoid massive future tax bills.
+
+---
+> **Axal VC Tip:** If you're just starting out with partners and no outside capital yet, focus on your **Operating Agreement** and an **Equity Split Agreement**. Don't spend $50k on a full Fund LPA until you have committed interest from LPs.
+
+Are you and your partners planning to put in your own capital first (a "GP-only" fund), or are you preparing to raise from external Limited Partners immediately?

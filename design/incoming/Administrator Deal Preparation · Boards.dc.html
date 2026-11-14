@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Administrator Deal Preparation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Admin · Deals · ADP-D0 · #5459 · revised for the 10 Nov amendments</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deals — private preparation for company, SPV and fund deals, reviewed versions, explicit publication</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Deals (/admin/deals): a workspace where an authorized administrator, or a GP, scout, broker or delegated Fund admin within their own scope, prepares a deal privately. Every deal names a real issuing company and one of its projects; a project without a company keeps research only. Creation starts from the transaction: direct company financing, SPV raise, fund raise or fund deployment; debt and secondaries stay unavailable behind their gates. The administrator saves and resumes it, assembles evidence and terms, gets an exact version reviewed, previews the permitted investor view and explicitly publishes it. Investors keep /deals and /deals/:dealId. Working draft, release and round stage are three separate indicators, and the version being edited, reviewed or previewed is always labelled. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark what depends on ADP-01 to ADP-04; amber ⚑ tags mark proposed policy pending owner sign-off. New deals are USD only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 10 Nov 2026, 15:30 UTC · checked against main a722096508, re-checked 9274ccf439 for the amendments · Northwind Labs, Harbor AI, Northwind SPV I, Axal Fund II, Meridian Securities, Ledgerline, Admin A, Admin B and every person and investor are fictional; $1,500,000 target, $50,000 minimum and $8,000,000 cap are sample terms, not suggested defaults</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="27">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Administrator Deal Preparation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['ADPW-00', 'Journey, three indicators, routes', 'The operating sequence, the three separate indicators (working draft, release, round stage), routes and navigation, the state vocabulary and the annotation key.', [W('ADPW00')]],
+      ['ADPW-01', 'Queue · desktop 1440', 'Deals with one primary action, a compact scope indicator, five views with exact counts, search, filters, sort and pagination. Rows name the deal, its transaction, the issuing company and the project, then preparation state, released version or Not released, round stage, owner and the blocking requirement. The work queue dominates; no charts.', [F('ADPW01', false, 900), F('ADPW01B', 'Counts unavailable · rows still usable', 900), C('ADPW01C', 'Empty, filtered empty, unavailable, loading', 1200, 320)]],
+      ['ADPW-02', 'Create private draft', 'Transaction family first; debt and secondaries are visible and unavailable. Then the issuer company and one of its projects as two separate fields, verified as a pair, or a project that resolves its company. Fund and SPV identifiers are context, never substitutes. Resume an existing preparation versus a new round, and the explicit consequence. Opening the page created nothing.', [F('ADPW02', false, 1540), C('ADPW02B', 'Picker unreadable vs no matches', 1100, 300)]],
+      ['ADPW-03', 'Workspace · Brief', 'The stable header: deal, issuer company, project and transaction, acting admin and scope, the private version being edited, the published version separately, the round stage and save status. Nine brief sections with source labels; missing evidence is visible but never blocks a save. The readiness sidebar names blockers with repair links and calculates no score.', [F('ADPW03', false, 1360), C('ADPW03B', 'Save status and the primary action', 1200, 300)]],
+      ['ADPW-04', 'Terms', 'Instrument and round economics in USD, with target, minimum, cap, carry and management fee kept distinct. Field validation, Not recorded versus Not applicable, provenance, and the comparison with published v2 and signed paper. New terms never reprice a commitment.', [F('ADPW04', false, 860), C('ADPW04B', 'Validation and unknown values', 1200, 380)]],
+      ['ADPW-05', 'Evidence & documents', 'The package manifest: type, source and version, as-of, access condition and inclusion. The picker reaches the deck, memo, scorecards, data room and Contracts without copying anything. Variants cover a removed source, a newer version, no source, unreadable, restricted and a revoked grant.', [F('ADPW05', false, 1020), C('ADPW05B', 'Source variants', 1300, 420), F('ADPW05C', 'Pick from existing sources', 900)]],
+      ['ADPW-06', 'Audience', 'Invited investors first; the marketplace teaser stays unavailable until a policy permits it. A preview per audience: teaser, invited without NDA or grant, invited with access. Changing the audience after review clears the approval.', [F('ADPW06', false, 1000), F('ADPW06B', 'Audience edited after review', 1080)]],
+      ['ADPW-07', 'Review queue and submission', 'The canonical review state: submitted version and digest, author, reviewer and next action, with a link to the same decision in Approvals. The submission sheet says what is included and that investors still see nothing new.', [F('ADPW07', false, 940), F('ADPW07B', 'Submit v3 for review', 900)]],
+      ['ADPW-08', 'Reviewer comparison', 'Admin B reviews private v3 against published v2. Material terms, sources and audience changes are highlighted. Internal comments, Request changes and Approve v3. Outcome states: approved, changes requested, stale approval, reviewer no longer authorized, publishing policy not configured.', [F('ADPW08', false, 1120), C('ADPW08B', 'Review outcomes', 1400, 260)]],
+      ['ADPW-09', 'Investor preview', 'Read-only, through the investors’ own permission-aware projection. A persistent “Preview of private v3 — not published” bar, a simulated audience and View currently published v2. No commit, invite, sign, money or grant controls.', [F('ADPW09', false, 1120)]],
+      ['ADPW-10', 'Preflight and publish confirmation', 'Content, sources, exact approval, audience and policy, each with its timestamp. Blocked and unreadable checks link to their repair. The confirmation names the version, audience, actor and whether notifications were requested; Publish only is the default.', [F('ADPW10', false, 900), C('ADPW10B', 'Blocked preflight', 1100, 420), C('ADPW10C', 'Publish and notify, chosen explicitly', 700, 520)]],
+      ['ADPW-11', 'Published and delivery outcomes', '“Version 3 published. Two notifications failed.” Delivery is separate: provider accepted, delivered only when confirmed, and failed. Retry notifications does not republish. After a timeout, the recorded outcome is read before any retry is offered.', [F('ADPW11', false, 980), C('ADPW11B', 'Timeout after submit', 1000, 300)]],
+      ['ADPW-12', 'History, withdrawal and archive', 'Publication and review timeline with scoped actors; internal notes are labelled. Withdrawal states what stops and what stays: signed paper, commitments and bank evidence remain, and no refund is implied. Old versions are historical, never public links.', [F('ADPW12', false, 900), F('ADPW12B', 'Withdraw v3', 900)]],
+      ['ADPW-13', 'Save and recovery', 'Another editor saved first: your text is kept, with Reload theirs or Reapply mine. Offline, session expired, save failed, leaving with unsaved text, an unreadable picker, and no indefinite browser storage.', [F('ADPW13', false, 900), C('ADPW13B', 'Recovery states', 1300, 420)]],
+      ['ADPW-14', 'Eadwyn assistance', 'The shared rail with tasks for this section. Output stays a proposal with citations: Accept into private draft, Edit or Discard. Eadwyn cannot write money terms, change scores, approve, grant access or publish. When AI is unavailable, manual drafting continues.', [F('ADPW14', false, 1400), C('ADPW14B', 'Eadwyn unavailable', 380, 520)]],
+      ['ADPW-15', 'Phone 390 and tablet 834', 'Queue cards with issuer and project, creation with the transaction family and a project that has no company, the brief with save state, a stacked conflict, reviewer changes, the publish sheet (a confirmation box must be ticked before Publish turns on) and the audience list. Tablet queue in two columns.', [P('ADPW15A', false), P('ADPW15G', 'New private draft · transaction, issuer and project'), P('ADPW15B', false), P('ADPW15C', false), P('ADPW15D', false), P('ADPW15E', false), P('ADPW15F', false), C('ADPW15T', 'Tablet 834', 834, 1112)]],
+      ['ADPW-16', 'Dark mode and permission states', 'The queue, the reviewer comparison and the brief on the dark tokens. Wrong scope, no access, revoked session, source unavailable, partial read and an unreviewed legacy record. Restricted content is left out, not dimmed.', [F('ADPW16', false, 900), F('ADPW16B', 'Reviewer comparison · dark', 1120), F('ADPW16D', 'Brief · dark', 1360), C('ADPW16C', 'Permission and read states', 1300, 400)]],
+      ['ADPW-18', 'Company and project states', 'Project has no company (research only; link its company first), invalid company and project pair, legal details not recorded, unauthorized signatory, project moved since approval (approval no longer covers new actions; released terms and signed paper keep their legal party), and a legacy deal with no company.', [C('ADPW18', false, 1300, 560)]],
+      ['ADPW-19', 'Parties & authority', 'A new section. The issuer and its representative and signatory authority; investing entities and individuals, a GP and a broker as separate parties; who can act, with software entitlement, mandate, regulatory permission and the approval each can give shown separately; and the approvals the deal needs as different acts.', [F('ADPW19', false, 1500)]],
+      ['ADPW-20', 'SPV raise · two linked legs', 'Northwind SPV I raises from its members (leg 1) and invests once in Northwind Labs, Inc. (leg 2). Soft interest, allocated, signed, called, received and deployed are separate columns, and legs are never added together.', [F('ADPW20', false, 1000)]],
+      ['ADPW-21', 'Fund raise · LP admissions', 'Axal Fund II, first close: prospect to receipt in nine steps, LPs as entities, trusts and individuals with their representatives, totals per stage, and direct handoffs to Fund admin for admissions, calls and receipts, positions and reporting. Fund admin stays the record.', [F('ADPW21', false, 1100)]],
+      ['ADPW-22', 'Fund deployment and co-investment', 'Allocation of the Northwind seed among Fund II, the SPV and a direct investor, through the existing closing routes, and the deployment steps with payment authorization as its own act. The platform records evidence; it does not move money.', [C('ADPW22', false, 1300, 640)]],
+      ['ADPW-23', 'Role views', 'A broker representative under mandate M-14 (one offering, approved material, own clients, supervisor approval per message, no admin rights); the broker supervisor’s queue and a suspended registration; a GP scoped to Fund II with GP acceptance; a scoped scout and a delegated Fund admin.', [F('ADPW23', 'Broker representative', 900), C('ADPW23B', 'Broker supervisor', 1100, 420), F('ADPW23C', 'GP · Fund II only', 900), C('ADPW23D', 'Scout and delegated Fund admin', 1100, 380)]],
+      ['ADPW-24', 'Authority model', 'The four checks shown separately for every actor, the approvals that are different acts and what each never implies, and the rules: no platform admin for brokers, information barriers, plans are not eligibility.', [W('ADPW24')]],
+      ['ADPW-25', 'Contract handoff', 'Send to Contracts names the legal party, project, revision, representative and counterparty, and checks authority again at send and sign. Blocked with an unauthorized signatory; after a project move the signed agreement keeps its legal party.', [C('ADPW25', false, 1300, 520)]],
+      ['ADPW-26', 'Gated workflows', 'Debt or private credit, secondary transfers, and continuation, M&A and feeders: visible, never selectable, with what must exist first.', [C('ADPW26', false, 1200, 300)]],
+      ['ADPW-27', 'Scoring & evidence', 'Inputs used by the collector, provenance, coverage and freshness, conflicting or restricted sources, repair links and separate package attachments.', [W('ADPW27')]],
+      ['ADPW-28', 'Risk & disclosures', 'Material risks, evidence confidence, control maturity, residual downside, scenarios, conflicts and the exact disclosure version awaiting review.', [W('ADPW28')]],
+      ['ADPW-29', 'Fund Admin Risk', 'Exposure and look-through, liquidity and call coverage, leverage, valuation uncertainty, conflicts and breaches. Links to the issuer, deal and approved LP reporting.', [W('ADPW29')]],
+      ['ADPW-17', 'Handoff', 'What was checked on main, backend required per package (ADP-01 to ADP-04) and the packages the amendments add, the policy decisions pending the owner, the deviations from the first canvas, frontend-only work, reused components and accessibility.', [W('ADPW17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

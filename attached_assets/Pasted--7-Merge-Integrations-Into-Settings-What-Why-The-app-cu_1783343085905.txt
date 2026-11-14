@@ -1,0 +1,39 @@
+#7 - Merge Integrations Into Settings
+What & Why
+The app currently has TWO Integrations surfaces: a large standalone Integrations "marketplace" page (sidebar item /integrations, visible to admin + investor, route-guarded to admin/partner/investor) and a much thinner "Integrations" section already inside Settings that only shows connected-account status + a server-flag-gated API-keys card. This is confusing and duplicative — the thin Settings tab even tells users to "Connect from the Integrations marketplace."
+Consolidate into ONE home: the full marketplace becomes the Settings → Integrations section, available to every profile. Remove the standalone page from the sidebar and route, keeping the standalone URL working via a redirect so existing links and OAuth returns don't break. This mirrors the pattern already used for Referrals (Task #4): the full page gains an embedded prop and is rendered inside Settings.
+Done looks like
+* Settings → Integrations shows the FULL marketplace (browse/connect/disconnect providers, sync, logs, waitlist, Google/LinkedIn/Outlook/Telegram tiles) — not the old thin summary.
+* The Integrations section in Settings is visible to ALL profiles (admin, founder, partner, investor, mentor).
+* The server-flag-gated API-keys card is preserved (not lost in the merge).
+* The standalone Integrations item is gone from the admin and investor sidebars.
+* Visiting /integrations (or /integrations?... from an OAuth callback or an existing link) lands on Settings → Integrations with the same behavior, preserving any query string so post-connect success states still show.
+* Connecting a provider via OAuth returns the user to the Settings Integrations view (success/error state intact), not a dead or blank page.
+* Both changelogs updated (technical + plain-English), newest-first.
+* npm run test:drift passes (dark-mode guard, tsc, worker tests, api-drift).
+Out of scope
+* No backend/worker API changes to the integrations endpoints themselves (registry, OAuth handlers, tier gating stay as-is).
+* No redesign of the marketplace UI — reuse the existing page as-is.
+* No change to how individual providers connect.
+Key decisions (baked in; called out for visibility)
+1. Keep /integrations as a redirect, not a hard 404. Several internal links and the OAuth callback flow point at /integrations; redirecting to /settings/integrations (preserving the query string) keeps them all working. This matches how /refer was handled in Task #4.
+2. Replace the thin Settings tab's connected-accounts list with the full embedded marketplace, but PRESERVE the API-keys card. The old thin tab's only unique content is the API-keys card (gated by the api_keys_enabled server flag per replit.md). The full marketplace supersedes the connected-accounts summary, so that summary is dropped, but the API-keys card must remain reachable in the Settings Integrations section.
+3. Expand visibility to all profiles. The standalone page was admin/partner/investor-only; the request is to keep the Settings one "across all profiles," so founder and mentor also get it. Tier gating and the marketplace's own role handling already render sensibly for every role.
+Steps
+1. Make the marketplace embeddable — Add an embedded prop to the standalone Integrations page that drops its outer page padding/max-width wrapper and suppresses its own page-level heading, exactly like the Referrals page does. Its internal query-param handling (OAuth return states) must keep working when mounted under /settings/integrations.
+2. Render it inside Settings — In the Settings Integrations section, render the embedded marketplace instead of the thin connected-accounts summary, and keep the server-flag-gated API-keys card. Ensure the section stays visible to all roles (no role restriction), and that the render/URL-sync keeps /settings/integrations working as a deep link.
+3. Redirect the old route — Change the standalone /integrations route so it redirects to /settings/integrations, preserving the incoming query string (so OAuth callbacks and existing links resolve correctly). Remove the now-dead standalone page mount.
+4. Remove sidebar entries — Remove the standalone Integrations item from the admin and investor sidebars, adding the same kind of inline "intentional removal" comment used for prior nav removals so the nav-integrity guard treats it as deliberate.
+5. Verify OAuth return path — Confirm that after connecting a provider the browser lands on Settings → Integrations with the success/error state intact (via the preserved query string + redirect). If the OAuth callback hard-codes a bare /integrations browser redirect, rely on the new redirect route (do not change backend/worker endpoints unless strictly necessary).
+6. Changelogs — Add one line to CHANGELOG.md (technical, undated) and one plain-English line to frontend/public/CHANGELOG-user.md, newest-first.
+7. Validate — Run npm run test:drift from the repo root and fix anything it flags (dark-mode variants on any new markup, tsc, worker tests, api-drift).
+Relevant files
+* frontend/src/pages/IntegrationsPage.jsx
+* frontend/src/pages/SettingsPage.jsx:130-146,153-169,310,3496-3567
+* frontend/src/App.jsx:117,1414
+* frontend/src/sidebarConfig.js:118,376
+* frontend/src/pages/ReferralsPage.jsx:43-115
+* frontend/src/pages/CapTablePage.jsx:936,981
+* frontend/src/pages/AdminPage.jsx:1728
+* CHANGELOG.md
+* frontend/public/CHANGELOG-user.md

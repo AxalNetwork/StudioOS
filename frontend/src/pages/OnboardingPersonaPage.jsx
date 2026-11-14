@@ -1,0 +1,285 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Loader2, Sparkles, Check, ArrowRight } from 'lucide-react';
+import { api } from '../lib/api';
+import { personaSegmentsApi } from '../lib/api/personaSegments';
+
+// Epic 1 — guided persona onboarding. Three states:
+//   1. INTRO    — collect a free-form first message
+//   2. CONFIRM  — show classifier suggestion (or alternatives if disambiguation)
+//   3. ANSWERS  — walk the chosen persona's follow-up bank, then finalize
+const FOUNDER_IDS = new Set(['founder_new', 'founder_existing']);
+
+export default function OnboardingPersonaPage() {
+  const navigate = useNavigate();
+  const followUp = new URLSearchParams(useLocation().search).get('follow_up') === '1';
+  const [loadTick, setLoadTick] = useState(0);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [questionReason, setQuestionReason] = useState(null);
+  const [stage, setStage] = useState(followUp ? 'loading' : 'intro');
+  const [firstMessage, setFirstMessage] = useState('');
+  const [taxonomy, setTaxonomy] = useState([]);
+  const [classifyResult, setClassifyResult] = useState(null);
+  const [chosenPersona, setChosenPersona] = useState(null);
+  const [secondaryPersona, setSecondaryPersona] = useState(null);
+  const [questionBank, setQuestionBank] = useState([]);
+  const [answers, setAnswers] = useState({});
+  const [questionIdx, setQuestionIdx] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    setError(''); setCatalogReady(false);
+    if (followUp) {
+      setStage('loading');
+      api.getMyPersonas().then(r => {
+        if (!live) return;
+        if (typeof r?.follow_up?.pending !== 'boolean' || !Array.isArray(r.follow_up.questions) || (r.follow_up.pending && !r.follow_up.questions.length)) throw new Error('Your segment questions could not be read. Try again.');
+        const next = r.follow_up;
+        setQuestionReason(next.recorded === false ? `Not recorded. ${next.reason || 'No questions are set for this segment.'}` : null);
+        setTaxonomy(next.persona_id ? [{ id: next.persona_id, label: next.name, follow_up_questions: next.questions }] : []);
+        setChosenPersona(next.persona_id ?? null); setQuestionBank(next.questions); setQuestionIdx(0); setAnswers({});
+        setStage(next.pending && next.questions.length ? 'answers' : 'done'); setDone(!next.pending); setCatalogReady(true);
+      }).catch(() => { if (live) { setError('Your segment questions could not be read. Try again.'); setStage('loading'); } });
+    } else {
+      api.getPersonaTaxonomy().then(r => {
+        if (!live) return;
+        if (!Array.isArray(r?.personas)) throw new Error('Segments could not be read.');
+        setTaxonomy(r.personas); setCatalogReady(true);
+      }).catch(() => { if (live) setError('The segments could not be read. Try again.'); });
+    }
+    return () => { live = false; };
+  }, [followUp, loadTick]);
+
+  const personaById = useMemo(() => {
+    const map = {};
+    for (const p of taxonomy) map[p.id] = p;
+    return map;
+  }, [taxonomy]);
+
+  const classify = async () => {
+    if (!firstMessage.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const r = await api.classifyPersona(firstMessage.trim());
+      setClassifyResult(r);
+      if (r.persona_id && !r.needs_disambiguation) setChosenPersona(r.persona_id);
+      setStage('confirm');
+    } catch (e) {
+      const msg = (e?.message || '').toLowerCase();
+      if (e?.status === 404 || msg === 'not found') {
+        // Route missing on this deployment. Don't show "Not found" — let the
+        // user proceed by picking their persona manually instead of being
+        // stuck on an onboarding form they can't escape.
+        setClassifyResult({ persona_id: null, needs_disambiguation: true });
+        setStage('confirm');
+      } else if (e?.status >= 500) {
+        setError("Couldn't reach the persona router right now. Pick your role manually below or try again in a moment.");
+        setClassifyResult({ persona_id: null, needs_disambiguation: true });
+        setStage('confirm');
+      } else {
+        setError(e.message || 'Failed to classify');
+      }
+    }
+    finally { setBusy(false); }
+  };
+
+  const startQuestions = (personaId) => {
+    const persona = personaById[personaId];
+    if (!persona) return;
+    setChosenPersona(personaId);
+    setQuestionBank(persona.follow_up_questions || []);
+    setQuestionIdx(0);
+    setAnswers({});
+    setStage('answers');
+  };
+
+  const submitAnswer = async () => {
+    const q = questionBank[questionIdx];
+    if (!q) return;
+    const value = answers[q.key];
+    if (value === undefined || value === null || value === '') {
+      setError('Please answer this question.');
+      return;
+    }
+    setBusy(true); setError('');
+    try {
+      if (followUp) await personaSegmentsApi.answerFollowUp(chosenPersona, q.key, value);
+      else await api.answerPersona(chosenPersona, q.key, value);
+      if (questionIdx + 1 < questionBank.length) {
+        setQuestionIdx(questionIdx + 1);
+      } else {
+        if (!followUp) {
+          const conf = classifyResult?.persona_id === chosenPersona ? (classifyResult?.confidence || 0.8) : 1.0;
+          const source = classifyResult?.persona_id === chosenPersona ? 'router' : 'self_select';
+          await api.finalizePersona(chosenPersona, conf, source, secondaryPersona);
+        }
+        setDone(true);
+        setStage('done');
+      }
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const renderQuestionInput = (q) => {
+    const val = answers[q.key] ?? '';
+    const set = (v) => setAnswers((a) => ({ ...a, [q.key]: v }));
+    if (q.type === 'choice' && Array.isArray(q.choices)) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {q.choices.map((c) => (
+            <button key={c} type="button" onClick={() => set(c)}
+              className={`min-h-[44px] px-3 py-2 rounded-lg text-sm border transition-colors ${val === c ? 'bg-violet-600 border-violet-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:border-violet-400 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-200'}`}>
+              {c}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (q.type === 'number') {
+      return (
+        <input id="persona-question-input" type="number" value={val} onChange={(e) => set(e.target.value)}
+          className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+          placeholder="Enter a number" />
+      );
+    }
+    return (
+      <input id="persona-question-input" type="text" value={val} onChange={(e) => set(e.target.value)}
+        className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+        placeholder="Type your answer" />
+    );
+  };
+
+  const offerSecondary = !followUp && chosenPersona && FOUNDER_IDS.has(chosenPersona);
+
+  return (
+    <div className="max-w-2xl mx-auto py-8 px-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles size={22} className="text-violet-600 dark:text-violet-300" />
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{followUp ? 'Your segment questions' : 'Tell us who you are'}</h1>
+      </div>
+      <p className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 mb-6">
+        {followUp ? 'Your segment was updated. Answer the questions you have not answered for this segment yet.' : "Two minutes. We'll tailor StudioOS to your role and only ask the questions that matter for you."}
+      </p>
+
+      {error && <div className="mb-4 text-sm bg-red-50 border border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300 rounded-lg px-3 py-2">{error}</div>}
+
+      {!catalogReady && !error && <p role="status">Reading segment questions…</p>}
+      {!catalogReady && error && <button type="button" onClick={() => setLoadTick(n => n + 1)} className="min-h-[44px] rounded-lg border px-4 dark:border-gray-700">Try again</button>}
+      {followUp && <button type="button" className="mb-4 min-h-[44px] text-violet-700 dark:text-violet-300" onClick={() => navigate('/account/profile', { state: { skipPersonaFollowUp: true } })}>Not now — return to profile</button>}
+      {!followUp && catalogReady && taxonomy.length === 0 && <p>No active segments are recorded. Try again later.</p>}
+      {stage === 'intro' && catalogReady && taxonomy.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            In one or two sentences, what brings you to Axal VC?
+          </label>
+          <textarea value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} rows={4}
+            className="min-h-[44px] w-full bg-white px-3 py-2 border border-gray-300 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-violet-500 dark:border-gray-700"
+            placeholder="e.g. I run a $50M family office and we're looking to allocate to AI-native venture studios." />
+          <div className="flex justify-end">
+            <button onClick={classify} disabled={busy || !firstMessage.trim()}
+              className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
+              {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />}
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {stage === 'confirm' && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
+          {classifyResult?.persona_id && !classifyResult?.needs_disambiguation ? (
+            <div>
+              <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Suggested persona</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{personaById[classifyResult.persona_id]?.label}</div>
+              <p className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 mt-1">{personaById[classifyResult.persona_id]?.short_description}</p>
+              {classifyResult.rationale && <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">{classifyResult.rationale}</p>}
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => startQuestions(classifyResult.persona_id)}
+                  className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
+                  <Check size={14} /> Yes, that's me
+                </button>
+                <button onClick={() => { setClassifyResult({ ...classifyResult, needs_disambiguation: true }); }}
+                  className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 px-4 py-2">
+                  Pick a different one
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-sm font-medium text-gray-900 mb-3 dark:text-gray-100">Pick the persona that best describes you</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {taxonomy.map((p) => (
+                  <button key={p.id} onClick={() => startQuestions(p.id)}
+                    className="text-left border border-gray-200 hover:border-violet-400 rounded-lg p-3 transition-colors dark:border-gray-800">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{p.label}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">{p.short_description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {stage === 'answers' && questionBank.length === 0 && !followUp && <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900"><h2 className="font-bold">{personaById[chosenPersona]?.label}</h2><p>Questions: Not recorded. No questions are set for this segment.</p><button type="button" disabled={busy} className="min-h-[44px] rounded-lg bg-violet-600 px-4 text-white" onClick={async () => {
+        setBusy(true); setError('');
+        try { await api.finalizePersona(chosenPersona, 1, 'self_select', null); setDone(true); setStage('done'); }
+        catch (e) { setError(e?.message || 'Your segment could not be saved.'); }
+        finally { setBusy(false); }
+      }}>Use this segment</button></section>}
+
+      {stage === 'answers' && questionBank[questionIdx] && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4 dark:bg-gray-900 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {personaById[chosenPersona]?.label}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{questionIdx + 1} / {questionBank.length}</div>
+          </div>
+          <label htmlFor="persona-question-input" className="block text-sm font-medium text-gray-800 dark:text-gray-200">{questionBank[questionIdx].prompt}</label>
+          {renderQuestionInput(questionBank[questionIdx])}
+
+          {questionIdx === questionBank.length - 1 && offerSecondary && (
+            <div className="border-t border-gray-100 pt-3">
+              <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input type="checkbox" className="mt-1" checked={secondaryPersona === 'operator_advisor'}
+                  onChange={(e) => setSecondaryPersona(e.target.checked ? 'operator_advisor' : null)} />
+                <span>I also want to be listed as an <span className="font-medium">Operator / Advisor</span> for other studio ventures.</span>
+              </label>
+            </div>
+          )}
+
+          <div className="flex justify-between">
+            <button onClick={() => setQuestionIdx(Math.max(0, questionIdx - 1))} disabled={questionIdx === 0 || busy}
+              className="min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 disabled:opacity-40 px-3 py-2">
+              Back
+            </button>
+            <button onClick={submitAnswer} disabled={busy}
+              className="min-h-[44px] flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg">
+              {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />}
+              {questionIdx + 1 === questionBank.length ? 'Finish' : 'Next'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {stage === 'done' && done && (
+        <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-900 rounded-xl p-5">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold mb-1">
+            <Check size={18} /> All set
+          </div>
+          <p className="text-sm text-emerald-800 dark:text-emerald-200">{followUp ? questionReason || 'Your segment questions are up to date. Your segment placement is unchanged.' : <>We've tagged you as <span className="font-medium">{personaById[chosenPersona]?.label}</span>{secondaryPersona && <> and <span className="font-medium">{personaById[secondaryPersona]?.label}</span></>}. Your sidebar and Studio now reflect what's most useful to you.</>}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => navigate(followUp ? '/account/profile' : '/studio')}
+              className="min-h-[44px] inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2 rounded-lg">
+              <ArrowRight size={14} /> {followUp ? 'Return to profile' : 'Go to Studio'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

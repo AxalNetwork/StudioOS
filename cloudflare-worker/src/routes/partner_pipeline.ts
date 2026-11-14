@@ -1,0 +1,1473 @@
+/**
+ * /api/partner/pipeline — Leads, Proposals, Negotiations and Retainers.
+ *
+ * IT WAS TWO ZONES WHEN THIS FILE WAS WRITTEN, and the header said so: the two
+ * that rendered a "no store behind this yet" card until migration 208 gave them
+ * one. The other two rendered SHARED PAGES instead — `/pipeline/leads` the
+ * marketplace needs board four licences see, `/pipeline/proposals` the
+ * engagements-and-invoices page it shared with `/delivery/board` — so neither
+ * had a partner-specific read at all, and neither could carry the artboard its
+ * bucket was specified from.
+ *
+ * WHAT THE TWO NEW ZONES ASKED FOR:
+ *
+ *   LEADS. Three sets that must not overlap — an open lead, a proposal, a pass
+ *   — and a score against the firm's OWN rules. `partner_fit_rules` (209/229)
+ *   held those rules the whole time and nothing read them;
+ *   `partner_lead_passes` (233) is new, because a decision NOT to bid was not
+ *   recorded anywhere and a pass without a reason is a lead read again next
+ *   quarter.
+ *
+ *   PROPOSALS. A version trail and a loss taxonomy, neither of which `quotes`
+ *   could hold: one row, one price, overwritten on edit, and a `rejected`
+ *   status with no reason beside it. Migration 234 adds both. What it does NOT
+ *   add is a read receipt — see `GET /proposals`.
+ *
+ * WHAT THE ORIGINAL TWO ASKED FOR AND WHY THE STORE IS SHAPED THIS WAY:
+ *
+ *   NEGOTIATIONS. A quote is sent or decided; the conversation between those
+ *   two states was unmodelled. `quote_negotiations` adds the stage, whose move
+ *   it is, and the one open question blocking it — the canvas's own framing is
+ *   that "a negotiation without a named blocker is a negotiation nobody is
+ *   running". `quote_terms` adds the clause-level view: what we asked, what
+ *   they asked, where it lands. Three positions rather than one value, because
+ *   collapsing to a current value loses the two halves that explain the third.
+ *
+ *   RETAINERS. An engagement is a single accepted quote at a single price, so
+ *   nothing distinguished a retainer from a one-off. `partner_retainers.shape`
+ *   is that missing fact and every figure on the zone depends on it.
+ *
+ * CONVENTIONS, from `needs.ts`: lists are `{items:[…]}`, a single item is a
+ * bare DTO, composite reads use named top-level keys, writes with nothing to
+ * return are `{ok:true}`, and every >=400 carries `{detail:'Human sentence'}`.
+ * Ownership failures are 404 rather than 403 — a non-owner must not learn the
+ * row exists.
+ *
+ * NO DYNAMIC SQL. `check-sql-prepare.mjs` fails a new `${}` inside
+ * `DB.prepare`, so every PATCH is read → merge in JS → one literal UPDATE with
+ * the full column list bound. That also preserves the semantics a PATCH ought
+ * to have: an absent key leaves a column alone, an explicit null clears it.
+ */
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { decodeCursor, encodeCursor, listLimit, scanAll, trimPage } from '../util/keyset';
+import { LOSS_REASONS } from '../services/bdAnalytics';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { railFor, refuseRun } from '../util/railContext';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { isAdmin } from './_t13t14t15_helpers';
+import {
+  companyBinds, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+} from '../services/partnerPipelineRules';
+import {
+  mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
+} from './_t13t14t15_helpers';
+import {
+  daysBetween, mergePatch, parseCents, parseHours, parsePeriod,
+  outsideCompany, requireOwnEngagement, requireOwnQuote, requirePartnerRole, retainerProjection, utilisationFor,
+} from './_partner_workspace_helpers';
+
+const partnerPipeline = new Hono<{ Bindings: Env }>();
+
+/** The partner row for the caller, or a throw `mapError` will shape. */
+async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
+  const user = (await requireAuth(c)) as User;
+  requirePartnerRole(user);
+  const partner = await requirePartnerProfile(c.env, user);
+  // D4693: THE SELECTED COMPANY, verified, resolved once and handed to every read and write below. The overview
+  // (`/quotes/me`, `/quotes/analytics`) already narrows to it; the zones did not, so a firm saw one agency's win rate
+  // beside another's proposals. An admin's oversight view stays wide, as it does there.
+  const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+  return { user, partnerId: Number(partner.id), companyId };
+}
+
+async function body<T>(c: any): Promise<T> {
+  return (await c.req.json().catch(() => ({}))) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Leads — the three sets, and a score that shows its work
+// ---------------------------------------------------------------------------
+
+const PASS_REASONS = [
+  'below_floor', 'no_capability', 'scope_mismatch', 'timing', 'price', 'other',
+];
+
+/**
+ * Does this need mention the thing this rule or offering is about?
+ *
+ * DELIBERATELY DUMB, AND SAID SO ON THE PAGE. A case-insensitive substring over
+ * the need's own words is not semantic matching and must not be presented as
+ * it: the receipt on the row names the phrase that matched, so a reader can see
+ * the match was "design system" appearing in a title rather than a judgement
+ * about the work. A cleverer matcher that could not show its reason would be
+ * worse here, not better.
+ */
+function mentions(haystack: string, phrase: string | null): boolean {
+  const p = String(phrase ?? '').trim().toLowerCase();
+  if (p.length < 3) return false;
+  return haystack.includes(p);
+}
+
+/**
+ * Score a need against the rules the firm wrote for itself, and return the
+ * receipts rather than only the number.
+ *
+ * THE RULES ARE ALREADY THERE. `partner_fit_rules` (209/229) is the firm's own
+ * register of what it takes and what it passes on, and `service_offerings` is
+ * what it sells. `/offers/fit-rules` answered `enforcement: 'none'` while
+ * nothing read them; this is the reader, and since #4696 that response says so
+ * (`enforcement: 'score_and_rank'`, `auto_decline: false`).
+ *
+ * A SCORE WITH NO RULES BEHIND IT IS NULL, NOT FIFTY. A firm that has stated no
+ * fit rule and listed no offering has told this product nothing to judge a lead
+ * against, and a number produced anyway would be the product's opinion wearing
+ * the firm's name. `score: null` with the reason, and the `Strong fit` tile
+ * goes with it.
+ *
+ * AN EXCLUSION IS NOT A LOW SCORE. "We do not do native mobile" is not 20 out
+ * of 100 — it is a different answer, and squeezing it onto the same axis would
+ * put a lead the firm has already ruled out above one it merely fits badly.
+ * An excluded lead carries `excluded_by` and no number at all.
+ */
+function scoreLead(
+  need: { title: string; description: string | null; category: string | null; budget_min: number | null; budget_max: number | null },
+  rules: any[],
+  offerings: any[],
+): {
+  score: number | null;
+  receipts: { label: string; kind: 'hit' | 'miss' | 'gap' }[];
+  excluded_by: string | null;
+  score_note: string | null;
+} {
+  const hay = [need.title, need.description, need.category]
+    .filter(Boolean).join(' ').toLowerCase();
+  const receipts: { label: string; kind: 'hit' | 'miss' | 'gap' }[] = [];
+
+  // ── An exclusion ends the read ────────────────────────────────────────────
+  for (const r of rules) {
+    if (r.kind !== 'sector_declined' && r.kind !== 'capability_absent') continue;
+    if (!mentions(hay, r.value)) continue;
+    return {
+      score: null,
+      receipts: [{ label: `${r.value} · excluded`, kind: 'miss' }],
+      // The firm's own sentence, so the pass quotes them rather than us.
+      excluded_by: r.statement || `This firm's rules exclude ${r.value}.`,
+      score_note: null,
+    };
+  }
+
+  // ── Capability ────────────────────────────────────────────────────────────
+  const bestFit = rules.filter((r) => r.kind === 'best_fit');
+  const capabilityHit = offerings.find((o) => mentions(hay, o.title))
+    || bestFit.find((r) => mentions(hay, r.value));
+  if (offerings.length || bestFit.length) {
+    if (capabilityHit) {
+      receipts.push({
+        label: `${capabilityHit.title || capabilityHit.value} · match`, kind: 'hit',
+      });
+    } else {
+      receipts.push({ label: 'No listed capability named', kind: 'miss' });
+    }
+  } else {
+    receipts.push({ label: 'No capability listed to match against', kind: 'gap' });
+  }
+
+  // ── Budget against the firm's own floor ───────────────────────────────────
+  const floor = rules.find((r) => r.kind === 'budget_floor' && r.floor_cents != null);
+  const stated = need.budget_max ?? need.budget_min;
+  if (!floor) {
+    receipts.push({ label: 'No budget floor stated', kind: 'gap' });
+  } else if (stated == null) {
+    // THE READER'S OWN RECORD HAS NO SUCH FACT — a gap, not a failure. The
+    // client did not say, which is different from saying too little.
+    receipts.push({ label: 'Budget not stated by the client', kind: 'gap' });
+  } else {
+    // `founder_needs.budget_*` is dollars (REAL, grandfathered); `floor_cents`
+    // is cents. Comparing them without the conversion would put every lead a
+    // hundred times under the floor.
+    const cents = Math.round(Number(stated) * 100);
+    receipts.push(cents >= Number(floor.floor_cents)
+      ? { label: 'At or above your floor', kind: 'hit' }
+      : { label: 'Below your floor', kind: 'miss' });
+  }
+
+  // ── Signal strength, where the matched profile carries one (229) ──────────
+  const signal = capabilityHit && capabilityHit.signal ? String(capabilityHit.signal) : null;
+  if (signal === 'best_fit') receipts.push({ label: 'You called this profile best fit', kind: 'hit' });
+  if (signal === 'weak_intent') receipts.push({ label: 'You called this profile weak intent', kind: 'miss' });
+
+  const hits = receipts.filter((x) => x.kind === 'hit').length;
+  const misses = receipts.filter((x) => x.kind === 'miss').length;
+  if (hits + misses === 0) {
+    return {
+      score: null,
+      receipts,
+      excluded_by: null,
+      score_note: 'Nothing this firm has written down applies to this lead, so there is nothing to score it against. Add a capability or a budget floor on Offers · Audience fit and this lead gets a number with its reasons.',
+    };
+  }
+  return {
+    score: Math.round((hits / (hits + misses)) * 100),
+    receipts,
+    excluded_by: null,
+    score_note: null,
+  };
+}
+
+/**
+ * `GET /leads` — the open leads, the passes, and the counts the strip reads.
+ *
+ * THE THREE SETS ARE ENFORCED, NOT ASSERTED. The artboard's own note: "a lead
+ * you already bid is not a lead, and a lead you declined is not one either."
+ * A need this firm has quoted on is a PROPOSAL and lives on `/pipeline/proposals`;
+ * a need with a row in `partner_lead_passes` is a PASS; everything else open is
+ * a LEAD. Each read excludes the other two, so no status column has to be kept
+ * in step and no name can claim two states at once.
+ */
+/**
+ * One chunk of the firm's open leads, in the order the page shows them.
+ *
+ * BOTH EXCLUSIONS ARE IN THE WHERE CLAUSE (#4701). A need this firm quoted on
+ * and a need it passed on are each a `NOT EXISTS` here, so a page is `limit`
+ * actionable leads and the cap can never be spent on a row the handler was
+ * going to throw away afterwards. The handler used to read 200 needs and 200
+ * passes independently and filter in JS: a firm with 200+ recent passes hid
+ * actionable leads behind rows it had already declined, and a pass older than
+ * its newest 200 fell out of the exclusion set and came back as a lead.
+ */
+async function readOpenLeads(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT n.id, n.uid, n.title, n.description, n.category,
+            n.budget_min, n.budget_max, n.timeline, n.created_at,
+            f.name AS founder_name, p.name AS project_name
+       FROM founder_needs n
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN projects p ON p.id = n.project_id
+      WHERE n.status = 'open'
+        AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+        AND (? IS NULL OR n.created_at < ? OR (n.created_at = ? AND n.id < ?))
+      ORDER BY n.created_at DESC, n.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const last = page.rows[page.rows.length - 1];
+  return { rows: page.rows, next: page.hasMore && last ? encodeCursor([String(last.created_at), Number(last.id)]) : null };
+}
+
+async function readPasses(env: Env, partnerId: number, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT lp.id, lp.need_id, lp.reason, lp.note, lp.passed_at,
+            n.title AS need_title, f.name AS founder_name
+       FROM partner_lead_passes lp
+       JOIN founder_needs n ON n.id = lp.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+      WHERE lp.partner_id = ?
+        AND (? IS NULL OR lp.passed_at < ? OR (lp.passed_at = ? AND lp.id < ?))
+      ORDER BY lp.passed_at DESC, lp.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const last = page.rows[page.rows.length - 1];
+  return { rows: page.rows, next: page.hasMore && last ? encodeCursor([String(last.passed_at), Number(last.id)]) : null };
+}
+
+partnerPipeline.get('/leads', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    const passedCursor = c.req.query('passed_cursor') ?? null;
+    // A bad cursor is a 400 before any read.
+    decodeCursor(cursor, 2); decodeCursor(passedCursor, 2);
+
+    const [leadPage, rules, offerings, passPage, passTotal] = await Promise.all([
+      readOpenLeads(c.env, partnerId, cursor, limit),
+      c.env.DB.prepare(
+        `SELECT kind, value, floor_cents, statement, referred_to, signal
+           FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      // `service_offerings` IS THE ODD ONE OUT IN THIS HANDLER, and reading it
+      // like its three siblings is what took this page down. `partner_fit_rules`,
+      // `partner_lead_passes` and `quotes` all carry `partner_id REFERENCES
+      // partners(id)`, so `partnerId` binds straight in. Offerings do not: the
+      // table keys on `owner_user_id REFERENCES users(id)` and has never had a
+      // `partner_id` column — not in migration 034, not in 200's rebuild, not in
+      // the production baseline. `WHERE partner_id = ?` here answered
+      // `D1_ERROR: no such column: partner_id at offset 62` for every partner,
+      // and because all the reads share one `Promise.all` it took the whole
+      // payload with it, not just the score.
+      //
+      // THE HOP IS THROUGH `users.partner_id`, and it is not a guess: migration
+      // 200 backfilled this very column with `(SELECT MIN(u.id) FROM users u
+      // WHERE u.partner_id = o.partner_id)` (200_service_offerings_shape.sql:174).
+      // `MIN(u.id)` is why this is `IN (…)` rather than `= user.id`: 200 handed
+      // every one of a firm's offerings to its lowest-id member, so scoping to
+      // the acting user would show a colleague an empty catalogue and score
+      // their leads against nothing. The firm owns the offerings; the row just
+      // records which member holds them.
+      c.env.DB.prepare(
+        `SELECT title, category FROM service_offerings
+          WHERE owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+            AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      readPasses(c.env, partnerId, passedCursor, limit),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n
+           FROM partner_lead_passes lp
+           JOIN founder_needs n ON n.id = lp.need_id
+          WHERE lp.partner_id = ?`,
+      ).bind(partnerId).first<{ n: number }>(),
+    ]);
+
+    const ruleRows = rules.results || [];
+    const offeringRows = offerings.results || [];
+
+    const items = leadPage.rows.map((n: any) => {
+      const judged = scoreLead(n, ruleRows, offeringRows);
+      return {
+        need_id: Number(n.id),
+        need_uid: n.uid,
+        who: n.founder_name ?? n.project_name ?? null,
+        title: n.title,
+        need: n.description ?? null,
+        category: n.category ?? null,
+        budget_min: n.budget_min == null ? null : Number(n.budget_min),
+        budget_max: n.budget_max == null ? null : Number(n.budget_max),
+        timeline: n.timeline ?? null,
+        // WHERE IT CAME FROM, and there is exactly one answer on this build.
+        // Every lead this product can see is a marketplace need; nothing
+        // records a lead arriving any other way, so a second provenance chip
+        // would be a distinction the reader could never see.
+        source: 'marketplace_need',
+        source_label: 'Marketplace need',
+        days_old: daysBetween(n.created_at),
+        ...judged,
+      };
+    });
+
+    // THE STRIP DESCRIBES EVERY OPEN LEAD, NOT THE PAGE. The counts are read by
+    // walking the whole population in chunks, so a firm with 600 open leads is
+    // told 600, and `totals_complete` says so if the walk could not finish.
+    let openCount = 0;
+    let scoredCount = 0;
+    let strongCount = 0;
+    let excludedCount = 0;
+    const walk = await scanAll(
+      (cur) => readOpenLeads(c.env, partnerId, cur, 200),
+      (rows) => {
+        for (const n of rows) {
+          openCount += 1;
+          const judged = scoreLead(n, ruleRows, offeringRows);
+          if (judged.excluded_by) excludedCount += 1;
+          if (judged.score != null) { scoredCount += 1; if (judged.score >= 80) strongCount += 1; }
+        }
+      },
+    );
+
+    return c.json({
+      items,
+      next_cursor: leadPage.next,
+      has_more: leadPage.next !== null,
+      passed: passPage.rows.map((p: any) => ({
+        id: Number(p.id),
+        need_id: Number(p.need_id),
+        who: p.founder_name ?? null,
+        title: p.need_title,
+        reason: p.reason,
+        note: p.note ?? null,
+        passed_at: p.passed_at,
+      })),
+      passed_next_cursor: passPage.next,
+      passed_has_more: passPage.next !== null,
+      open_count: openCount,
+      // NULL, NOT ZERO, when nothing can be scored at all. "No strong fits" and
+      // "no rules to judge fit with" are different answers and the strip draws
+      // them differently.
+      strong_fit_count: scoredCount ? strongCount : null,
+      excluded_count: excludedCount,
+      passed_count: Number(passTotal?.n ?? 0),
+      totals_complete: walk.complete,
+      population_note: walk.complete
+        ? 'Open counts all open marketplace needs across the firm, including fit exclusions, except needs already bid on or passed by this firm. Strong fit counts scored open leads at 80 or above.'
+        : 'These counts cover the open marketplace needs read so far. They exclude needs already bid on or passed by this firm. Strong fit counts scored open leads at 80 or above.',
+      // What the score is made of, said in the response so the page cannot
+      // imply a model where there is a substring match.
+      scoring: ruleRows.length || offeringRows.length ? 'fit_rules' : 'none',
+      scoring_note: ruleRows.length || offeringRows.length
+        ? 'A score is a count of your own stated rules this lead meets, over the ones it was measured against. Every receipt on the row names the rule it came from. A lead that matches a declined sector or an absent capability is marked excluded: it carries your sentence and no score, and it is left out of the ranking, but it stays on this list and is never declined for you. Nothing here is a model.'
+        : 'This firm has stated no fit rule and listed no service, so there is nothing to score a lead against. Nothing is scored, and nothing is guessed.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The firm's audience fit as words a model can match against: what it called
+ * best fit, what it sells, and what the caller typed. Empty when the firm has
+ * written none of these down.
+ */
+export function audienceFitQuery(rules: any[], offerings: any[], extra: string): string {
+  const fit = rules
+    .filter((r) => r.kind === 'best_fit' && r.signal !== 'weak_intent')
+    .map((r) => String(r.value ?? '').trim())
+    .filter(Boolean);
+  const sells = offerings.map((o) => String(o.title ?? '').trim()).filter(Boolean);
+  return [
+    extra,
+    fit.length ? `Best fit: ${fit.slice(0, 12).join('; ')}` : '',
+    sells.length ? `Services: ${sells.slice(0, 12).join('; ')}` : '',
+  ].filter(Boolean).join('. ');
+}
+
+/**
+ * `POST /leads/rank { query? }` — #3938 part 3 (D1478 task 4, job IN10): the
+ * firm's press orders its open leads by fit with its own audience fit: retrieve
+ * (bge-m3), then rank (the reranker), on `services/ai/matchRows.ts`. IN10 is a
+ * two-step job: no line is written, so every row's `line` is null and the
+ * page keeps its receipts. The same three sets as `GET /leads`: a lead already
+ * bid, passed or excluded by the firm's own rules is never ranked. A firm that
+ * has written no fit, no service and typed nothing has nothing to rank against:
+ * 409, and no run. Nothing here changes a lead.
+ */
+partnerPipeline.post('/leads/rank', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const b = await body<Record<string, unknown>>(c);
+    const extra = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    const [needs, rules, offerings] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT n.id, n.title, n.description, n.category, n.budget_min, n.budget_max
+           FROM founder_needs n
+          WHERE n.status = 'open'
+            AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+          ORDER BY n.created_at DESC
+          LIMIT 60`,
+      ).bind(partnerId, partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT kind, value, floor_cents, statement, referred_to, signal
+           FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT title, category FROM service_offerings
+          WHERE owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+            AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+    ]);
+    const ruleRows = rules.results || [];
+    const offeringRows = offerings.results || [];
+    const query = audienceFitQuery(ruleRows, offeringRows, extra);
+    if (!query) {
+      return c.json({ detail: 'There is nothing to rank your leads against yet. Add a best-fit profile or a service on Offers · Audience fit, or say what you are looking for.' }, 409);
+    }
+    const candidates = (needs.results || [])
+      .filter((n: any) => !scoreLead(n, ruleRows, offeringRows).excluded_by)
+      .map((n: any) => ({
+        key: String(n.id),
+        text: [
+          n.title,
+          n.category ? `Category: ${n.category}` : null,
+          typeof n.description === 'string' ? n.description.slice(0, 500) : null,
+          n.budget_max != null || n.budget_min != null ? `Budget up to $${Number(n.budget_max ?? n.budget_min)}` : 'Budget not stated',
+        ].filter(Boolean).join('. '),
+      }));
+    const rail = railFor(c, { page: 'Partner · Leads', option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.partnerLeads, rail, guardText: query }, 'IN10');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10, write: false }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'IN10', steps: res.steps, rows: res.rows.map((r) => ({ need_id: Number(r.key), position: r.position, line: r.line })) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Record a pass — the decision not to bid, with the reason that stops the lead
+ * coming round again.
+ *
+ * A PASS IS NOT A LOSS. It goes in its own table for the reason migration 233's
+ * header gives: a lost bid is a bid, and merging them would move a firm's win
+ * rate in whichever direction somebody guessed.
+ */
+partnerPipeline.post('/leads/:needId/pass', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    const b = await body<any>(c);
+    const reason = String(b.reason ?? '');
+    if (!PASS_REASONS.includes(reason)) {
+      return c.json({ detail: `A pass needs one of these reasons: ${PASS_REASONS.join(', ')}` }, 400);
+    }
+    const need = await c.env.DB.prepare('SELECT id FROM founder_needs WHERE id = ?')
+      .bind(needId).first<any>();
+    if (!need) return c.json({ detail: 'Need not found' }, 404);
+
+    // A NEED THIS FIRM ALREADY BID ON IS NOT A LEAD TO PASS. Refusing it here
+    // is what keeps the three sets disjoint at the write rather than only in
+    // the read: a row that made a need both a proposal and a pass would put one
+    // client in two places on the same bucket.
+    const bid = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM quotes WHERE need_id = ? AND partner_id = ?',
+    ).bind(needId, partnerId).first<{ ok: number }>();
+    if (bid) {
+      return c.json({
+        detail: 'You have already bid on this need, so it is a proposal rather than a lead. A bid you lost is recorded on Proposals with its reason.',
+      }, 409);
+    }
+
+    await c.env.DB.prepare(
+      `INSERT INTO partner_lead_passes (partner_id, need_id, reason, note, passed_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (partner_id, need_id) DO UPDATE SET
+         reason = excluded.reason, note = excluded.note, updated_at = excluded.updated_at`,
+    ).bind(partnerId, needId, reason, trimOrNull(b.note, 600), nowIso(), nowIso(), nowIso()).run();
+    return c.json({ ok: true, need_id: needId, reason });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Un-pass: the lead goes back where it was, with no trace of the mistake. */
+partnerPipeline.delete('/leads/:needId/pass', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const needId = Number(c.req.param('needId'));
+    await c.env.DB.prepare(
+      'DELETE FROM partner_lead_passes WHERE partner_id = ? AND need_id = ?',
+    ).bind(partnerId, needId).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Proposals — the lifecycle, the versions, and the one thing it cannot see
+// ---------------------------------------------------------------------------
+
+/**
+ * A LOSS TAKES THE PASS VOCABULARY MINUS TWO. Migration 233's set, without
+ * `below_floor` and `no_capability`: you do not lose a deal for being under your
+ * own floor, and you do not lose it for a capability you just quoted on. One
+ * vocabulary across both tables is what lets Pipeline · Analytics group them.
+ *
+ * ENFORCED HERE BECAUSE SQLITE CANNOT ENFORCE IT THERE. `ALTER TABLE … ADD
+ * COLUMN` takes no CHECK, and rebuilding `quotes` — a core table every licence
+ * reads — for one writer's constraint is the wrong trade. This route is that
+ * writer; migration 234's header says so, so the next one is warned.
+ */
+// The list itself lives in `services/bdAnalytics.ts`, which is the reader.
+// Spelling it twice is how a writer and a chart end up with four categories and
+// three bars.
+
+/**
+ * `GET /proposals` — every bid this firm has made, with its version trail.
+ *
+ * THE ARTBOARD'S SUBJECT IS THE LIFECYCLE: "a proposal opened four times and not
+ * answered is a different object from one never opened." THIS BUILD CANNOT TELL
+ * THOSE APART, and the response says so rather than letting the page imply it.
+ * `quotes` has no open, no read receipt and no view count, and no founder-side
+ * surface records one — the same absence `engagement_deliverables.opened_at`
+ * has, for the same reason: an open is the client's act.
+ *
+ * So `signal` is what this side genuinely knows — sent, how long ago, decided or
+ * not — and `read_receipts: 'none'` carries the reason. A "never opened" count
+ * computed from silence would be a number about our own send.
+ */
+/**
+ * One chunk of this firm's bids and the version trail of exactly those bids.
+ *
+ * THE TRAIL IS SCOPED TO THE RETURNED PARENTS (#4701). It used to read every
+ * version the firm had ever written, then keep the ones whose quote was in the
+ * capped list: the cost grew with history the page never showed, and a chunk
+ * of the answer was thrown away. The ids ride in one bound `json_each(?)`, so
+ * nothing is interpolated into the statement.
+ */
+async function readProposals(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT q.id, q.uid, q.need_id, q.price, q.timeline_weeks, q.deliverables,
+            q.status, q.decided_at, q.loss_reason, q.created_at, q.updated_at,
+            n.title AS need_title, f.name AS client,
+            e.id AS engagement_id, r.shape AS retainer_shape
+       FROM quotes q
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN engagements e ON e.quote_id = q.id
+       LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+      WHERE q.partner_id = ?
+        AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
+        AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
+      ORDER BY q.created_at DESC, q.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, ...companyBinds(companyId), cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const ids = page.rows.map((q: any) => Number(q.id));
+  const versions = ids.length
+    ? await env.DB.prepare(
+      `SELECT v.id, v.quote_id, v.version, v.change_summary, v.note, v.price_cents, v.created_at
+         FROM quote_versions v
+         JOIN quotes q ON q.id = v.quote_id
+        WHERE q.partner_id = ? AND v.quote_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
+        ORDER BY v.quote_id, v.version`,
+    ).bind(partnerId, JSON.stringify(ids), ...companyBinds(companyId)).all<any>()
+    : { results: [] as any[] };
+
+  const byQuote = new Map<number, any[]>();
+  for (const v of versions.results || []) {
+    const k = Number(v.quote_id);
+    if (!byQuote.has(k)) byQuote.set(k, []);
+    byQuote.get(k)!.push({
+      id: Number(v.id),
+      version: Number(v.version),
+      change_summary: v.change_summary,
+      note: v.note ?? null,
+      price_cents: v.price_cents == null ? null : Number(v.price_cents),
+      created_at: v.created_at,
+    });
+  }
+
+  const items = page.rows.map((q: any) => {
+    const trail = byQuote.get(Number(q.id)) || [];
+    // D4693: decided means won or lost. A decided_at stamp alone does not decide a quote —
+    // a withdrawn one can carry it and is still not a loss.
+    const outcome = quoteOutcome(q.status);
+    const decided = outcome === 'won' || outcome === 'lost';
+    return {
+      quote_id: Number(q.id),
+      uid: q.uid,
+      need_id: Number(q.need_id),
+      client: q.client ?? null,
+      need_title: q.need_title ?? null,
+      // `quotes.price` is grandfathered REAL dollars; every new money column
+      // in this bucket is cents, so the unit is named rather than guessed at
+      // by the reader.
+      price_dollars: q.price == null ? null : Number(q.price),
+      timeline_weeks: q.timeline_weeks == null ? null : Number(q.timeline_weeks),
+      // THE SHAPE IS THE RETAINER RECORD'S OR IT IS A FIXED SCOPE. Nothing
+      // stores "shape" on a quote, and an accepted quote with a retainer
+      // behind it is the only thing that makes one recurring.
+      shape: q.retainer_shape === 'retainer' ? 'Retainer'
+        : (q.retainer_shape === 'embedded_seat' ? 'Embedded seat' : 'Fixed scope'),
+      // v1 IS THE PROPOSAL ITSELF. A quote with no version rows has been sent
+      // once and never revised, which is a version history of length one
+      // rather than an absence.
+      version: trail.length ? Math.max(...trail.map((v: any) => v.version)) : 1,
+      versions: trail,
+      status: q.status,
+      state: q.status === 'accepted' ? 'Won'
+        : (q.status === 'rejected' ? 'Lost'
+          : (q.status === 'withdrawn' ? 'Withdrawn' : 'Sent')),
+      decided,
+      decided_at: q.decided_at ?? null,
+      loss_reason: q.loss_reason ?? null,
+      days_since_sent: daysBetween(q.created_at),
+      // WHAT THIS SIDE KNOWS, and it is not whether they read it.
+      signal: decided
+        ? `Decided ${q.decided_at ? String(q.decided_at).slice(0, 10) : ''}`.trim()
+        : `Sent · silent ${daysBetween(q.created_at) ?? 0} days`,
+      engagement_id: q.engagement_id ? Number(q.engagement_id) : null,
+    };
+  });
+  const last = page.rows[page.rows.length - 1];
+  return { rows: items, next: page.hasMore && last ? encodeCursor([String(last.created_at), Number(last.id)]) : null };
+}
+
+partnerPipeline.get('/proposals', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 2);
+    const pageRead = await readProposals(c.env, partnerId, companyId, cursor, limit);
+    const items = pageRead.rows;
+
+    // EVERY FIGURE BELOW DESCRIBES THE WHOLE BOOK, NOT THE PAGE (#4701). The
+    // win rate over a firm's newest 200 bids is a different number from its
+    // win rate, and it moves as old bids age out of the window. The populations
+    // are D4693's: won and lost are decisions, withdrawing is not losing, and
+    // the rate is the one `/quotes/analytics` prints.
+    let liveCount = 0;
+    let liveValue = 0;
+    let withdrawnCount = 0;
+    let wonCount = 0;
+    let lostCount = 0;
+    const lossCounts: Record<string, number> = {};
+    for (const r of LOSS_REASONS) lossCounts[r] = 0;
+    let unstatedLosses = 0;
+    const walk = await scanAll(
+      (cur) => readProposals(c.env, partnerId, companyId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          const outcome = quoteOutcome(x.status);
+          if (outcome === 'open') { liveCount += 1; liveValue += x.price_dollars || 0; }
+          if (outcome === 'withdrawn') withdrawnCount += 1;
+          if (outcome === 'won') wonCount += 1;
+          if (outcome === 'lost') {
+            lostCount += 1;
+            if (x.loss_reason && LOSS_REASONS.includes(x.loss_reason)) lossCounts[x.loss_reason] += 1;
+            else unstatedLosses += 1;
+          }
+        }
+      },
+    );
+    const decidedCount = wonCount + lostCount;
+
+    return c.json({
+      items,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
+      live_count: liveCount,
+      live_value_dollars: liveValue,
+      decided_count: decidedCount,
+      won_count: wonCount,
+      lost_count: lostCount,
+      // NULL WITH NOTHING DECIDED. A rate over an empty denominator is not zero
+      // per cent, and the analytics zone reports the same figure from the same
+      // rule rather than a second one.
+      win_rate_pct: winRate(wonCount, lostCount).pct,
+      // The sentence `/quotes/analytics` prints for the same figure, from the same function.
+      win_rate_basis: winRateBasis(wonCount, lostCount, liveCount, withdrawnCount),
+      withdrawn_count: withdrawnCount,
+      loss_reasons: LOSS_REASONS.map((reason) => ({ reason, count: lossCounts[reason] })),
+      // A LOSS WITH NO REASON IS THE CHART'S REAL FINDING, so it is counted
+      // rather than folded into `other`: "we did not ask" and "they said other"
+      // are different answers and only one of them is a taxonomy entry.
+      losses_unstated: unstatedLosses,
+      // THE ONE THING THIS ZONE CANNOT SEE, said in the response so the page
+      // cannot imply otherwise while the response stays silent.
+      read_receipts: 'none',
+      read_receipts_note: 'Nothing records that a client opened a proposal. There is no client-side surface to record it on, so a proposal that has gone quiet cannot be told from one that was never read — and "never opened" here would be a claim about our own silence rather than about them.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Append a version — what changed, and what it cost.
+ *
+ * APPEND-ONLY AND SELF-NUMBERING. The caller does not choose the version: the
+ * next one is the highest plus one, so two edits from two people cannot both
+ * claim to be v3. Nothing here edits or deletes an earlier version, because a
+ * history that can be rewritten is not one.
+ */
+partnerPipeline.post('/proposals/:quoteId/versions', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
+    const b = await body<any>(c);
+    const summary = trimOrNull(b.change_summary, 400);
+    if (!summary) return c.json({ detail: 'A version needs to say what changed' }, 400);
+    const cents = parseCents(b.price_cents, 'price_cents');
+    if ('error' in cents) return c.json({ detail: cents.error }, 400);
+
+    const top = await c.env.DB.prepare(
+      'SELECT MAX(version) AS top FROM quote_versions WHERE quote_id = ?',
+    ).bind(quoteId).first<{ top: number | null }>();
+    const version = Number(top?.top || 0) + 1;
+
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO quote_versions (quote_id, version, change_summary, note, price_cents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(quoteId, version, summary, trimOrNull(b.note, 600), cents.cents, nowIso(), nowIso()).run();
+    return c.json({
+      id: Number((ins as any).meta?.last_row_id),
+      quote_id: quoteId,
+      version,
+      change_summary: summary,
+      note: trimOrNull(b.note, 600),
+      price_cents: cents.cents,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Record why a proposal was lost — from the taxonomy, never typed.
+ *
+ * THE ARTBOARD'S OWN REASON: "reasons are picked from a fixed taxonomy, not
+ * typed. Free text would make this chart unreadable within a quarter." So this
+ * refuses anything outside the set, and it refuses a reason on a proposal that
+ * was not lost — a won deal with a loss reason is a row nothing can read.
+ */
+partnerPipeline.put('/proposals/:quoteId/outcome', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    const quote = await requireOwnQuote(c.env, partnerId, quoteId, companyId);
+    const b = await body<any>(c);
+
+    if (b.loss_reason === null) {
+      await c.env.DB.prepare('UPDATE quotes SET loss_reason = NULL, updated_at = ? WHERE id = ?')
+        .bind(nowIso(), quoteId).run();
+      return c.json({ ok: true, loss_reason: null });
+    }
+    const reason = String(b.loss_reason ?? '');
+    if (!LOSS_REASONS.includes(reason)) {
+      return c.json({ detail: `A loss reason is one of: ${LOSS_REASONS.join(', ')}` }, 400);
+    }
+    if ((quote as any).status !== 'rejected') {
+      return c.json({
+        detail: 'Only a lost proposal carries a loss reason. A bid you never made is a pass, recorded on Leads with its own reason.',
+      }, 409);
+    }
+    await c.env.DB.prepare('UPDATE quotes SET loss_reason = ?, updated_at = ? WHERE id = ?')
+      .bind(reason, nowIso(), quoteId).run();
+    return c.json({ ok: true, quote_id: quoteId, loss_reason: reason });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Negotiations
+// ---------------------------------------------------------------------------
+
+function negotiationDto(r: any) {
+  return {
+    id: Number(r.id),
+    uid: r.uid,
+    quote_id: Number(r.quote_id),
+    stage: r.stage,
+    ball: r.ball,
+    open_question: r.open_question ?? null,
+    last_moved_at: r.last_moved_at,
+    // Computed here AND the raw timestamp returned beside it. A page computing
+    // its own age from a clock that is not the server's would make the row and
+    // the "stalled 7d+" count disagree about the same negotiation.
+    days_stalled: daysBetween(r.last_moved_at),
+  };
+}
+
+function termDto(r: any) {
+  return {
+    id: Number(r.id),
+    uid: r.uid,
+    negotiation_id: Number(r.negotiation_id),
+    label: r.label,
+    our_position: r.our_position ?? null,
+    their_position: r.their_position ?? null,
+    landing: r.landing ?? null,
+    state: r.state,
+  };
+}
+
+const STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign', 'closed'];
+const BALLS = ['us', 'them'];
+const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
+
+/**
+ * One chunk of the firm's quotes with their negotiation, and the terms of
+ * exactly those negotiations (#4701), narrowed to the selected company (D4693).
+ *
+ * The terms ride a bound `json_each(?)` of the returned negotiation ids, still
+ * joined back to `quotes.partner_id` so the ownership predicate lives in the
+ * query: a term can only come back for a quote that is this partner's.
+ */
+async function readNegotiations(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 2);
+  const rows = await env.DB.prepare(
+    `SELECT q.id AS quote_id, q.uid AS quote_uid, q.price, q.status AS quote_status,
+            q.need_id, q.created_at AS quote_created_at, n.title AS need_title, n.category AS need_category,
+            f.name AS founder_name,
+            g.id AS negotiation_id, g.uid AS negotiation_uid, g.stage, g.ball,
+            g.open_question, g.last_moved_at
+       FROM quotes q
+       LEFT JOIN founder_needs n ON n.id = q.need_id
+       LEFT JOIN founders f ON f.id = n.founder_id
+       LEFT JOIN quote_negotiations g ON g.quote_id = q.id
+      WHERE q.partner_id = ?
+        AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
+        AND (? IS NULL OR q.created_at < ? OR (q.created_at = ? AND q.id < ?))
+      ORDER BY q.created_at DESC, q.id DESC
+      LIMIT ?`,
+  ).bind(partnerId, ...companyBinds(companyId), cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[0] : null, cur ? cur[1] : null, limit + 1).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const negotiationIds = page.rows.filter((r: any) => r.negotiation_id).map((r: any) => Number(r.negotiation_id));
+  const terms = negotiationIds.length
+    ? await env.DB.prepare(
+      `SELECT t.*
+         FROM quote_terms t
+         JOIN quote_negotiations g ON g.id = t.negotiation_id
+         JOIN quotes q ON q.id = g.quote_id
+        WHERE q.partner_id = ? AND t.negotiation_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?)
+        ORDER BY t.negotiation_id, t.id`,
+    ).bind(partnerId, JSON.stringify(negotiationIds), ...companyBinds(companyId)).all<any>()
+    : { results: [] as any[] };
+  const termsByNegotiation = new Map<number, any[]>();
+  for (const t of terms.results || []) {
+    const k = Number(t.negotiation_id);
+    if (!termsByNegotiation.has(k)) termsByNegotiation.set(k, []);
+    termsByNegotiation.get(k)!.push(termDto(t));
+  }
+  const items = page.rows.map((r: any) => ({
+    quote_id: Number(r.quote_id),
+    quote_uid: r.quote_uid,
+    quote_status: r.quote_status,
+    price: r.price,
+    need_id: r.need_id ? Number(r.need_id) : null,
+    need_title: r.need_title ?? null,
+    need_category: r.need_category ?? null,
+    founder_name: r.founder_name ?? null,
+    // D4693: `open` and `label` are the rule every count and every printed state uses.
+    negotiation: r.negotiation_id
+      ? { ...negotiationDto(r), open: negotiationIsOpen(r.stage, r.quote_status), label: negotiationLabel(r.stage, r.quote_status) }
+      : null,
+    terms: r.negotiation_id ? (termsByNegotiation.get(Number(r.negotiation_id)) || []) : [],
+  }));
+  const last = page.rows[page.rows.length - 1];
+  return { rows: items, next: page.hasMore && last ? encodeCursor([String(last.quote_created_at), Number(last.quote_id)]) : null };
+}
+
+partnerPipeline.get('/negotiations', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 2);
+    const pageRead = await readNegotiations(c.env, partnerId, companyId, cursor, limit);
+    const items = pageRead.rows;
+
+    // TRACKED AND OPEN, over the whole book (#4701). "Open" is the shared rule (D4693):
+    // tracked, not closed, and the quote behind it still waiting.
+    let liveCount = 0;
+    let liveValue = 0;
+    let awaitingUs = 0;
+    let awaitingThem = 0;
+    let stalled = 0;
+    let trackedCount = 0;
+    const walk = await scanAll(
+      (cur) => readNegotiations(c.env, partnerId, companyId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          if (x.negotiation) trackedCount += 1;
+          if (!x.negotiation?.open) continue;
+          liveCount += 1;
+          liveValue += Number(x.price) || 0;
+          if (x.negotiation.ball === 'us') awaitingUs += 1;
+          if (x.negotiation.ball === 'them') awaitingThem += 1;
+          if ((x.negotiation.days_stalled ?? 0) >= 7) stalled += 1;
+        }
+      },
+    );
+    return c.json({
+      items,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
+      open_count: liveCount,
+      tracked_count: trackedCount,
+      count_basis: `${liveCount} open of ${trackedCount} tracked. A negotiation is open when it is not closed and its quote is still waiting.`,
+      live_count: liveCount,
+      // `quotes.price` is grandfathered REAL dollars — named, not guessed at.
+      live_value_dollars: liveValue,
+      awaiting_us_count: awaitingUs,
+      awaiting_them_count: awaitingThem,
+      // SEVEN DAYS WITHOUT A RECORDED MOVE. `days_stalled` is computed from
+      // `last_moved_at` in the worker rather than by the page, so the row and
+      // the count cannot disagree about the same negotiation.
+      stalled_count: stalled,
+      // NOT COMPUTABLE, AND SAID IN THE RESPONSE. See the zone's own limit: a
+      // percentage drawn from stage alone is the stage relabelled as a forecast.
+      close_probability: null,
+      close_probability_note: 'Nothing here forecasts a close. Migration 234 records why a proposal was LOST, which is a taxonomy rather than a rate, and a handful of decided deals cannot support a probability conditioned on stage. A number drawn from stage alone would be the stage relabelled as a forecast.',
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * PUT because `idx_quote_negotiations_quote` is UNIQUE on quote_id — one
+ * negotiation per quote, so this is an upsert rather than a create.
+ *
+ * `last_moved_at` advances on a STAGE or BALL change, or on an explicit
+ * `touch: true`. It deliberately does NOT advance when only `open_question`
+ * changes: rewording the question is not a move, and if it reset the clock the
+ * "stalled 7d+" count could be cleared by typing.
+ */
+partnerPipeline.put('/negotiations/:quoteId', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
+    const b = await body<any>(c);
+
+    const existing = await c.env.DB.prepare(
+      'SELECT * FROM quote_negotiations WHERE quote_id = ?',
+    ).bind(quoteId).first<any>();
+
+    const stage = b.stage === undefined ? (existing?.stage ?? 'scoping') : String(b.stage);
+    const ball = b.ball === undefined ? (existing?.ball ?? 'them') : String(b.ball);
+    if (!STAGES.includes(stage)) return c.json({ detail: `Stage must be one of ${STAGES.join(', ')}` }, 400);
+    if (!BALLS.includes(ball)) return c.json({ detail: "Ball must be 'us' or 'them'" }, 400);
+
+    const openQuestion = Object.prototype.hasOwnProperty.call(b, 'open_question')
+      ? trimOrNull(b.open_question, 600)
+      : (existing?.open_question ?? null);
+
+    const moved = !existing
+      || stage !== existing.stage
+      || ball !== existing.ball
+      || b.touch === true;
+    const lastMoved = moved ? nowIso() : existing.last_moved_at;
+
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE quote_negotiations
+            SET stage = ?, ball = ?, open_question = ?, last_moved_at = ?, updated_at = ?
+          WHERE id = ?`,
+      ).bind(stage, ball, openQuestion, lastMoved, nowIso(), existing.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO quote_negotiations
+           (uid, quote_id, stage, ball, open_question, last_moved_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(newUid(), quoteId, stage, ball, openQuestion, lastMoved, nowIso(), nowIso()).run();
+    }
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM quote_negotiations WHERE quote_id = ?',
+    ).bind(quoteId).first<any>();
+    return c.json(negotiationDto(row));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * No DELETE on a negotiation. `stage: 'closed'` is in the CHECK constraint for
+ * exactly this: deleting the row would lose the conversation that produced the
+ * decision, which is the only part of it worth keeping afterwards.
+ */
+
+partnerPipeline.post('/negotiations/:quoteId/terms', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const quoteId = Number(c.req.param('quoteId'));
+    await requireOwnQuote(c.env, partnerId, quoteId, companyId);
+    const b = await body<any>(c);
+    const label = trimOrNull(b.label, 160);
+    if (!label) return c.json({ detail: 'A term needs a label — what is being negotiated' }, 400);
+
+    // Auto-create the negotiation: a term implies one, and making the caller
+    // create the parent first would be a round trip that exists only because
+    // of our table layout.
+    let negotiation = await c.env.DB.prepare(
+      'SELECT * FROM quote_negotiations WHERE quote_id = ?',
+    ).bind(quoteId).first<any>();
+    if (!negotiation) {
+      await c.env.DB.prepare(
+        `INSERT INTO quote_negotiations (uid, quote_id, last_moved_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).bind(newUid(), quoteId, nowIso(), nowIso(), nowIso()).run();
+      negotiation = await c.env.DB.prepare(
+        'SELECT * FROM quote_negotiations WHERE quote_id = ?',
+      ).bind(quoteId).first<any>();
+    }
+
+    const state = b.state === undefined ? 'open' : String(b.state);
+    if (!TERM_STATES.includes(state)) return c.json({ detail: `State must be one of ${TERM_STATES.join(', ')}` }, 400);
+
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO quote_terms
+         (uid, negotiation_id, label, our_position, their_position, landing, state, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), negotiation.id, label,
+      trimOrNull(b.our_position, 600), trimOrNull(b.their_position, 600),
+      trimOrNull(b.landing, 600), state, nowIso(), nowIso(),
+    ).run();
+    const row = await c.env.DB.prepare('SELECT * FROM quote_terms WHERE id = ?')
+      .bind((ins as any).meta?.last_row_id).first<any>();
+    return c.json(termDto(row));
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The term, if it hangs off a negotiation on a quote this partner owns. */
+async function ownTerm(env: Env, partnerId: number, termId: number, companyId: number | null = null) {
+  const row = await env.DB.prepare(
+    `SELECT t.*, q.partner_id
+       FROM quote_terms t
+       JOIN quote_negotiations g ON g.id = t.negotiation_id
+       JOIN quotes q ON q.id = g.quote_id
+      WHERE t.id = ?`,
+  ).bind(termId).first<any>();
+  const company = row && companyId !== null
+    ? (await env.DB.prepare(
+      `SELECT q.company_id FROM quote_terms t JOIN quote_negotiations g ON g.id = t.negotiation_id
+         JOIN quotes q ON q.id = g.quote_id WHERE t.id = ?`,
+    ).bind(termId).first<{ company_id: number | null }>())?.company_id
+    : null;
+  if (!row || Number(row.partner_id) !== Number(partnerId) || outsideCompany(company, companyId)) {
+    throw new Response(JSON.stringify({ detail: 'Term not found' }), {
+      status: 404, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  return row;
+}
+
+partnerPipeline.patch('/negotiation-terms/:id', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    const row = await ownTerm(c.env, partnerId, id, companyId);
+    const b = await body<any>(c);
+    const merged = mergePatch(row, b, ['label', 'our_position', 'their_position', 'landing', 'state']);
+    if (!trimOrNull(merged.label, 160)) return c.json({ detail: 'A term needs a label' }, 400);
+    if (!TERM_STATES.includes(String(merged.state))) {
+      return c.json({ detail: `State must be one of ${TERM_STATES.join(', ')}` }, 400);
+    }
+    await c.env.DB.prepare(
+      `UPDATE quote_terms
+          SET label = ?, our_position = ?, their_position = ?, landing = ?, state = ?, updated_at = ?
+        WHERE id = ?`,
+    ).bind(
+      trimOrNull(merged.label, 160), trimOrNull(merged.our_position, 600),
+      trimOrNull(merged.their_position, 600), trimOrNull(merged.landing, 600),
+      String(merged.state), nowIso(), id,
+    ).run();
+    const out = await c.env.DB.prepare('SELECT * FROM quote_terms WHERE id = ?').bind(id).first<any>();
+    return c.json(termDto(out));
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.delete('/negotiation-terms/:id', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const id = Number(c.req.param('id'));
+    await ownTerm(c.env, partnerId, id, companyId);
+    await c.env.DB.prepare('DELETE FROM quote_terms WHERE id = ?').bind(id).run();
+    return c.json({ ok: true, id });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// Retainers
+// ---------------------------------------------------------------------------
+
+const SHAPES = ['retainer', 'embedded_seat'];
+const CADENCES = ['monthly', 'quarterly'];
+
+/**
+ * One chunk of the firm's engagements with their retainer, and the usage rows
+ * of exactly those retainers (#4701).
+ *
+ * LEFT JOIN, matching `/negotiations` above: every engagement this firm
+ * holds comes back, with `retainer: null` where none is recorded. An inner
+ * join would return only the retainers that already exist, which reads as
+ * an empty book to a firm whose engagements are all one-off — and leaves
+ * the zone with no list to record the first retainer against.
+ *
+ * THE ORDER IS A KEYSET, so a page can name where it stopped: recorded
+ * retainers first, soonest renewal first, then engagements with none, newest
+ * first. The tie-break is `-e.id` (newest first), which is what
+ * `e.created_at DESC` meant for rows written in order, and unlike a timestamp
+ * it is unique.
+ *
+ * Usage rides a bound `json_each(?)` of the returned retainer ids and is
+ * joined back to `engagements.partner_id`, so a usage row can only come back
+ * for a retainer on one of this firm's engagements.
+ *
+ * THE RETAINER RULE IS #4690's. `retainerProjection` (cadence, current period,
+ * usage, utilisation, the monthly amount and the active predicate) is the one
+ * Delivery's Health and Board reads call too. This read does not derive a
+ * period, a utilisation or a monthly amount of its own.
+ */
+async function readRetainers(env: Env, partnerId: number, companyId: number | null, cursor: string | null, limit: number) {
+  const cur = decodeCursor(cursor, 4);
+  const now = new Date();
+  const rows = await env.DB.prepare(
+    `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status AS engagement_status,
+            e.price, e.founder_id, e.delivered_at, e.cancelled_at,
+            n.title AS need_title, f.name AS founder_name,
+            r.id AS retainer_id, r.uid AS retainer_uid, r.shape, r.cadence,
+            r.amount_cents, r.retained_hours, r.renews_at, r.ended_at,
+            (r.id IS NULL) AS k_none, (r.renews_at IS NULL) AS k_undated,
+            COALESCE(r.renews_at, '') AS k_renews, (0 - e.id) AS k_neg_id
+       FROM engagements e
+       LEFT JOIN founder_needs n ON n.id = e.need_id
+       LEFT JOIN founders f ON f.id = e.founder_id
+       LEFT JOIN partner_retainers r ON r.engagement_id = e.id
+      WHERE e.partner_id = ?
+        AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
+        AND (? IS NULL OR ((r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)) > (?, ?, ?, ?))
+      ORDER BY (r.id IS NULL), (r.renews_at IS NULL), COALESCE(r.renews_at, ''), (0 - e.id)
+      LIMIT ?`,
+  ).bind(
+    partnerId, ...companyBinds(companyId), cur ? 1 : null,
+    cur ? cur[0] : null, cur ? cur[1] : null, cur ? cur[2] : null, cur ? cur[3] : null,
+    limit + 1,
+  ).all<any>();
+  const page = trimPage(rows.results || [], limit);
+  const list = page.rows;
+
+  const retainerIds = list.filter((r: any) => r.retainer_id).map((r: any) => Number(r.retainer_id));
+  const usageRows = retainerIds.length
+    ? await env.DB.prepare(
+      `SELECT u.*
+         FROM retainer_usage u
+         JOIN partner_retainers r ON r.id = u.retainer_id
+         JOIN engagements e ON e.id = r.engagement_id
+        WHERE e.partner_id = ? AND u.retainer_id IN (SELECT value FROM json_each(?))
+          AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)
+        ORDER BY u.retainer_id, u.period DESC`,
+    ).bind(partnerId, JSON.stringify(retainerIds), ...companyBinds(companyId)).all<any>()
+    : { results: [] as any[] };
+  const usageByRetainer = new Map<number, any[]>();
+  for (const u of usageRows.results || []) {
+    const k = Number(u.retainer_id);
+    if (!usageByRetainer.has(k)) usageByRetainer.set(k, []);
+    usageByRetainer.get(k)!.push({
+      period: u.period, hours_used: Number(u.hours_used), note: u.note ?? null,
+    });
+  }
+
+  const items = list.map((r: any) => {
+    const base = {
+      engagement_id: Number(r.engagement_id),
+      engagement_uid: r.engagement_uid,
+      engagement_status: r.engagement_status,
+      engagement_price: r.price === null ? null : Number(r.price),
+      founder_id: r.founder_id ? Number(r.founder_id) : null,
+      founder_name: r.founder_name ?? null,
+      need_title: r.need_title ?? null,
+    };
+    const proj = retainerProjection(
+      r.retainer_id ? r : null,
+      r.retainer_id ? (usageByRetainer.get(Number(r.retainer_id)) || []) : [],
+      now,
+    );
+    return { ...base, ...proj };
+  });
+  const last = list[list.length - 1];
+  return {
+    rows: items,
+    next: page.hasMore && last
+      ? encodeCursor([Number(last.k_none), Number(last.k_undated), String(last.k_renews), Number(last.k_neg_id)])
+      : null,
+  };
+}
+
+partnerPipeline.get('/retainers', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const limit = listLimit(c.req.query('limit'));
+    const cursor = c.req.query('cursor') ?? null;
+    decodeCursor(cursor, 4);
+    const pageRead = await readRetainers(c.env, partnerId, companyId, cursor, limit);
+    const items = pageRead.rows;
+
+    // EVERY FIGURE BELOW IS OVER THE WHOLE BOOK (#4701). An ended retainer
+    // (D4693's active predicate) leaves the live counts before a shape or a
+    // consumption count.
+    let mrrCents = 0;
+    let counted = 0;
+    let unpriced = 0;
+    let withRetainer = 0;
+    let endedCount = 0;
+    let activeRetainers = 0;
+    let under = 0;
+    let over = 0;
+    let atRiskCents = 0;
+    let atRiskPriced = false;
+    const byShape: Record<string, number> = { retainer: 0, embedded_seat: 0 };
+    const walk = await scanAll(
+      (cur) => readRetainers(c.env, partnerId, companyId, cur, 200),
+      (rows) => {
+        for (const x of rows) {
+          if (!x.retainer) continue;
+          withRetainer += 1;
+          if (!x.retainer.active) { endedCount += 1; continue; }
+          activeRetainers += 1;
+          const monthly = x.retainer.current_monthly_cents;
+          if (monthly == null) unpriced += 1;
+          else { mrrCents += monthly; counted += 1; }
+          const shape = x.retainer.shape;
+          if (shape && shape in byShape) byShape[shape] += 1;
+          // A retainer with no retained hours is in neither consumption count:
+          // it has no utilisation at all, and reading it as under-consumption
+          // would report a fee-based retainer as a churn risk.
+          if (x.utilisation_pct != null && x.utilisation_pct < 60) {
+            under += 1;
+            if (monthly != null) { atRiskCents += monthly; atRiskPriced = true; }
+          }
+          if (x.utilisation_pct != null && x.utilisation_pct > 100) over += 1;
+        }
+      },
+    );
+
+    return c.json({
+      items,
+      next_cursor: pageRead.next,
+      has_more: pageRead.next !== null,
+      totals_complete: walk.complete,
+      retainer_count: withRetainer,
+      active_count: activeRetainers,
+      active_retainer_count: activeRetainers,
+      ended_count: endedCount,
+      mrr_cents: counted ? mrrCents : null,
+      shape_counts: byShape,
+      under_consuming_count: under,
+      over_scope_count: over,
+      // NULL, NOT ZERO, when nothing under-consuming carries an amount: "no
+      // money at risk" and "we cannot price the risk" are different answers.
+      at_risk_mrr_cents: atRiskPriced ? atRiskCents : null,
+      mrr_basis: counted
+        ? `${counted} active retainer${counted === 1 ? '' : 's'} with a recorded amount; normalised to a month (quarterly divided by three)${endedCount ? `; ${endedCount} ended not counted` : ''}.`
+        : null,
+      mrr_note: counted
+        ? (unpriced ? `${unpriced} retainer${unpriced === 1 ? ' has' : 's have'} no amount recorded and ${unpriced === 1 ? 'is' : 'are'} not in this total.` : null)
+        : (activeRetainers
+          ? 'No retainer has an amount recorded, so there is no monthly total to state.'
+          : (withRetainer
+            ? 'Every recorded retainer has ended, so there is no current recurring total to state.'
+            : 'No engagement is recorded as a retainer yet, so there is no recurring total to state.')),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.put('/retainers/:engagementId', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
+    const b = await body<any>(c);
+
+    const existing = await c.env.DB.prepare(
+      'SELECT * FROM partner_retainers WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+
+    const shape = b.shape === undefined ? (existing?.shape ?? 'retainer') : String(b.shape);
+    const cadence = b.cadence === undefined ? (existing?.cadence ?? 'monthly') : String(b.cadence);
+    if (!SHAPES.includes(shape)) return c.json({ detail: `Shape must be one of ${SHAPES.join(', ')}` }, 400);
+    if (!CADENCES.includes(cadence)) return c.json({ detail: `Cadence must be one of ${CADENCES.join(', ')}` }, 400);
+
+    const amount = Object.prototype.hasOwnProperty.call(b, 'amount_cents')
+      ? parseCents(b.amount_cents, 'Monthly amount')
+      : { cents: existing ? existing.amount_cents : null };
+    if ('error' in amount) return c.json({ detail: amount.error }, 400);
+
+    const hours = Object.prototype.hasOwnProperty.call(b, 'retained_hours')
+      ? parseHours(b.retained_hours, 'Retained hours')
+      : { hours: existing ? existing.retained_hours : null };
+    if ('error' in hours) return c.json({ detail: hours.error }, 400);
+
+    const renewsAt = Object.prototype.hasOwnProperty.call(b, 'renews_at')
+      ? trimOrNull(b.renews_at, 40) : (existing?.renews_at ?? null);
+    const endedAt = Object.prototype.hasOwnProperty.call(b, 'ended_at')
+      ? trimOrNull(b.ended_at, 40) : (existing?.ended_at ?? null);
+
+    if (existing) {
+      await c.env.DB.prepare(
+        `UPDATE partner_retainers
+            SET shape = ?, cadence = ?, amount_cents = ?, retained_hours = ?,
+                renews_at = ?, ended_at = ?, updated_at = ?
+          WHERE id = ?`,
+      ).bind(shape, cadence, amount.cents, hours.hours, renewsAt, endedAt, nowIso(), existing.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_retainers
+           (uid, engagement_id, shape, cadence, amount_cents, retained_hours, renews_at, ended_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        newUid(), engagementId, shape, cadence, amount.cents, hours.hours,
+        renewsAt, endedAt, nowIso(), nowIso(),
+      ).run();
+    }
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM partner_retainers WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    return c.json({
+      id: Number(row.id), uid: row.uid, engagement_id: engagementId,
+      shape: row.shape, cadence: row.cadence,
+      amount_cents: row.amount_cents === null ? null : Number(row.amount_cents),
+      retained_hours: row.retained_hours === null ? null : Number(row.retained_hours),
+      renews_at: row.renews_at ?? null, ended_at: row.ended_at ?? null,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.delete('/retainers/:engagementId', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
+    const row = await c.env.DB.prepare(
+      'SELECT id FROM partner_retainers WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    if (!row) return c.json({ detail: 'No retainer is recorded against this engagement' }, 404);
+    await c.env.DB.prepare('DELETE FROM retainer_usage WHERE retainer_id = ?').bind(row.id).run();
+    await c.env.DB.prepare('DELETE FROM partner_retainers WHERE id = ?').bind(row.id).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.put('/retainers/:engagementId/usage/:period', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
+    const retainer = await c.env.DB.prepare(
+      'SELECT * FROM partner_retainers WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    if (!retainer) return c.json({ detail: 'Record the retainer before logging hours against it' }, 404);
+
+    // Checked against THIS retainer's cadence: the column is free text, and
+    // without this a monthly retainer accumulates a quarterly usage row and
+    // utilisation divides one period's hours by another's allowance.
+    const p = parsePeriod(c.req.param('period'), retainer.cadence === 'quarterly' ? 'quarterly' : 'monthly');
+    if ('error' in p) return c.json({ detail: p.error }, 400);
+
+    const b = await body<any>(c);
+    const hours = parseHours(b.hours_used, 'Hours used');
+    if ('error' in hours) return c.json({ detail: hours.error }, 400);
+    if (hours.hours === null) return c.json({ detail: 'Hours used is required' }, 400);
+
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM retainer_usage WHERE retainer_id = ? AND period = ?',
+    ).bind(retainer.id, p.period).first<any>();
+    if (existing) {
+      await c.env.DB.prepare(
+        'UPDATE retainer_usage SET hours_used = ?, note = ?, updated_at = ? WHERE id = ?',
+      ).bind(hours.hours, trimOrNull(b.note, 400), nowIso(), existing.id).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO retainer_usage (retainer_id, period, hours_used, note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).bind(retainer.id, p.period, hours.hours, trimOrNull(b.note, 400), nowIso(), nowIso()).run();
+    }
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM retainer_usage WHERE retainer_id = ? AND period = ?',
+    ).bind(retainer.id, p.period).first<any>();
+    const u = utilisationFor(
+      { retained_hours: retainer.retained_hours === null ? null : Number(retainer.retained_hours) },
+      { hours_used: Number(row.hours_used) },
+    );
+    // `hours_used` comes from `...u` rather than being repeated here: the helper
+    // already carries the figure it divided by, and two keys of the same name
+    // would let the round-trip disagree with the percentage beside it.
+    return c.json({
+      retainer_id: Number(retainer.id), period: row.period,
+      note: row.note ?? null, ...u,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.delete('/retainers/:engagementId/usage/:period', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId, companyId);
+    const retainer = await c.env.DB.prepare(
+      'SELECT id FROM partner_retainers WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    if (!retainer) return c.json({ detail: 'No retainer is recorded against this engagement' }, 404);
+    // A real delete rather than writing zero: `hours_used: 0` is the claim that
+    // they worked none, which is not the same as no record.
+    await c.env.DB.prepare(
+      'DELETE FROM retainer_usage WHERE retainer_id = ? AND period = ?',
+    ).bind(retainer.id, String(c.req.param('period'))).run();
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+export { partnerPipeline };
+export default partnerPipeline;

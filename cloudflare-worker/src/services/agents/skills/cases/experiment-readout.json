@@ -1,0 +1,39 @@
+{
+  "skill": "experiment-readout",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "experiment": {
+          "hypothesis": "A shorter signup form lifts completion",
+          "variants": [
+            {
+              "name": "A",
+              "users": 410,
+              "completed": 96
+            },
+            {
+              "name": "B",
+              "users": 402,
+              "completed": 118
+            }
+          ]
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "410",
+      "118"
+    ],
+    "must_say_not_recorded": [
+      "decision rule"
+    ],
+    "must_not_include": [
+      "statistically significant win"
+    ]
+  }
+}

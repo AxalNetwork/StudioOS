@@ -1,0 +1,281 @@
+/**
+ * Expertise: five zones, three of them now backed by a real store.
+ *
+ * WHAT THESE PIN, and each is something that could plausibly go the other way:
+ *
+ *   * /office-hours is retired without dropping anything — its one capability
+ *     that lived nowhere else moved to the tab already built around it;
+ *   * a zone with a store gets its own page, and a zone without one keeps a
+ *     card that names the missing store rather than borrowing a page that
+ *     would render someone's guess;
+ *   * absent money reads as absent — no `$0` fallback anywhere;
+ *   * the attester's page is reachable by someone with no account.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+// The three ZoneBody rules, shared with the partner tree. They lived inline
+// here and walked `pages/advisor` only, which was right until the partner zones
+// were built on the same kit; see `_zoneGuards.mjs` for why they moved rather
+// than having their globs widened.
+import {
+  assertLoadingNeverOutlivesError, assertNoNullDraftDeref, assertAbsentIsNotZero,
+} from './_zoneGuards.mjs';
+import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+const app = read('frontend/src/App.jsx');
+const api = codeOnly(read('frontend/src/lib/api.js'));
+
+/** The `ZONE` dispatch map, as a `{prefix: [slug…]}` object. */
+function dispatchMap() {
+  const block = bucketRoutes.slice(
+    bucketRoutes.indexOf('const ZONE = {'),
+    bucketRoutes.indexOf('const COPY ='),
+  );
+  const out = {};
+  for (const m of block.matchAll(/'(\/[a-z]+)': \{([^}]*)\}/g)) {
+    out[m[1]] = [...m[2].matchAll(/^\s*'?([a-z-]+)'?:/gm)].map((x) => x[1]);
+  }
+  return out;
+}
+
+test('every Expertise zone the shell declares is either backed or honestly empty', () => {
+  const zones = allZoneRoutes('advisor')
+    .filter((r) => r.startsWith('/expertise/'))
+    .map((r) => r.slice('/expertise/'.length));
+  assert.deepEqual(zones, ['profile', 'services', 'proof', 'thinking', 'visibility']);
+
+  // The dispatch map and the COPY block must together cover the whole zone
+  // list. A zone in neither would fall through to the generic "Nothing here
+  // yet" card — which is honest, but says nothing useful about WHY.
+  const backed = dispatchMap()['/expertise'] || [];
+  // `thinking` joined these on 2026-09-04 and needed NO migration. Its card
+  // claimed `articles` had "no advisor owner, no reach figure" — production has
+  // `author_user_id NOT NULL` and a `views` counter incremented on every
+  // published read (`routes/articles.ts:320`). Two of that card's three claims
+  // were already false when it was written; the zone was a wiring job.
+  // `visibility` joined them with D1424 (#3700), over D1597's read of the
+  // advisor's own booking links and writing. It needed no migration either:
+  // owner answer H declined a view counter, so profile views are drawn "Not
+  // recorded" on the zone, in the Worker's own sentence.
+  assert.deepEqual(backed, ['profile', 'services', 'proof', 'thinking', 'visibility'],
+    'every Expertise zone has a page now');
+
+  // NO CARD LEFT, so the shared no-store map is empty — and a card for a zone
+  // that HAS a body would tell an advisor a working feature is missing. That
+  // is the failure this bucket has now hit four times: Sessions, Earnings,
+  // Thinking, and Visibility.
+  const noStore = codeOnly(read('frontend/src/workspaces/noStoreCopy.js'));
+  assert.match(noStore, /export const ADVISOR_EXPERTISE_COPY = \{\};/, 'a no-store card is back in front of a zone with a page');
+  for (const z of zones) assert.ok(backed.includes(z), `${z} has neither a page nor a card`);
+});
+
+test('every Practice zone is served — none is left claiming a store that exists', () => {
+  const zones = allZoneRoutes('advisor')
+    .filter((r) => r.startsWith('/practice/'))
+    .map((r) => r.slice('/practice/'.length));
+  assert.deepEqual(zones, ['opportunities', 'engagements', 'delivery', 'sessions', 'earnings']);
+
+  // ALL FIVE COME FROM THEIR OWN PAGE NOW, AND NONE FROM THE LEGACY WORKSPACE.
+  // That is what `fromWorkspace` being empty asserts, and the assertion is the
+  // point: the legacy five-tab workspace no longer serves a single Practice
+  // zone, so no advisor can reach two pages that answer the same question with
+  // different instruments.
+  //
+  // `opportunities` MOVED on canvas PR1, `engagements` on PR2 and `delivery` on
+  // PR3. All three rendered the legacy workspace `embedded`: a pending-request
+  // queue, a flat list of BOOKINGS keyed on `advisor_bookings.status`, and a
+  // post-session review loop. All three were honest and none was its artboard —
+  // PR1 asks for a decision LOG over every request that ever arrived, PR2 for a
+  // CONTRACT board with renewal cycles that nothing could store until migration
+  // 238, PR3 for a collection of WORK PRODUCTS with a version trail and an open
+  // receipt that nothing could store until 239.
+  //
+  // THE `LIVE` BLOCK IS STILL READ RATHER THAN ASSUMED GONE. It keeps its
+  // `/practice` key with an empty Set — the mechanism is the generic escape
+  // hatch for a bucket served by a workspace of its own — so this slice still
+  // has something to find, and finding nothing in it is the assertion.
+  const live = bucketRoutes.slice(bucketRoutes.indexOf('const LIVE = {'),
+    bucketRoutes.indexOf('const ZONE = {'));
+  assert.ok(live.length > 0 && live.length < 3000, 'the LIVE slice must not run away');
+  const fromWorkspace = zones.filter((z) => live.includes(`'${z}'`));
+  const fromOwnPage = dispatchMap()['/practice'] || [];
+  assert.deepEqual(fromWorkspace, []);
+  assert.deepEqual(fromOwnPage.slice().sort(),
+    ['delivery', 'earnings', 'engagements', 'opportunities', 'sessions']);
+  assert.deepEqual([...fromWorkspace, ...fromOwnPage].sort(), [...zones].sort());
+
+  // And the copy that said they had "no store at all" is gone. It was true
+  // when written and false the moment migration 205 shipped; a card naming a
+  // closed gap tells an advisor a working feature is missing.
+  assert.doesNotMatch(bucketRoutes, /Earnings is not built yet/);
+  assert.doesNotMatch(bucketRoutes, /Booked sessions are not a surface yet/);
+  assert.doesNotMatch(bucketRoutes, /no session price, paid booking or payout record/);
+});
+
+test('Visibility states what is not recorded on the zone itself, in the Worker\'s words', () => {
+  // The old card said "no impression or profile-view counter anywhere in the
+  // product". That is still true, and D1597's read says so in `views_note`;
+  // the zone draws it under "Profile views", "Not recorded", never a 0. The
+  // card itself is gone: requests per link and opens are recorded.
+  const zone = codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx'));
+  // D4827: the window the advisor picks (7, 30 or 90 days, 30 by default) is what is read.
+  assert.match(zone, /api\.getMyAdvisorVisibility\(days\)/);
+  assert.match(zone, /readVisibilityPage = \(days = VISIBILITY_DAYS\) =>/);
+  assert.match(zone, /Profile views<\/div>\s*<div className="mt-1\.5"><Unrecorded \/><\/div>\s*<div[^>]*>\{data\?\.views_note\}/,
+    'profile views must be Not recorded with the Worker\'s sentence');
+  assert.doesNotMatch(read('frontend/src/workspaces/noStoreCopy.js'), /no impression or profile-view counter anywhere in the product/,
+    'the card that zone replaced is back');
+  assert.doesNotMatch(bucketRoutes, /no impression or profile-view counter anywhere in the product/,
+    'the reason has one home; a second copy here could soften without the board changing');
+
+  // AND THE THINKING CARD IS GONE, not reworded. It asserted three things about
+  // `articles` and two were false: `author_user_id` is NOT NULL, and `views` is
+  // a live counter. Only "no record of where a piece ran" was true, and the
+  // zone states that on itself now. A card describing a gap that had already
+  // closed is worse than no card.
+  assert.doesNotMatch(bucketRoutes, /it has no advisor owner/);
+  assert.doesNotMatch(bucketRoutes, /Published thinking is not advisor-scoped yet/);
+  const thinking = read('frontend/src/pages/advisor/expertise/ThinkingZone.jsx');
+  assert.match(thinking, /where a piece ran/i,
+    'the one true claim on the old card must survive, on the zone itself');
+});
+
+test('/office-hours is retired, and its one unique capability moved rather than vanished', () => {
+  // This test previously pinned the opposite — that the frozen surface still
+  // rendered its own component. Task #124's freeze is lifted, so it pins the
+  // retirement instead. UNRESOLVED_ITEMS U4 is resolved with it.
+  const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
+  assert.equal(line, undefined);
+
+  // RETIRING IS NOT THE SAME AS DROPPING. Of everything that page rendered,
+  // exactly one thing lived nowhere else: the advisor's own review of a
+  // session. ProfileFitSection was already on the advisor's studio home, and
+  // the profile form, slot publishing and the booking list all have working
+  // equivalents under /expertise and /practice — which is the point, since the
+  // ones on that page were broken against the DTOs.
+  const delivery = codeOnly(read('frontend/src/pages/advisor/advisory/DeliveryPage.jsx'));
+  assert.match(delivery, /api\.fileAdvisorReview\(/,
+    'the advisor review moved to Delivery, the tab already built around it');
+  assert.match(codeOnly(read('frontend/src/pages/advisor/AdvisorStudioHome.jsx')),
+    /ProfileFitSection/, 'the fit profile was already here — nothing to move');
+});
+
+test('an unpriced service is never rendered as free', () => {
+  const kit = codeOnly(read('frontend/src/pages/advisor/expertise/kit.jsx'));
+  // `money` returns null for an absent amount so the caller must decide what
+  // absent looks like. A `?? 0` or a `|| 0` anywhere in that chain would turn
+  // "no price set" into "$0.00", which is a different claim entirely.
+  assert.match(kit, /if \(cents == null\) return null;/);
+
+  const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServicesZone.jsx'));
+  assert.match(services, /money\(row\.price_cents, row\.currency\) \?\? <Unrecorded \/>/,
+    'an absent price falls back to Not recorded, not to a zero');
+  // Shared with the partner tree, which carries the same risk on different
+  // column names (`amount_cents`, `floor_cents`, `hours_used`).
+  assertAbsentIsNotZero('frontend/src/pages/advisor/expertise', ['price_cents']);
+});
+
+test('a failed read is not rendered as an empty store', () => {
+  // The reported defect, in the user's words: "it does show anything, it looks
+  // blank, probably not connected to anything". ZoneBody reads `error` BEFORE
+  // `isEmpty` so a page can only claim a store is empty once it has read one.
+  const kit = read('frontend/src/pages/advisor/expertise/kit.jsx');
+  const body = kit.slice(kit.indexOf('export function ZoneBody'));
+  const errorAt = body.indexOf('if (error)');
+  const emptyAt = body.indexOf('if (isEmpty)');
+  assert.ok(errorAt > -1 && emptyAt > -1);
+  assert.ok(errorAt < emptyAt, 'the error branch must be reached before the empty branch');
+
+  // And every zone page routes its failure through it rather than swallowing
+  // the rejection into a [] that reads as "you have none".
+  for (const page of ['ServicesZone.jsx', 'ProofZone.jsx', 'ProfileZone.jsx']) {
+    const src = codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`));
+    assert.match(src, /<ZoneBody/, `${page} must use the shared four-state body`);
+    // #4689: Services and Proof read a page at a time through `usePagedList`,
+    // which catches the failure and hands it to ZoneBody as `error`.
+    if (/usePagedList\(/.test(src)) continue;
+    assert.match(src, /catch \(e\) \{/, `${page} must catch its own read failure`);
+  }
+  const pages = codeOnly(read('frontend/src/pages/advisor/expertise/pages.js'));
+  // D4711: a newer read may supersede this one (`seq`), and then this one writes nothing.
+  assert.match(pages, /catch \(e\) \{\s*reportError\('expertise:list', e\);\s*(?:if \(mine !== seq\.current\) return;\s*)?latest\.current = null;\s*setState\(\{ loading: false, error: (?:errorText|zoneError\(e, errorText, surface\)), rows: \[\]/,
+    'a failed first page is an error with no rows, never an empty list');
+  assert.doesNotMatch(pages, /e\?\.message/, '#4697: the helper never prints a thrown error\'s text');
+  for (const page of ['ServicesZone.jsx', 'ProofZone.jsx']) {
+    assert.match(codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`)), /error: list\.error/, `${page} passes the paged read's error to ZoneBody`);
+  }
+});
+
+test('no zone holds `loading` true past its own error', () => {
+  // THE BUG THIS PINS SHUT, which shipped and was reported from production as
+  // /expertise/profile spinning forever: a `loading` expression that ORs a
+  // data-presence check in makes the zone's OWN error card unreachable. The
+  // mechanism and the rule are in `_zoneGuards.mjs`; this asserts it over the
+  // advisor tree, and `partner_zone_bodies.test.mjs` asserts it over partner's.
+  assertLoadingNeverOutlivesError('frontend/src/pages/advisor', 10);
+});
+
+test('confirmation is the attester’s to give, and the link survives a refresh (D4670)', () => {
+  const proof = codeOnly(read('frontend/src/pages/advisor/expertise/ProofZone.jsx'));
+  // `attested` comes off the worker's row; nothing here computes it from the
+  // advisor's own input, and nothing lets them set it.
+  assert.match(proof, /row\.attested/);
+  assert.doesNotMatch(proof, /attested:\s*(true|false)/,
+    'the page must never assert attestation itself');
+  assert.match(proof, /Self-stated/, 'an unconfirmed claim says so');
+
+  // D4670: the link is drawn from each pending consent on the list, so a
+  // refresh never loses it; it can be, because the link no longer answers
+  // anything (a code mailed to the named address does). The old one-shot
+  // `request_token` on the response is gone, and so is "shown once".
+  assert.match(proof, /c\.invite_token/);
+  assert.doesNotMatch(proof, /request_token/);
+  assert.doesNotMatch(proof, /shown once/i);
+});
+
+test('the attester can answer without an account', () => {
+  assert.match(app, /path="\/attest\/:token"/, 'the public route exists');
+  const line = app.split('\n').find((l) => l.includes('path="/attest/:token"'));
+  assert.ok(line && !line.includes('guard('), 'and it is not behind a role guard');
+
+  // Without this a background settings/me 401 bounces an anonymous visitor to
+  // /login before they can answer — the same reason /esign/ is listed.
+  assert.match(api, /currentPath\.startsWith\('\/attest\/'\)/,
+    'isPublicPath must list /attest/ or the attester never reaches the page');
+});
+
+test('every new store has an api method, and none of them names an advisor', () => {
+  for (const method of [
+    'listMyAdvisorServices', 'createMyAdvisorService', 'updateMyAdvisorService',
+    'deleteMyAdvisorService', 'listMyAdvisorProof', 'createMyAdvisorProof',
+    'deleteMyAdvisorProof', 'requestAdvisorProofConsent', 'respondToAdvisorProofConsent',
+    'updateMyAdvisorBookingBilling', 'getMyAdvisorEarnings',
+    'listMyAdvisorCohorts', 'listMyAdvisorCohortFounders',
+  ]) {
+    assert.ok(api.includes(`${method}:`), `api.${method} is missing`);
+  }
+  // Scoping is the worker's job and it does it off the session. A client
+  // method that took an advisor id would imply otherwise at the call site.
+  const block = api.slice(api.indexOf('listMyAdvisorServices:'), api.indexOf('listMyAdvisorCohortFounders:'));
+  assert.doesNotMatch(block, /advisor_id/, 'no client method passes an advisor id');
+});
+
+test('a ZoneBody caller never holds its draft as null', () => {
+  // THE BUG THIS PINS SHUT, which two PRs walked past. `ProfileZone` held
+  // `const [draft, setDraft] = useState(null)` and read `draft.display_name` —
+  // plus eleven siblings — directly inside `<ZoneBody>`'s children. React builds
+  // a component's children when the PARENT renders, before ZoneBody looks at
+  // `loading`, so the null was dereferenced on the very first render, every
+  // time, and /expertise/profile threw into RouteErrorBoundary for everyone on
+  // every visit. The whole source-reading suite saw nothing;
+  // `scripts/check-workspace-frames.mjs` found it in one run.
+  //
+  // The rule now lives in `_zoneGuards.mjs` so the partner zones are held to it
+  // too — they are written on the same ZoneBody and invite the same mistake.
+  assertNoNullDraftDeref('frontend/src/pages/advisor', 8);
+});

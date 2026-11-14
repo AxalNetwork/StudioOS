@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6);max-width:1040px;margin:0 0 18px}
+    .row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+    .mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .pf-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em}
+    .body{font-size:12.5px;line-height:1.5}
+    .col{width:400px;flex:none}
+    .pfcard{background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px}
+    .tile{background:#f8f7fb;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
+    .sprite{width:180px;height:180px;image-rendering:pixelated;display:block}
+    .hit{display:block;text-decoration:none;color:inherit;cursor:pointer;transition:transform .12s,box-shadow .12s,border-color .12s}
+    .hit:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(24,24,27,.08)}
+    .hit:active{transform:translateY(0);box-shadow:inset 0 2px 4px rgba(24,24,27,.06)}
+    .hit:focus-visible{outline:2px solid #7c3aed;outline-offset:3px}
+    .page{width:1280px;min-width:1280px;flex:none;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(24,24,27,.08)}
+    .crumb{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:7px}
+    .chip{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;white-space:nowrap}
+    .well{border-radius:12px;padding:16px 18px}
+    .cap{font-size:11px;color:rgba(24,24,27,.58);line-height:1.5;margin-top:9px}
+    .ph{width:390px;min-width:390px;flex:none;background:#fff;border-radius:34px;box-shadow:0 4px 22px rgba(24,24,27,.16),0 0 0 9px #1a1a1c;overflow:hidden;display:flex;flex-direction:column}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{width:18px;height:18px;border-radius:50%;border:2px solid #ececf1;border-top-color:#7c3aed;animation:spin .9s linear infinite}
+  </style>
+</helmet>
+
+<!-- ═════════ A1–A4, A10 · COMPACT CONTAINERS ═════════ -->
+<section class="ab" id="a1">
+  <div class="ab-hd"><a class="ab-id" href="#a1">A1–A4 · A10</a><span class="ab-nm">Compact ARCHETYPE container on /studio — one hit target, six states</span><span class="mono" style="font-size:11px;color:#615c6e">/studio · Profile &amp; Fit column · 400px</span></div>
+  <div class="ab-sub">The whole card is the link. Pixel sprites stay; the only additions are a quiet "View full card →", a hover hairline in the archetype colour, a 2px lift and a violet focus ring. Empty, loading, error and locked are not clickable, and none of them shows a number it does not have.</div>
+  <div class="row">
+    <sc-for list="{{ compacts }}" as="c" hint-placeholder-count="7">
+      <div class="col">
+        <div class="mono" style="font-size:10px;font-weight:700;color:#615c6e;margin-bottom:8px">{{ c.id }} · {{ c.state }}</div>
+        <sc-if value="{{ c.live }}">
+          <a href="#a5" class="pfcard hit" role="button" style="{{ c.cardStyle }}" aria-label="{{ c.aria }}">
+            <div class="pf-lbl" style="color:#a1a1aa">{{ c.title }}</div>
+            <div style="display:flex;gap:10px;margin-top:14px">
+              <sc-for list="{{ c.sprites }}" as="s" hint-placeholder-count="1"><div class="tile" style="width:{{ s.w }}px;height:180px"><sc-if value="{{ s.src }}" hint-placeholder-val="{{ false }}"><div class="sprite" role="img" aria-label="" style="{{ s.bg }}"></div></sc-if></div></sc-for>
+            </div>
+            <div class="pf-lbl" style="color:#7c3aed;margin-top:16px">Primary archetype</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:5px">
+              <span style="font-size:18px;font-weight:800;letter-spacing:-.02em">{{ c.name }}</span>
+              <span class="mono" style="font-size:13px;font-weight:700;color:#7c3aed">{{ c.conf }}</span>
+            </div>
+            <div class="pf-lbl" style="color:#15803d;margin-top:14px">Core approach</div>
+            <div class="body" style="margin-top:3px">{{ c.tagline }}</div>
+            <div class="pf-lbl" style="color:#b45309;margin-top:12px">Description</div>
+            <div class="body" style="margin-top:3px;color:#3f3f46">{{ c.desc }}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:12px;border-top:1px solid #ececf1">
+              <span style="font-size:12px;font-weight:700;color:#7c3aed">View full card →</span>
+              <span class="mono" style="font-size:10px;color:#a1a1aa">{{ c.sexNote }}</span>
+            </div>
+          </a>
+        </sc-if>
+        <sc-if value="{{ c.empty }}">
+          <div class="pfcard" aria-disabled="true">
+            <div class="pf-lbl" style="color:#a1a1aa">{{ c.title }}</div>
+            <div style="border:1.5px dashed #ececf1;border-radius:12px;padding:38px 22px;text-align:center;margin-top:14px">
+              <div class="pf-lbl" style="color:#7c3aed">Primary archetype</div>
+              <div class="body" style="color:#a1a1aa;margin-top:8px;max-width:280px;margin-left:auto;margin-right:auto">Answer a few archetype questions in the advisor to reveal your archetype.</div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.loading }}">
+          <div class="pfcard" aria-busy="true">
+            <div class="pf-lbl" style="color:#a1a1aa">{{ c.title }}</div>
+            <div style="display:flex;align-items:center;justify-content:center;padding:74px 0"><span class="spin"></span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.error }}">
+          <div class="pfcard">
+            <div class="pf-lbl" style="color:#a1a1aa">{{ c.title }}</div>
+            <div style="display:flex;gap:9px;align-items:flex-start;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-top:14px"><span style="color:#b91c1c;font-weight:800;flex:none">!</span><span class="body" style="color:#b91c1c">Could not load your archetype. Retry.</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ c.locked }}">
+          <div class="pfcard" aria-disabled="true" style="cursor:not-allowed">
+            <div class="pf-lbl" style="color:#a1a1aa">{{ c.title }}</div>
+            <div class="tile" style="width:100%;height:180px;margin-top:14px;flex-direction:column;gap:9px;color:#a1a1aa">
+              <span style="width:22px;height:22px;display:block" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+              <span class="body" style="color:#a1a1aa">Archetype card is part of the Studio plan.</span>
+            </div>
+            <div class="pf-lbl" style="color:#a1a1aa;margin-top:16px">Primary archetype</div>
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em;color:#a1a1aa;margin-top:5px">Locked</div>
+            <div class="body" style="color:#a1a1aa;margin-top:10px">Your answers are kept; the reading unlocks with the plan.</div>
+          </div>
+        </sc-if>
+        <div class="cap">{{ c.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<!-- ═════════ A5–A8 · DETAILED PAGE CARDS ═════════ -->
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="4">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd"><a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a><span class="ab-nm">{{ p.title }}</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+    <div class="page" style="background:{{ p.t.page }}">
+      <div style="padding:22px 40px 0;display:flex;align-items:center;justify-content:space-between">
+        <a href="#a1" class="crumb hit" style="color:{{ p.t.muted }};padding:6px 8px;margin:-6px -8px;border-radius:8px">‹ Studio</a>
+        <span class="mono" style="font-size:11px;color:{{ p.t.muted }}">Profile &amp; Fit · Archetype</span>
+      </div>
+      <div style="padding:16px 40px 0">
+        <div style="position:relative;aspect-ratio:21/9;border-radius:16px;overflow:hidden;background:{{ p.t.tile }}">
+          <sc-for list="{{ p.banners }}" as="b" hint-placeholder-count="1">
+            <div style="position:absolute;top:0;bottom:0;left:{{ b.left }};width:{{ b.width }};overflow:hidden;background:{{ b.wellBg }}">
+              <!-- The placeholder is the BASE layer, always drawn. The still sits on top and
+                   hides itself if the file does not load, so a slug can never claim a still
+                   that is not on disk — the registry is an optimisation, not an assertion. -->
+              <div style="position:absolute;inset:0;background:linear-gradient(105deg,#140c26 0%,#140c26 32%,{{ p.accent }}55 78%,{{ p.accent }}88 100%)"></div>
+              <div style="position:absolute;top:0;bottom:0;right:0;width:58%;display:flex;align-items:center;justify-content:center;padding:0 16px;box-sizing:border-box">
+                <div style="border:1px dashed rgba(255,255,255,.4);border-radius:12px;padding:16px 20px;text-align:center;max-width:320px">
+                  <div class="mono" style="font-size:12px;font-weight:700;color:#fff">{{ b.file }}</div>
+                  <div class="mono" style="font-size:9.5px;color:rgba(255,255,255,.72);line-height:1.5;margin-top:7px">not yet supplied · {{ p.cloak }} cloak, white tri-spoke emblem · {{ p.staff }} · ¾ view, facing camera-right</div>
+                </div>
+              </div>
+              <sc-if value="{{ b.real }}">
+                <!-- The still, untouched: cover, centre-right so the character and the white
+                     cloak emblem survive the crop. No second gradient — the artwork already
+                     carries its own #140c26 type well down the left. -->
+                <sc-if value="{{ b.src }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="{{ b.alt }}" style="{{ b.imgStyle }}"></div></sc-if>
+              </sc-if>
+            </div>
+          </sc-for>
+          <!-- Overlay lives in the still's own dark well on the left, never across the face
+               or the cloak emblem, and never baked into the pixels. -->
+          <div style="position:absolute;left:0;bottom:0;width:42%;min-width:360px;padding:0 24px 29px;color:#fff">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="chip" style="background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.3)">{{ p.licence }}</span><span class="pf-lbl" style="color:#c4b5fd">Primary archetype</span></div>
+            <h1 style="margin:8px 0 0;font-size:32px;font-weight:900;letter-spacing:-.025em;line-height:1.05;text-shadow:0 2px 10px rgba(0,0,0,.55)">{{ p.name }}</h1>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap">
+              <span style="font-size:15px;font-weight:500;color:#f4f0fe;text-shadow:0 1px 6px rgba(0,0,0,.5)">{{ p.tagline }}</span>
+              <sc-if value="{{ p.confPill }}"><span class="chip mono" style="background:#7c3aed;color:#fff;text-transform:none;letter-spacing:0;font-size:11px">{{ p.confPill }} confidence</span></sc-if>
+            </div>
+          </div>
+          <!-- The accent sits inside the frame, so it follows the 16px radius and reads as the
+               banner's own edge rather than a stray rule floating beneath a rounded card. -->
+          <div style="position:absolute;left:0;right:0;bottom:0;height:3px;background:{{ p.accent }}"></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:24px;padding:28px 40px 26px">
+        <div style="grid-column:span 7;display:grid;gap:22px;align-content:start">
+          <div><div class="pf-lbl" style="color:#15803d">Core approach</div><div style="font-size:18px;font-weight:700;letter-spacing:-.015em;margin-top:6px;color:{{ p.t.ink }}">{{ p.tagline }}</div></div>
+          <div><div class="pf-lbl" style="color:#b45309">Description</div><div class="body" style="font-size:14px;margin-top:6px;color:{{ p.t.body }};max-width:560px">{{ p.desc }}</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div><div class="pf-lbl" style="color:#15803d">Strengths</div><div style="display:grid;gap:7px;margin-top:8px"><sc-for list="{{ p.strengths }}" as="s" hint-placeholder-count="3"><div style="display:flex;gap:9px;align-items:flex-start"><span style="width:6px;height:6px;border-radius:50%;background:#15803d;flex:none;margin-top:6px"></span><span class="body" style="color:{{ p.t.body }}">{{ s }}</span></div></sc-for></div></div>
+            <div><div class="pf-lbl" style="color:#b45309">Blind spots</div><div style="display:grid;gap:7px;margin-top:8px"><sc-for list="{{ p.blind }}" as="s" hint-placeholder-count="3"><div style="display:flex;gap:9px;align-items:flex-start"><span style="width:6px;height:6px;border-radius:50%;background:#b45309;flex:none;margin-top:6px"></span><span class="body" style="color:{{ p.t.body }}">{{ s }}</span></div></sc-for></div></div>
+          </div>
+        </div>
+        <div style="grid-column:span 5;display:grid;gap:12px;align-content:start">
+          <div class="well" style="background:{{ p.t.well }};border:1px solid {{ p.t.hair }}">
+            <div class="pf-lbl" style="color:#a1a1aa">Confidence</div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px"><span class="mono" style="font-size:28px;font-weight:700;color:#7c3aed;letter-spacing:-.02em">{{ p.conf }}</span><span class="body" style="color:{{ p.t.muted }}">{{ p.confNote }}</span></div>
+            <sc-if value="{{ p.confPct }}"><div style="height:5px;background:{{ p.t.hair }};border-radius:99px;overflow:hidden;margin-top:10px"><div style="height:100%;width:{{ p.confPct }}%;background:#7c3aed;border-radius:99px"></div></div></sc-if>
+          </div>
+          <div class="well" style="background:{{ p.t.well }};border:1px solid {{ p.t.hair }}">
+            <div class="pf-lbl" style="color:#a1a1aa">Complements</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><sc-for list="{{ p.complements }}" as="c" hint-placeholder-count="2"><span class="chip" style="text-transform:none;letter-spacing:0;font-size:11.5px;padding:5px 11px;background:{{ p.t.chipBg }};color:{{ p.t.ink }};border:1px solid {{ c.accent }}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{{ c.accent }};margin-right:6px;vertical-align:1px"></span>{{ c.name }}</span></sc-for></div>
+            <div class="body" style="color:{{ p.t.muted }};margin-top:9px;font-size:11.5px">Sibling archetypes in the same licence whose strengths sit where this one’s blind spots are.</div>
+          </div>
+          <div class="well" style="background:{{ p.t.well }};border:1px solid {{ p.t.hair }}">
+            <div class="pf-lbl" style="color:#a1a1aa">How we read this</div>
+            <div class="body" style="margin-top:6px;color:{{ p.t.body }}">From your advisor conversation, not a quiz.</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:0 4px"><span class="pf-lbl" style="color:#a1a1aa">Illustration</span><span class="mono" style="font-size:11px;color:{{ p.t.muted }}">{{ p.sexLabel }}</span></div>
+        </div>
+      </div>
+      <div style="padding:14px 40px 22px;border-top:1px solid {{ p.t.hair }};display:flex;align-items:center;justify-content:space-between">
+        <a href="#a1" class="crumb hit" style="color:#7c3aed;padding:8px 10px;margin:-8px -10px;border-radius:8px">‹ Back to studio</a>
+        <span class="mono" style="font-size:10.5px;color:{{ p.t.muted }}">{{ p.slug }}</span>
+      </div>
+    </div>
+  </section>
+</sc-for>
+
+<!-- ═════════ A9 · MOBILE ═════════ -->
+<section class="ab" id="a9">
+  <div class="ab-hd"><a class="ab-id" href="#a9">A9</a><span class="ab-nm">Mobile 390 — compact in the Profile &amp; Fit list, and the detailed page stacked</span><span class="mono" style="font-size:11px;color:#615c6e">/studio → /studio/archetype</span></div>
+  <div class="ab-sub">Same card, same hit target, one column. The banner keeps 21:9 and the two-column editorial stacks to one; the back chevron is the only nav.</div>
+  <div class="row">
+    <div>
+      <div class="ph">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="background:#f7f7f8;padding:8px 14px 18px;display:grid;gap:10px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:6px 6px 2px"><span style="font-size:19px;font-weight:800;letter-spacing:-.024em">Profile &amp; Fit</span><span class="mono" style="font-size:10.5px;color:#615c6e">Studio</span></div>
+          <div class="pfcard" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center"><div><div class="pf-lbl" style="color:#a1a1aa">Skills</div><div class="body" style="margin-top:3px">Product · GTM · Design lead</div></div><span style="color:#c9c6d2">›</span></div>
+          <a href="#a5" class="pfcard hit" role="button" style="padding:16px" aria-label="Founder archetype: The Missionary. View full card">
+            <div class="pf-lbl" style="color:#a1a1aa">Founder archetype</div>
+            <div style="display:flex;gap:14px;margin-top:12px;align-items:center">
+              <div class="tile" style="width:96px;height:96px"><sc-if value="{{ spriteF }}" hint-placeholder-val="{{ false }}"><div class="sprite" role="img" aria-label="" style="{{ spriteFStyle }}"></div></sc-if></div>
+              <div style="min-width:0;flex:1">
+                <div class="pf-lbl" style="color:#7c3aed">Primary archetype</div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:4px"><span style="font-size:17px;font-weight:800;letter-spacing:-.02em">The Missionary</span><span class="mono" style="font-size:12px;font-weight:700;color:#7c3aed">82%</span></div>
+                <div class="body" style="margin-top:4px;color:#3f3f46">Mission first, built to last.</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid #ececf1"><span style="font-size:12px;font-weight:700;color:#7c3aed">View full card →</span><span class="mono" style="font-size:10px;color:#a1a1aa">f</span></div>
+          </a>
+          <div class="pfcard" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center"><div><div class="pf-lbl" style="color:#a1a1aa">Values</div><div class="body" style="margin-top:3px">Leans mission · leans speed</div></div><span style="color:#c9c6d2">›</span></div>
+        </div>
+      </div>
+      <div class="cap" style="width:390px">Compact in list context: the sprite drops to 96px beside the copy so the card stays under a thumb’s reach; description is deferred to the page.</div>
+    </div>
+    <div>
+      <div class="ph">
+        <div style="height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;font-size:11px;font-weight:700"><span class="mono">9:41</span><span style="font-size:10px;letter-spacing:.06em">▮▮▮ ◗</span></div>
+        <div style="padding:8px 14px 20px;display:grid;gap:14px">
+          <a href="#a1" class="crumb" style="color:#a1a1aa;padding:4px 6px">‹ Studio</a>
+          <div style="position:relative;aspect-ratio:21/9;border-radius:16px;overflow:hidden;background:#140c26">
+            <sc-if value="{{ mobStill }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="The Missionary, woman" style="{{ mobStyle }}"></div></sc-if>
+            <div style="position:absolute;left:14px;bottom:15px;width:66%;color:#fff"><span class="pf-lbl" style="color:#c4b5fd;font-size:9.5px">Founder · Primary archetype</span><h1 style="margin:4px 0 0;font-size:24px;font-weight:900;letter-spacing:-.025em;text-shadow:0 2px 8px rgba(0,0,0,.55)">The Missionary</h1></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;height:3px;background:#0ea5e9"></div>
+          </div>
+          <div><div class="pf-lbl" style="color:#15803d">Core approach</div><div style="font-size:16px;font-weight:700;letter-spacing:-.015em;margin-top:5px">Mission first, built to last.</div></div>
+          <div><div class="pf-lbl" style="color:#b45309">Description</div><div class="body" style="margin-top:5px;color:#3f3f46">Anchored to the why. Bias to durable, sustainable building and craft over raw speed.</div></div>
+          <div class="well" style="background:#f8f7fb;border:1px solid #ececf1;padding:13px 15px;display:flex;justify-content:space-between;align-items:baseline"><span class="pf-lbl" style="color:#a1a1aa">Confidence</span><span class="mono" style="font-size:22px;font-weight:700;color:#7c3aed">82%</span></div>
+          <div><div class="pf-lbl" style="color:#15803d">Strengths</div><div class="body" style="margin-top:6px;color:#3f3f46;display:grid;gap:4px"><span>· Anchors the team to a durable why</span><span>· Earns deep trust from users and hires</span><span>· Persistent through long feedback cycles</span></div></div>
+          <div><div class="pf-lbl" style="color:#b45309">Blind spots</div><div class="body" style="margin-top:6px;color:#3f3f46;display:grid;gap:4px"><span>· May trade speed for conviction</span><span>· Slow to pivot when the mission is challenged</span><span>· Under-weights commercial urgency</span></div></div>
+          <div><div class="pf-lbl" style="color:#a1a1aa">Complements</div><div style="display:flex;gap:6px;margin-top:8px"><span class="chip" style="text-transform:none;letter-spacing:0;font-size:11.5px;padding:5px 11px;background:#fff;border:1px solid #f97316">The Rocketeer</span><span class="chip" style="text-transform:none;letter-spacing:0;font-size:11.5px;padding:5px 11px;background:#fff;border:1px solid #eab308">The Maverick</span></div></div>
+          <div class="body" style="color:#a1a1aa;font-size:11.5px">From your advisor conversation, not a quiz. · Illustration: f</div>
+          <a href="#a1" class="crumb" style="color:#7c3aed;padding:10px 0">‹ Back to studio</a>
+        </div>
+      </div>
+      <div class="cap" style="width:390px">Detailed, stacked: banner, hairline, then the left column’s copy and the right column’s wells in reading order.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ A24–A30 · THE FULL PAGE BELOW THE BANNER ═════════ -->
+<section class="ab" id="a24">
+  <div class="ab-hd"><a class="ab-id" href="#a24">A24</a><span class="ab-nm">Full page · below the banner · light</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">Three sections under the existing banner, overlay well and strengths / blind spots: the skills radar with two layers and five axis states, the archetype timeline, and the published matches. Every count is a field; nothing renders as a 0.</div>
+  <div class="page" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="mixed" history="five" matches="members" hint-size="100%,1600px"></dc-import></div>
+</section>
+<section class="ab" id="a25">
+  <div class="ab-hd"><a class="ab-id" href="#a25">A25</a><span class="ab-nm">Full page · below the banner · dark</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">Same three sections in dark mode. Self stays a violet fill, evidence stays an outline of dots; the Not recorded gap is text on the axis, never a 0.</div>
+  <div class="page" style="background:#0f0d17"><dc-import name="Archetype Full Sections" theme="dark" skills="mixed" history="five" matches="members" hint-size="100%,1600px"></dc-import></div>
+</section>
+<section class="ab" id="a26">
+  <div class="ab-hd"><a class="ab-id" href="#a26">A26</a><span class="ab-nm">Phone 390 · light and dark</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype</span></div>
+  <div class="ab-sub">The radar sits above its table; the timeline stacks oldest first; member rows wrap the values chip under the name. The dark phone shows the first-classification history and types with no published members.</div>
+  <div class="row">
+    <div class="ph" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="mixed" history="five" matches="members" hint-size="100%,2400px"></dc-import></div>
+    <div class="ph" style="background:#0f0d17"><dc-import name="Archetype Full Sections" theme="dark" skills="mixed" history="one" matches="none" hint-size="100%,2400px"></dc-import></div>
+  </div>
+</section>
+<section class="ab" id="a27">
+  <div class="ab-hd"><a class="ab-id" href="#a27">A27</a><span class="ab-nm">Skills · every axis Not recorded</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">No rating and no activity on any axis: the shape is absent, each axis reads Not recorded, and the prompt sends the member to Eadwyn. History shows the first classification; matches show types with no published members and the member unpublished.</div>
+  <div class="page" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="none" history="one" matches="none" published="{{ false }}" hint-size="100%,1500px"></dc-import></div>
+</section>
+<section class="ab" id="a28">
+  <div class="ab-hd"><a class="ab-id" href="#a28">A28</a><span class="ab-nm">Loading · skills and history</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">Skeletons in the card wells. No figure is shown while a read is in flight.</div>
+  <div class="page" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="loading" history="loading" matches="members" hint-size="100%,1200px"></dc-import></div>
+</section>
+<section class="ab" id="a29">
+  <div class="ab-hd"><a class="ab-id" href="#a29">A29</a><span class="ab-nm">Unreadable · all three sections</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">"Your skills could not be read", "Your history could not be read", "Matches could not be read", each with Try again. A failed read never renders as an empty radar or an empty list.</div>
+  <div class="page" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="error" history="error" matches="error" hint-size="100%,900px"></dc-import></div>
+</section>
+<section class="ab" id="a30">
+  <div class="ab-hd"><a class="ab-id" href="#a30">A30</a><span class="ab-nm">Matches · locked by plan</span><span class="mono" style="font-size:11px;color:#615c6e">/studio/archetype · 1280</span></div>
+  <div class="ab-sub">The member's plan does not include matches: a lock line and an upgrade action. Skills and history still render.</div>
+  <div class="page" style="background:#f4f3f7"><dc-import name="Archetype Full Sections" theme="light" skills="mixed" history="five" matches="locked" hint-size="100%,1300px"></dc-import></div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  // ══ Pixel sprite, drawn once per sex as an SVG data URI so the compact tile has a real
+  // 16-bit figure in it rather than a grey box. The realistic banner on the detailed page is a
+  // labelled placeholder: that image is commissioned, not generated here. ══
+  sprite(sex, cloak){
+    const px = (x, y, w, h, c) => '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+c+'"/>';
+    const skin = '#f2c9a6', hair = sex === 'f' ? '#5a3a2a' : '#2b2b2b', tunic = '#f3ead6', leather = '#6b4a2b', boot = '#3d2a1a';
+    let s = '';
+    // cloak behind
+    s += px(5, 9, 10, 12, cloak) + px(4, 11, 1, 8, cloak) + px(15, 11, 1, 8, cloak);
+    // emblem (white tri-spoke) on shoulder
+    s += px(12, 11, 2, 1, '#fff') + px(13, 12, 1, 1, '#fff') + px(12, 12, 1, 1, cloak) + px(11, 12, 1, 1, '#fff');
+    // head + hair
+    s += px(8, 3, 6, 6, skin) + px(7, 2, 8, 2, hair) + px(7, 4, 1, (sex === 'f' ? 6 : 3), hair) + px(14, 4, 1, (sex === 'f' ? 6 : 3), hair);
+    s += px(9, 6, 1, 1, '#18181b') + px(12, 6, 1, 1, '#18181b');
+    // tunic + harness
+    s += px(7, 9, 8, 7, tunic) + px(10, 9, 2, 7, leather) + px(7, 12, 8, 1, leather) + px(10, 12, 2, 1, '#d4a24c');
+    // arms + staff
+    s += px(6, 10, 1, 5, skin) + px(15, 10, 1, 5, skin) + px(17, 2, 1, 18, leather) + px(16, 1, 3, 2, '#d4a24c');
+    // legs + boots
+    s += px(8, 16, 2, 4, '#4a3a5a') + px(12, 16, 2, 4, '#4a3a5a') + px(8, 20, 2, 2, boot) + px(12, 20, 2, 2, boot) + px(8, 19, 2, 1, '#d4a24c') + px(12, 19, 2, 1, '#d4a24c');
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 23" shape-rendering="crispEdges">' + s + '</svg>');
+  }
+
+  renderVals() {
+    // ══ The 16 personas, verbatim from the brief. Strengths and blind spots exist only for the
+    // Missionary; the other pages carry the fields the brief supplied and nothing invented. ══
+    const A = {
+      fo_missionary: { licence:'Founder', name:'The Missionary', accent:'#0ea5e9', cloak:'sky-blue', staff:'compass-rose staff', tagline:'Mission first, built to last.',
+        desc:'Anchored to the why. Bias to durable, sustainable building and craft over raw speed.',
+        strengths:['Anchors the team to a durable why','Earns deep trust from users and hires','Persistent through long feedback cycles'],
+        blind:['May trade speed for conviction','Slow to pivot when the mission is challenged','Under-weights commercial urgency'], complements:['fo_rocketeer','fo_maverick'] },
+      fo_rocketeer: { licence:'Founder', name:'The Rocketeer', accent:'#f97316', tagline:'Fast, bold, built to break out.', desc:'High speed, high risk, hyper-growth. Comfortable raising big and moving first.', staff:'rocket staff' },
+      fo_architect: { licence:'Founder', name:'The Architect', accent:'#8b5cf6', tagline:'Craft, structure, and durable systems.', desc:'Quality-first and risk-aware, with a preference for process, structure, and deep technical foundations.', staff:'set-square staff' },
+      fo_maverick: { licence:'Founder', name:'The Maverick', accent:'#eab308', tagline:'Independent, instinctive, unafraid.', desc:'High autonomy and risk appetite with a fast, instinct-led style. Thrives without a playbook.', staff:'lightning staff' },
+      inv_thesis_backer: { licence:'Investor', name:'Thesis-Driven Backer', accent:'#0ea5e9', tagline:'Conviction before the crowd.' },
+      inv_network_amplifier: { licence:'Investor', name:'Network Amplifier', accent:'#8b5cf6', tagline:'Opens doors, compounds relationships.' },
+      inv_hands_on_partner: { licence:'Investor', name:'Hands-On Partner', accent:'#f97316', tagline:'Rolls up sleeves beside the founder.' },
+      inv_disciplined_allocator: { licence:'Investor', name:'Disciplined Allocator', accent:'#10b981', tagline:'Rigorous, patient, process-led.' },
+      pt_strategic_connector: { licence:'Partner/Operator', name:'Strategic Connector', accent:'#0ea5e9', tagline:'Aligns the right people to the plan.' },
+      pt_embedded_operator: { licence:'Partner/Operator', name:'Embedded Operator', accent:'#f97316', cloak:'orange', staff:'unique staff (not specified)', tagline:'In the trenches, delivering.', complements:['pt_growth_catalyst','pt_systems_builder'] },
+      pt_growth_catalyst: { licence:'Partner/Operator', name:'Growth Catalyst', accent:'#8b5cf6', tagline:'Turns momentum into scale.' },
+      pt_systems_builder: { licence:'Partner/Operator', name:'Systems Builder', accent:'#10b981', tagline:'Puts durable machinery in place.' },
+      mt_sage_guide: { licence:'Advisor', name:'Sage Guide', accent:'#0ea5e9', cloak:'sky-blue', staff:'silver hair, lantern staff', tagline:'Wisdom and perspective when it counts.', complements:['mt_hands_on_coach','mt_accountability_anchor'] },
+      mt_hands_on_coach: { licence:'Advisor', name:'Hands-On Coach', accent:'#f97316', tagline:'Beside you, session by session.', staff:'mug-yoke staff' },
+      mt_accountability_anchor: { licence:'Advisor', name:'Accountability Anchor', accent:'#10b981', tagline:'Keeps commitments honest.', staff:'anchor staff, pocket-watch' },
+      mt_craft_master: { licence:'Advisor', name:'Craft Master', accent:'#8b5cf6', tagline:'Deep expertise, generously shared.', staff:'apron, chisel staff' }
+    };
+    const TITLE = { Founder:'Founder archetype', Investor:'Investor archetype', 'Partner/Operator':'Partner/Operator archetype', Advisor:'Advisor archetype' };
+    const spriteF = this.sprite('f', '#0ea5e9'), spriteM = this.sprite('m', '#0ea5e9');
+    // The pair must fit the card's content box: 400 − 2×22 padding − 2 border = 354, minus the
+    // 10px gap, halved. Sized from the constraint rather than typed, so a padding change moves
+    // both tiles with it; the sprite scales inside via object-fit.
+    const CARD_W = 400, PAD = 22, BORDER = 1, GAP = 10;
+    const pairW = Math.floor((CARD_W - 2 * PAD - 2 * BORDER - GAP) / 2);
+    const sprBg = (src, w, h) => 'width:' + w + 'px;height:' + h + 'px;background:url("' + src + '") center / contain no-repeat;image-rendering:pixelated';
+    const sprites = (sex, accent) => sex === 'both'
+      ? [{ src:this.sprite('f', accent), w:pairW }, { src:this.sprite('m', accent), w:pairW }].map(s => Object.assign(s, { bg: sprBg(s.src, s.w, 180) }))
+      : [{ src:this.sprite(sex, accent), w:180 }].map(s => Object.assign(s, { bg: sprBg(s.src, s.w, 180) }));
+
+    // ══ Compact states. Live cards are one <a>; the hover and focus artboards are the same card
+    // with the state applied inline, so a reviewer sees the exact hairline and ring. ══
+    const live = (id, state, slug, sex, conf, extra, note) => { const a = A[slug];
+      return Object.assign({ id, state, live:true, title:TITLE[a.licence], name:a.name, tagline:a.tagline, desc:a.desc || a.tagline,
+        conf: conf === null ? 'N/A' : conf + '%', sprites:sprites(sex, a.accent), sexNote:'illustration · ' + sex,
+        aria: TITLE[a.licence] + ': ' + a.name + (conf === null ? '' : ', ' + conf + '% confidence') + '. View full card',
+        cardStyle:'', note }, extra || {}); };
+    const compacts = [
+      live('A1','rest','fo_missionary','f',82, {}, 'Resting: white card, hairline border, pixel sprite on the lilac tile. Everything inside is one link.'),
+      live('A2','hover','fo_missionary','f',82, { cardStyle:'transform:translateY(-2px);box-shadow:0 6px 18px rgba(24,24,27,.08);border-color:#0ea5e9' }, 'Hover: 1px hairline in the archetype colour, 2px lift. The sprite tile does not change.'),
+      live('A2b','focus-visible','fo_missionary','f',82, { cardStyle:'outline:2px solid #7c3aed;outline-offset:3px' }, 'Keyboard focus: 2px violet ring, 3px offset, on the whole card.'),
+      { id:'A3', state:'empty', empty:true, title:'Founder archetype', note:'No archetype yet. Dashed well, one sentence, not clickable — the advisor conversation is where it comes from.' },
+      live('A4','sex = both · Investor','inv_thesis_backer','both',null, {}, 'Compact keeps the two-up pair at ' + pairW + 'px each, sized to the content box — two small sprites read as a set, where two large stills read as a duplicate. Confidence is N/A because none is recorded.'),
+      { id:'A10', state:'locked', locked:true, title:'Advisor archetype', note:'Paywall: lock, one short line, not clickable. Answers are kept.' },
+      { id:'—', state:'loading · error', loading:true, title:'Partner/Operator archetype', note:'Loading is a spinner only.' }
+    ];
+    compacts.push({ id:'—', state:'error', error:true, title:'Partner/Operator archetype', note:'Error is a compact red note with a retry, not a modal.' });
+
+    // ══ Detailed pages. Theme tokens per artboard; light and dark share every other value. ══
+    const LIGHT = { page:'#fff', tile:'#f8f7fb', ink:'#18181b', body:'#3f3f46', muted:'#a1a1aa', hair:'#ececf1', well:'#f8f7fb', chipBg:'#fff' };
+    const DARK = { page:'#111827', tile:'#1f2937', ink:'#f4f4f5', body:'#d4d4d8', muted:'#a1a1aa', hair:'#27272a', well:'#18181b', chipBg:'#111827' };
+    // ══ Banner stills. The filename IS the contract: {slug}.png is the man, {slug}_f.png the
+    // woman. SUPPLIED lists what has actually landed in uploads/, so a slug not on it renders a
+    // labelled placeholder carrying that exact filename rather than a substitute image. Each
+    // still already has its own #140c26 type well down the left, so nothing is drawn over it. ══
+    // The list records what is on disk, not what the asset index says should be — checked
+    // against the directory, now complete at all 16 slugs.
+    // The labelled placeholder is the base layer
+    // under every hero — so a wrong entry degrades to the placeholder showing through rather
+    // than to an empty frame. (An onError handler here threw a scope error inside the nested
+    // loop; the base layer does the same job without one.)
+    const SUPPLIED = ['fo_missionary','fo_rocketeer','fo_architect','fo_maverick',
+      'inv_thesis_backer','inv_network_amplifier','inv_hands_on_partner','inv_disciplined_allocator',
+      'pt_strategic_connector','pt_embedded_operator','pt_growth_catalyst','pt_systems_builder',
+      'mt_sage_guide','mt_hands_on_coach','mt_accountability_anchor','mt_craft_master'];
+    // A single still crops centre-right, which is where the character and the emblem sit. In
+    // the paired state that would frame both figures identically and read as one image
+    // duplicated, so the two halves crop toward each other — the pair becomes one composition
+    // facing in, rather than two copies side by side.
+    const still = (slug, sex, left, width, pos) => {
+      const file = slug + (sex === 'f' ? '_f' : '') + '.png';
+      const have = SUPPLIED.indexOf(slug) > -1;
+      // The handler rides the banner object rather than the root, so it is in scope inside the
+      // nested sc-for that renders each still.
+      // Whole-value style rather than an interpolated one: a dotted hole inside a mixed style
+      // string does not resolve in this compiler, and the crop is genuinely per-instance.
+      const imgSrc = have ? ((window.__resources && window.__resources['still-' + slug + (sex === 'f' ? '_f' : '')]) || ('uploads/stills/' + file.replace(/\.png$/, '.jpg'))) : null;
+      return { left, width, sex, file, real:have, missing:!have,
+        imgStyle:'position:absolute;inset:0;width:100%;height:100%;background:url("' + imgSrc + '") ' + (pos || 'center right') + ' / cover no-repeat',
+        src: imgSrc, wellBg:'#140c26',
+        alt: A[slug].name + ', ' + (sex === 'f' ? 'woman' : 'man') };
+    };
+    // sex=both resolves to the man's still: one figure, one crop, the same hero every other
+    // artboard gets. The pair reads as one image duplicated, and a card whose job is to name
+    // a single person should not show two.
+    // One place decides what a sex value resolves to, and the title, the hero and the
+    // right-rail record all read it — so a heading can never claim a figure the hero omits.
+    const resolveSex = (sex) => sex === 'both' ? 'm' : sex;
+    const banners = (slug, sex) => [still(slug, resolveSex(sex), '0', '100%')];
+    const page = (id, badge, slug, sex, conf, t, blurb) => { const a = A[slug];
+      const shown = resolveSex(sex) === 'f' ? 'woman' : 'man';
+      return { id, badge, slug, sex, t, blurb,
+        title: a.licence + ' / ' + a.name + ' / ' + (sex === 'both' ? 'both → ' + shown : shown) + (t === DARK ? ' / dark' : ' / light'),
+        licence:a.licence, name:a.name, tagline:a.tagline, desc:a.desc || a.tagline, accent:a.accent, cloak:a.cloak || 'coloured', staff:a.staff || 'unique staff',
+        strengths: a.strengths || ['Not recorded for this archetype yet'], blind: a.blind || ['Not recorded for this archetype yet'],
+        complements: (a.complements || []).map(k => ({ name:A[k].name, accent:A[k].accent })),
+        conf: conf === null ? 'N/A' : conf + '%', confPct: conf === null ? null : String(conf), confPill: conf === null ? null : conf + '%',
+        confNote: conf === null ? 'no reading recorded yet' : 'from the advisor conversation',
+        sexLabel: sex === 'both' ? 'm · f (both)' : sex, banners: banners(slug, sex) }; };
+    const pages = [
+      page('a5','A5','fo_missionary','f',82,LIGHT,'The click destination. The 21:9 hero is the supplied still, cover and centre-right so the character and the white cloak emblem survive the crop — no recolour, no second gradient, nothing baked into the pixels. The title sits in the artwork\u2019s own dark well on the left. Below, a 7/5 editorial: product sentences left, wells right. Complements are sibling archetypes as chips, never people.'),
+      page('a6','A6','fo_missionary','f',82,DARK,'Dark mode, same still. Only the page, wells and hairlines take the dark tokens; the banner is untouched and the accent hairline stays the cloak colour. Green and amber labels stay as they are — they are the platform\u2019s, not the theme\u2019s.'),
+      page('a7','A7','mt_sage_guide','m',71,LIGHT,'Advisor · Sage Guide · man ← mt_sage_guide.png. Strengths and blind spots are not in the brief for this archetype, so those columns read "Not recorded" rather than inventing three bullets.'),
+      page('a8','A8','pt_embedded_operator','both',null,LIGHT,'Partner · Embedded Operator · sex = both. The hero is the man\u2019s still, pt_embedded_operator.png — a split pair read as one image duplicated, so the setting resolves to a single figure and the indicator below still records "both". Confidence is N/A: no reading exists, so the pill is absent from the hero and the well says so.'),
+      // The woman's still for the same archetype: A8 resolves sex=both to the man, so without
+      // this pt_embedded_operator_f.png would be the one supplied file nothing renders.
+      page('a8f','A8f','pt_embedded_operator','f',null,LIGHT,'Partner · Embedded Operator · woman ← pt_embedded_operator_f.png. The same archetype as A8 with sex = f, which is how the woman\u2019s still is reached now that "both" resolves to a single figure.'),
+      page('a11','A11','fo_rocketeer','m',null,LIGHT,'Founder · The Rocketeer · man ← fo_rocketeer.png. Orange cloak, so the hairline is orange; violet stays page chrome only.'),
+      page('a12','A12','fo_architect','f',null,LIGHT,'Founder · The Architect · woman ← fo_architect_f.png.'),
+      page('a13','A13','fo_maverick','m',null,LIGHT,'Founder · The Maverick · man ← fo_maverick.png. Gold cloak.'),
+      page('a14','A14','inv_thesis_backer','f',null,LIGHT,'Investor · Thesis-Driven Backer · woman ← inv_thesis_backer_f.png. The last outstanding still; the set is now complete at 32 files across all 16 archetypes.'),
+      page('a15','A15','inv_network_amplifier','m',null,LIGHT,'Investor · Network Amplifier · man ← inv_network_amplifier.png.'),
+      page('a16','A16','inv_hands_on_partner','f',null,LIGHT,'Investor · Hands-On Partner · woman ← inv_hands_on_partner_f.png.'),
+      page('a17','A17','inv_disciplined_allocator','m',null,LIGHT,'Investor · Disciplined Allocator · man ← inv_disciplined_allocator.png. Green cloak.'),
+      page('a18','A18','pt_strategic_connector','f',null,LIGHT,'Partner · Strategic Connector · woman ← pt_strategic_connector_f.png.'),
+      page('a19','A19','pt_growth_catalyst','m',null,LIGHT,'Partner · Growth Catalyst · man ← pt_growth_catalyst.png.'),
+      page('a20','A20','pt_systems_builder','f',null,LIGHT,'Partner · Systems Builder · woman ← pt_systems_builder_f.png. Green cloak.'),
+      page('a21','A21','mt_hands_on_coach','f',null,LIGHT,'Advisor · Hands-On Coach · woman ← mt_hands_on_coach_f.png.'),
+      page('a22','A22','mt_accountability_anchor','m',null,LIGHT,'Advisor · Accountability Anchor · man ← mt_accountability_anchor.png.'),
+      page('a23','A23','mt_craft_master','f',null,LIGHT,'Advisor · Craft Master · woman ← mt_craft_master_f.png.')
+    ];
+
+    const mobStill = (window.__resources && window.__resources['still-fo_missionary_f']) || 'uploads/stills/fo_missionary_f.jpg';
+    const mobStyle = 'position:absolute;inset:0;width:100%;height:100%;background:url("' + mobStill + '") center right / cover no-repeat';
+    const spriteFStyle = 'width:96px;height:96px;background:url("' + spriteF + '") center / contain no-repeat;image-rendering:pixelated';
+    return { compacts, pages, spriteF, spriteM, mobStill, mobStyle, spriteFStyle, lockIcon: this.ic('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>') };
+  }
+}
+</script>
+</body></html>

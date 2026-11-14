@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Accounts › Persona segments</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Persona segments</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:860px;line-height:1.55">Inside each profile, the segments the studio serves: who they are, how many, what they told us at sign-up as counts only, what they need, what answers it, and where nothing does yet. Drawn for an admin on HQ-held accounts, with Super Admin boards where HQ’s controls differ. Side drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Persona Segments Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['SEG1', 'Overview · Admin · desktop 1440, light', 'Eadwyn open. Tiles, the profile filter, segments by profile with hollow No segment bars, how segments were set, how sure the sign-up suggestion was, new tags per week, the segment cards and the needs and offers table. Data: personas.items, accounts_tagged, unclassified, source and confidence exist; profile per segment, the bands, weekly tags, needs and offers are NEW.', [D('SEG1')]],
+      ['SEG2', 'Segment · Profile tab · Angel / Scout', 'Counts only. Who they are, how they work, what they told us at sign-up with hollow Not answered bars, a small group where every cell is under 5, and each need with what answers it. Data: short_description, the four investor archetypes and the stored answers exist; counts per segment, themes, needs, offers and reach are NEW.', [D('SEG2')]],
+      ['SEG3', 'Segment · Members tab', 'Newest tagged first, three picked with the move bar. The inset shows a member whose profile differs from the segment’s, and a founder who also carries Operator / Advisor. Data: user_id, name, email, role, persona_id, confidence, source and updated_at exist; paging, filters, last active and sub-accounts are NEW.', [D('SEG3'), D('SEG3i', 'Inset · Operator / Advisor', 1000)]],
+      ['SEG4', 'Move to another segment', 'A · a move, with what changes. B · an admin account, which only a Super Admin can move. C · the same segment picked. Then the toast. The Accounts canvas opens this dialog from the Retag… link in an account’s drawer. Data: the move answers ok, unchanged, user_not_found or super_admin_required.', [D('SEG4a', 'A · Move', 680), D('SEG4b', 'B · Admin account', 680), D('SEG4c', 'C · Same segment', 680), D('SEG4t', 'After a move', 680)]],
+      ['SEG5', 'Unclassified', 'Members with no segment, why they have none, twelve picked, and the notice that asks them to finish their profile. Data: personas.unclassified exists; the list, the reasons and the notice are NEW.', [D('SEG5'), D('SEG5d', 'Ask to finish their profile')]],
+      ['SEG6', 'Edit segment · Super Admin', 'HQ edits Angel / Scout in a centred lightbox rather than a side drawer, then confirms the change. The third frame is an admin’s Suggest a change. Data: the segment profile store and the suggestions store are NEW.', [D('SEG6', 'Edit segment'), D('SEG6c', 'Save · confirm', 680), D('SEG6s', 'Admin · Suggest a change', 680)]],
+      ['SEG7', 'Overview · Super Admin · HQ shell', 'The Content strip, New segment, the Suggestions tab, the scope select (HQ-held accounts, [Branch North] (sample), All studios, added up) and two suggestions waiting.', [D('SEG7')]],
+      ['SEG8', 'Activity tab', 'Moves, sign-up choices, segment edits and suggestions, newest first. Data: persona_retagged rows exist; the other kinds are NEW.', [D('SEG8')]],
+      ['SEG9', 'Overview · dark', 'SEG1 in the dark colours, with Eadwyn collapsed.', [D('SEG9')]],
+      ['SEG10', 'Empty', 'A new studio: measured zeros, one card where the charts go, and the Advisors card.', [D('SEG10')]],
+      ['SEG11', 'Loading', 'Header, tabs and filter at once; tiles and charts as skeletons; a Reading dot on the Eadwyn spine.', [D('SEG11')]],
+      ['SEG12', 'Error and partial', 'One chart could not be read while every other block answers. Insets: a draft segment with no needs written, and the whole page failing with the sidebar and Eadwyn still there.', [D('SEG12'), D('SEG12d', 'Inset · draft segment', 900), D('SEG12f', 'Inset · whole page failed', 1440, 640)]],
+      ['SEG13', 'No permission', 'An admin opening /admin/persona-segments/new, and a member who is not an admin.', [D('SEG13a', 'Admin opens /new', 1440, 720), D('SEG13b', 'A member opens the page', 1440, 720)]],
+      ['SEG14', 'Phone · 390 wide', 'The overview on a phone, and the move dialog as a full-screen sheet with sticky buttons.', [P('SEG14a', 'Overview'), P('SEG14b', 'Move sheet')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

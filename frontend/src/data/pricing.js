@@ -1,0 +1,128 @@
+/**
+ * Task #4 (ID) — Pricing surface data file.
+ *
+ * Single source of truth for the public /pricing page. Tier feature
+ * lists are imported directly from `PaywallModal.TIER_PLANS` so the
+ * in-app paywall and this page never drift — change the bullet list
+ * in one place (PaywallModal) and both surfaces update.
+ *
+ * Local additions in this file:
+ *   - the FREE tier (paywall only renders paid tiers)
+ *   - taglines, CTAs, FAQ — marketing copy that doesn't belong in
+ *     the in-app paywall.
+ *
+ * D1050 (#2901): NO PRICE IS TYPED HERE. A paid tier's `priceMonthly` and
+ * `priceAnnual` are null until `pricedTier` (`lib/plansPricing.js`) puts the
+ * plans read's prices on it; a free tier is 0.
+ */
+import { TIER_PLANS } from '../components/PaywallModal';
+
+function tierFromPlan(id, extra) {
+  const plan = TIER_PLANS[id];
+  if (!plan) throw new Error(`Unknown tier id: ${id}`);
+  return {
+    id,
+    name: plan.label,
+    priceMonthly: null,
+    priceAnnual: null,
+    tagline: plan.blurb,
+    features: plan.features.slice(),
+    cta: extra.cta,
+    highlight: extra.highlight || false,
+  };
+}
+
+export const FOUNDER_TIERS = [
+  {
+    id: 'free',
+    name: 'Free',
+    priceMonthly: 0,
+    priceAnnual: 0,
+    // D683: what Free includes is a decision, not a leftover. It lets a
+    // founder start Validate on one idea, apply to the Lab, and be found:
+    // the limits are `FREE_TIER_LIMITS` and the founder intro allowance
+    // (`services/introductions.ts`) in the Worker.
+    tagline: 'Start validating one idea.',
+    features: [
+      '1 active startup',
+      'Start Validate: 5 customer interviews and 3 OKRs',
+      'Apply to the Spin-Out Lab, the 28-day sprint',
+      'Public profile + referral link',
+      'Accept up to 3 proposed introductions a month',
+      'Community support',
+    ],
+    cta: { label: 'Start free', to: '/register?plan=free' },
+  },
+  tierFromPlan('growth', {
+    highlight: true,
+    cta: { label: 'Start 14-day trial', to: '/register?plan=growth' },
+  }),
+  tierFromPlan('studio', {
+    cta: { label: 'Start 14-day trial', to: '/register?plan=studio' },
+  }),
+];
+
+export const INVESTOR_TIERS = [
+  {
+    id: 'free',
+    name: 'Free',
+    priceMonthly: 0,
+    priceAnnual: 0,
+    tagline: 'Browse deals & follow founders.',
+    features: [
+      'Public deal index',
+      'Watch up to 10 companies',
+      'Market intel pulses (read-only)',
+      'Community office hours',
+    ],
+    cta: { label: 'Sign up', to: '/register?plan=investor_free' },
+  },
+  tierFromPlan('professional', {
+    highlight: true,
+    cta: { label: 'Start 14-day trial', to: '/register?plan=professional' },
+  }),
+  tierFromPlan('institutional', {
+    cta: { label: 'Talk to sales', to: '/demo?topic=investor' },
+  }),
+];
+
+export const PRICING_FAQ = [
+  {
+    q: 'Can I switch plans later?',
+    a: 'Yes — upgrades take effect immediately and we prorate the first invoice. Downgrades take effect at the end of the current billing period.',
+  },
+  {
+    q: 'Do you offer annual billing?',
+    a: 'Yes — annual billing saves roughly 20% on every paid tier. You can flip between monthly and annual anytime from Settings → Billing.',
+  },
+  {
+    q: 'What happens after the 14-day trial?',
+    a: 'Your account converts to the tier you selected. You can cancel inside the trial with one click and pay nothing.',
+  },
+  {
+    q: 'Are there discounts for venture studios or accelerators?',
+    a: 'Yes — programs supporting 5+ founders qualify for our Studio Partner program. Reach out via the demo page.',
+  },
+  {
+    q: 'Where is my data stored?',
+    a: 'In Cloudflare D1 (US East). At-rest encryption is enabled on every column that holds personal data. See our Trust Center for details.',
+  },
+];
+
+export function tierSchemaOffer(tier, audience) {
+  return {
+    '@type': 'Offer',
+    name: `${tier.name} — ${audience}`,
+    description: tier.tagline,
+    price: tier.priceMonthly,
+    priceCurrency: 'USD',
+    priceSpecification: {
+      '@type': 'UnitPriceSpecification',
+      price: tier.priceMonthly,
+      priceCurrency: 'USD',
+      unitText: 'MONTH',
+    },
+    eligibleCustomerType: audience,
+    availability: 'https://schema.org/InStock',
+  };
+}

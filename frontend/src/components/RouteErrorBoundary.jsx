@@ -1,0 +1,209 @@
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
+import { reportError } from '../lib/log';
+import { isChunkLoadError } from '../lib/chunkLoadError';
+import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
+import { isCapturing, whenIdle } from '../lib/captureGuard';
+
+/**
+ * Page-level error boundary that wraps the lazy `<Routes>` tree.
+ *
+ * Without this boundary, ANY render-time throw inside a lazily-loaded
+ * page component (missing import, bad data shape, undefined access)
+ * bubbles past `<Suspense>` and blanks the entire React tree — every
+ * route, including /login, goes blank. That's the "blank pages happen
+ * across the platform often" pattern the user reported.
+ *
+ * Behaviour:
+ *   - Catches errors from page render/lifecycle.
+ *   - Logs once via `reportError` for triage.
+ *   - Renders an explicit, visible error state (NOT silent) with the
+ *     error message, a "Try again" button (resets boundary state so
+ *     the route re-renders fresh), and a "Back to Studio" link.
+ *   - Resets automatically when the URL pathname changes, so navigating
+ *     away from the broken page recovers without a hard reload.
+ *   - Stale-chunk / React.lazy payload failures (incl. Safari's
+ *     `_result.default` TypeError) auto-reload once via `isChunkLoadError`
+ *     instead of stranding the user on the red card.
+ *
+ * Per replit.md user prefs: "explicit error handling over silent
+ * fallbacks" — we deliberately surface the failure with the underlying
+ * message so the user knows what's wrong and the next reload of the
+ * agent has a starting clue.
+ */
+
+// sessionStorage key used to prevent auto-reload loops.
+const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
+const RELOAD_GUARD_PARAM = '__boundary';
+const MAX_BOUNDARY_RELOADS = 1;
+
+export class RouteErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, reloading: false, caughtAt: 0 };
+    this._resetTimer = null;
+  }
+
+  static getDerivedStateFromError(error) {
+    // Decide synchronously — before the first error render — whether this is a
+    // recoverable stale-chunk failure we're going to auto-reload from. When it
+    // is, we render a calm "updating" splash instead of the alarming error
+    // card, so the red card never flashes during the reload. The reload itself
+    // is fired from componentDidCatch; this stays side-effect-free and only
+    // reads the one-shot guard so its decision mirrors componentDidCatch's.
+    let reloading = false;
+    if (isChunkLoadError(error)) {
+      reloading = readAttempts(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM) < MAX_BOUNDARY_RELOADS;
+    }
+    // `caughtAt` stamps when the error surfaced so componentDidUpdate can keep
+    // a freshly-caught card visible across a redirect-induced pathname change
+    // (the "flash then blank" race) instead of erasing it instantly.
+    return { error, reloading, caughtAt: Date.now() };
+  }
+
+  componentDidCatch(error, info) {
+    try {
+      reportError('route-error-boundary', error);
+      if (typeof console !== 'undefined' && info?.componentStack) {
+        console.error('[RouteErrorBoundary]', error, info.componentStack);
+      }
+    } catch { /* never let the boundary itself throw */ }
+
+    // Auto-recover from chunk-load failures exactly once per tab (storage or URL).
+    if (isChunkLoadError(error)) {
+      // A running recording is never reloaded away (D685 §5.6.8): the reload waits for it.
+      const reloaded = reloadWithinBudget(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS, whenIdle);
+      this._reloadQueued = this._reloadQueued || reloaded;
+      if (!reloaded) {
+        // Budget spent or storage refused with no URL marker — show the actionable card.
+        this.setState({ reloading: false });
+      }
+    }
+  }
+
+  componentDidUpdate(prevProps) {
+    // Reset on route change so a user navigating away from the broken page
+    // recovers cleanly without a hard reload. BUT — Task #10 — when an error
+    // and a programmatic redirect (e.g. a RequireAuth gate's <Navigate>) fire
+    // in the same tick, an instant reset would erase the card before the user
+    // ever sees it (the reported "error flash, then blank"). So if the error
+    // was caught very recently, DEFER the reset by the remaining freshness
+    // window: the card stays visible briefly, then we clear it and let the
+    // already-changed route render. Chunk-load failures are unaffected — they
+    // reload the whole document, so this client-side path never applies.
+    if (this.state.error && prevProps.pathname !== this.props.pathname) {
+      const FRESH_MS = 3000;
+      const age = Date.now() - (this.state.caughtAt || 0);
+      if (age >= FRESH_MS) {
+        this.clearError();
+      } else {
+        clearTimeout(this._resetTimer);
+        this._resetTimer = setTimeout(() => this.clearError(), FRESH_MS - age);
+      }
+    }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this._resetTimer);
+  }
+
+  clearError = () => {
+    clearTimeout(this._resetTimer);
+    this.setState({ error: null, reloading: false, caughtAt: 0 });
+  };
+
+  handleRetry = () => {
+    this.clearError();
+  };
+
+  handleChunkReload = () => {
+    if (this._reloadQueued) return;
+    this._reloadQueued = true;
+    whenIdle(() => {
+      try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch {}
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete(RELOAD_GUARD_PARAM);
+        window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+      } catch { /* ignore */ }
+      window.location.reload();
+    });
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    // Recoverable stale-chunk failure: we're auto-reloading to pick up the
+    // freshly deployed build. Show a calm, neutral splash (matching the app's
+    // Suspense loading state) instead of the alarming red error card — the page
+    // reloads a beat later. The red card is reserved for failures we can't
+    // silently recover from (a real render error, or a chunk error where the
+    // one-shot reload guard is already spent / sessionStorage is blocked).
+    const capturingChunk = isChunkLoadError(this.state.error) && isCapturing();
+    if (this.state.reloading && !capturingChunk) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 px-4 text-gray-500 dark:text-gray-400">
+          <RefreshCcw size={22} className="animate-spin" aria-hidden="true" />
+          <p className="text-sm" role="status" aria-live="polite">
+            Updating to the latest version…
+          </p>
+        </div>
+      );
+    }
+
+    const msg = this.state.error?.message || String(this.state.error) || 'Unknown error';
+    const isChunk = isChunkLoadError(this.state.error);
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950 px-4 py-12">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="max-w-lg w-full border border-red-200 dark:border-red-900/50 rounded-xl bg-red-50/70 dark:bg-red-950/30 p-6"
+        >
+          <div className="mb-4 inline-flex items-center justify-center w-11 h-11 rounded-full bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300">
+            <AlertTriangle size={20} aria-hidden="true" />
+          </div>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            This page hit an unexpected error
+          </h1>
+          <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
+            {isChunk
+              ? (capturingChunk ? 'A new version is ready. This page reloads when your recording ends.' : 'A new version of the app was just deployed. Reload to pick it up.')
+              : 'The page failed to render. The team has been notified. You can try again, or head back to Studio.'}
+          </p>
+          <pre className="text-xs font-mono text-red-700 dark:text-red-300 bg-white/60 dark:bg-black/30 border border-red-200 dark:border-red-900/40 rounded-md p-3 mb-5 whitespace-pre-wrap break-words max-h-40 overflow-auto">
+            {msg}
+          </pre>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <button
+              type="button"
+              onClick={isChunk ? this.handleChunkReload : this.handleRetry}
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm font-medium hover:bg-gray-800 dark:hover:bg-white transition-colors"
+            >
+              <RefreshCcw size={15} aria-hidden="true" />
+              {isChunk ? 'Reload' : 'Try again'}
+            </button>
+            <Link
+              to="/studio"
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Home size={15} aria-hidden="true" />
+              Back to Studio
+            </Link>
+            {capturingChunk && <Link to="/validate/record/live" className="text-sm text-gray-900 dark:text-gray-100 underline">Return to recording</Link>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// Functional wrapper so we can inject `pathname` from react-router and
+// auto-reset the boundary when the user navigates away from a broken
+// page.
+export default function RouteErrorBoundaryWithLocation({ children }) {
+  const { pathname } = useLocation();
+  return <RouteErrorBoundary pathname={pathname}>{children}</RouteErrorBoundary>;
+}

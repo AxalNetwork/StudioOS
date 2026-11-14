@@ -1,0 +1,43 @@
+#12 - LC — Admin > Telegram channels + aggregator
+What & Why
+Admin-only system to manage one public Telegram channel (@axalvc) + invite-only cohort channels (founders, investors, mentors, operating partners, alumni). Drafts are aggregated from platform activity per audience; admin reviews, edits, and sends. No automatic posting without admin approval. PII linter blocks leaky drafts; admin overrides are logged.
+Done looks like
+* One Axal-owned Telegram bot (AxalNewsBot) created via BotFather; token stored as Wrangler secret TELEGRAM_BOT_TOKEN.
+* Bot added as ADMIN with "Post Messages" permission to all six channels.
+* New D1 tables telegram_channels, telegram_posts, telegram_aggregations exist in prod.
+* Worker routes (all admin + Cf-Access):
+    * Channels: GET/POST/DELETE /api/admin/telegram/channels[/:id]
+    * Posts: GET /api/admin/telegram/posts?status=&channel_id=, POST/PUT/DELETE /api/admin/telegram/posts[/:id], POST /api/admin/telegram/posts/:id/send, POST /api/admin/telegram/posts/:id/schedule.
+    * Aggregator: POST /api/admin/telegram/aggregator/run, GET /api/admin/telegram/aggregator/preview?kind=&period_days=.
+* Aggregator (cloudflare-worker/src/services/telegram/aggregator.ts) produces ≥ 1 draft per active audience per the audience-specific signal lists.
+* Telegram client (cloudflare-worker/src/services/telegram/client.ts) wraps sendMessage / sendPhoto / sendDocument with the existing circuit-breaker + retry; parse_mode=MarkdownV2.
+* PII linter (cloudflare-worker/src/services/telegram/redactCheck.ts) blocks send when drafts contain user email/phone/tax-id/bank-acct/full legal name without the user's consent_for_promotion opt-in, OR when private founder data appears in the public channel. Admin override requires a typed reason and is logged.
+* Audit: every send / edit / delete writes admin_audit_log with admin_id, post_id, action, body_hash, timestamp.
+* Frontend /admin/telegram: Channels tab (list / add / remove / test-connect "hello" send), Drafts tab (aggregator queue + manual compose), composer (rich markdown, R2 media uploads with gated retrieval, audience picker, schedule picker, PII linter result before send), History tab (paginated sent posts with Telegram link).
+* Admin can add a channel (bot must already be in it).
+* Aggregator run produces ≥ 1 draft per active audience.
+* Admin can edit a draft and send to chosen channel — public + private channels each successfully receive a real message.
+* PII linter blocks a deliberately-leaky draft until typed override; override row appears in admin_audit_log.
+* Failure path: invalid token → typed error { code: 'telegram_token_missing' }, never silent 500.
+Out of scope
+* Auto-posting without admin approval.
+* Reading replies from Telegram channels back into StudioOS.
+* Per-channel engagement analytics beyond what the Bot API exposes (private channels expose none).
+* Multiple bots per audience.
+Steps
+1. Bot + secrets — Create the bot via BotFather; add it as admin to all six channels; store TELEGRAM_BOT_TOKEN via wrangler secret put. Add a check that refuses to boot if missing in prod (typed error, not silent fallback).
+2. Schema — Migration creates the three tables; seed the six channels (slug, label, chat_id, audience, is_invite_only).
+3. Telegram client + circuit breaker — Wrap the Bot API in the existing breaker/retry pattern. Cover sendMessage, sendPhoto, sendDocument, getChat (used by test-connect).
+4. Aggregator — Pull audience-specific signals from existing platform tables (mentor sessions, deal-room intros, Spin-Out graduates, MI signals, founder match, MRR milestones, partner deals, sourcing rewards). Produce markdown drafts with sane copy + suggested media (logos / MI charts via Browser Rendering).
+5. PII linter — Implement redactCheck.ts covering email/phone/tax-id/bank/full-legal-name detection, with consent_for_promotion opt-in column on users (side table if users is at the ALTER limit). Public-channel guard rejects private founder data. Override requires typed reason, recorded in admin_audit_log.
+6. Worker routes — Implement all channel + post + aggregator endpoints, admin-gated + Cf-Access. Pagination clamps via util/pagination.ts.
+7. Admin UI — Build the four-tab /admin/telegram page with the composer, audience picker, scheduler, PII-linter modal, and history list.
+8. Audit + acceptance — Wire admin_audit_log writes for every send / edit / delete / override. Test a leaky draft → linter blocks → override → audited. Test invalid token → typed error.
+Relevant files
+* cloudflare-worker/sql/migrations/ (new — three tables)
+* cloudflare-worker/src/routes/ (new admin_telegram.ts)
+* cloudflare-worker/src/services/telegram/ (new client.ts, aggregator.ts, redactCheck.ts)
+* cloudflare-worker/src/util/pagination.ts
+* frontend/src/pages/admin/ (new AdminTelegramPage.jsx)
+* wrangler.toml (new env binding declarations if needed; secret added via CLI)
+* cloudflare-worker/src/services/ (existing circuit-breaker + retry helpers)

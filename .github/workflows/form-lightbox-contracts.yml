@@ -1,0 +1,47 @@
+name: Form lightbox contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/pages/cycles/FormLightbox.jsx'
+      - 'frontend/src/ui/Lightbox.jsx'
+      - 'frontend/test/*d695*'
+      - '.github/workflows/form-lightbox-contracts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: form-lightbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: D695 form and page contracts
+    runs-on: ubuntu-latest
+    # D5612: keep this job to form contracts, guards and a real SPA build.
+    # ci.yml's required test:drift (full suite) runs every test in shards.
+    # Repeating the unsharded suite here exceeded 90 minutes after contracts passed.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix frontend --no-audit --no-fund
+          npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+      - name: Form, page, modal and mutation contracts
+        run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/add_lightbox_d695.test.mjs frontend/test/lightbox_d685.test.mjs
+      - name: Folder, decision and dark-mode guards
+        run: |
+          node scripts/check-folder-docs.mjs
+          node scripts/check-decision-ids.mjs
+          node scripts/check-dark-mode.mjs
+      - name: Build root SPA
+        run: npm run build
