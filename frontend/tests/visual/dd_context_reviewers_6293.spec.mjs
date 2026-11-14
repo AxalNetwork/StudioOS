@@ -44,3 +44,49 @@ for (const failure of [false, true]) {
     expect(writes).toEqual([{ path: `/api/dd/cases/${UID}/sections/1/assign`, body: { user_id: failure ? 6 : 5, role: 'reviewer' } }]);
   });
 }
+
+test('Overview edits deal context in-page, retaining a refused edit and saving exact native minor units on phone', async ({ page, request }) => {
+  await prepare(page, request, { as: 'security' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const writes = []; let fail = true;
+  await page.route('**/api/dd/**', async (route) => {
+    const req = route.request(); const path = new URL(req.url()).pathname;
+    if (req.method() === 'PATCH') {
+      writes.push({ path, body: req.postDataJSON() });
+      if (fail) return route.fulfill({ status: 503, json: { detail: 'Synthetic save unavailable' } });
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (path === `/api/dd/cases/${UID}`) return route.fulfill({ json: record });
+    if (path === '/api/dd/subjects') return route.fulfill({ json: { items: [{ id: 7, deals: [{ id: 12, instrument: 'Equity' }] }] } });
+    return route.fulfill({ json: { items: [] } });
+  });
+  await page.goto(`/admin/due-diligence/${UID}`);
+  const opener = page.getByTestId('dd-deal-context-open');
+  expect((await opener.boundingBox()).height).toBeGreaterThanOrEqual(44);
+  await opener.click();
+  const dialog = page.getByTestId('dd-deal-context');
+  await expect(dialog).toContainText('Activity records which fields changed');
+  await expect(dialog).toContainText('No notification is sent');
+  await expect(page.getByTestId('dd-context-cheque')).toHaveValue('123.45');
+  await page.getByTestId('dd-context-round').fill('Series A');
+  await page.getByTestId('dd-context-currency').selectOption('KWD');
+  await page.getByTestId('dd-context-cheque').fill('12.345');
+  await page.getByTestId('dd-context-deal').selectOption('12');
+  await dialog.getByRole('button', { name: 'Save deal context', exact: true }).click();
+  await expect(page.getByTestId('dd-deal-context-error')).toContainText('Synthetic save unavailable');
+  await expect(page.getByTestId('dd-context-round')).toHaveValue('Series A');
+  await expect(page.getByTestId('dd-context-cheque')).toHaveValue('12.345');
+  fail = false;
+  await dialog.getByRole('button', { name: 'Save deal context', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const expected = { path: `/api/dd/cases/${UID}`, body: { round_label: 'Series A', cheque_cents: 12345, cheque_currency: 'KWD', deal_id: 12 } };
+  expect(writes).toEqual([expected, expected]);
+});
+
+test('Overview explains context ownership without an edit action for a read-only case', async ({ page, request }) => {
+  await prepare(page, request, { as: 'security' });
+  await page.route(`**/api/dd/cases/${UID}`, (route) => route.fulfill({ json: { ...record, allowed: { update: false, assign: false } } }));
+  await page.goto(`/admin/due-diligence/${UID}`);
+  await expect(page.getByTestId('dd-who-context')).toContainText('The case lead or an Admin');
+  await expect(page.getByTestId('dd-deal-context-open')).toHaveCount(0);
+});

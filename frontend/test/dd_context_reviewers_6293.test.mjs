@@ -8,6 +8,7 @@ import { ddDeskApi } from '../src/lib/api/ddDesk.js';
 import { ddLifecycleApi } from '../src/lib/api/ddLifecycle.js';
 import { AssignDialog } from '../src/pages/duediligence/DdCaseDialogs.jsx';
 import DealContextDialog from '../src/pages/duediligence/DdDealContextDialog.jsx';
+import { OverviewTab } from '../src/pages/duediligence/DdCaseWork.jsx';
 import { dealContextInitial, dealContextPatch, priorReviewWords } from '../src/pages/duediligence/ddDealContextModel.js';
 
 const CASE = { uid: 'case-6293', subject_type: 'project', subject_id: 7, subject_label: 'Synthetic Venture',
@@ -105,6 +106,19 @@ test('read-only/scoped cases draw no edit controls and fetch no deal choices', a
     }
     assert.equal(reads, 0);
   } finally { s.restore(); }
+});
+
+test('Overview opens the context dialog only with update permission, and hides the block from scoped reviewers', async () => {
+  for (const [allowed, scoped] of [[true, false], [false, false], [true, true]]) {
+    const opened = [];
+    const view = await mountContracts(React.createElement(OverviewTab, { data: data({ allowed: { update: allowed }, case: { ...CASE, scoped } }), open: (...args) => opened.push(args), sectionRefs: { current: {} } }));
+    try {
+      assert.equal(Boolean(node(view, 'dd-deal-context-open')), allowed && !scoped);
+      assert.equal(Boolean(node(view, 'dd-deal')), !scoped);
+      if (allowed && !scoped) { await press(view, 'dd-deal-context-open'); assert.deepEqual(opened, [['deal-context']]); }
+      else if (!scoped) assert.match(view.text(), /case lead or an Admin edits deal context/);
+    } finally { await view.unmount(); }
+  }
 });
 
 test('Assign shows suggested names and prior counts before search, never email, and records the selected identity', async () => {

@@ -146,7 +146,7 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
             <div className={`text-[12.5px] ${muted}`}>{score == null ? 'No score yet' : `Score ${score} of 100`}</div>
           </Block>
           {!cs.scoped && (
-            <Block title="Deal context" testId="dd-deal">
+            <Block title="Deal context" testId="dd-deal" action={may(data, 'update') ? <button type="button" className={`${btnCls} max-sm:min-h-11`} onClick={() => open('deal-context')} data-testid="dd-deal-context-open">Edit deal context</button> : <Who text="The case lead or an Admin edits deal context." testId="dd-who-context" />}>
               <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
                 <dt className={muted}>Round</dt><dd className="m-0">{cs.round_label || NOT_RECORDED}</dd>
                 <dt className={muted}>Cheque</dt><dd className="m-0">{cs.cheque_cents != null ? codeAmount(Number(cs.cheque_cents), cs.cheque_currency, { trimWhole: true }) : NOT_RECORDED}</dd>
