@@ -190,7 +190,7 @@ test('#4831 PX-04 mounted: each failed source says so in its own place, and the 
 test('#4831 PX-04: Engagements opens the sheet only for a linked account', () => {
   const zone = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
   assert.match(zone, /const openClient = \(e\) => \{ if \(e\?\.founder_user_id\) \{/);
-  assert.match(zone, /<ClientSheet key=\{client\.id\} clientUserId=\{client\.id\} clientName=\{client\.name\}/);
+  assert.match(zone, /<ClientSheet key=\{client\?\.id\} clientUserId=\{client\?\.id\} clientName=\{client\?\.name\}/);
   assert.match(zone, /\{e\.founder_user_id && onOpenClient\s*\n\s*\? <button/);
   const sheet = read('frontend/src/pages/advisor/practice/EngagementSheet.jsx');
   assert.match(sheet, /e\.founder_user_id && onOpenClient/);

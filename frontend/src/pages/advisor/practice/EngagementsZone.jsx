@@ -656,7 +656,7 @@ export default function EngagementsZone() {
         busy={busy === opened.id} note={note} onClose={() => { setOpenId(null); setNote(null); }} onDecide={decideFromSheet}
         onOpenClient={openClient} />
     )}
-    {client && <ClientSheet key={client.id} clientUserId={client.id} clientName={client.name} onClose={() => setClient(null)} />}
+    {client && <ClientSheet key={client?.id} clientUserId={client?.id} clientName={client?.name} onClose={() => setClient(null)} />}
     </>
   );
 }
