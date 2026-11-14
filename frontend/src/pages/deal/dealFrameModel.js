@@ -176,10 +176,36 @@ export const EMPTY = {
 };
 
 /**
- * Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431). #4046: it arrives through Ask on New note, drawn
- * from the deal's company and stage and your firm's notes; a summary of the deal's whole record is not read yet.
+ * Eadwyn's draft (DL14). #4046: Ask on New note drafts a note from the deal's company and stage and your
+ * firm's notes. #6194: the card drafts a deal summary on request, from what this investor may read (the
+ * deal's terms, the shared evidence, their own diligence case, their firm's notes); it is "Not saved"
+ * until Save as my note, and Discard writes no note.
  */
-export const EADWYN_DRAFT_WAITS = 'Ask on New note drafts a note from this deal’s company and stage and your firm’s notes. Nothing lands until you save it as your note. A summary of the deal’s whole record is not read here yet.';
+export const EADWYN_DRAFT_WAITS = 'Ask on New note drafts a note from this deal’s company and stage and your firm’s notes. Nothing lands until you save it as your note.';
+export const EADWYN_DRAFT = Object.freeze({
+  eye: 'Eadwyn · draft',
+  title: 'Draft: deal summary from the evidence and diligence so far',
+  line: 'Eadwyn reads only what you may read here: the deal’s terms, the evidence the founder shared with you, your own diligence case and your firm’s notes. Nothing behind an unsigned NDA is used. It drafts only when you ask, and nothing lands until you save it as your note.',
+  ask: 'Draft a deal summary',
+  running: 'Drafting from what is on record…',
+  mark: 'Eadwyn’s draft · Not saved',
+  save: 'Save as my note',
+  discard: 'Discard',
+  again: 'Try again',
+  empty: 'Eadwyn drafted no summary from what is on record. Nothing was saved.',
+  aiOff: 'AI assistance is off on this page.',
+  unreadable: 'Whether Eadwyn can draft here could not be read. Nothing was asked.',
+  unavailable: 'Eadwyn cannot draft on this deal for you.',
+});
+/** #6194: how each source's state reads beside its name. */
+export const DRAFT_SOURCE_STATE = Object.freeze({ used: 'Used', none: 'None on record', not_shared: 'Not shared', unreadable: 'Unreadable' });
+/** #6194: the sources a draft names, as rows; an unknown state reads Unreadable, never Used. */
+export function draftSourceRows(sources) {
+  return (Array.isArray(sources) ? sources : []).filter((s) => s && s.key).map((s) => ({
+    key: String(s.key), label: String(s.label || s.key), state: Object.hasOwn(DRAFT_SOURCE_STATE, s.state) ? s.state : 'unreadable',
+    word: DRAFT_SOURCE_STATE[s.state] || DRAFT_SOURCE_STATE.unreadable, note: String(s.note || ''),
+  }));
+}
 
 /** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
 export const DECK_SLOT = {

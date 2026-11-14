@@ -4,7 +4,7 @@
 //     a blank note draws the field's trigger and the form's Ask; a placed value is "Not saved" and nothing is
 //     written until Save; Save posts the note through the notes route, then records the placed proposal against
 //     the id the route returns; a typed note draws no trigger; a refused read (another firm, an admin) shows nothing;
-//   - the draft slot says what Ask drafts from, and that a summary of the whole record is not read yet.
+//   - the draft slot says what Ask drafts from (#6194: the card drafts the deal summary itself).
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/fill_deal_notes_pages_4046.test.mjs
 import test from 'node:test';
@@ -28,7 +28,8 @@ test('the model: one composition field, the note\'s words, on deal_notes; the ta
   assert.match(NOT_FILLED_HERE['deal-note'][0], /^Tag/);
   assert.match(EADWYN_DRAFT_WAITS, /^Ask on New note drafts a note/);
   assert.match(EADWYN_DRAFT_WAITS, /Nothing lands until you save it as your note\./);
-  assert.match(EADWYN_DRAFT_WAITS, /whole record is not read here yet/, 'what is still not read stays said');
+  // #6194: the card now drafts a deal summary from the record itself, so the "not read yet" sentence is gone.
+  assert.doesNotMatch(EADWYN_DRAFT_WAITS, /not read here yet/);
 });
 
 async function mount(element, routes) {

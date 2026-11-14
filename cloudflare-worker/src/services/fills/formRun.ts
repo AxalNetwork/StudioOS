@@ -30,6 +30,7 @@ import type { Citation } from './types';
 import type { ScopeContext } from './scopes';
 import { noteFirm } from '../dealNotes';
 import { studioOf } from '../programProposals';
+import { investorEvidence } from '../raiseEvidence';
 
 /** The most rows one run may propose, and the most Accept all takes at once (#2431 question 3, A). */
 export const MAX_RUN_ROWS = 10;
@@ -56,7 +57,17 @@ export interface FormGather {
   guide?: string;
   /** #3938 part 7: a retrieval step's hint (VA12's interviewees by meaning), read after the facts; never an answer. */
   hint?: string;
+  /** #6194: what a draft read, source by source, for the member: used, none, not shared or unreadable. */
+  sources?: DraftSource[];
+  /** #6194: the longest value a composition may keep on this run (a deal summary is longer than a title). */
+  maxValue?: number;
 }
+
+/** #6194: one source a deal summary drew on, or why it did not. `note` is said to the member, never a figure. */
+export interface DraftSource { key: 'deal' | 'terms' | 'evidence' | 'diligence' | 'notes'; label: string; state: 'used' | 'none' | 'not_shared' | 'unreadable'; note: string }
+
+/** #6194: the longest deal summary kept, well inside a note's 10,000 characters. */
+export const DEAL_SUMMARY_MAX = 1500;
 
 /**
  * Effort as the Add feature writer stores it (`cycle_build.ts` EFFORT_IN: Low,
@@ -127,6 +138,8 @@ export async function gatherForm(env: Env, projectId: number, fields: readonly F
  * D1595 (#3868): a support entry's company and the caller's own last entries
  * on it; the caller's own offering titles; the caller's own perk offers.
  * #4046: a deal note reads the deal's company and stage and its firm's last notes.
+ * #6194: asked for a deal summary (`ctx.purpose`), it also reads what this
+ * investor may read (`dealSummarySources`) and says, source by source, what it used.
  */
 export async function gatherScoped(env: Env, userId: number, table: string, row: Record<string, unknown> | null, parentId: number | null = null, ctx?: ScopeContext): Promise<FormGather> {
   const out: FormGather = { choices: new Map(), existing: [], context: [] };
@@ -191,6 +204,7 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
     if (firm === undefined) return out;
     out.existing = await list(`SELECT substr(body, 1, 300) AS value FROM deal_notes
       WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT 10`, dealId ?? null, firm, userId);
+    if (ctx?.purpose === 'deal_summary') await dealSummarySources(env, userId, Number(dealId), firm == null ? null : Number(firm), out, !!deal);
   } else if (table === 'program_proposals') {
     // #4046 (B4): the studio's own other proposal names (`ownRow`'s rule) and the program names its admins can
     // already see (the registry reader's licence filter, narrowed to leave out HQ's 'proposed' drafts), so a name is not a repeat; and
@@ -313,14 +327,14 @@ export function checkValue(f: FillField | undefined, name: string, value: unknow
   if (f.class === 'sourced') {
     const cite = citationOf(citation);
     if (!cite) return { field: name, why: 'no_citation' };
-    return { field: f.field, value: String(value).trim().slice(0, MAX_VALUE), citation: cite };
+    return { field: f.field, value: String(value).trim().slice(0, gather.maxValue ?? MAX_VALUE), citation: cite };
   }
   if (f.field === 'effort') {
     const word = EFFORT_WORDS[String(value).trim().toLowerCase()];
     return word ? { field: f.field, value: word, citation: null } : { field: name, why: 'invalid' };
   }
   if (typeof value !== 'string' && typeof value !== 'number') return { field: name, why: 'invalid' };
-  return { field: f.field, value: String(value).trim().slice(0, MAX_VALUE), citation: null };
+  return { field: f.field, value: String(value).trim().slice(0, gather.maxValue ?? MAX_VALUE), citation: null };
 }
 
 const isKept = (x: KeptValue | Dropped): x is KeptValue => 'value' in x;
@@ -361,4 +375,93 @@ export function parseRows(output: string | undefined, fields: readonly FillField
     else dropped.push({ field: required.find((k) => row[k] == null) ?? '', why: 'empty', row: i });
   });
   return { rows, dropped };
+}
+
+/**
+ * #6194 — what a deal summary reads beyond the note's own context, each only as this investor may
+ * read it, and each said as a source: used, none on record, not shared, or unreadable. `readEvidence` is
+ * `investorEvidence`; a test passes its own.
+ *
+ *   terms      the deal's terms a Free reader is shown (`GET /api/deals/:id`): instrument, target
+ *              raise, currency and closing date. Never another investor's commitment, the round's
+ *              total, a vote or an IC decision.
+ *   evidence   the founder's shared Raise evidence, through `investorEvidence` (D1265), which
+ *              applies the audience, the NDA, each item's sharing, the file gate and quote consent
+ *              and logs the open. Before the NDA it is coverage only; nothing behind it is read.
+ *   diligence  the caller's own diligence case on the company (owner or reviewer, as the deal's
+ *              stage reads it): its status, risk band, checklist counts and open findings' titles
+ *              and severities. Never a note, a detail or an excerpt (they are encrypted and private).
+ *   notes      the firm's own notes, already read above (`out.existing`): another firm's never are.
+ */
+export async function dealSummarySources(env: Env, userId: number, dealId: number, firm: number | null, out: FormGather, dealRead: boolean,
+  readEvidence: typeof investorEvidence = investorEvidence): Promise<void> {
+  const sources: DraftSource[] = [];
+  const ctx = out.context ?? (out.context = []);
+  sources.push(dealRead
+    ? { key: 'deal', label: 'The deal', state: 'used', note: 'Its company and stage.' }
+    : { key: 'deal', label: 'The deal', state: 'unreadable', note: 'The deal could not be read.' });
+  let projectId: number | null = null;
+  try {
+    const d = await env.DB.prepare(`SELECT d.project_id, d.instrument, COALESCE(d.target_raise, d.amount) AS target, COALESCE(d.currency, 'USD') AS currency,
+        d.closing_deadline, p.sector FROM deals d JOIN projects p ON p.id = d.project_id AND p.deleted_at IS NULL WHERE d.id = ?`)
+      .bind(dealId).first<{ project_id: number; instrument: string | null; target: number | null; currency: string; closing_deadline: string | null; sector: string | null }>();
+    projectId = d ? Number(d.project_id) : null;
+    const terms = d ? [
+      d.instrument ? `Instrument: ${d.instrument}` : null,
+      d.target != null ? `Target raise: ${Number(d.target)} ${d.currency}` : null,
+      d.closing_deadline ? `Closing date: ${d.closing_deadline}` : null,
+      d.sector ? `Sector: ${d.sector}` : null,
+    ].filter((x): x is string => !!x) : [];
+    if (terms.length) { ctx.push(...terms); sources.push({ key: 'terms', label: 'The deal\'s terms', state: 'used', note: 'Instrument, target raise and closing date, as the deal states them.' }); }
+    else sources.push({ key: 'terms', label: 'The deal\'s terms', state: 'none', note: 'No terms are recorded on this deal.' });
+  } catch { sources.push({ key: 'terms', label: 'The deal\'s terms', state: 'unreadable', note: 'The deal\'s terms could not be read.' }); }
+
+  if (projectId == null) {
+    sources.push({ key: 'evidence', label: 'Shared evidence', state: 'unreadable', note: 'The company could not be read, so its evidence was not.' });
+  } else {
+    try {
+      const view: any = await readEvidence(env, projectId, userId);
+      const groups = view?.coverage?.state === 'recorded' ? view.coverage.groups || [] : null;
+      if (!view.nda_signed) {
+        if (groups?.length) ctx.push(...groups.slice(0, 10).map((g: any) => `Evidence on file (coverage only): ${g.area} · ${g.kind} · ${g.count} item${g.count === 1 ? '' : 's'}`));
+        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'not_shared',
+          note: groups?.length ? 'Coverage only: the NDA is not signed, so no figure, file or quote behind it was used.' : 'The NDA is not signed, and nothing is shared before it.' });
+      } else if (view.items?.state !== 'recorded') {
+        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'unreadable', note: 'The shared evidence could not be read.' });
+      } else if (!view.items.rows.length) {
+        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'none', note: 'The founder has shared no evidence with you.' });
+      } else {
+        ctx.push(...view.items.rows.slice(0, 15).map((r: any) => `Evidence: ${r.area} · ${r.kind} · ${String(r.summary ?? '').slice(0, 200)}${r.value_num != null ? ` · ${r.value_num}${r.value_unit ? ` ${r.value_unit}` : ''}${r.currency ? ` ${r.currency}` : ''}` : ''}${r.observed_on ? ` (observed ${r.observed_on})` : ''}`));
+        sources.push({ key: 'evidence', label: 'Shared evidence', state: 'used', note: `${view.items.rows.length} item${view.items.rows.length === 1 ? '' : 's'} the founder shared with you.` });
+      }
+    } catch (e: any) {
+      sources.push(e?.code === 'not_found'
+        ? { key: 'evidence', label: 'Shared evidence', state: 'not_shared', note: 'The founder has not shared evidence with you.' }
+        : { key: 'evidence', label: 'Shared evidence', state: 'unreadable', note: 'The shared evidence could not be read.' });
+    }
+    try {
+      const dd = await env.DB.prepare(`SELECT d.id, d.status, d.risk_band FROM dd_cases d WHERE d.subject_type = 'project' AND d.subject_id = ?
+          AND d.status != 'archived' AND (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))
+          ORDER BY julianday(d.updated_at) DESC, d.id DESC LIMIT 1`).bind(projectId, userId, userId).first<{ id: number; status: string; risk_band: string | null }>();
+      if (!dd) sources.push({ key: 'diligence', label: 'Your diligence case', state: 'none', note: 'You have no diligence case on this company.' });
+      else {
+        const items = await env.DB.prepare('SELECT status, COUNT(*) AS n FROM dd_checklist_items WHERE case_id = ? GROUP BY status').bind(dd.id).all<{ status: string; n: number }>();
+        const findings = await env.DB.prepare(`SELECT title, severity FROM dd_findings WHERE case_id = ? AND resolved_at IS NULL
+            ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, id LIMIT 10`).bind(dd.id).all<{ title: string; severity: string }>();
+        ctx.push(`Diligence case: ${dd.status}${dd.risk_band ? `, risk band ${dd.risk_band}` : ''}`);
+        const counts = (items.results || []).map((r) => `${r.n} ${r.status}`).join(', ');
+        if (counts) ctx.push(`Diligence checklist: ${counts}`);
+        ctx.push(...(findings.results || []).map((f) => `Open diligence finding (${f.severity}): ${String(f.title).slice(0, 160)}`));
+        sources.push({ key: 'diligence', label: 'Your diligence case', state: 'used', note: 'Its status, checklist and open findings\' titles.' });
+      }
+    } catch { sources.push({ key: 'diligence', label: 'Your diligence case', state: 'unreadable', note: 'Your diligence case could not be read.' }); }
+  }
+  sources.push(out.existing.length
+    ? { key: 'notes', label: firm == null ? 'Your notes' : 'Your firm\'s notes', state: 'used', note: `The last ${out.existing.length} on this deal.` }
+    : { key: 'notes', label: firm == null ? 'Your notes' : 'Your firm\'s notes', state: 'none', note: 'None on this deal yet.' });
+  out.sources = sources;
+  out.maxValue = DEAL_SUMMARY_MAX;
+  out.guide = 'Write a short deal summary for the investor\'s own note, from what is on record only: what the company does, the terms on record, '
+    + 'what the shared evidence shows and where their diligence case stands. Say plainly what is not recorded. Never invent a figure, never name '
+    + 'another investor, and never tell the reader what to decide. A few short paragraphs, under 1500 characters. Put it in the body field.';
 }

@@ -1,7 +1,8 @@
 /**
- * D1152 (#3057) — DL14: your firm's notes on this deal (part 2's store), the
- * slot for Eadwyn's draft summary, and the deal's activity without other
- * investors' names (the Worker withholds them, D1152).
+ * D1152 (#3057) — DL14: your firm's notes on this deal (part 2's store),
+ * Eadwyn's draft summary (#6194: drafted on request, from what this investor
+ * may read, "Not saved" until Save as my note), and the deal's activity
+ * without other investors' names (the Worker withholds them, D1152).
  *
  * WHO WRITES. Every member of your firm reads the notes; only a note's
  * author edits or deletes it (`author_user_id`, D1150). A new note is saved
@@ -14,7 +15,10 @@ import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, noteError } from './dealFrameModel';
+import { EADWYN_DRAFT, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, draftSourceRows, noteError } from './dealFrameModel';
+import { fillsApi } from '../../lib/api/fills.js';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
+import { refusalView } from '../../lib/fillSheet.js';
 import Sheet from '../../ui/Sheet.jsx';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -80,6 +84,114 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
   );
 }
 
+const STATE_TONE = {
+  used: 'text-axal-ink dark:text-gray-100',
+  none: 'text-axal-muted dark:text-gray-400',
+  not_shared: 'text-axal-muted dark:text-gray-400',
+  unreadable: 'text-axal-destructive dark:text-red-300',
+};
+
+/** #6194: the sources a draft read, each with its state: Used, None on record, Not shared or Unreadable. */
+function DraftSources({ sources }) {
+  const rows = draftSourceRows(sources);
+  if (!rows.length) return null;
+  return (
+    <div className="flex flex-col gap-1" data-testid="deal-eadwyn-draft-sources">
+      <span className={EYE}>Sources</span>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {rows.map((r) => (
+          <li key={r.key} className="text-[12.5px] leading-[1.45]" data-state={r.state} data-testid={`deal-eadwyn-draft-source-${r.key}`}>
+            <span className="font-bold text-axal-ink dark:text-gray-100">{r.label}</span>
+            <span className={STATE_TONE[r.state]}> · {r.word}</span>
+            {r.note && <span className="text-axal-muted dark:text-gray-400"> · {r.note}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * #6194 — DL14's "Draft: deal summary". Asked for by the investor, never on load: the deal note's own
+ * scoped fill (`input.draft: 'deal_summary'`), so the hold, the charge and the guard are the fill's.
+ * The draft is Eadwyn's and "Not saved" until Save as my note, which saves it through the notes route
+ * and then records the kept proposal. Discard discards the proposal and writes no note.
+ */
+function EadwynDraft({ dealId, fill, onSaved }) {
+  const [state, setState] = useState({ step: 'idle' });
+  const [busy, setBusy] = useState(false);
+  const can = fill.status === 'ready' && fill.canFill && !fill.aiOff;
+  const ask = async () => {
+    if (!can) return;
+    setState({ step: 'running' });
+    try {
+      const events = await fillsApi.run({ page: SCOPED_FORMS.dealNote.page, option: `form:${SCOPED_FORMS.dealNote.form}`, parent: Number(dealId), input: { draft: 'deal_summary', values: { body: '' } } });
+      const end = events.find((e) => e.event === 'done')?.data || null;
+      if (!end || end.refusal) { setState({ step: 'refused', text: refusalView(end?.refusal ?? null, { charged: end?.charged_microusd ?? null }).text }); return; }
+      const draft = (end.proposals || []).find((p) => p.field === 'body' && String(p.value || '').trim());
+      setState(draft ? { step: 'draft', uid: draft.uid, text: String(draft.value), sources: end.sources || [] } : { step: 'empty', sources: end.sources || [] });
+    } catch (e) {
+      reportError('DealNotes:draft', e);
+      setState({ step: 'refused', text: refusalView({ code: e?.code, message: e?.message }).text });
+    }
+  };
+  const save = async () => {
+    if (state.step !== 'draft' || busy) return;
+    setBusy(true);
+    try {
+      const created = await dealContextApi.addNote(dealId, { body: state.text.trim(), tag: null });
+      if (Number(created?.id) > 0) {
+        try { await fillsApi.record({ page: SCOPED_FORMS.dealNote.page, form: SCOPED_FORMS.dealNote.form, record: Number(created.id), proposals: [state.uid] }); }
+        catch (e) { reportError('DealNotes:draft-record', e); }
+      }
+      setState({ step: 'idle' });
+      onSaved();
+    } catch (e) {
+      setState((s) => ({ ...s, error: e?.message || 'That did not save. Try again.' }));
+    } finally { setBusy(false); }
+  };
+  const discard = async () => {
+    const uid = state.uid;
+    setState({ step: 'idle' });
+    // The proposal is marked discarded; no note is written. A failed mark leaves the proposal unused, never saved.
+    if (uid) railProposalsApi.decide(uid, 'discard').catch((e) => reportError('DealNotes:draft-discard', e));
+  };
+  const why = fill.status === 'loading' ? null
+    : fill.status === 'unreadable' ? EADWYN_DRAFT.unreadable
+      : fill.aiOff ? EADWYN_DRAFT.aiOff
+        : fill.offLine || (!can ? EADWYN_DRAFT.unavailable : null);
+  return (
+    <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="deal-eadwyn-draft" data-step={state.step}>
+      <span className={EYE}>{EADWYN_DRAFT.eye}</span>
+      <h3 className={H3}>{EADWYN_DRAFT.title}</h3>
+      {(state.step === 'idle' || state.step === 'refused' || state.step === 'empty') && (
+        <>
+          <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT.line}</p>
+          <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT_WAITS}</p>
+          {state.step === 'refused' && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="deal-eadwyn-draft-refused">{state.text}</p>}
+          {state.step === 'empty' && <p className={`m-0 ${SUB}`} data-testid="deal-eadwyn-draft-empty">{EADWYN_DRAFT.empty}</p>}
+          {state.step === 'empty' && <DraftSources sources={state.sources} />}
+          {why && <p className={`m-0 ${SUB}`} data-testid="deal-eadwyn-draft-why">{why}</p>}
+          <div><button type="button" className={BTN_S} disabled={!can} onClick={ask} data-testid="deal-eadwyn-draft-ask">{state.step === 'idle' ? EADWYN_DRAFT.ask : EADWYN_DRAFT.again}</button></div>
+        </>
+      )}
+      {state.step === 'running' && <p className={`m-0 ${SUB}`} aria-busy="true" data-testid="deal-eadwyn-draft-running">{EADWYN_DRAFT.running}</p>}
+      {state.step === 'draft' && (
+        <>
+          <span className="inline-flex w-fit items-center rounded-axal-pill border border-axal-lavender-edge bg-white px-2.5 py-0.5 text-[11.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300" data-testid="deal-eadwyn-draft-mark">{EADWYN_DRAFT.mark}</span>
+          <p className="m-0 whitespace-pre-line text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100" data-testid="deal-eadwyn-draft-text">{state.text}</p>
+          <DraftSources sources={state.sources} />
+          {state.error && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{state.error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={actionPrimary} disabled={busy} onClick={save} data-testid="deal-eadwyn-draft-save">{EADWYN_DRAFT.save}</button>
+            <button type="button" className={actionGhost} disabled={busy} onClick={discard} data-testid="deal-eadwyn-draft-discard">{EADWYN_DRAFT.discard}</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Notes({ dealId, userId }) {
   const [read, setRead] = useState({ status: 'loading' });
   const [body, setBody] = useState('');
@@ -128,10 +240,7 @@ function Notes({ dealId, userId }) {
           <button type="button" className={BTN_S} disabled={busy} onClick={save} data-testid="deal-note-save">Save</button>
         </div>
       </section>
-      <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="deal-eadwyn-draft">
-        <span className={EYE}>Eadwyn · draft</span>
-        <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT_WAITS}</p>
-      </section>
+      <EadwynDraft dealId={dealId} fill={fill} onSaved={load} />
       <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-notes">
         <h3 className={H3}>Notes</h3>
         {read.status === 'loading' && <p className={`m-0 ${SUB}`}>Reading…</p>}
