@@ -87,6 +87,23 @@ async function get(router: { request: Function }, path: string, e: any, userId =
 
 // ── Leads ────────────────────────────────────────────────────────────────────
 
+test('lifecycle activity uses recorded timestamps and scopes each event to the requested opportunity and partner', async () => {
+  const db = migratedDatabase(); seedPartner(db); seedNeeds(db, 3);
+  const pass = db.prepare("INSERT INTO partner_lead_passes (partner_id, need_id, reason, passed_at) VALUES (?, ?, 'timing', ?)");
+  pass.run(1, 1, stamp(1)); pass.run(2, 3, stamp(4));
+  const quote = db.prepare("INSERT INTO quotes (id, uid, need_id, partner_id, price, deliverables, status, decided_at) VALUES (?, ?, ?, ?, 100, '[]', 'rejected', ?)");
+  quote.run(1, 'quote-1', 2, 1, stamp(3)); quote.run(2, 'quote-2', 3, 1, null);
+  db.prepare("INSERT INTO quote_versions (quote_id, version, change_summary, created_at) VALUES (1, 1, 'First', ?)").run(stamp(2));
+  const all = await get(partnerPipeline, '/activity', envFor(db));
+  assert.equal(all.status, 200);
+  assert.deepEqual(all.body.items.map((e: any) => [e.kind, e.occurred_at, e.opportunity.need_id]), [
+    ['proposal_lost', stamp(3), 2], ['proposal_version', stamp(2), 2], ['passed', stamp(1), 1],
+  ]);
+  assert.deepEqual((await get(partnerPipeline, '/activity?need_id=1', envFor(db))).body.items.map((e: any) => e.kind), ['passed']);
+  assert.deepEqual((await get(partnerPipeline, '/activity?need_id=3', envFor(db))).body.items, []);
+  assert.equal((await get(partnerPipeline, '/activity?need_id=wrong', envFor(db))).status, 400);
+});
+
 test('the newest 200 needs all passed: older actionable leads are still returned', async () => {
   const db = migratedDatabase(); seedPartner(db); seedNeeds(db, 230);
   const pass = db.prepare("INSERT INTO partner_lead_passes (partner_id, need_id, reason, passed_at) VALUES (?,?,?,?)");
