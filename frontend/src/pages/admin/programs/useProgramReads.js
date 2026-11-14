@@ -150,7 +150,7 @@ export function useMentorReads(tab) {
   const hosts = useRead('hosts', 'hosts', tick, overview, readHosts);
   const history = useRead('history', 'history', tick, overview, readHistory);
   const recent = useRead('recent', 'recent', tick, overview, readRecent);
-  const sessions = useRead('sessions', 'sessions', tick, tab === 'how', readSessions);
+  const sessions = useRead('sessions', 'sessions', tick, tab === 'how' || tab === 'participation', readSessions);
   return { assignments, timeline, hosts, history, recent, sessions, reload };
 }
 
