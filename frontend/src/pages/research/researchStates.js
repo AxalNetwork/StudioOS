@@ -84,6 +84,130 @@ export function rowProblem(d) {
 }
 
 /**
+ * D6281 (#6281, RS-06's departures from D3701) — the Library's search, its four
+ * filters and the drop-to-upload check, as pure functions so the page and its
+ * test read one rule.
+ *
+ * KEPT IN THE URL. Each filter is a query parameter, so a reload or Back lands
+ * on the same view. An empty or unknown value is no filter, never a filter that
+ * matches nothing.
+ *
+ * TYPE IS THE FILE TYPE, NOT THE KIND (D3701 "Library columns"): the canvas's
+ * Type column names the file (PDF, Word…), read from the stored
+ * `content_type`. A document with none recorded is Not recorded, never PDF.
+ */
+export const LIBRARY_PARAMS = ['q', 'type', 'index', 'answerable', 'collection', 'view'];
+
+const FILE_TYPES = {
+  'application/pdf': { key: 'pdf', label: 'PDF' },
+  'application/msword': { key: 'word', label: 'Word' },
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { key: 'word', label: 'Word' },
+  'application/vnd.ms-powerpoint': { key: 'powerpoint', label: 'PowerPoint' },
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': { key: 'powerpoint', label: 'PowerPoint' },
+  'text/plain': { key: 'text', label: 'Text' },
+  'text/markdown': { key: 'markdown', label: 'Markdown' },
+  'text/csv': { key: 'csv', label: 'CSV' },
+};
+const UNRECORDED_TYPE = { key: 'unrecorded', label: NOT_RECORDED };
+
+/** RS-06 "Type": the file type from the stored content type. */
+export function fileTypeOf(d) {
+  return FILE_TYPES[String(d?.content_type || '').split(';')[0].trim().toLowerCase()] || UNRECORDED_TYPE;
+}
+
+/** RS-06 "Answerable in Ask" as a filter key, from the same `answerabilityOf`. */
+export function answerabilityKeyOf(d) {
+  const label = answerabilityOf(d).label;
+  return label === 'Answerable' ? 'answerable' : label === 'Partly answerable' ? 'partial' : 'not';
+}
+
+/** The index-state filter key: the indexer's word, or `unrecorded` (Not recorded). */
+export function indexKeyOf(d) {
+  return INDEX_STATE[d?.index_state] ? d.index_state : 'unrecorded';
+}
+
+export const ANSWERABLE_OPTIONS = [
+  { key: 'answerable', label: 'Answerable' },
+  { key: 'partial', label: 'Partly answerable' },
+  { key: 'not', label: 'Not answerable' },
+];
+
+/** The filter options a list offers: only values some document carries, in a fixed order. */
+export function libraryOptions(items) {
+  const types = new Map();
+  for (const d of items || []) { const t = fileTypeOf(d); types.set(t.key, t.label); }
+  const ix = new Set((items || []).map(indexKeyOf));
+  return {
+    type: [...types].map(([key, label]) => ({ key, label })).sort((a, b) => (a.key === 'unrecorded') - (b.key === 'unrecorded') || a.label.localeCompare(b.label)),
+    index: [...Object.keys(INDEX_STATE), 'unrecorded'].filter((k) => ix.has(k)).map((key) => ({ key, label: INDEX_STATE[key]?.label || NOT_RECORDED })),
+    answerable: ANSWERABLE_OPTIONS,
+  };
+}
+
+/** The filters a URL carries. Missing parameters are '' (no filter); `view` defaults to `all`. */
+export function libraryFiltersFrom(params) {
+  const get = (k) => String(params?.get?.(k) ?? '').trim();
+  return {
+    q: get('q'), type: get('type'), index: get('index'), answerable: get('answerable'),
+    collection: get('collection'), view: get('view') || 'all',
+  };
+}
+
+/** The URL after one change: other parameters (the page's own, and any other) are kept; an empty value is removed. */
+export function librarySearchFor(params, patch) {
+  const next = new URLSearchParams(params?.toString?.() || '');
+  for (const [k, v] of Object.entries(patch)) {
+    const value = v == null ? '' : String(v);
+    if (!value) next.delete(k); else next.set(k, value);
+  }
+  if (next.get('view') === 'all') next.delete('view');
+  return next;
+}
+
+/** True when the reader has narrowed the list in any way. */
+export function isFiltered(f) {
+  return Boolean(f.q || f.type || f.index || f.answerable || f.collection || (f.view && f.view !== 'all'));
+}
+
+/**
+ * The documents the search and the four RS-06 filters keep. `members` is the
+ * selected collection's document uids, or null when it is not loaded. The
+ * profile's chip view is applied by the page, which declares its keys
+ * (`profile_zone_filters.test.mjs` reads them there).
+ */
+export function filterLibrary(items, f, members = null) {
+  const q = (f.q || '').toLowerCase();
+  return (items || []).filter((d) => {
+    if (q && !String(d.title || '').toLowerCase().includes(q)) return false;
+    if (f.type && fileTypeOf(d).key !== f.type) return false;
+    if (f.index && indexKeyOf(d) !== f.index) return false;
+    if (f.answerable && answerabilityKeyOf(d) !== f.answerable) return false;
+    if (f.collection && !(members || []).includes(d.uid)) return false;
+    return true;
+  });
+}
+
+/**
+ * Drop-to-upload: the reason a file is refused BEFORE it is sent, or null. The
+ * same two rules the Worker applies (`routes/research.ts` ALLOWED_MIME and
+ * MAX_BYTES), in its own words, so a refusal here is never one the Worker
+ * would not also give. A file whose type the browser could not name is refused
+ * too: the Worker reads only the type, so it would refuse it as well.
+ */
+export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+export const UPLOAD_ACCEPT = '.pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv';
+export const UPLOAD_TYPES_SENTENCE = 'Upload a PDF, Word, PowerPoint, text, markdown or CSV file.';
+export function uploadRefusal(file) {
+  if (!file) return 'Choose a file first.';
+  const name = file.name || 'That file';
+  if (!FILE_TYPES[String(file.type || '').toLowerCase()]) {
+    return `${name} can’t be added: its type ${file.type ? `(${file.type}) ` : ''}can’t be read. ${UPLOAD_TYPES_SENTENCE}`;
+  }
+  if (Number(file.size) > UPLOAD_MAX_BYTES) return `${name} can’t be added: it is over the 20 MB limit.`;
+  return null;
+}
+
+/**
  * RS-07C — the seven response states. `action` is what the state card offers:
  * `library` opens the Library, `retry` puts the question back in the composer,
  * `keep` is the save control every exchange already has.
