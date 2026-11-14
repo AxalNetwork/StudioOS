@@ -503,7 +503,11 @@ test('D686 recorded approval survives a publisher that throws; removing the catc
   const req=createRequire(pathToFileURL(resolve('cloudflare-worker/src/services/roundCalls.ts')));
   let js=stripTypeScriptTypes(modified,{mode:'strip'});
   js=js.replace(/^((?:import\s+[^'";]+|export\s*\{[^}]*\})\s+from\s*['"])([^'"]+)(['"])/gm,
-    (_all,prefix,spec,quote)=>prefix+(spec.startsWith('data:')?spec:spec.startsWith('.')?pathToFileURL(resolve('cloudflare-worker/src/services',spec+'.ts')).href:pathToFileURL(req.resolve(spec)).href)+quote);
+    (_all,prefix,spec,quote)=>{
+      if(spec.startsWith('data:'))return prefix+spec+quote;
+      const target=spec.startsWith('.')?resolve('cloudflare-worker/src/services',spec):req.resolve(spec);
+      return prefix+pathToFileURL(spec.startsWith('.')&&!existsSync(target)?target+'.ts':target).href+quote;
+    });
   const mutant=await import('data:text/javascript;base64,'+Buffer.from(js+'\n// notice regression').toString('base64'));
   await assert.rejects(()=>check(mutant),assert.AssertionError);
 });
