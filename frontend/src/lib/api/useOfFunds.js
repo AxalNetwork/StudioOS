@@ -25,6 +25,8 @@ export const useOfFundsApi = {
   // D5069: a DELETE has no body, so the scenario revision it read travels in the query.
   deleteMilestone: (project, id, revision) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   hires: project => request(`/cycles/raise/use-of-funds/hires?${q(project)}`),
+  // D6083: Add a hire (UF6). A new hire starts at revision 0, so it carries none.
+  createHire: (project, body) => request(`/cycles/raise/use-of-funds/hires?${q(project)}`, { method: 'POST', body: JSON.stringify(body) }),
   updateHire: (project, id, body) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   // D5375: a hire edit carries `expected_revision` in its body; a removal, having no body, carries it in the query.
   deleteHire: (project, id, revision) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),

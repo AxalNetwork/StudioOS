@@ -80,7 +80,7 @@ test('D1176 empty plan reads nulls, original legacy source, no forecast defaults
 test('D1176 every method refuses partners, investors, advisors, explorers and a foreign founder, even with a residual founder id',async()=>{
   const f=fixture();
   for(const who of [2,4,5,6,7])for(const [method,path,b]of [
-    ['GET','/plan'],['GET','/scenarios'],['POST','/scenarios',input()],['GET','/scenarios/1'],['PATCH','/scenarios/1',{name:'Denied'}],['DELETE','/scenarios/1'],['POST','/scenarios/1/make-base',{}],['GET','/compare?ids=1'],['GET','/milestones'],['POST','/milestones',{label:'Denied'}],['GET','/milestones/1'],['PATCH','/milestones/1',{label:'Denied'}],['DELETE','/milestones/1'],['GET','/hires'],['PATCH','/hires/1',{role:'Denied'}],['DELETE','/hires/1'],['PUT','',{sections:[]}],
+    ['GET','/plan'],['GET','/scenarios'],['POST','/scenarios',input()],['GET','/scenarios/1'],['PATCH','/scenarios/1',{name:'Denied'}],['DELETE','/scenarios/1'],['POST','/scenarios/1/make-base',{}],['GET','/compare?ids=1'],['GET','/milestones'],['POST','/milestones',{label:'Denied'}],['GET','/milestones/1'],['PATCH','/milestones/1',{label:'Denied'}],['DELETE','/milestones/1'],['GET','/hires'],['POST','/hires',{role:'Denied',category_key:'product'}],['PATCH','/hires/1',{role:'Denied'}],['DELETE','/hires/1'],['PUT','',{sections:[]}],
   ] as any[])assert.equal((await call(f,method,path,b,who)).status,403,`${who} ${method} ${path}`);
   assert.equal(rows(f,'SELECT id FROM uof_scenarios').length,0);assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
 });
@@ -418,7 +418,7 @@ test('D1176 audit storage failure rolls back promotion, Base edits, milestone an
   f.db.exec("INSERT INTO use_of_funds_hires(id,project_id,category_key,role) VALUES(1,1,'product','Engineer')");
   const snapshot=()=>['uof_scenarios','uof_scenario_lines','uof_milestones','use_of_funds_hires','projects'].map(t=>rows(f,`SELECT * FROM ${t}`));
   const before=snapshot();f.db.exec('DROP TABLE activity_logs');
-  for(const [method,path,b]of [['POST',`/scenarios/${a.id}/make-base`,{}],['PATCH',`/scenarios/${a.id}`,{name:'Must roll back'}],['POST','/scenarios',input('Must roll back')],['POST','/milestones',{scenario_id:a.id,label:'Must roll back'}],['PATCH',`/milestones/${m.body.id}`,{cost_cents:33}],['PATCH','/hires/1',{annual_cents:33}],['DELETE',`/scenarios/${a.id}`]] as any[])assert.equal((await call(f,method,path,b)).status,503);
+  for(const [method,path,b]of [['POST',`/scenarios/${a.id}/make-base`,{}],['PATCH',`/scenarios/${a.id}`,{name:'Must roll back'}],['POST','/scenarios',input('Must roll back')],['POST','/milestones',{scenario_id:a.id,label:'Must roll back'}],['PATCH',`/milestones/${m.body.id}`,{cost_cents:33}],['PATCH','/hires/1',{annual_cents:33}],['POST','/hires',{role:'Must roll back',category_key:'product'}],['DELETE',`/scenarios/${a.id}`]] as any[])assert.equal((await call(f,method,path,b)).status,503);
   assert.deepEqual(snapshot(),before);
 });
 test('D1176 the existing Add hire also commits its admin audit atomically without business text in the log',async()=>{
@@ -541,4 +541,41 @@ test('D5375 a competing hire write between the read and the batch changes no row
     assert.deepEqual(rows(f,'SELECT * FROM use_of_funds_hires WHERE id=1')[0],{...before,revision:1,role:'Other tab'});
     assert.equal(rows(f,'SELECT id FROM activity_logs').length,0,`${method}: no audit row of the refused write`);
   }
+});
+
+// D6083 (#6083): Add a hire from the tool (UF6) goes through the store's field rules and audit.
+test('D6083 POST /hires adds a hire at revision 0 that the plan, its section and payroll read, with its audit row',async()=>{
+  const f=fixture();const a=await created(f);await call(f,'POST',`/scenarios/${a.id}/make-base`,{});
+  const r=await call(f,'POST','/hires',{role:'  Data engineer ',category_key:'infrastructure',start_month:'2027-01',annual_cents:120000,currency:'USD'});
+  assert.equal(r.status,201,JSON.stringify(r.body));
+  assert.deepEqual({...r.body,id:undefined},{id:undefined,category_key:'infrastructure',role:'Data engineer',start_month:'2027-01',annual_cents:120000,currency:'usd',revision:0,source:'Typed'});
+  const stored=rows(f,'SELECT id,uid,project_id,role,revision,created_by FROM use_of_funds_hires');
+  assert.equal(stored.length,1);assert.equal(stored[0].id,r.body.id);assert.equal(stored[0].project_id,1);assert.equal(stored[0].revision,0);assert.equal(stored[0].created_by,1);
+  assert.match(stored[0].uid,/^[a-f0-9]{32}$/);
+  const log=rows(f,"SELECT entity_type,entity_id,action,details FROM activity_logs WHERE action='uof_hire_created'");
+  assert.deepEqual(log,[{entity_type:'raise.use-of-funds',entity_id:stored[0].uid,action:'uof_hire_created',details:'uof hire added.'}],'audited, with no role or cost in the log');
+  assert.equal((await call(f,'GET','/hires')).body.items[0].role,'Data engineer');
+  const plan=(await call(f,'GET','/plan')).body.base.value;
+  assert.equal(plan.hires.items.length,1);
+  const infra=plan.model.sections.find((x:any)=>x.key==='infrastructure');
+  assert.equal(infra.payroll.value[0],10000,'payroll from its start month: a twelfth of the annual cost');
+  // The new hire edits like any other: its own revision 0.
+  assert.equal((await call(f,'PATCH',`/hires/${r.body.id}`,{role:'Staff data engineer',expected_revision:0})).status,200);
+});
+test('D6083 POST /hires refuses a bad body, saves nothing, and an admin add says so in the log',async()=>{
+  const f=fixture();
+  for(const b of [{},{role:'No section'},{category_key:'product'},{role:'',category_key:'product'},{role:'x',category_key:'marketing'},
+    {role:'x',category_key:'product',start_month:'2027-13'},{role:'x',category_key:'product',annual_cents:-1},{role:'x',category_key:'product',annual_cents:1.5},
+    {role:'x',category_key:'product',currency:'dollars'},{role:'x',category_key:'product',expected_revision:0},{role:'x',category_key:'product',source:'connector'},
+    {role:'x',category_key:'product',project_id:2}] as any[]){
+    const r=await call(f,'POST','/hires',b);assert.equal(r.status,400,JSON.stringify(b));assert.equal(r.body.code,'invalid_plan');
+  }
+  assert.equal(rows(f,'SELECT id FROM use_of_funds_hires').length,0);assert.equal(rows(f,'SELECT id FROM activity_logs').length,0);
+  const missing=await call(f,'POST','/hires',{role:'Ops lead',category_key:'operations',start_month:null,annual_cents:null});
+  assert.equal(missing.status,201);assert.equal(missing.body.start_month,null);assert.equal(missing.body.annual_cents,null,'a cost nobody typed stays missing, never 0');
+  assert.equal((await call(f,'POST','/hires',{role:'Admin add',category_key:'product'},3)).status,201);
+  assert.match(rows(f,"SELECT details FROM activity_logs WHERE action='uof_hire_created' ORDER BY id DESC")[0].details,/^Studio admin: /);
+  assert.equal((await call(f,'POST','/hires',{role:'Support',category_key:'product'},1,{impersonated_by:3})).status,403,'a support session cannot add');
+  assert.equal((await call(f,'POST','/api/cycles/raise/use-of-funds/hires?project=2',{role:'Foreign',category_key:'product'})).status,403,'not the founder\'s venture');
+  assert.equal(rows(f,"SELECT id FROM use_of_funds_hires WHERE project_id=2").length,0);
 });

@@ -1,20 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Unreadable, usePhoneWidth } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import MercuryRaiseFeed from '../../cycles/MercuryRaiseFeed';
-import { recordHref } from '../../cycles/recordModel';
 import {
   FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, dayText,
   forecastHref, historyRows, homeTiles, initials, money, monthsText, needsRows, planEmpty, planVsActual, runwayCandidates,
-  runwayTodayView, sectionOf, sectionRows, tabHref, tabSearch, tiesRows,
+  runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
-  AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditSplitDialog,
-  FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, Skeleton, Source, StackBar, WhereUsedDialog,
+  AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditSplitDialog,
+  FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, SectionSheet, Skeleton, Source, StackBar, WhereUsedDialog,
   useRead, usePlan,
 } from './UseOfFundsParts';
 import { Compare, Forecast, Scenarios } from './ScenariosForecast';
@@ -35,7 +34,43 @@ import { Compare, Forecast, Scenarios } from './ScenariosForecast';
  * Runway › Forecast (UF8), drawn from `ScenariosForecast.jsx`. A `sub` names
  * the page under a tab: `compare` under Scenarios, `forecast` under Runway.
  * No tab waits any more.
+ *
+ * D6083 (#6083): a section opens its sheet (UF4; a bottom sheet on a phone,
+ * UF21c) inside the tool, at `?section=<key>` on the tab that opened it, from
+ * Home, Allocation and Milestones and hires; a hire is added there or beside
+ * Add milestone (UF6). The generic section record page is no longer linked.
  */
+
+/** D6083: the open section sheet, read from and written to the address. */
+function useSectionSheet() {
+  const loc = useLocation();
+  const navigate = useNavigate();
+  return {
+    open: sheetSectionFrom(loc.search),
+    to: (key) => ({ pathname: loc.pathname, search: sectionSheetSearch(loc.search, key) }),
+    close: () => navigate({ pathname: loc.pathname, search: sectionSheetSearch(loc.search, null) }),
+  };
+}
+
+/**
+ * D6083: the section sheet and its Add a hire, over whichever tab opened them. Mercury's actual share
+ * is read only for the founder (D1174); for anyone else the sheet says Founder only and reads nothing.
+ */
+function SectionSheetHost({ plan, projectId, sheet, api, onSaved }) {
+  const [adding, setAdding] = useState(false);
+  const founder = plan?.viewer?.mercury !== false;
+  const mod = useModule(founder && sheet.open ? projectId : null);
+  if (!sheet.open) return null;
+  const base = baseOf(plan);
+  return (
+    <>
+      <SectionSheet plan={plan} sectionKey={sheet.open} mercury={founder ? mod.data?.parts?.mercury ?? null : null}
+        mercuryState={mod.status} onClose={sheet.close} onAddHire={() => setAdding(true)} />
+      {adding ? <AddHireDialog projectId={projectId} section={sheet.open} currency={base?.currency} api={api}
+        onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); onSaved(t); }} /> : null}
+    </>
+  );
+}
 
 /** The tool's own tabs, a second level under the Raise modules. */
 export function UseOfFundsTabBar({ active, search = '' }) {
@@ -103,7 +138,7 @@ function Tiles({ plan }) {
 }
 
 /** The section table (UF1): share, amount, a month over the target, its milestone and its hires. */
-function SectionTable({ rows, base, search, testId = 'uof-sections' }) {
+function SectionTable({ rows, base, sheetTo, testId = 'uof-sections' }) {
   const target = base?.target_runway_months;
   return (
     <div className="overflow-x-auto">
@@ -113,7 +148,7 @@ function SectionTable({ rows, base, search, testId = 'uof-sections' }) {
         <tbody>{rows.map((r) => (
           <tr key={r.key} data-testid="uof-section-row">
             <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">
-              <Link to={recordHref('raise', SLUG, r.key, tabSearch(search))} className={`${LINK} inline-flex items-center gap-1.5`}><span className={`h-2 w-2 rounded-full ${SECTION_BG[r.key]}`} aria-hidden="true" />{r.label}</Link>
+              <Link to={sheetTo(r.key)} className={`${LINK} inline-flex items-center gap-1.5`} data-testid={`uof-open-section-${r.key}`}><span className={`h-2 w-2 rounded-full ${SECTION_BG[r.key]}`} aria-hidden="true" />{r.label}</Link>
             </td>
             <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{r.share != null ? `${r.share}%` : <NotRecorded />}</td>
             <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(r.amountCents, base?.currency) || <NotRecorded />}</td>
@@ -199,6 +234,7 @@ function TiesCard({ plan, onOpen }) {
 export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) {
   const read = usePlan(projectId, api);
   const phone = usePhoneWidth();
+  const sheet = useSectionSheet();
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
   const saved = (text) => { setDialog(null); setNotice(text); read.reload(); };
@@ -241,7 +277,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
                   <Card title="Where the money goes" meta={money(base?.amount_to_raise_cents, base?.currency) ? `${money(base.amount_to_raise_cents, base.currency)} · base scenario` : null} testId="uof-money">
                     <StackBar rows={rows} currency={base?.currency} />
-                    {!phone ? <SectionTable rows={rows} base={base} search={search} /> : null}
+                    {!phone ? <SectionTable rows={rows} base={base} sheetTo={sheet.to} /> : null}
                   </Card>
                   {!phone ? (plan.viewer?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'
                     ? <p className={`m-0 rounded-lg border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-800`} data-testid="uof-cash-founder-only">Cash over time uses the founder’s own figures. Mercury figures are visible to the founder only.</p>
@@ -255,6 +291,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
               {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               {dialog === 'ties' ? <WhereUsedDialog plan={plan} rows={tiesRows(plan)} onClose={() => setDialog(null)} onRound={() => setDialog('round')} /> : null}
               {dialog === 'round' ? <RoundSizeDialog projectId={projectId} plan={plan} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
+              <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={saved} />
             </>
           );
         }}
@@ -280,6 +317,7 @@ const useModule = (projectId) => useRead(() => cyclesApi.module('raise', project
 function Allocation({ projectId, search, api, phone }) {
   const read = usePlan(projectId, api);
   const mod = useModule(projectId);
+  const sheet = useSectionSheet();
   const [dialog, setDialog] = useState(false);
   const [notice, setNotice] = useState('');
   const [view, setView] = useState('chart');
@@ -310,7 +348,7 @@ function Allocation({ projectId, search, api, phone }) {
                         <span className={`h-2 w-2 shrink-0 rounded-full ${SECTION_BG[r.key]}`} aria-hidden="true" />
                         <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.label}</span>
                           <span className={`${MONO} text-[11.5px] ${MUTED}`}>{r.share != null ? `${r.share}%` : NOT_RECORDED} · {money(r.amountCents, base?.currency) || NOT_RECORDED} · {money(r.monthlyCents, base?.currency) ? `${money(r.monthlyCents, base?.currency)} a month` : 'a month Not recorded'}</span></span>
-                        <Link to={recordHref('raise', SLUG, r.key, tabSearch(search))} aria-label={`Open ${r.label}`} className={`${BTN_GHOST} w-11`}>›</Link>
+                        <Link to={sheet.to(r.key)} aria-label={`Open ${r.label}`} className={`${BTN_GHOST} w-11`} data-testid={`uof-open-section-${r.key}`}>›</Link>
                       </li>
                     ))}</ul>
                   </Card>
@@ -324,7 +362,7 @@ function Allocation({ projectId, search, api, phone }) {
                           const a = actual.rows.find((x) => x.key === r.key);
                           return (
                             <tr key={r.key} data-testid="uof-allocation-row">
-                              <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Link className={LINK} to={recordHref('raise', SLUG, r.key, tabSearch(search))}>{r.label}</Link></td>
+                              <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Link className={LINK} to={sheet.to(r.key)} data-testid={`uof-open-section-${r.key}`}>{r.label}</Link></td>
                               <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{r.share != null ? `${r.share}%` : <NotRecorded />}</td>
                               <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(r.amountCents, base?.currency) || <NotRecorded />}</td>
                               <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(r.monthlyCents, base?.currency) || <NotRecorded />}</td>
@@ -353,6 +391,7 @@ function Allocation({ projectId, search, api, phone }) {
               </Card>
             </div>
             {dialog ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(false)} onSaved={(t) => { setDialog(false); setNotice(t); read.reload(); }} /> : null}
+            <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={(t) => { setNotice(t); read.reload(); }} />
           </>
         );
       }}
@@ -366,7 +405,9 @@ function Milestones({ projectId, search, api }) {
   const [q, setQ] = useState('');
   const [section, setSection] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addingHire, setAddingHire] = useState(false);
   const [editingHire, setEditingHire] = useState(null);
+  const sheet = useSectionSheet();
   const [notice, setNotice] = useState('');
   return (
     <PlanFrame read={read} testId="uof-milestones">
@@ -389,7 +430,12 @@ function Milestones({ projectId, search, api }) {
           <>
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="uof-ms-summary">
               <span className={`${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`}>{(base?.milestones || []).length} milestones · {hiresOk ? base.hires.items.length : '—'} hires · {outMonth ? `cash out ${outMonth}` : 'cash out not modelled'}</span>
-              {plan.viewer?.can_write ? <button type="button" className={BTN} onClick={() => setAdding(true)} data-testid="uof-add-milestone-open">Add milestone</button> : null}
+              {plan.viewer?.can_write ? (
+                <span className="flex flex-wrap gap-2 max-md:w-full max-md:[&>*]:flex-1">
+                  <button type="button" className={BTN} onClick={() => setAdding(true)} data-testid="uof-add-milestone-open">Add milestone</button>
+                  {hiresOk ? <button type="button" className={BTN_GHOST} onClick={() => setAddingHire(true)} data-testid="uof-add-hire-open">Add a hire</button> : null}
+                </span>
+              ) : null}
             </div>
             {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
             <Card title="Payroll from planned hires" meta={<Source source="Modelled" />} testId="uof-payroll">
@@ -426,13 +472,13 @@ function Milestones({ projectId, search, api }) {
               </Card>
               <Card title="Hires" testId="uof-hires-table">
                 {!hiresOk ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} onRetry={read.reload} />
-                  : hires.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No hires planned. A hire is added on its section’s page.</p> : (
+                  : hires.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-hires-none">{base.hires.items.length ? 'No hire in this section.' : `No hires planned.${plan.viewer?.can_write ? ' Add a hire to plan its payroll.' : ''}`}</p> : (
                     <div className="overflow-x-auto"><table className="w-full min-w-[440px] border-collapse text-left text-[12.5px]">
                       <thead><tr>{['Role', 'Section', 'From', 'Cost a year', 'A month', ...(plan.viewer?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                       <tbody>{hires.map((h) => (
                         <tr key={h.id} data-testid="uof-hire-row">
                           <td className="border-b border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-800">{h.role || NOT_RECORDED}</td>
-                          <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Link className={LINK} to={recordHref('raise', SLUG, h.category_key, tabSearch(search))}>{sectionOf(h.category_key)?.short || NOT_RECORDED}</Link></td>
+                          <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">{sectionOf(h.category_key) ? <Link className={LINK} to={sheet.to(h.category_key)}>{sectionOf(h.category_key).short}</Link> : NOT_RECORDED}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{h.start_month || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(h.annual_cents, h.currency) || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{typeof h.annual_cents === 'number' ? money(Math.round(h.annual_cents / 12), h.currency) : <NotRecorded />}</td>
@@ -445,6 +491,8 @@ function Milestones({ projectId, search, api }) {
             </div>
             {editingHire ? <EditHireDialog key={editingHire.id} projectId={projectId} hire={editingHire} api={api} onClose={() => setEditingHire(null)} onSaved={(t) => { setEditingHire(null); setNotice(t); read.reload(); }} /> : null}
             {adding ? <AddMilestoneDialog projectId={projectId} revision={base?.revision} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
+            {addingHire ? <AddHireDialog projectId={projectId} section={section || 'product'} currency={base?.currency} api={api} onClose={() => setAddingHire(false)} onSaved={(t) => { setAddingHire(false); setNotice(t); read.reload(); }} /> : null}
+            <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={(t) => { setNotice(t); read.reload(); }} />
           </>
         );
       }}
