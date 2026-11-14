@@ -10,7 +10,7 @@ import type { Card, Figure } from '../src/services/cycleCards';
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER); INSERT INTO projects VALUES (1,11,101), (2,22,202); CREATE TABLE user_company_links (company_id INTEGER, user_id INTEGER); CREATE TABLE growth_channels (project_id INTEGER); CREATE TABLE waitlist_signups (project_id INTEGER, created_at TEXT, invited_at TEXT, followed_up_at TEXT, promoted_at TEXT); CREATE TABLE mercury_partner_proposals (project_id INTEGER, state TEXT);');
+  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER); INSERT INTO projects VALUES (1,11,101), (2,22,202); CREATE TABLE user_company_links (company_id INTEGER, user_id INTEGER); CREATE TABLE growth_channels (project_id INTEGER); CREATE TABLE waitlist_signups (project_id INTEGER, created_at TEXT, invited_at TEXT, followed_up_at TEXT, promoted_at TEXT); CREATE TABLE mercury_partner_proposals (project_id INTEGER, state TEXT); CREATE TABLE growth_partners (id INTEGER PRIMARY KEY, uid TEXT, project_id INTEGER, name TEXT, stage TEXT, renewal_on TEXT);');
   for (const [name, table] of [['173_metrics_board_reporting.sql', 'metric_targets'], ['249_project_metrics.sql', 'project_metrics']]) {
     const sql = readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
     const start = sql.indexOf(`CREATE TABLE IF NOT EXISTS ${table} (`);
