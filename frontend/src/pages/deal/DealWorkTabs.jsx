@@ -27,7 +27,7 @@ import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import { DECK_SLOT } from './dealFrameModel';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
-  caseCard, caseForDeal, myCommitment, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
+  caseCard, caseForDeal, closedReason, myCommitment, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
 } from './dealWorkModel';
 
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink focus:border-axal-violet focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -370,7 +370,10 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
         {c.state === 'none' && (
           <>
             <p className={`m-0 ${SUB}`}>You have not committed to this deal. Committing records your intent; no money moves.</p>
-            <button type="button" className={`${BTN_P} w-fit`} onClick={onChangeAmount} data-testid="deal-commit-open">Commit</button>
+            {/* D6191: Commit is offered only on an open deal; otherwise the tab says why. */}
+            {deal.status === 'active'
+              ? <button type="button" className={`${BTN_P} w-fit`} onClick={() => onChangeAmount?.(null)} data-testid="deal-commit-open">Commit</button>
+              : <p className={`m-0 ${SUB}`} data-testid="deal-commit-closed">{closedReason(deal)}</p>}
           </>
         )}
         {c.state === 'ready' && (
@@ -387,10 +390,11 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
               {c.note && <span className={SUB}>{NOTE_READERS}</span>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {!c.confirmed && <button type="button" className={BTN_S} onClick={onChangeAmount} data-testid="deal-change-amount">Change amount</button>}
+              {!c.confirmed && deal.status === 'active' && <button type="button" className={BTN_S} onClick={() => onChangeAmount?.(c.row)} data-testid="deal-change-amount">Change amount</button>}
               <button type="button" className={`${BTN_S} text-axal-destructive dark:text-red-300`} onClick={() => setWithdrawing(true)} data-testid="deal-withdraw">Withdraw</button>
             </div>
             {c.confirmed && <p className={`m-0 ${SUB}`}>A confirmed commitment changes only by withdrawing it and committing again.</p>}
+            {!c.confirmed && deal.status !== 'active' && <p className={`m-0 ${SUB}`} data-testid="deal-commit-closed">{closedReason(deal)}</p>}
             {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c.row, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </>
         )}

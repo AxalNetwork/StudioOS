@@ -227,7 +227,7 @@ test('the wiring: each non-investor gets the staff table, the Operating Partner 
   assert.match(page, /\{tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId=\{deal\.id\} currency=\{deal\.currency\} viewer=\{viewerOf\(role, user, deal\)\} proof=\{isAdmin && !branchOfUser\(user\)\} \/>\}/);
   assert.match(page, /\{isPartner && <span className=\{PILL_N\} data-testid="deal-read-only">◉ \{READ_ONLY\}<\/span>\}/);
   assert.match(page, /<DealTransfersTab dealId=\{deal\.id\} currency=\{deal\.currency\} canRecord=\{isAdmin\} \/>/);
-  assert.match(page, /<DealCommitment key=\{proofKey\} deal=\{deal\} user=\{user\} onChangeAmount=\{\(\) => setCommitOpen\(true\)\} onShare=\{openProof\} \/>/, 'D752’s proof door sits on the investor’s own commitment');
+  assert.match(page, /<DealCommitment key=\{proofKey\} deal=\{deal\} user=\{user\} onChangeAmount=\{\(row\) => setCommitOpen\(\{ current: row \|\| null \}\)\} onShare=\{openProof\} \/>/, 'D752’s proof door sits on the investor’s own commitment (D6191: Change amount hands over the live row)');
   assert.match(read('frontend/src/pages/closing/ClosingRoom.jsx'), /if \(role === 'partner' \|\| !Array\.isArray\(read\.data\)\) return null;/, 'the closing room keeps the Operating Partner to the total');
   assert.match(read('frontend/src/lib/api/dealStaff.js'), /transferGate: \(dealId\) => request\(`\/deals\/\$\{encodeURIComponent\(dealId\)\}\/transfer-gate`\)/);
   assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
