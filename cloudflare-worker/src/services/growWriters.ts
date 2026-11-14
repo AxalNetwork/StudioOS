@@ -531,14 +531,32 @@ export async function updatePartner(env: Env, pid: number, user: User, uid: stri
   return { uid };
 }
 
+/** D6112: how a `partner_revenue.source` reads beside its month. Only 'manual' (typed) exists today (migration 443). */
+export function partnerRevenueSource(source: unknown): string {
+  if (source === 'manual') return 'typed';
+  if (source === 'mercury') return 'From Mercury';
+  return String(source ?? '');
+}
+
+/**
+ * A month's partner-sourced revenue, typed. D6112 (#6112): typing replaces a
+ * typed month and never a month another source filled. Migration 443 allows
+ * only `source = 'manual'`, so no such month exists today; the read and the
+ * upsert's `WHERE` both hold the line for the day one does.
+ */
 export async function setPartnerRevenue(env: Env, pid: number, user: User, uid: string, month: string, b: Body) {
   if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
   const row = await owned<{ id: number }>(env, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', uid, pid);
   const amount = cents(b.amount_cents, 'amount_cents');
+  const prev = await env.DB.prepare('SELECT source FROM partner_revenue WHERE partner_id = ? AND month = ?').bind(row.id, month).first<{ source: string }>();
+  if (prev && prev.source !== 'manual') {
+    throw new Refused(409, `The ${month} figure came from ${prev.source === 'mercury' ? 'Mercury' : prev.source}, so it is kept and cannot be typed over`, 'month');
+  }
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO partner_revenue (partner_id, month, amount_cents, source, recorded_by) VALUES (?, ?, ?, 'manual', ?)
-       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by`,
+       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by
+       WHERE partner_revenue.source = 'manual'`,
     ).bind(row.id, month, amount, user.id),
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: uid, action: 'grow_partner_revenue', summary: `Revenue entered for ${month}` })),
   ]);

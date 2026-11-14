@@ -165,7 +165,7 @@ const CANVAS: Array<[string, string, string[], string[], string[]]> = [
   ['distribution', 'cha1', ['Spend · 30 d', 'Customers', 'CAC', 'Bar'], ['Funnel', 'Experiments'], ['Customers acquired']],
   ['revenue-and-traction', 'mrr', ['Value', 'Change · 30 d', 'Source', 'As of'], ['History', 'Split'], ['Alerts', 'Shared']],
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
-  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Terms'], ['Contact', 'Introductions']],
+  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
   ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
 ];
