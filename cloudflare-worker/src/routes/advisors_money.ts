@@ -633,7 +633,7 @@ advisors.get('/me/ledger', async (c) => {
     // cancelled or missed session is owed back (open) or was refunded (resolved
     // by an operator). Nothing here moves money. One refund row per booking, as
     // before; the window is the booking's, as for every other figure here.
-    const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    const refundByBooking = new Map<number, { cents: number | null; resolved: boolean }>();
     // #5305: an unreadable refund store is null below, never "0 owed".
     let refundsRead = false;
     try {
@@ -646,11 +646,10 @@ advisors.get('/me/ledger', async (c) => {
             AND (? IS NULL OR datetime(b.created_at) < datetime(?))`
       ).bind(m.id, from, from, until, until).all<{ booking_id: number; amount_cents: number | null; resolved_at: string | null }>();
       for (const r of rr.results || []) {
-        if (r.amount_cents != null) {
-          refundByBooking.set(Number(r.booking_id), {
-            cents: Number(r.amount_cents), resolved: r.resolved_at != null,
-          });
-        }
+        // #6393: a missing amount is still a refund; never drop it from the count.
+        refundByBooking.set(Number(r.booking_id), {
+          cents: r.amount_cents == null ? null : Number(r.amount_cents), resolved: r.resolved_at != null,
+        });
       }
       refundsRead = true;
     } catch { /* table absent or unreadable: no refund figure, never a guess */ }
@@ -787,11 +786,13 @@ advisors.get('/me/ledger', async (c) => {
       included: { sessions: agg.states.included },
       refunds_owed: refundsRead ? {
         sessions: refundsFor(false).length,
-        amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
+        amount_cents: refundsFor(false).reduce((n, r) => n + (r.cents ?? 0), 0),
+        unpriced_sessions: refundsFor(false).filter((r) => r.cents === null).length,
       } : null,
       refunded: refundsRead ? {
         sessions: refundsFor(true).length,
-        amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
+        amount_cents: refundsFor(true).reduce((n, r) => n + (r.cents ?? 0), 0),
+        unpriced_sessions: refundsFor(true).filter((r) => r.cents === null).length,
       } : null,
       paid_out_cents: paidOutCents,
       paid_out_count: paidOutCount,
