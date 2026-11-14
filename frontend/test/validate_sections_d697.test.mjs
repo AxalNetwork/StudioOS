@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import { InterviewsSection, PainThemesSection, HypothesesSection, historyNotes } from '../src/pages/cycles/ValidateSections.jsx';
+import { InterviewsSection, PainThemesSection, HypothesesSection, historyNotes, withVenture } from '../src/pages/cycles/ValidateSections.jsx';
 import { adaptModule, adaptRecords } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS, TITLES } from '../src/pages/cycles/adapters/validate.js';
 import { cellView } from '../src/pages/cycles/cycleModel.js';
@@ -113,6 +113,38 @@ test('1: More tools links the Marketplace and Team › Advisors under their own 
   assert.match(html, /href="\/build\/team\?mode=workspace&amp;tab=advisors"[^>]*>Team › Advisors: the advisor directory</);
   assert.doesNotMatch(html, /href="\/advisory"/);
   assert.doesNotMatch(html, /Find interviewees/);
+});
+
+// #6005: the three links out of Validate keep the venture, so a founder with
+// more than one venture does not land on another one.
+test('#6005: Marketplace, Team › Advisors and the Problem slide carry ?project_id when the page has a venture', () => {
+  const tools = ssr(h(InterviewsSection, { parts: RESEARCH_PARTS, projectId: 7, openDialog: noop, onLog: noop, onExport: noop }));
+  assert.match(tools, /href="\/build\/marketplace\?project_id=7"[^>]*>Marketplace:/);
+  assert.match(tools, /href="\/build\/team\?mode=workspace&amp;tab=advisors&amp;project_id=7"[^>]*>Team › Advisors:/);
+  const pain = ssr(h(PainThemesSection, { parts: PAIN_PARTS, projectId: 7, onExport: noop, onAssign: noop }));
+  assert.match(pain, /data-testid="validate-problem-slide" href="\/raise\/pitch\/edit\?project_id=7"/);
+});
+
+test('#6005: with no venture the three links carry no project_id parameter', () => {
+  for (const projectId of [null, undefined, '', 'abc']) {
+    const tools = ssr(h(InterviewsSection, { parts: RESEARCH_PARTS, projectId, openDialog: noop, onLog: noop, onExport: noop }));
+    assert.match(tools, /href="\/build\/marketplace"/);
+    assert.match(tools, /href="\/build\/team\?mode=workspace&amp;tab=advisors"/);
+    const pain = ssr(h(PainThemesSection, { parts: PAIN_PARTS, projectId, onExport: noop, onAssign: noop }));
+    assert.match(pain, /href="\/raise\/pitch\/edit"/);
+    assert.doesNotMatch(tools + pain, /project_id/);
+  }
+  assert.equal(withVenture('/a?x=1', 7), '/a?x=1&project_id=7');
+  assert.equal(withVenture('/a', 7), '/a?project_id=7');
+  assert.equal(withVenture('/a?x=1', null), '/a?x=1');
+});
+
+test('#6005: on the mounted page the venture in the URL reaches the More tools links', async () => {
+  const m = await mounted('/validate/customer-research?project_id=7', handlerFor('customer-research'));
+  try {
+    assert.equal(m.props(m.byTestid('validate-link-marketplace')).href, '/build/marketplace?project_id=7');
+    assert.equal(m.props(m.byTestid('validate-link-advisors')).href, '/build/team?mode=workspace&tab=advisors&project_id=7');
+  } finally { await m.close(); }
 });
 
 test('1: Log an interview opens LogInterviewModal; a save posts the page\'s venture and re-reads the module', async () => {

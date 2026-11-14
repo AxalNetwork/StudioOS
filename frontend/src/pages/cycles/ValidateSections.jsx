@@ -6,6 +6,7 @@ import { RECENTLY_MOVED_DAYS, daysBefore, historyReaches, startOfMonth } from '.
 import { placementText } from '../founder/InterviewReview';
 import { NO_SUGGESTIONS, acceptAllBatches, heardLine, suggestionLine, suggestionsView } from './validatePhone';
 import { affectsLine, draftFrom, editableKind, payloadFrom, visibleFields } from './suggestionForms';
+import { ventureSearch } from './ventureQuery';
 
 /**
  * D697 (#1659) — Validate's three bottom sections: what the Interviews, Pain
@@ -97,7 +98,18 @@ function ExportButton({ label, run, testid }) {
 /** `?log=` values that open Log an interview, as FVW's `?new=` did. */
 const LOG_INTENTS = ['notes', 'upload'];
 
-export function InterviewsSection({ parts, openDialog, onLog, onExport }) {
+/**
+ * `path` with the venture's `project_id` added to whatever query it already
+ * carries (#6005), so a founder with more than one venture stays on this one.
+ * With no venture the path is returned unchanged.
+ */
+export function withVenture(path, projectId) {
+  const q = ventureSearch(projectId);
+  if (!q) return path;
+  return path.includes('?') ? `${path}&${q.slice(1)}` : `${path}${q}`;
+}
+
+export function InterviewsSection({ parts, projectId = null, openDialog, onLog, onExport }) {
   const stats = parts?.stats || {};
   const writer = parts?.can_write === true;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -140,8 +152,8 @@ export function InterviewsSection({ parts, openDialog, onLog, onExport }) {
       {/* Decision 15: neither finds interviewees, so the card says what each is. */}
       <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="validate-more-tools">
         <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100">More tools</span>
-        <Link to="/build/marketplace" className={LINK}>Marketplace: partners' services, and the needs you post</Link>
-        <Link to="/build/team?mode=workspace&tab=advisors" className={LINK}>Team › Advisors: the advisor directory</Link>
+        <Link to={`/build/marketplace${ventureSearch(projectId)}`} className={LINK} data-testid="validate-link-marketplace">Marketplace: partners' services, and the needs you post</Link>
+        <Link to={withVenture('/build/team?mode=workspace&tab=advisors', projectId)} className={LINK} data-testid="validate-link-advisors">Team › Advisors: the advisor directory</Link>
       </div>
     </section>
   );
@@ -185,7 +197,7 @@ function UnthemedQuote({ quote, themes, onAssign }) {
   );
 }
 
-export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = null }) {
+export function PainThemesSection({ parts, projectId = null, onExport, onAssign, newThemeHref = null }) {
   const stats = parts?.stats || {};
   const writer = parts?.can_write === true;
   const unthemed = Array.isArray(parts?.unthemed) ? parts.unthemed : null;
@@ -210,7 +222,7 @@ export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = nu
       ]} />
       {writer && (
         <div className="flex flex-wrap items-start gap-2">
-          <Link to="/raise/pitch/edit" title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
+          <Link to={`/raise/pitch/edit${ventureSearch(projectId)}`} title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
           <ExportButton label="Export map" run={onExport} testid="validate-export-map" />
         </div>
       )}
