@@ -149,11 +149,11 @@ test('the Teams section: shared-connection link, its rows, and Back to Record a 
     assert.match(plain, /data-testid="teams-row-create" data-value="Available"/);
     assert.match(plain, /data-testid="teams-row-bot" data-value="Available"/);
     assert.doesNotMatch(plain, /teams-record-return/);
-    saveRecordDraft(7, { projectId: 10, interviewId: 4, name: 'A person', mode: 'video', provider: 'teams', link: 'https://teams.microsoft.com/l/meetup-join/x' }, Date.now(), store);
+    saveRecordDraft(7, { projectId: 10, interviewId: 4, name: 'A person', mode: 'video', provider: 'teams', link: 'https://teams.microsoft.com/l/meetup-join/x' }, undefined, store);
     const back = page({ initialCaps: caps, memberId: 7 });
     assert.match(back, /href="\/validate\/record\?project_id=10&amp;interview=4"/);
     assert.doesNotMatch(back, /meetup-join/, 'the meeting link is never in the page');
-    saveRecordDraft(7, { projectId: 10, mode: 'video', provider: 'teams' }, Date.now(), store);
+    saveRecordDraft(7, { projectId: 10, mode: 'video', provider: 'teams' }, undefined, store);
     assert.doesNotMatch(page({ initialCaps: caps, memberId: 8 }), /teams-record-return/, 'another member sees no way back into it');
     assert.match(page({ initialCaps: null, memberId: 8 }), /data-testid="teams-retry"/, 'an unreadable read offers Try again');
   } finally { globalThis.sessionStorage = prev; }
