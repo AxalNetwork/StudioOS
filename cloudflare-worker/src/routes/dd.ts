@@ -26,8 +26,8 @@ import {
   encField, decField,
   DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, seedNewCase,
   TEMPLATE_DEPTHS, DEPTH_RANK, builtInTemplate, checkTemplateBody, latestTemplate, seedFromTemplate, CHECKLIST_CATALOG,
-  renderReportArtifact,
-  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth, type TemplateBody,
+  renderReportArtifact, loadReportParts,
+  type DDSubjectType, type ReportCase, type ReportSection, type ReportFlag, type ReportExtras, type ChecklistDepth, type TemplateBody,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
@@ -1484,21 +1484,40 @@ dd.post('/cases/:uid/report', async (c) => {
       const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(sid).first<{ name: string }>().catch(() => null);
       if (u?.name) signerNames.set(sid, u.name);
     }
+    const flagOf = async (f: any): Promise<ReportFlag> => ({
+      severity: f.severity, title: f.title,
+      detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
+      evidence_url: f.evidence_url,
+      // D1247: a closed flag stays in the report, marked closed.
+      state: f.state ?? null,
+      resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
+    });
+    // D6296 (#6296): the checklist, the decision, the memo and the requests.
+    // The deal team (an Admin, the lead or the opener — `memo_read`) gets
+    // every part. A section reviewer who may generate (a partner) gets the
+    // checklist of the sections they review and the decision without its
+    // reason; the memo, the reason, the requests and the case-wide flags
+    // read "not in this copy", as the case read withholds them from them.
+    const dealTeam = user.role === 'admin' || leadsOrOpened(user, cs);
+    const mineRows: any[] = dealTeam ? [] : await sql`SELECT DISTINCT section_id FROM dd_reviewers WHERE case_id = ${caseId} AND user_id = ${user.id}`;
+    const mySections = new Set(mineRows.map((r) => Number(r.section_id)));
+    const parts = await loadReportParts(c.env, cs, { dealTeam });
     const reportSections: ReportSection[] = await Promise.all(sections.map(async s => ({
       section_key: s.section_key, title: s.title, weight: Number(s.weight),
       status: s.status, verdict: s.verdict,
       signed_off_by_name: Number.isFinite(Number(s.signed_off_by)) ? (signerNames.get(Number(s.signed_off_by)) ?? null) : null,
       completed_at: s.completed_at ?? null,
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
-      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(async f => ({
-        severity: f.severity, title: f.title,
-        detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
-        evidence_url: f.evidence_url,
-        // D1247: a closed flag stays in the report, marked closed.
-        state: f.state ?? null,
-        resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
-      }))),
+      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(flagOf)),
+      checklist: dealTeam || mySections.has(Number(s.id)) ? (parts.checklistBySection.get(Number(s.id)) ?? []) : null,
     })));
+    const extras: ReportExtras = {
+      deal_team: dealTeam,
+      decision: parts.decision,
+      memo: parts.memo,
+      requests: parts.requests,
+      case_wide_flags: dealTeam ? await Promise.all(findings.filter(f => f.section_id == null).map(flagOf)) : [],
+    };
     const reportCase: ReportCase = {
       uid: String(cs.uid), subject_label: String(cs.subject_label),
       subject_type: String(cs.subject_type),
@@ -1508,7 +1527,7 @@ dd.post('/cases/:uid/report', async (c) => {
       notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
     };
 
-    const artifact = await renderReportArtifact(c.env, reportCase, reportSections);
+    const artifact = await renderReportArtifact(c.env, reportCase, reportSections, extras);
     const ts = Date.now();
     const ext = artifact.format === 'pdf' ? 'pdf' : 'html';
     // Encryption-at-rest: DD reports may contain PII (subject email,

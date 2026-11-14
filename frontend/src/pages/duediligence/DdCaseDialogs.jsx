@@ -238,7 +238,7 @@ export function ReportDialog({ generate, onClose, onDone }) {
   }, 'The report could not be generated.');
   return (
     <Dialog title="Generate a report" testId="dd-report" onClose={onClose} onSubmit={submit} action="Generate report" busy={busy}>
-      <p className={`m-0 text-[13px] ${muted}`}>The report carries every section’s verdict, the flags and the score as they stand now. It opens in a new tab through a link that works once, for five minutes.</p>
+      <p className={`m-0 text-[13px] ${muted}`}>The report carries the decision and its reason, the memo, each section’s checklist with its evidence count, every verdict with who signed it off and when, the flags with their state and resolution, the requests to the subject and the score, as they stand now. The memo, the reason and the requests go only into a report the case lead, its opener or an Admin generates. It opens in a new tab through a link that works once, for five minutes.</p>
       <Note>Your authenticator code is asked for if you have not given one recently. Generating is recorded on the case.</Note>
       <Refusal text={error} testId="dd-report-error" />
     </Dialog>
