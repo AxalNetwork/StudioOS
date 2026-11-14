@@ -3477,6 +3477,8 @@ export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
 export { DeckRemote } from './durable-objects/deck-remote';
+// D5581 part 2 (#5581): WorkGraph leases, bound as WORK_GRAPH_LEASE; kept apart from #5618's Merge Control.
+export { WorkGraphLease } from './durable-objects/work-graph-lease';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].

@@ -33,7 +33,11 @@
       ]
     }
   ],
+  "services": [
+    { "binding": "ENGINEERING_EVENTS", "service": "studioos-engineering-events", "entrypoint": "EngineeringEvents" }
+  ],
   "vars": {
+    "WORKFLOW_LOGS_ENABLED": "false",
     "DELIVERY_ENABLED": "false",
     "ROUTING_REGISTRY": "null"
   },

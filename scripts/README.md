@@ -4,6 +4,7 @@
 
 | Command | What it does |
 | --- | --- |
+| `build-workflow-slack-registry.mjs` | Generates the private channel-ID routing configuration from the approved Slack bot's actual memberships. See [workflow Slack rollout](../documentation/operations/WORKFLOW_SLACK_6370.md). |
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
@@ -14,6 +15,8 @@
 | `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
+| `coordinator.mjs` | D6312: Session 1's audit writes for the `coordinator-audit` skill: `snapshot`, weekly `delta`, `plan` from verified findings, then `apply` (notes, labels, closes) and `file` (new tasks, one list per parent). Dry run unless `--go`; re-reads each issue before changing it and skips one that moved; every write carries a run marker so a re-run never repeats it. |
+| `land-canvas.mjs` | D6312: lands an owner-approved Claude Design canvas for the `land-canvas` skill: checks each file's SHA-256 against the digests on the issue, copies it into `design/incoming/` with the `· Boards` name, prints the board list, and `--waiting N` lists the blocked issues to release. |
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
 | `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 | `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
@@ -283,6 +286,13 @@ binding targets and branch isolation.
 `configure-meeting-bot-binding.mjs` prints the prospective site config and topology catalogue; only
 `--write` changes it, after the owner deploys both bot hosts. Its pure helper
 `lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.
+
+`check-meeting-bot-teams.mjs` (D5815, #5815) checks the Teams recorder's
+deployment matrix offline: each environment's site → host binding, run-state
+object, private chunk bucket, callback origin, signing audience, container,
+pinned browser, readiness/egress, revision order and switch values. It prints
+`pass`/`FAIL` per row, never a value. `lib/meetingBotTeamsMatrix.test.mjs` fails
+each row on its own mutation.
 
 ## Review harnesses
 

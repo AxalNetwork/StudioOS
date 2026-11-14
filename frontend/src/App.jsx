@@ -551,7 +551,7 @@ import RecordingPill from './pages/founder/RecordingPill';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
-import { connectorsRedirect } from './pages/account/connectorsModel';
+import { connectorsRedirect, takeSignInFrom } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
@@ -789,7 +789,9 @@ function SupportRedirect() {
 // Connectors" notice.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={connectorsRedirect(loc)} state={{ connectorsMoved: true }} replace />;
+  // D5810: a Microsoft sign-in begun on the Teams page returns there; the marker is read once.
+  const [from] = useState(() => takeSignInFrom());
+  return <Navigate to={connectorsRedirect(loc, { from })} state={{ connectorsMoved: true }} replace />;
 }
 
 
