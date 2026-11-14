@@ -3,7 +3,7 @@ import type { Env, User } from '../types';
 import { embedText } from './vectorize';
 import { eventTopics, validEventTopics } from './eventTopics';
 import { EVENT_TYPE_IDS } from './eventTypes';
-import { registrationEligibility } from './eventOrganiser';
+import { registrationEligibilityBatch } from './eventOrganiser';
 import { shapeEvent } from './eventsCommon';
 
 export type Reason = { code: string; text: string; ref: { kind: string; id: number | string } };
@@ -109,7 +109,8 @@ export async function recommendedEvents(env: Env, u: Omit<User, 'role'> & { role
   const rows = await env.DB.prepare("SELECT e.*,f.verdict FROM events e LEFT JOIN event_rec_feedback f ON f.event_id=e.id AND f.user_id=? WHERE e.visibility='public' AND e.status='published' AND e.admin_published=1 AND datetime(e.starts_at)>=datetime('now') AND e.host_user_id!=? AND COALESCE(f.verdict,'')!='not_for_me' AND NOT EXISTS (SELECT 1 FROM event_registrations r WHERE r.event_id=e.id AND r.user_id=? AND r.status IN ('registered','confirmed','attended','waitlisted')) ORDER BY e.starts_at,e.id LIMIT 200").bind(u.id,u.id,u.id).all<any>();
   if (!Array.isArray(rows.results)) throw new Error('candidates unreadable');
   const eligible = [];
-  for (const event of rows.results) { const registration = await registrationEligibility(env,event,u.id,u.email); if (registration.eligible) eligible.push({ event,registration }); }
+  const registrations = await registrationEligibilityBatch(env, rows.results, u.id, u.email);
+  for (let i = 0; i < rows.results.length; i++) { const registration = registrations[i]; if (registration.eligible) eligible.push({ event: rows.results[i], registration }); }
   const budget = { left: vectors && env.AI ? 10 : 0 };
   const text = [...own.signals.map(s=>s.text),...prefs.interests,prefs.goals_90d,...prefs.formats,...prefs.types].filter(Boolean).join(' ').slice(0,4000);
   const member = text ? await cachedVector(env,true,u.id,text,budget) : null;

@@ -42,25 +42,86 @@ export async function registrationRulesFromStore(env: Env, value: unknown) {
   return validateRegistrationRules(shaped, rows.results.map(row => row.key));
 }
 
-export async function registrationEligibility(env: Env, event: any, userId: number | null, email: string | null) {
-  const rules = await registrationRulesFromStore(env, event.audience_rules_json || '{}');
+type AudienceRules = Awaited<ReturnType<typeof registrationRulesFromStore>>;
+type AudienceReads = {
+  invited: (eventId: number) => Promise<boolean>;
+  user: () => Promise<any>;
+  personas: () => Promise<Array<{ persona_id: string; is_primary: number }>>;
+};
+function audienceReads(env: Env, userId: number | null, email: string | null): AudienceReads {
+  return {
+    invited: async eventId => !!await env.DB.prepare(`SELECT id FROM event_invitations WHERE event_id = ? AND status != 'revoked' AND (invited_user_id = ? OR lower(invited_email) = lower(?)) LIMIT 1`).bind(eventId, userId, email).first(),
+    user: async () => {
+      const user: any = await env.DB.prepare(`SELECT role FROM users WHERE id = ?`).bind(userId).first();
+      if (user) user.licences = await heldLicences(env.DB, { id: userId!, role: user.role });
+      return user;
+    },
+    personas: async () => {
+      const rows = await env.DB.prepare(`SELECT persona_id, is_primary FROM user_personas WHERE user_id = ?`).bind(userId).all<{ persona_id: string; is_primary: number }>();
+      if (!Array.isArray(rows.results)) throw new Error('audience personas unreadable');
+      return rows.results;
+    },
+  };
+}
+async function eligibility(rules: AudienceRules, eventId: number, userId: number | null, reads: AudienceReads) {
   if (rules.mode === 'everyone') return { eligible: true, reason: 'Everyone may register.' };
   if (rules.mode === 'invite_only') {
-    const invite = await env.DB.prepare(`SELECT id FROM event_invitations WHERE event_id = ? AND status != 'revoked' AND (invited_user_id = ? OR lower(invited_email) = lower(?)) LIMIT 1`).bind(event.id, userId, email).first();
-    return { eligible: !!invite, reason: invite ? 'You have an invitation.' : 'An invitation is required.' };
+    const invite = await reads.invited(eventId);
+    return { eligible: invite, reason: invite ? 'You have an invitation.' : 'An invitation is required.' };
   }
   if (userId === null) return { eligible: false, reason: 'Sign in with an eligible member account.' };
-  const user: any = await env.DB.prepare(`SELECT role FROM users WHERE id = ?`).bind(userId).first();
-  if (user) user.licences = await heldLicences(env.DB, { id: userId, role: user.role });
+  const user = await reads.user();
   if ((rules.roles as string[] | undefined)?.some(role => !!user && (role === user.role || (isLicence(role) && holdsLicence(user, role))))) return { eligible: true, reason: 'Your role is eligible.' };
   if ((rules.personas as string[] | undefined)?.length) {
-    const rows = await env.DB.prepare(`SELECT persona_id, is_primary FROM user_personas WHERE user_id = ?`).bind(userId).all<{ persona_id: string; is_primary: number }>();
-    const held = rows.results || [];
+    const held = await reads.personas();
     const primary = held.find(p => p.is_primary === 1);
     const current = held.filter(p => p.is_primary === 1 || (primary && isAllowedPersonaOverlap(primary.persona_id as PersonaId, p.persona_id as PersonaId)));
     if (current.some(p => (rules.personas as string[]).includes(p.persona_id))) return { eligible: true, reason: 'Your persona is eligible.' };
   }
   return { eligible: false, reason: 'Your role or persona is outside this event’s audience.' };
+}
+export async function registrationEligibility(env: Env, event: any, userId: number | null, email: string | null) {
+  return eligibility(await registrationRulesFromStore(env, event.audience_rules_json || '{}'), event.id, userId, audienceReads(env, userId, email));
+}
+
+/** D6413: bounded candidate windows share caller reads only within this call. */
+export async function registrationEligibilityBatch(env: Env, events: any[], userId: number | null, email: string | null) {
+  const shaped = events.map(event => {
+    const value = event.audience_rules_json || '{}';
+    const raw = typeof value === 'string' ? JSON.parse(value) : value;
+    const keys = raw && typeof raw === 'object' && Array.isArray(raw.personas) ? raw.personas : [];
+    return validateRegistrationRules(raw, keys);
+  });
+  const keys = [...new Set(shaped.flatMap(r => r.personas as string[] || []))];
+  let allowed: string[] = [];
+  if (keys.length) {
+    try {
+      const rows = await env.DB.prepare(`SELECT key FROM segment_profiles WHERE key IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(keys)).all<{ key: string }>();
+      if (!Array.isArray(rows.results)) throw new Error('segment choices unreadable');
+      allowed = rows.results.map(row => row.key);
+    } catch { throw new AudienceSegmentsUnreadable(); }
+  }
+  const rules = shaped.map(r => validateRegistrationRules(r, allowed));
+  const reads = audienceReads(env, userId, email);
+  let user: ReturnType<AudienceReads['user']> | undefined;
+  let personas: ReturnType<AudienceReads['personas']> | undefined;
+  let invites: Promise<Set<number>> | undefined;
+  const shared: AudienceReads = {
+    user: () => user ??= reads.user(),
+    personas: () => personas ??= reads.personas(),
+    invited: async eventId => {
+      invites ??= (async () => {
+        const ids = events.filter((_, i) => rules[i].mode === 'invite_only').map(e => e.id);
+        const rows = await env.DB.prepare(`SELECT event_id FROM event_invitations WHERE event_id IN (SELECT value FROM json_each(?)) AND status != 'revoked' AND (invited_user_id = ? OR lower(invited_email) = lower(?))`).bind(JSON.stringify(ids), userId, email).all<{ event_id: number }>();
+        if (!Array.isArray(rows.results)) throw new Error('audience invitations unreadable');
+        return new Set(rows.results.map(row => row.event_id));
+      })();
+      return (await invites).has(eventId);
+    },
+  };
+  const results = [];
+  for (let i = 0; i < events.length; i++) results.push(await eligibility(rules[i], events[i].id, userId, shared));
+  return results;
 }
 
 export function agendaLocation(body: any) {
