@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Research v2 Data Room to Library · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Research · Research v2 addendum · #6283 (continues RS-01 to RS-12, boards RS-13 to RS-21)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Research v2 · bring a granted data-room file into Library so Ask can cite it, for as long as the grant lasts</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Research v2 canvas (RS-06 Evidence Library, RS-07 Ask, RS-02 B Evidence, the citation passage panel, Not recorded) in the investor shell: company/project switcher top-left, the Investor union sidebar with Research zones Ask, Diligence, Benchmarking, Markets, Geographies and Library, no licence switcher, and Eadwyn as the one shared rail (#5130), which only proposes. An investor holding a live data-room grant adds a file the founder opened to them to their own Library; it is indexed in their own space and Ask and Research Projects cite it with its passage. Access follows the grant: a revoked or expired grant, a lapsed NDA, or a file removed or moved out of the grant’s folders makes it Source no longer available, its index entries are deleted, and an NDA file loses its name everywhere. The founder sees every Add and Remove in the room’s Activity and controls a per-room switch that is off by default. A file behind an NDA the investor has not signed is a count, never a name, a proposal or an offer. Zero, Not recorded, Unreadable and No longer available each have their own glyph and word. Nothing adds, sends or grants by itself. Violet dashed ◇ tags mark backend work (#6283, #6282 for the Diligence kind, and the investor My Research shell change); amber ⚑ tags mark the owner picks, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Halverton], [Northwind Ventures], [Mara Quist], [Theo Brandt], every file name, email and figure ([71%] retention, [$0.004] cost, 8 files, 21 documents) are fictional; RS-16 shows a later date (20 Nov 2026) after access ends</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Research v2 Data Room to Library Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-13', 'Room file → Add to my Library', 'The room [Halverton] with its access header (granted 12 Oct 2026, expires 12 Jan 2027, NDA Signed), folders and file rows. On main a signed NDA lists every admitted file, so “behind an NDA” is 0; the second frame is the same room before the NDA, with “3 files behind an NDA” as a count only. Each open row has an overflow with Add to my Library ◇; added rows read In your Library with Open. The file page keeps the folder in the breadcrumb only; Download is primary and Add to my Library ◇ is secondary. The confirm sheet says what happens, the cost line ◇, and Add to Library / Cancel.', [F('RSL13', 'Room · NDA signed · row overflow open', 900), F('RSL13N', 'Same room before the NDA · 3 files behind an NDA, count only', 900), F('RSL13B', 'File page · Cohort retention Q3.xlsx', 900), F('RSL13C', 'Confirm sheet', 900)]],
+      ['RS-14', 'Library with room files', 'RS-06’s table with a Source filter (All · Ours · Shared by clients · From data rooms ◇) beside the kind filters. Room rows carry “From [Halverton] data room”, Read-only, Index state and Answerable in Ask as two pills, Open in room and Remove from Library. Header: 18 answerable in Ask · 3 not answerable, room rows counted. Eadwyn proposes the 2 open-to-invited files not yet added: Add, Edit selection or Discard.', [F('RSL14', false, 1130)]],
+      ['RS-15', 'Ask and project evidence citing a room file', 'A: RS-07’s answer cites Cohort retention Q3.xlsx from the [Halverton] data room, staged 2 Oct 2026; the passage panel shows the exact row, cost [$0.004] recorded, and a cached answer reads $0.00 recorded. B: RS-02 B Evidence with the same file, origin Data room (granted), Available until 12 Jan 2027. Investors have no My Research on main (◇).', [F('RSL15', 'Ask', 1100), F('RSL15B', 'Project evidence', 900)]],
+      ['RS-16', 'Source no longer available', 'After the founder ends access (sample 20 Nov 2026): the four room rows keep their title and the reason, In Ask No, index entries deleted; the header drops to 15 · 6. The Ask answer keeps its text and its citation reads No longer available with no passage. Each reason in its own words: revoked, expired, file removed, moved out of the grant’s folders. NDA lapsed: nameless everywhere, Back to the room only, no sign action.', [F('RSL16', 'Library after access ends', 1080), F('RSL16B', 'Ask answer after access ends', 760), C('RSL16C', 'Four reasons · row, citation, evidence', 1280, 880), C('RSL16D', 'NDA lapsed · nameless', 1280, 340)]],
+      ['RS-17', 'Founder’s side', 'Data room › Activity in the page’s own words (Opened the room, Link issued for …, Blocked: NDA needed for …) with the new lines ◇ “added … to their Library” and “removed … from their Library”, and the event filter gains both. Data room › Access carries the per-room switch ◇, off by default; turning it off goes Scope → Review → Result.', [F('RSL17', 'Activity', 1000), C('RSL17B', 'Access · the switch, off and on, and turning it off', 1340, 320)]],
+      ['RS-18', 'Empty states', 'Library filtered to From data rooms with nothing added, one action: Open your rooms. Variant with no live grant: “No rooms are open to you”, with no action that implies the investor can open one.', [F('RSL18', false, 760), C('RSL18B', 'No live grant', 940, 280)]],
+      ['RS-19', 'States', 'Loading room and Library, Not recorded, Unreadable room read with Try again, the three refusals (room not open to you, NDA required, founder has not allowed Ask ◇), indexing Queued, Failed with Re-index and Unsupported, saving and save failed with the selection kept, out of AI tokens, and the four absences side by side.', [C('RSL19', false, 1440, 900)]],
+      ['RS-20', 'Phone 390', 'Room file rows as cards with the overflow in a bottom sheet; the confirm sheet full height; Library room rows as cards with both pills, the source chip and No longer available; a citation as a bottom sheet with its passage. 44px targets, primary 48px, no table wider than the screen.', [P('RSL20A', 'Room · cards'), P('RSL20B', 'Row actions sheet'), P('RSL20C', 'Confirm sheet'), P('RSL20D', 'Library · From data rooms'), P('RSL20E', 'Citation sheet')]],
+      ['RS-21', 'Dark', 'RS-14 and RS-16 on the dark tokens (#0B1220 / #111827, violet #A78BFA, as RS-12). Chips and states keep their words and shapes.', [F('RSL21', 'Library with room files · dark', 1130), F('RSL21B', 'Source no longer available · dark', 1080)]],
+      ['RS-H', 'Handoff', 'What was checked on main and what it showed, backend required (◇), the owner picks (⚑, drawn as A), frontend-only work, the handoff path and accessibility.', [W('RSLH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

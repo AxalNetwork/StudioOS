@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Closing Workspace · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals · Experience V2 addendum · Closing workspace · #6158</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deals v2 addendum — the Closing workspace tabs, and Closing and Commit on the phone</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Deals v2 (DX8 Closing, DX7 Investment committee, DX14 dialogs) with sections DX17 to DX28 and boards DE19 to DE30. /deals/closing shows what still stands between an approved deal and a closed investment: the checklist, the paper, the conditions, the recorded transfers and the audit, then the close and the hand-off to Portfolio. An Admin records and closes; the Operating Partner who leads the round ticks the checklist; an investor in the deal reads and never acts. Axal VC records money movement and never moves money: the transfer disclaimer appears once per workspace, and an unreadable hold never turns Record transfer on. Same shell (#3704), the three status families, the absence states and the Eadwyn rail as Deals v2; Eadwyn output is a draft that is accepted, edited or discarded. Violet dashed ◇ tags mark backend work (mostly #6156); amber ⚑ tags mark the five owner questions, drawn as option A. Condition dialogs belong to addendum B (#6142) and the investor closing room to #6188.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Tidewater Systems (USD), Saltmarsh Robotics (EUR), Acme Robotics, Northwind Ventures, Brightwell Fund II, Investors A to H and Names A to D are fictional, and so is every figure</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Closing Workspace Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DX17', 'Closing workspace · Paper tab', 'Admin view of Tidewater Systems: every envelope on the deal with its state as a word and a glyph, signatures counted per envelope, sent and executed dates, and Open document. One Partly signed, one Voided, one Rejected. Eadwyn summarises what is unsigned and who it waits on; the draft is accepted into the deal notes, edited or discarded.', [F('DCL19', false, 1000)]],
+      ['DX18', 'Conditions tab', 'Saltmarsh Robotics: open conditions first, then Met and Waived, each with its decision, raised by and resolved by. Owner is ◇ #6156 and reads Not recorded. The hold banner and one primary action, Open in Investment committee; the Met / Waived and Add dialogs are links to addendum B. Admin-only variant for a condition on a decision the Admin cannot see, with no count.', [F('DCL20', false, 1000)]],
+      ['DX19', 'Transfer tab', 'A · Recorded: the disclaimer once, Phone verified as a word and glyph, Not recorded for a missing reference or note, and a total that says what it counts. Record transfer opens the DX14 dialog unchanged. B · Held by 2 open conditions, with the reason beside the disabled button, and the variant where the hold could not be read.', [F('DCL21a', 'A · Recorded', 820), F('DCL21b', 'B · Held, and hold unreadable', 900)]],
+      ['DX20', 'Audit tab', 'Newest first, with filters. Transfers and paper join from their own records with names; closing events show “Name not shown yet” (◇ actor name); checklist moves are ◇ until #6156 records history. Admins only on this route.', [F('DCL22', false, 1080)]],
+      ['DX21', 'Checklist item actions', 'The round’s lead edits an item in a side sheet: status, ◇ owner, ◇ due date, note, Save. Overdue, Blocked and Skipped each read as a word and a glyph. Eadwyn proposes owners and due dates one at a time; nothing saves until accepted.', [F('DCL23', false, 1010)]],
+      ['DX22', 'Investor view of the workspace', 'Northwind Ventures reads Tidewater: their own line and the round total only, the checklist read only, their own paper, conditions they may see and every transfer; no Audit tab. Refused lines name who acts. One primary action: Open my closing room (#6188).', [F('DCL24', false, 900)]],
+      ['DX23', 'After close', 'A · Closed: received lines and total in USD, executed paper, the founder’s cap-table decision, 4 reporting duties, and Record in Portfolio per line (closing creates no position; ◇ the In Portfolio link). B · Before close today: Close the closing stays unavailable with each unmet rule written beside it.', [F('DCL25', 'A · Closed', 900), C('DCL25b', 'B · Before close', 760, 320)]],
+      ['DX24', 'Empty states', 'A no deals at closing, B no checklist (apply a template), C applied and empty, D no paper, E no transfers (Admin and anyone else), F no conditions.', [C('DCL26', false, 1400, 530)]],
+      ['DX25', 'States', 'Loading per tab, Not recorded, Unavailable per section with the others still shown, Refused, saving and save failed, Record transfer refused by a condition, Super Admin preview naming the real actor, Stale and Partial.', [C('DCL27', false, 1400, 570)]],
+      ['DX26', 'Phone 390 · Closing', 'A · Deals at closing as cards. B · Workspace with sideways tabs and checklist rows. C · The item sheet at full height. D · Transfers as cards, the disclaimer once and a sticky Record transfer showing its held reason. 44px targets.', [P('DCL28a', 'A · Deals at closing'), P('DCL28b', 'B · Workspace'), P('DCL28c', 'C · Item sheet'), P('DCL28d', 'D · Transfer')]],
+      ['DX27', 'Phone 390 · Commit', 'A · The DE07 decision with recusals counted beside the tally and Vote as a sticky action. B · Conditions as cards marked Blocks Closing. C · No investment decision is open. Vote and condition dialogs are #6142’s.', [P('DCL29a', 'A · Decision'), P('DCL29b', 'B · Conditions'), P('DCL29c', 'C · Empty')]],
+      ['DX28', 'Dark', 'A · Transfer tab. B · Investor view. States keep their words and shapes.', [F('DCL30a', 'A · Transfer', 820), F('DCL30b', 'B · Investor view', 900)]],
+      ['DX29', 'Handoff', 'What was checked on main, what needs engineering (◇), the owner questions (⚑), frontend-only work and accessibility.', [W('DCLH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

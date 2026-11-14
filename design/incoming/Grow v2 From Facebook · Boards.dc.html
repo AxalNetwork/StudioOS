@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 From Facebook · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · From Facebook · #5861 · addendum to Grow v2 (#4861), GR-21 to GR-26</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">The venture’s Facebook Page audience, read on demand, beside Distribution and Revenue and traction</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A new part, “From Facebook” (id="from-facebook"), inside two existing Grow module pages: on /grow/distribution after From Mercury and before From Notion, and on /grow/revenue-and-traction after From Mercury and before From Google and PostHog. No new route. It is built like From Mercury on main: a card with Facebook’s mark (the BrandIcon path, no Meta blue beyond the mark), a source line and one Sync button. Distribution shows followers now and October’s views, unique viewers and post engagements as label-and-number pairs, not KPI tiles, plus one proposal to link the Page to a Distribution channel. Revenue and traction shows a 12-month followers line and month rows; these are audience, never revenue, never a KPI and never summed into money. Every figure says what it counts, for which period, and “From Facebook, as of <date>”, and has its own Delete, which sticks after the next sync. Nothing syncs on a schedule. Sync, Accept and Dismiss are for the connection’s owner who is a writer; Delete for any writer; a reader sees figures only; a support session cannot sync. Eadwyn does not read Facebook (owner, 9 Nov, #2399): the rail keeps its usual Distribution content. Zero, Not recorded and Unreadable never look alike (D5129). Brief boards map as FB2 → GR-21 and GR-22, FB3 → GR-23 and GR-24, FB5 → GR-25 and GR-26; GR ids are confirmed at landing. Violet dashed ◇ tags mark backend work (#5859, #5860); the amber ⚑ tag marks a choice for the owner.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 (brief written at 45e7c55fa6) · [Lumen Labs], [Lumen Labs] Page, [Ana R.] and every figure are fictional sample data; last sync 21 Oct 2026</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 From Facebook Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-21', 'Distribution · From Facebook · desktop 1440 (brief FB2)', 'Inside the Distribution module page, after From Mercury. Header with the mark, the source line “From Facebook, as of 21 Oct 2026 · [Lumen Labs] Page” (Page name ◇), and Sync from Facebook. Four figures as label-and-number pairs, each with its period, its source and a Delete: Followers 4,218 now; Views 31,904, Unique viewers 12,377 and Post engagements 1,086 for October 2026, to 21 Oct. Under them the proposal “Link your Facebook Page to a Distribution channel?” with Accept and Dismiss; while it is pending Accept is the one violet button and Sync is drawn plain. The Eadwyn rail shows its usual Distribution content and nothing about Facebook. Also: after Accept (“Linked to the channel [Facebook]”, the person stays on Distribution), after Dismiss (gone, with a toast) and the Delete confirm dialog.', [F('GFB2', false, 1180), C('GFB2C', 'After Accept · after Dismiss · Delete confirm', 1740, 590)]],
+      ['GR-22', 'Revenue and traction · From Facebook audience · desktop 1440 (brief FB2)', 'Inside Revenue and traction after From Mercury, before From Google and PostHog. Header “From Facebook · Audience, not revenue”, the same source line and Sync (the part’s one violet button). One small followers line with labelled axes, no target and no good or bad colour. “Last 12 months” from Nov 2025 to Oct 2026 (“to 21 Oct”): followers at month end, new follows and views in Roboto Mono, each with its own Delete. Views for Mar 2026 reads Not recorded. October agrees with GR-21: 4,218 followers and 31,904 views.', [F('GFB2R', false, 1500)]],
+      ['GR-23', 'Empty and Not connected (brief FB3)', '(a) Empty: connected and a Page chosen, never synced. The owner sees “Your Page [Lumen Labs] is chosen. Nothing has been read from Facebook yet.” and Sync from Facebook; a reader sees the sentence with no button. (b) Not connected: no connection, or no Page chosen for this company, with Connect Facebook or Choose a Page to /account/connectors/facebook; a reader sees “Facebook is not connected for this venture”. Coming back to the module after choosing a Page is ◇. The same crops on Revenue and traction.', [C('GFB3', 'Distribution', 1440, 494), C('GFB3R', 'Revenue and traction', 1440, 494)]],
+      ['GR-24', 'States (brief FB3)', 'Each crop keeps the header. Loading bars, no zeros. Not recorded in muted words with Followers still shown. Unreadable: a red sentence with Try again and no figures, while the rest of the page loads. Sync failed: the last good figures stay with their date and Sync becomes Try again. Reconnect for the owner, and for a reader with the owner’s name ◇. Rate limited. Partly synced on Revenue and traction, where unread months read Not recorded. The reader view of GR-21, a support session with Sync disabled, Syncing… and Saving…, and the inline red line when a delete or an accept fails.', [C('GFB3S', 'Loading to Partly synced', 1740, 1235), C('GFB3T', 'Reader, support session, saving and save failed', 1740, 727)]],
+      ['GR-25', 'Phone 390 · light (brief FB5)', 'Distribution: header with the mark, the source line wrapping under it, a full-width 44px Sync, the four figures as a 2×2 grid with 44px Delete targets, and the proposal with Accept and Dismiss stacked full width. Revenue and traction: the followers line at full width and the months as cards (newest first), each line with its own Delete; never a wide table. Delete opens a bottom sheet. Unreadable, Sync failed and Not connected at 390.', [P('GFB5A', 'Distribution'), P('GFB5B', 'Revenue and traction'), P('GFB5C', 'Delete · bottom sheet'), C('GFB5S', 'States at 390', 1290, 536)]],
+      ['GR-26', 'Dark · desktop 1440 and phone 390 (brief FB5)', 'GR-21 and GR-22 on the dark tokens, and GR-25’s Distribution part in dark. Same words and shapes; Not recorded stays muted, not red; the mark keeps its own blue.', [F('GFB6', 'Distribution · dark', 1180), F('GFB6R', 'Revenue and traction · dark', 1500), P('GFB6P', 'Phone · dark')]],
+      ['GR-H', 'Handoff', 'The brief-to-canvas board map, what was checked on main and what it showed, backend required (#5859, #5860, return to the module), frontend only, the choices drawn (owner questions answered A; one primary per screen), and accessibility.', [W('GFBH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

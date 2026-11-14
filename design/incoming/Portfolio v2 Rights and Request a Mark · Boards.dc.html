@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Rights and Request a Mark · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Portfolio · company workspace · #6228 · Portfolio v2 addendum, PFA18 onward</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Portfolio — the rights an investor holds, from which document and clause, and asking HQ for a mark</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Portfolio v2 addendum (PFA01 to PFA17) in its frame: board keys carry the PRM prefix, so PRM18 is PFA18 and PRM18D its dark variant. Route A is the company workspace Financials tab, section Ownership & rights (/portfolio/companies/:uid/financials#ownership-rights), read only: every right names its document and clause or says Not recorded at closing. Route B is Request a mark, a Sheet opened from a Stale chip on Positions, the mark-history Sheet or Financials, in PF-07’s Prepare → Review → Confirm → Receipt. Route C is the admin position sheet, where HQ answers by recording a mark or declines with a reason; recording a mark stays an HQ admin act. States follow Platform States (D5129) with Unavailable as the failed-read word; Eadwyn is the one shared rail (#5130) and only proposes. Violet dashed ◇ tags mark backend work (the rights table, the clause read, the investor pro rata read, and Declined, evidence and the answering-mark link on #6205’s requests).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Northwind Labs], [Northwind SPV I], [Harbor Capital], [Harbor Seed Fund], [Meridian Partners], [A. Lind] and every company, person and bracketed figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="9">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Rights and Request a Mark Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PFA18', 'Ownership & rights with every right', 'Northwind Labs Financials: the holding line (route, rounds, invested, ownership % as recorded), Rights under your documents (seven rows, each with document and clause, what is recorded and what you can do), the duties table and the read-only investor cap table. No primary action. Eadwyn proposes recording an observer seat it found in the signed agreement.', [F('PRM18', false, 2800)]],
+      ['PFA19', 'Nothing recorded', '(a) A SAFE with no duty and no right: None, not Not recorded, with Ask HQ to record a right and the Requested row after it. (b) A cap table not shared with you: Refused, never an empty table, with Ask the founder for access.', [C('PRM19', false, 1484, 880)]],
+      ['PFA20', 'Request a mark · Prepare → Review → Confirm → Receipt', 'Opened from the Stale chip on Positions. Company and holding fixed, kind, the latest mark with its age, a required reason (Eadwyn drafts, the investor accepts, edits or discards), optional evidence. Review says only HQ sees it; Receipt says Requested 14 Nov 2026.', [F('PRM20', 'Prepare · Sheet over Positions', 1120), C('PRM20B', 'Review', 724, 500), C('PRM20C', 'Confirm', 724, 400), C('PRM20R', 'Receipt', 724, 440)]],
+      ['PFA21', 'Request states · investor', 'The Requested chip on the Positions row and in the mark history; the investor’s own requests newest first (Requested, Answered linking to the mark, Declined with HQ’s reason); the chip specimen, the empty state and the unavailable list.', [F('PRM21', false, 1000), C('PRM21B', 'Chips, empty and unavailable', 1444, 370)]],
+      ['PFA22', 'Requests in the admin position sheet', 'Open mark requests above the register, with Record a mark (PF-07, prefilled; the Receipt answers the request) and Decline with a reason the investor sees. Eadwyn proposes a basis and source, never a value.', [F('PRM22', false, 1260), C('PRM22B', 'Record a mark · Prepare from the request', 764, 550), C('PRM22C', 'Receipt · request answered', 764, 400), C('PRM22E', 'Decline · Scope → Review → Result', 764, 480)]],
+      ['PFA23', 'States', 'Loading, Not recorded, zero vs Not recorded vs Unavailable, Stale, each read failing on its own section, Refused (not a holder; cap table not shared), saving, save failed with entries kept, the one-open-request refusal, Not applicable, Eadwyn unavailable and an empty admin queue.', [C('PRM23', false, 1484, 1170)]],
+      ['PFA24', 'Phone 390', 'Ownership & rights as labelled cards (rights, duties, cap-table holders), the Request Sheet one step per screen with 44px targets, and the admin queue as cards. No table is wider than the screen.', [P('PRM24A', 'Rights · holding and first cards'), P('PRM24B', 'Rights, duties and cap table cards'), P('PRM24C', 'Request · Prepare'), P('PRM24E', 'Request · Review'), P('PRM24F', 'Request · Receipt'), P('PRM24G', 'Admin queue cards')]],
+      ['PFA18D · PFA22D', 'Dark', 'PFA18 and PFA22 on the dark tokens; ◇, chips and states keep their words and shapes.', [F('PRM18D', 'Ownership & rights · dark', 2800), F('PRM22D', 'Admin requests · dark', 1260)]],
+      ['PFA-H', 'Handoff', 'What was checked on main, backend required, the owner’s questions (option A drawn), frontend-only work, navigation and accessibility.', [W('PRMH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Diligence and Data Room · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals v2 addendum DE19 to DE31 · #6176 (under #4815)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deal page — Traction in Scorecard, the Diligence tab, and the open Data room for investors, founders and staff</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Deals v2 (DE01 to DE18, sections DX1 to DX16, DX-R, DX-H) in its own frame: the #3704 shell, the DE04 deal header and tab bar, the three status families and the five absence states. It restyles the older Investor Deal Page boards DL6, DL7, DL8, DL16, DL17 and DL18a–d in the v2 look. Traction becomes a section of the Scorecard tab: the founder’s own monthly figures, each with its source and as-of date, gaps that read Not reported and never 0, and ARR and NRR as Not recorded. Diligence is the case: summary, sections, requests to the founder, flags, references and the decision, with Proceed refused while a blocking section has an open High flag. Data room extends DE10 crop D (crops C and D are not redrawn). The founder never sees case data. Severity, verdict, risk, signature and decision always carry a word and a glyph. Violet dashed ◇ tags mark backend work listed on #6176; amber ⚑ tags mark the owner’s picks (option A on all three questions).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Acme Robotics], [Northwind Ventures], [Investor B] to [Investor E], [Founder A], [Name A] to [Name F], [Admin A], [Admin B], the references and every figure are fictional samples; the euro amounts follow the Deals v2 canvas</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Diligence and Data Room Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DX17', 'Traction · Scorecard section (DE19)', 'Scorecard › Traction, opened by /deals/:dealId/traction (⚑ Q1 A). Five tiles with value, period, source and as-of; ARR and NRR in the Not recorded shape ◇. MRR, net burn and paying accounts by month with Not reported gap bands; ◇ previous year; Chart / Table; Download CSV is the one primary action. Eadwyn proposes a two-line reading naming the months it used.', [F('DPD19', false, 1110)]],
+      ['DX18', 'Traction · table (DE20)', 'The same 12 months, newest first: one row a month, the as-of under each value, Not reported rows and cells, and ◇ the link to each source update. CSV and the switch stay in place.', [F('DPD20', false, 1290)]],
+      ['DX19', 'Traction · empty and states (DE21)', 'Empty with ◇ the last-shared month and ◇ Ask the founder for an update drawn as option A (⚑ proposal 12); masked before the NDA; loading; Traction unreadable while the rest of Scorecard stands; history unreadable with the latest figures kept; and the four looks that never merge.', [C('DPD21', false, 1400, 760)]],
+      ['DX20', 'Diligence · case open, investor lead (DE22)', 'Summary strip (stage, risk, [18] of [42] items worked, flags, opened and lead, IC date, round), the decision bar with Memo, Report, Send to IC disabled with its reason and Record decision as the primary action. Sections with Blocking markers; requests with Send, Remind, Withdraw and Open the answer; flags with Resolve; Eadwyn’s drafted questions ◇ with Send as requests; reference calls with ◇ recording and summary. Then the sheets: Proceed disabled naming the blocking section, Send request, Withdraw, the 409 refusal and a sent result.', [F('DPD22', false, 1700), C('DPD22B', 'Record decision, Send request, Withdraw', 1340, 580)]],
+      ['DX21', 'Diligence · reviewer and decided (DE23)', 'A · a section reviewer: their verdict form and sections, requests on their sections read-only (“Requests to the founder are sent by the case lead”), the rest named and closed. B · decided, Proceed with conditions with reason, date and who; Send to IC is the primary action. C · With IC, which cannot be sent again.', [F('DPD23', 'A · Section reviewer', 1180), F('DPD23B', 'B · Decided', 1030), F('DPD23C', 'C · With IC', 1080)]],
+      ['DX22', 'Diligence · no case and states (DE24)', 'No case with Open a case (standard depth) and the newest-[200] line; loading; Not recorded (risk, due date, lead); unreadable with the list summary kept; Refused for a non-reviewer and for a decision; archived; saving and save failed with the draft kept; Send to IC refused.', [C('DPD24', false, 1400, 680)]],
+      ['DX23', 'Data room · open, investor (DE25)', 'Extends DE10 crop D at /deals/:dealId/data-room (⚑ Q2 A): the access line, Search names, ◇ Search inside files, Type, Sort and ◇ New since your last visit · [4]; folders and 25 files a page of [63]; Deal paper with Fully signed, Partly signed [2] of [3], Sent, Declined and Voided, Download and ◇ Review and sign; the Deck ◇; Eadwyn’s files that answer open requests.', [F('DPD25', false, 2180)]],
+      ['DX24', 'Data room · founder’s view (DE26)', 'In Raise › Data room (the Raise v2 Data Room tabs). Requests: access requests oldest first with Accept as the primary action, diligence requests to answer and Eadwyn’s draft answer. Activity: period, investor and action filters, per-investor opens, downloads and Blocked: NDA not signed against the previous period, events a day, the paged log, ◇ per-file totals, Download CSV. Then the Accept and Decline sheets and the CSV refusal.', [F('DPD26', 'Requests', 830), F('DPD26B', 'Activity', 920), C('DPD26C', 'Sheets and the CSV refusal', 1340, 430)]],
+      ['DX25', 'Data room · admin and Operating Partner (DE27)', 'A · Admin: the support-read sheet with a reason (1–500 characters) the founder sees, read-only, and the history. B · Operating Partner: Refused, ask the founder; a failed read offers only Try again.', [C('DPD27', false, 1340, 410)]],
+      ['DX26', 'Data room · states (DE28)', 'Loading, empty room, Not recorded (size, type, no end date), search index unavailable, the access read and the room read each failing alone with paper kept, Refused (no grant, declined with reason, request open), and download failed with the selection kept.', [C('DPD28', false, 1400, 490)]],
+      ['DX27', 'Phone 390 (DE29)', 'Traction tiles 2×3 and one chart at a time; Diligence summary, collapsible cards and a sticky Record decision; the investor’s room as cards with paper; the founder’s room with requests first. 44px targets, no table wider than the screen.', [P('DPD29A', 'Traction'), P('DPD29B', 'Diligence'), P('DPD29C', 'Data room · investor'), P('DPD29D', 'Founder’s room')]],
+      ['DX28', 'Dark (DE30)', 'DE19, DE22 and DE25 on the dark tokens. Not recorded, Not reported, Unreadable and Refused keep their words and shapes.', [F('DPD30A', 'Traction', 1110), F('DPD30B', 'Diligence', 1700), F('DPD30C', 'Data room', 2180)]],
+      ['DX-H2', 'Backend fit and handoff (DE31)', 'Each board’s Worker route on main, the ◇ list, the owner’s picks, the handoffs to DE07, DE09 and DE08b, frontend-only work, what is preserved and accessibility.', [W('DPD31')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences v2 New Licence Steps · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+/* LX · Licences & Contracts v2 addendum (#5303). Contracts pills/tags/table copied from Contracts v2 under lx- names. */
+.lx-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.lx-pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.lx-pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lx-pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.lx-pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.lx-pl.dash{border-style:dashed}
+.lx-pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.lx-pl.void{text-decoration:line-through}
+.lx-otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.lx-otag.env{border-style:dashed}
+.lx-ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.lx-ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.lx-ctab td{color:var(--ink);padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.lx-ctab tr:last-child td{border-bottom:0}
+.lx-ctab td.n,.lx-ctab th.n{text-align:right;font-family:var(--mo);white-space:nowrap}
+.lx-ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.lx-ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:3px}
+.lx-ctab tr.sel td{background:var(--lav)}
+.lx-ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.lx-ctab tr.hi td{background:var(--amBg)}
+.lx-ctab tfoot td{background:var(--raised);font-weight:700;border-top:1.5px solid var(--hair2)}
+.lx-fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.lx-fchips .rm{display:inline-flex;align-items:center;gap:6px;padding:2px 6px 2px 9px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.lx-fchips .rm i{font-style:normal;font-weight:800;padding:0 3px}
+.lx-wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.lx-pr{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:4px;border:1px dashed var(--amD);color:var(--amT);background:var(--card);font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;vertical-align:middle}
+.lx-na{color:var(--mu);font:500 12px var(--sg);font-style:italic}
+.lx-frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lx-frow .dd{min-height:30px}
+.lx-wbar{display:flex;align-items:center;gap:10px;padding:8px 13px;border-radius:9px;background:#18181b;color:#f4f3f7;font:600 12px var(--sg)}
+.lx-wbar b{font-weight:800;color:#fff}
+.lx-wbar .x{margin-left:auto;font:500 11.5px var(--mo);color:#c9c4d6}
+.lx-blk{display:flex;flex-direction:column;gap:10px}
+.lx-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.lx-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lx-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.lx-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0;font-size:13px}
+.lx-kv dt,.lx-kv dd{padding:7px 0;border-bottom:1px solid var(--hair)}
+.lx-kv dt{color:var(--mu)}
+.lx-kv dd{font-weight:600}
+.lx-kv dd.mo{font-family:var(--mo)}
+.lx-big{font:700 22px var(--mo);letter-spacing:-.02em}
+.lx-sub{font-size:12px;color:var(--mu)}
+.lx-cmp td.dif{font-family:var(--mo);white-space:nowrap}
+.lx-up{color:var(--amT)}
+.lx-dn{color:var(--pos)}
+.lx-steps{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.lx-steps span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.lx-steps span+span{border-left:0}
+.lx-steps span:first-child{border-radius:8px 0 0 8px}.lx-steps span:last-child{border-radius:0 8px 8px 0}
+.lx-steps span.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lx-steps span.cur{color:#fff;background:var(--ink);border-color:var(--ink)}
+.lx-trace{display:grid;grid-template-columns:minmax(0,1.6fr) 110px 110px minmax(0,1.3fr);font-size:12.5px;border-top:1px solid var(--hair)}
+.lx-trace>span{padding:8px 10px;border-bottom:1px solid var(--hair)}
+.lx-trace>span.h{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.lx-trace>span.m{font-family:var(--mo);text-align:right}
+.lx-trace>span.tot{font-weight:800;background:var(--lav)}
+.lx-mtx{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.lx-mtx th,.lx-mtx td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:center}
+.lx-mtx th:first-child,.lx-mtx td:first-child{text-align:left}
+.lx-mtx thead th{font:700 12px var(--sg);background:var(--raised);vertical-align:bottom}
+.lx-mtx thead th small{display:block;font:500 11px var(--mo);color:var(--mu);margin-top:2px}
+.lx-mtx .yes{color:var(--pos);font-weight:800}
+.lx-mtx .no{color:var(--hair2)}
+.lx-mtx tfoot td{background:var(--raised);font-family:var(--mo);font-weight:700}
+.lx-mtx tfoot td:first-child{font-family:var(--sg)}
+.lx-mtx tfoot tr.w td{font:500 11.5px var(--sg);background:var(--card);vertical-align:top}
+.lx-mtx td.sel,.lx-mtx th.sel{box-shadow:inset 2px 0 0 var(--vi),inset -2px 0 0 var(--vi);background:var(--lav)}
+.lx-offer{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.lx-offer.cur{border:2px solid var(--vi)}
+.lx-offer h3{font-size:14px;font-weight:800}
+.lx-offer .p{font:700 20px var(--mo);letter-spacing:-.02em}
+.lx-chk{display:flex;flex-direction:column}
+.lx-chk li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:13px}
+.lx-chk li:first-child{border-top:0}
+.lx-chk i{font-style:normal;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;font:800 11px var(--sg);border:1.5px solid var(--hair2);color:var(--mu)}
+.lx-chk i.y{background:var(--pos);border-color:var(--pos);color:#fff}
+.lx-chk i.w{border-color:var(--amD);color:var(--amT)}
+.lx-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:9px;background:var(--raised);border:1px solid var(--hair);font-weight:800;font-size:13.5px}
+.lx-ref{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px dashed var(--hair2);border-radius:10px;background:var(--card);font-size:12.5px;color:var(--mu)}
+.lx-ref b{color:var(--ink)}
+.lx-why{font-size:12px;color:var(--amT);font-weight:600}
+.lx-sec{display:flex;align-items:center;gap:8px;font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-top:4px}
+.lx-sec::after{content:'';flex:1;height:1px;background:var(--hair)}
+.lx-st{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lx-st .cd{gap:8px}
+.lx-dk .sd,.lx-dk .tb{background:var(--card)}
+.lx-dk .btn{background:var(--card);color:var(--ink);border-color:var(--hair2)}
+.lx-dk .btn.p{background:#a78bfa;border-color:#a78bfa;color:#0b1220}
+.lx-dk .stt{background:var(--raised)}
+.lx-dk .nt{background:var(--raised);color:var(--ink)}
+.lx-dk a{color:#c4b5fd}
+.lx-ph .lx-ctab th,.lx-ph .lx-ctab td{padding:8px 10px}
+.lx-mcard{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.lx-mcard .r{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12.5px}
+
+/* LNS · Licences v2 Addendum · New Licence Steps (#5930). Continues L21's step frame. */
+.lns-crumb{font:600 12px var(--sg);color:var(--mu);margin-bottom:-8px}
+.lns-crumb a{color:var(--mu)!important}
+.lns-crumb b{color:var(--ink)}
+.lns-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.lns-card{gap:14px}
+.lns-card>.ch h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.lns-vs{font:500 10.5px var(--mo);color:var(--mu);text-align:right}
+.vstep li.on .lns-vs{color:var(--vt);font-weight:700}
+.lns-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+.lns-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}
+.lns-seats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lns-f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.lns-f.lns-s2{grid-column:span 2}
+.lns-f label{font-size:12.5px;font-weight:700;color:var(--ink);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.lns-opt{font:600 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair);border-radius:4px;padding:0 5px;background:var(--raised)}
+.lns-in{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink);min-width:0}
+.lns-in.mo .lns-v{font-family:var(--mo);font-weight:500}
+.lns-in.area{min-height:56px;align-items:flex-start;padding-top:9px}
+.lns-in.empty .lns-v{color:var(--mu);font-weight:400;font-family:var(--sg)}
+.lns-in.ro{background:var(--raised);border-style:dashed;color:var(--ink)}
+.lns-in.e{border:1.5px solid var(--neg);background:var(--negBg)}
+.lns-v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lns-in.area .lns-v{white-space:normal}
+.lns-suf{font:500 11.5px var(--sg);color:var(--mu);white-space:nowrap}
+.lns-help{font-size:11.5px;color:var(--mu);line-height:1.4}
+.lns-err{font-size:11.5px;color:var(--neg);font-weight:600;line-height:1.4;font-family:var(--sg)}
+.lns-err b{font-weight:800;margin-right:2px}
+.lns-sw{display:inline-block;width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.18);flex:none;vertical-align:middle;margin-right:5px}
+.lns-sec{display:flex;align-items:center;gap:10px;font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-top:4px}
+.lns-sec>span:first-child{white-space:nowrap}
+.lns-sec::after{content:'';flex:1;height:1px;background:var(--hair);order:1}
+.lns-sec .raw{order:2;text-transform:none;letter-spacing:0}
+.lns-kind,.lns-tpl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lns-tpl{grid-template-columns:minmax(0,1fr)}
+.lns-rc{display:grid;grid-template-columns:18px minmax(0,1fr) auto auto;gap:4px 10px;align-items:start;padding:11px 13px;border:1px solid var(--hair2);border-radius:10px;background:var(--card)}
+.lns-tpl .lns-rc{align-items:center;padding:9px 13px}
+.lns-rc i{width:16px;height:16px;border-radius:999px;border:1.5px solid var(--hair2);margin-top:1px;background:var(--card)}
+.lns-tpl .lns-rc i{margin-top:0}
+.lns-rc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.lns-rc.on i{border:5px solid var(--vi)}
+.lns-rc.off{opacity:.62;background:var(--raised);border-style:dashed}
+.lns-rc b{font-size:13px;display:block}
+.lns-rc small{font-size:12px;color:var(--mu);line-height:1.45;display:block;margin-top:2px}
+.lns-tpl .lns-rc div{display:flex;gap:8px;align-items:baseline}
+.lns-tpl .lns-rc small{margin:0}
+.lns-cr{font:700 11px var(--sg);color:var(--amT);background:var(--amBg);border:1px solid var(--amE);border-radius:999px;padding:1px 8px;white-space:nowrap}
+.lns-cx{font:700 11px var(--sg);color:var(--mu);border:1px dashed var(--hair2);border-radius:999px;padding:1px 8px;white-space:nowrap;background:var(--card)}
+.lns-cons{display:flex;gap:10px;align-items:flex-start;padding:10px 13px;border-radius:10px;border:1.5px solid var(--ink);font-size:12.5px;line-height:1.55}
+.lns-cons>span{font-weight:800}
+.lns-flag{display:inline-flex;align-items:center;gap:3px;padding:0 6px;border-radius:4px;border:1px dashed var(--amD);color:var(--amT);background:var(--amBg);font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;vertical-align:middle}
+.lns-ft{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-top:12px;border-top:1px solid var(--hair)}
+.lns-fn{font-size:12px;color:var(--mu);line-height:1.5;max-width:520px}
+.lns-fb{display:flex;gap:8px;align-items:center;flex:none}
+.lns-fb .btn{white-space:nowrap}
+.lns-spin{display:inline-block;width:11px;height:11px;border-radius:999px;border:2px solid currentColor;border-right-color:transparent;margin-right:6px;vertical-align:-1px}
+.lns-totp{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:9px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px;line-height:1.5;color:var(--ink)}
+.lns-totp>span{color:var(--vt);font-weight:800}
+.lns-bk{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.lns-tot{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px}
+.lns-tot>span{color:var(--mu);font-weight:600}
+.lns-sub{display:flex;flex-direction:column;gap:12px;padding:14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.lns-empty{display:flex;gap:10px;align-items:center;padding:12px 14px;border:1px dashed var(--hair2);border-radius:10px;font-size:12.5px;color:var(--mu);line-height:1.5}
+.lns-empty a{white-space:nowrap}
+.lns-none{display:inline-flex;align-items:center;gap:4px;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.lns-prop{display:flex;flex-direction:column;gap:8px;padding:12px 13px;border:1px solid var(--lavE);border-left:3px solid var(--vi);border-radius:9px;background:var(--card);font-size:12.5px;line-height:1.5}
+.lns-pa{display:flex;gap:6px}
+.lns-pl{display:flex;flex-direction:column;gap:6px;padding-left:2px}
+.lns-pl li{line-height:1.5}
+.lns-docc{display:flex;flex-direction:column;gap:10px;padding:14px;border:1.5px solid var(--ink);border-radius:10px}
+.lns-doc{margin:0;height:230px;overflow:auto;border:1px solid var(--hair);border-radius:8px;padding:12px 14px;background:var(--raised);font:400 12px/1.6 var(--mo);color:var(--ink);white-space:pre-wrap}
+.lns-doc mark{background:var(--amBg);color:var(--amT);border:1px dashed var(--amD);border-radius:3px;padding:0 2px}
+.lns-notext{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px dashed var(--hair2);border-radius:8px;background:var(--raised)}
+.lns-unf{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.lns-unf ul{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:8px;overflow:hidden}
+.lns-unf li{display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 11px;border-bottom:1px solid var(--hair)}
+.lns-unf li:last-child{border-bottom:0}
+.lns-unf code{font:600 11.5px var(--mo);color:var(--amT)}
+.lns-sig{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:9px;border:1px solid var(--hair);background:var(--raised);font-size:12.5px}
+.lns-rgs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lns-rg{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px}
+.lns-rg h3{font-size:13.5px;font-weight:800}
+.lns-rg h3 .mo{color:var(--mu);margin-right:4px}
+.lns-edit{font:700 12px var(--sg)}
+.lns-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.lns-dl{display:grid;grid-template-columns:150px minmax(0,1fr);border-top:1px solid var(--hair)}
+.lns-dl dt,.lns-dl dd{padding:6px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.lns-dl dt{color:var(--mu)}
+.lns-dl dd{font-weight:600}
+.lns-q4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;border:1.5px solid var(--ink);border-radius:10px;padding:12px 14px}
+.lns-q4 h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:5px}
+.lns-q4 p,.lns-q4 li{font-size:12.5px;line-height:1.55}
+.lns-q4 ul{display:flex;flex-direction:column;gap:3px;list-style:disc;padding-left:16px}
+.lns-q4.lns-q4p{grid-template-columns:minmax(0,1fr)}
+.lns-blk{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:10px;border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.lns-blk.ok{border-color:var(--posE);background:var(--posBg)}
+.lns-blk.ok b{color:var(--pos)}
+.lns-blk.ok .ch b{color:var(--ink)}
+.lns-blk.b{border:1.5px solid var(--amE);background:var(--amBg)}
+.lns-blk.u{border:1.5px solid var(--negE);background:var(--negBg)}
+.lns-blk ul{display:flex;flex-direction:column;gap:4px}
+.lns-blk li{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:center}
+.lns-blk li>span:first-child{color:var(--amT);font-size:10px}
+.lns-blk li a{white-space:nowrap;font-weight:700}
+.lns-mini{gap:9px}
+.lns-mt{font-size:14px;font-weight:800;line-height:1.35}
+.lns-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.lns-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.lns-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+.lns-g5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.lns-fe{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.lns-skl{display:flex;flex-direction:column;gap:8px}
+.lns-code{display:flex;gap:8px}
+.lns-code span{display:grid;place-items:center;width:42px;height:48px;border:1.5px solid var(--hair2);border-radius:9px;font:600 20px var(--mo);color:var(--ink);background:var(--card)}
+.lns-code span:empty{border-style:dashed}
+.lns-code span.e{border-color:var(--neg)}
+.lns-dlg{position:absolute;z-index:6;left:50%;top:180px;transform:translateX(-50%);width:480px;background:var(--card);border:1px solid var(--hair);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:20px 22px;display:flex;flex-direction:column;gap:12px}
+.lns-dlg h2{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.lns-dlg p{font-size:13px;line-height:1.55}
+.lns-dlg .lns-fb{justify-content:flex-end}
+.lns-ph .pt{flex:none}
+.lns-pstep{flex:none;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--hair);background:var(--raised);font:700 12.5px var(--sg)}
+.lns-pstep .btn{min-height:44px!important}
+.lns-ph2{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.25}
+.lns-ph .lns-in{min-height:44px}
+.lns-ph .lns-kind{grid-template-columns:minmax(0,1fr)}
+.lns-pin{flex:none;display:flex;flex-direction:column;gap:6px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.lns-pin .btn{min-height:48px;width:100%;justify-content:center}
+.lns-pn{font-size:11.5px;color:var(--mu);text-align:center;line-height:1.4}
+.lns-prows{display:flex;flex-direction:column;gap:8px}
+.lns-prow{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:10px;align-items:center;font-size:13.5px;font-weight:600}
+.lns-p2{display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:10px}
+.lns-pg{border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.lns-pg>button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;width:100%;min-height:52px;padding:8px 12px;border:0;background:none;text-align:left;font:inherit;color:var(--ink)}
+.lns-pg>button b{font-size:13.5px}
+.lns-pg>button span{grid-column:1;font-size:12px;color:var(--mu)}
+.lns-pg>button i{grid-row:1/3;grid-column:2;align-self:center;font-style:normal;color:var(--mu)}
+.lns-pg.open{padding-bottom:10px}
+.lns-pg .lns-dl{margin:0 12px;grid-template-columns:100px minmax(0,1fr)}
+.lns-pg .lns-edit{display:inline-flex;align-items:center;min-height:44px;margin-left:12px}
+.lns-psheet{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-radius:18px 18px 0 0;padding:10px 16px 22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.lns-psheet h2{font-size:17px;font-weight:800}
+.lns-psheet .vstep li{min-height:44px}
+.lns-grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);align-self:center}
+.lns-pfull{position:absolute;inset:0;z-index:7;background:var(--card);display:flex;flex-direction:column}
+.lns-pfull .lns-pin{flex-direction:row}
+.lns-pfull .lns-pin .btn{width:auto;flex:1}
+.lns-hd h2{font-size:16px;font-weight:800;margin:22px 0 8px}
+.lns-hd>p{font-size:13px;line-height:1.6;margin-top:8px}
+.lns-hd code{font:600 11.5px var(--mo);background:#f3effe;padding:0 4px;border-radius:4px}
+.lns-ul{display:flex;flex-direction:column;gap:6px;list-style:disc;padding-left:18px;font-size:13px;line-height:1.55}
+.lns-dk .lns-cons,.lns-dk .lns-q4,.lns-dk .lns-docc{border-color:var(--ink)}
+.lns-dk .lns-sw{border-color:rgba(255,255,255,.3)}
+.lns-dk .lns-rc.on i{border-color:var(--vi)}
+.lns-dk .stt.ni,.lns-dk .stt.mz{background:transparent}
+.lns-rail{box-sizing:border-box;min-width:0;width:320px!important;overflow:hidden}
+.lns-rail *{box-sizing:border-box}
+.lns-rail .lns-prop{max-width:100%}
+.lns-f .seg{align-self:flex-start}
+.lns-rgs.lns-rgm{display:block;column-gap:12px}
+.lns-rgm .lns-rg{break-inside:avoid;margin-bottom:12px}
+.lns-dk .vstep li.dn i{color:#0b1220}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "LNS41", "options": ["LNS41", "LNS41B", "LNS42", "LNS43", "LNS44", "LNS44B", "LNS44C", "LNS45", "LNS45B", "LNS46A", "LNS46B", "LNS46C", "LNS46D", "LNS46E", "LNS46F", "LNS46G", "LNS46H", "LNS46I", "LNS47", "LNS47B", "LNS47C", "LNS47D", "LNS47E", "LNS48A", "LNS48B", "LNS48C", "LNS48D", "LNS48E", "LNS49", "LNS49B", "LNS49C", "LNS49D", "LNSHO"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'LNS41';
+    /* ---------- palette, glyphs and states: copied from Licences v2 (li.js) and its addendum (lx.js) ---------- */
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const PDK = { bg: '#0b1220', card: '#111827', raised: '#162033', ink: '#e5e7eb', mu: '#a3a9b8', hair: '#243049', hair2: '#33405c', vi: '#a78bfa', vt: '#c4b5fd', lav: '#1e1b3a', lavE: '#4c3f8f', pos: '#6ee7b7', posBg: '#0f2a22', posE: '#1f5a46', neg: '#fca5a5', negBg: '#2a1215', negE: '#6b2a2f', amT: '#fcd34d', amBg: '#2a2110', amE: '#7a5b14', amD: '#f59e0b', dim: 'rgba(0,0,0,.5)', skel: '#243049' };
+    const V = (p) => Object.keys(p).map(k => '--' + k + ':' + p[k]).join(';');
+    const VARS = V(P);
+    const VDK = V(PDK);
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      pa: SV('<rect x="3" y="2.5" width="2" height="7" fill="currentColor"/><rect x="7" y="2.5" width="2" height="7" fill="currentColor"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      q: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>')
+    };
+    const S = { Active: ['ok', 'ok'], Completed: ['ok', 'ok'], Synced: ['ok', 'ok'], Draft: ['pd', 'pd'], Pending: ['pd', 'pd'], Saving: ['pd', 'pd'], Failed: ['fl', 'fl'], Refused: ['fl', 'fl'], Partial: ['xar', 'half'], Unknown: ['un', 'q'], Unavailable: ['un', 'ua'], None: ['mz', 'nd'], 'Not recorded': ['ni', 'nd'], Blocked: ['xar', 'ar'], Conflict: ['xar', 'ar'], 'Not sent': ['mz', 'nd'] };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NREC = '<span class="nrec">— Not recorded</span>';
+    const NONE = '<span class="lns-none">○ None</span>';
+    const UNV = (what) => '<span class="unr">! ' + (what || 'Unavailable') + ' · <a href="#">Try again</a></span>';
+    const flag = (t) => '<span class="lns-flag" title="Owner policy decision">⚑ ' + t + '</span>';
+
+    /* ---------- shell (Licences v2 HQ shell, unchanged) ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const railShut = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about this licence" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const railOpen = (inner) => '<aside class="sp eadx lns-rail" aria-label="Eadwyn" style="width:320px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1">' + inner + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px"><div class="inp" style="min-width:0;min-height:38px">Ask about this licence…</div><button type="button" class="disc2" aria-expanded="false">Model and usage ▾</button></div></aside>';
+    const shell = (body, o) => '<div class="sh" style="min-height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:196px minmax(0,1fr) 320px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Licences' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail ? railOpen(o.rail) : railShut) + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv' + (o.dark ? ' lx-dk lns-dk' : '') + '" style="' + (o.dark ? VDK : VARS) + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w, dark) => '<div class="cv' + (dark ? ' lx-dk lns-dk' : '') + '" style="' + (dark ? VDK : VARS) + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const sheet = (h, eye, title, body, foot, w) => '<div class="dim1" style="opacity:1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="' + h + '" style="width:' + (w || 520) + 'px"><div class="drh"><div class="tr"><span class="eye">' + eye + '</span><button type="button" class="ib" aria-label="Cancel">✕</button></div><h2 id="' + h + '">' + title + '</h2></div><div class="drb" style="gap:14px">' + body + '</div><div class="drf"><div style="display:flex;gap:8px;justify-content:flex-end">' + foot + '</div></div></aside>';
+
+    /* ---------- sample (fictional, bracketed in the brief) ---------- */
+    const REF = 'WL-CH-001';
+    const ENT = 'Helvetic Ventures SA';
+    const SEATS = [['Founder', 12], ['Investor / LP', 6], ['Advisor', 4], ['Service partner', 2]];
+    const SEATN = SEATS.reduce((a, s) => a + s[1], 0); /* 24 */
+    const SW = (hex) => '<span class="lns-sw" style="background:' + hex + '" aria-hidden="true"></span><span class="mo">' + hex + '</span>';
+
+    /* ---------- L21's step frame ---------- */
+    const STEPS = ['Legal entity', 'Territory', 'Commercial terms', 'Administrators', 'Agreement', 'Issue'];
+    const vlist = (cur, o) => { o = o || {}; return '<ol class="vstep" aria-label="Steps">' + J(STEPS.map((s, i) => { const done = o.done ? o.done.indexOf(i) >= 0 : i < cur; return '<li class="' + (i === cur ? 'on' : done ? 'dn' : '') + '"' + (i === cur ? ' aria-current="step"' : '') + '><i>' + (done && i !== cur ? '✓' : i + 1) + '</i><span>' + s + '</span><span class="lns-vs">' + (i === cur ? 'Current' : done ? 'Saved' : '') + '</span></li>'; })) + '</ol>'; };
+    const head = (n, o) => { o = o || {}; return '<div class="lns-crumb"><a href="#">Licences</a> / <b>New licence</b></div><header class="pgh"><div><h1>Issue a licence</h1><p>Step ' + (n + 1) + ' of 6 · ' + STEPS[n] + '</p></div><div class="ctl">'
+      + (o.fresh ? '<span class="raw">Nothing is saved until you create the draft</span>' : '<span class="raw">' + REF + ' · ' + ENT + '</span>' + st('Draft', 'Draft · saved ' + (o.saved || '10:14') + ' UTC'))
+      + '<button type="button" class="btn">Leave</button></div></header>'; };
+    const flow = (n, card, o) => { o = o || {}; return page(head(n, o) + '<div class="ws" style="grid-template-columns:240px minmax(0,1fr)">' + vlist(n, o) + '<div class="lns-col">' + card + '</div></div>', { h: o.h || 1000, rail: o.rail, overlay: o.overlay, dark: o.dark }); };
+    const stepCard = (title, inner, foot, o) => { o = o || {}; return '<section class="cd lns-card"><div class="ch"><h2>' + title + '</h2>' + (o.right || '') + '</div>' + inner + (foot || '') + '</section>'; };
+    const foot = (back, primary, o) => { o = o || {}; return '<div class="lns-ft">' + (o.note ? '<p class="lns-fn">' + o.note + '</p>' : '<span></span>') + '<div class="lns-fb">' + (back ? '<button type="button" class="btn">Back</button>' : '') + (o.sec || '') + '<button type="button" class="btn p"' + (o.dis ? ' aria-disabled="true"' : '') + '>' + (o.busy ? '<span class="lns-spin" aria-hidden="true"></span>' : '') + primary + '</button></div></div>'; };
+
+    /* ---------- fields ---------- */
+    const fld = (id, label, val, o) => { o = o || {}; return '<div class="lns-f' + (o.span ? ' lns-s2' : '') + '"><label for="' + id + '">' + label + (o.opt ? ' <span class="lns-opt">Optional</span>' : '') + (o.req ? ' <span class="lns-opt">Required</span>' : '') + (o.fixed ? ' <span class="lns-opt">Fixed after create</span>' : '') + '</label>'
+      + '<div class="lns-in' + (o.err ? ' e' : '') + (o.ro ? ' ro' : '') + (o.mono ? ' mo' : '') + (o.area ? ' area' : '') + (val ? '' : ' empty') + '" id="' + id + '" role="textbox"' + (o.ro ? ' aria-readonly="true"' : '') + (o.err ? ' aria-invalid="true" aria-describedby="' + id + '-e"' : '') + '>' + (o.pre || '') + '<span class="lns-v">' + (val || o.ph || '') + '</span>' + (o.suf ? '<span class="lns-suf">' + o.suf + '</span>' : '') + '</div>'
+      + (o.err ? '<small class="lns-err" id="' + id + '-e"><b aria-hidden="true">✕</b> ' + o.err + '</small>' : '') + (o.help ? '<small class="lns-help">' + o.help + '</small>' : '') + '</div>'; };
+    const sec = (t, right) => '<div class="lns-sec"><span>' + t + '</span>' + (right || '') + '</div>';
+    const cons = (t) => '<div class="lns-cons"><span aria-hidden="true">→</span><div>' + t + '</div></div>';
+    const code = (o) => { o = o || {}; return '<div class="lns-code" role="group" aria-label="6-digit code">' + J([4, 8, 1, 9, 3, 0].map((d, i) => '<span' + (o.err ? ' class="e"' : '') + '>' + (o.blank || i > (o.n == null ? 5 : o.n - 1) ? '' : d) + '</span>')) + '</div>'; };
+    const totpNote = (what) => '<div class="lns-totp"><span aria-hidden="true">⛨</span><div><b>Asks for your authenticator code</b> · ' + what + '</div></div>';
+
+    /* ================= L41 · Step 1 Legal entity ================= */
+    const kindCards = (sel, ro) => '<div class="lns-kind" role="radiogroup" aria-label="Kind">' + J([['subsidiary', 'Axal subsidiary', 'An Axal-branded territory.'], ['wl', 'White-label', 'Their brand on the same console. A white-label needs its brand kit colours before it can be issued.']].map(k => '<div role="radio" aria-checked="' + (k[0] === sel) + '"' + (ro ? ' aria-disabled="true"' : '') + ' class="lns-rc' + (k[0] === sel ? ' on' : '') + (ro && k[0] !== sel ? ' off' : '') + '"><i aria-hidden="true"></i><div><b>' + k[1] + '</b><small>' + k[2] + '</small></div></div>')) + '</div>';
+    const entityFields = (o) => { o = o || {}; return '<div class="lns-grid">'
+      + (o.ro ? fld('ref', 'Licence reference', REF, { ro: true, mono: true, fixed: true }) : fld('ref', 'Licence reference', o.blank ? '' : REF, { mono: true, ph: 'e.g. WL-CH-001', err: o.refErr, help: o.blank ? 'Required · unique across every licence family' : 'Unique across every licence family · up to 40 characters, saved in capitals' }))
+      + fld('len', 'Legal entity name', o.blank ? '' : ENT, { ph: 'As registered', help: o.blank ? 'Required' : '' })
+      + fld('brn', 'Brand name in product', o.blank ? '' : 'Helvetic Ventures', { ph: 'Same as the legal name', help: 'Shown in the product; defaults to the legal name' })
+      + '</div>'
+      + '<div class="lns-f"><label>Kind' + (o.ro ? ' <span class="lns-opt">Fixed after create</span>' : '') + '</label>' + kindCards(o.blank ? 'subsidiary' : 'wl', o.ro) + '</div>'
+      + sec('For the agreement', '<span class="raw">The agreement needs these three</span>')
+      + '<div class="lns-grid">' + fld('adr', 'Registered address', o.blank ? '' : '[Bahnhofstrasse 1, 8001 Zürich]', { opt: true, span: true, ph: 'Street, postcode, city' })
+      + fld('sgn', 'Signatory name', o.blank ? '' : '[A. Keller]', { opt: true, ph: 'Who signs for the entity' })
+      + fld('sgt', 'Signatory title', o.sgtVal || '', { opt: true, ph: 'e.g. Managing director', err: o.sgtErr, help: o.ro ? 'A recorded value can be changed but not cleared' : '' }) + '</div>'; };
+    const s1New = (o) => { o = o || {}; return stepCard('Who receives this licence?', entityFields(o),
+      cons('Creates <b class="mo">' + REF + '</b> as a draft in the ledger. It grants nothing until it is issued. Reference and kind cannot be changed afterwards. ' + flag('Q1 · A'))
+      + foot(false, o.busy ? 'Creating draft…' : 'Create draft and continue', { busy: o.busy, dis: o.busy })); };
+    const brandKit = (o) => { o = o || {}; return '<div class="lns-bk"><div class="ch"><div><b style="font-size:13.5px">Brand kit</b> <span class="raw">· white-label only</span></div>' + (o.unr ? st('Unavailable', 'Brand kit unreadable') : st('Not recorded', 'No colours saved yet')) + '</div>'
+      + (o.unr ? '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The brand kit could not be read.</b> The brand-kit store could not be read on this database. The other fields on this step still save.</div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>' : '')
+      + '<div class="lns-grid">' + fld('bkp', 'Primary colour', o.unr ? '' : '#0F766E', { mono: true, pre: o.unr ? '' : '<span class="lns-sw" style="background:#0F766E" aria-hidden="true"></span>', err: o.err, ph: '#rrggbb' })
+      + fld('bka', 'Accent colour', o.unr || o.err ? '' : '#B45309', { mono: true, pre: o.unr || o.err ? '' : '<span class="lns-sw" style="background:#B45309" aria-hidden="true"></span>', ph: '#rrggbb' }) + '</div>'
+      + '<p class="foot">Both are needed before a white-label can be issued. Each swatch shows its hex value. ' + flag('Q4 · A') + '</p>'
+      + totpNote('saving the brand kit') + '</div>'; };
+    const s1Draft = (o) => { o = o || {}; return stepCard('Who receives this licence?', entityFields({ ro: true }) + brandKit(o),
+      foot(false, 'Save and continue', { note: 'Saves the entity details to the draft, then the brand kit.' }), { right: st('Draft', REF + ' · Draft') }); };
+
+    /* ================= L42 · Step 3 Commercial terms ================= */
+    const seatsBlock = (o) => { o = o || {}; const v = o.blank ? [0, 0, 0, 0] : SEATS.map(s => s[1]); const tot = v.reduce((a, b) => a + b, 0);
+      return sec('Seats', '<span class="raw">Whole numbers, 0 or more</span>') + '<div class="lns-seats">' + J(SEATS.map((s, i) => fld('st' + i, s[0], (o.neg && i === 0) ? '-2' : String(v[i]), { mono: true, suf: 'seats', err: (o.neg && i === 0) ? 'founder seats cannot be negative' : '' }))) + '</div>'
+        + '<div class="lns-tot"><span>Total</span><b class="mo">' + (tot === 0 ? '0 seats licensed' : tot + ' seats across 4 types') + '</b></div>'; };
+    const termsBlock = (o) => { o = o || {}; const b = o.blank;
+      return sec('Terms', '<span class="raw">Per licence year unless stated</span>') + '<div class="lns-grid3">'
+        + fld('fee', 'Annual fee', b ? '' : '120,000', { mono: true, suf: 'per licence year', ph: 'Amount' })
+        + fld('cur', 'Currency', b ? '' : 'EUR', { mono: true, help: 'Three-letter code', ph: 'EUR' })
+        + fld('rsh', 'Revenue share', o.rsErr ? '112.5' : b ? '' : '12.5', { mono: true, suf: '%', err: o.rsErr, help: o.rsErr ? '' : (b ? '0 to 100%' : 'Stored as 1,250 basis points') })
+        + fld('tsp', 'Token split', o.tsBlank || b ? '' : '5', { mono: true, suf: '%', help: o.tsBlank || b ? 'Optional · 0 to 100%' : 'Stored as 500 basis points' })
+        + fld('trm', 'Term', b ? '' : '3', { mono: true, suf: 'years', help: 'Whole years' })
+        + fld('sta', 'Start date', b ? '' : '2027-01-01', { mono: true, help: b ? 'YYYY-MM-DD' : 'Fri 1 Jan 2027' })
+        + fld('ren', 'Renewal date', o.renErr ? '2030-02-30' : o.renFilled ? '2030-01-01' : '', { mono: true, ph: 'YYYY-MM-DD', err: o.renErr, help: o.renFilled ? 'Tue 1 Jan 2030' : (b ? 'Needed to issue' : 'Eadwyn proposed a date · nothing is filled until you accept') })
+        + '</div>'; };
+    const reasonF = (o) => { o = o || {}; return fld('rsn', 'Reason', o.short ? 'At issue' : 'Terms recorded at issue', { req: true, area: true, err: o.short ? 'A reason of at least 10 characters is required' : '', help: o.short ? '' : 'Recorded in History with your name and the time' }); };
+    const s3 = (o) => { o = o || {}; return stepCard('What are the commercial terms?', seatsBlock(o) + termsBlock(o) + sec('Recorded with the money terms') + reasonF(o.reason)
+      + totpNote('saving the fee, shares, term and dates. Seats save without one.')
+      + foot(true, o.busy ? 'Saving…' : 'Save terms and continue', { busy: o.busy, dis: o.busy })); };
+    const eadRenew = '<p class="foot">Eadwyn reads this step and changes nothing. A proposal fills a field only when you accept it.</p>'
+      + '<div class="lns-prop"><span class="eye">Proposal · renewal date</span><p>Start <b class="mo">1 Jan 2027</b> + <b class="mo">3</b> years → renew on <b class="mo">1 Jan 2030</b>.</p><p class="raw">From the start date and term on this step. Not a pricing recommendation.</p><div class="lns-pa"><button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn t bsm">Discard</button></div></div>'
+      + '<p class="foot">Accept fills the field. Edit opens it. Discard leaves it blank. Nothing saves until you press Save terms and continue.</p>';
+
+    /* ================= L43 · Step 4 Administrators ================= */
+    const adminTable = (o) => { o = o || {}; if (o.unr) return '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The administrators could not be read.</b> This is not a claim that none are appointed. You can still appoint one below.</div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>';
+      if (o.none) return '<div class="lns-empty">' + NONE + '<span>No administrator appointed yet</span></div>';
+      return '<table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Licence role</th><th>Account role</th><th>Account</th></tr></thead><tbody><tr><td><b>[Sample Admin]</b></td><td class="mo">[admin@sample]</td><td>Principal</td><td>Admin</td><td>' + st('Active') + '</td></tr></tbody></table>'; };
+    const appoint = (o) => { o = o || {}; return '<div class="lns-sub"><b style="font-size:13.5px">Appoint an administrator</b><div class="lns-grid">'
+      + fld('aem', 'Email of an existing account', o.blank ? '' : '[delegate@sample]', { mono: true, ph: 'name@company', err: o.emErr })
+      + '<div class="lns-f"><label>Role</label><div class="seg" role="radiogroup" aria-label="Role"><button type="button" role="radio" aria-checked="' + !!o.blank + '">Principal</button><button type="button" role="radio" aria-checked="' + !o.blank + '">Delegate</button></div></div>'
+      + fld('arn', 'Reason', o.blank ? '' : (o.rsErr ? 'Ops' : 'Runs day-to-day operations for the studio'), { span: true, area: true, req: true, ph: 'At least 10 characters', err: o.rsErr ? 'A reason of at least 10 characters is required' : '', help: o.rsErr ? '' : 'It is recorded' })
+      + '</div>' + cons('This account becomes an admin of this licence’s studio.') + totpNote('appointing an administrator')
+      + '<div style="display:flex;justify-content:flex-end"><button type="button" class="btn">Appoint</button></div></div>'; };
+    const s4 = (o) => { o = o || {}; return stepCard('Who runs this licence?', sec('Appointed administrators', o.none || o.unr ? '' : '<span class="raw">1 appointed</span>') + adminTable(o) + appoint(o),
+      foot(true, 'Continue to agreement', { sec: '<button type="button" class="btn">Skip for now</button>', note: 'Optional for issuing. Administrators can be appointed later on the licence’s Access page.' })); };
+
+    /* ================= L44 · Step 5 Agreement ================= */
+    const TPL = [['White-label Licence Agreement', 'v3', 'pending', ''], ['Subsidiary Licence Agreement', 'v7', '', ''], ['Service Partner Schedule', 'v1', '', 'Legal review required'], ['Exclusivity Schedule', 'v1', '', 'No text yet']];
+    const picker = (o) => { o = o || {}; if (o.unr) return '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The master templates could not be read.</b> Nothing can be generated until they can. The other steps are unaffected.</div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>';
+      if (o.none) return '<div class="lns-empty">' + NONE + '<span>HQ has authored no master templates yet, so there is nothing to instantiate. The library lives on Contracts. <a href="#">Open Contracts › Templates</a></span></div>';
+      return '<div class="lns-tpl" role="radiogroup" aria-label="Master template">' + J(TPL.map((t, i) => '<div role="radio" aria-checked="' + (i === 0) + '"' + (t[3] ? ' aria-disabled="true"' : '') + ' class="lns-rc' + (i === 0 ? ' on' : '') + (t[3] ? ' off' : '') + '"><i aria-hidden="true"></i><div><b>[' + t[0] + ']</b><small class="mo">' + t[1] + '</small></div>' + (t[2] ? '<span class="lns-cr">◔ Counsel review pending</span>' : '') + (t[3] ? '<span class="lns-cx">⊘ ' + t[3] + '</span>' : '') + '</div>')) + '</div>'; };
+    const BODY = '# [WHITE-LABEL LICENCE AGREEMENT]\nTemplate white-label-licence v3\n\n1. Parties\nAxal VC Holdings LLC (“Licensor”) and [Helvetic Ventures SA], [Bahnhofstrasse 1, 8001 Zürich] (“Licensee”), represented by [A. Keller], {{licence.signatory_title}}.\n\n2. Territory\n[Switzerland].\n\n3. Term\n3 years from 1 Jan 2027; renewal on 1 Jan 2030.\n\n4. Fees\nAnnual fee EUR 120,000 per licence year. Revenue share 12.5%. Token split 5%.\n\n5. Seats\nFounder 12 · Investor / LP 6 · Advisor 4 · Service partner 2.\n\n9. Notice\nEither party gives {{terms.notice_period}} written notice…';
+    const docText = '<pre class="lns-doc" tabindex="0" aria-label="Generated text">' + BODY.replace(/\{\{([^}]+)\}\}/g, '<mark>{{$1}}</mark>') + '</pre>';
+    const UNF = [['signatory title', 'licence.signatory_title', 'set in step 1', 'Step 1'], ['notice period', 'terms.notice_period', 'set on the licence’s Terms page after issuing', 'Terms page']];
+    const docCard = (o) => { o = o || {}; return '<div class="lns-docc"><div class="ch"><div><b style="font-size:14px">[White-label Licence Agreement] · v3</b><div class="raw">Template white-label-licence v3 · hash 7a3e…c41b · generated 10:31 UTC</div></div>' + st('Draft') + '</div>'
+      + (o.noText ? '<div class="lns-notext"><span class="raw">Text shown when generated</span><p class="foot">The saved contract keeps its hash and fields; its text is returned only when it is generated. Generate again to read it here, or open it on the licence’s Agreement page after issuing.</p></div>' : docText)
+      + '<div class="lns-unf"><b>Unfilled fields · 2</b><ul>' + J(UNF.map(u => '<li><code>' + u[1] + '</code><span>' + u[0] + ' · ' + u[2] + '</span>' + (u[3] === 'Step 1' ? '<a href="#">Go to step 1</a>' : '<span></span>') + '</li>')) + '</ul></div></div>'; };
+    const sigLine = '<div class="lns-sig"><span aria-hidden="true">✎</span><div>Issuing does not wait for a signature. Send the agreement from Agreement after issuing. ' + flag('Q2 · A') + '</div></div>';
+    const s5 = (o) => { o = o || {}; return stepCard('Which agreement does this licence use?', sec('Master templates', '<span class="raw">Current version of each</span>') + picker(o)
+      + (o.none || o.unr ? '' : '<div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn"' + (o.gen === false ? '' : '') + '>' + (o.gen === false ? 'Generate draft' : 'Generate again from v3') + '</button><span class="foot">' + (o.gen === false ? 'Creates the draft contract from the chosen template at its current version. Nothing is sent.' : 'A new draft supersedes this one; nothing is deleted or sent.') + '</span></div>')
+      + (o.gen === false || o.none || o.unr ? '' : sec('Draft contract') + (o.cunr ? '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Contracts could not be read.</b> The licence_contracts table could not be read on this database. A contract may exist; this is not a claim that none does.</div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>' : docCard(o)))
+      + sigLine, foot(true, 'Continue to review')); };
+    const eadPlace = '<p class="foot">Eadwyn reads the draft contract and fills nothing.</p><div class="lns-prop"><span class="eye">Still unfilled · 2</span><ul class="lns-pl"><li><b>The signatory’s title</b> is blank. Add it in step 1, Legal entity, then generate again.</li><li><b>The notice period</b> is not a field in this flow. It is set on the licence’s Terms page after issuing.</li></ul><div class="lns-pa"><button type="button" class="btn t bsm">Dismiss</button></div></div>';
+
+    /* ================= L45 · Step 6 Issue review ================= */
+    const grp = (n, t, rows) => '<section class="lns-rg"><div class="ch"><h3><span class="mo">' + n + '</span> ' + t + '</h3><a href="#" class="lns-edit">Edit<span class="lns-sr"> ' + t + '</span></a></div><dl class="lns-dl">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd' + (r[2] ? ' class="mo"' : '') + '>' + r[1] + '</dd>')) + '</dl></section>';
+    const groups = (o) => { o = o || {}; return (o.cols ? '<div class="lns-rgs lns-rgm" style="columns:' + o.cols + '">' : '<div class="lns-rgs">')
+      + grp(1, 'Legal entity', [['Reference', REF, 1], ['Legal entity', ENT], ['Brand name', 'Helvetic Ventures'], ['Kind', 'White-label'], ['Registered address', o.noAdr ? NREC : '[Bahnhofstrasse 1, 8001 Zürich]'], ['Signatory', '[A. Keller]'], ['Signatory title', NREC], ['Brand kit', o.noKit ? NREC : SW('#0F766E') + ' primary · ' + SW('#B45309') + ' accent']])
+      + grp(2, 'Territory', [['Countries', 'Switzerland · 1 country']])
+      + grp(3, 'Commercial terms', [['Seats', '<b class="mo">' + SEATN + '</b> licensed · Founder 12 · Investor / LP 6 · Advisor 4 · Service partner 2'], ['Annual fee', '<span class="mo">EUR 120,000</span> per licence year'], ['Revenue share', '<span class="mo">12.5%</span> · 1,250 bp'], ['Token split', o.noTok ? NREC : '<span class="mo">5%</span> · 500 bp'], ['Term', '<span class="mo">3</span> years'], ['Start', '1 Jan 2027', 1], ['Renewal', o.noRen ? NREC : '1 Jan 2030', !o.noRen]])
+      + grp(4, 'Administrators', [['Appointed', o.noAdm ? NONE : '[Sample Admin] · Principal · Active']])
+      + grp(5, 'Agreement', [['Draft contract', '[White-label Licence Agreement] v3 · ' + st('Draft')], ['Hash', '7a3e…c41b', 1], ['Unfilled fields', '2 · signatory title, notice period'], ['Signature', st('Not sent', 'Not sent · does not block issuing')]])
+      + '</div>'; };
+    const consq = (o) => { o = o || {}; return '<div class="lns-q4">'
+      + '<section><h3>1 · What will happen</h3><p><b class="mo">' + REF + '</b> becomes Active for <b>Switzerland</b>; its studio can use <b class="mo">' + SEATN + '</b> seats.</p></section>'
+      + '<section><h3>2 · What else this affects</h3><ul><li>Switzerland has been held by this draft since step 2, and issuing keeps it.</li>' + (o.noRen ? '<li>No renewal date is set yet, so renewal cannot be tracked; this blocks issuing.</li>' : '<li>Renewal is tracked from <b class="mo">1 Jan 2030</b>.</li>') + '<li>If a branch is deployed for this licence, it receives the Active copy. If not, the copy goes when the branch is deployed.</li></ul></section>'
+      + '<section><h3>3 · What is recorded</h3><p>Who issued it and when, in History. No reason is asked. ' + flag('Q3 · A') + '</p></section>'
+      + '<section><h3>4 · Can this be undone?</h3><p>No. It can be suspended or terminated later; termination releases the territory.</p></section></div>'; };
+    const BLK = [['This is a white-label licence and its brand kit has no colours.', 'Step 1 · Brand kit'], ['No renewal date is set.', 'Step 3 · Commercial terms']];
+    const blockers = (o) => { o = o || {};
+      if (o.unr) return '<div class="lns-blk u" role="alert"><div class="ch"><b>What still blocks issuing</b>' + st('Unavailable') + '</div><p>We could not check what blocks issuing. Issue stays off until the check can be read; it is never treated as clear.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></div>';
+      if (o.blocked) return '<div class="lns-blk b"' + (o.refused ? ' role="alert"' : '') + '><div class="ch"><b>' + (o.refused ? 'Not issued · 2 things block issuing' : 'What still blocks issuing') + '</b>' + st(o.refused ? 'Refused' : 'Blocked', o.refused ? 'Refused · blocked' : '2 blockers') + '</div>' + (o.refused ? '<p>The platform checked again when you pressed Issue licence. Every value is kept.</p>' : '') + '<ul>' + J(BLK.map(b => '<li><span aria-hidden="true">▲</span><span>' + b[0] + '</span><a href="#">' + b[1] + '</a></li>')) + '</ul></div>';
+      return '<div class="lns-blk ok"><div class="ch"><b>What still blocks issuing</b>' + st('Completed', 'Checked 10:40 UTC') + '</div><p><b>✓ Nothing blocks issuing.</b> Territory, seats, fee and revenue share, renewal date and brand kit colours are in place. A pending signature does not block issuing.</p></div>'; };
+    const s6 = (o) => { o = o || {}; const off = o.blocked || o.unr;
+      return stepCard('Review and issue', '<p class="foot" style="margin-top:-4px">Every value saved in steps 1 to 5. Edit returns to its step; your place here is kept.</p>' + groups(o) + sec('If you issue this licence') + consq(o) + blockers(o) + (o.extra || ''),
+        foot(true, o.busy ? 'Issuing…' : 'Issue licence', { dis: off || o.busy, busy: o.busy, note: off ? (o.unr ? 'Issue licence is off: we could not check what blocks issuing.' : 'Issue licence is off: 2 things block issuing.') : 'One press. The Worker checks the blockers again before it changes anything.' })); };
+    const eadSum = '<p class="foot">Eadwyn reads this review. The summary is not saved and changes nothing.</p><div class="lns-prop"><span class="eye">Plain-words summary · draft</span><p>Helvetic Ventures SA receives a white-label licence, WL-CH-001, for Switzerland. It runs for 3 years from 1 Jan 2027 and renews on 1 Jan 2030. It pays EUR 120,000 a licence year, a 12.5% revenue share and a 5% token split, and has 24 seats. [Sample Admin] is its principal administrator. The agreement is a draft with 2 unfilled fields and has not been sent.</p><div class="lns-pa"><button type="button" class="btn bsm">Edit</button><button type="button" class="btn t bsm">Dismiss</button></div></div>';
+
+    /* ================= L46 · states ================= */
+    const mini = (n, title, inner, w) => '<section class="cd lns-mini"' + (w ? ' style="grid-column:span ' + w + '"' : '') + '><span class="eye">Step ' + (n + 1) + ' · ' + STEPS[n] + '</span><b class="lns-mt">' + title + '</b>' + inner + '</section>';
+    const statesEmpty = () => crop('<span class="eye">Empty · nothing entered · only the primary fields are required</span><div class="lns-g2">'
+      + mini(0, 'Who receives this licence?', entityFields({ blank: true }) + '<div class="lns-ft"><span></span><div class="lns-fb"><button type="button" class="btn p" aria-disabled="true">Create draft and continue</button></div></div>')
+      + mini(2, 'What are the commercial terms?', seatsBlock({ blank: true }) + termsBlock({ blank: true }) + '<p class="foot">Seats at 0 and blank terms save; issuing needs seats, fee, revenue share and a renewal date.</p>')
+      + mini(3, 'Who runs this licence?', adminTable({ none: true }) + '<p class="foot">Optional for issuing. Continue to agreement or Skip for now.</p>')
+      + mini(4, 'Which agreement does this licence use?', picker({ none: true }) + sigLine) + '</div>', 1400);
+    const ferr = (title, inner) => '<div class="lns-fe"><span class="raw">' + title + '</span>' + inner + '</div>';
+    const statesErr = (dark) => crop('<span class="eye">Field errors · on the field’s own line, in the Worker’s words</span><div class="lns-g3">'
+      + ferr('Step 1 · 409 on create', fld('e1', 'Licence reference', REF, { mono: true, err: REF + ' is already in use' }))
+      + ferr('Step 1 · a recorded value cleared', fld('e2', 'Signatory title', '', { ph: 'e.g. Managing director', err: 'signatory_title cannot be blank', help: 'Was “[Director]” · a recorded value can be changed but not cleared' }))
+      + ferr('Step 1 · brand kit · 400', fld('e3', 'Primary colour', '#0F76', { mono: true, err: 'Both a primary and an accent colour are required, each as a hex value such as #0f766e' }))
+      + ferr('Step 3 · the field’s own check', fld('e4', 'Revenue share', '112.5', { mono: true, suf: '%', err: 'Enter a percentage from 0 to 100' }))
+      + ferr('Step 3 · the Worker refuses', fld('e5', 'Revenue share', '12.505', { mono: true, suf: '%', err: 'revenue_share_bps must be whole basis points from 0 to 10000, or null to clear it' }))
+      + ferr('Step 3 · date', fld('e6', 'Renewal date', '2030-02-30', { mono: true, err: 'renews_on must be a real date as YYYY-MM-DD, or null to clear it' }))
+      + ferr('Step 3 · seats', fld('e7', 'Founder', '-2', { mono: true, suf: 'seats', err: 'founder seats cannot be negative' }))
+      + ferr('Step 4 · 404', fld('e8', 'Email of an existing account', '[nobody@sample]', { mono: true, err: 'No account with that address' }))
+      + ferr('Step 4 · 409', fld('e9', 'Email of an existing account', '[admin@sample]', { mono: true, err: 'That account already administers DACH-001' }))
+      + ferr('Step 4 · reason under 10 characters', fld('e10', 'Reason', 'Ops', { area: true, err: 'A reason of at least 10 characters is required' }))
+      + '</div><p class="foot">The field keeps what was typed. Focus moves to the first field in error; its message is tied to it with aria-describedby. Nothing else on the step is cleared.</p>', 1400, dark);
+    const statesNrec = () => crop('<span class="eye">Not recorded · optional values left blank, in the review</span>' + groups({ noAdr: true, noTok: true, cols: 3 }) + '<p class="foot">Registered address and token split were left blank: they read “— Not recorded” in the muted style, never a dash, “0” or “0%”. The signatory title is also Not recorded. A step with no administrator reads “○ None”: the read succeeded and there is nothing.</p>', 1400);
+    const unrCard = (n, title, msg, keep) => '<section class="cd lns-mini"><span class="eye">Step ' + (n + 1) + ' · ' + STEPS[n] + '</span><b class="lns-mt">' + title + '</b><div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div>' + msg + '</div></div><p class="foot">' + keep + '</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>';
+    const statesUnr = (dark) => crop('<span class="eye">Unreadable · a read the step depends on failed · entered values stay</span><div class="lns-g5">'
+      + unrCard(0, 'Brand kit', '<b>The brand kit could not be read.</b> ' + st('Unavailable'), 'Entity fields still save. Issuing is blocked until the kit can be read.')
+      + unrCard(3, 'Administrators list', '<b>The administrators could not be read.</b> ' + st('Unavailable'), 'Not a claim that none are appointed. Appoint still works.')
+      + unrCard(4, 'Master templates', '<b>The master templates could not be read.</b> ' + st('Unavailable'), 'Generate is off until they can. Continue still works.')
+      + unrCard(4, 'Contracts', '<b>Contracts could not be read.</b> ' + st('Unavailable'), 'A draft may exist. It is never shown as “no contract”.')
+      + unrCard(5, 'What blocks issuing', '<b>We could not check what blocks issuing.</b> ' + st('Unavailable'), 'Issue licence is disabled until the check can be read.')
+      + '</div>', 1400, dark);
+    const statesRef = (dark) => crop('<span class="eye">Refused · values are kept</span><div class="lns-g2">'
+      + '<section class="cd lns-mini"><span class="eye">Opening New licence · not a Super Admin</span>' + st('Refused') + '<b class="lns-mt">Only HQ Super Admins can issue licences; ask a Super Admin.</b><p class="foot">Shown in place of the step card. The step list is not drawn, because no step can be used. Nothing was created.</p></section>'
+      + '<section class="cd lns-mini"><span class="eye">Saving terms, brand kit or an administrator</span>' + st('Refused') + '<b class="lns-mt">Sign in again with your authenticator app to make this change.</b><p class="foot">This session was not signed in with an authenticator. Nothing was saved; every typed value stays on the step. Seats, entity details and the contract do not need it.</p><button type="button" class="btn bsm" style="align-self:flex-start">Sign in again</button></section></div>', 1100, dark);
+    const verifySheet = (o) => { o = o || {}; return sheet('vf', 'Fresh verification', 'Confirm with your authenticator', '<p style="font-size:13px;line-height:1.5">Saving the money terms of <b class="mo">' + REF + '</b> needs a fresh code.</p>'
+      + '<dl class="kv2" style="grid-template-columns:120px minmax(0,1fr)"><dt>Saving</dt><dd>Annual fee, currency, revenue share, token split, term, start and renewal dates</dd><dt>Reason</dt><dd>Terms recorded at issue</dd><dt>Not in this save</dt><dd>Seats (saved without a code)</dd></dl>'
+      + '<div class="lns-f"><label>6-digit code from your authenticator app</label>' + code({ n: 6 }) + '</div><p class="foot">Cancel keeps every value on the step. Nothing is saved until the code is accepted.</p>',
+      '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Verify and save</button>'); };
+    const statesConflict = () => crop('<span class="eye">Conflict · step 3 · 409 terms_conflict</span><div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>These terms changed since you opened them, so nothing was saved. Reload them and apply your change again.</b><div>Changed by [M. Okafor] at 10:36 UTC (terms revision 2).</div></div><span class="bt"><button type="button" class="btn p bsm">Reload terms</button></span></div>'
+      + '<table class="tbl"><thead><tr><th>Term</th><th>When you opened it</th><th>Now</th><th>Your entry, kept</th></tr></thead><tbody><tr><td>Revenue share</td><td class="mo">' + '<span class="nrec">Not recorded</span></td><td class="mo">10%</td><td class="mo">12.5%</td></tr><tr><td>Annual fee</td><td class="mo"><span class="nrec">Not recorded</span></td><td class="mo"><span class="nrec">Not recorded</span></td><td class="mo">EUR 120,000</td></tr></tbody></table><p class="foot">Your entries stay in the fields after Reload, so you can apply them again on the current terms.</p>', 1000);
+    const statesGen = () => crop('<span class="eye">Generate refused · nothing was generated</span><div class="lns-g2">'
+      + '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>Restricted — Legal review required.</b> [Counsel has not reviewed this template.] Nothing was generated, sent or published.<div class="raw">409 template_restricted</div></div></div>'
+      + '<div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Another contract was being issued for this licence at the same moment. Reload and try again.</b><div class="raw">409 contract_conflict</div></div><span class="bt"><button type="button" class="btn bsm">Reload</button></span></div></div>', 1100);
+    const statesSave = () => crop('<span class="eye">Saving, save failed, loading</span><div class="lns-g3">'
+      + '<section class="cd lns-mini"><span class="eye">Saving</span><div class="lns-ft" style="border:0;padding:0"><span></span><div class="lns-fb"><button type="button" class="btn">Back</button><button type="button" class="btn p" aria-disabled="true"><span class="lns-spin" aria-hidden="true"></span>Saving…</button></div></div><p class="foot">The button says Saving and is off; fields stay readable. A screen reader hears “Saving terms”.</p></section>'
+      + '<section class="cd lns-mini"><span class="eye">Save failed · step 3</span><div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>Seats were saved. The money terms were not.</b> The request did not complete. Every value you typed is still on this step.</div></div><button type="button" class="btn p bsm" style="align-self:flex-start">Save terms again</button></section>'
+      + '<section class="cd lns-mini"><span class="eye">Loading · step 4</span><div class="lns-skl"><span class="sk" style="height:12px;width:40%"></span><span class="sk" style="height:34px"></span><span class="sk" style="height:34px"></span><span class="sk" style="height:12px;width:60%"></span></div><p class="foot">Skeleton rows in the step card only. The step list stays.</p></section></div>', 1400);
+
+    /* ================= L47 · refusals and outcomes ================= */
+    const refusals = () => crop('<span class="eye">Issue refused · shown on L45 in the Worker’s words · every value is kept</span><div class="lns-g2">'
+      + '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>Only a draft or pending licence can be activated.</b><div>Nothing was changed. <span class="raw">409 bad_transition</span></div></div><span class="bt"><button type="button" class="btn bsm">Reload review</button></span></div>'
+      + '<div class="nt a" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>This licence changed while your request was being handled, so nothing was changed. Reload it and try again.</b><div class="raw">409 licence_changed</div></div><span class="bt"><button type="button" class="btn bsm">Reload review</button></span></div></div>', 1100);
+    const OUT = [['Active', 'ACTIVE', 'Issued · no branch deployed yet', 'No branch is deployed for this licence yet. The Active copy goes when the branch is deployed.', '<a href="#">Operations · deployment</a>', ''],
+      ['Completed', 'Completed', 'Issued and copied to its branch', WL_PUSH(), '', ''],
+      ['Partial', 'Partially completed', 'Issued at HQ · branch copy not delivered yet', 'The licence is Active at HQ. The branch has not received its copy. HQ retries automatically.', '<a href="#">Operations · deployment</a>', 'border:1.5px solid var(--amE)'],
+      ['Unknown', 'Outcome unknown', 'No answer from HQ', 'The request may or may not have issued the licence. Check before trying again.', '<button type="button" class="btn p bsm">Check status</button>', '']];
+    function WL_PUSH() { return 'The Active copy was delivered to the Helvetic Ventures branch at 10:42 UTC.'; }
+    const outcomes = (dark) => crop('<span class="eye">Outcomes · L18 · partial never looks like full success</span><div class="lns-g4">' + J(OUT.map(x => '<section class="cd" style="gap:7px' + (x[5] ? ';' + x[5] : '') + '">' + st(x[0], x[1]) + '<b>' + x[2] + '</b><p style="font-size:12.5px;line-height:1.5">' + x[3] + '</p>' + (x[4] ? '<div>' + x[4] + '</div>' : '') + '</section>')) + '</div>', 1400, dark);
+    const overview = () => page('<div class="lns-crumb"><a href="#">Licences</a> / <b>Helvetic Ventures</b></div><header class="pgh" style="align-items:flex-start"><div><h1 style="font-size:28px">Helvetic Ventures</h1><p class="raw" style="font-size:12px">' + REF + ' · Switzerland · White-label</p><div style="display:flex;gap:10px;align-items:center;margin-top:8px">' + st('Active', 'ACTIVE') + '<span style="font-size:12.5px;color:var(--mu)">Renews 1 Jan 2030 · Agreement v3 draft · no branch deployed</span></div></div><div class="ctl"><button type="button" class="btn">Record a request</button><button type="button" class="btn" aria-haspopup="menu">More ▾</button></div></header>'
+      + '<div class="nt g" role="status"><span class="ic" aria-hidden="true">✓</span><div><b>' + REF + ' issued · Active for Switzerland.</b> No branch is deployed for this licence yet, so no copy was sent. <a href="#">Operations · deployment</a></div><span class="bt"><button type="button" class="ib" aria-label="Dismiss" style="width:28px;height:28px">✕</button></span></div>'
+      + '<nav class="ptabs" aria-label="Licence sections">' + J(['Overview', 'Terms', 'Agreement', 'Access', 'Operations', 'History'].map(t => '<a href="#"' + (t === 'Overview' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>'
+      + '<div class="g">' + J([['Licence', st('Active'), 'Issued 14 Nov 2026 10:42 UTC'], ['Agreement', st('Draft', 'v3 draft · not sent'), '<a href="#">Send for signature on Agreement</a>'], ['Commercial', 'EUR 120,000 / licence year · 12.5% revenue share', 'Term 3 years from 1 Jan 2027'], ['Access', '1 administrator', SEATN + ' seats licensed · utilisation <span class="nrec">Not recorded</span>']].map(f => '<section class="cd" style="grid-column:span 3;gap:6px"><span class="eye">' + f[0] + '</span><div style="font-size:13.5px;font-weight:700">' + f[1] + '</div><span class="raw">' + f[2] + '</span></section>')) + '</div>', { h: 640 });
+    const leave = () => '<div class="dim1" style="opacity:1"></div><div class="lns-dlg" role="alertdialog" aria-modal="true" aria-labelledby="lv"><h2 id="lv">Leave New licence?</h2><p>The draft <b class="mo">' + REF + '</b> stays in the ledger as Draft, with everything saved so far. You can finish it from its licence page. Values typed on this step and not yet saved are discarded.</p><div class="lns-fb"><button type="button" class="btn">Leave</button><button type="button" class="btn p">Stay</button></div></div>';
+
+    /* ================= L48 · phone ================= */
+    const phone = (n, body, cta, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph lns-ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Leave New licence">‹</button><b style="font-size:15px">Issue a licence</b><button type="button" class="pi" aria-label="More">⋯</button></div>'
+      + '<div class="lns-pstep"><span>Step ' + (n + 1) + ' of 6 · ' + STEPS[n] + '</span><button type="button" class="btn bsm" aria-haspopup="dialog">Steps</button></div>'
+      + '<div class="pbd" style="overflow:hidden;flex:1">' + body + '</div>' + (cta ? '<div class="lns-pin">' + cta + '</div>' : '') + (o.overlay || '') + '</div></div>'; };
+    const pbtn = (t, dis) => '<button type="button" class="btn p"' + (dis ? ' aria-disabled="true"' : '') + '>' + t + '</button>';
+    const ph1 = () => phone(0, '<h2 class="lns-ph2">Who receives this licence?</h2>' + fld('pr', 'Licence reference', REF, { mono: true, help: 'Unique across every licence family' }) + fld('pl', 'Legal entity name', ENT) + fld('pb', 'Brand name in product', 'Helvetic Ventures', { help: 'Defaults to the legal name' }) + '<div class="lns-f"><label>Kind</label>' + kindCards('wl') + '</div>' + sec('For the agreement') + fld('pa', 'Registered address', '[Bahnhofstrasse 1, 8001 Zürich]', { opt: true }),
+      '<p class="lns-pn">Creates ' + REF + ' as a draft. It grants nothing until issued.</p>' + pbtn('Create draft and continue'));
+    const ph3 = () => phone(2, '<h2 class="lns-ph2">What are the commercial terms?</h2>' + sec('Seats') + '<div class="lns-prows">' + J(SEATS.map(s => '<div class="lns-prow"><span>' + s[0] + '</span><div class="lns-in mo" role="textbox" aria-label="' + s[0] + ' seats"><span class="lns-v">' + s[1] + '</span></div></div>')) + '<div class="lns-tot"><span>Total</span><b class="mo">24 seats across 4 types</b></div></div>' + sec('Terms') + '<div class="lns-p2">' + fld('pf', 'Annual fee', '120,000', { mono: true }) + fld('pc', 'Currency', 'EUR', { mono: true }) + '</div>' + fld('prs', 'Revenue share', '12.5', { mono: true, suf: '%' }),
+      totpNoteP() + pbtn('Save terms and continue'));
+    function totpNoteP() { return '<p class="lns-pn">⛨ Saving the money terms asks for your authenticator code.</p>'; }
+    const pgrp = (t, sum, open, rows) => '<div class="lns-pg' + (open ? ' open' : '') + '"><button type="button" aria-expanded="' + !!open + '"><b>' + t + '</b><span>' + sum + '</span><i aria-hidden="true">' + (open ? '▴' : '▾') + '</i></button>' + (open ? '<dl class="lns-dl">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl><a href="#" class="lns-edit">Edit legal entity</a>' : '') + '</div>';
+    const ph6 = () => phone(5, '<h2 class="lns-ph2">Review and issue</h2>'
+      + pgrp('1 Legal entity', ENT + ' · White-label', true, [['Reference', '<span class="mo">' + REF + '</span>'], ['Address', '[Bahnhofstrasse 1, 8001 Zürich]'], ['Signatory title', NREC], ['Brand kit', SW('#0F766E') + ' ' + SW('#B45309')]])
+      + pgrp('2 Territory', 'Switzerland') + pgrp('3 Commercial terms', '24 seats · EUR 120,000 / yr') + pgrp('4 Administrators', '1 · Principal') + pgrp('5 Agreement', 'v3 draft · not sent')
+      + '<div class="lns-q4 lns-q4p"><section><h3>1 · What will happen</h3><p><b class="mo">' + REF + '</b> becomes Active for Switzerland; its studio can use <b class="mo">24</b> seats.</p></section><section><h3>4 · Can this be undone?</h3><p>No. It can be suspended or terminated.</p></section></div>'
+      + '<div class="lns-blk ok"><p><b>✓ Nothing blocks issuing.</b></p></div>', pbtn('Issue licence'));
+    const phSteps = () => phone(2, '<p class="foot">Commercial terms</p>', '', { overlay: '<div class="dim1" style="opacity:1"></div><div class="lns-psheet" role="dialog" aria-modal="true" aria-labelledby="pss"><div class="lns-grab" aria-hidden="true"></div><h2 id="pss">Steps</h2>' + vlist(2) + '<p class="foot">Saved steps show ✓. Opening another step keeps what you typed on this one.</p><button type="button" class="btn" style="min-height:44px">Close</button></div>' });
+    const phVerify = () => phone(2, '', '', { overlay: '<div class="lns-pfull" role="dialog" aria-modal="true" aria-labelledby="pvf"><div class="pt"><button type="button" class="pi" aria-label="Cancel">✕</button><b id="pvf" style="font-size:15px">Confirm with your authenticator</b><span style="width:44px"></span></div><div class="pbd" style="flex:1"><p style="font-size:14px;line-height:1.5">Saving the money terms of <b class="mo">' + REF + '</b> needs a fresh code.</p><dl class="kv2" style="grid-template-columns:96px minmax(0,1fr)"><dt>Saving</dt><dd>Fee, currency, shares, term and dates</dd><dt>Reason</dt><dd>Terms recorded at issue</dd></dl><div class="lns-f"><label>6-digit code</label>' + code({ n: 3 }) + '</div><p class="foot">Cancel keeps every value on the step.</p></div><div class="lns-pin"><button type="button" class="btn">Cancel</button>' + pbtn('Verify and save', true) + '</div></div>' });
+
+    /* ================= handoff ================= */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk lns-hd">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const handoff = () => dk('<h1>New licence steps · handoff</h1><p>Checked against main <code>6d7712c6d1</code> (14 Nov 2026); the brief was checked on <code>45e7c55fa6</code> and nothing it relies on moved. Every value on L41 to L49 has a Worker route today. <b>Backend required: none.</b> The flow itself is frontend work: today <code>AdminLicences.jsx</code> creates the draft with one inline form (reference, legal name, brand name, kind) and the later steps live as editors on the licence page (<code>TerritoryEditor</code>, <code>CommercialTerms</code>, <code>AdminsEditor</code>, <code>ContractStep</code>, <code>BrandKitEditor</code>).</p>'
+      + '<h2>Step by step</h2>' + tbl(['Step', 'Route on main', 'Write bar', 'Frontend work'], [
+        ['1 Legal entity', '<code>POST /api/admin/licences</code> (ref ≤ 40, upper-cased; 409 “&lt;REF&gt; is already in use”; kind subsidiary | white_label) · <code>PATCH /:uid/entity</code> (no ref, no kind; “&lt;field&gt; cannot be blank”)', 'Super Admin', 'Send address and signatory on create (the inline form omits them); read-only ref and kind after create'],
+        ['1 Brand kit', '<code>PUT /:uid/brand</code> (both hex; 400 invalid_colours; 503 brand_kit_unreadable)', 'TOTP + step-up', 'Block shown for white-label once the draft exists'],
+        ['2 Territory', '<code>PUT /:uid/territories</code> (L21, unchanged)', 'Super Admin', '—'],
+        ['3 Seats', '<code>PUT /:uid/seats</code> (“&lt;type&gt; seats cannot be negative”)', 'Super Admin, no code', 'Saved first on Save terms and continue'],
+        ['3 Money terms', '<code>PATCH /:uid/terms</code> (reason, <code>expected_revision</code>; 400 <code>errors[]</code>; 409 terms_conflict with who changed them)', 'TOTP + step-up + reason', 'Percent ↔ basis points; renewal proposal accept / edit / discard'],
+        ['4 Administrators', '<code>GET</code> / <code>POST /:uid/admins</code> (reason ≥ 10; 404, 409 already administers, 409 licence_cannot_administer)', 'TOTP + step-up', 'Appoint makes the account an admin; optional for issuing'],
+        ['5 Agreement', '<code>GET /:uid/contract</code> (templates, contracts without body, <code>templates_reason</code>, <code>contracts_available</code>) · <code>POST /:uid/contract</code> (body_md, 409 template_restricted / template_has_no_body / contract_conflict)', 'Super Admin', 'Text preview only right after Generate (GET returns no body)'],
+        ['6 Issue', '<code>GET /:uid/activation</code> (blockers, can_activate, note) · <code>POST /:uid/activate</code> (409 blocked + blockers, bad_transition, licence_changed; answers <code>pushed</code>)', 'Super Admin; no reason', 'Review groups, four questions, blockers linked to steps, outcome banner on Overview']])
+      + '<h2>Preserved from Licences v2</h2><p>L21’s step frame (header, 240px step list, one card, Back and Continue at the bottom right), L17’s four questions, L18’s outcome cards, L19’s None / Not recorded / Unavailable, the HQ shell and the Eadwyn rail. The handoff after Issue is L03 (Overview) with a banner; Send for signature waits on L10; administrators not appointed are appointed on L11.</p>'
+      + '<h2>Notes for the build</h2><ul class="lns-ul"><li>Step 3 is two writes. Seats (no code) save first, then the money terms (code + reason). If the second fails, say “Seats were saved. The money terms were not.” (L46).</li><li>The branch copy after Issue is read from <code>pushed</code>. A failed push is retried by the schedule (<code>retryPendingLicencePushes</code>); there is no manual retry route, so the partial card links to Operations · deployment and offers no Retry.</li><li>Not drawn, because nothing produces them: an “Administrator missing” flag on the ledger and an administrator item in Needs HQ.</li><li>Accessibility: the step list is an ordered list with <code>aria-current="step"</code>; each error is tied to its field with <code>aria-describedby</code> and focus moves to the first; the verification sheet traps focus and returns it to Save; status always has a word and a glyph; brand colours always show their hex; phone targets are 44px and the primary action is pinned.</li></ul>'
+      + '<h2>Pending the owner (⚑, option A drawn)</h2>' + tbl(['Question', 'Drawn'], [['Q1 When does the draft enter the ledger?', 'A · on Create draft and continue; leaving keeps it as Draft'], ['Q2 Does Agreement send for signature?', 'A · no; issuing never waits for a signature'], ['Q3 Should Issue ask for a reason?', 'A · no; History records who and when'], ['Q4 Where are brand kit colours set?', 'A · a Brand kit block on step 1 for a white-label once the draft exists']])
+      + '<h2>Open</h2><p>#5955 (invoices, also under #4819) was briefed with the same board ids, L41 to L49, and the same part file, <code>D4819-p1.md</code>. One of the two needs renumbering before either lands.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'LNS41') html = flow(0, s1New(), { fresh: true, done: [], h: 980 });
+    else if (B === 'LNS41B') html = flow(0, s1Draft(), { done: [], saved: '10:14', h: 1030 });
+    else if (B === 'LNS42') html = flow(2, s3(), { saved: '10:22', h: 1020, rail: eadRenew });
+    else if (B === 'LNS43') html = flow(3, s4(), { saved: '10:27', h: 860 });
+    else if (B === 'LNS44') html = flow(4, s5(), { saved: '10:31', h: 1140, rail: eadPlace });
+    else if (B === 'LNS44B') html = crop('<span class="eye">Coming back to step 5 later · the saved contract, without its text</span>' + docCard({ noText: true }), 900);
+    else if (B === 'LNS44C') html = crop('<span class="eye">Before generating</span>' + picker() + '<div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn">Generate draft</button><span class="foot">Creates the draft contract from the chosen template at its current version. Nothing is sent.</span></div>' + sigLine, 900);
+    else if (B === 'LNS45') html = flow(5, s6(), { saved: '10:40', h: 1770, rail: eadSum });
+    else if (B === 'LNS45B') html = crop('<span class="eye">Blocked · the platform’s own list, each linked to its step</span>' + blockers({ blocked: true }) + '<div class="lns-ft"><p class="lns-fn">Issue licence is off: 2 things block issuing.</p><div class="lns-fb"><button type="button" class="btn">Back</button><button type="button" class="btn p" aria-disabled="true">Issue licence</button></div></div>', 1000);
+    else if (B === 'LNS46A') html = statesEmpty();
+    else if (B === 'LNS46B') html = statesErr(false);
+    else if (B === 'LNS46C') html = statesNrec();
+    else if (B === 'LNS46D') html = statesUnr(false);
+    else if (B === 'LNS46E') html = statesRef(false);
+    else if (B === 'LNS46F') html = flow(2, s3({ renFilled: true }), { saved: '10:22', h: 1000, overlay: verifySheet() });
+    else if (B === 'LNS46G') html = statesConflict();
+    else if (B === 'LNS46H') html = statesGen();
+    else if (B === 'LNS46I') html = statesSave();
+    else if (B === 'LNS47') html = flow(5, s6({ blocked: true, refused: true, noKit: true, noRen: true, cols: 2 }), { saved: '10:40', h: 1380 });
+    else if (B === 'LNS47B') html = refusals();
+    else if (B === 'LNS47C') html = outcomes(false);
+    else if (B === 'LNS47D') html = overview();
+    else if (B === 'LNS47E') html = flow(3, s4(), { saved: '10:27', h: 860, overlay: leave() });
+    else if (B === 'LNS48A') html = ph1();
+    else if (B === 'LNS48B') html = ph3();
+    else if (B === 'LNS48C') html = ph6();
+    else if (B === 'LNS48D') html = phSteps();
+    else if (B === 'LNS48E') html = phVerify();
+    else if (B === 'LNS49') html = flow(5, s6({ cols: 2 }), { saved: '10:40', h: 1330, dark: true });
+    else if (B === 'LNS49B') html = statesErr(true);
+    else if (B === 'LNS49C') html = statesUnr(true);
+    else if (B === 'LNS49D') html = statesRef(true);
+    else if (B === 'LNSHO') html = handoff();
+    else html = flow(0, s1New(), { fresh: true, done: [], h: 980 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

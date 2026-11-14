@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Fund v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Fund (Institutional) · #6229 · new canvas, sections FV1 onward</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor Fund v2 — run your own fund’s back office, every figure traced to its record</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The investor’s Fund section (/funds, /funds/lps, /funds/calls, /funds/ledger, /funds/reporting and the period editor) for the general partner of record on the Institutional tier. It replaces Pages · Investor Fund (IF1–IF4) and IF0 / IF0e. The #3704 investor shell from Deals v2, with the zone row Overview · LPs · Calls · Ledger · Reporting and ?fund= carried across zones. Committed, called, collected, outstanding, deployed, distributed and dry powder are separate figures, each with what it counts and its as-of date; NAV, RVPI, TVPI and IRR are Not recorded with their reasons, never 0. Money actions (new call, receipt, distribution, mark paid) follow Prepare → Review → Confirm → Authenticate → Receipt; nothing sends, issues or moves money by itself, and issued never means delivered. States follow Platform States (D5129) with Unavailable as the failed-read word. Eadwyn is the shared rail (#5130). Violet dashed ◇ tags mark backend work (#6229); amber ⚑ tags mark the owner picks (a)–(d), drawn as option A. Tags are annotations, not product copy. Board keys use the IFD prefix (IFD01 = FV1).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 (brief written on 45e7c55fa6) · [Sample Fund I], [LP · …], [GP Name], [Venture A–C] and every figure in brackets are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Fund v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FV1', 'Overview · /funds', 'Committed as the headline; called, collected, outstanding, deployed, distributed, dry powder and DPI as tiles with what each counts and its as-of; NAV, RVPI, TVPI and IRR Not recorded with reasons; the quarterly history with the gap rules (a measured 0 on the baseline, marks as a gap); the gap list with one action each; the four zone cards (⚑ d A). No primary action and no Eadwyn here. Also no fund record: Create a fund, and the LP-only line to My commitment.', [F('IFD01', false, 1250), F('IFD01B', 'No fund to operate yet', 900)]],
+      ['FV2', 'Locked · below Institutional', 'One surface for /funds and every zone, with the zone name as a variable: what the add-on includes and Talk to Axal (⚑ c A). Existing investor and LP tools are unchanged.', [F('IFD02', false, 760), P('IFD02P', 'Phone 390')]],
+      ['FV3', 'LPs · register', 'Totals strip, filter chips, the register with an inline type select, LPA, KYC from linked accounts (Not recorded with no account, never pending) and the last logged message. Add LP as a sheet with an optional first call that is queued, not sent.', [F('IFD03', false, 900), F('IFD03B', 'Add LP · Prepare', 900)]],
+      ['FV4', 'LP record', 'Commitment, LPA, KYC, calls and receipts line by line, distributions, the comms log (subject only, never a body) and the statement as the LP sees it. ◇ Edit details. Also Log a message, and the edit that needs a write route.', [F('IFD04', false, 1040), C('IFD04B', 'Log a message · ◇ Edit details', 1140, 530)]],
+      ['FV5', 'Calls · ledger · /funds/calls', 'Stats with their bases; Latest call, All calls, Outstanding; call 2 with purpose, due, issuer and the residual sentence; each line’s owed, received, outstanding, state, age and KYC with Record receipt, Draft reminder and Log as sent; the wire trail with Export wires; a From Mercury match; the group issued before calls were numbered. ◇ the Axal HQ notice.', [F('IFD05', false, 1340)]],
+      ['FV6', 'Calls · new call', 'Amount → preview split in whole cents with the residual and each LP’s KYC → due date and purpose → Confirm → Authenticate (◇ for a GP) → Receipt. Changing the amount drops the preview. Refusals: no billable LPs, and the Fund I hold in Super Admin preview (D708).', [F('IFD06', 'Review', 1000), C('IFD06B', 'Confirm · Authenticate · Receipt · refusals', 1280, 540)]],
+      ['FV7', 'Calls · receipt and chase', 'A · Record receipt prefilled with what is outstanding (append-only; a correction is a second receipt), then review and receipt. B · the Eadwyn reminder proposal for one LP, nothing sent. C · Log as sent and the logged confirmation.', [C('IFD07', false, 1280, 820)]],
+      ['FV8', 'Distributions', 'The list with paid, pending and failed kept apart and Mark paid on the pending row; New distribution: proceeds → basis, profit, carry withheld with the default-20% flag, each LP line and the unallocated cents → Execute (queued) → Authenticate → Receipt. Drawn under ⚑ (a) A.', [F('IFD08', false, 760), F('IFD08S', 'New distribution · Review', 1060), C('IFD08B', 'Execute · Authenticate · Receipt · Mark paid', 1280, 570)]],
+      ['FV9', 'Ledger · /funds/ledger', 'A · under ⚑ (b) A: periods, journal with totals and Balanced, trial balance, Mercury ledger proposals and What you can do here (◇ Worker scope change). B · as today: a GP who is not the assigned administrator sees capital lines, Fees and their own LP seat summary, with no journal.', [F('IFD09', '(b) A · GP reads the journal', 1180), F('IFD09B', 'As today · not the administrator', 1000)]],
+      ['FV10', 'Reporting · archive', 'Periods with Draft or Issued, issued on and by and the correction link; ◇ Delivered reads Not recorded; the LP report archive with figures as recorded, Not recorded where blank; From Mercury month-end cash and a statement to attach. Primary: New period.', [F('IFD10', false, 1060)]],
+      ['FV11', 'Period editor', 'Label and dates, Letter, Key developments, Outlook and Subsequent events; Save draft; LP preview per LP. ◇ Eadwyn draft of the letter. Also the Issue dialog and an issued period, read-only, with Issue a correcting period.', [F('IFD11', false, 960), C('IFD11B', 'Issue · issued · correction', 1140, 380)]],
+      ['FV12', 'States', 'Loading in the real layout’s shape; empty per zone with one action or who acts next; Not recorded with reasons; Unavailable per source while the rest keeps working; Partial with an outlined chart slot; Refused; saving, save failed, revision conflict and an issued period.', [F('IFD12A', 'Loading', 900), C('IFD12B', 'Empty', 1280, 330), C('IFD12C', 'Not recorded', 1280, 330), F('IFD12D', 'Unavailable', 820), C('IFD12E', 'Partial · Refused', 1280, 710), C('IFD12F', 'Saving · save failed · conflict', 1280, 470)]],
+      ['FV13', 'Eadwyn Fund rail', 'A · the tasks this section has and what each reads (reminder and Mercury matches built; ◇ period letter). B · a running task, then its proposal with sources and Accept / Edit / Discard. Nothing is sent, posted or issued without Accept.', [C('IFD13A', 'A · default', 700, 660), C('IFD13B', 'B · running and proposal', 700, 660)]],
+      ['FV14', 'Phone 390', 'Overview tiles 2×2 with the NAV reasons and a sideways chart; Add LP as a full-height sheet; LP record with Log a message; call lines as cards with one Record receipt and More…; the distribution preview sheet; ledger and journal as cards; the archive as cards; the period editor with Issue sticky at the bottom. 44px targets.', [P('IFD14A', 'Overview'), P('IFD14B', 'Add LP'), P('IFD14C', 'LP record · Log a message'), P('IFD14D', 'Call lines'), P('IFD14E', 'Distribution preview'), P('IFD14F', 'Ledger'), P('IFD14G', 'Reporting'), P('IFD14H', 'Period editor')]],
+      ['FV15', 'Dark', 'FV1 and FV5 on the dark tokens. States keep their words and shapes.', [F('IFD15A', 'Overview', 1250), F('IFD15B', 'Calls', 1340)]],
+      ['FV-H', 'Handoff and backend fit', 'Each board’s Worker route on main, backend required (◇), owner picks (⚑), frontend-only work, handoffs and accessibility.', [W('IFD16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

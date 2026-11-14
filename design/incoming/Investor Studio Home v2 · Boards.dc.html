@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Studio Home v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Studio · #6126 · continues Studio Modularity (SM16 to SM27)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor Studio home v2: what needs me, where my funds stand, what arrived</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/studio for a member holding the Investor licence, inside the existing module frame (D1419): the header, the thesis band (now with sectors, stages, regions, ticket and exclusions), Eadwyn’s fixed chat, the locked profile-fit band and the module grid stay. Five new modules (Needs you, Funds, Returns, Thesis fit on live deals, Arrivals) form the default under the owner’s pick A, 9 of 12; Historical match scores, Quick stats and Portfolio glance stay placeable. Every figure names what it counts, its date and that it is gross; Zero, Not recorded and Unreadable never look alike (D5129). No Eadwyn rail and no Ask on /studio. Section ids SM16 to SM27 continue the Studio Modularity canvas; the component keys use the IHS prefix. A violet dashed ◇ marks backend work and an amber ⚑ an owner decision; neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked on main 6d7712c6d1 · [Jordan Reyes], [Harbor Street Capital], [Fund I], [Fund II], the companies and every amount are fictional sample data. Shell follows #3704: union sidebar, company switcher top-left, Portfolio in the Account menu.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Studio Home v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SM16', 'Investor Studio home v2 · default layout', 'Header (Studio, Investor badge, purpose, date, Customise), the extended thesis band with a struck-through Excludes group and Edit in Settings ›, Eadwyn’s chat, the locked profile-fit band, then the default modules under pick A. The one filled action is the top Needs you row, Pay [Call 3] · due [20 Nov]. Eadwyn’s next-step card is drawn ◇: nothing happens until the investor accepts.', [F('IHS16', false, 3099)]],
+      ['SM17', 'Needs you', 'Seven rows, by due date then date added: capital call (with masked account and reference), fund notice (per-notice unread ◇), Trust requirement, data-room access, booklet, LPA, and one inbox row counting every kind of notification. B shows the half-width variant and row variants: overdue in words with an icon, due date not recorded, payment details unavailable with the reason.', [C('IHS17', 'A · Full width', 1200, 552), C('IHS17H', 'B · Half width and row variants', 1200, 669)]],
+      ['SM18', 'Funds', 'One row per fund: committed, called, received, due now, uncalled, TVPI, DPI and LPA signed date, with a bar of called of committed and received inside called. [Fund II] has nothing paid in, so TVPI and DPI read “No paid-in capital yet”, never 0.00×. Totals add up: $350,000 committed, $150,000 called, $100,000 received, $50,000 due, $200,000 uncalled.', [C('IHS18', false, 1200, 344)]],
+      ['SM19', 'Returns', 'IRR, TVPI, MOIC and DPI for the accessible book with paid in, distributed and NAV, labelled gross and dated. Mark coverage as a sentence. The figure states from positions analytics: not computed with its reason, Total loss beside −100%, and a measured 0.00×. IRR per fund and net to you are ◇.', [C('IHS19', false, 1200, 432)]],
+      ['SM20', 'Thesis fit on live deals', 'Replaces Historical match scores in the default. Six deals from the flow, each with four criterion chips (Match ✓, Outside ✕, Not set, Not recorded) and the platform’s reason on hover and tap; Deal unavailable and Unreadable · Try again. No score, no ranking.', [C('IHS20', false, 1200, 605)]],
+      ['SM21', 'Arrivals', 'One dated list, newest first: founder updates, capital statement and fund report, and the deals-in-flow count. No “new” badge, because the last visit is not recorded (◇). Upcoming events beside it, as today.', [C('IHS21', false, 1200, 477)]],
+      ['SM22', 'Empty states', '(a) Nothing needs you today. (b) No fund commitment, with one action, See [Axal Fund I]. (c) Thesis not set: the band and the fit module both point to Settings, and every chip would be Not set. (d) Nothing has arrived yet, with the ◇ caveat that a failed report read looks like none.', [C('IHS22A', '(a) Needs you', 640, 199), C('IHS22B', '(b) Funds', 1200, 208), C('IHS22C', '(c) Thesis not set', 1200, 316), C('IHS22D', '(d) Arrivals', 640, 256)]],
+      ['SM23', 'States', 'A · Loading: each module on its own skeleton while the others show. B · Not recorded: a call with no due date, a fit criterion the deal lacks, an obligation with no expiry, an analytics date not asked for. C · Unreadable, each module alone with Try again; the admin data-room refusal; Customise saving and save failed with edits kept. D · Refused: the administrator preview, every investor module withheld and Customise offered (D4362).', [F('IHS23A', 'A · Loading', 2682), C('IHS23B', 'B · Not recorded', 1200, 364), C('IHS23C', 'C · Unreadable, refused, saving', 1200, 620), F('IHS23D', 'D · Administrator preview', 1032)]],
+      ['SM24', 'Customise with the new modules', 'The module map (SM6), investor list: the five new modules Recommended and added; Historical match scores (from the retired matching engine, historical, never recalculated), Quick stats and Portfolio glance stay placeable. 9 of 12 placed.', [F('IHS24', false, 1180)]],
+      ['SM25', 'Phone 390', 'A · Header with Customise as an icon, the thesis band (chips to two lines, then +[n] more), Eadwyn’s chat and the profile-fit band. B · Needs you as 44px cards and the first fund card. C · The second fund and Returns as a 2×4 grid. D · Pay opens the payment details in a bottom sheet. E · Thesis fit cards, Arrivals and Events.', [P('IHS25A', 'A · Top'), P('IHS25B', 'B · Needs you, Funds'), P('IHS25C', 'C · Funds, Returns'), P('IHS25D', 'D · Payment sheet'), P('IHS25E', 'E · Fit, Arrivals, Events')]],
+      ['SM26', 'Tablet 768', 'The SM14 grid at 2 columns: full-width modules stay full, halves stay halves; Funds becomes one card per fund below 1024.', [C('IHS26', false, 768, 3144)]],
+      ['SM27', 'Dark', 'SM16 and SM23 C on the dark tokens (SM15); states keep their words, glyphs and shapes.', [F('IHS27A', 'A · Home', 3099), C('IHS27B', 'B · States', 1200, 620)]],
+      ['SM-H', 'Handoff', 'What was checked on main, what is preserved, frontend only, the six ◇ backend items plus the catalogue change, the owner decisions (pick A on all five, and one primary per screen ⚑), routes and accessibility.', [W('IHS28')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

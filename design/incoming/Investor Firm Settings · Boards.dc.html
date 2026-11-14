@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Firm Settings · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Account · Firm Settings · #6286 · continues Company Settings v2 (CS-17 to CS-26)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Firm Settings — one settings home for the investor: firm facts, thesis and where identity, licences, funds and seats stand</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Firm Settings (/account/portfolio/settings, the investor sidebar’s last row under Trust). Today an investor with no company lands on “Create your company” and one with a company is redirected to that company’s settings; neither shows the firm. These boards continue Company Settings v2 (its head, save-status rail, sticky Save / Discard bar, CS-12 save-state matrix and leave dialog) and number from CS-17. One Save sends the whole investor profile (PUT /api/investor-profile/me). Deal fit is read only from the saved thesis. States follow Platform States (D5129): Not recorded, Unreadable (the Worker’s word for Unavailable), Refused, never drawn as zero or blank. Eadwyn appears only in the one rail (#5130). Violet dashed ◇ tags mark backend work; amber ⚑ tags mark owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 10:58 · checked against main 6d7712c6d1 · [Northlake Angels], [Kestrel Syndicate], [Tidepool Labs], every deal, fund, person and email are fictional; $50,000 to $250,000 per cheque and the $250,000 LP target are sample values</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Firm Settings Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['CS-17', 'Firm Settings · loaded', 'Head with Complete and Last saved. Firm profile, then Thesis and matching as one editor (sectors, stages, geographies, thesis with read-only keywords, anti-thesis, value weights “not used in deal fit yet”), then the Investor Signals setting. Right column: save status and four read-only status blocks, each with one link out. One Save: “Saves firm profile and thesis together.” Second frame: Eadwyn’s thesis draft in the rail with Accept, Edit, Discard; nothing saved until Save.', [F('IFS17', 'Loaded · one field edited', 2130), F('IFS17B', 'Eadwyn · Help me write my thesis', 1500)]],
+      ['CS-18', 'Thesis and matching · after save', '“In your deal flow now”: fit per deal by sector, stage, region and cheque from the saved thesis, with Unreadable + Try again and Deal unavailable rows. Eadwyn explains what moved by comparing the fit read before and after Save, this session only. Preview before saving is drawn disabled (◇). The crop shows the whole read failing and the two refusals.', [F('IFS18', false, 1820), C('IFS18B', 'Fit read failed · Free plan · support session', 1240, 242)]],
+      ['CS-19', 'Firm Settings · empty first run', 'Nothing recorded: every firm field says Not recorded, lists say “No sectors chosen”, weights show 0.50 default, Signals on. One action: Set up your firm. The crop is the page after a first, incomplete save: “Needs: a stage”, and fit says Not set where the thesis is empty.', [F('IFS19', false, 2055), C('IFS19B', 'After the first save · Needs', 1140, 395)]],
+      ['CS-20', 'States', 'Loading per section with status blocks loading on their own; Not recorded never blank or zero and one block Unreadable while the rest work; Saving · Saved · Save failed; seat colleague refused, read only (◇); conflict between tabs (◇); leave with unsaved changes.', [C('IFS20A', 'Loading', 1240, 669), C('IFS20B', 'Not recorded · Funds unreadable', 1240, 742), C('IFS20C', 'Save states', 1340, 321), C('IFS20D', 'Seat colleague · refused', 1240, 432), C('IFS20E', 'Conflict', 1040, 288), C('IFS20F', 'Leave with unsaved changes', 640, 328)]],
+      ['CS-21', 'Read failed', 'The profile read failed: no form with empty values, one panel with Try again; the status blocks still show what they read.', [F('IFS21', false, 900)]],
+      ['CS-22', 'Investor with an active company', 'Firm Settings first, then one line “Settings for [Tidepool Labs]” linking to that company’s settings, as the partner branch does today. No redirect (Q4 option A).', [F('IFS22', false, 1000)]],
+      ['CS-23', 'Partner or advisor at the same address · unchanged', 'The partner keeps today’s firm profile card and company link; the advisor (“Practice Settings”) keeps the on-ramp or redirect. Drawn only to show they are not affected.', [C('IFS23A', 'Partner · unchanged', 680, 289), C('IFS23B', 'Advisor · unchanged', 680, 246)]],
+      ['CS-24', 'Team seats', 'Institutional owner: seat list with Joined / Invited / Revoked and dates, Invite a colleague (1 seat left), the invite link shown once with “Email not sent: share this link”. Crop: revoke as Scope → Review → Result, the seat colleague’s view, other plans.', [F('IFS24', false, 980), C('IFS24B', 'Revoke · colleague · other plans', 1340, 372)]],
+      ['CS-25', 'Phone 390', 'Frame 1: head, completeness, status blocks as four cards, Firm profile stacked, Save bar above the safe area. Frame 2: wrapping chips, fit as cards, Eadwyn as a bottom sheet. 44px targets.', [P('IFS25A', false), P('IFS25B', false)]],
+      ['CS-26', 'Dark', 'CS-17 on the dark tokens; status words, glyphs, Not recorded and self-declared keep their shapes.', [F('IFS26', false, 2130)]],
+      ['CS-27', 'Handoff', 'Checked on main, preserved, frontend only, backend required (◇), owner questions (⚑) and accessibility.', [W('IFS27')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

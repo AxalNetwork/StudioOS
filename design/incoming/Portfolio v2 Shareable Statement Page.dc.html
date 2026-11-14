@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Shareable Statement · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+.pfsh{display:grid;grid-template-columns:212px minmax(0,1fr) 44px}
+.pfsh.wr{grid-template-columns:212px minmax(0,1fr) 320px}
+.pfsd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.pfsd .lg2{padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.pfsd .co2{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg);background:var(--card);color:var(--ink);text-align:left}
+.pfsd .co2 i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.pfsd .co2 span{margin-left:auto;color:var(--mu);font-weight:500}
+.pfsd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.pfsd .sep2{height:1px;background:var(--hair);margin:6px 14px}
+.pfnav{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.pfnav a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.pfnav a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.pfnav a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pfnav a span.w{color:var(--amT)}
+.acm{position:absolute;right:30px;top:50px;z-index:6;width:250px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.16);padding:6px;display:flex;flex-direction:column}
+.acm a{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 10px;border-radius:8px;font:600 13px var(--sg);color:var(--ink)!important}
+.acm a[aria-current=page]{background:var(--lav);color:var(--vt)!important;font-weight:800}
+.acm a small{font:500 11px var(--mo);color:var(--mu)}
+.acm .hr2{height:1px;background:var(--hair);margin:4px 6px}
+.perf{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,2fr);gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.perf .hero{padding:16px 20px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.perf .hero b{font:700 30px var(--mo);letter-spacing:-.03em;line-height:1.05}
+.perf .hero .sub2{font-size:12.5px;color:var(--mu);line-height:1.5}
+.perf .mults{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.perf .mults>div{padding:14px 16px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.perf .mults>div:nth-child(4n){border-right:0}
+.perf .mults>div:nth-last-child(-n+4){border-bottom:0}
+.perf .mults small{font-size:11.5px;color:var(--mu)}
+.perf .mults b{font:700 19px var(--mo);letter-spacing:-.02em}
+.perf .mults em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu);line-height:1.4}
+.basis{display:flex;flex-wrap:wrap;gap:6px 14px;font:500 11px var(--mo);color:var(--mu);padding:8px 20px;border-top:1px solid var(--hair);background:var(--raised);grid-column:1/-1}
+.attn{display:flex;flex-direction:column}
+.attn>li{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:14px;align-items:start;padding:12px 0;border-top:1px solid var(--hair)}
+.attn>li:first-child{border-top:0}
+.attn .cn{font-size:14px;font-weight:800}
+.attn .ev{display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.attn .ev span{display:flex;gap:8px;align-items:baseline}
+.attn .ev span i{font-style:normal;font:500 11px var(--mo);color:var(--mu);min-width:110px}
+.hl2{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);white-space:nowrap}
+.hl2 svg{flex:none}
+.hl2.h{color:var(--pos)}.hl2.w{color:var(--amT)}.hl2.a{color:var(--neg)}.hl2.n{color:var(--mu)}.hl2.u{color:var(--ink)}
+.ptbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ptbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.ptbl th.n,.ptbl td.n{text-align:right;font-family:var(--mo)}
+.ptbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.ptbl td a.cnm{font-weight:800;color:var(--ink)!important}
+.ptbl td small{display:block;color:var(--mu);font-size:11px}
+.ptbl tr:last-child td{border-bottom:0}
+.ptbl tr.tot td{font-weight:800;background:var(--raised)}
+.chip3{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--mo);color:var(--mu)}
+.chart2{display:flex;align-items:flex-end;gap:10px;height:150px;padding:8px 4px 0;border-bottom:1px solid var(--hair2);position:relative}
+.chart2>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%}
+.chart2 i{display:block;width:100%;max-width:46px;background:#7c3aed;border-radius:3px 3px 0 0}
+.chart2 i.c{background:var(--hair2)}
+.chart2 b{font:700 10.5px var(--mo)}
+.chart2 span{font:500 10px var(--mo);color:var(--mu)}
+.tline{display:flex;flex-direction:column}
+.tline li{display:grid;grid-template-columns:96px 18px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tline li:first-child{border-top:0}
+.tline li .d{font:500 11px var(--mo);color:var(--mu);padding-top:1px}
+.tline li .k2{width:10px;height:10px;border-radius:3px;margin-top:4px;background:var(--hair2)}
+.tline li .k2.m{background:#7c3aed}.tline li .k2.r{background:var(--pos)}.tline li .k2.s{background:var(--amD)}
+.cohead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.cohead h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.cohead .idn{display:flex;gap:12px;align-items:center;margin-top:6px;font-size:12.5px;color:var(--mu);flex-wrap:wrap}
+.cofacts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cofacts>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.cofacts>div:last-child{border-right:0}
+.cofacts small{font-size:11.5px;color:var(--mu)}
+.cofacts b{font:700 17px var(--mo);letter-spacing:-.01em}
+.cofacts em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.pvb{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 16px;background:#18181b;color:#fff;font:600 12.5px var(--sg)}
+.pvb a{color:#c4b5fd!important;font-weight:700}
+.priv{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sg);color:var(--mu);padding:3px 9px;border:1px dashed var(--hair2);border-radius:999px;background:var(--raised)}
+.obl td.miss{color:var(--amT);font-weight:700}
+.kpiq{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.kpiq>div{padding:10px 12px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.kpiq>div:last-child{border-right:0}
+.kpiq small{font-size:11px;color:var(--mu)}
+.kpiq b{font:700 15px var(--mo)}
+.src2{border-left:3px solid var(--hair2);padding:8px 12px;background:var(--raised);font-size:12.5px;line-height:1.6;border-radius:0 8px 8px 0}
+.mtitle{font:500 11px var(--mo);color:var(--mu);padding:6px 10px;border:1px dashed var(--hair2);border-radius:8px;display:inline-flex;gap:6px}
+.pfc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.pfc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pfc b{font-size:14px}
+.pfc dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;font-size:12px}
+.pfc dt{color:var(--mu)}
+.pfc dd{font-family:var(--mo);font-weight:700;text-align:right}
+.mk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mk>div{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);display:flex;flex-direction:column;gap:3px}
+.mk small{font-size:11px;color:var(--mu)}
+.mk b{font:700 16px var(--mo)}
+.mk em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.compgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cmpl{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.ptbl td.mo{white-space:nowrap}
+.priv{align-self:flex-start}
+/* PST · Portfolio v2 Addendum · Shareable Statement (#6217) */
+.pst-tag{display:inline-flex;align-items:center;gap:4px;font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:#6d28d9;border:1px dashed #a78bfa;background:#f5f3ff;border-radius:999px;padding:1px 7px;white-space:nowrap;vertical-align:middle}
+.pst-flag{display:inline-flex;align-items:center;gap:4px;font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:#92400e;border:1px solid #fcd34d;background:#fffbeb;border-radius:999px;padding:1px 7px;white-space:nowrap;vertical-align:middle}
+.pst-sh{position:absolute;top:0;bottom:0;z-index:5;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column;border-radius:16px 0 0 16px}
+.pst-shh{padding:18px 22px 14px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.pst-shh h2{font-size:19px;font-weight:800;letter-spacing:-.01em;margin-top:3px}
+.pst-shh p{font-size:12.5px;color:var(--mu);margin-top:4px;line-height:1.45}
+.pst-shb{flex:1;overflow:hidden;padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.pst-shf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border-radius:0 0 0 16px}
+.pst-shf .pst-acts{display:flex;gap:8px}
+.pst-lab{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.pst-ch{border:1px solid var(--hair);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.pst-ch label{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:32px;padding:0 12px;border-top:1px solid var(--hair);font:600 12.5px var(--mo)}
+.pst-ch label:first-child{border-top:0}
+.pst-ch label.pst-on{background:var(--lav);color:var(--vt)}
+.pst-ch label.pst-off{color:var(--mu);background:var(--raised)}
+.pst-ch label small{font:600 11px var(--sg);color:var(--mu)}
+.pst-ch label.pst-on small{color:var(--vt)}
+.pst-rd{width:14px;height:14px;border-radius:50%;border:1.6px solid var(--hair2);display:inline-block;background:var(--card)}
+.pst-rd.pst-on{border:4.5px solid var(--vi)}
+.pst-rd.pst-off{border-style:dashed}
+.pst-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:var(--card)}
+.pst-strip>div{padding:10px 12px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.pst-strip>div:last-child{border-right:0}
+.pst-strip small{font-size:11px;color:var(--mu);line-height:1.3}
+.pst-strip b{font:700 16px var(--mo);letter-spacing:-.02em}
+.pst-strip em{font-style:normal;font:500 10px var(--mo);color:var(--mu)}
+.pst-basis{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font:500 11px var(--mo);color:var(--mu);padding:7px 12px;border:1px solid var(--hair);border-top:0;border-radius:0 0 10px 10px;background:var(--raised);margin-top:-15px}
+.pst-toc{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.pst-toc li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:0 6px;padding:6px 0;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:baseline}
+.pst-toc li i{font:600 11px var(--mo);font-style:normal;color:var(--mu)}
+.pst-toc li b{font-weight:700}
+.pst-toc li span{grid-column:2;font:500 10.5px var(--mo);color:var(--mu)}
+.pst-scope{font-size:12.5px;line-height:1.5;padding:10px 12px;border-left:3px solid var(--hair2);background:var(--raised);border-radius:0 8px 8px 0}
+.pst-scope+.pst-scope{margin-top:-8px}
+.pst-own{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--mu);line-height:1.45}
+.pst-mm{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1.5px solid var(--amE);background:var(--amBg);font-size:12.5px;line-height:1.45;color:var(--ink)}
+.pst-mm b{display:block}
+.pst-mm .pst-ic{font:800 13px var(--sg);color:var(--amT);flex:none;width:18px;text-align:center}
+.pst-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.pst-rail .pst-rh{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.pst-rail .pst-rh i{display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#7c3aed;color:#fff;font:800 12px var(--sg);font-style:normal}
+.pst-rail .pst-rh b{font-size:14px}
+.pst-rail .pst-rh small{margin-left:auto;font:500 10.5px var(--mo);color:var(--mu)}
+.pst-rail .pst-rb{padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:12.5px;line-height:1.5}
+.pst-prop{border:1px dashed var(--vi);border-radius:10px;padding:11px 12px;background:var(--lav);display:flex;flex-direction:column;gap:8px}
+.pst-prop .pst-lab{color:var(--vt)}
+.pst-prop p{font-size:12.5px;line-height:1.55;color:var(--ink)}
+.pst-prop .pst-cite{font:500 10.5px var(--mo);color:var(--mu)}
+.pst-prop .pst-a{display:flex;gap:6px;flex-wrap:wrap}
+.pst-ok{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:12px;border:1px solid var(--posE);background:var(--posBg)}
+.pst-ok .pst-ic{width:26px;height:26px;border-radius:50%;background:var(--pos);color:#fff;display:grid;place-items:center;font:800 13px var(--sg);flex:none}
+.pst-ok b{font-size:15px;display:block}
+.pst-ok p{font-size:12.5px;color:var(--ink);margin-top:3px;line-height:1.5}
+.pst-empty{display:flex;flex-direction:column;gap:10px;padding:18px;border:1px dashed var(--hair2);border-radius:12px;background:var(--raised)}
+.pst-empty b{font-size:15px}
+.pst-empty p{font-size:12.5px;line-height:1.5;color:var(--mu)}
+.pst-fail{display:flex;flex-direction:column;gap:8px;padding:14px;border:1.5px dashed var(--ink);border-radius:12px;background:var(--card)}
+.pst-fail b{font-size:15px;display:flex;gap:8px;align-items:center}
+.pst-fail p{font-size:12.5px;line-height:1.5}
+.pst-fail ul{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.pst-fail li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.pst-fail li span{font:600 11px var(--mo);color:var(--mu)}
+.pst-dis{opacity:.45;cursor:not-allowed}
+.pst-btnoff{background:var(--raised)!important;border:1px dashed var(--hair2)!important;color:var(--mu)!important}
+/* paper (always light) */
+.pst-desk{background:#e8e7ee;display:flex;gap:28px;padding:28px 32px;align-items:flex-start}
+.pst-desk.pst-dkm{background:#0b1220}
+.pst-pg{width:612px;height:792px;flex:none;background:#fff;color:#18181b;box-shadow:0 1px 2px rgba(0,0,0,.12),0 10px 30px rgba(24,24,27,.14);position:relative;overflow:hidden;font-family:var(--sg);padding:40px 44px 0;display:flex;flex-direction:column;gap:12px}
+.pst-pg .pst-pk{font:700 8.5px var(--sg);letter-spacing:.14em;text-transform:uppercase;color:#a1a1aa}
+.pst-pg h3{font-size:19px;font-weight:800;letter-spacing:-.015em;margin-top:3px;line-height:1.2}
+.pst-pg .pst-ps{font:500 9px var(--mo);color:#71717a;margin-top:4px}
+.pst-pg .pst-pl{font:700 8.5px var(--sg);letter-spacing:.12em;text-transform:uppercase;color:#6d28d9;border-bottom:1.5px solid #ede9fe;padding-bottom:4px}
+.pst-pg .pst-pp{font-size:9.5px;line-height:1.5;color:#3f3f46}
+.pst-pg .pst-pf{position:absolute;left:44px;right:44px;bottom:22px;border-top:1px solid #ececf1;padding-top:7px;display:flex;justify-content:space-between;gap:16px;font:500 7.5px var(--mo);color:#71717a;line-height:1.5}
+.pst-pg .pst-pf span:last-child{white-space:nowrap}
+.pst-kv{display:flex;flex-direction:column}
+.pst-kv>div{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:10px;align-items:baseline;padding:5px 0 4px;border-bottom:1px dotted #d4d4d8;font-size:10px}
+.pst-kv>div span{color:#3f3f46;font-weight:600}
+.pst-kv>div i{font-style:normal;font:500 7.5px var(--mo);color:#71717a;line-height:1.35}
+.pst-kv>div b{font:700 11px var(--mo);text-align:right;color:#18181b}
+.pst-kv>div b.pst-nrv{font:italic 500 9.5px var(--sg);color:#52525b}
+.pst-pill{display:inline-flex;align-items:center;gap:3px;font:700 7px var(--sg);letter-spacing:.02em;border:1px solid #71717a;color:#3f3f46;border-radius:999px;padding:0 5px;white-space:nowrap;line-height:1.6;background:#fff}
+.pst-pill.pst-neg{border-color:#b91c1c;color:#b91c1c}
+.pst-pill.pst-dash{border-style:dashed}
+.pst-pill.pst-dot{border-style:dotted}
+.pst-pill svg{width:7px;height:7px}
+.pst-pt{width:100%;border-collapse:collapse;font-size:8px;table-layout:fixed}
+.pst-pt th{text-align:left;font:700 6.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:#71717a;padding:4px 3px;border-top:1.5px solid #18181b;border-bottom:1px solid #18181b;vertical-align:bottom}
+.pst-pt td{padding:4px 3px;border-bottom:1px solid #ececf1;vertical-align:top;line-height:1.35;color:#18181b}
+.pst-pt td small{display:block;color:#71717a;font-size:7px}
+.pst-pt .n{text-align:right;font-family:var(--mo)}
+.pst-pt td.mo{font-family:var(--mo);font-size:7.5px}
+.pst-pt tr.pst-why td{border-bottom:1px solid #ececf1;padding-top:0;font-size:7.5px;color:#3f3f46;font-style:italic}
+.pst-pt tr.pst-nb td{border-bottom:0}
+.pst-pt tr.pst-tot td{font-weight:800;border-top:1.5px solid #18181b;border-bottom:1.5px solid #18181b;background:#faf9fc}
+.pst-pt td.pst-lt{color:#71717a;font-style:italic}
+.pst-pt td b{font-weight:800}
+.pst-pmm{border:1.2px solid #92400e;border-radius:6px;padding:6px 8px;font-size:8.5px;line-height:1.45;color:#18181b;display:flex;gap:6px}
+.pst-pmm i{font:800 9px var(--sg);font-style:normal;color:#92400e}
+.pst-bars{display:flex;align-items:flex-end;gap:10px;height:170px;border-bottom:1px solid #18181b;padding:0 4px}
+.pst-bars>div{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.pst-bars i{display:block;width:100%;max-width:44px;background:#6d28d9}
+.pst-bars i.pst-gap{background:transparent;border:1.2px dashed #71717a;border-bottom:0;height:150px;display:flex;align-items:center;justify-content:center}
+.pst-bars i.pst-gap em{font-size:7.5px;color:#3f3f46}
+.pst-bars b{font:700 7.5px var(--mo)}
+.pst-bars em{font:600 7px var(--sg);font-style:italic;color:#52525b;text-align:center}
+.pst-bx{display:flex;gap:10px;padding:0 4px}
+.pst-bx span{flex:1;text-align:center;font:500 7px var(--mo);color:#71717a}
+.pst-dl{display:grid;grid-template-columns:110px minmax(0,1fr);border-top:1px solid #ececf1}
+.pst-dl dt,.pst-dl dd{padding:6px 0;border-bottom:1px dotted #d4d4d8;font-size:9px;line-height:1.5}
+.pst-dl dt{font-weight:800}
+.pst-dl dd{color:#3f3f46}
+.pst-cn{border-left:3px solid #18181b;padding:6px 10px;background:#faf9fc;display:flex;flex-direction:column;gap:3px}
+.pst-cn b{font:700 7.5px var(--sg);letter-spacing:.1em;text-transform:uppercase;color:#52525b}
+.pst-cn p{font-size:9px;line-height:1.5;color:#18181b}
+.pst-wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:3}
+.pst-wm span{transform:rotate(-35deg);font:800 34px var(--sg);color:rgba(24,24,27,.10);letter-spacing:.02em;white-space:nowrap;border:3px solid rgba(24,24,27,.10);padding:6px 18px;border-radius:8px}
+.pst-notes{display:flex;flex-direction:column;gap:10px;min-width:0;flex:1}
+.pst-notes .cd{gap:8px}
+.pst-notes ol{display:flex;flex-direction:column;gap:7px;counter-reset:n}
+.pst-notes ol li{font-size:12.5px;line-height:1.5;padding-left:24px;position:relative;counter-increment:n}
+.pst-notes ol li:before{content:counter(n);position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:50%;background:#18181b;color:#fff;font:700 10px var(--mo);display:grid;place-items:center}
+.pst-desk.pst-dkm .pst-notes .cd{background:#111827;border-color:#1f2937;color:#e5e7eb}
+.pst-desk.pst-dkm .pst-notes ol li:before{background:#a78bfa;color:#0b1220}
+.pst-cap{font:600 11px var(--mo);color:#5f5a6b;margin-bottom:6px}
+.pst-desk.pst-dkm .pst-cap{color:#9ca3af}
+/* specimens */
+.pst-spec{display:grid;grid-template-columns:120px minmax(0,1fr) minmax(0,1fr);border-top:1px solid var(--hair)}
+.pst-spec>div{padding:7px 8px;border-bottom:1px solid var(--hair);font-size:12px;line-height:1.4;min-width:0}
+.pst-spec>div.pst-h{font:700 9.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.pst-spec .pst-paperin{background:#fff;border:1px solid #ececf1;border-radius:4px;padding:4px 6px;font-size:9px;color:#18181b}
+.pst-zero{font:700 13px var(--mo)}
+.pst-unav{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--sg);color:var(--ink);border:1px solid var(--hair2);border-radius:6px;padding:1px 7px;background:var(--card)}
+.pst-unrd{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--sg);color:var(--ink);border:1.5px dashed var(--ink);border-radius:6px;padding:1px 7px}
+.pst-reason{display:block;font:500 10.5px var(--mo);color:var(--mu);margin-top:2px}
+/* phone */
+.pst-ph{width:390px;height:844px;display:flex;flex-direction:column;position:relative;overflow:hidden;background:var(--card)}
+.pst-ph .pst-top{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px 0 16px;border-bottom:1px solid var(--hair)}
+.pst-ph .pst-top b{font-size:16px;font-weight:800}
+.pst-ph .pst-top button{min-width:44px;height:44px;border:0;background:transparent;font:700 18px var(--sg);color:var(--ink)}
+.pst-ph .pst-bdy{flex:1;overflow:hidden;padding:14px 16px 90px;display:flex;flex-direction:column;gap:12px}
+.pst-ph .pst-stk{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 26px;background:var(--card);border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pst-ph .pst-stk .btn{min-height:44px;width:100%;font-size:14px}
+.pst-ph .pst-stk small{font:500 10.5px var(--mo);color:var(--mu);text-align:center}
+.pst-sel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 12px;border:1px solid var(--hair2);border-radius:10px;font:600 14px var(--mo);background:var(--card)}
+.pst-cards{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.pst-cards>div{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 12px;border-top:1px solid var(--hair)}
+.pst-cards>div:first-child{border-top:0}
+.pst-cards small{font-size:12px;color:var(--mu)}
+.pst-cards b{font:700 15px var(--mo)}
+.pst-cards b.pst-tx{font:600 12px var(--sg)}
+.pst-coll{border:1px solid var(--hair);border-radius:10px;display:flex;flex-direction:column}
+.pst-coll>button{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:0 12px;border:0;background:transparent;font:700 13px var(--sg);color:var(--ink);width:100%}
+.pst-coll .pst-in{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+.pst-coll .pst-in p{font-size:12.5px;line-height:1.5}
+.pst-coll .pst-a{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.pst-coll .pst-a .btn{min-height:44px}
+.pst-thumb{display:flex;gap:12px;align-items:center;padding:10px;border:1px solid var(--hair);border-radius:10px;min-height:44px}
+.pst-thumb .pst-mini{width:62px;height:80px;flex:none;background:#fff;border:1px solid #d4d4d8;box-shadow:0 2px 6px rgba(0,0,0,.1);padding:6px;display:flex;flex-direction:column;gap:3px}
+.pst-thumb .pst-mini i{display:block;height:3px;background:#d4d4d8;border-radius:1px}
+.pst-thumb .pst-mini i.pst-mk{background:#6d28d9;width:50%}
+.pst-thumb .pst-mini i.pst-tx{background:#18181b;height:5px;width:80%}
+.pst-kvt>div{padding:3px 0 2px}
+.pst-dark .ptbl td{color:var(--ink)}
+.pst-dark .ptbl td small{color:var(--mu)}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1060px"}, "board": {"editor": "enum", "default": "PST13a", "options": ["PST13a", "PST13a2", "PST13b", "PST13c", "PST13c2", "PST13d", "PST13e", "PST13f", "PST13f2", "PST13g", "PST13g2", "PST13g3", "PST13g4", "PST13g5", "PST13i", "PST13i2", "PST13z", "PST13h1", "PST13h2", "PST13h3", "PST13h4"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'PST13a';
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      st: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.6"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      dia: SV('<path d="M6 1.5l4.5 4.5L6 10.5 1.5 6z" fill="currentColor"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      q: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>')
+    };
+    const S = { Received: ['ok', 'ok'], Delivered: ['ok', 'ok'], Current: ['ok', 'ok'], Saved: ['ok', 'ok'], Due: ['pd', 'pd'], Promised: ['pd', 'pd'], Draft: ['pd', 'pd'], Pending: ['pd', 'pd'], 'In progress': ['pd', 'pd'], Overdue: ['xar', 'ar'], Missing: ['xar', 'half'], Stale: ['xst', 'st'], Unreadable: ['un', 'ua'], 'Not recorded': ['ni', 'nd'], Failed: ['fl', 'fl'], Conflict: ['xar', 'ar'], 'No obligation': ['na', 'nd'], Private: ['ni', 'lk'] };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    // health: five distinct states, word + shape; never Healthy from missing evidence
+    const HS = { Healthy: ['h', 'ok'], Watch: ['w', 'dia'], Attention: ['a', 'ar'], 'Not enough evidence': ['n', 'nd'], Unreadable: ['u', 'ua'] };
+    const hl = (s) => '<span class="hl2 ' + HS[s][0] + '">' + SH[HS[s][1]] + s + '</span>';
+    const NREC = '<span class="nrec">— Not recorded</span>';
+    const UNR = '<span class="unr">! Unreadable · <a href="#">Retry</a></span>';
+    const NEW = (t) => '<span class="ptag" title="NEW UX CAPABILITY — backend support required">◇ ' + (t || 'Backend required') + '</span>';
+    const PRIV = '<span class="priv">' + SH.lk + 'Private in preview</span>';
+    /* ===== PST · Portfolio v2 addendum · shareable statement (#6217) · board PF-13, frames PF13a–PF13i ===== */
+    const PD = { bg: '#0b1220', card: '#111827', raised: '#0f172a', ink: '#e5e7eb', mu: '#9ca3af', hair: '#1f2937', hair2: '#374151', vi: '#a78bfa', vt: '#c4b5fd', lav: '#1e1b3a', lavE: '#4c1d95', pos: '#34d399', posBg: '#052e24', posE: '#065f46', neg: '#f87171', negBg: '#2a1215', negE: '#7f1d1d', amT: '#fbbf24', amBg: '#2a1f08', amE: '#92400e', amD: '#f59e0b', dim: 'rgba(0,0,0,.6)', skel: '#1f2937' };
+    const VARSD = Object.keys(PD).map(k => '--' + k + ':' + PD[k]).join(';');
+    const TAG = (t) => '<span class="pst-tag" title="Annotation: backend work required">◇ ' + t + '</span>';
+    const FLAG = (t) => '<span class="pst-flag" title="Annotation: owner decision">⚑ ' + t + '</span>';
+    const AS = '30 Sep 2026', PREP = '14 Nov 2026', INV = '[Investor name]';
+    const SENT = {
+      no_mark: 'No valuation is recorded for this position as of this date; invested cost is not its value.',
+      fund_marks_conflict: 'Two funds recorded different values for this company on the same date. Record a firm-level mark, or read the fund on its own page.',
+      negative_fmv: 'The recorded valuation is negative, which is not a carrying value.'
+    };
+    const SCOPE_HELD = 'Companies where you hold a confirmed commitment. The amounts are the positions the studio recorded in them; how you hold each one (direct, through an SPV or a fund) is not recorded yet.';
+    const SCOPE_GP = 'Positions attributed to the funds you run as general partner of record.';
+    const SCOPE_ALL = 'Every position the studio recorded.';
+    const MM = 'Positions include cheques dated after ' + AS + '; the summary does not.';
+
+    /* ---------- shell (copied from Portfolio v2 PF; #3704 union sidebar, Eadwyn in Portfolio's own rail slot) ---------- */
+    const NAV = ['Studio', 'Spin-Out Lab', 'Deals', 'Axal VC Fund', 'Fund', 'Trust', 'Network', 'Research'];
+    const railShut = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Portfolio" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const shell = (body, o) => '<div class="pfsh" style="min-height:' + (o.h || 900) + 'px;height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:212px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="pfsd"><div class="lg2"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="co2" aria-label="Company or project: Harbor Capital (sample)"><i aria-hidden="true"></i>Harbor Capital<span>▾</span></button><nav aria-label="Workspace">' + J(NAV.map(t => (t === 'Trust' ? '<div class="sep2"></div>' : '') + '<a href="#">' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn" style="overflow:hidden">' + (o.preview ? '<div class="pvb" role="status"><span>' + SH.lk + ' Previewing Investor · private investor data withheld</span><a href="#">Back to HQ</a></div>' : '') + '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies &amp; projects, Licences" aria-haspopup="menu" aria-expanded="false">HC</button></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail || railShut) + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv' + (o.dark ? ' pst-dark' : '') + '" style="' + (o.dark ? VARSD : VARS) + ';width:1440px;height:' + (o.h || 900) + 'px;position:relative;overflow:hidden">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w, dark) => '<div class="cv" style="' + (dark ? VARSD : VARS) + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ---------- Portfolio header + local nav (PortfolioFrame) ---------- */
+    const LN = [['Overview', ''], ['Positions', '9'], ['Reports', ''], ['Performance', ''], ['Value-add', '']];
+    const head = (cur, open) => '<div class="crumb" style="font:600 12px var(--sg);color:var(--mu)">Account › <b style="color:var(--ink)">Portfolio</b></div><header class="pgh"><div><h1>Portfolio</h1><p>How the investments are doing, what needs attention, and who owes what.</p></div><div class="ctl"><span class="raw">Gross of fees and carry · as of ' + AS + ' · read 14:30 UTC</span><button type="button" class="btn">Export ▾</button><button type="button" class="btn" aria-haspopup="dialog" aria-expanded="' + (open ? 'true' : 'false') + '"' + (open ? ' style="border-color:var(--vi);color:var(--vt)!important;background:var(--lav)"' : '') + '>Statement</button></div></header>'
+      + '<nav class="pfnav" aria-label="Portfolio">' + J(LN.map(l => '<a href="#"' + (l[0] === cur ? ' aria-current="page"' : '') + '>' + l[0] + (l[1] ? '<span>' + l[1] + '</span>' : '') + '</a>')) + '</nav>';
+
+    /* ---------- the sample book (fictional; gross; USD) ----------
+       As of 30 Sep 2026 (analytics, cut at the date): 8 positions, paid-in $7,000,000, distributed $900,000, NAV $11,100,000,
+       TVPI 1.71×, DPI 0.13×, RVPI 1.59×, IRR 21.3%, 5 of 8 marked, 3 at cost (2 no mark + 1 unusable), 1 unusable mark.
+       Positions read (marks cut, cheques NOT cut): 9 rows, invested $7,400,000, carrying $11,500,000 ([Company I] first funded 12 Oct 2026). */
+    // name, sector, stage, rounds, latest round, invested, ownership, carrying, multiple, mark date, mark basis, vintage, kind
+    const ROWS = [
+      ['[Company A]', 'Robotics', 'Series A', 2, 'Series A', '$2,000,000', '8.5%', '$5,200,000', '2.60×', '30 Sep 2026', 'Round price', '2025', 'm'],
+      ['[Company B]', 'Climate software', 'Seed', 2, 'Seed extension', '$1,500,000', '6.2%', '$2,400,000', '1.60×', '31 Mar 2026', 'Round price', '2025', 'm'],
+      ['[Company C]', 'Biotech tools', 'Pre-seed', 1, 'Pre-seed', '$500,000', '2.2%', '$650,000', '1.30×', '30 Sep 2026', 'Round price', '2025', 'm'],
+      ['[Company D]', 'Inference chips', 'Seed', 1, 'Seed', '$1,000,000', null, '$1,500,000', '1.50×', '30 Jun 2026', 'GP estimate', '2025', 'm'],
+      ['[Company E]', 'Fintech', 'Series A', 1, 'Series A', '$1,250,000', '5.0%', '$600,000', '0.48×', '30 Sep 2026', 'Write-down', '2025', 'below'],
+      ['[Company F]', 'Data infrastructure', 'Seed', 1, 'Seed', '$250,000', '3.1%', '$250,000', '1.00×', null, null, '2026', 'cost'],
+      ['[Company G]', 'Developer tools', 'Pre-seed', 1, 'Pre-seed', '$250,000', '1.4%', '$250,000', '1.00×', null, null, '2026', 'cost'],
+      ['[Company H, a longer registered name that wraps onto a second line]', 'Logistics software', 'Seed', 1, 'Seed', '$250,000', '1.8%', '$250,000', '1.00×', null, null, '2025', 'conflict'],
+      ['[Company I]', 'Health data', 'Seed', 1, 'Seed', '$400,000', '2.5%', '$400,000', '1.00×', null, null, '2026', 'after']
+    ];
+    // quarter-end, NAV ($m for bar), NAV, paid-in, distributed, TVPI, coverage
+    const QS = [
+      ['31 Mar 2025', null],
+      ['30 Jun 2025', 3.25, '$3,250,000', '$3,250,000', '$0', '1.00×', '0 of 2'],
+      ['30 Sep 2025', 5.4, '$5,400,000', '$4,750,000', '$0', '1.14×', '2 of 4'],
+      ['31 Dec 2025', 7.9, '$7,900,000', '$6,500,000', '$0', '1.22×', '4 of 6'],
+      ['31 Mar 2026', 9.2, '$9,200,000', '$7,000,000', '$0', '1.31×', '4 of 8'],
+      ['30 Jun 2026', 9.65, '$9,650,000', '$7,000,000', '$900,000', '1.51×', '5 of 8'],
+      ['30 Sep 2026', 11.1, '$11,100,000', '$7,000,000', '$900,000', '1.71×', '5 of 8']
+    ];
+    const SUMMARY = [
+      ['NAV as of ' + AS, '$11,100,000', 'Σ latest carrying value of each position; an unmarked position carries at cost'],
+      ['Paid-in to ' + AS, '$7,000,000', 'Σ recorded contributions'],
+      ['Distributed to ' + AS, '$900,000', 'Σ recorded distributions'],
+      ['Total value as of ' + AS, '$12,000,000', 'Distributed + NAV'],
+      ['TVPI as of ' + AS, '1.71×', '(Distributed + NAV) ÷ paid-in'],
+      ['DPI as of ' + AS, '0.13×', 'Distributed ÷ paid-in'],
+      ['RVPI as of ' + AS, '1.59×', 'NAV ÷ paid-in'],
+      ['IRR to ' + AS, '21.3%', 'XIRR on dated flows, NAV as the terminal value'],
+      ['Mark coverage', '5 of 8 marked', 'Positions with a usable mark, of the 8 held at ' + AS],
+      ['Positions at cost', '3', '2 with no mark · 1 whose recorded mark cannot be used'],
+      ['Unusable marks', '1', 'Fund marks conflict · see page 2']
+    ];
+    const METH = [
+      ['TVPI', '(Distributed + NAV) ÷ paid-in'],
+      ['DPI', 'Distributed ÷ paid-in'],
+      ['RVPI', 'NAV ÷ paid-in'],
+      ['IRR', 'XIRR on dated contributions and distributions, with NAV as the terminal value. Reads Unavailable, with the reason, when no rate solves; never 0%.'],
+      ['NAV', 'Σ the latest mark per company on or before the as-of date; a company with no usable mark carries at cost.'],
+      ['Paid-in', 'Σ recorded contributions dated on or before the as-of date.'],
+      ['Distributed', 'Σ recorded distributions dated on or before the as-of date.'],
+      ['Mark coverage', 'Positions with a usable mark, out of every position held at that date.'],
+      ['Quarter-ends', 'Each point is the book read as of that quarter-end. A quarter-end with no book, or one that could not be read, is a gap: no bar, no zero, no line across it.'],
+      ['Basis', 'Gross of fees and carry: management fees, carry and fund expenses are not deducted, so these are not net returns.']
+    ];
+
+    /* ---------- paper (US Letter 612×792, always light; layout borrowed from quarterlyReportPdf.js) ---------- */
+    const G = {
+      below: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 2.5h10L6 10.5z" fill="currentColor"/></svg>',
+      cost: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+      unus: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/></svg>',
+      after: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5l4.5 4.5L6 10.5 1.5 6z" fill="currentColor"/></svg>'
+    };
+    const pill = (k) => k === 'below' ? '<span class="pst-pill pst-neg">' + G.below + 'Below cost</span>'
+      : k === 'cost' ? '<span class="pst-pill pst-dot">' + G.cost + 'At cost</span>'
+      : k === 'unus' ? '<span class="pst-pill pst-dash">' + G.unus + 'Mark unusable</span>'
+      : '<span class="pst-pill">' + G.after + 'Funded after ' + AS + '</span>';
+    const pfoot = (n, line, o) => '<div class="pst-pf"><span>' + line + '</span><span>' + INV + ' · as of ' + AS + ' · Page ' + n + ' of ' + ((o && o.of) || 5) + '</span></div>';
+    const STD = 'Figures are gross of management fees, carry and fund expenses. Unmarked positions carry at cost.';
+    const phead = (kick, title) => '<div><div class="pst-pk">' + kick + '</div><h3>' + title + '</h3><div class="pst-ps">Prepared ' + PREP + ' · Gross of fees and carry · USD</div></div>';
+    const pg = (inner, o) => '<div class="pst-pg" role="img" aria-label="' + ((o && o.label) || 'Statement page') + '">' + (o && o.wm ? '<div class="pst-wm" aria-hidden="true"><span>Preview, not for distribution</span></div>' : '') + inner + '</div>';
+
+    const kvRow = (r, irr) => '<div><span>' + r[0] + '<i style="display:block;margin-top:1px">' + r[2] + '</i></span>' + (irr && r[0].indexOf('IRR') === 0 ? irr : '<b>' + r[1] + '</b>') + '</div>';
+    const page1 = (o) => {
+      o = o || {};
+      return pg(phead('Portfolio statement', INV + ' · as of ' + AS)
+        + (o.note ? '<div class="pst-cn"><b>Note from ' + INV + ' · the investor’s own words, not Axal’s</b><p>Attached is my portfolio statement as of 30 Sep 2026, gross of fees and carry, in USD. NAV is $11,100,000 on $7,000,000 paid-in (TVPI 1.71×). 5 of 8 positions carry a recorded mark; 3 are carried at cost, one because its recorded mark cannot be used.</p></div>' : '')
+        + '<div class="pst-pl">Summary · as of ' + AS + '</div>'
+        + '<div class="pst-kv' + (o.note ? ' pst-kvt' : '') + '">' + J(SUMMARY.map(r => kvRow(r, o.irr))) + '</div>'
+        + '<div class="pst-pl" style="margin-top:2px">Scope</div><p class="pst-pp">' + (o.scope || SCOPE_HELD) + '</p>' + (o.gp ? '<p class="pst-pp" style="margin-top:-6px">' + SCOPE_GP + '</p>' : '')
+        + '<div class="pst-pl" style="margin-top:2px">Basis</div><p class="pst-pp">Gross of fees and carry. <b>Net returns: Not recorded.</b> No fee, carry or expense is recorded for this book, so no net figure is shown.</p>'
+        + pfoot(1, STD), { wm: o.wm, label: 'Statement page 1: Summary' });
+    };
+    const posRows = () => J(ROWS.map(r => {
+      const k = r[12];
+      const light = k === 'cost' || k === 'conflict' || k === 'after';
+      const why = k === 'cost' ? SENT.no_mark : k === 'conflict' ? SENT.fund_marks_conflict + ' Carried at cost.' : k === 'after' ? 'Funded after ' + AS + ': its one cheque is dated 12 Oct 2026, so the summary on page 1 does not count it. ' + SENT.no_mark : null;
+      const pl = k === 'below' ? pill('below') : k === 'cost' ? pill('cost') : k === 'conflict' ? pill('unus') : k === 'after' ? pill('cost') : '';
+      return '<tr' + (why ? ' class="pst-nb"' : '') + '><td><b>' + r[0] + '</b>' + (k === 'after' ? '<span style="display:block;margin-top:2px">' + pill('after') + '</span>' : '') + '<small>' + r[1] + ' · ' + r[2] + '</small></td><td>' + r[3] + ' · ' + r[4] + '</td><td class="n">' + r[5] + '</td><td class="n">' + (r[6] || '<i style="font-family:var(--sg);color:#52525b">Not recorded</i>') + '</td><td class="n' + (light ? ' pst-lt' : '') + '">' + r[7] + (pl ? '<span style="display:block;margin-top:2px">' + pl + '</span>' : '') + '</td><td class="n">' + r[8] + '</td><td class="mo" style="white-space:nowrap">' + (r[9] || '—') + '</td><td>' + (r[10] || '<span style="color:#71717a">No usable mark</span>') + '</td><td class="mo">' + r[11] + '</td></tr>'
+        + (why ? '<tr class="pst-why"><td colspan="9">' + why + '</td></tr>' : '');
+    }));
+    const posHead = '<thead><tr><th style="width:20%">Company<br>sector · stage</th><th style="width:12%">Rounds · latest</th><th class="n" style="width:10%">Invested</th><th class="n" style="width:8%">Owner­ship</th><th class="n" style="width:12%">Carrying value</th><th class="n" style="width:7%">Multiple</th><th style="width:12%">Mark date</th><th style="width:10%">Mark basis</th><th style="width:8%">Vintage</th></tr></thead>';
+    const page2 = (o) => {
+      o = o || {};
+      return pg(phead('Portfolio statement · Positions', 'Positions as of ' + AS)
+        + '<div class="pst-pmm" role="note"><i>!</i><span><b>' + MM + '</b> The rows list $7,400,000 invested; paid-in to ' + AS + ' on page 1 is $7,000,000. The difference is $400,000; the row marked “Funded after ' + AS + '” accounts for $400,000 of it.</span></div>'
+        + '<table class="pst-pt"><caption style="caption-side:top;text-align:left;font:500 7.5px var(--mo);color:#71717a;padding-bottom:4px">9 companies · ownership fully diluted, latest round · carrying value is the latest usable mark on or before ' + AS + '; without one, a position carries at cost, set in light italic and marked At cost. Cost is not a valuation.</caption>' + posHead + '<tbody>' + posRows()
+        + '<tr class="pst-tot"><td>Total · 9 rows</td><td></td><td class="n">$7,400,000</td><td></td><td class="n">$11,500,000</td><td></td><td colspan="3" style="font-weight:500;font-size:7px">Summary, cut at ' + AS + ': paid-in $7,000,000 · NAV $11,100,000 · 8 positions</td></tr></tbody></table>'
+        + pfoot(2, STD + ' Rows that run over continue on the next page under the same header.'), { wm: o.wm, label: 'Statement page 2: Positions' });
+    };
+    const bars = (failQ) => {
+      const cells = QS.map(q => {
+        const gap = q[1] == null ? 'No book' : (failQ === q[0] ? 'Not read' : null);
+        return gap ? '<div><i class="pst-gap"><em>' + gap + '</em></i></div>' : '<div><b>$' + q[1] + 'm</b><i style="height:' + Math.round(q[1] / 11.1 * 150) + 'px"></i></div>';
+      });
+      return '<div class="pst-bars" role="img" aria-label="NAV at seven quarter-ends from 31 Mar 2025 to 30 Sep 2026. Gaps are drawn as empty slots.">' + J(cells) + '</div><div class="pst-bx">' + J(QS.map(q => '<span>' + q[0] + '</span>')) + '</div>';
+    };
+    const page3 = (o) => {
+      o = o || {};
+      const f = o.fail;
+      return pg(phead('Portfolio statement · NAV at quarter-ends', 'NAV at each quarter-end to ' + AS)
+        + bars(f)
+        + '<p class="pst-pp" style="font-size:8.5px;color:#52525b">Each bar is the book read as of that quarter-end. A slot with no bar is a gap, not a zero; nothing is drawn between quarter-ends.' + (f ? ' <b>1 quarter-end could not be read: ' + f + '.</b> It is listed below as Not read.' : '') + '</p>'
+        + '<table class="pst-pt"><thead><tr><th>Quarter-end</th><th class="n">NAV</th><th class="n">Paid-in</th><th class="n">Distributed</th><th class="n">TVPI</th><th style="padding-left:12px">Mark coverage</th></tr></thead><tbody>'
+        + J(QS.slice().reverse().map(q => q[1] == null ? '<tr><td class="mo">' + q[0] + '</td><td colspan="5" class="pst-lt">No book · No position is recorded on or before this date.</td></tr>'
+          : f === q[0] ? '<tr><td class="mo">' + q[0] + '</td><td colspan="5"><b>Not read</b> <span class="pst-lt">· This quarter-end could not be read. Gap, not zero.</span></td></tr>'
+          : '<tr><td class="mo">' + q[0] + '</td><td class="n">' + q[2] + '</td><td class="n">' + q[3] + '</td><td class="n">' + q[4] + '</td><td class="n">' + q[5] + '</td><td class="mo" style="padding-left:12px">' + q[6] + ' marked</td></tr>')) + '</tbody></table>'
+        + '<p class="pst-pp" style="font-size:8.5px;color:#52525b">Up to 8 quarter-ends are shown, ending at the chosen date; this book’s first cheque was in 2025, so the series starts at 31 Mar 2025. Each point counts only cheques, distributions and marks dated on or before its quarter-end. Unmarked positions carry at cost.</p>'
+        + pfoot(3, STD), { wm: o.wm, label: 'Statement page 3: NAV at quarter-ends' });
+    };
+    const page4 = (o) => pg(phead('Portfolio statement · Cohorts', 'Vintage cohorts as of ' + AS)
+      + '<table class="pst-pt"><caption style="caption-side:top;text-align:left;font:500 7.5px var(--mo);color:#71717a;padding-bottom:4px">Grouped by the year of the first cheque · as of ' + AS + ' · gross</caption><thead><tr><th>Vintage</th><th class="n">Positions</th><th class="n">At cost</th><th class="n">Invested</th><th class="n">Carrying value</th><th class="n">Carrying ÷ invested</th></tr></thead><tbody>'
+      + '<tr><td class="mo">2025</td><td class="n">6</td><td class="n">1</td><td class="n">$6,500,000</td><td class="n">$10,600,000</td><td class="n">1.63×</td></tr>'
+      + '<tr><td class="mo">2026</td><td class="n">3</td><td class="n">3</td><td class="n">$900,000</td><td class="n">$900,000</td><td class="n">1.00×</td></tr>'
+      + '<tr class="pst-tot"><td>Total</td><td class="n">9</td><td class="n">4</td><td class="n">$7,400,000</td><td class="n">$11,500,000</td><td class="n"></td></tr></tbody></table>'
+      + '<p class="pst-pp">Distributions are not recorded per company, so carrying ÷ invested is not TVPI. 0 undated positions sit in no cohort.</p>'
+      + '<div class="pst-pmm" role="note"><i>!</i><span><b>' + MM + '</b> The 2026 cohort includes [Company I], funded after ' + AS + ' ($400,000, at cost).</span></div>'
+      + pfoot(4, STD), { wm: o && o.wm, label: 'Statement page 4: Cohorts' });
+    const page5 = (o) => pg(phead('Portfolio statement · Methodology', 'How these figures are made')
+      + '<dl class="pst-dl">' + J(METH.map(m => '<dt>' + m[0] + '</dt><dd>' + m[1] + '</dd>')) + '</dl>'
+      + '<p class="pst-pp" style="font-size:8.5px;color:#52525b">Definitions as on the Performance page (/portfolio/performance). Mark basis names how a recorded mark was arrived at: Round price, Secondary, GP estimate, Write-down or Cost.</p>'
+      + pfoot(5, 'Produced from Axal VC records on ' + PREP + '; not an audited statement. Gross of fees and carry.'), { wm: o && o.wm, label: 'Statement page 5: Methodology' });
+
+    const notes = (title, items) => '<div class="pst-notes"><section class="cd"><span class="eye">' + title + '</span><ol>' + J(items.map(i => '<li>' + i + '</li>')) + '</ol></section></div>';
+    const desk = (pages, side, o) => { o = o || {}; return '<div class="cv" style="' + (o.dark ? VARSD : VARS) + ';width:1440px"><div class="pst-desk' + (o.dark ? ' pst-dkm' : '') + '">' + J(pages.map(p => '<div><div class="pst-cap">' + p[0] + '</div>' + p[1] + '</div>')) + (side || '') + '</div></div>'; };
+
+    /* ---------- the sheet ---------- */
+    const QE = [['30 Sep 2026', 'Latest completed'], ['30 Jun 2026', ''], ['31 Mar 2026', ''], ['31 Dec 2025', ''], ['30 Sep 2025', ''], ['30 Jun 2025', ''], ['31 Mar 2025', 'No book']];
+    const chooser = (o) => { o = o || {}; return '<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="pst-lab" id="asl">As of · quarter-end</span><span class="raw">completed quarters only</span></div>'
+      + '<div class="pst-ch" role="radiogroup" aria-labelledby="asl">' + J(QE.slice(0, o.n || 7).map((q, i) => q[1] === 'No book' ? '<label class="pst-off" aria-disabled="true"><span class="pst-rd pst-off"></span><span>' + q[0] + '</span><small>No book · before the first cheque</small></label>' : '<label' + (i === 0 ? ' class="pst-on"' : '') + '><span class="pst-rd' + (i === 0 ? ' pst-on' : '') + '" role="radio" aria-checked="' + (i === 0) + '"></span><span>' + q[0] + '</span><small>' + q[1] + '</small></label>')) + '</div>'
+      + '<span class="raw">From 31 Mar 2025 (the first cheque’s year, 2025) to 30 Sep 2026 (the reporting read’s last completed quarter).</span></div>'; };
+    const strip = (o) => { o = o || {}; return '<div style="display:flex;flex-direction:column;gap:6px"><span class="pst-lab">Preview · as of ' + AS + '</span><div class="pst-strip"><div><small>NAV as of 30 Sep 2026</small><b>$11,100,000</b><em>unmarked at cost</em></div><div><small>Paid-in to 30 Sep 2026</small><b>$7,000,000</b><em>Σ contributions</em></div><div><small>TVPI</small><b>1.71×</b><em>(dist. + NAV) ÷ paid-in</em></div><div><small>Coverage</small><b>5 of 8</b><em>marked · 3 at cost</em></div></div></div>'
+      + '<div class="pst-basis"><span>Gross of fees and carry</span><span>USD</span><span>Net returns: <i style="font-style:italic">Not recorded</i> ' + TAG('#6217 net basis') + '</span></div>'
+      + (o.noMM ? '' : '<div class="pst-mm" role="note"><span class="pst-ic">!</span><span><b>' + MM + '</b>Positions list $7,400,000 invested against $7,000,000 paid-in. [Company I] is marked “Funded after 30 Sep 2026” on page 2. ' + TAG('positions cut at the date') + '</span></div>'); };
+    const toc = '<div style="display:flex;flex-direction:column;gap:6px"><span class="pst-lab">The PDF holds · 5 pages · US Letter</span><ol class="pst-toc"><li><i>1</i><b>Summary</b><span>11 figures · scope · basis</span></li><li><i>2</i><b>Positions</b><span>9 companies · mismatch note</span></li><li><i>3</i><b>NAV at quarter-ends</b><span>7 points · chart and table</span></li><li><i>4</i><b>Cohorts</b><span>2 vintages</span></li><li><i>5</i><b>Methodology</b><span>10 definitions</span></li></ol></div>';
+    const scopeBlock = (o) => { o = o || {}; return '<div style="display:flex;flex-direction:column;gap:6px"><span class="pst-lab">What it counts</span><div class="pst-scope">' + (o.all ? SCOPE_ALL : SCOPE_HELD) + '</div>' + (o.gp ? '<div class="pst-scope">' + SCOPE_GP + '</div>' : '') + '</div>'; };
+    const ownNote = '<p class="pst-own"><span aria-hidden="true">' + SH.lk + '</span><span>This file is for you to share. Axal does not send it or keep a copy. ' + FLAG('owner: who it may go to · A') + '</span></p>';
+    const sheetFrame = (body, foot, o) => { o = o || {}; return '<aside class="pst-sh" role="dialog" aria-modal="true" aria-labelledby="psth" style="right:' + (o.right == null ? 340 : o.right) + 'px;width:' + (o.w || 560) + 'px"><div class="pst-shh"><div><span class="eye">Portfolio · ' + (o.from || 'Overview') + '</span><h2 id="psth">Portfolio statement</h2><p>' + (o.sub || 'One PDF of your book as of a quarter-end, gross of fees and carry.') + '</p></div><button type="button" class="ib" aria-label="Close statement">✕</button></div><div class="pst-shb">' + body + '</div>' + (foot ? '<div class="pst-shf">' + foot + '</div>' : '') + '</aside>'; };
+    const dlFoot = (o) => { o = o || {}; return '<label class="ck" style="font-size:12px"><input type="checkbox"' + (o.note ? ' checked' : '') + '>Include as a cover note</label><div class="pst-a" style="display:flex;gap:8px"><button type="button" class="btn">Cancel</button>' + (o.held ? '<button type="button" class="btn pst-btnoff" aria-disabled="true">Download PDF</button>' : '<button type="button" class="btn p">Download PDF</button>') + '</div>'; };
+    const sheetMain = (o) => sheetFrame(chooser() + strip() + '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">' + toc + scopeBlock(o) + '</div>' + ownNote, dlFoot(o), o);
+    const dim = (r) => '<div aria-hidden="true" style="position:absolute;left:0;top:0;bottom:0;right:' + r + 'px;background:var(--dim);opacity:.5;z-index:4"></div>';
+
+    /* ---------- Eadwyn, in Portfolio's rail slot (#5130) ---------- */
+    const COVER = 'Attached is my portfolio statement as of 30 Sep 2026, gross of fees and carry, in USD. NAV is $11,100,000 on $7,000,000 paid-in (TVPI 1.71×). 5 of 8 positions carry a recorded mark; 3 are carried at cost, one because its recorded mark cannot be used. The positions page lists one company first funded after 30 Sep 2026, which the summary does not count.';
+    const eadwyn = (o) => { o = o || {}; return '<aside class="pst-rail" aria-label="Eadwyn"><div class="pst-rh"><i aria-hidden="true">E</i><b>Eadwyn</b><small>Portfolio</small><button type="button" class="ib" aria-label="Close Eadwyn" style="margin-left:6px">✕</button></div><div class="pst-rb">'
+      + '<span class="pst-lab">Task · covering note for this statement</span>'
+      + (o.off ? '<div class="nt"><span class="pst-ic" aria-hidden="true">i</span><div><b>Eadwyn is unavailable</b><div>The statement does not need it. Write your own note in your email.</div></div></div>'
+        : '<div class="pst-prop"><span class="pst-lab">Proposal · not in the PDF</span><p>' + COVER + '</p><span class="pst-cite">From page 1 (summary, coverage, at cost) and page 2 (Funded after). No forecast; no figure that is not on the statement.</span><div class="pst-a" style="display:flex;gap:6px"><button type="button" class="btn bsm">Copy</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn t bsm">Discard</button></div></div>'
+        + '<p class="foot">Copy puts the note on your clipboard for your own email. It goes into the PDF only if you tick “Include as a cover note”, and then it is marked as your own words.</p>')
+      + '<div style="border-top:1px solid var(--hair);padding-top:10px;display:flex;flex-direction:column;gap:6px"><span class="pst-lab">Ask about this statement</span><div class="inp" style="min-height:36px;display:flex;align-items:center;padding:0 10px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px">Why are 3 positions at cost?</div></div>'
+      + '</div></aside>'; };
+
+    /* ---------- behind the sheet: Portfolio Overview with this book ---------- */
+    const perf = () => '<section class="perf"><div class="hero"><span class="eye">Net asset value</span><b>$11,100,000</b><span class="sub2">As of 30 Sep 2026 · 5 of 8 positions marked (63% mark coverage)</span><span class="sub2">Three positions carry at cost: two have no mark and one mark cannot be used.</span></div>'
+      + '<div class="mults">' + J([['TVPI', '1.71×', 'Total value ÷ paid-in'], ['DPI', '0.13×', 'Distributed ÷ paid-in'], ['RVPI', '1.59×', 'NAV ÷ paid-in'], ['IRR', '21.3%', 'XIRR · NAV terminal'], ['Paid-in', '$7,000,000', '8 positions'], ['NAV', '$11,100,000', 'unmarked at cost'], ['Distributed', '$900,000', 'Σ distributions'], ['Total value', '$12,000,000', 'Distributed + NAV']].map(m => '<div><small>' + m[0] + '</small><b>' + m[1] + '</b><em>' + m[2] + '</em></div>')) + '</div>'
+      + '<div class="basis"><span>Gross of fees and carry</span><span>As of 30 Sep 2026</span><span>Unmarked positions carry at cost</span><a href="#">Methodology</a></div></section>';
+    const coList = () => '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="ptbl"><caption class="eye" style="text-align:left;padding:10px 14px 8px;caption-side:top">Portfolio companies · gross</caption><thead><tr><th>Company</th><th>Sector · stage</th><th class="n">Invested</th><th class="n">Carrying value</th><th class="n">Multiple</th></tr></thead><tbody>'
+      + J(ROWS.slice(0, 6).map(r => '<tr><td><a class="cnm" href="#">' + r[0] + '</a></td><td>' + r[1] + '<small>' + r[2] + '</small></td><td class="n">' + r[5] + '</td><td class="n">' + r[7] + '</td><td class="n">' + r[8] + '</td></tr>')) + '</tbody></table></section>';
+    const overview = (open) => head('Overview', open) + perf() + coList();
+    const newOverview = () => head('Overview', true).replace('<span>9</span>', '<span>1</span>').replace('as of ' + AS + ' · read', 'as of today · read') + '<section class="perf"><div class="hero"><span class="eye">Net asset value · today</span><b>$500,000</b><span class="sub2">1 position, first cheque 6 Oct 2026 · 0 of 1 marked; carried at cost</span></div><div class="mults">' + J([['Paid-in', '$500,000', 'Σ contributions'], ['Distributed', '$0', 'none recorded'], ['Positions', '1', '0 marked'], ['Mark coverage', '0 of 1', 'at cost']].map(m => '<div><small>' + m[0] + '</small><b>' + m[1] + '</b><em>' + m[2] + '</em></div>')) + '</div></section>';
+    const emptyOverview = () => head('Overview', true).replace('<span>9</span>', '') + '<section class="perf"><div class="hero"><span class="eye">Net asset value</span><b style="font:italic 500 18px var(--sg);color:var(--mu)">— Not recorded</b><span class="sub2">No position is recorded in this book.</span></div><div class="mults">' + J(['TVPI', 'DPI', 'RVPI', 'IRR'].map(m => '<div><small>' + m + '</small><b style="font:italic 500 13px var(--sg);color:var(--mu)">— Not recorded</b><em>no book</em></div>')) + '</div></section>';
+
+    /* ---------- states ---------- */
+    const box = (t, inner, span) => '<section class="cd" style="gap:10px' + (span ? ';grid-column:span ' + span : '') + '"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+    const GUN = '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 6h5" stroke="currentColor" stroke-width="1.8"/></svg>';
+    const UNAV = (r) => '<span class="pst-unav">' + GUN + 'Unavailable</span><span class="pst-reason">' + r + '</span>';
+    const spec = () => '<div class="pst-spec"><div class="pst-h">Value</div><div class="pst-h">On the preview</div><div class="pst-h">In the PDF (greyscale-safe)</div>'
+      + '<div>Distributed</div><div><span class="pst-zero">$0</span><span class="pst-reason">measured zero · read succeeded</span></div><div><span class="pst-paperin"><b class="mo">$0</b> · Σ recorded distributions</span></div>'
+      + '<div>Ownership</div><div><span class="nrec">— Not recorded</span><span class="pst-reason">no ownership on the latest round</span></div><div><span class="pst-paperin"><i>Not recorded</i></span></div>'
+      + '<div>IRR · no rate</div><div>' + UNAV('No rate solves between −99.99% and +1000% on these flows.') + '</div><div><span class="pst-paperin"><b>Unavailable</b> · No rate solves between −99.99% and +1000% on these flows.</span></div>'
+      + '<div>IRR · total loss</div><div><span class="pst-zero">−100%</span><span class="pst-reason">Total loss: capital deployed and nothing came back.</span></div><div><span class="pst-paperin"><b class="mo">−100%</b> · Total loss: capital deployed and nothing came back.</span></div>'
+      + '<div>TVPI · no paid-in</div><div>' + UNAV('No paid-in capital is recorded.') + '</div><div><span class="pst-paperin"><b>Unavailable</b> · No paid-in capital is recorded.</span></div>'
+      + '<div>Vintage</div><div><span class="nrec">— Not recorded</span><span class="pst-reason">undated · sits in no cohort</span></div><div><span class="pst-paperin"><i>Not recorded</i> · counted in “n undated positions sit in no cohort”</span></div>'
+      + '<div>Quarter-end · no book</div><div><span class="stt ni">' + SH.nd + 'No book</span><span class="pst-reason">No position is recorded on or before this date.</span></div><div><span class="pst-paperin">Empty dashed slot, labelled <i>No book</i>; no bar, no zero</span></div>'
+      + '<div>Quarter-end · failed</div><div><span class="pst-unrd">' + SH.ua + 'Not read</span><span class="pst-reason">This quarter-end could not be read.</span></div><div><span class="pst-paperin">Empty dashed slot, labelled <b>Not read</b>, and listed under the chart</span></div>'
+      + '</div>';
+    const stateGrid = () => crop('<span class="eye">PF13g · States of the statement sheet · Zero, Not recorded, Unavailable and Unreadable never look alike</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">'
+      + box('Loading · Download held', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="pst-lab">As of · quarter-end</span><span class="sk" style="height:32px"></span><span class="sk" style="height:32px;width:80%"></span><span class="pst-lab">Preview</span><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"><span class="sk" style="height:46px"></span><span class="sk" style="height:46px"></span><span class="sk" style="height:46px"></span><span class="sk" style="height:46px"></span></div></div><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="raw">Waiting for Positions, Performance and Reporting</span><button type="button" class="btn pst-btnoff" aria-disabled="true">Download PDF</button></div><span class="raw">Announced: “Loading the statement”</span>')
+      + box('Refused · no investor licence and no fund', '<div class="nt"><span class="pst-ic" aria-hidden="true">⦸</span><div><b>Statements are for investors who hold positions in this book.</b><div>An Axal admin can confirm your investor access.</div></div></div><span class="raw">No figures, no chooser, no Download. The read answered 403.</span>')
+      + box('Producing', '<div role="status" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px"><span class="sk" style="width:18px;height:18px;border-radius:50%"></span><div style="flex:1"><b style="font-size:13px">Preparing your statement…</b><div class="raw">As of 30 Sep 2026 · 5 pages</div></div><button type="button" class="btn bsm">Cancel</button></div><span class="raw">Drawn in your browser. Cancel stops it; nothing is downloaded.</span>')
+      + box('Production failed · the PDF library did not load', '<div class="nt r" role="alert"><span class="pst-ic" aria-hidden="true">✕</span><div><b>The PDF could not be made. Nothing was downloaded.</b><div>As of 30 Sep 2026 is kept.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div><span class="raw">The figures were read; only drawing the file failed.</span>')
+      + box('GP of record · second scope sentence', '<div class="pst-scope">' + SCOPE_HELD + '</div><div class="pst-scope">' + SCOPE_GP + '</div><span class="raw">Shown when the read returns fund_scope; printed on page 1 too.</span>')
+      + box('Cover note included', '<label class="ck"><input type="checkbox" checked>Include as a cover note</label><div class="pst-cn" style="background:var(--raised)"><b>Note from ' + INV + ' · the investor’s own words</b><p style="font-size:12px">Attached is my portfolio statement as of 30 Sep 2026…</p></div><span class="raw">Printed above the figures on page 1 (PF13b, right).</span>')
+      + box('Not recorded, Unavailable, zero and gaps · in place', spec(), 3)
+      + '</div>', 1400);
+
+    const fail = (what, extra) => '<div class="pst-fail" role="alert"><b>' + SH.ua + what + ' could not be read</b><p>No statement was produced and nothing was downloaded: a statement with a missing section would mislead once it is passed on. As of 30 Sep 2026 is kept.</p><ul><li>Positions<span>read 14:30 · ok</span></li><li>Performance as of 30 Sep 2026<span style="color:var(--ink)">failed 14:31 · <a href="#">Try again</a></span></li><li>Reporting (last completed quarter)<span>read 14:30 · ok</span></li></ul>' + (extra || '') + '</div>';
+
+    /* ---------- phone 390 ---------- */
+    const phone = (title, body, stk, dark) => '<div class="cv" style="' + (dark ? VARSD : VARS) + ';width:390px;height:844px"><div class="pst-ph" role="dialog" aria-modal="true" aria-label="' + title + '"><div class="pst-top"><b>' + title + '</b><button type="button" aria-label="Close statement">✕</button></div><div class="pst-bdy">' + body + '</div>' + (stk ? '<div class="pst-stk">' + stk + '</div>' : '') + '</div></div>';
+    const mSel = '<label class="pst-lab" for="mas">As of · quarter-end</label><div class="pst-sel" id="mas" role="combobox" aria-expanded="false">30 Sep 2026 · latest<span aria-hidden="true">▾</span></div>';
+    const mCards = '<div class="pst-cards"><div><small>NAV as of 30 Sep 2026</small><b>$11,100,000</b></div><div><small>Paid-in to 30 Sep 2026</small><b>$7,000,000</b></div><div><small>TVPI</small><b>1.71×</b></div><div><small>Coverage</small><b>5 of 8 marked</b></div><div><small>Basis</small><b class="pst-tx">Gross of fees and carry</b></div></div>';
+    const mMM = '<div class="pst-mm" role="note"><span class="pst-ic">!</span><span><b>' + MM + '</b>$7,400,000 listed against $7,000,000 paid-in. ' + TAG('cut at the date') + '</span></div>';
+    const mStk = '<button type="button" class="btn p">Download PDF</button><small>5 pages · as of 30 Sep 2026 · gross</small>';
+    const MOB = {
+      PST13h1: () => phone('Portfolio statement', mSel + mCards + mMM + '<div class="pst-coll"><button type="button" aria-expanded="false">Eadwyn · covering note proposal<span aria-hidden="true">▸</span></button></div><div class="pst-thumb"><div class="pst-mini" aria-hidden="true"><i class="pst-mk"></i><i class="pst-tx"></i><i></i><i></i><i></i><i></i><i></i></div><div style="flex:1"><b style="font-size:13px">Page 1 · Summary</b><div class="raw">Tap to open full screen</div></div><span aria-hidden="true">›</span></div>', mStk),
+      PST13h2: () => phone('Portfolio statement', '<div class="pst-coll"><button type="button" aria-expanded="true">Eadwyn · covering note proposal<span aria-hidden="true">▾</span></button><div class="pst-in"><span class="pst-lab" style="color:var(--vt)">Proposal · not in the PDF</span><p>' + COVER + '</p><div class="pst-a"><button type="button" class="btn">Copy</button><button type="button" class="btn">Edit</button><button type="button" class="btn">Discard</button></div><label class="ck" style="min-height:44px"><input type="checkbox">Include as a cover note</label></div></div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px"><span class="pst-lab">The PDF holds · 5 pages</span><ol class="pst-toc"><li><i>1</i>Summary<span>11 figures</span></li><li><i>2</i>Positions<span>9 rows</span></li><li><i>3</i>NAV at quarter-ends<span>7 points</span></li><li><i>4</i>Cohorts<span>2</span></li><li><i>5</i>Methodology<span>10</span></li></ol></div>'
+        + '<div class="pst-scope">' + SCOPE_HELD + '</div><p class="pst-own">' + SH.lk + '<span>This file is for you to share. Axal does not send it or keep a copy.</span></p>', mStk),
+      PST13h3: () => phone('Portfolio statement', mSel + fail('Performance as of 30 Sep 2026').replace('<ul>', '<ul style="font-size:12px">').replace(' · <a href="#">Try again</a>', '') + '<button type="button" class="btn p" style="min-height:44px">Try again · Performance</button>', ''),
+      PST13h4: () => phone('Portfolio statement', '<div class="pst-empty"><b>No position is recorded in your book yet, so there is no statement to produce.</b><p>Statements start from the first recorded cheque. Positions appear when the studio records an investment in a company you hold.</p><a class="btn p" href="#" style="min-height:44px">Go to Positions</a></div><p class="raw">No chooser and no Download: there is nothing to choose or produce.</p>', '')
+    };
+
+    /* ---------- handoff ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const handoff = () => dk('<h1>PF-13 handoff · portfolio statement as of a quarter-end</h1><p>Continues Portfolio v2 (PF-01 to PF-12, D4817) with board PF-13 only; frames PF13a to PF13i. Same PortfolioFrame, FinancialMetric / BasisStrip parts, type and colours. Printed pages borrow the layout of <code>frontend/src/lib/quarterlyReportPdf.js</code> (jsPDF on <code>pdfBoard.js</code>, US Letter portrait, page head, dotted key/value rows, ruled tables, pills, “Page x of y” stamped after layout) and none of its net figures. Checked on main 6d7712c6d1, 14 Nov 2026.</p>'
+      + '<h2>Checked on main</h2>' + tbl(['Value', 'Read', 'What main does today'], [
+        ['Summary figures', '<code>GET /api/positions/analytics?as_of=</code>', 'Cuts contributions, distributions and marks at the date. Returns nav, paid_in, distributed, returns.{tvpi,dpi,rvpi,irr} with state computed / total_loss / unavailable and a reason, basis gross, position_count, unmarked_position_count (includes unusable marks), unusable_mark_count, mark_coverage.'],
+        ['Positions', '<code>GET /api/positions?as_of=</code>', 'Cuts marks only. SUM(invested_amount), COUNT(*) rounds and the latest round are over every cheque, and companies first funded after the date are listed. Returns latest_date (last cheque) and vintage (year of the first cheque, falling back to created_at), not the first cheque’s date.'],
+        ['Mark reasons', '<code>MARK_UNAVAILABLE_REASONS</code> in portfolioValuation.ts', 'The three sentences on page 2, word for word. An unusable mark carries at cost and counts as unmarked.'],
+        ['Scope', 'positions read → scope, fund_scope', 'HELD_SCOPE text, the GP fund statement, and “Every position the studio recorded.” for an admin.'],
+        ['Quarter-ends', 'quarterWindowOf, QUARTER_LIMIT = 8, one analytics read per point', 'Window starts at Q1 of the first cheque’s year and ends at kpi-compliance period_until; points are ok / not_recorded / unreadable.'],
+        ['Cohorts', 'cohortsOf (portfolioModel.js)', 'Groups by vintage; carrying ÷ invested, labelled never TVPI; counts undated.'],
+        ['Methodology', 'METHODOLOGY in InvestorPortfolioPerformance.jsx', 'Ten rows, printed word for word on page 5.'],
+        ['Statement / LP export', 'none', 'No statement, no record of one, no share. Performance takes no as_of in its URL.']])
+      + '<h2>Backend required (◇)</h2><p><b>Positions cut at the as-of date</b>: invested, rounds, latest round and the company list cut at <code>as_of</code>, and the first cheque’s date returned so a row can say “Funded after”. Until it ships, the sheet and pages 2 and 4 carry the mismatch note whenever the rows’ invested total differs from paid-in; “Funded after” can be derived today only for a company whose every cheque (latest_date) is after the date. <b>Net of fees and carry</b>: no read; drawn as “Net returns: Not recorded”. <b>Distributions per company</b>: none, so cohorts are not TVPI. <b>A record that a statement was produced or sent</b> and <b>sending to a named person</b>: none; not drawn (owner pick A).</p>'
+      + '<h2>Pending the owner (⚑, drawn as option A)</h2><p>Net basis: gross only. Recipients: the investor downloads and sends it; Axal neither sends nor records. Placement: a sheet from Overview and Performance, no new route. Dates: any completed quarter-end, with the mismatch note and Funded after rows.</p>'
+      + '<h2>Frontend only</h2><p>The Statement action and sheet on Overview and Performance; the chooser built from quarterWindowOf; the preview strip from the chosen date’s analytics read; the PDF drawn with jsPDF like quarterlyReportPdf.js (Helvetica and Courier core faces, as that file falls back); the mismatch check (Σ positions invested ≠ paid_in); the admin-preview watermark on every page; the Eadwyn cover-note task (copy, edit, discard, optional cover note); the downloaded confirmation; “Open Performance” with the same as-of, which needs Performance to accept <code>?as_of=</code> in its URL (its reads already take it).</p>'
+      + '<h2>Accessibility</h2><p>The sheet is a modal dialog with a labelled radiogroup for the date; disabled “No book” dates say why in words. Pills carry a glyph and a word (Below cost ▼, At cost ○, Mark unusable ⊘, Funded after ◆), so the PDF reads in greyscale. Gaps are labelled slots, never zero bars; the chart is repeated as a table. Download is held, not hidden, while reads are pending, and announced. Phone targets are 44px; no table is wider than the screen. Not claimed from screenshots.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'PST13a') html = page(overview(true), { h: 1060, rail: eadwyn(), overlay: dim(340) + sheetMain({}) });
+    else if (B === 'PST13a2') html = page(overview(true), { h: 1000, overlay: dim(44) + sheetFrame('<div class="pst-ok" role="status"><span class="pst-ic" aria-hidden="true">✓</span><div><b>Statement as of 30 Sep 2026 downloaded</b><p>Portfolio statement 2026-09-30.pdf · 5 pages · gross of fees and carry · USD.</p><p>Axal sent nothing and kept no copy. It is yours to pass on.</p></div></div>'
+      + '<div class="cd" style="gap:8px"><b style="font-size:13.5px">Check what you sent against the live page</b><p class="foot" style="font-size:12.5px">Performance opens at the same date, 30 Sep 2026, so its figures should match page 1.</p></div>' + scopeBlock(), '<span class="raw">You can make another statement at any time.</span><div class="pst-a" style="display:flex;gap:8px"><button type="button" class="btn">Done</button><a class="btn p" href="#">Open Performance as of 30 Sep 2026</a></div>', { right: 44, sub: 'Downloaded.' }) });
+    else if (B === 'PST13b') html = desk([['Page 1 of 5 · Summary · 100% · ' + TAG('net basis: Not recorded'), page1()], ['Variant · Eadwyn’s cover note accepted', page1({ note: true })]], '', {});
+    else if (B === 'PST13c') html = desk([['Page 2 of 5 · Positions · 100%', page2()]], notes('Page 2 · how the rows read', ['Long names wrap and never truncate ([Company H]). When rows run past the page, they continue on the next page under the same header row (PF13c, below).', 'At cost, Mark unusable and Funded after are words with a glyph, and the API’s sentence sits under the row. Light italic is a second cue, never the only one.', 'Below cost: a red outline pill with ▼ and the words; in greyscale the pill and the word remain.', 'Ownership blank prints Not recorded, never 0%. A position with no mark prints No usable mark, never a date.', 'The totals row adds the rows as listed. The line beside it gives the summary cut at the date, so no two totals sit silently apart.', TAG('positions cut at the date') + ' Until GET /api/positions?as_of= cuts cheques and companies, the note at the top prints whenever the rows’ invested total differs from paid-in.']));
+    else if (B === 'PST13c2') html = crop('<span class="eye">Rows that run over · the header repeats on the continuation page</span>' + '<div style="background:#fff;border:1px solid #d4d4d8;padding:16px 20px;color:#18181b;width:560px"><div class="pst-pk" style="font:700 8.5px var(--sg);letter-spacing:.14em;color:#a1a1aa">PORTFOLIO STATEMENT · POSITIONS (CONTINUED)</div><table class="pst-pt" style="margin-top:8px">' + posHead + '<tbody>' + posRows().split('</tr>').slice(-5).join('</tr>') + '</tbody></table></div><span class="raw">Every page footer is stamped with the real total after layout, as quarterlyReportPdf.js does.</span>', 640);
+    else if (B === 'PST13d') html = desk([['Page 3 of 5 · NAV at quarter-ends · 100%', page3()]], notes('Page 3 · quarter-end series', ['Up to 8 quarter-ends ending at the chosen date (QUARTER_LIMIT). This book’s first cheque was in 2025, so 7 points: 31 Mar 2025 to 30 Sep 2026.', '31 Mar 2025 is before the first cheque: an empty dashed slot labelled No book. No bar, no zero, no line across it.', 'Bars only; nothing is drawn between quarter-ends. The table repeats every point, the gap included.', 'Each point is its own analytics read with ?as_of= the quarter-end, so its NAV, paid-in, distributed, TVPI and coverage are cut at that date and agree with page 1 at 30 Sep 2026.']));
+    else if (B === 'PST13e') html = desk([['Page 4 of 5 · Cohorts', page4()], ['Page 5 of 5 · Methodology', page5()]], '', {});
+    else if (B === 'PST13f') html = page(emptyOverview(), { h: 900, overlay: dim(44) + sheetFrame('<div class="pst-empty"><b>No position is recorded in your book yet, so there is no statement to produce.</b><p>A statement starts from the first recorded cheque. Positions appear when the studio records an investment in a company where you hold a confirmed commitment.</p><div><a class="btn p" href="#">Go to Positions</a></div></div><p class="raw">Download is absent, not disabled: there is nothing to produce. This holds for an investor with the licence whose book is empty.</p>', '', { right: 44 }) });
+    else if (B === 'PST13f2') html = page(newOverview(), { h: 900, overlay: dim(44) + sheetFrame('<div style="display:flex;flex-direction:column;gap:6px"><span class="pst-lab" id="asl2">As of · quarter-end</span><div class="pst-ch" role="radiogroup" aria-labelledby="asl2">' + J(['30 Sep 2026', '30 Jun 2026', '31 Mar 2026'].map(d => '<label class="pst-off" aria-disabled="true"><span class="pst-rd pst-off"></span><span>' + d + '</span><small>No book · before the first cheque</small></label>')) + '</div></div><div class="pst-empty" style="padding:12px 14px"><b style="font-size:13.5px">No completed quarter-end yet</b><p>Your first cheque is dated 6 Oct 2026, after the last completed quarter-end (30 Sep 2026). A statement is made as of a completed quarter-end; the first this book can use is 31 Dec 2026, once the reporting read names it.</p><p class="raw">When the reads give another reason, it is shown here instead: “No quarter-end has passed since the first recorded cheque.” and “No position records the date of its first cheque.”</p></div><div><a class="btn" href="#">Open Positions</a></div>', '<span class="raw">Download is absent until a quarter-end completes.</span><button type="button" class="btn">Close</button>', { right: 44 }) });
+    else if (B === 'PST13g') html = stateGrid();
+    else if (B === 'PST13g2') html = page(overview(true), { h: 900, overlay: dim(44) + sheetFrame(chooser() + fail('Performance as of 30 Sep 2026').replace(' · <a href="#">Try again</a>', '') + '<p class="foot" style="font-size:12.5px">Portfolio behind this sheet still works. The same holds when Positions or the Reporting read fails: the sheet names that read, and Try again retries it alone.</p>', '<span class="raw">Download is absent while a section is missing.</span><div style="display:flex;gap:8px"><button type="button" class="btn">Close</button><button type="button" class="btn p">Try again · Performance</button></div>', { right: 44 }) });
+    else if (B === 'PST13g3') html = desk([['Exception · one quarter-end failed · page 3 still made', page3({ fail: '31 Dec 2025' })]], notes('One point failing does not stop the statement', ['Every other section answered, so the PDF can be made. The sheet says so before Download: “31 Dec 2025 could not be read; page 3 shows it as a gap.”', 'The failed point is an empty dashed slot labelled Not read, and the table lists it in words. It never draws as $0.', 'Any other failure (positions, analytics for the chosen date, the reporting read) produces no statement at all: PF13g, Unreadable.']));
+    else if (B === 'PST13g4') html = page(overview(true), { h: 1000, preview: true, overlay: dim(44) + sheetFrame(chooser({ n: 4 }) + strip() + '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">' + toc + scopeBlock({ all: true }) + '</div><div class="nt a"><span class="pst-ic" aria-hidden="true">!</span><div><b>Preview as Investor</b><div>Every page is watermarked “Preview, not for distribution”. The book is every position the studio recorded, not one investor’s.</div></div></div>', dlFoot({}), { right: 44, sub: 'Admin preview of the investor statement.' }) });
+    else if (B === 'PST13g5') html = desk([['Admin preview · page 1 watermarked', page1({ wm: true, scope: SCOPE_ALL })], ['Admin preview · page 2 watermarked', page2({ wm: true })]], '', {});
+    else if (MOB[B]) html = MOB[B]();
+    else if (B === 'PST13i') html = page(overview(true), { h: 1060, dark: true, rail: eadwyn(), overlay: dim(340) + sheetMain({}) });
+    else if (B === 'PST13i2') html = desk([['Dark canvas · page 1 stays paper', page1()], ['Page 2 stays paper', page2()]], '', { dark: true });
+    else if (B === 'PST13z') html = handoff();
+    else html = page(overview(true), { h: 1060, rail: eadwyn(), overlay: dim(340) + sheetMain({}) });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

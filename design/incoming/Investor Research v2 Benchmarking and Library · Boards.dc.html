@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Research v2 Benchmarking and Library · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Investor licence · #6273 · Research v2 addendum, boards RS-13 to RS-22</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Investor Research v2 — Benchmarking against a named peer set, theses beside Markets, and the investor’s Library</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The investor’s Research zones (/research/benchmarking and /:uid, /research/markets with sector pages, /research/geographies/:code, /research/library), for an investor and an Axal admin in View mode. It continues the Research v2 canvas (RS-01 to RS-12, spec RS-A to RS-C) in its frame: one breadcrumb, one title, one purpose line, one violet primary, Ask Eadwyn as the secondary, contained cards, Not recorded never zero, no composite score and no chart without a time series. The shell is the investor shell from Deals v2: a company switcher (investor indigo), the union sidebar with Research expanded to its zones, Portfolio, Companies and Licences in the Account menu, and the one Eadwyn rail. A benchmark row is a Comparison only with a peer value, its source and n; otherwise it is Tracked, drawn dashed. Every sentence of refusal is the Worker’s own. States follow Platform States (D5129; a failed read says Unavailable). Violet dashed ◇ tags mark backend work on #6273; amber ⚑ tags mark the four owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Northlake Capital], [Northlake Fund I], [Company A], [Company B], [Founder sample], [Peer dataset A], [Peer survey B], [Benchmark report C] and every company, fund, figure and signal are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Research v2 Benchmarking and Library Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-13', 'Benchmarking · desktop 1440', 'Four tiles from the Worker (Metrics 7, Comparisons 5, Not read yet 4, Smallest peer base n = 8) with the platform’s thin-base sentence. Search, sort and Not read yet kept in the URL, Export CSV. Comparison rows show peer value, source, n and as-of together; Tracked rows say so in words and a dashed shape. New benchmark opens a sheet that refuses a peer figure without its source and n. Delete runs Scope → Review → Result and names the constituents that go with it. The ◇ Eadwyn narrative states “Cost quote unavailable, this is not free” and runs only on Confirm.', [F('RSB13', false, 1000), F('RSB13B', 'New benchmark · peer figure refused without its base', 1000), C('RSB13C', 'Row menu and delete', 1340, 273), C('RSB13D', 'Eadwyn narrative ◇', 940, 385)]],
+      ['RS-14', 'One benchmark · desktop 1440', 'Back keeps the list’s filters. Ours and the peer value as two labelled numbers with source, n and as-of (no bar chart from two points), the thin-base banner, editable fields with Save, named constituents with Add and Remove, and the count-mismatch line. ◇ Restatement history and ◇ “Use our figure from [Northlake Fund I]”. The crop shows the 409 and 400 sentences.', [F('RSB14', false, 1080), C('RSB14B', 'Refusals in the platform’s sentences', 1340, 325)]],
+      ['RS-15', 'Benchmarking empty', 'Measured zeros on three tiles and Not recorded on Smallest peer base. One action, New benchmark. After it, the new row appears as Tracked.', [F('RSB15', false, 900), C('RSB15B', 'After the first save', 1240, 226)]],
+      ['RS-16', 'Where Benchmarking and Diligence open', 'A) Keep them as investor zones under Research, as today. B) Open them from a deal (a Benchmarks card and a Data room card on the deal page) or a portfolio company, with a “Your benchmarks” list left in Research. Each half shows the shell row, the breadcrumb and the clicks. ⚑ Q1, drawn A.', [C('RSB16', false, 1480, 870)]],
+      ['RS-17', 'Markets for an investor', 'Your thesis (the one profile thesis today: text, keywords, sectors, stages, geographies, anti-thesis) beside the market directory with companies mapped, the supplier’s count labelled as the supplier’s, and as-of. Markets matching the thesis sectors carry the words and a ✓. Market readings are hidden for an investor (⚑ Q2). The second frame draws ◇ several theses with Active, Parked and Retired, deals sourced (all time), a written read and an Eadwyn thesis review.', [F('RSB17', false, 900), F('RSB17B', 'Several theses ◇', 1000)]],
+      ['RS-18', 'Sector and country, investor lens', 'A · AI infrastructure: six dimensions as small multiples over 12 named months, gaps with “No live source yet for this sector”, source mix, companies and companies by country. B · Germany: counts with their own as-of, companies by market and by label with the unplaced and unlabelled counts, companies, funds, signals marked Country or Region, and Demand Not recorded because demand data is global only. ◇ Yours here and ◇ scoped Ask on both; the primary opens Ask with a question naming the place.', [F('RSB18A', 'A · Sector', 1060), F('RSB18B', 'B · Country', 1000)]],
+      ['RS-19', 'Library for an investor', 'The investor’s four tiles, a kind filter (Document, Report, Primary, Legal, My playbook, ◇ Diligence, ◇ Benchmark; no About a client), Index state and Answerable in Ask as separate columns, Retry on Failed and Remove and replace on Unsupported, ◇ Asked about per row, and the ◇ From a data room group with consent recorded or Withdrawn. No client wording. ⚑ Q4.', [F('RSB19', false, 1000)]],
+      ['RS-20', 'States', 'Loading skeletons with tile labels kept, Empty, measured zero beside Not recorded, Unavailable for each read with what still works and Try again, Refused for a founder or advisor, Not found for another investor’s benchmark or an unknown country, out of AI tokens, Saving and Save failed, and an admin’s View mode.', [C('RSB20', 'Loading, Empty, Not recorded', 1440, 652), C('RSB20B', 'Unavailable, Refused, Not found, tokens, saving', 1440, 612)]],
+      ['RS-21', 'Phone 390', 'Benchmarking with tiles in a 2×2 grid and rows as cards; one benchmark with Save in a sticky bar; Markets with the thesis first; a sector one dimension at a time; Library cards with both states and the right next action; a country with counts first. 44px targets.', [P('RSB21A', 'A · Benchmarking'), P('RSB21B', 'B · One benchmark'), P('RSB21C', 'C · Markets'), P('RSB21D', 'D · Sector'), P('RSB21E', 'E · Library'), P('RSB21F', 'F · Country')]],
+      ['RS-22', 'Dark', 'RS-13 and RS-17 on the dark tokens. Comparison and Tracked, thesis markers and Not recorded keep their words and shapes.', [F('RSB22', 'Benchmarking · dark', 1000), F('RSB22B', 'Markets · dark', 900)]],
+      ['RS-A2', 'Existing vs proposed, part 2', 'The RS-A table for the investor boards: what main records per capability, and what is ◇ or ⚑.', [W('RSBA')]],
+      ['RS-H', 'Handoff', 'Checked on main, preserved, frontend only, backend required (#6273), the owner questions drawn as A, handoff paths and accessibility.', [W('RSBH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

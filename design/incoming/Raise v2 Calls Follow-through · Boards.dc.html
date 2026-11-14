@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 Calls Follow-through · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Raise · Capital relationships · Calls · #6053 · Raise v2 addendum (brief CLS16 to CLS28)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Calls follow-through — remind, export, re-use a closed call, and turn a response into a recorded commitment</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">What a founder does after a call for capital is sent, on /raise/capital-relationships/calls/:uid and the Calls list; the confirm step opens on Capital relationships › Commitments. No new route. It continues the Raise v2 canvas (44 boards) in the same shell, Eadwyn rail and state vocabulary, and numbers its boards RAC16 to RAC28 after the brief’s CLS16 to CLS28. The owner reminds, exports, sets the audience, extends and closes; a co-founder may start a new call as a draft, answer questions and record a commitment (D1191). Indicated amounts are never committed: only the confirm step writes Signed or Wired, and only Received, Signed, Wired, Confirmed and Pending count. A matching investor is never named before they respond, in reminders and exports too. Eadwyn proposes; it never sends or records. States follow Platform States (D5129). Violet dashed ◇ tags mark backend work (#6053); amber ⚑ tags mark the five owner questions, drawn as option A. The whole area is behind ROUND_CALLS_ENABLED="false" (#1008 item 19), so the build cannot be checked live until counsel answers.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Northwind Labs], [Seed extension], [Bridge call], every investor, [Maya Chen] and [Sam Patel] are fictional, and every figure is a sample</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise v2 Calls Follow-through Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RAC16', 'Remind · one call', 'The open [Bridge call] with a filter row (Not opened 9 · Opened, not answered 7 · Not delivered 1, since 6 Nov, out of 30), a checkbox per row and a ◇ Last reminded column. Matching investors stay unnamed. Eadwyn pre-ticks the 6 who opened in the first two days; the owner accepts, edits or discards. The sheet shows exactly what they receive (the same in-app notice, no email) and the limit.', [F('RAC16', false, 1240), F('RAC16B', 'Remind sheet', 1240)]],
+      ['RAC17', 'Remind · result, limits and empty', '“11 of 12 were reminded on Axal; one investor’s account is paused.” Rows at the limit greyed with the word and ⦸. Remind off with its reason when past the close date, closed, awaiting counsel or read only. Everyone answered: measured zeros and one action.', [C('RAC17', false, 1400, 640)]],
+      ['RAC18', 'Export', 'From the closed [Seed extension]: CSV for the cap table or PDF for counsel. Included and Withheld side by side; amounts headed “Indicated (USD), not committed”; emails and unnamed matches withheld. The file ends as a dated, logged row on the call.', [F('RAC18', false, 960), C('RAC18B', 'The dated export row', 1200, 250)]],
+      ['RAC19', 'Export · empty and partial', 'No responses yet still offers the terms-only PDF. A failed questions read marks the file “Questions could not be read”; the export is never silently short.', [C('RAC19', false, 1200, 330)]],
+      ['RAC20', 'New call from a closed one', 'Drawn as of 3 Nov, before [Bridge call] existed: “Start a new call from this” opens the new-call sheet at Step 1 with “Copied from [Seed extension], closed 12 Oct.” Terms and data room carry over and stay editable; the close date, counsel approval and deck version do not (v6 offered, v5 used). Step 3 pre-ticks the chosen investors, greys those no longer verified, re-matches matches; a co-founder sees it read only.', [F('RAC20', false, 960), F('RAC20B', 'Step 1 · copied terms', 1120), F('RAC20C', 'Step 3 · audience (owner)', 960), C('RAC20D', 'Step 3 · co-founder, read only', 900, 620)]],
+      ['RAC21', 'New call · blocked', 'Another call is open, so the action is off with CLS2’s reason. With no closed call the action does not appear at all.', [C('RAC21', false, 1100, 260)]],
+      ['RAC22', 'From a response to a recorded commitment', '[Investor A]’s drawer: “Indicated [$50,000] on 3 Oct through [Seed extension]” and why it does not count. Record a commitment (owner or co-founder) opens a confirm sheet: Signed or Wired, a typed amount ([$45,000] differs from the indicated), one warning line. Commitments then shows the line moved from Soft to Signed and counted: [$695,000] of [$1,500,000], was [$650,000]. The Indicated line stays listed and not counted.', [F('RAC22', false, 960), F('RAC22B', 'Confirm sheet', 960), F('RAC22C', 'Capital relationships › Commitments after saving', 900), C('RAC22D', 'The drawer after saving', 600, 790)]],
+      ['RAC23', 'Confirm · conflicts', 'Already Wired (not overwritten), another currency (listed, not counted), withdrawn or blank (Not recorded, never $0), and no pipeline line (Add to Capital relationships).', [C('RAC23', false, 1300, 260)]],
+      ['RAC24', 'States', 'Loading, Not recorded, measured zero, call unreadable (summary from the list kept), commitments unreadable after a saved record, refused for a co-founder (Remind and Export off, Record and Start on), Admin, Explorer and HQ counsel, saving and call_changed.', [C('RAC24', false, 1400, 530)]],
+      ['RAC25', 'Phone 390 · reminders and export', 'Sideways chips, recipient cards with checkboxes, a sticky Remind (12) bar, and full-screen Remind and Export sheets. 44px targets.', [P('RAC25a', false), P('RAC25b', false), P('RAC25c', false)]],
+      ['RAC26', 'Phone 390 · new call and confirm', 'Start a new call from the closed call card, the full-screen sheet with the copied banner, and Record a commitment as a bottom sheet with Status, Amount and the warning line.', [P('RAC26a', false), P('RAC26b', false), P('RAC26c', false)]],
+      ['RAC27', 'Switched off and refused', 'ROUND_CALLS_ENABLED off: CLS1’s card with Remind, Export and Start new not drawn, desktop and phone. Refused on a phone: a co-founder with Remind and Export off and Record a commitment on.', [C('RAC27', false, 900, 220), P('RAC27P', 'Switched off · phone'), P('RAC27R', 'Refused · co-founder')]],
+      ['RAC28', 'Dark', 'RAC16 and RAC22 on the dark tokens. States keep their words and shapes.', [F('RAC28', false, 1240), F('RAC28B', 'Confirm · dark', 960)]],
+      ['RAC-H', 'Handoff', 'What was checked on main, backend work (#6053), the five owner questions drawn as option A, frontend-only work, handoff paths and accessibility.', [W('RACH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

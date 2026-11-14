@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences v2 Initial Invoice · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+/* LX · Licences & Contracts v2 addendum (#5303). Contracts pills/tags/table copied from Contracts v2 under lx- names. */
+.lx-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.lx-pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.lx-pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lx-pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.lx-pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.lx-pl.dash{border-style:dashed}
+.lx-pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.lx-pl.void{text-decoration:line-through}
+.lx-otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.lx-otag.env{border-style:dashed}
+.lx-ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.lx-ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.lx-ctab td{color:var(--ink);padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.lx-ctab tr:last-child td{border-bottom:0}
+.lx-ctab td.n,.lx-ctab th.n{text-align:right;font-family:var(--mo);white-space:nowrap}
+.lx-ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.lx-ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:3px}
+.lx-ctab tr.sel td{background:var(--lav)}
+.lx-ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.lx-ctab tr.hi td{background:var(--amBg)}
+.lx-ctab tfoot td{background:var(--raised);font-weight:700;border-top:1.5px solid var(--hair2)}
+.lx-fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.lx-fchips .rm{display:inline-flex;align-items:center;gap:6px;padding:2px 6px 2px 9px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.lx-fchips .rm i{font-style:normal;font-weight:800;padding:0 3px}
+.lx-wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.lx-pr{display:inline-flex;align-items:center;gap:4px;padding:0 6px;border-radius:4px;border:1px dashed var(--amD);color:var(--amT);background:var(--card);font:700 9.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;vertical-align:middle}
+.lx-na{color:var(--mu);font:500 12px var(--sg);font-style:italic}
+.lx-frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lx-frow .dd{min-height:30px}
+.lx-wbar{display:flex;align-items:center;gap:10px;padding:8px 13px;border-radius:9px;background:#18181b;color:#f4f3f7;font:600 12px var(--sg)}
+.lx-wbar b{font-weight:800;color:#fff}
+.lx-wbar .x{margin-left:auto;font:500 11.5px var(--mo);color:#c9c4d6}
+.lx-blk{display:flex;flex-direction:column;gap:10px}
+.lx-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.lx-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.lx-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.lx-kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:0;font-size:13px}
+.lx-kv dt,.lx-kv dd{padding:7px 0;border-bottom:1px solid var(--hair)}
+.lx-kv dt{color:var(--mu)}
+.lx-kv dd{font-weight:600}
+.lx-kv dd.mo{font-family:var(--mo)}
+.lx-big{font:700 22px var(--mo);letter-spacing:-.02em}
+.lx-sub{font-size:12px;color:var(--mu)}
+.lx-cmp td.dif{font-family:var(--mo);white-space:nowrap}
+.lx-up{color:var(--amT)}
+.lx-dn{color:var(--pos)}
+.lx-steps{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.lx-steps span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.lx-steps span+span{border-left:0}
+.lx-steps span:first-child{border-radius:8px 0 0 8px}.lx-steps span:last-child{border-radius:0 8px 8px 0}
+.lx-steps span.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.lx-steps span.cur{color:#fff;background:var(--ink);border-color:var(--ink)}
+.lx-trace{display:grid;grid-template-columns:minmax(0,1.6fr) 110px 110px minmax(0,1.3fr);font-size:12.5px;border-top:1px solid var(--hair)}
+.lx-trace>span{padding:8px 10px;border-bottom:1px solid var(--hair)}
+.lx-trace>span.h{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.lx-trace>span.m{font-family:var(--mo);text-align:right}
+.lx-trace>span.tot{font-weight:800;background:var(--lav)}
+.lx-mtx{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+.lx-mtx th,.lx-mtx td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:center}
+.lx-mtx th:first-child,.lx-mtx td:first-child{text-align:left}
+.lx-mtx thead th{font:700 12px var(--sg);background:var(--raised);vertical-align:bottom}
+.lx-mtx thead th small{display:block;font:500 11px var(--mo);color:var(--mu);margin-top:2px}
+.lx-mtx .yes{color:var(--pos);font-weight:800}
+.lx-mtx .no{color:var(--hair2)}
+.lx-mtx tfoot td{background:var(--raised);font-family:var(--mo);font-weight:700}
+.lx-mtx tfoot td:first-child{font-family:var(--sg)}
+.lx-mtx tfoot tr.w td{font:500 11.5px var(--sg);background:var(--card);vertical-align:top}
+.lx-mtx td.sel,.lx-mtx th.sel{box-shadow:inset 2px 0 0 var(--vi),inset -2px 0 0 var(--vi);background:var(--lav)}
+.lx-offer{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.lx-offer.cur{border:2px solid var(--vi)}
+.lx-offer h3{font-size:14px;font-weight:800}
+.lx-offer .p{font:700 20px var(--mo);letter-spacing:-.02em}
+.lx-chk{display:flex;flex-direction:column}
+.lx-chk li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:13px}
+.lx-chk li:first-child{border-top:0}
+.lx-chk i{font-style:normal;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;font:800 11px var(--sg);border:1.5px solid var(--hair2);color:var(--mu)}
+.lx-chk i.y{background:var(--pos);border-color:var(--pos);color:#fff}
+.lx-chk i.w{border-color:var(--amD);color:var(--amT)}
+.lx-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:9px;background:var(--raised);border:1px solid var(--hair);font-weight:800;font-size:13.5px}
+.lx-ref{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px dashed var(--hair2);border-radius:10px;background:var(--card);font-size:12.5px;color:var(--mu)}
+.lx-ref b{color:var(--ink)}
+.lx-why{font-size:12px;color:var(--amT);font-weight:600}
+.lx-sec{display:flex;align-items:center;gap:8px;font:700 10.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-top:4px}
+.lx-sec::after{content:'';flex:1;height:1px;background:var(--hair)}
+.lx-st{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lx-st .cd{gap:8px}
+.lx-dk .sd,.lx-dk .tb{background:var(--card)}
+.lx-dk .btn{background:var(--card);color:var(--ink);border-color:var(--hair2)}
+.lx-dk .btn.p{background:#a78bfa;border-color:#a78bfa;color:#0b1220}
+.lx-dk .stt{background:var(--raised)}
+.lx-dk .nt{background:var(--raised);color:var(--ink)}
+.lx-dk a{color:#c4b5fd}
+.lx-ph .lx-ctab th,.lx-ph .lx-ctab td{padding:8px 10px}
+.lx-mcard{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.lx-mcard .r{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12.5px}
+/* LFI · initial invoice on a licence's Fees view and what Apply writes (#5955). Continues the Licences & Contracts v2 addendum (L41+). */
+.lfi-spec{display:block;margin-top:3px;font:500 10.5px var(--mo);color:var(--mu);letter-spacing:0;white-space:normal;word-break:break-word}
+.lfi-nr{display:inline-flex;align-items:center;gap:5px;padding:0 7px;border:1px dotted var(--hair2);border-radius:999px;color:var(--mu);font:500 11.5px var(--sg);font-style:italic;white-space:nowrap}
+.lfi-unr{display:inline-flex;align-items:center;gap:5px;padding:0 7px;border:1px dashed var(--neg);border-radius:6px;color:var(--neg);font:700 11.5px var(--sg)}
+.lfi-fh{display:flex;justify-content:space-between;align-items:flex-end;gap:14px}
+.lfi-fh h2{font-size:19px;font-weight:800;letter-spacing:-.01em}
+.lfi-fh code,.lfi-why code,.lfi-from code,.lfi-empty code,.lfi-ust code,.cd code{font:500 11px var(--mo)}
+.lfi-per{font:500 12px var(--sg);color:var(--mu)}
+.lfi-ic{border:1.5px solid var(--ink)}
+.lfi-icv{border-style:dashed}
+.lfi-icg{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:22px;align-items:start}
+.lfi-nar .lfi-icg{grid-template-columns:minmax(0,1fr)}
+.lfi-icr{display:flex;flex-direction:column;gap:12px}
+.lfi-ln{width:100%;border-collapse:collapse;font-size:13px}
+.lfi-ln th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:6px 8px;border-bottom:1px solid var(--hair)}
+.lfi-ln td{padding:9px 8px;border-bottom:1px solid var(--hair);vertical-align:top}
+.lfi-ln td.c{color:var(--mu);font-size:12px;width:170px}
+.lfi-ln .n{text-align:right;font-family:var(--mo);white-space:nowrap}
+.lfi-ln td.n{font-weight:700}
+.lfi-ln tfoot td{font-weight:800;border-bottom:0;border-top:1.5px solid var(--ink);font-size:13.5px}
+.lfi-note{font-size:12px;color:var(--mu);margin-top:6px}
+.lfi-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin:0}
+.lfi-meta>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.lfi-meta dt{font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.lfi-meta dd{margin:0;font-size:12.5px;font-weight:600;word-break:break-word}
+.lfi-meta dd.mo{font-family:var(--mo);font-size:12px}
+.lfi-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.lfi-why{font-size:12px;color:var(--mu);line-height:1.5}
+.lfi-why b{color:var(--ink)}
+.lfi-from{font-size:12px;color:var(--mu);border-top:1px solid var(--hair);padding-top:9px;line-height:1.5}
+.lfi-from b{color:var(--ink)}
+.lfi-void s{text-decoration-thickness:1.5px}
+.lfi-empty{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border:1px dashed var(--hair2);border-radius:10px;background:var(--raised)}
+.lfi-empty>.stt{align-self:flex-start}
+.lfi-ust{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px dashed var(--hair2);border-radius:10px}
+.lfi-ust>div{flex:1}
+.lfi-ust .btn{flex:none}
+.lfi-strip{display:grid;grid-template-columns:200px minmax(0,1fr);gap:18px;padding:14px 0;border-top:1px solid var(--hair2)}
+.lfi-strip:first-of-type{border-top:0}
+.lfi-sl{display:flex;flex-direction:column;gap:4px}
+.lfi-sl b{font-size:14px;font-weight:800}
+.lfi-sl span{font-size:12px;color:var(--mu);line-height:1.45}
+.lfi-sb{display:flex;flex-direction:column;gap:10px;min-width:0}
+.lfi-prop{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav)}
+.lfi-ptx{font-size:12.5px;line-height:1.5;color:var(--ink)}
+.lfi-at td.c{color:var(--mu);font-size:12px;white-space:nowrap}
+.lfi-at td{vertical-align:top}
+.lfi-goes{font-size:12.5px;font-weight:700;color:var(--vt)}
+.lfi-nc{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.lfi-keep{display:block;font-size:11.5px;color:var(--mu);margin-top:2px}
+.lfi-ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid var(--amE);border-radius:10px;background:var(--amBg);font-size:12.5px;line-height:1.5;color:var(--ink)}
+.lfi-ack .bx{flex:none;display:grid;place-items:center;width:18px;height:18px;margin-top:1px;border-radius:4px;border:1.5px solid var(--amT);background:var(--card);font:800 12px var(--sg);color:#fff}
+.lfi-ack.on .bx{background:var(--vi);border-color:var(--vi)}
+.lfi-sw{margin:0 12px 10px;display:flex;justify-content:space-between;align-items:center;min-height:34px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.lfi-tbar{height:52px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--hair);background:var(--card);font-size:14px}
+.lfi-fw{width:100%;min-height:44px!important}
+.lfi-g2m{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lfi-ml{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.lfi-ml .r{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--hair);font-size:13px}
+.lfi-ml .r small{display:block;font-size:11px;color:var(--mu)}
+.lfi-ml .r.t{font-weight:800;border-bottom:0;border-top:1.5px solid var(--ink)}
+.lfi-bs{position:absolute;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-radius:18px 18px 0 0;padding:10px 18px 22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -12px 40px rgba(0,0,0,.18)}
+.lfi-bs h2{font-size:18px;font-weight:800}
+.lfi-grab{align-self:center;width:40px;height:4px;border-radius:4px;background:var(--hair2)}
+.lfi-pin{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 18px;background:var(--card);border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.lfi-dk .lfi-ack .bx{color:#0b1220}
+.lfi-dk .lfi-ln tfoot td{border-top-color:var(--ink)}
+.lfi-dk .tbl th,.lfi-dk .tbl td{border-color:var(--hair)}
+.lfi-dk .lx-wbar{background:#000;border:1px solid var(--hair2)}
+.lfi-ust .raw,.lfi-empty .raw,.lx-st .raw,.lfi-ic .raw,.lfi-bs .raw{font-family:var(--sg)}
+.lfi-rl .lfi-icg{grid-template-columns:minmax(0,1fr)}
+.lfi-rl .lfi-meta{grid-template-columns:repeat(3,minmax(0,1fr))}
+.lfi-rl .lfi-fh{flex-direction:column;align-items:flex-start;gap:4px}
+.tbl td.mo{white-space:nowrap}
+.lfi-dk .lx-steps span.cur{color:#0b1220;background:#e5e7eb}
+.lfi-dk .btn.p{color:#0b1220!important}
+.lfi-at td:first-child{min-width:230px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1160px"}, "board": {"editor": "enum", "default": "LFI41", "options": ["LFI41", "LFI41B", "LFI42", "LFI42B", "LFI43", "LFI43B", "LFI44", "LFI45", "LFI45B", "LFI45C", "LFI45D", "LFI46", "LFI46B", "LFI47", "LFI47B", "LFI48", "LFI48B", "LFI49A", "LFI49B", "LFI50A", "LFI50B", "LFI50C", "LFI51A", "LFI51B", "LFI52"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'LFI41';
+    const P = { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f3effe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const SH = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      pa: SV('<rect x="3" y="2.5" width="2" height="7" fill="currentColor"/><rect x="7" y="2.5" width="2" height="7" fill="currentColor"/>'),
+      nd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      q: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.4 1.8c-.4.2-.6.5-.6 1V8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="10" r=".9" fill="currentColor"/>')
+    };
+    const S = { Active: ['ok', 'ok'], Executed: ['ok', 'ok'], Synced: ['ok', 'ok'], Paid: ['ok', 'ok'], Current: ['ok', 'ok'], Completed: ['ok', 'ok'], Draft: ['pd', 'pd'], Sent: ['pd', 'pd'], Pending: ['pd', 'pd'], Waiting: ['pd', 'pd'], Due: ['pd', 'pd'], Suspended: ['', 'pa'], Terminated: ['', 'fl'], 'Out of sync': ['xar', 'ar'], Overdue: ['xar', 'ar'], Differs: ['xar', 'ar'], Incomplete: ['xar', 'half'], Failed: ['fl', 'fl'], Refused: ['fl', 'fl'], Partial: ['xar', 'half'], Unknown: ['un', 'q'], Unavailable: ['un', 'ua'], None: ['mz', 'nd'], 'Not recorded': ['ni', 'nd'] };
+    const st = (s, label) => { const x = S[s] || ['', 'nd']; return '<span class="stt ' + x[0] + '">' + SH[x[1]] + (label || s) + '</span>'; };
+    const NREC = '<span class="nrec">— Not recorded</span>';
+    const NEW = '<span class="ptag" title="Needs backend work">◇ Backend required</span>';
+
+    /* ---------- shell ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const rail = (open) => open
+      ? '<aside class="sp eadx" aria-label="Eadwyn" style="width:320px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1"><p class="foot">Eadwyn reads the licence ledger on this page and changes nothing in it. Eadwyn drafts; you send.</p><div class="prm"><button type="button">Check which licences renew in the next 90 days</button><button type="button">Summarise unresolved licence issues</button><button type="button">Compare current terms with executed agreements</button><button type="button">Draft a licence amendment summary</button></div></div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px"><div class="inp" style="min-width:0;min-height:38px">Ask about Licences…</div><button type="button" class="disc2" aria-expanded="false">Model and usage ▾</button></div></aside>'
+      : '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Licences" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const shell = (body, o) => '<div class="sh" style="min-height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Licences' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">GL</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail(o.rail) + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const TABS = ['Overview', 'Terms', 'Agreement', 'Access', 'Operations', 'History'];
+    const ident = (cur, o) => { o = o || {}; return '<div style="font:600 12px var(--sg);color:var(--mu)"><a href="#" style="color:var(--mu)">Licences</a> / <b style="color:var(--ink)">Axal VC France</b></div>'
+      + '<header class="pgh" style="align-items:flex-start"><div><h1 style="font-size:28px">Axal VC France</h1><p class="raw" style="font-size:12px">AXL-FR-001 · France · Subsidiary</p><div style="display:flex;gap:10px;align-items:center;margin-top:8px">' + st(o.status || 'Active', (o.status || 'Active').toUpperCase()) + '<span style="font-size:12.5px;color:var(--mu)">Renews 1 Mar 2027 · Agreement v4 executed · France branch ' + (o.healthy ? 'synced 4 min ago' : 'on revision 142 of 143') + '</span></div></div><div class="ctl"><button type="button" class="btn">' + (cur === 'Terms' ? 'Amend terms' : 'Record a request') + '</button><button type="button" class="btn" aria-haspopup="menu">More ▾</button></div></header>'
+      + (o.healthy ? '' : '<div class="nt a" style="padding:9px 13px"><span class="ic" aria-hidden="true">!</span><div><b>3 items need HQ</b> · Agreement terms changed since v4 · 2 studio requests · annual invoice overdue</div></div>')
+      + '<nav class="ptabs" aria-label="Licence sections">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>'; };
+    const lpage = (cur, body, o) => page(ident(cur, o) + body, { h: (o && o.h) || 1000, overlay: o && o.overlay });
+    const sheet = (h, title, body, foot) => '<div class="dim1" style="opacity:1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="' + h + '" style="width:540px"><div class="drh"><div class="tr"><span class="eye">Consequential action</span><button type="button" class="ib" aria-label="Cancel">✕</button></div><h2 id="' + h + '">' + title + '</h2></div><div class="drb" style="gap:14px">' + body + '</div><div class="drf"><div style="display:flex;gap:8px;justify-content:flex-end">' + foot + '</div></div></aside>';
+    const Q = (n, t, inner) => '<section><h3>' + n + ' · ' + t + '</h3>' + inner + '</section>';
+    const phone = (title, body) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="More">⋯</button></div><div class="pbd" style="overflow:hidden">' + body + '</div></div></div>';
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+
+    /* ================= LX · addendum (#5303) ================= */
+    Object.assign(S, { Provisional: ['xar', 'half'], Stale: ['xar', 'pd'], 'Not applicable': ['mz', 'nd'], 'In force': ['ok', 'ok'], Granted: ['ok', 'ok'], Paused: ['', 'pa'], Ended: ['', 'fl'], Open: ['pd', 'pd'], Applied: ['ok', 'ok'], Kept: ['ok', 'ok'], Overridden: ['xar', 'ar'], Postponed: ['', 'pa'], Retired: ['', 'nd'], Superseded: ['', 'nd'], Recorded: ['ok', 'ok'], 'Not sent': ['mz', 'nd'], 'Amendment needed': ['xar', 'ar'], 'Not in force': ['xar', 'pd'] });
+    const PR = '<span class="lx-pr" title="No read returns this yet">◇ pending read</span>';
+    const NA = '<span class="lx-na">Not applicable</span>';
+    const UNV = '<span class="unr">! Unavailable · <a href="#">Retry</a></span>';
+    const pl = (tone, t) => '<span class="lx-pl ' + (tone || '') + '">' + t + '</span>';
+    const LS = { draft: ['', '✎ Draft'], prepared: ['', '○ Prepared'], ready: ['v', '◔ Ready for signature'], sent: ['v', '➤ Sent · awaiting signature'], executed: ['seal', '● Executed'], voided: ['void', '⊘ Voided'], superseded: ['', '⤳ Superseded'], notsent: ['dash', '○ Prepared · not sent · no envelope'] };
+    const ls = (k) => pl(LS[k][0], LS[k][1]);
+    const LW = { draft: 'draft', awaiting: 'awaiting signature', executed: 'executed', superseded: 'superseded', voided: 'voided' };
+    const lw = (k) => '<span class="raw" style="font-size:11.5px">legal state · <b style="color:var(--ink)">' + LW[k] + '</b></span>';
+    const ot = (t) => '<span class="lx-otag">' + t + '</span>';
+    const wbar = (what) => '<div class="lx-wbar"><span aria-hidden="true">⛨</span><span><b>Super Admin write</b> · ' + what + '</span><span class="x">Recorded with your name, the time and your reason</span></div>';
+    const steps = (arr, cur) => '<div class="lx-steps" aria-label="Steps">' + J(arr.map((s, i) => '<span class="' + (i < cur ? 'ok' : i === cur ? 'cur' : '') + '"' + (i === cur ? ' aria-current="step"' : '') + '>' + (i < cur ? '✓ ' : '') + s + '</span>')) + '</div>';
+    const ctab = (hd, rows, o) => { o = o || {}; return '<table class="lx-ctab"><thead><tr>' + J(hd.map(h => '<th' + (h.charAt(0) === '#' ? ' class="n"' : '') + '>' + h.replace(/^#/, '') + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr' + (r.cls ? ' class="' + r.cls + '"' : '') + '>' + J((r.c || r).map((c, i) => '<td' + (hd[i] && hd[i].charAt(0) === '#' ? ' class="n"' : '') + '>' + c + '</td>')) + '</tr>')) + '</tbody>' + (o.foot || '') + '</table>'; };
+    const card = (title, inner, o) => { o = o || {}; return '<section class="cd"' + (o.style ? ' style="' + o.style + '"' : '') + '>' + (title ? '<div class="ch"' + (o.style && o.style.indexOf('padding:14px 0 0') === 0 ? ' style="padding:0 16px"' : '') + '><h2' + (o.big ? ' style="font-size:17px"' : '') + '>' + title + '</h2>' + (o.right || '') + '</div>' : '') + inner + '</section>'; };
+    const kv = (rows, w) => '<dl class="lx-kv"' + (w ? ' style="grid-template-columns:' + w + 'px minmax(0,1fr)"' : '') + '>' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd' + (r[2] ? ' class="mo"' : '') + '>' + r[1] + '</dd>')) + '</dl>';
+
+    /* shell with a chosen HQ nav item (Licences or Contracts) */
+    const shellN = (body, o, nav) => '<div class="sh" style="min-height:' + (o.h || 900) + 'px' + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">' + (o.grp || 'HQ') + '</span><nav aria-label="' + (o.grp || 'HQ') + '">' + J((o.navs || NAV).map(t => '<a href="#"' + (t === nav ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px">' + (o.grp ? '' : '<span class="bdg" style="background:#881337">HQ</span>') + '<button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">' + (o.av || 'GL') + '</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + rail(false) + (o.overlay || '') + '</div>';
+    const pageN = (body, o, nav) => { o = o || {}; return '<div class="cv' + (o.dark ? ' lx-dk' : '') + '" style="' + (o.vars || VARS) + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shellN(body, o, nav) + '</div>'; };
+    const lic = (body, o) => pageN(body, o, 'Licences');
+    const con = (body, o) => pageN(body, o, 'Contracts');
+
+    /* ---------- licences page header with the new Pricing / Packages tabs ---------- */
+    const LTABS = ['Ledger', 'Program access by licence', 'Pricing', 'Axal VC packages'];
+    const lh = (tab, h1, sub, ctl) => '<header class="pgh"><div><h1>' + (h1 || 'Licences') + '</h1><p>' + (sub || 'HQ’s authoritative record of territory and user licences.') + '</p></div><div class="ctl">' + (ctl || '') + '</div></header><nav class="ptabs" aria-label="Licences">' + J(LTABS.map(t => '<a href="#"' + (t === tab ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const modelSel = (open) => '<div style="position:relative"><button type="button" class="dd" aria-haspopup="listbox" aria-expanded="' + !!open + '">Model <b>v3</b> · active since 1 Nov 2026 ▾</button>'
+      + (open ? '<ul role="listbox" aria-label="Pricing model versions" style="position:absolute;right:0;top:38px;z-index:5;width:320px;background:var(--card);border:1px solid var(--hair2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;display:flex;flex-direction:column;gap:2px;font-size:12.5px">'
+        + J([['v4', 'Draft', 'Edited 8 Nov by M. Okafor', false], ['v3', 'Active', 'Since 1 Nov 2026 · activated by Guillaume L.', true], ['v2', 'Retired', '2 Mar – 31 Oct 2026', false], ['v1', 'Retired', 'Until 1 Mar 2026', false]].map(m => '<li role="option" aria-selected="' + m[3] + '" style="display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 8px;border-radius:7px' + (m[3] ? ';background:var(--lav)' : '') + '"><b class="mo">' + m[0] + '</b><span>' + m[2] + '</span>' + st(m[1]) + '</li>')) + '<li style="padding:6px 8px;border-top:1px solid var(--hair);margin-top:4px"><a href="#">Open pricing models ›</a></li></ul>' : '') + '</div>';
+
+    const SNAV = ['Home', 'Studio', 'Programs', 'Members', 'Licence', 'Settings'];
+    const SBOX = (title, kind, body) => '<section class="cd">' + '<span class="eye">' + title + '</span>' + st(kind === 'Partial' ? 'Partial' : kind) + body + '</section>';
+    const PDK = { bg: '#0b1220', card: '#111827', raised: '#162033', ink: '#e5e7eb', mu: '#a3a9b8', hair: '#243049', hair2: '#33405c', vi: '#a78bfa', vt: '#c4b5fd', lav: '#1e1b3a', lavE: '#4c3f8f', pos: '#6ee7b7', posBg: '#0f2a22', posE: '#1f5a46', neg: '#fca5a5', negBg: '#2a1215', negE: '#6b2a2f', amT: '#fcd34d', amBg: '#2a2110', amE: '#7a5b14', amD: '#f59e0b', dim: 'rgba(0,0,0,.5)', skel: '#243049' };
+    const VDK = Object.keys(PDK).map(k => '--' + k + ':' + PDK[k]).join(';');
+
+    /* ================= LFI · initial invoice and what Apply writes (#5955) · continues the addendum at L41 ================= */
+    Object.assign(S, { Issued: ['pd', 'pd'], 'Not issued': ['mz', 'nd'], 'Part paid': ['xar', 'half'], Void: ['', 'fl'], Loading: ['mz', 'pd'], Applied: ['ok', 'ok'], Saving: ['pd', 'pd'], Conflict: ['xar', 'ar'] });
+    const BK = (n) => '<span class="ptag" title="Needs backend work">◇ #' + n + '</span>';
+    const spec = (t) => '<span class="lfi-spec">' + t + '</span>';
+    const nr = (t) => '<span class="lfi-nr">' + SH.nd + (t || 'Not recorded') + '</span>';
+    const unr = (t) => '<span class="lfi-unr">' + SH.ua + (t || 'Unavailable') + '</span>';
+    const LB = { name: 'Axal VC Belgium', ref: 'AXL-BE-001', ctry: 'Belgium', kind: 'Subsidiary' };
+    const LL = { name: 'Axal VC Luxembourg', ref: 'AXL-LU-001', ctry: 'Luxembourg', kind: 'Subsidiary' };
+    const LBX = { name: 'Axal VC Benelux', ref: 'AXL-BNX-001', ctry: 'Basket · BE, NL, LU', kind: 'Subsidiary' };
+    const REF0 = 'AXAL-LIC-AXL-BE-001-INIT';
+    const DEC = 'accepted 12 Nov 2026 by M. Okafor';
+
+    /* shell: HQ sidebar, top bar, Eadwyn rail (collapsed, or open with a proposal) */
+    const sideHQ = (nav) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === nav ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const sideST = () => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="lfi-sw" aria-haspopup="menu">Axal VC Belgium ▾</button><span class="eye grp">Studio</span><nav aria-label="Studio">' + J(SNAV.map(t => '<a href="#"' + (t === 'Licence' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>';
+    const topb = (hq, av) => '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px">' + (hq ? '<span class="bdg" style="background:#881337">HQ</span>' : '') + '<button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account">' + av + '</span></div></div>';
+    const ead = (ctx, body) => '<aside class="sp eadx" aria-label="Eadwyn" style="width:320px"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1"><p class="foot">' + ctx + '</p>' + body + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px"><div class="inp" style="min-width:0;min-height:38px">Ask about this licence…</div></div></aside>';
+    const prop = (eye, txt, cite, acts) => '<div class="lfi-prop"><span class="eye">' + eye + '</span><div class="lfi-ptx">' + txt + '</div><p class="foot">' + cite + '</p><div style="display:flex;gap:6px;flex-wrap:wrap">' + (acts || '<button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn t bsm">Discard</button>') + '</div></div>';
+    const shellL = (body, o) => '<div class="sh' + (o.rail ? ' lfi-rl' : '') + '" style="min-height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">' + (o.studio ? sideST() : sideHQ('Licences')) + '<div class="mn">' + topb(!o.studio, o.av || 'GL') + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail || rail(false)) + (o.overlay || '') + '</div>';
+    const pg = (body, o) => { o = o || {}; return '<div class="cv' + (o.dark ? ' lx-dk lfi-dk' : '') + '" style="' + (o.dark ? VDK : VARS) + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shellL(body, o) + '</div>'; };
+    const identL = (cur, o) => { o = o || {}; const L = o.lic || LB; const stt = o.status || 'Active';
+      return '<div style="font:600 12px var(--sg);color:var(--mu)"><a href="#" style="color:var(--mu)">Licences</a> / <b style="color:var(--ink)">' + L.name + '</b></div>'
+      + '<header class="pgh" style="align-items:flex-start"><div><h1 style="font-size:28px">' + L.name + '</h1><p class="raw" style="font-size:12px">' + L.ref + ' · ' + L.ctry + ' · ' + L.kind + ' · EUR</p><div style="display:flex;gap:10px;align-items:center;margin-top:8px">' + st(stt === 'Pending activation' ? 'Pending' : stt, stt.toUpperCase()) + '<span style="font-size:12.5px;color:var(--mu)">' + (o.since || 'Started 1 Sep 2025 · renews 1 Sep 2027 · Agreement v2 executed') + '</span></div></div><div class="ctl"><button type="button" class="btn">Record a request</button><button type="button" class="btn" aria-haspopup="menu">More ▾</button></div></header>'
+      + (o.attn ? '<div class="nt a" style="padding:9px 13px"><span class="ic" aria-hidden="true">!</span><div>' + o.attn + '</div></div>' : '')
+      + '<nav class="ptabs" aria-label="Licence sections">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>'; };
+    const opsNav = '<nav class="ptabs" aria-label="Operations" style="margin-top:-6px"><a href="#">Requests</a><a href="#">Compliance notices</a><a href="#" aria-current="page">Billing · Fees</a></nav>';
+    const pmNav = '<nav class="ptabs" aria-label="Terms" style="margin-top:-6px"><a href="#">Contract terms</a><a href="#" aria-current="page">Pricing &amp; Market</a></nav>';
+    const feesHead = (note) => '<div class="lfi-fh"><div><h2>Fees</h2><p class="raw">Everything HQ invoices this licence, in <b class="mo" style="color:var(--ink)">EUR</b>, the licence currency (<code>territory_licences.currency</code>).</p></div><span class="raw">' + (note || 'Read <code>GET /api/admin/licences/:uid/fee-invoices</code> · <code>/pricing</code> · 14:30 UTC') + '</span></div>';
+    const toast = (t) => '<div class="toast" role="status"><span class="ok" aria-hidden="true">✓</span>' + t + '</div>';
+
+    /* ---------- the initial invoice card ---------- */
+    const eur = (n) => '€' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const linesTbl = (o) => { o = o || {};
+      const fee = o.nrfee ? ['Initial fee', 'one-off', nr(), spec('licence_pricing_decisions.accepted_initial_fee_cents · NULL')] : ['Initial fee', 'one-off · from the accepted pricing', eur(50000), spec('licence_pricing_decisions.accepted_initial_fee_cents')];
+      const cls = o.basket ? 'class <b>BE high</b> · <b>NL medium</b> · <b>LU</b> ' + nr('class Not recorded') : 'class <b>high</b>' + (o.issued ? ' · frozen at issue' : '');
+      const sur = ['Regulatory surcharge · ' + cls, 'one-off · billed once with the initial fee', eur(8000), spec('…accepted_regulatory_surcharge_cents · ' + (o.basket ? 'country_market_profiles.regulatory_class per country' : 'regulatory_class frozen on the invoice') + ' ◇')];
+      const rows = o.nrsur ? [fee] : [fee, sur];
+      const tot = o.nrfee ? nr('Total not calculated') : eur(o.nrsur ? 50000 : 58000);
+      return '<table class="lfi-ln"><thead><tr><th>Line</th><th>Counts</th><th class="n">Amount · EUR</th></tr></thead><tbody>' + J(rows.map(r => '<tr><td><b>' + r[0] + '</b>' + r[3] + '</td><td class="c">' + r[1] + '</td><td class="n">' + r[2] + '</td></tr>')) + '</tbody><tfoot><tr><td colspan="2">Total' + (o.void ? ' · void, nothing owed' : '') + '</td><td class="n">' + (o.void ? '<s>' + tot + '</s>' : tot) + '</td></tr></tfoot></table>'
+        + (o.nrsur ? '<p class="lfi-note">' + nr('Regulatory surcharge · Not recorded') + ' · not billed. No €0 line is printed.</p>' : ''); };
+    const metaG = (rows) => '<dl class="lfi-meta">' + J(rows.map(r => '<div><dt>' + r[0] + '</dt><dd' + (r[2] === 0 ? '' : ' class="mo"') + '>' + r[1] + '</dd></div>')) + '</dl>';
+    const ISS = { issued: 'Issued', ready: 'Not issued', notstarted: 'Not issued', nostart: 'Not issued', paid: 'Paid', part: 'Part paid', void: 'Void', notbill: 'Not issued', basket: 'Issued', overdue: 'Overdue', nrfee: 'Not issued', nrsur: 'Not issued', invunread: 'Unavailable', licensee: 'Issued' };
+    const icard = (s, o) => { o = o || {};
+      const issued = ['issued', 'paid', 'part', 'void', 'basket', 'overdue', 'licensee'].indexOf(s) >= 0;
+      const chip = s === 'paid' ? st('Paid', 'Paid 9 Dec 2026') : s === 'part' ? st('Part paid', 'Part paid') : s === 'void' ? '<span class="stt fl lfi-void">' + SH.fl + '<s>Void</s> · licensee entity named wrongly</span>' : s === 'overdue' ? st('Overdue', 'Overdue · 8 days') : s === 'invunread' ? st('Unavailable', 'Unknown · invoices unreadable') : st(ISS[s] || 'Not issued');
+      const head = '<div class="ch"><h2>Initial invoice · one-off</h2><span style="display:flex;gap:8px;align-items:center">' + BK(5954) + chip + '</span></div>';
+      const paid = s === 'paid' ? eur(58000) + ' of ' + eur(58000) : s === 'part' ? '<b>' + eur(20000) + '</b> of ' + eur(58000) : s === 'void' ? '—' : eur(0) + ' of ' + eur(58000);
+      const meta = issued ? metaG([['Reference', s === 'basket' ? 'AXAL-LIC-AXL-BNX-001-INIT' : REF0], ['Issued', '13 Nov 2026'], ['Due', '13 Dec 2026 · 30 days'], ['Paid so far', paid], ['PDF', s === 'void' ? '<span class="lx-na">Hidden · a void invoice prints nothing</span>' : '<a href="#">' + (s === 'basket' ? 'AXAL-LIC-AXL-BNX-001-INIT' : REF0) + '.pdf</a>', 0]])
+        : metaG([['Reference', '<span class="lx-na">Given at issue</span>', 0], ['Issued', '<span class="lx-na">Not issued</span>', 0], ['Due', o.nostartDue ? '<span class="lx-na">—</span>' : '30 days after issue', 0], ['Payee', 'Axal VC Holdings LLC', 0]]);
+      let act = '', why = '';
+      if (o.licensee) act = '';
+      else if (s === 'issued' || s === 'basket') act = '<button type="button" class="btn ' + (o.noPrimary ? '' : 'p') + '">Record payment…</button><button type="button" class="btn">Void…</button>';
+      else if (s === 'overdue') act = '<button type="button" class="btn p">Record payment…</button><button type="button" class="btn">Void…</button>';
+      else if (s === 'part') { act = '<button type="button" class="btn p">Record payment…</button>'; why = 'Void is not offered: only an invoice with nothing paid can be voided.'; }
+      else if (s === 'paid') { why = 'Paid in full. Nothing more is recorded; Void is not offered.'; }
+      else if (s === 'void') why = 'An initial invoice has been issued for this licence; no second one can be issued.';
+      else if (s === 'ready') act = '<button type="button" class="btn ' + (o.noPrimary ? '' : 'p') + '">Issue initial invoice…</button>';
+      else if (s === 'notstarted') { act = '<button type="button" class="btn" aria-disabled="true">Issue initial invoice…</button>'; why = 'Can be issued from <b class="mo">1 Dec 2026</b> (<code>territory_licences.starts_on</code>).'; }
+      else if (s === 'nostart') { act = '<button type="button" class="btn" aria-disabled="true">Issue initial invoice…</button>'; why = 'Start date ' + nr() + ' · <a href="#">set it on Terms</a>. The licence year and the due date cannot be told without it.'; }
+      else if (s === 'notbill') why = 'Only an active or suspended licence is invoiced.';
+      else if (s === 'nrfee') { act = '<button type="button" class="btn" aria-disabled="true">Issue initial invoice…</button>'; why = 'The accepted pricing has no initial fee, so nothing can be invoiced. Record it by applying or overriding on <a href="#">Pricing &amp; Market</a>.'; }
+      else if (s === 'nrsur') act = '<button type="button" class="btn ' + (o.noPrimary ? '' : 'p') + '">Issue initial invoice…</button>';
+      else if (s === 'invunread') { act = '<button type="button" class="btn" aria-disabled="true">Issue initial invoice…</button>'; why = 'Issue is off until the invoices are read: one may already be issued, and a second can never be.'; }
+      const foot = '<p class="lfi-from">From pricing decision <b>' + (o.decision || DEC) + '</b> · <a href="#">Terms › Pricing &amp; Market</a>' + (issued ? ' · frozen at issue: later applies or market updates never change it.' : ' · the figures are frozen when the invoice is issued.') + '</p>';
+      return '<section class="cd lfi-ic' + (s === 'void' ? ' lfi-icv' : '') + '">' + head
+        + '<div class="lfi-icg"><div>' + linesTbl({ issued: issued, nrfee: s === 'nrfee', nrsur: s === 'nrsur', basket: s === 'basket', void: s === 'void' }) + '</div><div class="lfi-icr">' + meta
+        + (act ? '<div class="lfi-acts">' + act + '</div>' : '') + (why ? '<p class="lfi-why">' + why + '</p>' : '') + '</div></div>' + (o.licensee ? '<p class="lfi-from">One-off invoice for the initial licence fee and the regulatory surcharge. The amounts are fixed as issued.</p>' : foot) + '</section>'; };
+
+    /* ---------- the annual list (Licences v2 L13 style, unchanged) ---------- */
+    const ANN = [['2026–27', 'AXAL-LIC-AXL-BE-001-2026-27', 42000, '1 Sep 2026', '1 Oct 2026', 'Paid', 'Paid 29 Sep 2026'], ['2025–26', 'AXAL-LIC-AXL-BE-001-2025-26', 42000, '1 Sep 2025', '1 Oct 2025', 'Paid', 'Paid 24 Sep 2025']];
+    const annual = (o) => { o = o || {};
+      const head = '<div class="ch"><h2>Annual licence-fee invoices <span class="lfi-per">· per licence year</span></h2><button type="button" class="btn bsm"' + (o.empty ? '' : ' aria-disabled="true"') + '>Issue this licence year’s invoice…</button></div>';
+      if (o.unread) return '<section class="cd">' + head + '<div class="lfi-ust">' + unr('Unavailable') + '<div><b>Invoices could not be read</b><p class="raw">The Worker did not answer at 14:30 UTC. This is not an empty list.</p></div><button type="button" class="btn bsm">Try again</button></div></section>';
+      if (o.loading) return '<section class="cd" aria-busy="true">' + head + J([1, 2].map(() => '<div style="display:grid;grid-template-columns:90px 240px 1fr 120px 110px;gap:16px"><span class="sk" style="height:14px"></span><span class="sk" style="height:14px"></span><span></span><span class="sk" style="height:14px"></span><span class="sk" style="height:14px"></span></div>')) + '</section>';
+      if (o.empty) return '<section class="cd">' + head + '<div class="lfi-empty">' + st('None', 'None') + '<b>No annual invoice issued yet</b><span class="raw">The 2026–27 licence year began 1 Nov 2026 · €36,000.00 per licence year</span></div></section>';
+      return '<section class="cd" style="padding:14px 0 0;gap:6px"><div class="ch" style="padding:0 18px"><h2>Annual licence-fee invoices <span class="lfi-per">· per licence year</span></h2><button type="button" class="btn bsm" aria-disabled="true">Issue this licence year’s invoice…</button></div><table class="tbl"><thead><tr><th style="padding-left:18px">Licence year</th><th>Reference</th><th class="n">Amount</th><th>Issued</th><th>Due</th><th>Status</th><th class="n">Paid</th><th></th></tr></thead><tbody>'
+        + J(ANN.map(r => '<tr><td style="padding-left:18px"><b>' + r[0] + '</b></td><td class="mo" style="font-size:11.5px">' + r[1] + '</td><td class="n">' + eur(r[2]) + '</td><td class="mo">' + r[3] + '</td><td class="mo">' + r[4] + '</td><td>' + st(r[5], r[6]) + '</td><td class="n">' + eur(r[2]) + '</td><td style="text-align:right;padding-right:18px"><a class="btn t bsm" href="#">PDF</a></td></tr>')) + '</tbody></table><p class="foot" style="padding:0 18px 14px">2026–27 is invoiced; the button opens again on 1 Sep 2027. The €45,000 fee applied on 12 Nov 2026 is invoiced from the 2027–28 licence year; issued invoices stay as issued. ' + spec('licence_fee_invoices · one row per licence year') + '</p></section>'; };
+    const feesBody = (s, o) => { o = o || {}; return opsNav + feesHead(o.note) + (o.card || icard(s, o)) + (o.ann || annual(o.annO)); };
+
+    /* ---------- L42 · issue sheet ---------- */
+    const STEPS5 = ['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt'];
+    const sheetW = (h, title, body, foot, w, err) => '<div class="dim1" style="opacity:1"></div><aside class="drw" role="dialog" aria-modal="true" aria-labelledby="' + h + '" style="width:' + (w || 560) + 'px"><div class="drh"><div class="tr"><span class="eye">Money action · issues an invoice</span><button type="button" class="ib" aria-label="Cancel">✕</button></div><h2 id="' + h + '">' + title + '</h2></div><div class="drb" style="gap:14px">' + (err || '') + body + '</div><div class="drf"><p class="ln">Super Admin write bar: your sign-in is 12 minutes old, inside the window. Older than that, Issue asks you to sign in again first (Authenticate).</p><div style="display:flex;gap:8px;justify-content:flex-end">' + foot + '</div></div></aside>';
+    const issueSheet = (err) => sheetW('iss', 'Issue the initial invoice', steps(STEPS5, 1)
+      + Q('1', 'What is invoiced · EUR, the decision’s currency', linesTbl({}) + '<p class="lfi-from" style="margin-top:6px">From: pricing decision <b>' + DEC + '</b> · <a href="#">Terms › Pricing &amp; Market</a></p>')
+      + Q('2', 'Who and when', '<dl class="lx-kv" style="grid-template-columns:150px minmax(0,1fr)"><dt>Licensor · payee</dt><dd>Axal VC Holdings LLC</dd><dt>Licensee</dt><dd>Axal VC Belgium SRL</dd><dt>Issued</dt><dd class="mo">Today · 13 Nov 2026</dd><dt>Due</dt><dd class="mo">In 30 days · 13 Dec 2026</dd></dl>' + spec('licence_terms.licensor_ip_entity · licence_terms.payment_terms_days (30 when not recorded)'))
+      + Q('3', 'What happens', '<ul class="rz"><li><b>One invoice is issued and frozen</b><small>Its two lines, the class and the total never change after issue</small></li><li><b>A second initial invoice can never be issued, even after a void</b></li><li><b>Annual invoices are unaffected</b><small>2026–27 stays as issued and paid</small></li><li><b>Nothing is sent</b><small>The licensee sees it on their Statements tab; HQ sends nothing by email</small></li></ul>')
+      + Q('4', 'Can it be undone', '<p style="font-size:12.5px">Void it while nothing is paid, with a reason. The one initial invoice stays used.</p>'), '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Issue initial invoice</button>', 560, err);
+
+    /* ---------- L47 · Apply review ---------- */
+    const AROWS = [
+      ['Annual fee', 'per licence year', '€42,000', '€45,000', 'Core terms', 'territory_licences.annual_fee_cents', ''],
+      ['Royalty', '% of revenue', '6.00%', '5.50%', 'Core terms', 'territory_licences.revenue_share_bps (600 → 550)', ''],
+      ['Minimum royalty', 'per licence year', '€16,800', '€18,000', 'Schedule § 4.4 minimum guarantee', 'licence_terms.minimum_guarantee_cents', '5953'],
+      ['Initial fee', 'one-off', 'NR', '€50,000', 'One-off initial invoice, issued from Fees', 'licence_pricing_decisions.accepted_initial_fee_cents', ''],
+      ['Regulatory surcharge · class high', 'one-off', 'NR', '€8,000', 'One-off initial invoice, billed once with the initial fee', '…accepted_regulatory_surcharge_cents', '']];
+    const goes = (r) => '<span class="lfi-goes">→ ' + r[4] + '</span>' + (r[6] ? ' ' + BK(r[6]) : '');
+    const applyTbl = (o) => { o = o || {}; const rows = o.rows || AROWS;
+      return '<table class="lx-ctab lfi-at"><thead><tr><th>Figure</th><th>Counts</th><th class="n">Before</th><th class="n">After</th><th>Goes to</th></tr></thead><tbody>'
+        + J(rows.map(r => '<tr' + (r[7] ? ' class="' + r[7] + '"' : '') + '><td><b>' + r[0] + '</b>' + spec(r[5]) + '</td><td class="c">' + r[1] + '</td><td class="n">' + (r[2] === 'NR' ? nr() : r[2]) + '</td><td class="n"><b>' + (r[3] === 'NR' ? nr() : r[3]) + '</b></td><td>' + (r[8] || goes(r)) + '</td></tr>')) + '</tbody></table>'; };
+    const ackBox = (on, what) => '<label class="lfi-ack' + (on ? ' on' : '') + '"><span class="bx" aria-hidden="true">' + (on ? '✓' : '') + '</span><span><b>Required.</b> This changes <b>' + (what || 'the annual fee, the royalty and the minimum guarantee') + '</b>, and the current agreement (v2, executed) was drawn on the old figures. It will not be edited; it may no longer match until a replacement is instantiated on the <a href="#">Agreement</a> section.</span></label>';
+    const applyCard = (o) => { o = o || {};
+      return '<section class="cd" style="border:1.5px solid var(--ink)"><div class="ch"><h2 style="font-size:17px">Apply recommendation · review</h2><span class="raw">Model v3 · snapshot 11 Nov 2026 · Belgium · EUR</span></div>' + steps(STEPS5, 1)
+        + applyTbl() + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Issued invoices stay as issued.</b> If the initial invoice is already issued, the new initial fee and surcharge are recorded on the decision only. Here no initial invoice exists yet (<code>GET /:uid/fee-invoices</code> ' + BK(5954) + ').</div></div>'
+        + '<div class="lx-g3"><div class="fld"><label>Effective from</label><div class="inp mo" style="min-width:0">12 Nov 2026</div></div><div class="fld"><label>Next review</label><div class="inp mo" style="min-width:0">12 Nov 2027</div></div><div class="fld"><label>Override reason <span>· only when overriding</span></label><div class="inp" style="min-width:0;opacity:.6">Not needed: every figure is the recommendation</div></div></div>'
+        + '<div class="fld"><label for="wn">Why now? <span>· required, recorded on the decision</span></label><div class="inp" id="wn" style="min-height:44px;min-width:0;color:var(--ink)">' + (o.reason || 'First priced decision for Belgium under model v3; sets the initial fee and surcharge for the one-off invoice.') + '</div></div>'
+        + ackBox(o.ack !== false)
+        + wbar('apply pricing to AXL-BE-001')
+        + '<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center"><span class="raw" style="margin-right:auto">Sends <code>expected_terms_revision 7</code> and <code>acknowledge_agreement_mismatch</code></span><button type="button" class="btn">Back</button><button type="button" class="btn">Apply override instead…</button><button type="button" class="btn p"' + (o.ack === false ? ' aria-disabled="true"' : '') + '>Apply recommendation</button></div></section>'; };
+    const eadApply = ead('Eadwyn reads this review and writes nothing. A proposal goes into the reason field only if you accept it.', prop('Summary', 'Raises the annual fee by €3,000 to €45,000 per licence year, lowers the royalty from 6.00% to 5.50%, lifts the minimum guarantee to €18,000, and sets a one-off €58,000 initial invoice (€50,000 + €8,000 surcharge) for Fees.', 'From the five rows of this review · snapshot 11 Nov 2026', '<span class="raw">Information only</span>')
+      + prop('Proposed reason · Why now?', 'First priced decision for Belgium under model v3; sets the initial fee and surcharge for the one-off invoice.', 'Drafted from the decision history (none before) and the snapshot', '<span class="stt ok">' + SH.ok + 'Accepted into Why now? · 14:31</span><button type="button" class="btn t bsm">Undo</button>'));
+
+    /* ---------- strips and state boxes ---------- */
+    const strip = (name, cond, inner) => '<div class="lfi-strip"><div class="lfi-sl"><b>' + name + '</b><span>' + cond + '</span></div><div class="lfi-sb">' + inner + '</div></div>';
+    const sheetCrop = (eye, inner) => crop('<span class="eye">' + eye + '</span>' + inner, 1400);
+    const noDec = () => '<section class="cd lfi-ic"><div class="ch"><h2>Initial invoice · one-off</h2><span style="display:flex;gap:8px;align-items:center">' + BK(5954) + st('None', 'No pricing accepted') + '</span></div><div class="lfi-empty"><b>No pricing has been accepted for this licence, so there is no initial fee to invoice.</b><span class="raw">The initial fee and the regulatory surcharge come from an accepted or overridden pricing decision. None exists yet (<code>GET /:uid/pricing</code> → <code>latest_decision: null</code>).</span><button type="button" class="btn p" style="align-self:flex-start;margin-top:4px">Open Pricing &amp; Market</button></div></section>';
+    const loadCard = () => '<section class="cd lfi-ic" aria-busy="true"><div class="ch"><h2>Initial invoice · one-off</h2>' + st('Loading', 'Loading') + '</div><div class="lfi-icg"><div style="display:flex;flex-direction:column;gap:10px">' + J([70, 85, 50].map(w => '<span class="sk" style="height:14px;width:' + w + '%"></span>')) + '</div><div style="display:flex;flex-direction:column;gap:10px">' + J([60, 90, 40].map(w => '<span class="sk" style="height:14px;width:' + w + '%"></span>')) + '</div></div><p class="foot">Card and list load separately; neither is drawn as empty or €0 while loading.</p></section>';
+    const decUnread = () => '<section class="cd lfi-ic"><div class="ch"><h2>Initial invoice · one-off</h2>' + st('Unavailable', 'Unavailable') + '</div><div class="lfi-ust">' + unr('Unavailable') + '<div><b>Pricing decision could not be read</b><p class="raw">Its figures are unknown, not zero. Issue stays off.</p></div><button type="button" class="btn bsm">Try again</button></div></section>';
+    const refusedCard = () => '<section class="cd"><div class="lfi-ust">' + st('Refused') + '<div><b>Only a Super Admin can issue or record licence invoices</b><p class="raw">Your role reads licences but not their fees. An existing Super Admin can grant it under Team.</p></div></div></section>';
+    const conflictCard = () => '<section class="cd lfi-ic"><div class="ch"><h2>Record payment · ' + REF0 + '</h2>' + st('Conflict', 'Changed') + '</div><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>This invoice changed since you opened it, so nothing was recorded.</b> Reload it and check the current total and status. <span class="raw">(409 <code>invoice_changed</code> · revision 1 read, 2 current)</span></div><span class="bt"><button type="button" class="btn p bsm">Reload</button></span></div><div class="fld"><label>Total received so far (EUR) <span>· kept as you typed it</span></label><div class="inp mo" style="min-width:0;max-width:260px;color:var(--ink)">20,000.00</div></div></section>';
+
+    /* ---------- L46 · licensee Statements ---------- */
+    const studioPage = (unread) => pg('<header class="pgh"><div><h1>Licence</h1><p>Axal VC Belgium · AXL-BE-001 · what HQ has licensed to this studio. Read-only.</p></div></header>'
+      + '<nav class="ptabs" aria-label="Licence"><a href="#">Overview</a><a href="#">Agreement</a><a href="#" aria-current="page">Statements</a><a href="#">Requests</a></nav>'
+      + (unread ? '<section class="cd"><div class="lfi-ust">' + unr('Unavailable') + '<div><b>Your fee invoices could not be read. Try again in a moment.</b><p class="raw">Statements below still show. <code>fee_invoices_reason</code></p></div><button type="button" class="btn bsm">Try again</button></div></section>'
+        : icard('licensee', { licensee: true })
+        + '<section class="cd" style="padding:14px 0 0;gap:6px"><div class="ch" style="padding:0 18px"><h2>Annual licence-fee invoices <span class="lfi-per">· per licence year</span></h2></div><table class="tbl"><thead><tr><th style="padding-left:18px">Licence year</th><th>Reference</th><th class="n">Amount</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody>' + J(ANN.map(r => '<tr><td style="padding-left:18px"><b>' + r[0] + '</b></td><td class="mo" style="font-size:11.5px">' + r[1] + '</td><td class="n">' + eur(r[2]) + '</td><td class="mo">' + r[4] + '</td><td>' + st(r[5], r[6]) + '</td><td style="text-align:right;padding-right:18px"><a class="btn t bsm" href="#">PDF</a></td></tr>')) + '</tbody></table></section>')
+      + '<section class="cd" style="padding:14px 0 0;gap:6px"><div class="ch" style="padding:0 18px"><h2>Royalty statements <span class="lfi-per">· per quarter · 6.00% of revenue</span></h2></div><table class="tbl"><thead><tr><th style="padding-left:18px">Period</th><th class="n">Revenue reported</th><th class="n">Royalty owed</th><th>Status</th></tr></thead><tbody><tr><td style="padding-left:18px"><b>Q3 2026</b></td><td class="n">€52,000.00</td><td class="n">€3,120.00</td><td>' + st('Due', 'Due 15 Nov 2026') + '</td></tr><tr><td style="padding-left:18px"><b>Q2 2026</b></td><td class="n">€47,500.00</td><td class="n">€2,850.00</td><td>' + st('Paid', 'Paid 12 Aug 2026') + '</td></tr></tbody></table></section>'
+      + '<p class="foot">Pay by bank transfer to Axal VC Holdings LLC, quoting each invoice’s reference. No HQ notes, payment notes or actions are shown here.</p>', { studio: true, av: 'AP', h: unread ? 700 : 900 });
+
+    /* ---------- L48 · apply review states ---------- */
+    const R = (i, patch) => Object.assign(AROWS[i].slice(), patch);
+    const nc = (keep) => '<span class="lfi-nc">' + SH.nd + 'Not recorded · no change</span><span class="lfi-keep">' + keep + '</span>';
+    const rvNR = () => applyTbl({ rows: [AROWS[0], AROWS[1], R(2, { 3: 'NR', 8: nc('Schedule § 4.4 keeps €16,800 per licence year') }), R(3, { 3: 'NR', 8: nc('Nothing for the initial invoice') }), R(4, { 0: 'Regulatory surcharge · class ' + '<span class="nrec">Not recorded</span>', 3: 'NR', 8: nc('Never written as €0') })] });
+    const rvNoAnnual = () => applyTbl({ rows: [R(0, { 3: '<span class="lfi-nc">' + SH.nd + 'Not recorded · give a value</span><div class="inp mo" style="min-width:0;width:140px;margin:6px 0 0 auto;color:var(--ink)">€ 45,000</div>', 7: 'hi' }), AROWS[1]] }) + '<div class="nt r"><span class="ic" aria-hidden="true">✕</span><div><b>Give the accepted annual fee: there is no recommendation to take it from.</b> <span class="raw">(400 <code>accepted_value_required</code>)</span> Apply recommendation is refused; Override with a typed value goes ahead.</div></div><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" aria-disabled="true">Apply recommendation</button><button type="button" class="btn p">Apply override</button></div>';
+    const rvAck = () => applyTbl({ rows: [AROWS[0]] }) + ackBox(false, 'the annual fee') + '<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center"><span class="raw" style="margin-right:auto">Apply is off until the box is ticked (409 <code>agreement_ack_required</code> otherwise)</span><button type="button" class="btn p" aria-disabled="true">Apply recommendation</button></div>';
+    const rvIssued = (unread) => applyTbl({ rows: [R(3, { 2: '€50,000', 3: '€52,000', 8: unread ? '<span class="lfi-unr">' + SH.ua + 'Invoices could not be read · whether one is issued is unknown</span>' : '<span class="lfi-goes">Recorded on the decision only</span><span class="lfi-keep">invoice ' + REF0 + ' already issued ' + BK(5954) + '</span>' }), R(4, { 2: '€8,000', 3: '€9,000', 8: unread ? '<span class="lfi-unr">' + SH.ua + 'Invoices could not be read · whether one is issued is unknown</span>' : '<span class="lfi-goes">Recorded on the decision only</span><span class="lfi-keep">the issued invoice keeps €8,000</span>' })] });
+    const BOX = (t, kind, body) => '<section class="cd"><span class="eye">' + t + '</span>' + st(kind) + body + '</section>';
+    const rvStates = () => crop('<span class="eye">L48 · Apply review · read and write states (Worker sentences as given)</span><div class="lx-st">' + J([
+      BOX('Stale terms', 'Conflict', '<b>These terms changed since you opened them, so nothing was saved.</b><p class="raw">Reload them and apply again. 409 <code>terms_conflict</code>.</p><button type="button" class="btn p bsm" style="align-self:flex-start">Reload</button>'),
+      BOX('Snapshot stale', 'Stale', '<b>The territory or pricing basis changed since this recommendation was made.</b><p class="raw">Refresh the recommendation and apply again. 409 <code>snapshot_stale</code>.</p><button type="button" class="btn bsm" style="align-self:flex-start">Refresh recommendation</button>'),
+      BOX('Currency mismatch', 'Refused', '<b>This licence is held in EUR, and the recommendation is in GBP.</b><p class="raw">Change the licence currency on the Terms tab first, or override in GBP. Nothing written. 409 <code>currency_mismatch</code>.</p>'),
+      BOX('Agreement unreadable', 'Unavailable', '<b>The licence contract store could not be read, so whether the agreement still matches cannot be told.</b><p class="raw">Nothing was saved; try again. 503 <code>agreement_unreadable</code>.</p>'),
+      BOX('Terminated licence', 'Not applicable', '<b>A terminated licence is not priced.</b><p class="raw">No Apply, no Override. 409 <code>licence_terminated</code>.</p>'),
+      BOX('Loading', 'Loading', '<span class="sk" style="height:12px;width:80%"></span><span class="sk" style="height:12px;width:60%"></span><span class="sk" style="height:12px;width:70%"></span>'),
+      BOX('Pricing unreadable', 'Unavailable', '<b>The pricing read failed.</b><p class="raw">Current terms still show: annual €42,000 · royalty 6.00% · minimum €16,800. No review is offered.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button>'),
+      BOX('Refused', 'Refused', '<b>Only a Super Admin can apply pricing.</b><p class="raw">The review is not shown; the Pricing &amp; Market read stays visible to roles that have it.</p>'),
+      BOX('Saving', 'Saving', '<b>Applying…</b><p class="raw">Inputs are locked, not cleared. Leaving now does not cancel the write.</p>'),
+      BOX('Save failed', 'Failed', '<b>Nothing was saved.</b><p class="raw">The Worker did not answer. Your figures, dates and reason are kept; Apply again when ready.</p>')]) + '</div>', 1400);
+
+    /* ---------- L49 · tablet 834 ---------- */
+    const tab = (body, h) => '<div class="cv" style="' + VARS + ';width:834px;height:' + h + 'px"><div class="lfi-tbar"><button type="button" class="ib" aria-label="Menu">☰</button><b>Axal VC</b><span class="bdg" style="background:#881337">HQ</span><span style="margin-left:auto" class="av" role="img" aria-label="Account">GL</span></div><main class="bd lfi-nar" style="gap:14px;padding:20px 24px">' + body + '</main></div>';
+    const tabHead = (cur) => '<div style="font:600 12px var(--sg);color:var(--mu)"><a href="#" style="color:var(--mu)">Licences</a> / <b style="color:var(--ink)">Axal VC Belgium</b></div><header><h1 style="font-size:24px;font-weight:800">Axal VC Belgium</h1><p class="raw">AXL-BE-001 · Belgium · EUR · ' + st('Active', 'ACTIVE') + '</p></header><nav class="ptabs" aria-label="Licence sections" style="gap:18px">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const tabApply = () => '<section class="cd"><div class="ch"><h2>Apply recommendation · review</h2></div>' + steps(STEPS5, 1) + '<table class="lx-ctab lfi-at"><thead><tr><th>Figure · goes to</th><th class="n">Before → after</th></tr></thead><tbody>' + J(AROWS.map(r => '<tr><td><b>' + r[0] + '</b> <span class="raw">' + r[1] + '</span><span class="lfi-goes" style="display:block;margin-top:3px">→ ' + r[4] + (r[6] ? ' ' + BK(r[6]) : '') + '</span>' + spec(r[5]) + '</td><td class="n">' + (r[2] === 'NR' ? nr() : r[2]) + ' → <b>' + r[3] + '</b></td></tr>')) + '</tbody></table><p class="foot">Issued invoices stay as issued. If the initial invoice is already issued, the new initial fee and surcharge are recorded on the decision only.</p><div class="fld"><label>Why now? <span>· required</span></label><div class="inp" style="min-width:0;min-height:40px;color:var(--ink)">First priced decision for Belgium under model v3; sets the initial fee and surcharge for the one-off invoice.</div></div>' + ackBox(true) + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Back</button><button type="button" class="btn p">Apply recommendation</button></div></section>';
+
+    /* ---------- L50 · phone 390 ---------- */
+    const mLines = '<div class="lfi-ml"><div class="r"><span>Initial fee <small>one-off</small></span><b class="mo">€50,000.00</b></div><div class="r"><span>Regulatory surcharge <small>class high · one-off</small></span><b class="mo">€8,000.00</b></div><div class="r t"><span>Total · EUR</span><b class="mo">€58,000.00</b></div></div>';
+    const phFees = () => phone('Fees', '<div class="mc"><b style="font-size:16px">Axal VC Belgium</b><small class="raw">AXL-BE-001 · EUR · Active</small></div><section class="lx-mcard"><div class="r"><b style="font-size:14px">Initial invoice · one-off</b>' + st('Issued') + '</div>' + mLines + '<span class="raw" style="font-size:11.5px">' + REF0 + '<br>Issued 13 Nov 2026 · due 13 Dec 2026 · paid €0.00</span><button type="button" class="btn p lfi-fw">Record payment…</button><div class="lfi-g2m"><button type="button" class="btn lfi-fw">Void…</button><a href="#" class="btn lfi-fw">PDF</a></div></section><span class="eye">Annual licence-fee invoices · per licence year</span>' + J(ANN.map(r => '<div class="lx-mcard"><div class="r"><b>' + r[0] + '</b>' + st(r[5], r[6]) + '</div><div class="r"><span class="raw">' + r[1].replace('AXAL-LIC-', '') + '</span><b class="mo">' + eur(r[2]) + '</b></div></div>')));
+    const phIssue = () => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">Fees</b><button type="button" class="pi" aria-label="More">⋯</button></div><div class="pbd" style="overflow:hidden;opacity:.35"><div class="mc"><b style="font-size:16px">Axal VC Belgium</b><small class="raw">AXL-BE-001</small></div><section class="lx-mcard"><b>Initial invoice · one-off</b>' + mLines + '</section></div></div><div class="dim1" style="opacity:1"></div><div class="lfi-bs" role="dialog" aria-modal="true" aria-labelledby="bs1"><span class="lfi-grab" aria-hidden="true"></span><h2 id="bs1">Issue the initial invoice</h2>' + steps(['Review', 'Confirm', 'Receipt'], 0) + mLines + '<p class="raw" style="font-size:12px">From pricing decision ' + DEC + '. Payee Axal VC Holdings LLC · due in 30 days, 13 Dec 2026.</p><p style="font-size:12.5px"><b>One invoice is issued and frozen.</b> A second initial invoice can never be issued, even after a void. Annual invoices are unaffected.</p><button type="button" class="btn p lfi-fw">Issue initial invoice</button><button type="button" class="btn lfi-fw">Cancel</button></div></div>';
+    const phApply = () => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">Apply · review</b><button type="button" class="pi" aria-label="More">⋯</button></div><div class="pbd" style="overflow:hidden;gap:10px;padding-bottom:0">' + J(AROWS.map(r => '<div class="lx-mcard" style="gap:4px;padding:10px 12px"><div class="r"><b>' + r[0].replace(' · class high', '') + '</b><span class="raw">' + r[1] + '</span></div><div class="r"><span class="mo">' + (r[2] === 'NR' ? '<span class="nrec">Not recorded</span>' : r[2]) + ' → <b>' + r[3] + '</b></span>' + (r[6] ? BK(r[6]) : '') + '</div><span class="lfi-goes" style="font-size:11.5px">→ ' + r[4] + '</span></div>')) + '<div class="fld"><label>Why now? <span>· required</span></label><div class="inp" style="min-width:0;min-height:40px;color:var(--ink);font-size:12px">First priced decision for Belgium under model v3…</div></div></div><div class="lfi-pin"><label class="lfi-ack on" style="font-size:11.5px;padding:8px 10px"><span class="bx" aria-hidden="true">✓</span><span>Agreement v2 was drawn on the old figures; it will not be edited.</span></label><button type="button" class="btn p lfi-fw">Apply recommendation</button></div></div></div>';
+
+    /* ---------- L52 · handoff ---------- */
+    const handoff = () => dk('<h1>Handoff · initial invoice and what Apply writes (#5955)</h1><p>Continues the Licences and Contracts v2 Addendum at L41, beside L26. Checked against <code>main</code> 6d7712c6d1 on 14 Nov 2026 (the brief cites 45e7c55fa6; the routes and services it names are unchanged in what these boards draw). Sample licence Axal VC Belgium (AXL-BE-001), Axal VC Luxembourg and Axal VC Benelux are fictional; the figures are bracketed samples that agree on every board.</p>'
+      + '<h2>Checked on main</h2>' + tbl(['Thing drawn', 'Where it is on main', 'Status'], [
+        ['Annual invoice rows, Record payment, Void (nothing paid), PDF, revision conflict', '<code>routes/admin_licences_fees.ts</code>, <code>services/licenceFeeInvoices.ts</code> (migration 513, UNIQUE <code>licence_uid, period_start</code>; PATCH <code>expected_revision</code> → 409 <code>invoice_changed</code>; <code>paid_not_void</code>)', 'Preserved, unchanged'],
+        ['Issue refusals: not billable, no start date, currency unknown, licensor not payee, terms unreadable (503)', '<code>issueFeeInvoice</code>, <code>licensorRefusal</code> in <code>services/licenceAccount.ts</code>; due = <code>payment_terms_days</code> or 30', 'Reused for the initial invoice'],
+        ['Accepted initial fee, accepted surcharge, decision kind, date, by, reason, currency; per-country regulatory class', '<code>GET /:uid/pricing</code> → <code>latest_decision</code>, <code>countries[].regulatory_class</code>', 'Frontend'],
+        ['Apply write, refusals (400 accepted_value_required; 409 terms_conflict, snapshot_stale, agreement_ack_required, currency_mismatch, licence_terminated; 503 agreement_unreadable)', '<code>routes/admin_licence_pricing_apply.ts</code>, <code>services/licencePricingApply.ts</code>', 'Frontend; sentences shown as given'],
+        ['Licensee’s own invoices and their own failure', '<code>GET /api/licence/mine/statements</code> → <code>fee_invoices</code>, <code>fee_invoices_reason</code> (“Your annual fee invoices could not be read…”)', 'Frontend; sentence drops “annual” once the initial invoice is listed (#5954)']])
+      + '<h2>Backend required (◇)</h2>' + tbl(['Need', 'Today on main', 'Issue'], [
+        ['An initial invoice: a kind or a sibling table, one per licence ever (void included), two lines, class frozen on it, reference, Issue write and its refusals (already issued, not started, no initial fee)', '<code>licence_fee_invoices</code> is one row per licence year; nothing invoices the initial fee', '#5954'],
+        ['Apply writes the accepted minimum royalty to <code>licence_terms.minimum_guarantee_cents</code> and counts it as a contractual change (agreement acknowledgement)', '<code>CONTRACTUAL</code> writes only <code>annual_fee_cents</code> and <code>revenue_share_bps</code>; the other three figures are on the decision only', '#5953'],
+        ['The Apply review knows whether an initial invoice is issued', 'The pricing read returns no invoices; needs a second read of <code>/:uid/fee-invoices</code> once invoices carry a kind', '#5954']])
+      + '<div class="cols"><div><h2>Frontend only</h2><p>The Fees section split (initial card above the annual list) in <code>LicenceFeeInvoices.jsx</code>; the five-row “Goes to” table in <code>CountryPricing.jsx</code>; the post-Apply link “Initial invoice: issue it from Fees”; Not recorded, Unavailable and €0 drawn apart; phone, tablet and dark layouts; the Eadwyn proposals (accept, edit or discard; Eadwyn sends nothing and writes nothing).</p><h2>Pending the owner (⚑)</h2><p>None. The three questions in the brief are drawn as A, the owner’s answers Q9, Q10 and Q11 on #1008: HQ presses Issue from the start date; older licences are not invoiced automatically; a later Apply records the new initial figures on the decision only.</p></div><div><h2>Open for engineering</h2><p>The initial invoice’s reference (<code>AXAL-LIC-&lt;ref&gt;-INIT</code> is drawn as a sample) and whether its due date follows <code>payment_terms_days</code> are #5954’s to record. Main’s agreement-ack sentence says “Contract tab”; the boards say Agreement section, the Licences v2 name.</p><h2>Accessibility</h2><p>Every status carries a word and a glyph; Void is struck and worded; disabled actions keep a sentence saying why; the ack is a real checkbox with its label; phone actions are 44 px; the sheet and bottom sheet are modal dialogs with a labelled title; amounts are tabular mono with the currency printed.</p></div></div>');
+
+    let html;
+    const hq = (cur, body, o) => pg(identL(cur, o) + body, o);
+    if (B === 'LFI41') html = hq('Operations', feesBody('issued'), { h: 960 });
+    else if (B === 'LFI41B') html = hq('Operations', feesBody('overdue', { note: 'Sample later: Mon 21 Dec 2026 · read 09:10 UTC' }), { h: 1160, attn: '<b>1 item needs HQ</b> · Initial invoice overdue · 8 days · €58,000.00', rail: ead('Eadwyn reads this licence’s invoices and changes nothing. Eadwyn sends nothing: an accepted note is yours to send.', prop('Proposed reminder note · not sent', 'Dear A. Peeters, our records show nothing received yet for invoice ' + REF0 + ' (€58,000.00, due 13 Dec 2026). Please pay by bank transfer to Axal VC Holdings LLC quoting that reference, or let us know if payment is already on its way.', 'From the invoice row (due 13 Dec 2026, paid €0.00) and the licence’s administrator', '<button type="button" class="btn bsm">Accept as draft</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn t bsm">Discard</button>') + '<p class="foot">Accepted text is kept as a draft on this licence for HQ to send from its own mail. StudioOS sends no reminder.</p>') });
+    else if (B === 'LFI42') html = hq('Operations', feesBody('ready', { noPrimary: true, note: 'Sample: Fri 13 Nov 2026 · before issue' }), { h: 1160, attn: '<b>1 item needs HQ</b> · Initial invoice not issued · pricing ' + DEC, overlay: issueSheet() });
+    else if (B === 'LFI42B') html = crop('<span class="eye">Receipt · after Issue the sheet closes and the card shows the new invoice</span>' + icard('issued') + '<div style="height:64px"></div>' + toast('Issued · <b class="mo">' + REF0 + '</b> · €58,000.00 · <a href="#">Open PDF</a>'), 1300);
+    else if (B === 'LFI43') html = sheetCrop('L43 · lifecycle · 1 of 2', strip('Not yet issued', 'Licence active or suspended, started, decision accepted', icard('ready')) + strip('Licence not started', 'Active, starts_on 1 Dec 2026 is after today', icard('notstarted')) + strip('No start date', 'territory_licences.starts_on is NULL', icard('nostart', { nostartDue: true })) + strip('Paid', 'Paid total equals the total', icard('paid')));
+    else if (B === 'LFI43B') html = sheetCrop('L43 · lifecycle · 2 of 2', strip('Part paid', 'Paid €20,000 of €58,000', icard('part')) + strip('Voided', 'Voided with nothing paid · the slot stays used', icard('void')) + strip('Not invoiced', 'Licence draft, pending activation or terminated', icard('notbill')) + strip('Basket licence', 'Axal VC Benelux · one class per country · overridden decision', icard('basket', { decision: 'overridden 10 Nov 2026 by M. Okafor · surcharge set by HQ', noPrimary: true })));
+    else if (B === 'LFI44') html = pg(identL('Operations', { lic: LL, since: 'Started 1 Nov 2026 · renews 1 Nov 2027 · Agreement v1 executed' }) + opsNav + feesHead() + noDec() + annual({ empty: true }), { h: 800 });
+    else if (B === 'LFI45') html = sheetCrop('L45 · data states · 1 of 2', strip('Loading', 'Card and list load separately', loadCard() + annual({ loading: true })) + strip('Initial fee not recorded', 'accepted_initial_fee_cents is NULL', icard('nrfee')) + strip('Surcharge not recorded', 'accepted_regulatory_surcharge_cents is NULL · one line only', icard('nrsur', { noPrimary: true })));
+    else if (B === 'LFI45B') html = sheetCrop('L45 · data states · 2 of 2', strip('Invoices unreadable', 'Decision read; invoice read failed', icard('invunread') + annual({ unread: true })) + strip('Decision unreadable', 'Invoice read; pricing read failed', decUnread() + annual()) + strip('Refused', 'Not a Super Admin', refusedCard()) + strip('Conflict', 'Record payment on an older revision', conflictCard()));
+    else if (B === 'LFI45C') html = hq('Operations', feesBody('ready', { noPrimary: true }), { h: 1160, overlay: issueSheet('<div class="nt r" role="alert"><span class="ic" aria-hidden="true">✕</span><div><b>Not issued.</b> This licence’s terms name Axal VC Management LLC as the licensor, but the territory licence fee is paid to Axal VC Holdings LLC, so no payment instructions are given. Ask HQ to correct the terms before you pay. <span class="raw">(409 <code>licensor_not_payee</code>)</span></div></div>') });
+    else if (B === 'LFI45D') html = crop('<span class="eye">L45 · Issue refusals · shown as the Worker gives them, sheet kept open</span>' + ctab(['Code', 'Sentence shown', 'Source'], [
+        ['<code>initial_invoice_exists</code>', 'An initial invoice has been issued for this licence; no second one can be issued.', BK(5954) + ' new'],
+        ['<code>licence_not_billable</code>', 'A pending activation licence is not invoiced. Only an active or suspended licence is.', 'main · annual issue'],
+        ['<code>not_started</code>', 'This licence starts on 1 Dec 2026, so its initial invoice can be issued from then.', BK(5954) + ' new'],
+        ['<code>no_start_date</code>', 'This licence records no start date, so its licence year cannot be told. Set the start date first.', 'main · annual issue'],
+        ['<code>no_initial_fee</code>', 'The accepted pricing has no initial fee, so there is nothing to invoice.', BK(5954) + ' new'],
+        ['<code>currency_unknown</code>', 'This licence’s currency ("") is not one StudioOS can price in, so its fee cannot be invoiced. Set the licence currency first.', 'main · annual issue'],
+        ['<code>licensor_not_payee</code>', 'This licence’s terms name Axal VC Management LLC as the licensor, but the territory licence fee is paid to Axal VC Holdings LLC, so no payment instructions are given…', 'main · <code>licensorRefusal</code>'],
+        ['<code>terms_unreadable</code> · 503', 'This licence’s terms could not be read, so its licensor and payment terms are unknown. Nothing was issued; try again.', 'main · route']]), 1300);
+    else if (B === 'LFI46') html = studioPage(false);
+    else if (B === 'LFI46B') html = studioPage(true);
+    else if (B === 'LFI47') html = hq('Terms', pmNav + '<p class="raw">Sample: Thu 12 Nov 2026, the review as HQ saw it before applying. Extends L26’s Apply step.</p>' + applyCard(), { h: 1200, rail: eadApply });
+    else if (B === 'LFI47B') html = crop('<span class="eye">Receipt · after Apply</span><section class="cd"><div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Applied · decision recorded 12 Nov 2026 14:32 by M. Okafor.</b> Core terms revision 8 · pushed to the Belgium branch.</div></div>' + ctab(['Figure', '#Now', 'Where it landed'], [['Annual fee', '€45,000', 'Core terms · invoiced from the 2027–28 licence year'], ['Royalty', '5.50%', 'Core terms'], ['Minimum royalty', '€18,000', 'Schedule § 4.4 minimum guarantee ' + BK(5953)], ['Initial fee', '€50,000', 'Decision · for the one-off initial invoice'], ['Regulatory surcharge · class high', '€8,000', 'Decision · billed once with the initial fee']]) + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><a class="btn p" href="#">Initial invoice: issue it from Fees ›</a><a class="btn" href="#">Agreement v2 may no longer match · open Agreement</a></div><p class="foot">The link opens L41/L43 on the same licence. Nothing was invoiced by Apply.</p></section>', 1100);
+    else if (B === 'LFI48') html = sheetCrop('L48 · Apply review states · 1 of 2', strip('Not recorded', 'The recommendation lacks a figure', rvNR()) + strip('No recommended annual fee', 'Only Override with a typed value goes ahead', rvNoAnnual()) + strip('Agreement mismatch', 'Annual fee changes; agreement v2 exists', rvAck()) + strip('Initial invoice already issued', 'Re-apply after issue ' + BK(5954), rvIssued(false) + '<span class="eye" style="margin-top:6px">Invoices unreadable</span>' + rvIssued(true)));
+    else if (B === 'LFI48B') html = rvStates();
+    else if (B === 'LFI49A') html = tab(tabHead('Operations') + opsNav + feesHead('Read 14:30 UTC') + icard('issued') + annual(), 1080);
+    else if (B === 'LFI49B') html = tab(tabHead('Terms') + pmNav + tabApply(), 1020);
+    else if (B === 'LFI50A') html = phFees();
+    else if (B === 'LFI50B') html = phIssue();
+    else if (B === 'LFI50C') html = phApply();
+    else if (B === 'LFI51A') html = hq('Operations', feesBody('issued'), { h: 960, dark: true });
+    else if (B === 'LFI51B') html = hq('Terms', pmNav + applyCard(), { h: 1240, dark: true, rail: eadApply });
+    else if (B === 'LFI52') html = handoff();
+    else html = hq('Operations', feesBody('issued'), { h: 1160 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill Library v2 Extension Compare · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Company Team · Skills · Skill Library v2 addendum · #5963 (under #4538)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Compare a company skill extension with the Axal version it was built on, and extend an Axal skill</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Skill Library v2 (SK-01 to SK-16) as SK-17 to SK-25, with the Team library (SK-09) and Team skill page (SK-10) as parents. An extension is a company skill copied from one published Axal version, with a reason. The compare page (/account/companies/:uid/settings/team/skills/:skillUid/base, owner Q1 option A) shows seven parts in a fixed order, conflicts first, across Axal’s base version, the company’s latest version and Axal’s newest; every marker is a word and a glyph, added and removed lines carry + and −. Pinned agents never move by themselves. Editors (Owner, Admin, Founder, primary admin) act; members and HQ admins read published extensions only (owner Q2 option A). States follow Platform States (D5129): Not recorded and Unreadable are never drawn as 0, empty or “up to date”. A violet dashed ◇ tag marks backend work (rebase #5965, version author and date); spec notes under each board name the lineage or card field behind every value. Eadwyn stays the one rail; its proposals are saved only when accepted.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 (routes/team_skills.ts, migration 202611130253_4538) · [Lumen Robotics], [Market sizing], [Lumen market sizing], [Market sizing · hospitals] and every step, tool and tag are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Skill Library v2 Extension Compare Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['SK-17', 'Extension compare — update available, with conflicts', 'Axal published v5; the extension [Lumen market sizing] v2 is built on Axal v3. Header with the reason, banner “2 parts conflict” and “Your agents keep their pinned version”, the draft-edits line, then seven parts with Steps and Tools (conflicts) first: Axal v3, Your version v2, Axal v5. Tools: web.search Removed by you; filings.read New in Axal v5 — not available to this extension. History by version. One primary: Extend Axal v5 again; Edit my draft; ◇ Rebase onto v5 not built. Eadwyn summarises v3 → v5 and proposes per conflict; nothing is saved until accepted.', [F('SKX17', false, 1840)]],
+      ['SK-18', 'Base status variants', 'A · Up to date: no banner, two columns, Changed by you / Same as Axal. B · Base retired: chip, “No further Axal versions. Your extension keeps working.”, Extend again hidden. C · Newest version suspended: banner kept, chip, Extend Axal v5 again disabled with its reason. D · Update available, no conflicts.', [F('SKX18A', 'A · Up to date', 1290), F('SKX18B', 'B · Base retired', 1290), F('SKX18C', 'C · Newest Axal version suspended', 1510), F('SKX18D', 'D · Update available, no conflicts', 1370)]],
+      ['SK-19', 'Not an extension and Draft only', 'A · lineage is null: “This skill is not based on an Axal skill.” with Back to the skill; no comparison, no “up to date”. B · Draft only (editor): “Draft — not published yet”, compared against the draft, “No published versions yet” and the skill page’s existing Publish.', [F('SKX19A', 'A · Not an extension', 720), F('SKX19B', 'B · Draft only', 1320)]],
+      ['SK-20', 'A conflict up close, and where rebase would sit', 'Steps opened: Axal v3, your v2 and Axal v5 line by line. ◇ The rebase panel (needs #5965): Keep mine / Take Axal v5 / Edit by hand per conflicting part, parts changed only by Axal “Taken from Axal v5”, and the result line. Create draft is disabled. Take Axal v5 matters for Tools: only a rebase or a new extension can carry filings.read.', [F('SKX20', false, 1260)]],
+      ['SK-21', 'Extend an Axal skill', 'A · The dialog from the Axal skill page in Team › Skills, as the first extension opens (the SK-17 extension was made this way when v3 was newest): reason with a 0 / 300 counter and an Eadwyn proposal, Name prefilled, Version defaulting to the newest. A2 · The “again” path from SK-17: version 5, a new name, “This is a new extension”. B · Refusals tied to their field or the dialog (slug_taken shown). C · Saving. D · Done: “Draft created from Axal v5” and the new draft’s skill page, with SK-10’s new “Based on Axal … · Compare with Axal” line.', [F('SKX21A', 'A · Dialog', 900), C('SKX21A2', 'A2 · Extend Axal v5 again', 720, 664), C('SKX21B', 'B · Refusals', 1380, 550), C('SKX21C', 'C · Saving', 720, 559), F('SKX21D', 'D · Done', 760)]],
+      ['SK-22', 'Read-only views', 'A · Company member: no actions, “Only your company’s editors can change this skill.” B · Axal HQ admin: “Viewing as Axal HQ — read only”, versions named for the company; no Extend, Edit or Rebase. Both only for a published extension.', [F('SKX22A', 'A · Company member', 1480), F('SKX22B', 'B · Axal HQ admin', 1520)]],
+      ['SK-23', 'States', 'A · Axal’s version could not be read (lineage.base null): no comparison, never “up to date”; the reason, our version and history still show; Try again. B · Loading in the seven-part order, Not recorded (built-on and reason), request Unreadable, Refused (“There is no such skill”), Extend saving and save failed, and the two edit refusals on an extension’s draft (tool_not_in_base, base_unreadable), edits kept.', [F('SKX23A', 'A · Axal’s version unreadable', 900), C('SKX23B', 'B · States', 1440, 515)]],
+      ['SK-24', 'Phone 390', 'Header and banner first, then one card per part, conflicts first, each stacking Axal v3 → Yours → Axal v5 with its marker on top; history as a list; actions in a bottom bar; Extend as a full-height sheet. 44px targets, no table.', [P('SKX24A', 'A · Header, banner, Steps'), P('SKX24B', 'B · Tools and the other parts'), P('SKX24C', 'C · History and reason'), P('SKX24D', 'D · Extend sheet')]],
+      ['SK-25', 'Dark', 'SK-17 and SK-24 A on #0B1220 / #111827, as SK-16. Markers, + / − glyphs and chips keep their words and shapes.', [F('SKX25A', 'Desktop 1440', 1590), P('SKX25B', 'Phone 390')]],
+      ['SK-H', 'Handoff', 'What was checked on main, what is preserved, frontend-only work (#5964), backend required (◇ rebase #5965, version author and date), the owner questions drawn as A, and accessibility.', [W('SKXH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

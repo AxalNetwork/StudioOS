@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axal VC Fund v2 and LP Workspace · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Axal VC Fund · #6127 · new canvas, boards VF-01 onward</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC Fund v2 — one journey from “should I invest?” to “what do I owe, sign and receive?”</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The LP workspace (/spinout-lab/investor-workspace, investors and admins) and /spinout-lab as an investor sees it. The first screen follows the person’s standing, derived from their own records and never chosen on the page: Visitor, Applicant, Approved, Committed, Full rights. A committed LP sees what is due, what to sign and what arrived before anything else. Sections are tabs with hash anchors on one route (option A); #my-commitment and #my-notices keep working. Committed, called, paid in and uncalled are always separate figures, each with its period. Nothing on these pages pays a call: the call action opens masked wire details, and the full account number only through the recorded reveal. The request to increase follows Prepare → Review → Confirm → Authenticate → Receipt and is a request, not a commitment. States follow Platform States (D5129): Not recorded, Unavailable and a recorded $0 never look alike, and a failed read never shows as Visitor. No Eadwyn rail on these pages (owner request). Violet dashed ◇ tags mark backend work (#6137, #6138, stores, read changes); amber ⚑ tags mark owner decisions. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 09:12 UTC · checked against main 6d7712c6d1 (brief written on 45e7c55fa6) · [Investor Name], [Investor entity], [GP Name], [Venture A–C], [Bank Name] and every figure in brackets are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="19">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Axal VC Fund v2 and LP Workspace Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['VF-01', 'First screen · Visitor', 'Sales hero with the thesis and the raise bar (as of the read), three Lab programme proof tiles, key terms and tiers (owner-maintained). Tabs: Overview, Fund and terms, Apply and onboarding only. Primary: Apply to participate.', [F('IFV01', false, 980)]],
+      ['VF-02', 'First screen · Applicant', 'Application in review with the date sent and what happens next; the onboarding table first, with a status and a link per row; a short fund summary. The first unfinished row is the primary action. Also the three cases lpAccessState() reads as pending.', [F('IFV02', false, 1000), C('IFV02B', 'Pending · approved with no position · position with no LPA', 1100, 420)]],
+      ['VF-03', 'First screen · Approved, nothing committed', 'What to do next: To sign (booklet parts, LPA), To fund (proof of funds through Mercury), To commit (tiers, your position against the minimum, Email the GP of record). Then the reports archive. Primary: the next signature.', [F('IFV03', false, 980)]],
+      ['VF-04', 'First screen · Committed', 'Money first: What is due, What to sign, What arrived. Then My commitment with committed, called, paid in, uncalled, distributions, TVPI and DPI to date; the increase line (◇, Email the GP today); a short Lab card. Primary: Wire details for call #2.', [F('IFV04', false, 1120)]],
+      ['VF-05', 'First screen · Full rights', 'As VF-04, plus a rights card: the allocation window (◇ #6138, closes at demo day, date passed), ◇ co-invest offers (⚑ proposal 14) and the cohorts shared with this investor.', [F('IFV05', false, 1260)]],
+      ['VF-06', 'Section · My commitment', 'The commitment summary, capital call lines (call, owed, received to date, issued, due, state; ◇ purpose), distributions, the LPA row, proof of funds shared (floor, as of, expires, state, views, Revoke) and the GP of record. Also the request to increase as Prepare → Review → Confirm → Authenticate → Receipt.', [F('IFV06', false, 1220), C('IFV06B', 'Request to increase · prepare and receipt', 1240, 460)]],
+      ['VF-07', 'Capital call detail sheet', 'Amount owed, received to date (◇ each receipt), issued, due, ◇ purpose, masked wire details with Copy reference and Show full account number (recorded), the notice PDF. States: instructions unavailable, support session, paid in full with its paid date, part received and overdue, no due date.', [F('IFV07', false, 1180), C('IFV07B', 'Sheet states', 1240, 500)]],
+      ['VF-08', 'Section · Documents and notices', 'One shelf with filters. Notices, statements, reports and the booklet (nine parts; 1 and 2 carry no signature) with type, title, date, amount and PDF. The LPA document, K-1 and audited statements are ◇ “Not issued on the platform yet”, never an empty list.', [F('IFV08', false, 1200)]],
+      ['VF-09', 'Section · Reports', 'Issued periods newest first; one report open with the GP letter, frozen figures and the period’s capital and fee statements with revisions; an older period reads “Figures not recorded for this period”. ◇ Ask about this report. Also the admin-only GP desk.', [F('IFV09', false, 940), C('IFV09B', 'GP desk · admin only', 760, 300)]],
+      ['VF-10', 'Section · Fund and terms', 'Key terms, the raise (recorded, or Owner-maintained), tiers with your tier marked, the ◇ #6137 portfolio block as Not recorded, and the cohorts granted to you. Scheduled dates use the passed-date wording. Also NDA required, no cohort and not verified.', [F('IFV10', false, 1160), C('IFV10B', 'Cohort states', 1100, 230)]],
+      ['VF-11', 'Section · Apply and onboarding', 'The application form (accredited is self-certified, not verified) and the onboarding table with 44px rows. After sending: pending with Edit, approved, and declined with the review note and no resubmit.', [F('IFV11', false, 1100), C('IFV11B', 'Sent and reviewed', 1240, 330)]],
+      ['VF-12', 'Section · History', 'A dated list built only from records that exist, each row linked to its document. The footer names what is not tracked yet (◇ receipts by date, documents viewed, requests made).', [F('IFV12', false, 1060)]],
+      ['VF-13', '/spinout-lab · visitor versus committed LP', 'Left: the sales page with how the Lab works, programme proof, an illustrative composite cohort, Fund brief and Review the fund. Right: the committed LP’s short Lab summary with their cohorts and Open my fund workspace. Every CTA goes to the workspace.', [F('IFV13', false, 940)]],
+      ['VF-14', 'Empty states', 'No notices, no reports, no calls (uncalled [$150,000]), no history, no cohort shared and no proof of funds. Each has one action or says who acts next.', [C('IFV14', false, 1240, 420)]],
+      ['VF-15', 'States', 'Position unreadable (“This is not a $0 commitment”) with Fund and terms still working and each failed read in its own block; loading that holds the standing back; Not recorded, Refused, save failed and the inert admin preview switcher.', [F('IFV15', false, 900), F('IFV15B', 'Loading · never Visitor', 760), C('IFV15C', 'Not recorded · Refused · Saving · Preview', 1240, 600)]],
+      ['VF-16', 'Phone 390 · first screen and sections', 'Standing chip, then What is due, What to sign and What arrived as stacked cards; a sticky, scrolling section chip row; call lines as cards; the call sheet full height with Copy reference. 44px targets.', [C('IFV16A', 'First screen', 390, 1130), P('IFV16B', 'My commitment · call cards'), P('IFV16C', 'Call sheet')]],
+      ['VF-17', 'Phone 390 · documents, onboarding, application, history', 'The shelf as a list with a filter sheet, onboarding rows as cards with one button each, the application as a sheet, and history as a dated list.', [P('IFV17A', 'Documents'), P('IFV17B', 'Filter sheet'), P('IFV17C', 'Onboarding · applicant'), P('IFV17D', 'Application sheet · visitor'), P('IFV17E', 'History')]],
+      ['VF-18', 'Dark', 'VF-04 on the dark tokens with the calls-unavailable block, and the VF-15 Unreadable block. States keep their words and shapes.', [F('IFV18', false, 1260), C('IFV18B', 'Unreadable · dark', 1000, 330)]],
+      ['VF-H', 'Handoff', 'What was checked on main, build now in #6130, preserved behaviour, backend required (◇), owner decisions (⚑) and accessibility.', [W('IFV19')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
