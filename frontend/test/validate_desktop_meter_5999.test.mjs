@@ -10,19 +10,24 @@
  * (PR #5858) draws the count alone.
  *
  *   1. one read draws the same meter on desktop and phone;
- *   2. a writer (a venture handed in, the phone's rule) gets the control on
- *      both; a reader (none) sees the meter without it;
+ *   2. the control comes from the read's `can_write` (the owner's option B):
+ *      a writer gets it on both widths; a reader, a read-only partner viewing
+ *      the venture included, sees the meter without it; a venture handed in
+ *      is not enough on its own;
  *   3. no meter for the read draws nothing on either width;
  *   4. both widths save through the one writer, with the same check and the
  *      same error sentence; the desktop route wires it to the real client.
  *
- * Mutation checked (each broke the named test, then was restored):
+ * Mutation checked (each broke the named tests, then was restored):
  *   - `ValidateLead` reading `phoneMeter(raw)` in place of `rootMeter(...)`: 3 fails (a Stop drew a meter on desktop);
- *   - `CycleMeter`'s writer rule without `projectId != null`: 2 fails (a reader got "Set a target");
+ *   - `CycleMeter`'s writer rule without `canWrite === true` (the old `projectId`-only rule): 2 and 2 (route) fail (a partner got "Set a target");
+ *   - the phone root handing `CycleMeter` no `canWrite`: 2 and 4 fail (no writer on the phone);
+ *   - `ValidateLead` handing `canWrite={true}`: 2 and 2 (route) fail (a reader got the control on desktop);
+ *   - `CycleMeter`'s writer rule without `projectId != null`: 2 fails (a writer with no venture got the control);
  *   - `CycleMeter` without its `if (!meter) return null`: 3 fails (throws on a null meter);
  *   - `TargetForm`'s Worker refusal replaced by `TARGET_NOT_SAVED`: 4 fails (the Worker's words are lost on both widths);
  *   - `ValidateLead` handing `CycleMeter` no `projectId`: 2, 4 and 4 (route) fail;
- *   - `Meter` dropping "· <target_reason>": 1 and 4 (route) fail.
+ *   - `Meter` dropping "· <target_reason>": 1, 4 (route) and 2 (route) fail.
  *
  * Every name is made up. Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/validate_desktop_meter_5999.test.mjs
@@ -53,7 +58,8 @@ const P = 3;
 const Q = `?project_id=${P}`;
 
 const FOCUS = { rule: 'next_interview', eyebrow: 'Validate · Next', headline: 'Record the interview with Ada Quill.', why: 'Two more make a theme.', cta: { label: 'Record a session', href: `/validate/record${Q}` }, then: 'Group them.', secondary: [] };
-const read = (o = {}) => ({ focus: FOCUS, meter: { key: 'interviews_this_month', label: 'Interviews this month', count: 14, target: 20, target_reason: null, display: '14 of 20' }, index: [], figures: [], cards: [], ...o });
+/** A writer's read (the founder's own venture): the Worker sends `can_write: true`. */
+const read = (o = {}) => ({ can_write: true, focus: FOCUS, meter: { key: 'interviews_this_month', label: 'Interviews this month', count: 14, target: 20, target_reason: null, display: '14 of 20' }, index: [], figures: [], cards: [], ...o });
 
 /** The reads both widths must agree on: a target, no target with the Worker's reason, the figure fallback, an unreadable count. */
 const READS = {
@@ -109,18 +115,24 @@ test('1: one read draws the same meter on desktop and phone, and both draw `root
 
 // ── 2. Writers and readers ────────────────────────────────────────────────
 
-test('2: a writer gets "Set a target" or "Change the target" on both widths; a reader sees the meter with no control', () => {
+test('2: the control follows the read\'s can_write on both widths: a writer gets it; a reader, a partner included, sees the meter without it', () => {
   const raw = READS['with a target'];
   const none = READS['no target, the Worker\'s reason'];
+  const partner = { ...raw, can_write: false };
+  const unsent = { ...raw, can_write: undefined };
   for (const [draw, ids] of [[phone, 'phone'], [desk, 'validate']]) {
-    const reader = draw(raw);
-    assert.match(reader, new RegExp(`data-testid="${ids}-meter"`), `${ids}: a reader sees the meter`);
-    assert.doesNotMatch(reader, /-target-open|-target-form|Set a target|Change the target/, `${ids}: and no control`);
     assert.match(renderedText(draw(raw, { projectId: P })), /Change the target/, `${ids}: a writer with a target`);
     assert.match(renderedText(draw(none, { projectId: P })), /Set a target/, `${ids}: a writer with none`);
+    for (const [who, r, pid] of [['a read-only partner viewing the venture', partner, P], ['a read with no can_write, a venture handed in', unsent, P], ['a writer with no venture to save to', raw, null]]) {
+      const out = draw(r, { projectId: pid });
+      assert.match(out, new RegExp(`data-testid="${ids}-meter"`), `${ids}, ${who}: the meter`);
+      assert.doesNotMatch(out, /-target-open|-target-form|Set a target|Change the target/, `${ids}, ${who}: and no control`);
+    }
+    // The reader's meter is the writer's, less the control.
+    assert.equal(meterOf(draw(partner, { projectId: P }), ids), meterOf(draw(raw, { projectId: P }), ids).replace(/<button[^]*?<\/button>/, ''), `${ids}: the same meter`);
   }
   // The control is Validate's alone, on the shared component as on the phone.
-  assert.doesNotMatch(renderToStaticMarkup(h(CycleMeter, { meter: phoneMeter(raw, 'validate'), cycle: 'raise', projectId: P })), /target-open/);
+  assert.doesNotMatch(renderToStaticMarkup(h(CycleMeter, { meter: phoneMeter(raw, 'validate'), cycle: 'raise', canWrite: true, projectId: P })), /target-open/);
 });
 
 // ── 3. No meter, nothing ──────────────────────────────────────────────────
@@ -192,7 +204,7 @@ test('4: both widths check the same way, send the same call, and show the same e
       assert.equal(await submit(m, ids, '25'), null, `${ids}: saved`);
       assert.deepEqual(calls, [[P, 25], [P, 25], [P, 25]], `${ids}: the one writer, the venture and the value`);
       assert.equal(changed, 1, `${ids}: a save re-reads the overview`);
-      assert.equal(m.by(`${ids}-target-form`), undefined, `${ids}: and closes the form`);
+      assert.equal(Boolean(m.by(`${ids}-target-form`)), false, `${ids}: and closes the form`);
       seen[ids] = [local, worker, fallback];
     } finally { await m.unmount(); }
   }
@@ -201,7 +213,8 @@ test('4: both widths check the same way, send the same call, and show the same e
   assert.equal(TARGET_NOT_SAVED, 'The target could not be saved.');
 });
 
-test('4 (route): at 1024px /validate draws the meter in the lead row, and Save goes to PUT /api/cycles/validate/interviews-target', async () => {
+for (const writer of [true, false]) test(writer ? '4 (route): at 1024px /validate draws the meter in the lead row, and Save goes to PUT /api/cycles/validate/interviews-target'
+  : '2 (route): at 1024px a read-only partner\'s read (can_write: false) draws the meter in the lead row with no control', async () => {
   __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest();
   const real = { myAiSpend: api.myAiSpend, aiPricing: api.aiPricing, mine: aiBudgetApi.mine, topUp: aiBudgetApi.topUp, read: railPrefsApi.read };
   const never = () => new Promise(() => {});
@@ -214,16 +227,22 @@ test('4 (route): at 1024px /validate draws the meter in the lead row, and Save g
   globalThis.fetch = async (url, init = {}) => {
     const path = String(url);
     if (path.includes('/cycles/validate/interviews-target')) sent.push([init.method, path, init.body]);
-    const body = path.includes('/cycles/validate/overview') ? READS['no target, the Worker\'s reason'] : {};
+    const body = path.includes('/cycles/validate/overview') ? { ...READS['no target, the Worker\'s reason'], can_write: writer } : {};
     return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) };
   };
   const m = await mount(h(MemoryRouter, { initialEntries: [`/validate${Q}`] }, h(Routes, null, h(Route, { path: '/validate', element: h(CycleRoute, { cycle: 'validate' }) }))));
   try {
     await m.act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); });
-    assert.ok(m.by('cycle-overview'), 'the desktop overview');
-    assert.ok(m.by('validate-lead') && m.by('validate-meter'), 'the meter in the lead row');
-    assert.equal(m.by('phone-meter'), undefined, 'and no phone root');
+    assert.ok(Boolean(m.by('cycle-overview')), 'the desktop overview');
+    assert.ok(Boolean(m.by('validate-lead') && m.by('validate-meter')), 'the meter in the lead row');
+    assert.equal(Boolean(m.by('phone-meter')), false, 'and no phone root');
     assert.match(m.text('validate-meter'), /4 · No target set/);
+    if (!writer) {
+      // Booleans, not nodes: a failed assert would print the whole stub DOM.
+      assert.equal(Boolean(m.by('validate-target-open')), false, 'a reader gets no control');
+      assert.doesNotMatch(m.text('validate-meter'), /Set a target/);
+      return;
+    }
     assert.equal(await submit(m, 'validate', '12'), null);
     assert.deepEqual(sent, [['PUT', `/api/cycles/validate/interviews-target?project=${P}`, JSON.stringify({ value: 12 })]]);
   } finally {

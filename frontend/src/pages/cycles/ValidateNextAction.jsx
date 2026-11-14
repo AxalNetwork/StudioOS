@@ -70,7 +70,8 @@ const METER_CARD = 'rounded-xl border border-axal-hairline bg-white px-[18px] py
  * from 1280px, stacked below. With no meter the next action draws alone, as
  * before; with neither, nothing.
  *
- *   projectId  the venture a writer saves to, as the phone root takes it; null for a reader
+ *   projectId  the venture a writer saves to, as the phone root takes it; the control
+ *              is drawn only where the read says `can_write`, as on the phone
  *   onChanged  a saved target re-reads the overview
  */
 export function ValidateLead({ raw, search = '', openAction, projectId = null, api = cycleValidateApi, onChanged }) {
@@ -80,7 +81,7 @@ export function ValidateLead({ raw, search = '', openAction, projectId = null, a
   return (
     <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-testid="validate-lead">
       {next}
-      <CycleMeter meter={meter} cycle="validate" projectId={projectId} api={api} onChanged={onChanged} ids="validate" className={METER_CARD} />
+      <CycleMeter meter={meter} cycle="validate" canWrite={raw?.can_write === true} projectId={projectId} api={api} onChanged={onChanged} ids="validate" className={METER_CARD} />
     </div>
   );
 }

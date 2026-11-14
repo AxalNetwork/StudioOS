@@ -10,16 +10,19 @@ import { targetValue } from './validatePhone';
  * and display, "· <reason>" with no target, a 7px bar against one. No meter
  * draws nothing.
  *
- * "Set a target" is Validate's alone, and only for a writer: the same rule
- * the phone root always used, a venture handed in (`projectId`). A reader
- * (no `projectId`) sees the meter without the control. Both widths save
+ * "Set a target" is Validate's alone, and only for a writer: the overview
+ * read's `can_write` (#5999, the owner's option B), which the Worker sets by
+ * the very gate PUT /interviews-target allows a save with (`canWrite`), and a
+ * venture to save to (`projectId`). A reader, a read-only partner included,
+ * sees the meter without the control. Both widths save
  * through the one writer, `cycleValidateApi.setInterviewsTarget` (PUT
  * /api/cycles/validate/interviews-target), with `targetValue`'s check and the
  * Worker's refusal in its own words, so the error sentence is the same.
  *
  *   meter      the root's meter, or null
  *   cycle      the cycle; the control is drawn for 'validate' only
- *   projectId  the venture a writer saves to; null for a reader
+ *   canWrite   the read's `can_write`; only `true` draws the control
+ *   projectId  the venture a writer saves to
  *   api        `cycleValidateApi` (a test hands in its own)
  *   onChanged  called once a target is saved, so the overview is read again
  *   ids        the testid prefix: `phone` on the phone root, `validate` on desktop
@@ -88,10 +91,10 @@ export function Meter({ meter, children, ids = 'phone', className = 'mt-5' }) {
 }
 
 /** The meter, and for a Validate writer "Set a target" / "Change the target" opening the form in place. */
-export default function CycleMeter({ meter, cycle = 'validate', projectId = null, api = cycleValidateApi, onChanged, ids = 'phone', className = 'mt-5' }) {
+export default function CycleMeter({ meter, cycle = 'validate', canWrite = false, projectId = null, api = cycleValidateApi, onChanged, ids = 'phone', className = 'mt-5' }) {
   const [editing, setEditing] = useState(false);
   if (!meter) return null;
-  const writer = cycle === 'validate' && projectId != null;
+  const writer = cycle === 'validate' && canWrite === true && projectId != null;
   return (
     <Meter meter={meter} ids={ids} className={className}>
       {writer && !editing && (

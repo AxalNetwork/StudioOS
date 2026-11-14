@@ -137,7 +137,8 @@ test('Set a target: a whole number above zero, empty clears it; saved through #1
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  const render = () => act(async () => { root.render(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw: RAW, search: '?project_id=3', projectId: 3, api, onChanged: () => { changed += 1; } }))); });
+  // #5999: a writer, as the Worker's read now says (`can_write`).
+  const render = () => act(async () => { root.render(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw: { ...RAW, can_write: true }, search: '?project_id=3', projectId: 3, api, onChanged: () => { changed += 1; } }))); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);

@@ -17,6 +17,7 @@ import { CYCLE_NAMES, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, rootMeter, then
  *
  * #5999: the meter and "Set a target" are `CycleMeter.jsx`, shared with the
  * desktop Validate lead row, and the meter is `rootMeter`, the one both widths draw.
+ * "Set a target" is drawn only where the read says `can_write` (the owner's option B).
  *
  * `CycleRoute` draws it below 1024px on a cycle's root, in place of the
  * overview and `AlsoIn` (#1665's PR 1b); the desktop page draws neither.
@@ -92,7 +93,7 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
           </div>
           <h2 id="phone-focus-title" className="m-0 mt-2 text-[29px] font-black leading-[1.15] tracking-[-.032em] text-gray-900 [text-wrap:balance] dark:text-gray-100">{focus.headline}</h2>
           {focus.why && <p className="m-0 mt-3 text-[14.5px] leading-[1.6] text-gray-600 dark:text-gray-400" data-testid="phone-focus-why">{focus.why}</p>}
-          <CycleMeter meter={meter} cycle={cycle} projectId={projectId} api={api} onChanged={onChanged} />
+          <CycleMeter meter={meter} cycle={cycle} canWrite={raw.can_write === true} projectId={projectId} api={api} onChanged={onChanged} />
           {/* D4589: a step that could not be worked out has no primary action, only its secondary ones. */}
           {focus.href && (
             <Link to={focus.href}
