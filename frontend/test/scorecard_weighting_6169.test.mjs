@@ -49,7 +49,7 @@ async function mount(el, { deal = () => OPEN, weights = () => json({ weights: nu
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/deals/4/scorecard'] }, el)));
-  const flush = () => act(async () => { for (let i = 0; i < 10; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 10; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join(' ') : n?.textContent || '');
