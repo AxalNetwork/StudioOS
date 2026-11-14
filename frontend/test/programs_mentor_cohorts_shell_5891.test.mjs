@@ -54,11 +54,15 @@ test('the registry failure stays on registry sections while Participation shows 
   document.body.appendChild(container);
   const root = createRoot(container);
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  let registryReply;
+  let sessionsReply;
   globalThis.fetch = async (url) => {
     const path = String(url).split('?')[0];
-    if (path === base.replace('/admin', '/api/admin')) return Response.json({ error: 'unavailable' }, { status: 503 });
+    if (path === base.replace('/admin', '/api/admin')) {
+      return new Promise((resolve) => { registryReply = resolve; });
+    }
     if (path === '/api/admin/programs/mentor-cohorts/sessions') {
-      return Response.json({ cycles: [{ cycle_id: 1, year: 2026, month: 10, mentors: 2, sessions: 7 }] });
+      return new Promise((resolve) => { sessionsReply = resolve; });
     }
     return Response.json({ items: [], cycles: [] });
   };
@@ -67,27 +71,37 @@ test('the registry failure stays on registry sections while Participation shows 
   const ids = () => {
     return walk(container).map((node) => Object.entries(node).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.['data-testid']);
   };
-  async function mount(suffix, expected) {
+  async function mount(suffix) {
+    registryReply = undefined;
+    sessionsReply = undefined;
     await act(async () => root.render(React.createElement(MemoryRouter, {
       key: suffix, initialEntries: [base + suffix + '?source=test#details'],
     }, React.createElement(Page))));
-    for (let attempt = 0; !ids().includes(expected) && attempt < 80; attempt++) {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
-    }
-    assert.ok(ids().includes(expected), expected);
+    assert.equal(typeof registryReply, 'function', 'the registry read started');
+  }
+
+  async function refuseRegistry() {
+    await act(async () => registryReply(Response.json({ error: 'unavailable' }, { status: 503 })));
   }
 
   try {
-    await mount('/availability', 'programs-shell-registry-failed');
+    await mount('/availability');
+    await refuseRegistry();
+    assert.ok(ids().includes('programs-shell-registry-failed'));
     assert.ok(!ids().includes('programs-generic-availability'));
-    await mount('/settings', 'programs-shell-registry-failed');
+    await mount('/settings');
+    await refuseRegistry();
+    assert.ok(ids().includes('programs-shell-registry-failed'));
     assert.ok(!ids().includes('programs-generic-settings'));
-    await mount('/participation', 'programs-mentor-participation-unrecorded');
-    const recorded = () => walk(container).some((node) => /7 sessions booked with a mentor/.test(node.textContent));
-    for (let attempt = 0; !recorded() && attempt < 80; attempt++) {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
-    }
-    assert.ok(recorded(), 'Participation renders the booked sessions total');
+    await mount('/participation');
+    assert.equal(typeof sessionsReply, 'function', 'the sessions read started');
+    await act(async () => {
+      registryReply(Response.json({ error: 'unavailable' }, { status: 503 }));
+      sessionsReply(Response.json({ cycles: [{ cycle_id: 1, year: 2026, month: 10, mentors: 2, sessions: 7 }] }));
+    });
+    assert.ok(ids().includes('programs-mentor-participation-unrecorded'));
+    assert.ok(walk(container).some((node) => /7 sessions booked with a mentor/.test(node.textContent)),
+      'Participation renders the booked sessions total');
     assert.ok(!ids().includes('programs-shell-registry-failed'));
   } finally {
     await act(async () => root.unmount());
