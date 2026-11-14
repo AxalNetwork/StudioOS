@@ -21,7 +21,7 @@ import { activePackageDetail, draftNextVersion, publishVersion } from '../src/se
 const CLOCK = Date.UTC(2026, 10, 13, 12);
 const SECRET = 'synthetic-package-offer-5024-test-secret';
 const LIC = 'lic_5024', OTHER = 'lic_other_5024';
-// A test-only published version. The seeded v1 includes HQ-only Influencers and must be refused.
+// A test-only published version. The seeded composition includes HQ-only Influencers and must be refused.
 const CORE = ['referral-partners', 'refer-and-earn', 'perks'];
 const BASE = `/api/admin/licences/${LIC}/package-offers`;
 const REASON = 'Commercial package reviewed with the licence operator';
@@ -69,11 +69,12 @@ function fixture(ctx: any) {
   const one = (sql: string, ...args: any[]) => db.prepare(sql).get(...args) as any;
   let seq = 0;
   const setup = async (strategy = 'none', gate = 'optional', compatibleCatalogue = true) => {
-    if (compatibleCatalogue) {
-      const original = await activePackageDetail(env, 'core_network');
-      const draft = await draftNextVersion(env, 'core_network', { ...original, items: original.items.filter((p) => p.program_key !== 'influencer') }, 'user:1');
-      await publishVersion(env, 'core_network', draft.version, 'user:1');
-    }
+    const original = await activePackageDetail(env, 'core_network');
+    // SQLite seed date('now') is outside Node's mocked clock. Publish fixed fixture dates through the real
+    // version service, preserving both the immutable seed and all catalogue triggers.
+    const draft = await draftNextVersion(env, 'core_network', { ...original, effective_from: '2026-11-01',
+      items: compatibleCatalogue ? original.items.filter((p) => p.program_key !== 'influencer') : original.items }, 'user:1');
+    await publishVersion(env, 'core_network', draft.version, 'user:1');
     const p = await call('POST', '/api/admin/licence-agreement-policies/package/core_network', {
       strategy, legal_gate: gate, programs: compatibleCatalogue ? CORE : [...CORE, 'influencer'], reason: REASON,
     });
