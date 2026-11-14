@@ -156,10 +156,10 @@ test('a history row names who did it, what changed and how it ended', () => {
     change: { recorded: true, before: { founder: 5, investor: 2 }, after: { founder: 8, investor: 2 } },
   } }));
   const text = renderedText(html);
-  assert.match(text, /seats changed/);
-  assert.match(text, /by Sue/);
+  assert.match(text, /Seats changed/);
+  assert.match(text, /Sue/);
   assert.match(text, /HQ done · branch pending/);
-  assert.match(text, /founder58/, 'before then after');
+  assert.match(text, /founderBefore: 5 → , after: 8/, 'before then after');
   assert.doesNotMatch(text, /investor/, 'an unchanged field is not listed as a change');
 });
 
@@ -171,7 +171,9 @@ test('Not recorded and Unreadable stay two different things', () => {
     [{ field: 'status', label: 'Status', before: 'active', after: 'suspended' }]);
   assert.equal(outcomeLabel(null), 'Not recorded');
   assert.equal(actorLabel({ state: 'unknown', id: 9 }), 'Unknown account');
-  assert.equal(actorLabel({ state: 'none' }), 'System');
+  // D4819 L16 (#5926): a row naming nobody reads Not recorded; only an automatic step is System.
+  assert.equal(actorLabel({ state: 'none' }), 'Not recorded');
+  assert.equal(actorLabel({ state: 'none' }, { automatic: true }), 'System');
   const legacy = renderedText(renderToStaticMarkup(h(HistoryRow, { e: { id: 1, event: 'created', actor: { state: 'none' }, change: { recorded: false }, outcome: null } })));
   assert.match(legacy, /Change: Not recorded\./);
   const broken = renderedText(renderToStaticMarkup(h(HistoryRow, { e: { id: 2, event: 'renewed', actor: { state: 'none' }, change: { recorded: true, readable: false }, outcome: 'committed' } })));
