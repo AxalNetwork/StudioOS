@@ -18,6 +18,7 @@ import {
   PRACTICE_PAGE, requireMyAdvisor, requireOwnEngagement,
 } from '../services/advisorPractice';
 import { ALLOWED_DECLARED, MAX_UPLOAD_BYTES, sniffType } from './company_documents';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -171,11 +172,15 @@ async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number
   }
   if (!c.env.FILES) throw c.json({ detail: 'File storage is not configured on this deployment.', code: 'storage_unconfigured' }, 503);
   const key = `advisor-deliverables/${advisorId}/${crypto.randomUUID()}`;
+  // D1170: the advisor's own upload is weighed against their storage plan before it lands; a full plan
+  // answers 413 `storage_full` (thrown as a Response, like the checks above) and nothing is stored.
+  const room = await assertStorageRoom(c.env, { userId: advisorId }, bytes.length, { id: advisorId });
   try {
     await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
   } catch {
     throw c.json({ detail: 'The file could not be stored. Try again.', code: 'storage_failed' }, 502);
   }
+  await noteStorageLanded(c.env, room);
   let sha256: string | null = null;
   try {
     sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
