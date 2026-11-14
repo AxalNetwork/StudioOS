@@ -100,7 +100,7 @@ async function mount(url, handle, element) {
       h(Route, { path: '/admin/licences', element: h(React.Fragment, null, h(AdminLicences), h(Probe)) }),
       h(Route, { path: '/admin/licences/:uid', element: h(Probe) }),
       h(Route, { path: '/admin/licences/registry/user/:uid', element: h(React.Fragment, null, element, h(Probe)) })))));
-  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const nodes = () => walk(container);
