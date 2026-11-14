@@ -84,6 +84,8 @@ const LOG_KEYS = new Set([...LOG_SELECT.slice(0, LOG_SELECT.indexOf('FROM adviso
 
 const version = (over = {}) => ({
   uid: 'v-1', version: 1, label: null, summary: null, link_url: null,
+  // #5960 (D5960): which kind of document, and a stored file's name, type and size.
+  document: null, file: null,
   sent_at: null, opened_at: null, signed_off_at: null,
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });
@@ -111,7 +113,7 @@ const logRow = (over = {}) => ({
   advisor_name: 'Ada Advisor', document_uid: null, document_title: null, ...over,
 });
 const shared = (over = {}) => ({
-  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', scope_project: true,
+  grant_uid: 'g-1', project_uid: 'p-1', project_name: 'Halverton', granted_by_user_id: 12, scope_project: true,
   scope_data_room: false, scope_sessions: false, expires_at: null, created_at: '2026-09-01 08:00:00', ...over,
 });
 const advisor = (over = {}) => ({

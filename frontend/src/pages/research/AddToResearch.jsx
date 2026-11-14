@@ -2,7 +2,8 @@
  * D5157 part 3 (#5157) — Add to research and Compare, from Companies and Funds
  * (RS-04 A and B, RS-05 A and B in `design/incoming/Research v2 Page.dc.html`).
  *
- * One panel for both acts. It names what will be added, lets the member pick
+ * The same picker also links an Ask answer to a project (D5157 part 5).
+ * It names what will be added, lets the member pick
  * one of their active Research Projects or start a new one, and then either
  * keeps the companies or funds in that project (Add to research) or opens a
  * comparison of them there (Compare). The answer is said in the panel, with a
@@ -36,6 +37,7 @@ export const COMPARE_LIMIT = 6;
  * compare. `onDone` hears the outcome, `{ projectUid, comparisonUid? }`.
  */
 export default function AddToResearch({ kind, items, mode = 'add', onClose, onDone, returnFocusTo }) {
+  const answer = kind === 'answer';
   const words = KIND_WORDS[kind] || KIND_WORDS.company;
   const compare = mode === 'compare';
   const [read, retry] = useProjectRead(() => researchProjectsApi.list('active'), 'active');
@@ -58,6 +60,10 @@ export default function AddToResearch({ kind, items, mode = 'add', onClose, onDo
         const res = await researchProjectComparisonsApi.create(project.uid, body);
         setResult({ ok: true, project, comparisonUid: res?.item?.uid || null, text: `Comparison “${res?.item?.title || title.trim() || names.join(' · ')}” is in “${project.title}”.` });
         onDone?.({ projectUid: project.uid, comparisonUid: res?.item?.uid || null });
+      } else if (answer) {
+        await researchProjectsApi.link(project.uid, 'answers', items[0].uid);
+        setResult({ ok: true, project, text: `Answer saved to “${project.title}”.` });
+        onDone?.({ projectUid: project.uid });
       } else {
         const res = await researchProjectComparisonsApi.addSubjects(project.uid, kind, items.map((x) => x.uid));
         setResult({ ok: true, project, text: addOutcome(names, project.title, res) });
@@ -73,7 +79,7 @@ export default function AddToResearch({ kind, items, mode = 'add', onClose, onDo
     if (project && !tooMany) run(project);
   };
 
-  const heading = !compare ? 'Add to research' : items.length === 1 ? `Compare ${names[0]}` : `Compare ${items.length} ${words.many}`;
+  const heading = answer ? 'Save to project' : !compare ? 'Add to research' : items.length === 1 ? `Compare ${names[0]}` : `Compare ${items.length} ${words.many}`;
   return (
     <Sheet label={heading} eyebrow={compare ? 'Compare' : 'Add to research'} title={heading} onClose={onClose} phone="sheet" width={480}
       testId="add-to-research" returnFocusTo={returnFocusTo}>
@@ -85,7 +91,7 @@ export default function AddToResearch({ kind, items, mode = 'add', onClose, onDo
             <p>{result.text}</p>
             {result.ok ? (
               <Link className="mt-1 inline-block text-violet-700 underline dark:text-violet-300" data-testid="add-to-research-open"
-                to={`/research/projects/${encodeURIComponent(result.project.uid)}/comparisons`}>
+                to={`/research/projects/${encodeURIComponent(result.project.uid)}${answer ? '' : '/comparisons'}`}>
                 {compare ? 'Open the comparison →' : 'Open the project →'}
               </Link>
             ) : null}
@@ -124,13 +130,13 @@ export default function AddToResearch({ kind, items, mode = 'add', onClose, onDo
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
               <button type="button" className={SECONDARY} onClick={() => setCreating(true)} disabled={busy || read.status !== 'ok'} data-testid="button-add-to-new-research">New research project</button>
               <button type="submit" className={BTN_PRIMARY} disabled={busy || !target || tooMany || read.status !== 'ok'} data-testid="button-add-to-research-confirm">
-                {busy ? (compare ? 'Creating…' : 'Adding…') : compare ? 'Create comparison' : 'Add to project'}
+                {busy ? (compare ? 'Creating…' : answer ? 'Saving…' : 'Adding…') : compare ? 'Create comparison' : answer ? 'Save answer' : 'Add to project'}
               </button>
             </div>
           </form>
         ) : null}
         <p className="text-[11.5px] text-axal-faint dark:text-gray-500">
-          {compare
+          {answer ? 'The project keeps a link to this Ask answer and its recorded citations.' : compare
             ? 'A comparison shows each value with its source and date. Missing values say Not recorded and never count as zero. Nothing is scored.'
             : `The project keeps the ${items.length === 1 ? words.one : words.many} by name; the values are read from the directory each time, with their source and date.`}
         </p>

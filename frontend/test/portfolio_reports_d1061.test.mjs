@@ -179,7 +179,9 @@ async function mount(element, routes, url = '/') {
 const companyAt = (url, routes) => mount(h(Routes, null,
   h(Route, { path: '/portfolio/companies/:uid', element: h(PortfolioCompanyPage) }),
   h(Route, { path: '/portfolio/companies/:uid/reports', element: h(PortfolioCompanyPage) }),
-  h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) })), routes, url);
+  h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) }),
+  // D4817 part 6: the old Terms address is replaced by Financials, at Ownership & rights.
+  h(Route, { path: '/portfolio/companies/:uid/financials', element: h(PortfolioCompanyPage) })), routes, url);
 const COMPANY_ROUTES = (over = {}) => ({
   '/positions': POSITIONS,
   '/reporting/companies/p-abc': { ok: true, company: ACME },

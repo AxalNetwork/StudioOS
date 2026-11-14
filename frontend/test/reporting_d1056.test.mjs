@@ -134,7 +134,9 @@ test('mounted company page: the header from the position, Reports from the compa
       h(Routes, null,
         h(Route, { path: '/portfolio/companies/:uid', element: h(PortfolioCompanyPage) }),
         h(Route, { path: '/portfolio/companies/:uid/reports', element: h(PortfolioCompanyPage) }),
-        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) })))));
+        h(Route, { path: '/portfolio/companies/:uid/terms', element: h(PortfolioCompanyPage) }),
+        // D4817 part 6: the old Terms address is replaced by Financials, at Ownership & rights.
+        h(Route, { path: '/portfolio/companies/:uid/financials', element: h(PortfolioCompanyPage) })))));
     await t.settle();
   };
   try {
@@ -175,7 +177,8 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
   assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/grow\/updates' \}/);
   assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /\{ to: '\/portfolio\/updates', label: 'Reports',/);
   assert.match(read('frontend/src/workspaces/shellConfig.js'), /\{ slug: 'updates', label: 'Reports', archetype: A\.FEED \}/);
-  assert.match(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'), /<Link to=\{companyHref\(row\.project\.uid\)\}/);
+  // D4817 part 4 (#5311, PF-04): the obligations inbox row carries the company's uid itself.
+  assert.match(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'), /<Link className="pf-co" to=\{companyHref\(row\.uid\)\}/);
   for (const f of ['frontend/src/pages/cycles/ReportingDesk.jsx', 'frontend/src/pages/investor/PortfolioCompanyPage.jsx', 'frontend/src/pages/cycles/reportingModel.js']) {
     assert.doesNotMatch(read(f), /window\.(alert|confirm)|\balert\(|\bconfirm\(/, f);
   }

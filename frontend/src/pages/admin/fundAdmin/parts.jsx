@@ -20,11 +20,13 @@
  */
 
 export const NUM = 'font-mono tabular-nums';
+/** D4812 part 8: what makes any text control a 44 × 44px target on a phone, and leaves it as drawn at a desk. */
+export const TAP = 'max-sm:inline-flex max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:items-center';
 /** D4812 part 7 (FA-09): a text button or link that is still a 44px target on a phone. */
-export const TAP_LINK = 'text-[12.5px] font-semibold text-axal-violet-deep underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center';
+export const TAP_LINK = `text-[12.5px] font-semibold text-axal-violet-deep underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300 ${TAP}`;
 const SURFACE = 'rounded-axal-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const SUNKEN = 'border-b border-axal-hairline bg-[#faf9fc] dark:border-gray-800 dark:bg-gray-950/40';
-export const TH = 'text-[9.5px] font-extrabold uppercase tracking-[.09em] text-axal-muted dark:text-gray-400';
+export const TH = 'text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-muted dark:text-gray-400';
 
 export function Section({ title, sub, aside = null, children, testId }) {
   return (
@@ -61,10 +63,10 @@ export function Line({ a, b = null, figure = null, chip = null, action = null, t
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-axal-hairline px-4 py-3 last:border-b-0 hover:bg-[#faf9fc] sm:px-5 dark:border-gray-800 dark:hover:bg-gray-950/40" data-testid={testId}>
       <div className="min-w-0 flex-1 basis-56">
-        <div className={`text-[12px] font-bold ${tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-zinc-700 dark:text-gray-200'}`}>{a}</div>
-        {b != null && b !== '' && <div className="mt-0.5 break-words [overflow-wrap:anywhere] text-[11px] leading-relaxed text-axal-muted dark:text-gray-400">{b}</div>}
+        <div className={`text-[13.5px] font-bold ${tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-zinc-700 dark:text-gray-200'}`}>{a}</div>
+        {b != null && b !== '' && <div className="mt-0.5 break-words [overflow-wrap:anywhere] text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">{b}</div>}
       </div>
-      {figure != null && <div className={`text-right text-[12px] font-bold text-axal-ink dark:text-gray-100 ${NUM}`}>{figure}</div>}
+      {figure != null && <div className={`text-right text-[13.5px] font-bold text-axal-ink dark:text-gray-100 ${NUM}`}>{figure}</div>}
       {chip}
       {action && <div className="flex flex-wrap justify-end gap-2">{action}</div>}
     </div>
@@ -79,7 +81,7 @@ export function Tiles({ items, testId, cols = 'lg:grid-cols-4' }) {
         <div key={t.k} className={`${SURFACE} px-4 py-3.5`} data-testid={t.testId}>
           <div className={TH}>{t.k}</div>
           <div className={`mt-1.5 text-[20px] font-bold tracking-[-.024em] ${t.tone === 'warn' ? 'text-amber-700 dark:text-amber-300' : t.tone === 'ok' ? 'text-axal-positive dark:text-emerald-300' : 'text-axal-ink dark:text-gray-100'} ${NUM}`}>{t.v}</div>
-          {t.note && <div className="mt-0.5 text-[10.5px] text-axal-muted dark:text-gray-400">{t.note}</div>}
+          {t.note && <div className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">{t.note}</div>}
         </div>
       ))}
     </div>
@@ -107,7 +109,7 @@ export function Table({ cols, rows, rowKey, template, foot = null, testId, rowTe
           {cols.map((c, i) => (
             <div key={c.key} className={`flex items-baseline justify-between gap-3 px-4 py-1 first:pt-3 last:pb-3 sm:block sm:py-2.5 ${i === 0 ? 'sm:pl-5 sm:pr-2.5' : i === cols.length - 1 ? 'sm:pl-2.5 sm:pr-5' : 'sm:px-2.5'} ${c.align === 'right' ? 'sm:text-right' : ''}`}>
               {i > 0 && <span className={`${TH} sm:hidden`}>{c.label}</span>}
-              <div className={`min-w-0 break-words [overflow-wrap:anywhere] text-[11.5px] ${c.mono ? `${NUM} font-semibold text-zinc-700 dark:text-gray-200` : 'text-zinc-700 dark:text-gray-200'} ${i === 0 ? 'font-semibold' : ''}`}>{c.cell(r)}</div>
+              <div className={`min-w-0 break-words [overflow-wrap:anywhere] text-[13px] ${c.mono ? `${NUM} font-semibold text-zinc-700 dark:text-gray-200` : 'text-zinc-700 dark:text-gray-200'} ${i === 0 ? 'font-semibold' : ''}`}>{c.cell(r)}</div>
             </div>
           ))}
         </div>
@@ -120,7 +122,7 @@ export function Table({ cols, rows, rowKey, template, foot = null, testId, rowTe
 
 /** An empty or explanatory body line inside a Panel. */
 export function Note({ children, testId }) {
-  return <div className="px-4 py-3 text-[12px] leading-relaxed text-axal-muted sm:px-5 dark:text-gray-400" data-testid={testId}>{children}</div>;
+  return <div className="px-4 py-3 text-[13px] leading-relaxed text-axal-muted sm:px-5 dark:text-gray-400" data-testid={testId}>{children}</div>;
 }
 
 /** FND19: each failed block names the state and keeps its own retry. */

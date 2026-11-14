@@ -46,6 +46,18 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 `PerformanceSummary`, and `Skeleton` is shared. Decision notes:
 `documentation/architecture/decisions/D4817-p3.md`.
 
+D4817 part 4 (canvas PF-04) draws Reports
+(`../investor/InvestorPortfolioUpdates.jsx` at `/portfolio/updates`) in the
+same frame (`tab="updates"`). The obligations inbox is one row per company in
+the reporting population (`obligationRowsOf`): its period, a Due cell that
+says no due date is recorded (`NO_DUE_DATE`) rather than counting overdue
+days, the last update received, the shared `ObligationStatus`, what is
+missing against the required KPI set (`missingFor`, measured only against an
+update for the period, `periodCovers`) and the last chase (`lastChaseOf`). The
+report detail opens in the shared Sheet with each field's source and date
+(`reportFieldsOf`). The company Reports' Ask and Waive are not on this board.
+Decision notes: `documentation/architecture/decisions/D4817-p4.md`.
+
 ## Rules
 
 - A failed read reads **Unreadable** with a Retry for that source alone; a
@@ -54,3 +66,15 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 - No issue number, decision id or build-phase name in member copy (#5365 F-09).
 - The rail's structure is #5130's; the Account-menu move is #4473's. The frame
   places the rail and links Portfolio's own routes, and changes neither.
+
+D4817 part 6 (canvas PF-06) draws one company's workspace
+(`../investor/PortfolioCompanyPage.jsx` at `/portfolio/companies/:uid`, with
+`/financials`, `/reports`, `/support` and `/activity`; the old `/terms` lands
+on Financials' Ownership & rights) in the same frame, through its optional
+`title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
+(tabs and titles, who the company is to the caller, the holding route, the
+six key facts, evidence and next actions, rounds, return, support and each
+source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+Activity; `company.css` holds their styles on the frame's tokens. The name is
+drawn only once an authorised read has named the company. Decision notes:
+`documentation/architecture/decisions/D4817-p6.md`.

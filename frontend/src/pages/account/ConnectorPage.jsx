@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { ChevronDown, Info } from 'lucide-react';
-import { BrandIcon, LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   ActivityGroup, CompaniesGroup, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, ToolModals,
@@ -25,6 +25,8 @@ import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
 import VercelProjectsSection from './VercelProjectsSection';
 import PosthogProjectsSection from './PosthogProjectsSection';
 import LinkedInSection, { LinkedInDisconnectChoice } from './LinkedInSection';
+import TeamsSection from './TeamsSection';
+import ConnectorMark from './ConnectorMark';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -162,6 +164,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {/* D5810 (#5810): Teams' rows on the shared Microsoft connection, and the way back to Record a session. */}
+      {p.key === 'teams' && <TeamsSection p={p} />}
       {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
       {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
       {shownBody
@@ -205,7 +209,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
       <header data-testid="connector-page-band" className="flex min-w-0 flex-wrap items-center gap-4 rounded-axal-sm bg-axal-ground p-5 dark:bg-gray-800/60">
-        <BrandIcon provider={p.key} name={p.display_name} size={phone ? 48 : 56} />
+        <ConnectorMark p={p} size={phone ? 48 : 56} />
         <div className="min-w-0 flex-1">
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}

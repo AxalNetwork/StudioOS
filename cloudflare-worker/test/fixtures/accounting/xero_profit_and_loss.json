@@ -1,0 +1,32 @@
+{
+  "Status": "OK",
+  "Reports": [{
+    "ReportID": "ProfitAndLoss",
+    "ReportName": "Profit and Loss",
+    "ReportType": "ProfitAndLoss",
+    "ReportTitles": ["Profit & Loss", "Synthetic Fixture Ltd", "1 April 2025 to 31 March 2026"],
+    "ReportDate": "14 November 2026",
+    "UpdatedDateUTC": "/Date(1794616000000)/",
+    "Rows": [
+      { "RowType": "Header", "Cells": [{ "Value": "" }, { "Value": "31 Mar 26" }] },
+      { "RowType": "Section", "Title": "Income", "Rows": [
+        { "RowType": "Row", "Cells": [
+          { "Value": "Sales", "Attributes": [{ "Value": "9c1e3f81-4a5d-4e6f-8b12-3d4e5f607182", "Id": "account" }] },
+          { "Value": "210340.00" } ] },
+        { "RowType": "SummaryRow", "Cells": [{ "Value": "Total Income" }, { "Value": "210340.00" }] }
+      ] },
+      { "RowType": "Section", "Title": "Less Operating Expenses", "Rows": [
+        { "RowType": "Row", "Cells": [
+          { "Value": "Wages and Salaries", "Attributes": [{ "Value": "ad2f4092-5b6e-4f70-9c23-4e5f60718293", "Id": "account" }] },
+          { "Value": "180000.00" } ] },
+        { "RowType": "Row", "Cells": [
+          { "Value": "Subscriptions", "Attributes": [{ "Value": "be3051a3-6c7f-4081-ad34-5f60718293a4", "Id": "account" }] },
+          { "Value": "n/a" } ] },
+        { "RowType": "SummaryRow", "Cells": [{ "Value": "Total Operating Expenses" }, { "Value": "199870.12" }] }
+      ] },
+      { "RowType": "Section", "Title": "", "Rows": [
+        { "RowType": "Row", "Cells": [{ "Value": "Net Profit" }, { "Value": "10469.88" }] }
+      ] }
+    ]
+  }]
+}
