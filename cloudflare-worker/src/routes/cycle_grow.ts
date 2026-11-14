@@ -16,6 +16,10 @@
  * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
+ *   PATCH /feedback/themes         { project, from, to, merge? }  D6098 (#6098): rename one theme, or merge it
+ *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
+ *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)
+ *                                  carries each theme's counts
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
  *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
  *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
@@ -77,7 +81,7 @@ import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
-  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
+  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme,
   updatePartner, updateRole,
 } from '../services/growWriters';
 import { distributionOverview } from '../services/distribution/overview';
@@ -127,7 +131,7 @@ async function writes(c: C, user: User, pid: number): Promise<boolean> {
 }
 
 function fail(c: C, e: unknown) {
-  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}), ...(e.extra ?? {}) }, e.status as 400);
   if (e instanceof KpiRefused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
   throw e;
 }
@@ -226,7 +230,13 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
       filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },
         { key: 'status', label: 'Status', options: fixed(FEEDBACK_STATUS) }],
-      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }] };
+      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
+      // D6098 (#6098): each theme's counts, for Rename or merge; a writer's only. A failed
+      // read draws no Rename and never blanks the feedback.
+      ...(writer ? { parts: { themes: await feedbackThemes(env, projectId).catch((e) => {
+        console.error('[cycle_grow] feedback themes unreadable:', (e as Error).name);
+        return null;
+      }) } } : {}) };
   }
   if (slug === 'distribution') {
     const extra = new Map(((await env.DB.prepare('SELECT uid, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE project_id = ?')
@@ -524,6 +534,8 @@ r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignIt
 r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
 
 r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
+// D6098 (#6098): before `/feedback/:uid`, so `themes` is never read as a uid.
+r.patch('/feedback/themes', write((c, u, pid, b) => renameFeedbackTheme(c.env, pid, u, b)));
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
 r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
 r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));
