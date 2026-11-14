@@ -20,6 +20,10 @@
  * only invoice is void is listed too, because D802 refuses a second invoice for it. A billable licence that cannot be
  * invoiced at all (no fee, no start date) is listed with why, never folded into a zero.
  *
+ * D5954 (#5954) — THE INITIAL INVOICE COUNTS. A licence's one-off initial invoice (`kind = 'initial'`, migration
+ * 202611141106) is an invoice like any other in invoiced, collected, outstanding, overdue and void. It holds no licence
+ * year, so it never fills the "expected, not invoiced" gap of the first year it shares a start day with.
+ *
  * NO CROSS-CURRENCY TOTAL. Every figure is integer minor units in the invoice's own currency, in one bucket per
  * currency. There is no FX policy, so nothing is added across buckets.
  */
@@ -167,13 +171,14 @@ export async function licenceFeeReceivables(env: Env, period: Period, today: str
     ).bind(period.start, period.end).all<InvoiceRow>();
     const open = await env.DB.prepare(
       `SELECT i.uid, i.licence_uid, i.reference, i.period_label, i.issued_at, i.due_at, i.status, i.amount_cents,
-              i.paid_cents, i.currency, l.licence_ref, l.brand_name
+              i.paid_cents, i.currency, i.kind, l.licence_ref, l.brand_name
          FROM licence_fee_invoices i
          LEFT JOIN territory_licences l ON l.uid = i.licence_uid
         WHERE i.status != 'void' AND i.paid_cents < i.amount_cents
         ORDER BY i.due_at ASC, i.id ASC`,
-    ).all<InvoiceRow & { licence_ref: string | null; brand_name: string | null }>();
-    const periods = await env.DB.prepare('SELECT licence_uid, period_start, status FROM licence_fee_invoices')
+    ).all<InvoiceRow & { kind: string | null; licence_ref: string | null; brand_name: string | null }>();
+    // Licence years only: an initial invoice (D5954) shares the first year's start day but is not that year's invoice.
+    const periods = await env.DB.prepare("SELECT licence_uid, period_start, status FROM licence_fee_invoices WHERE kind = 'annual'")
       .all<{ licence_uid: string; period_start: string; status: string }>();
     const licences = await env.DB.prepare(
       `SELECT uid, licence_ref, brand_name, status, annual_fee_cents, currency, starts_on
@@ -205,7 +210,7 @@ export async function licenceFeeReceivables(env: Env, period: Period, today: str
       receivable_by_currency: receivableBuckets(openRows, today),
       overdue: overdue.slice(0, OVERDUE_LIST_LIMIT).map((r) => ({
         uid: r.uid, licence_uid: r.licence_uid, licence_ref: r.licence_ref ?? null, brand_name: r.brand_name ?? null,
-        reference: r.reference, period_label: r.period_label, issued_at: dayOf(r.issued_at), due_at: dayOf(r.due_at),
+        kind: r.kind === 'initial' ? 'initial' : 'annual', reference: r.reference, period_label: r.period_label, issued_at: dayOf(r.issued_at), due_at: dayOf(r.due_at),
         days_overdue: Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dayOf(r.due_at)}T00:00:00Z`)) / 86_400_000),
         outstanding_cents: outstandingOf(r), currency: String(r.currency || '').toUpperCase(),
       })),
