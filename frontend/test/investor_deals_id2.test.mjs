@@ -29,7 +29,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
-import { PASS_TAXONOMY, passReasonRevisit } from '../src/lib/dealFlow.js';
+import { PASS_TAXONOMY } from '../src/lib/dealFlow.js';
 import { INVESTOR_ZONE_FILTERS } from '../src/workspaces/investorZoneFilters.js';
 import { INVESTOR_ZONE_ACTIONS } from '../src/workspaces/investorZoneActions.js';
 
@@ -108,38 +108,30 @@ test('D1260: a scorecard with nothing to show is never a zero', () => {
   assert.match(Z, /value=\{scoredCount === null \? null :/);
 });
 
-test('the pass taxonomy is the artboard’s instrument, with its re-entry conditions', () => {
+test('the pass taxonomy is the artboard’s instrument, read from the firm’s own passes (D6148)', () => {
   const board = id2();
   assert.ok(board.includes("instTitle:'Pass reasons"), 'the artboard changed its instrument');
-  assert.match(Z, /Pass reasons — the fund’s memory/, 'the instrument lost the artboard’s title');
+  assert.match(Z, /title=\{`Pass reasons — \$\{whose\} passes`\}/, 'the instrument lost the artboard’s title');
   assert.match(Z, /a pass is data, not a deletion/);
-  // BEHAVIOUR: exactly two of the five reasons carry a re-entry condition, and
-  // the note counts them rather than asserting a number.
-  const revisitable = PASS_TAXONOMY.filter((r) => r.revisit);
-  assert.equal(revisitable.length, 2, 'the taxonomy’s re-entry conditions changed — recheck the note');
-  assert.ok(passReasonRevisit('valuation'), 'valuation lost its re-entry condition');
-  assert.ok(passReasonRevisit('early'), 'too-early lost its re-entry condition');
-  assert.equal(passReasonRevisit('team'), '', 'a team pass gained a re-entry condition');
-  assert.match(Z, /revisitable\.length/, 'the note hardcodes how many reasons can be revisited');
-  assert.match(Z, /PASS_TAXONOMY\.length/, 'the note hardcodes how many reasons there are');
-  // A pass with no reason is counted on its own, never folded into a bucket.
-  // THE SPREAD, not the bare name: `passes.unrecorded` also appears in
-  // `passes.unrecorded_note` further down the same cell, so deleting the row
-  // that renders the count left the file still matching.
-  assert.match(Z, /\.\.\.\(passes\.unrecorded\s*\n?\s*\?/,
-    'passes with no recorded reason are no longer given their own row');
-  assert.match(Z, /not a taxonomy entry/);
+  // D6148: the studio's round-level passes are never presented as the firm's own.
+  assert.doesNotMatch(Z, /fund’s memory|fund's memory|the fund’s/, 'the studio aggregate is called the fund’s memory again');
+  assert.doesNotMatch(Z, /dealPassAnalytics/, 'Screening reads the studio’s round-level passes again');
+  // Every reason is a row, in the taxonomy's order, from the read; a re-entry
+  // condition the product does not act on is no longer printed as a promise.
+  assert.equal(PASS_TAXONOMY.length, 5);
+  assert.doesNotMatch(Z, /passReasonRevisit/, 'the taxonomy’s resurfacing promise is printed again');
+  assert.match(Z, /NEXT_ROUND_LINE/, 'the note no longer says Next round is not detected');
 });
 
 test('one store failing costs its own zone, not the page', () => {
   // Two reads, two states. Folding them into one would mean a pass-record
   // outage hid the score history and vice versa.
   assert.match(Z, /api\.dealScreening\(\)\.then\(setDesk/);
-  assert.match(Z, /api\.dealPassAnalytics\(\)\.then\(setPasses/);
-  assert.match(Z, /const bothFailed = desk === UNAVAILABLE && passes === UNAVAILABLE/);
+  assert.match(Z, /dealFlowApi\.passes\(\)\.then\(setPasses/);
+  assert.match(Z, /const bothFailed = desk === UNAVAILABLE && \(passes === UNAVAILABLE \|\| passes === NOT_INVESTOR\)/);
   assert.match(Z, /data-testid="screening-passes-unreadable"/,
     'an unreadable pass record renders as no passes');
-  assert.match(ZONE, /not a claim that the fund has\s+passed on nothing/,
+  assert.match(ZONE, /not a claim that you have\s+passed on nothing/,
     'the unreadable state no longer says what it is not');
 });
 

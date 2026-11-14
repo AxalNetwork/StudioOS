@@ -41,6 +41,29 @@ export function passReasonRevisit(key) {
   return PASS_TAXONOMY.find((r) => r.key === key)?.revisit || '';
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** `2027-03-12…` → `12 Mar 2027`; anything else is null, never a guessed date. */
+export function dayWithYear(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : null;
+}
+
+/**
+ * D6148: when a firm's pass comes back, in words, from the pass the flow row
+ * carries ({ revisit, revisit_at }). A date reads "Back on 12 Mar 2027"; Next
+ * round reads "Next round". Anything else is null: the caller says Not
+ * recorded, never a guessed rule.
+ */
+export function passReturnWord(pass) {
+  if (!pass) return null;
+  if (pass.revisit === 'date') return dayWithYear(pass.revisit_at) ? `Back on ${dayWithYear(pass.revisit_at)}` : null;
+  if (pass.revisit === 'next_round') return 'Next round';
+  return null;
+}
+
+/** What a firm is told about Next round: it is not detected, so it never comes back by itself. */
+export const NEXT_ROUND_LINE = 'A new round is not detected: a deal records no round of its own, so a pass marked Next round does not come back by itself. Look again when you hear of one.';
+
 /**
  * Stage SLA presets, from the canvas.
  *

@@ -7,7 +7,7 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
-import { FlowError, addToFlow, dismissItem, flowEvents, inboxItems, passDeal, readFlow, scopeFor, updateFlow } from '../services/dealFlow';
+import { FlowError, addToFlow, dismissItem, flowEvents, inboxItems, passDeal, readFlow, readPasses, scopeFor, updateFlow } from '../services/dealFlow';
 import {
   NoteError, comparable, keepNote, newNotePayload, noteMaterial, notePrompt, parseIds, parseNote, receiptFor, savedNotes,
 } from '../services/dealCompareNote';
@@ -27,8 +27,11 @@ import { railFor, refuseRun } from '../util/railContext';
  *   PATCH  /:dealId                move, change the owner, write the note
  *   POST   /:dealId/pass           { reason, revisit?, revisit_at?, note?, via_key? }
  *   GET    /:dealId/events         what happened to it
- *   GET    /inbox                  New for you: deals not yet in the flow
+ *   GET    /inbox                  New for you: deals not yet in the flow, and passes back on their date (D6148)
  *   POST   /inbox/:key/dismiss     "Not for me" { reason? }
+ *
+ * D6148 (#6148): Pass reasons on Screening, the firm's own.
+ *   GET    /passes                 this flow's passes: counts per reason, and each passed deal with when it comes back
  *
  * D1241 (#3254): Compare's Eadwyn note (`services/dealCompareNote.ts`).
  *   GET    /compare-note?ids=      the notes this investor saved for these ventures
@@ -69,7 +72,10 @@ function failure(c: Ctx, e: unknown) {
   return c.json({ error: 'Your deal flow could not be read. Try again.', code: 'deal_flow_unreadable' }, 503);
 }
 
-// Literal paths first: `/inbox` and `/compare-note` must not be read as a deal id.
+// Literal paths first: `/inbox`, `/passes` and `/compare-note` must not be read
+// as a deal id. Only PATCH and POST take a bare `/:dealId` today, so a GET
+// literal cannot be shadowed, but it sits here with the others all the same.
+routes.get('/passes', async (c) => { try { return c.json(await readPasses(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.get('/compare-note', async (c) => {
   try { const s = await scope(c); return c.json(await savedNotes(c.env, s.user, parseIds(c.req.query('ids')))); } catch (e) { return failure(c, e); }
 });

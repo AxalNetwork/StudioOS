@@ -250,7 +250,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // Each key narrows a real collection: `scored` and `flags` come from
   // `score_snapshots` (six dimensions, `admin_review_status`, `anomaly_flags`),
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
-  // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
+  // CHECKed pass taxonomy, counted over the firm's own passes
+  // (`GET /api/deals/flow/passes`, D6148).
   // D1260 (#3283): Screening reads the venture scorecard. The canvas's Scored,
   // Rubric and Red flags were the Lab scorer's (a total, six dimensions, its
   // anomaly flags), which investors no longer see; Scorecards is the eleven scopes.
