@@ -853,7 +853,16 @@ function termDto(r: any) {
   };
 }
 
-const STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign', 'closed'];
+const WIP_STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign'];
+const STAGES = [...WIP_STAGES, 'closed'];
+
+async function readNegotiationWipLimits(env: Env, partnerId: number) {
+  const { results } = await env.DB.prepare(
+    'SELECT stage, wip_limit FROM partner_negotiation_wip_limits WHERE partner_id = ?',
+  ).bind(partnerId).all<{ stage: string; wip_limit: number }>();
+  const stored = new Map(results.map(({ stage, wip_limit }) => [stage, wip_limit]));
+  return Object.fromEntries(WIP_STAGES.map(stage => [stage, stored.get(stage) ?? null]));
+}
 const BALLS = ['us', 'them'];
 const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
@@ -953,6 +962,7 @@ partnerPipeline.get('/negotiations', async (c) => {
       },
     );
     return c.json({
+      wip_limits: await readNegotiationWipLimits(c.env, partnerId),
       items,
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
@@ -974,6 +984,30 @@ partnerPipeline.get('/negotiations', async (c) => {
       close_probability: null,
       close_probability_note: 'Nothing here forecasts a close. Migration 234 records why a proposal was LOST, which is a taxonomy rather than a rate, and a handful of decided deals cannot support a probability conditioned on stage. A number drawn from stage alone would be the stage relabelled as a forecast.',
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.put('/negotiations/wip-limits/:stage', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const stage = c.req.param('stage');
+    if (!WIP_STAGES.includes(stage)) return c.json({ detail: 'Unknown negotiation lane' }, 400);
+    const limit: unknown = (await body<{ limit?: unknown } | null>(c))?.limit;
+    if (limit !== null && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0)) {
+      return c.json({ detail: 'Limit must be a non-negative whole number or null' }, 400);
+    }
+    if (limit === null) {
+      await c.env.DB.prepare(
+        'DELETE FROM partner_negotiation_wip_limits WHERE partner_id = ? AND stage = ?',
+      ).bind(partnerId, stage).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_negotiation_wip_limits (partner_id, stage, wip_limit)
+         VALUES (?, ?, ?)
+         ON CONFLICT (partner_id, stage) DO UPDATE SET wip_limit = excluded.wip_limit`,
+      ).bind(partnerId, stage, limit).run();
+    }
+    return c.json({ stage, limit });
   } catch (e) { return mapError(c, e); }
 });
 
