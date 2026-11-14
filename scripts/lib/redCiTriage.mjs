@@ -92,6 +92,39 @@ export function failedLeafJobs(jobs) {
       step: j.steps?.find((s) => ['failure', 'timed_out'].includes(s.conclusion))?.name || null }));
 }
 
+/**
+ * A run with no failed leaf job that still shows red: a newer push cancelled its jobs, and a summary gate
+ * (`landing gate`, `test:drift (full suite)`) failed only because the jobs it waits on did not pass.
+ * Returns null when a leaf job failed (that is a real failure) or when nothing was cancelled.
+ */
+export function cancelledRun(run, jobs) {
+  if (failedLeafJobs(jobs).length) return null;
+  const all = (jobs || []).filter(Boolean);
+  const cancelled = all.filter((j) => j.conclusion === 'cancelled' && !SUMMARY_JOBS.includes(j.name)).map((j) => j.name);
+  if (!cancelled.length && run?.conclusion !== 'cancelled') return null;
+  const gates = all.filter((j) => SUMMARY_JOBS.includes(j.name) && j.conclusion === 'failure').map((j) => j.name);
+  return { cancelled, gates };
+}
+
+/** The sentences `red-ci-triage.mjs` prints for a run with no failed leaf job: under `failing` (`line`) and as `next`. */
+export function noFailureNote({ run, jobs, head }) {
+  const c = cancelledRun(run, jobs);
+  if (c) {
+    const count = c.cancelled.length ? `${c.cancelled.length} job(s) were cancelled and none failed` : 'the run was cancelled and no job failed';
+    const gates = c.gates.length ? ` ${c.gates.join(' and ')} shows failure only because the jobs it waits on were cancelled.` : '';
+    const where = run?.head_sha && head && run.head_sha !== head
+      ? `Read the run on the current head ${String(head).slice(0, 10)}.`
+      : 'Read the newest run on the current head; if this is still the newest, nothing has replaced it yet.';
+    return {
+      cancelled: true,
+      line: `this run was cancelled or superseded by a newer push: ${count}`,
+      next: `This run was cancelled or superseded by a newer push: ${count}.${gates} It says nothing about the code. ${where}`,
+    };
+  }
+  if (run?.status === 'completed') return { cancelled: false, line: 'no failed job on this run', next: `No failed job on this run (${run.conclusion}).` };
+  return { cancelled: false, line: 'no failed job on this run', next: 'No job has failed yet; the run is still going.' };
+}
+
 /** `suite (worker-2-of-6)` → `worker-2-of-6`; any other job → null. */
 export const suitePart = (jobName) => /^suite \(([\w-]+)\)$/.exec(String(jobName))?.[1] || null;
 
