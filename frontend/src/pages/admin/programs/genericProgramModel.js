@@ -65,7 +65,7 @@ const MODULE_PATHS = Object.freeze({
   'refer-and-earn': { referral_queue: '/queue' },
   perks: { perk_queue: '/queue' },
   learning: { learners: '/people' },
-  influencer: { applications: '', influencers: '' },
+  influencer: { applications: '/applications', influencers: '/influencers' },
 });
 export const NO_MODULES = 'None yet. This program works with the core sections alone.';
 export const MODULES_UNREAD = 'Its modules could not be read.';

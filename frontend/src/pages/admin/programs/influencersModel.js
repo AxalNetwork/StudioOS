@@ -28,12 +28,15 @@ export const REASON_MAX = 2000;
 export const KEY = 'influencer';
 export const BASE = '/admin/programs/influencer';
 export const TABS = Object.freeze([
-  { key: 'how', label: 'How it runs', path: `${BASE}/how-it-runs` },
-  { key: 'applications', label: 'Applications', path: `${BASE}/applications` },
-  { key: 'influencers', label: 'Influencers', path: `${BASE}/influencers` },
+  { key: 'overview', label: 'Overview', path: BASE },
+  { key: 'how', label: 'Playbook', path: `${BASE}/how-it-runs` },
+  { key: 'availability', label: 'Availability & grants', path: `${BASE}/availability` },
+  { key: 'participation', label: 'Participation', path: `${BASE}/participation` },
+  { key: 'applications', label: 'Applications', path: `${BASE}/applications`, module: 'applications' },
+  { key: 'influencers', label: 'Influencers', path: `${BASE}/influencers`, module: 'influencers' },
   { key: 'offers', label: 'Offers', path: `${BASE}/offers` },
   { key: 'payouts', label: 'Payouts', path: `${BASE}/payouts` },
-  { key: 'activity', label: 'Activity', path: `${BASE}/activity` },
+  { key: 'activity', label: 'History', path: `${BASE}/activity` },
   { key: 'settings', label: 'Settings', path: `${BASE}/settings` },
 ]);
 /** The program's own address opens Applications, where the work waits. */
