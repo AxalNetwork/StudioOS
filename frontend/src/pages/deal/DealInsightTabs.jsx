@@ -19,7 +19,7 @@ import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { Slot } from './DealOverview';
 import {
   ADVISORS_LINE, COVERAGE_NOTE, MASKED, NOT_RECORDED, NOT_REPORTED, SLOTS, TRACTION_CHARTS,
-  blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionView,
+  blockOf, chartSummary, coverageView, dateText, figureText, insightState, marketRow, personView, safeUrl, sizingView, slotOf, tractionCsv, tractionSources, tractionView,
 } from './dealInsightsModel';
 
 const TONE = {
@@ -312,20 +312,32 @@ function Chart({ chart, points }) {
           {points.map((p, i) => (i % 3 === 0 || i === n - 1 ? <text key={`x-${p.month}`} x={X(i)} y={H - 8} textAnchor="middle" fontSize="11" className="fill-axal-muted dark:fill-gray-400">{dateText(p.month)?.slice(0, 3)}</text> : null))}
         </svg>
       ) : <Missing reason="Nothing shared in the last twelve months." />}
+      <p className={`${SUB} break-words`} data-testid={`deal-traction-source-${chart.key}`}>{tractionSources(points).join('; ') || NOT_RECORDED}</p>
       <details className="text-[12.5px]">
         <summary className="cursor-pointer font-semibold text-axal-violet-deep dark:text-violet-300">View as table</summary>
-        <table className="mt-2 w-full border-collapse text-left">
+        <table className="mt-2 w-full table-fixed border-collapse text-left">
           <thead><tr className="text-axal-muted dark:text-gray-400"><th scope="col" className="py-1 pr-3">Month</th><th scope="col" className="py-1 pr-3">{chart.title.replace(' by month', '')}</th><th scope="col" className="py-1">Source</th></tr></thead>
           <tbody>{points.map((p) => (
             <tr key={p.month} className="text-axal-ink dark:text-gray-100" data-testid={`deal-traction-row-${chart.key}-${p.month}`}>
               <td className="py-1 pr-3">{dateText(p.month)}</td>
               <td className="py-1 pr-3 font-mono">{p.value == null ? NOT_REPORTED : figureText(p.value, p.unit)}</td>
-              <td className="py-1">{p.value == null ? '' : (p.source || NOT_RECORDED)}</td>
+              <td className="break-words py-1 [overflow-wrap:anywhere]">{p.value == null ? '' : (p.source || NOT_RECORDED)}</td>
             </tr>))}</tbody>
         </table>
       </details>
     </Card>
   );
+}
+
+/** D6177: the browser downloads the already-read monthly figures, without another API request. */
+function downloadTraction(view, dealId) {
+  const url = URL.createObjectURL(new Blob([tractionCsv(view)], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  const id = Number.isSafeInteger(Number(dealId)) && Number(dealId) > 0 ? String(Number(dealId)) : 'deal';
+  try {
+    link.href = url; link.download = `deal-${id}-traction.csv`;
+    document.body.appendChild(link); link.click();
+  } finally { link.remove(); URL.revokeObjectURL(url); }
 }
 
 export function DealTraction({ deal }) {
@@ -334,6 +346,13 @@ export function DealTraction({ deal }) {
     <InsightFrame read={read} retry={retry} dealId={deal.id} what="The traction figures" testId="deal-traction">
       {(d) => {
         const v = tractionView(d);
+        if (v.state === 'recorded' && v.reported === 0) return (
+          <section className={`${CARD} flex min-w-0 flex-col items-center gap-2.5 px-7 py-[34px] text-center`} data-testid="deal-traction-empty">
+            <span aria-hidden="true" className="text-[26px] leading-none text-axal-muted dark:text-gray-400">○</span>
+            <h3 className="m-0 text-base font-extrabold leading-[1.35] text-axal-ink dark:text-gray-100">No traction reported yet.</h3>
+            <p className={`m-0 text-center ${SUB}`}>Figures appear once the founder reports them or connects a source.</p>
+          </section>
+        );
         return (
           <div className="grid gap-3.5 md:grid-cols-4" data-testid="deal-traction">
             {v.state === 'unreadable' && <section className={`${CARD} p-4 md:col-span-4`} data-testid="deal-traction-history-unreadable"><Unreadable what="The shared figures" claim="That is not the same as none." onRetry={retry} /></section>}
@@ -341,6 +360,10 @@ export function DealTraction({ deal }) {
               <p className={`m-0 md:col-span-4 ${SUB}`} data-testid="deal-traction-reported">
                 {v.reported ? `The founder shared figures for ${v.reported} of the last twelve months. A month not reported is a gap, never a zero.` : 'The founder has shared no figures with you in the last twelve months.'}
               </p>
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 md:col-span-4">
+                <p className={`m-0 ${SUB}`} data-testid="deal-traction-last-shared">Last shared: {dateText(v.lastShared) || NOT_RECORDED}</p>
+                <button type="button" className={`${BTN_S} min-h-11`} onClick={() => downloadTraction(v, deal.id)} data-testid="deal-traction-csv">Download CSV</button>
+              </div>
               {v.tiles.map((t) => (
                 <Card key={t.key} eye={t.label} testId={`deal-traction-tile-${t.key}`}>
                   {t.value ? <p className={BIG}>{t.value}</p> : <Missing reason={t.reason} />}

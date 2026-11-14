@@ -224,6 +224,7 @@ export function tractionView(read) {
     state: history ? 'recorded' : b.state,
     months,
     reported: history ? history.filter((m) => m.state === 'reported').length : 0,
+    lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
     series,
     tiles: [...tiles, ...extra],
   };
@@ -260,3 +261,35 @@ export function slotOf(slot, block) {
 
 /** Words for the team values band, advisors and geography the read holds no figure for. */
 export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
+
+
+/** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
+export function tractionSources(points) {
+  const sources = new Map();
+  for (const point of points) {
+    if (point.value == null) continue;
+    const source = sourceText(point.source) || NOT_RECORDED;
+    const asOf = dateText(point.as_of) ? point.as_of : null;
+    if (!sources.has(source) || (asOf && (!sources.get(source) || asOf > sources.get(source)))) sources.set(source, asOf);
+  }
+  return [...sources].map(([source, asOf]) => `${source} · As of ${dateText(asOf) || NOT_RECORDED}`);
+}
+
+/** D6177: RFC 4180 cells; source text cannot become a spreadsheet formula. Numeric values stay numeric. */
+function tractionCsvCell(value) {
+  let text = String(value ?? '');
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
+
+/** Export only the axis and figures already read, including every successful gap as Not reported. */
+export function tractionCsv(view) {
+  const rows = [['month', 'figure', 'value', 'unit', 'source']];
+  for (const figure of TRACTION_TILES) {
+    const points = view.series[figure.key] || [];
+    const unit = points.find(p => p.unit)?.unit || '';
+    for (const point of points) rows.push([point.month, figure.label, point.value == null ? NOT_REPORTED : point.value,
+      point.unit || unit, point.value == null ? '' : point.source || NOT_RECORDED]);
+  }
+  return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
+}
