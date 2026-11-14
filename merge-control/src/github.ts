@@ -1,6 +1,19 @@
 /** D5618: request-scoped GitHub App installation client; no PAT, no production Worker import. */
 import type { Env, GithubApi } from './types.ts';
 import { createPrivateKey, sign } from 'node:crypto';
+/** D5620: the only path allowed to contain `..`: a three-dot compare of two full SHAs. */
+const COMPARE = /^compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}$/;
+export const REQUEST_TIMEOUT_MS = 10_000;
+export function comparePath(base: string, head: string): string {
+  const path = `compare/${base}...${head}`;
+  if (!COMPARE.test(path)) throw new Error('compare needs two full commit SHAs');
+  return path;
+}
+/** D5620: the head commit's recursive tree, which carries the file modes the compare API omits. */
+export function treePath(sha: string): string {
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('tree needs a full commit SHA');
+  return `git/trees/${sha}?recursive=1`;
+}
 const base64url = (value: Uint8Array | string) => Buffer.from(value).toString('base64url');
 export async function githubClient(env: Env, fetcher: typeof fetch = fetch): Promise<GithubApi> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(env.REPOSITORY) || !/^\d+$/.test(env.GITHUB_APP_ID ?? '') || !/^\d+$/.test(env.GITHUB_INSTALLATION_ID ?? '') || !env.GITHUB_APP_PRIVATE_KEY) throw new Error('App not configured');
@@ -15,8 +28,8 @@ export async function githubClient(env: Env, fetcher: typeof fetch = fetch): Pro
   if (!token) throw new Error('missing installation token');
   let requests = 0;
   return async (method, path, body) => {
-    if (++requests > 100 || !/^[\w./?=&%_-]+$/.test(path) || path.includes('..')) throw new Error('GitHub request cap or invalid path');
-    const res = await fetcher(`https://api.github.com/repos/${env.REPOSITORY}/${path}`, { method,
+    if (++requests > 100 || !/^[\w./?=&%_-]+$/.test(path) || (path.includes('..') && !COMPARE.test(path))) throw new Error('GitHub request cap or invalid path');
+    const res = await fetcher(`https://api.github.com/repos/${env.REPOSITORY}/${path}`, { method, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Merge-Control', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (!res.ok && !(method === 'POST' && path.endsWith('/cancel') && res.status === 409)) throw Object.assign(new Error(`GitHub HTTP ${res.status}`), { status: res.status });

@@ -31,6 +31,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
+          # D5620: policy_version is this build's commit; policy.ts refuses to load without it.
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          version=(--define "MERGE_CONTROL_POLICY_VERSION:\"$GITHUB_SHA\"")
           cloudflare-worker/node_modules/.bin/tsc -p merge-control/tsconfig.json
-          cloudflare-worker/node_modules/.bin/wrangler deploy --dry-run --config wrangler.merge-control.toml
-          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.merge-control.toml
+          cloudflare-worker/node_modules/.bin/wrangler deploy --dry-run --config wrangler.merge-control.toml "${version[@]}"
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.merge-control.toml "${version[@]}"
