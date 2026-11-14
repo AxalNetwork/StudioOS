@@ -14,6 +14,7 @@
  * Object and the tests share one definition. The Durable Object is `durable-objects/work-graph-lease.ts`.
  */
 import type { Env } from '../types';
+import { doNamespace } from '../util/doNamespace';
 import type { Scope } from './workGraphContracts';
 
 // ── the shapes ───────────────────────────────────────────────────────────────
@@ -264,8 +265,9 @@ async function call(env: Env, caller: Caller, resource: Pick<LeaseResource, 'sco
   if (!sameTenant(caller.scope, resource.scope)) return refuse('wrong_tenant');
   // A refusal the caller decided (a write path with no capability) is audited without reaching the object.
   if (refusedBefore) return refuse(refusedBefore);
-  const ns = env.WORK_GRAPH_LEASE;
-  if (!ns) return refuse('no_binding');
+  if (!env.WORK_GRAPH_LEASE) return refuse('no_binding');
+  // D264: the branch's Durable Object jurisdiction applies here as at every other site.
+  const ns = doNamespace(env, env.WORK_GRAPH_LEASE);
 
   const key = leaseKey(resource.scope, resource.assetId);
   const stub = ns.get(ns.idFromName(key));
