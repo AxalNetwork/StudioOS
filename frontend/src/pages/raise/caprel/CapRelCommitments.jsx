@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -25,9 +26,9 @@ import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS,
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
-const BTN_S = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_S = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[32px] justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const H3 = `m-0 text-[14px] font-extrabold ${INK}`;
 /** The counted statuses solid, the listed ones hatched, as the canvas draws them. */
 const SEG = {
@@ -191,27 +192,29 @@ function Every({ read, f, setF }) {
           <option value="">Any status</option>{statuses.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-left text-[12.5px]">
-          <thead><tr className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
-            {['Investor', 'Amount', 'Status', 'Source', 'Date', ''].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
-          </tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-commit-row">
-                <td className={`px-3 py-2 font-bold ${INK}`}>{r.investor}</td>
-                <td className={`px-3 py-2 font-mono ${r.amount === 'Not recorded' ? MUTED : INK}`}>{r.amount}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[r.counted ? 'counted' : r.status === 'not_recorded' ? 'not_recorded' : 'listed']}`}>{r.status_label}</span>
-                  {r.why ? <div className={`mt-1 text-[11.5px] ${MUTED}`}>{r.why}</div> : null}
-                </td>
-                <td className={`px-3 py-2 ${INK}`}>{r.source_label}</td>
-                <td className={`px-3 py-2 font-mono ${r.on ? INK : MUTED}`}>{r.on || '—'}</td>
-                <td className="px-3 py-2 text-right">{r.status === 'not_recorded' || r.status === 'soft' ? <span className={`text-[12px] ${MUTED}`}>Set status on Pipeline</span> : null}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div>
+        <ResponsiveRecords>
+          <table role="table" className="w-full min-w-[820px] border-collapse text-left text-[12.5px]">
+            <thead role="rowgroup"><tr role="row" className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
+              {['Investor', 'Amount', 'Status', 'Source', 'Date', ''].map((h) => <th role="columnheader" key={h} className="px-3 py-2">{h}</th>)}
+            </tr></thead>
+            <tbody role="rowgroup">
+              {rows.map((r) => (
+                <tr role="row" key={r.key} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-commit-row">
+                  <td role="cell" className={`px-3 py-2 font-bold ${INK}`}><RecordLabel>Investor</RecordLabel>{r.investor}</td>
+                  <td role="cell" className={`px-3 py-2 font-mono ${r.amount === 'Not recorded' ? MUTED : INK}`}><RecordLabel>Amount</RecordLabel>{r.amount}</td>
+                  <td role="cell" className="px-3 py-2"><RecordLabel>Status</RecordLabel>
+                    <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${STATUS_TONE[r.counted ? 'counted' : r.status === 'not_recorded' ? 'not_recorded' : 'listed']}`}>{r.status_label}</span>
+                    {r.why ? <div className={`mt-1 text-[11.5px] ${MUTED}`}>{r.why}</div> : null}
+                  </td>
+                  <td role="cell" className={`px-3 py-2 ${INK}`}><RecordLabel>Source</RecordLabel>{r.source_label}</td>
+                  <td role="cell" className={`px-3 py-2 font-mono ${r.on ? INK : MUTED}`}><RecordLabel>Date</RecordLabel>{r.on || '—'}</td>
+                  <td role="cell" className="px-3 py-2 text-right">{r.status === 'not_recorded' || r.status === 'soft' ? <span className={`text-[12px] ${MUTED}`}>Set status on Pipeline</span> : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveRecords>
         {!rows.length ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="caprel-commit-none">{(read.investors || []).length ? 'No commitment matches.' : 'No commitment is recorded yet.'}</p> : null}
       </div>
       <p className={`m-0 border-t border-axal-hairline px-4 py-2 text-[11.5px] ${MUTED} dark:border-gray-800`}>Close or tranche, and route: not recorded on a commitment until a closing exists.</p>
