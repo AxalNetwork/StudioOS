@@ -7,6 +7,9 @@ import { roomListing } from '../src/pages/deal/dealWorkModel.js';
 import { roomFilesQuery } from '../src/pages/deal/roomFilesQuery.js';
 import SharedRoomFiles from '../src/pages/deal/SharedRoomFiles.jsx';
 import { dataRoomApi } from '../src/lib/api/dataRoom.js';
+import { DealDocuments } from '../src/pages/deal/DealWorkTabs.jsx';
+import { dealWorkroomApi } from '../src/lib/api/dealWorkroom.js';
+import { api } from '../src/lib/api.js';
 
 const files = Array.from({ length: 60 }, (_, i) => ({ uid: `f-${String(i).padStart(2, '0')}`, name: `File ${String(i).padStart(2, '0')}.pdf`, folder_uid: i < 55 ? 'folder-a' : 'folder-b',
   size_bytes: i * 100, created_at: `2026-10-${String(i % 28 + 1).padStart(2, '0')}T10:00:00Z` }));
@@ -75,4 +78,24 @@ test('index off and failed search stay distinct and keep the name filter usable'
       } finally { await view.unmount(); }
     }
   } finally { dataRoomApi.sharedSearch = original; }
+});
+
+test('Documents mounts the new listing only after the existing access gate admits it', async () => {
+  const original = { access: dealWorkroomApi.roomAccess, room: dealWorkroomApi.sharedRoom, paper: api.esignList };
+  try {
+    for (const granted of [true, false]) {
+      const reads = [];
+      dealWorkroomApi.roomAccess = async () => ({ granted: granted ? {} : null, project_uid: 'p-6185' });
+      dealWorkroomApi.sharedRoom = async (uid) => { reads.push(uid); return { files, folders: [{ uid: 'folder-a', name: 'Finance' }], withheld_behind_nda: 3, nda_signed: false }; };
+      api.esignList = async () => ({ envelopes: [] });
+      const view = await mountContracts(React.createElement(DealDocuments, { deal: { id: 7 } }));
+      try {
+        await view.flush();
+        assert.equal(Boolean(node(view, 'shared-room-files')), granted);
+        assert.equal(Boolean(node(view, 'room-name-filter')), granted);
+        assert.deepEqual(reads, granted ? ['p-6185'] : []);
+        if (!granted) assert.match(view.text(), /not opened their data room to you/);
+      } finally { await view.unmount(); }
+    }
+  } finally { dealWorkroomApi.roomAccess = original.access; dealWorkroomApi.sharedRoom = original.room; api.esignList = original.paper; }
 });

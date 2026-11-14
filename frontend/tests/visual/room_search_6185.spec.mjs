@@ -58,3 +58,38 @@ test('phone component keeps name search, sort and page while excluding extra con
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.getByTestId('deal-room-withheld')).toContainText('3 files need your NDA');
 });
+
+test('the investor Documents route mounts search behind its existing access/NDA gates', async ({ page, request }) => {
+  const m = await prepare(page, request, { as: 'security' });
+  const user = { ...m.security.user, role: 'investor', is_superadmin: false, kyc_status: 'approved' };
+  await page.addInitScript((user) => { localStorage.setItem('user', JSON.stringify(user)); localStorage.setItem('viewMode', 'investor'); }, user);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const files = Array.from({ length: 30 }, (_, i) => ({ uid: `live-${i}`, name: `Listed file ${i}.pdf`, size_bytes: i * 100, created_at: '2026-10-01', folder_uid: null }));
+  const reads = []; let granted = true;
+  await page.route('**/api/**', async route => {
+    const req = route.request(), path = new URL(req.url()).pathname;
+    if (path === '/api/auth/me') return route.fulfill({ json: user });
+    if (path === '/api/onboarding/progress') return route.fulfill({ json: { flow: 'investor', completed_at: '2026-10-01' } });
+    if (path === '/api/deals/7') return route.fulfill({ json: { id: 7, project_name: 'Synthetic Venture', status: 'active', currency: 'USD' } });
+    if (path === '/api/deals/7/commitments') return route.fulfill({ json: [] });
+    if (path === '/api/deals/7/room-access') return route.fulfill({ json: { project_uid: 'p-live', granted: granted ? {} : null, founder_user_id: 1 } });
+    if (path === '/api/data-room/shared/p-live') { reads.push('listing'); return route.fulfill({ json: { files, folders: [], withheld_behind_nda: 3, nda_signed: false } }); }
+    if (path === '/api/data-room/shared/p-live/search') { reads.push('search'); return route.fulfill({ json: { available: true, value: { hits: [
+      { file_uid: 'live-0', file_name: 'Admitted search result', snippet: 'Admitted content' }, { file_uid: 'hidden', file_name: 'Hidden room filename', snippet: 'Hidden content' }] } } }); }
+    return route.fulfill({ json: { items: [], envelopes: [], steps: [], quota: {} } });
+  });
+  await page.goto('/deals/7/documents');
+  await expect(page.getByTestId('shared-room-files')).toBeVisible();
+  await expect(page.getByTestId('deal-room-file')).toHaveCount(25);
+  await expect(page.getByTestId('deal-room-withheld')).toContainText('3 files need your NDA');
+  await page.getByLabel('Search inside the files', { exact: true }).fill('cash'); await page.getByTestId('dataroom-search-go').click();
+  await expect(page.getByTestId('dataroom-search-hits')).toContainText('Admitted content');
+  await expect(page.getByTestId('deal-documents')).not.toContainText('Hidden room filename');
+  await expect(page.getByTestId('deal-documents')).not.toContainText('Hidden content');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(reads).toEqual(['listing', 'search']);
+  granted = false; reads.length = 0; await page.reload();
+  await expect(page.getByTestId('deal-room-state-not_opened')).toBeVisible();
+  await expect(page.getByTestId('shared-room-files')).toHaveCount(0);
+  expect(reads).toEqual([]);
+});

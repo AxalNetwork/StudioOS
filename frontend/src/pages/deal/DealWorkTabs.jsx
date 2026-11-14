@@ -8,7 +8,7 @@
  * leaves the rest of the tab standing. Every change opens an in-page dialog
  * that says what it changes, and its refusal stays inside the dialog.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { api, dd } from '../../lib/api';
@@ -23,6 +23,7 @@ import { ownDealTarget, showsProof } from '../investor/proofOfFundsModel';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S, BTN_P } from './DealFrame';
 import { Slot } from './DealOverview';
+import SharedRoomFiles from './SharedRoomFiles.jsx';
 import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import { DECK_SLOT } from './dealFrameModel';
 import {
@@ -189,12 +190,9 @@ export function DealDocuments({ deal }) {
   const [paper, reloadPaper] = useRead(() => api.esignList({ deal_id: deal.id }), [deal.id]);
   const st = roomStateOf(access, room);
   const listing = room.status === 'ready' ? roomListing(room.data) : null;
-  const [folder, setFolder] = useState('');
-  const [q, setQ] = useState('');
   const [dialog, setDialog] = useState(null); // 'ask' | 'nda'
   const [message, setMessage] = useState('');
   const [dl, setDl] = useState({}); // uid → { busy, err }
-  const files = useMemo(() => (listing?.files || []).filter((f) => (!folder || f.folder_uid === folder) && (!q.trim() || f.name.toLowerCase().includes(q.trim().toLowerCase()))), [listing, folder, q]);
   const download = async (f) => {
     setDl((m) => ({ ...m, [f.uid]: { busy: true } }));
     try {
@@ -217,39 +215,7 @@ export function DealDocuments({ deal }) {
           {st.state === 'behind_nda' && st.ndaPending && <span className={SUB}>The NDA is out for signature. The files open once every party has signed.</span>}
         </section>
       )}
-      {listing && (
-        <div className="grid gap-3.5 md:grid-cols-[240px_minmax(0,1fr)]">
-          <Card eye="Folders" testId="deal-room-folders">
-            <button type="button" onClick={() => setFolder('')} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === '' ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
-              <span>All files</span><span className="font-mono text-[12px]">{listing.files.length}</span>
-            </button>
-            {listing.folders.map((f) => (
-              <button key={f.uid} type="button" onClick={() => setFolder(f.uid)} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === f.uid ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
-                <span>{f.name}</span><span className="font-mono text-[12px]">{f.count}</span>
-              </button>
-            ))}
-            {st.withheld > 0 && (
-              <p className="m-0 border-t border-axal-hairline px-2 pt-2 text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid="deal-room-withheld">
-                {st.withheld} file{st.withheld === 1 ? ' needs' : 's need'} your NDA
-                <span className={`block font-normal ${SUB}`}>Their names show once you sign.</span>
-              </p>
-            )}
-          </Card>
-          <Card title={`Files · ${files.length}`} testId="deal-room-files">
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files" aria-label="Search files" className={FIELD} />
-            {files.length === 0 && <p className={`m-0 ${SUB}`}>{listing.files.length === 0 ? 'No file here is open to you yet.' : 'No file matches.'}</p>}
-            {files.map((f) => (
-              <div key={f.uid} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-room-file">
-                <span className="min-w-0 flex-1 text-[13px] font-bold text-axal-ink dark:text-gray-100">{f.name}</span>
-                <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{f.size} · {f.added}</span>
-                <button type="button" className="text-[12.5px] font-bold text-axal-violet-deep underline dark:text-violet-300" disabled={dl[f.uid]?.busy} onClick={() => download(f)}>Open</button>
-                <Err text={dl[f.uid]?.err} />
-              </div>
-            ))}
-            <p className={`m-0 ${SUB}`}>Each download is a one-time link and is logged. The founder sees who opened what.</p>
-          </Card>
-        </div>
-      )}
+      {listing && <SharedRoomFiles key={projectUid} projectUid={projectUid} listing={listing} rawFiles={room.data?.files || []} withheld={st.withheld || 0} onDownload={download} downloads={dl} />}
       <div className="grid gap-3.5 md:grid-cols-2">
         <Card title="Deal paper" testId="deal-paper">
           <p className={`m-0 ${SUB}`}>The envelopes on this deal that you are party to.</p>
