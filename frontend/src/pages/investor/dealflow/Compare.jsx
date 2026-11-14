@@ -17,6 +17,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { dealInsightsApi } from '../../../lib/api/dealInsights.js';
+import { dateText } from '../../deal/dealInsightsModel';
 import { dealFlowApi } from '../../../lib/api/dealFlow.js';
 import { dealViewsApi } from '../../../lib/api/dealViews.js';
 import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
@@ -24,9 +26,9 @@ import { reportError } from '../../../lib/log';
 import { Unreadable } from '../../../ui';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
 import { MAX_COMPARE } from './dealFlowModel';
-import { fitOf, flowRows, scoresOf, stageWord, stripScopes } from './flowModel';
+import { fitOf, flowRows, moneyText, scoresOf, stageWord, stripScopes } from './flowModel';
 import { AskCell, DaysCell, FitCell } from './FlowCells';
-import { COMPARE_COLOURS, barShare, compareCsv, compareRows, compareSummary } from './compareModel';
+import { COMPARE_COLOURS, COMPARE_TRACTION, barShare, compareCsv, compareRows, compareSummary, compareTraction } from './compareModel';
 
 const BOX = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -34,6 +36,7 @@ const WARN = 'm-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-
 const PILL = 'rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] dark:border-gray-700';
 const BTN = 'inline-flex items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const PRIMARY = 'inline-flex items-center rounded-[9px] bg-violet-700 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 dark:bg-violet-600 dark:hover:bg-violet-500';
+const OPACITY = { High: 'opacity-100', Medium: 'opacity-80', Low: 'opacity-55' };
 const HATCH = { backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px)' };
 
 /** The chart: per scope, one bar per venture in its colour; a missing score is a dash with its word. */
@@ -48,11 +51,11 @@ function ScopeBars({ ventures }) {
               <div key={ventures[i].id} className="flex items-center gap-2" title={`${ventures[i].name}: ${c.title || c.word}`}>
                 {c.kind === 'scored'
                   ? <span className="h-2.5 rounded-sm bg-gray-100 dark:bg-gray-800" style={{ width: '60%' }}>
-                    <span className={`block h-full rounded-sm ${COMPARE_COLOURS[i].bar} ${c.low ? 'opacity-70' : ''}`} style={{ width: `${Math.round(barShare(c.band) * 100)}%`, ...(c.low ? HATCH : {}) }}
+                    <span className={`block h-full rounded-sm ${COMPARE_COLOURS[i].bar} ${OPACITY[c.confidence] ?? 'opacity-55'}`} style={{ width: `${Math.round(barShare(c.band) * 100)}%`, ...(c.low ? HATCH : {}) }}
                       data-testid={`dealflow-compare-bar-${r.key}-${i}`} data-band={c.band} data-low={c.low ? '1' : '0'} />
                   </span>
                   : <span className="w-[60%] border-t border-dashed border-gray-300 dark:border-gray-600" data-testid={`dealflow-compare-bar-${r.key}-${i}`} data-band="none" />}
-                <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{c.kind === 'scored' ? `${c.word}${c.confidence ? ` · ${c.confidence.toLowerCase()}` : ''}` : c.word}</span>
+                <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{c.kind === 'scored' ? `${c.word}${c.confidence ? ` · ${c.confidence.toLowerCase()} confidence` : ' · confidence not recorded'}` : c.word}</span>
               </div>
             ))}
           </div>
@@ -64,17 +67,37 @@ function ScopeBars({ ventures }) {
 
 /** The table: the same bands, the strongest alone in a row in weight 800, then the facts. */
 function CompareTable({ ventures, flowUnknown = false }) {
+  const section = (label) => <tr><th scope="rowgroup" colSpan={ventures.length + 1} className="bg-gray-50 px-2 py-2 text-left text-sm font-bold dark:bg-gray-800">{label}</th></tr>;
+  const fact = (label, render) => <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">{label}</th>{ventures.map(venture => <td key={venture.id} className="px-2 py-1.5">{render(venture)}</td>)}</tr>;
+  const traction = new Map(ventures.map(venture => [venture.id, compareTraction(venture.traction)]));
+  const tractionWord = (venture, key) => {
+    const read = traction.get(venture.id);
+    if (read.state === 'loading') return 'Reading…';
+    if (read.state === 'masked') return 'Locked';
+    if (read.state === 'unreadable') return 'Unreadable';
+    return (key === 'period' ? read.period : read.figures[key]) || 'Not reported';
+  };
   const head = 'px-2 py-1.5 text-left text-[11px] font-bold uppercase text-gray-500 dark:text-gray-400';
   return (
-    <div className="overflow-x-auto" id="compare-table">
+    <div className="max-h-[65vh] overflow-auto" id="compare-table">
       <table className="w-full border-collapse text-[13px]" data-testid="dealflow-compare-table">
-        <thead>
+        <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
           <tr className="border-b border-axal-hairline dark:border-gray-800">
-            <th className={head}>Scope</th>
-            {ventures.map((v, i) => <th key={v.id} className={head}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" />{v.name}</th>)}
+            <th scope="col" className={head}>Comparison</th>
+            {ventures.map((v, i) => <th scope="col" key={v.id} className={head}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" />{v.name}</th>)}
           </tr>
         </thead>
         <tbody>
+          {section('Investment case')}
+          {fact('Ask', v => <AskCell row={v} />)}
+          {fact('Instrument', v => v.instrument || 'Not recorded')}
+          {fact('Valuation cap', v => moneyText(v.valuation, v.currency) || 'Not recorded')}
+          {fact('Close', v => dateText(v.close) || 'Not recorded')}
+          {fact('Your stage', v => flowUnknown ? 'Unreadable' : stageWord(v.stage))}
+          {fact('Days in stage', v => <DaysCell row={v} flowUnknown={flowUnknown} testId={`dealflow-compare-days-${v.id}`} />)}
+        </tbody>
+        <tbody>
+          {section('Scorecard')}
           {compareRows(ventures).map((r) => (
             <tr key={r.key} className="border-t border-gray-100 dark:border-gray-800">
               <th scope="row" className="px-2 py-1.5 text-left font-semibold">{r.label}</th>
@@ -85,10 +108,19 @@ function CompareTable({ ventures, flowUnknown = false }) {
               ))}
             </tr>
           ))}
-          <tr className="border-t border-axal-hairline dark:border-gray-700"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Ask</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><AskCell row={v} /></td>)}</tr>
-          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Your stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5">{flowUnknown ? 'Unreadable' : stageWord(v.stage)}</td>)}</tr>
-          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Days in stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><DaysCell row={v} flowUnknown={flowUnknown} testId={`dealflow-compare-days-${v.id}`} /></td>)}</tr>
-          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Fit to my thesis</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><FitCell fit={v.fit} /></td>)}</tr>
+        </tbody>
+        <tbody>
+          {section('Fit to thesis')}
+          {fact('Fit to my thesis', v => <FitCell fit={v.fit} />)}
+        </tbody>
+        <tbody>
+          {section('Traction')}
+          {fact('Reporting period', v => tractionWord(v, 'period'))}
+          {COMPARE_TRACTION.map(metric => <React.Fragment key={metric.key}>{fact(metric.label, v => tractionWord(v, metric.key))}</React.Fragment>)}
+        </tbody>
+        <tbody>
+          {section('Risk')}
+          {fact('Material risks', () => 'Not recorded')}
         </tbody>
       </table>
     </div>
@@ -125,13 +157,14 @@ export function CompareNote({ ids, api: noteApi = dealFlowApi }) {
     <section className={BOX} data-testid="dealflow-compare-note">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Draft a comparison note</h3>
+          <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Decision notes</h3>
           <p className={MUTED}>Eadwyn drafts from the scores on this page. Nothing is saved until you press Save to notes.</p>
         </div>
         {!draft && <button type="button" className={BTN} onClick={run} disabled={busy} data-testid="dealflow-compare-note-draft">{busy ? 'Drafting…' : 'Draft the note'}</button>}
       </div>
       {draft && (
         <div className="flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950" data-testid="dealflow-compare-note-text">
+          <p className={MUTED}>Proposal awaiting your decision</p>
           <p className="m-0 whitespace-pre-line text-[13px] text-axal-ink dark:text-gray-100">{draft.note?.text}</p>
           <div className="flex gap-2">
             <button type="button" className={PRIMARY} onClick={keep} disabled={busy} data-testid="dealflow-compare-note-save">{busy ? 'Saving…' : 'Save to notes'}</button>
@@ -201,11 +234,11 @@ export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = fal
                 <a href="#compare-table" className="text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300">View as table</a>
               </div>
               <p className="m-0 text-[13px]" data-testid="dealflow-compare-summary">{compareSummary(ventures)}</p>
-              <p className={MUTED}>A bar is a band: Weak, Fair or Strong, never a number. A hatched bar has low confidence; a dashed line is a scope without a score.</p>
+              <p className={MUTED}>A bar is a band: Weak, Fair or Strong, never a number. Opacity and the label show confidence. A dashed line marks a scope without a score.</p>
               <ScopeBars ventures={ventures} />
               <CompareTable ventures={ventures} flowUnknown={flowUnknown} />
             </section>
-            <CompareNote ids={ids.length ? ids : ventures.map((v) => v.id)} />
+            <CompareNote key={(ids.length ? ids : ventures.map(v => v.id)).join(',')} ids={ids.length ? ids : ventures.map((v) => v.id)} />
           </>
         )}
     </div>
@@ -220,13 +253,15 @@ export function DealCompare({ ids }) {
   const [fits, setFits] = useState(null);
   const [again, setAgain] = useState(0);
   const [againScores, setAgainScores] = useState(0);
+  const [traction, setTraction] = useState({ key: null, reads: {} });
+  const [againTraction, setAgainTraction] = useState(0);
   useEffect(() => {
     let alive = true;
     setRead({ kind: 'loading' });
     // D4635 (#4635): a failed flow read is said, never read as an empty flow (which would claim "Not on your deals").
     let flowFailed = false;
     Promise.all([api.listDeals(), dealFlowApi.flow().catch((e) => { reportError('DealFlow:compare-flow', e); flowFailed = true; return { items: [] }; })]).then(
-      ([deals, flow]) => { if (alive) setRead({ kind: 'ok', flowFailed, rows: flowRows('all', { flow, deals }) }); },
+      ([deals, flow]) => { if (alive) setRead({ kind: 'ok', flowFailed, rows: flowRows('all', { flow, deals }), deals }); },
       (e) => { reportError('DealFlow:compare', e); if (alive) setRead({ kind: 'unreadable' }); },
     );
     return () => { alive = false; };
@@ -240,9 +275,24 @@ export function DealCompare({ ids }) {
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, againScores]);
-  const ventures = useMemo(() => (read.kind === 'ok'
-    ? ids.map((id) => read.rows.find((r) => r.id === String(id))).filter(Boolean).map((r) => ({ ...r, scores: scoresOf(scores, r.id), fit: fitOf(fits, r.id) }))
-    : []), [read, scores, fits, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const picked = useMemo(() => read.kind === 'ok'
+    ? ids.map(id => read.rows.find(row => row.id === String(id))).filter(Boolean) : [], [read, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let alive = true;
+    setTraction({ key, reads: {} });
+    for (const { id } of picked) {
+      const remember = value => {
+        if (alive) setTraction(current => ({ key, reads: { ...current.reads, [id]: value } }));
+      };
+      dealInsightsApi.traction(id).then(remember, error => remember([403, 404].includes(error?.status) ? { masked: true } : 'failed'));
+    }
+    return () => { alive = false; };
+  }, [key, picked, againTraction]);
+  const listed = new Map((Array.isArray(read.deals) ? read.deals : []).map(deal => [String(deal.id), deal]));
+  const ventures = picked.map(row => ({
+    ...row, close: listed.get(row.id)?.closing_deadline, valuation: listed.get(row.id)?.valuation_cap ?? null, scores: scoresOf(scores, row.id), fit: fitOf(fits, row.id),
+    traction: traction.key === key ? traction.reads[row.id] : undefined,
+  }));
   if (read.kind === 'loading') return <section className={BOX} aria-busy="true"><p className={MUTED}>Reading…</p></section>;
   if (read.kind === 'unreadable') return <section className={BOX}><Unreadable what="The ventures to compare" claim="That is not the same as having none." onRetry={() => setAgain((n) => n + 1)} /></section>;
   return (
@@ -250,6 +300,7 @@ export function DealCompare({ ids }) {
       {scores === 'failed' && <p className={WARN} role="status" data-testid="dealflow-compare-scores-failed">Scores could not be read. Names, stages and money are current. <button type="button" className="font-semibold underline" onClick={() => setAgainScores((n) => n + 1)}>Try again</button></p>}
       {fits === 'failed' && <p className={WARN} role="status" data-testid="dealflow-compare-fit-failed">Fit to your thesis could not be read. The scores are current. <button type="button" className="font-semibold underline" onClick={() => setAgainScores((n) => n + 1)}>Try again</button></p>}
       {read.flowFailed && <p className={WARN} role="status" data-testid="dealflow-compare-flow-failed">Your deal flow could not be read, so where each venture is on it is not shown. <button type="button" className="font-semibold underline" onClick={() => setAgain((n) => n + 1)}>Try again</button></p>}
+      {ventures.some(venture => compareTraction(venture.traction).state === 'unreadable') && <p className={WARN} role="status">Some traction figures could not be read. <button type="button" className="font-semibold underline" onClick={() => setAgainTraction(value => value + 1)}>Try again</button></p>}
       <CompareView ventures={ventures} missing={ids.length - ventures.length} ids={ventures.map((v) => v.id)} flowUnknown={!!read.flowFailed} />
     </>
   );

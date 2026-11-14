@@ -6,6 +6,7 @@
  * one colour, the same in the cards, the chart and the table. The strongest
  * band in a row is weight 800 only when no other venture shares it.
  */
+import { TRACTION_TILES, dateText, figureText, insightState, tractionView } from '../../deal/dealInsightsModel';
 import { SCOPE_KEYS, SCOPE_LABEL, scopeCell } from './flowModel';
 
 /** One colour per venture, in pick order: the swatch, the bar, and their dark-mode pair. */
@@ -62,4 +63,19 @@ export function compareCsv(ventures) {
   const lines = [['Scope', ...ventures.map((v) => v.name)]];
   for (const r of compareRows(ventures)) lines.push([r.label, ...r.cells.map((c) => (c.kind === 'scored' && c.confidence ? `${c.word} · ${c.confidence}` : c.word))]);
   return lines.map((l) => l.map(csvCell).join(',')).join('\n');
+}
+
+export const COMPARE_TRACTION = TRACTION_TILES;
+
+export function compareTraction(read) {
+  if (read === undefined) return { state: 'loading', figures: {} };
+  const result = insightState(read === 'failed' ? { status: 'unreadable' } : { data: read });
+  if (result.state !== 'open') return { state: result.state, figures: {} };
+  const { state, months, series } = tractionView(result.data);
+  const period = months.at(-1);
+  const figures = Object.fromEntries(TRACTION_TILES.flatMap(tile => {
+    const point = series[tile.key]?.at(-1);
+    return point?.value != null ? [[tile.key, figureText(point.value, point.unit)]] : [];
+  }));
+  return { state, period: dateText(period), figures };
 }
