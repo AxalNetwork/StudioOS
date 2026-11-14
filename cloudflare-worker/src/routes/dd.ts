@@ -236,6 +236,7 @@ const READY_EXPR = "(c.status IN ('open', 'in_review')"
   + ' AND EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id)'
   + ' AND NOT EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id AND s.verdict IS NULL))';
 const CASE_FILTER_SQL = ' WHERE (? IS NULL OR c.subject_type = ?)'
+  + ' AND (? IS NULL OR c.subject_id = ?)'
   + ' AND (? IS NULL OR c.status = ?)'
   + " AND (? IS NULL OR (? = 'none' AND c.risk_band IS NULL) OR c.risk_band = ?)"
   + " AND (? IS NULL OR (? = 'ready' AND " + READY_EXPR + ')'
@@ -279,10 +280,22 @@ const LIST_SORTS = new Set(['opened', 'target', 'activity', 'flags', 'name']);
 const LIST_STAGES = new Set(['not_started', 'in_review', 'ready', 'decided', 'archived']);
 const SEVERITY_WORD = ['', 'info', 'low', 'medium', 'high', 'critical'];
 
+/**
+ * D6181 (#6181): `subject_id`, an exact subject (a project's id when
+ * subject_type is `project`). Absent or empty is no filter; anything but a
+ * positive whole number is `undefined`, which the list refuses with a 400
+ * rather than widening an exact lookup to every case the caller may read.
+ */
+function subjectIdParam(v: string | undefined): number | null | undefined {
+  if (v == null || v === '') return null;
+  return /^[1-9][0-9]{0,15}$/.test(v) && Number.isSafeInteger(Number(v)) ? Number(v) : undefined;
+}
+
 /** The binds for CASE_FILTER_SQL, in its order: the query's filters, then who may see which cases. */
 function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): unknown[] {
   const opt = (v: string | undefined) => (v == null || v === '' ? null : v);
   const subjectType = opt(q('subject_type'));
+  const subjectId = subjectIdParam(q('subject_id')) ?? null;
   const status = opt(q('status'));
   const band = opt(q('risk_band'));
   const stage = LIST_STAGES.has(String(q('stage'))) ? String(q('stage')) : null;
@@ -295,6 +308,7 @@ function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): u
   const everyone = user.role === 'admin' && q('owner_only') !== '1' ? 1 : 0;
   return [
     subjectType, subjectType,
+    subjectId, subjectId,
     status, status,
     band, band, band,
     stage, stage, stage, stage, stage, stage,
@@ -313,6 +327,7 @@ dd.get('/cases', async (c) => {
   const sort = LIST_SORTS.has(String(q('sort'))) ? String(q('sort')) : 'opened';
   const pageSize = Math.min(Math.max(Number.parseInt(String(q('page_size') ?? '200'), 10) || 200, 1), 200);
   const page = Math.max(Number.parseInt(String(q('page') ?? '1'), 10) || 1, 1);
+  if (subjectIdParam(q('subject_id')) === undefined) return c.json({ error: 'subject_id must be a positive whole number.', code: 'invalid_subject_id' }, 400);
   const binds = caseFilterBinds(user, q);
   const counted = await c.env.DB.prepare(LIST_COUNT_SQL).bind(...binds).first<{ n: number }>();
   const rows = await c.env.DB.prepare(LIST_ROWS_SQL)
