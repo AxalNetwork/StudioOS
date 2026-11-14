@@ -34,7 +34,7 @@ const view = (d, s = {}) => {
 // `frontend/test/raise_call_page_d1225.test.mjs`. The route, the redirects and
 // the sheet stay pinned here.
 
-test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent there, others stay', () => {
+test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent there, others stay', async () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   // D1227 (#3226): the page lives at Capital relationships › Calls; /raise/calls/:uid forwards there.
   assert.match(app, /<Route path="\/raise\/capital-relationships\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RaiseCallPage \/>\)\} \/>/);
@@ -45,7 +45,13 @@ test('the route sits in the Raise shell; a founder at /round-calls/:uid is sent 
   assert.match(page, /if \(d && d\.viewer !== 'founder'\) return <Navigate to=\{`\/round-calls\/\$\{encodeURIComponent\(uid\)\}`\} replace \/>;/);
   const old = readFileSync('frontend/src/pages/founder/RoundCallPage.jsx', 'utf8');
   // D1227 (#3226): the sent call's address is under Capital relationships › Calls.
-  assert.match(old, /to=\{\(projectId&&call\.state!=='draft'\?'\/raise\/capital-relationships\/calls\/':'\/round-calls\/'\)\+call\.uid\}/, 'the founder\'s list opens a sent call in the Raise shell, and a draft on its own page, where Continue draft is');
+  const { RoundCallList } = await import('../src/pages/founder/RoundCallPage.jsx');
+  const links = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(RoundCallList, {
+    projectId: String(call.project_id),
+    calls: [call, { ...call, uid: 'c2', name: 'Draft seed', state: 'draft' }],
+  })));
+  assert.match(links, /href="\/raise\/capital-relationships\/calls\/c1"[^>]*>Seed<\/a>/);
+  assert.match(links, /href="\/round-calls\/c2"[^>]*>Draft seed<\/a>/);
   // D1221 (#2458): a founder's sent call opens at its address under Capital relationships › Calls (CLS8).
   // D1224 (#3223): a draft too; the shell's page opens the new-call sheet on it.
   assert.match(old, /if\(read\.data\?\.viewer==='founder'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
