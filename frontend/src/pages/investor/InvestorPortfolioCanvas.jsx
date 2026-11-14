@@ -9,6 +9,9 @@
  * Unreadable with a Retry, and the panels beside it keep their figures.
  * A failed positions read never looks like an empty book (#5365 F-01), and a
  * Worker `detail` never reaches the page (F-26).
+ *
+ * D6207 (#6207) reverses one D4817 departure: under the hero NAV, the change
+ * since the last completed quarter-end, from one extra quarter-end read.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -25,7 +28,8 @@ import {
   AttentionItem, HealthStatus, ObligationStatus, PerformanceSummary, Skeleton, SourceFailure, SummaryTile,
 } from '../portfolio/PortfolioParts';
 import {
-  HEALTH, NOT_RECORDED, SHAPES, attentionOf, companyRowsOf, filterRows, performanceOf, reportingSummaryOf, valueAddSummaryOf,
+  HEALTH, NOT_RECORDED, SHAPES, attentionOf, companyRowsOf, filterRows, lastQuarterEndOf, navChangeOf, performanceOf, quarterShape,
+  reportingSummaryOf, valueAddSummaryOf,
 } from '../portfolio/portfolioModel';
 
 const label = (value) => titleCase(value) || 'Unknown';
@@ -41,6 +45,21 @@ const SOURCES = {
 };
 
 const SOURCE_NAMES = { analytics: 'Performance', health: 'Health', updates: 'Founder updates', support: 'Support', compliance: 'Reporting' };
+
+/**
+ * D6207 (#6207): one extra read, the book as of the last completed
+ * quarter-end, and the line "NAV up $X since 30 Sep 2026 (quarter-end)" under
+ * the hero. Mounted once that date is known (keyed by it), so a reload that
+ * re-reads the reporting window reads the quarter-end afresh. Draws nothing —
+ * no number, no zero — unless both the hero and this read answered with a NAV.
+ */
+function NavChangeLine({ date, analytics }) {
+  const sources = useMemo(() => ({ [date]: { call: () => api.positionsAnalytics(date), shape: quarterShape(date) } }), [date]);
+  const { reads } = usePortfolioReads(sources);
+  const change = navChangeOf(analytics, date, reads[date]);
+  if (!change) return null;
+  return <span className="pf-sub" data-testid="portfolio-nav-change" title={change.note}>{change.text}</span>;
+}
 
 /** Needs attention: the evidence-backed queue, most urgent first. */
 function NeedsAttention({ attention, reads, retry }) {
@@ -217,6 +236,8 @@ export default function InvestorPortfolioCanvas() {
   const rows = useMemo(() => companyRowsOf(reads), [reads]);
   const reporting = useMemo(() => reportingSummaryOf(reads.compliance, reads.updates), [reads.compliance, reads.updates]);
   const support = useMemo(() => valueAddSummaryOf(reads.support), [reads.support]);
+  const quarterEnd = lastQuarterEndOf(reads.positions, reads.compliance);
+  const navChange = quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null;
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
   const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
 
@@ -256,7 +277,7 @@ export default function InvestorPortfolioCanvas() {
         />
       )}
     >
-      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} />
+      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} change={navChange} />
       <NeedsAttention attention={attention} reads={reads} retry={retry} />
       <div className="pf-two">
         <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />
