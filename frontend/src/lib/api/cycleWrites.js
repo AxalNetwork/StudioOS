@@ -109,6 +109,8 @@ export function makeCycleWrites(request) {
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       contentDelete: (projectId, uid) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
       // Edits: a PATCH changes only the fields it is sent.
+      // D6098 (#6098): rename one feedback theme, or merge it (`merge: true`); the roadmap items that answer it follow.
+      feedbackTheme: (projectId, body) => request('/cycles/grow/feedback/themes', { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
