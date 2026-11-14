@@ -271,7 +271,8 @@ async function removeFeature(ctx: RecordContext, featureId: number): Promise<Act
       SELECT ?, ?, 'build.solution-design', ?, 'build_feature_removed', 'Feature removed', ? WHERE changes() = 1`)
       .bind(ctx.projectId, ctx.user.id, String(featureId), `user:${ctx.user.id}`),
   ]);
-  if (Number(results[0]?.meta?.changes) !== 1) {
+  // D1 meta.changes includes cascaded child deletes; RETURNING counts the parent.
+  if (results[0]?.results?.length !== 1) {
     refuse(409, await featureRemovalReason(ctx, featureId) ?? 'The feature changed before it could be removed. Refresh and try again.');
   }
   return { ok: true };

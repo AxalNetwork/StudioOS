@@ -120,6 +120,23 @@ test('No longer a must-have preserves the feature and all related work through p
   } finally { db.close(); }
 });
 
+test('D1 cascade-inclusive change metadata still reports a successful parent removal',async()=>{
+  const db=fixture();try{
+    db.exec(`INSERT INTO mvp_feature_links(feature_id,kind,url) VALUES (7,'figma','https://figma.com/file/example');
+      INSERT INTO mvp_release_checks(feature_id,label) VALUES (7,'Release check');`);
+    const env=envFor(db),batch=env.DB.batch.bind(env.DB);
+    // Observed with the native Miniflare D1 binding: one parent + two cascades
+    // has meta.changes=3, while DELETE RETURNING still has one parent row.
+    env.DB.batch=async(statements:any[])=>{
+      const results=await batch(statements);results[0].meta.changes=3;return results;
+    };
+    const result=await request(db,action('solution-design','delete'),'POST',10,env);
+    assert.equal(result.status,200);assert.equal(result.body.ok,true);
+    assert.equal(n(db,'mvp_features'),2);assert.equal(n(db,'mvp_feature_links'),0);assert.equal(n(db,'mvp_release_checks'),0);
+    assert.equal(n(db,'activity_logs'),1);
+  }finally{db.close();}
+});
+
 const protectedReferences = [
   ['roadmap_okrs',"INSERT INTO roadmap_okrs(project_id,objective,feature_id) VALUES (1,'Linked item',7)",'1 roadmap item'],
   ['venture_risks',"INSERT INTO venture_risks(project_id,title,severity,feature_id,created_by) VALUES (1,'Linked risk','low',7,10)",'1 risk'],
