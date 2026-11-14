@@ -16,6 +16,7 @@
 import type { Env, User } from '../types';
 import { PASS_REASON_KEYS } from './dealPassTaxonomy';
 import { dealAudience, dealAudiences } from './dealAccess';
+import { notifyInvitationAnswer } from './dealInvitationAnswer';
 
 export const STAGES = ['sourcing', 'screening', 'diligence', 'commit', 'closing', 'passed'] as const;
 export type Stage = typeof STAGES[number];
@@ -94,8 +95,9 @@ async function validOwner(env: Env, scope: Scope, ownerId: unknown): Promise<num
 const ROW_SELECT = `SELECT f.uid, f.deal_id, f.stage, f.owner_user_id, o.name AS owner_name, f.entered_via, f.entered_at,
     f.stage_changed_at, f.pass_reason, f.passed_at, f.revisit, f.revisit_at, f.note,
     d.status AS round_status, d.amount, d.target_raise, p.name AS project_name, p.sector AS sector,
-    p.founder_id, p.deleted_at
-  FROM deal_flow_entries f JOIN deals d ON d.id = f.deal_id JOIN projects p ON p.id = d.project_id LEFT JOIN users o ON o.id = f.owner_user_id`;
+    p.founder_id, p.deleted_at, mi.status AS my_invitation
+  FROM deal_flow_entries f JOIN deals d ON d.id = f.deal_id JOIN projects p ON p.id = d.project_id LEFT JOIN users o ON o.id = f.owner_user_id
+  LEFT JOIN deal_invitations mi ON mi.deal_id = f.deal_id AND mi.investor_user_id = ?`;
 
 function shape(r: any, nowMs: number, canOpen: boolean) {
   const ask = r.target_raise ?? r.amount;
@@ -108,6 +110,9 @@ function shape(r: any, nowMs: number, canOpen: boolean) {
     ask: ask == null || !Number.isFinite(Number(ask)) ? null : Number(ask),
     pass: r.stage === 'passed' ? { reason: r.pass_reason, passed_at: r.passed_at, revisit: r.revisit ?? null, revisit_at: r.revisit_at ?? null } : null,
     note: r.note ?? null,
+    // D6425: the viewer's own invitation to this deal ('invited', 'interested', 'passed'), or null. A pass answers
+    // one that is not yet 'passed', so the Pass dialog says the studio is told only when it is.
+    my_invitation: r.my_invitation ?? null,
     // A door only where DEAL's rule holds; a flow row never opens a deal by itself.
     can_open: canOpen,
   };
@@ -116,7 +121,7 @@ function shape(r: any, nowMs: number, canOpen: boolean) {
 /** The flow, every stage, newest move first. */
 export async function readFlow(env: Env, scope: Scope, nowMs = Date.now()) {
   const rows = await env.DB.prepare(ROW_SELECT + ' WHERE f.scope_key = ? AND p.deleted_at IS NULL ORDER BY f.stage_changed_at DESC, f.id DESC')
-    .bind(scope.key).all<any>();
+    .bind(scope.user.id, scope.key).all<any>();
   const candidates = rows.results || [];
   const audiences = await dealAudiences(env, scope.user, candidates.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
   const items = candidates.map((r) => shape(r, nowMs, (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none'));
@@ -126,7 +131,7 @@ export async function readFlow(env: Env, scope: Scope, nowMs = Date.now()) {
 
 async function readOne(env: Env, scope: Scope, dealId: number, nowMs = Date.now()) {
   const r = await env.DB.prepare(ROW_SELECT + ' WHERE f.scope_key = ? AND f.deal_id = ?')
-    .bind(scope.key, dealId).first<any>();
+    .bind(scope.user.id, scope.key, dealId).first<any>();
   if (!r) throw new FlowError('not_in_flow', 404, 'This deal is not in your deal flow.');
   const canOpen = r.deleted_at == null && await dealAudience(env, scope.user, dealId, r.founder_id) !== 'none';
   return shape(r, nowMs, canOpen);
@@ -240,6 +245,23 @@ export async function passDeal(env: Env, scope: Scope, dealId: number, input: Re
   const note = input.note === undefined ? undefined : textOrNull(input.note, NOTE_MAX, 'invalid_note');
   const reason = String(input.reason);
   let entry = await entryOf(env, scope, dealId);
+  // D6425 (#6425): a pass answers the viewer's own invitation to this deal, unless it is already answered 'passed'
+  // (re-answering 'interested' follows `/invitations/respond`, which lets an investor change their answer).
+  const invitation = await env.DB.prepare('SELECT status, invited_by_user_id FROM deal_invitations WHERE deal_id = ? AND investor_user_id = ?')
+    .bind(dealId, scope.user.id).first<{ status: string; invited_by_user_id: number | null }>();
+  const answers = invitation != null && invitation.status !== 'passed';
+  // Guarded on the pass itself: only once this flow entry is 'passed' does the invitation change, so the two land
+  // together or not at all (a D1 batch runs every statement; a guard that wrote nothing must stop this one too).
+  const answer = (uid: string) => env.DB.prepare(
+    `UPDATE deal_invitations SET status = 'passed', responded_at = datetime('now')
+      WHERE deal_id = ? AND investor_user_id = ? AND status <> 'passed'
+        AND EXISTS (SELECT 1 FROM deal_flow_entries WHERE scope_key = ? AND deal_id = ? AND uid = ? AND stage = 'passed')`,
+  ).bind(dealId, scope.user.id, scope.key, dealId, uid);
+  const told = async (written: unknown) => {
+    const answered = answers && Number((written as any)?.meta?.changes) === 1;
+    if (answered) await notifyInvitationAnswer(env, { inviterId: invitation!.invited_by_user_id, investorName: scope.user.name, dealId, response: 'passed' });
+    return answered;
+  };
   if (!entry) {
     await liveDeal(env, dealId);
     let via: Via = 'added';
@@ -255,10 +277,12 @@ export async function passDeal(env: Env, scope: Scope, dealId: number, input: Re
         .bind(uid, scope.key, scope.companyId, scope.user.id, dealId, scope.user.id, via, reason, revisit, revisitAt, note ?? null, scope.key, dealId),
       event(env, scope, dealId, uid, 'entered', null, 'passed'),
       event(env, scope, dealId, uid, 'passed', null, 'passed', reason),
+      ...(answers ? [answer(uid)] : []),
     ]);
     // D4632: another add or pass landed first. Nothing of this one was written.
     if (Number(added[0]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again. Nothing was saved.');
-    return readOne(env, scope, dealId);
+    const invitation_answered = await told(added[3]);
+    return { ...(await readOne(env, scope, dealId)), invitation_answered };
   }
   if (entry.stage === 'passed') throw new FlowError('already_passed', 409, 'You have already passed on this deal.');
   // D4632: the history row first, then the pass, both under the version
@@ -268,10 +292,12 @@ export async function passDeal(env: Env, scope: Scope, dealId: number, input: Re
     env.DB.prepare(`UPDATE deal_flow_entries SET stage = 'passed', stage_changed_at = datetime('now'), updated_at = datetime('now'), pass_reason = ?, passed_at = datetime('now'),
         revisit = ?, revisit_at = ?` + (note === undefined ? '' : ', note = ?') + ' WHERE scope_key = ? AND deal_id = ?' + GUARD)
       .bind(...[reason, revisit, revisitAt, ...(note === undefined ? [] : [note]), scope.key, dealId, ...guardBinds(entry)]),
+    ...(answers ? [answer(entry.uid)] : []),
   ];
   const result = await env.DB.batch(statements);
   if (Number(result[1]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again. Nothing was saved.');
-  return readOne(env, scope, dealId);
+  const invitation_answered = await told(result[2]);
+  return { ...(await readOne(env, scope, dealId)), invitation_answered };
 }
 
 /** One row's events, oldest first. */

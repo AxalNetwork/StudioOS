@@ -34,7 +34,7 @@ import {
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
-  settingsOfSpec, sortRows, viewChanged,
+  passAnswersInvitation, settingsOfSpec, sortRows, viewChanged,
 } from './flowModel';
 import { FlowBoard, FlowBoardLoading, PhoneBoard } from './FlowBoard';
 import { FlowTable, PhoneCards } from './FlowTable';
@@ -386,7 +386,7 @@ export default function DealFlow({ view, scope }) {
         <PeekDrawer row={peekRow} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
       )}
       {dialog?.kind === 'pass' && (
-        <PassDialog row={dialog.row} invited={dialog.row.enteredVia === 'invited'} onClose={() => setDialog(null)}
+        <PassDialog row={dialog.row} invited={passAnswersInvitation(dialog.row)} onClose={() => setDialog(null)}
           onPassed={(next) => { replaceEntry(next); setDialog(null); setToast({ kind: 'moved', text: `You passed on ${dialog.row.name}. The round stays open for other investors.` }); }} />
       )}
       {dialog?.kind === 'back' && <MoveBackDialog row={dialog.row} to={dialog.to} onClose={() => setDialog(null)} onMove={() => confirmMove(dialog.row, dialog.to)} />}
