@@ -182,7 +182,7 @@ r.get('/health', async (c) => {
     const filtered = Boolean(badge) || interventionOnly;
     type HealthListRow = SnapRow & { previous_status: string | null; status_changed_at: string | null };
     const snapshots = new Map<number, HealthListRow>();
-    // Use the same authorized project set as the list, with bounded SQL bindings.
+    // Use the same authorized project set as the list, in bounded batches. The schema has one snapshot per project and date.
     for (let offset = 0; offset < projects.length; offset += 50) {
       const ids = projects.slice(offset, offset + 50).map((p) => p.id);
       const { results } = await c.env.DB.prepare(

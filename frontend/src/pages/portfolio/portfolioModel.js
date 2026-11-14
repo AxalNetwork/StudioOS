@@ -217,7 +217,7 @@ export function healthFor(position, health) {
   if (item) {
     const state = BADGE[item.badge];
     if (!state) return { state: 'Not recorded', reason: 'The snapshot carries no badge.' };
-    return { state, date: item.snapshot_date || null, previous: BADGE[item.previous_status] || null, changedAt: item.status_changed_at || null, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
+    return { state, date: item.snapshot_date || null, previous: Object.hasOwn(item, 'previous_status') ? (BADGE[item.previous_status] || null) : undefined, changedAt: item.status_changed_at, stale: item.stale === true, ageDays: isNum(item.age_days) ? Number(item.age_days) : null, intervention: Boolean(item.intervention) };
   }
   const nm = (health.value.not_measured || []).find((n) => uid && n.uid === uid);
   if (nm && /insufficient|not_enough/.test(String(nm.state))) return { state: 'Not enough evidence', reason: nm.reason || 'Not enough evidence to score health.' };
@@ -643,6 +643,8 @@ export function attentionRulesOf(reads, rows) {
   };
   const healthFlip = health.state !== 'ok' ? { state: health.state } : {
     state: 'ok',
+    partial: list.filter(({ health: h }) => h.state === 'Attention' && (h.previous === undefined
+      || (h.previous && (h.ageDays == null || daysBetween(h.changedAt, h.date) == null)))).map((r) => r.name),
     hits: list.map((r) => ({ key: r.key, name: r.name, text: recentAttentionChange(r.health) }))
       .filter((r) => r.text),
   };

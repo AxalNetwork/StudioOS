@@ -251,7 +251,7 @@ function AttentionRules({ rules, retry }) {
     }
     return (
       <>
-        {rule.hits.length === 0 ? <span className="pf-muted">No company in the book</span> : (
+        {rule.hits.length === 0 ? (!rule.partial?.length && <span className="pf-muted">No company in the book</span>) : (
           <ul className="pf-rule-hits">{rule.hits.map((x) => <li key={x.key}><b>{x.name}</b> {x.text}</li>)}</ul>
         )}
         {rule.partial?.length ? <small className="pf-muted">History for {rule.partial.join(', ')} could not be read.</small> : null}

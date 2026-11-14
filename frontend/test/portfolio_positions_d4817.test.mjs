@@ -142,6 +142,15 @@ function book({ path }) {
 
 /* ---------------------------------------------------------------- tests */
 
+test('an older health response leaves the recent transition rule unreadable for a red company', async () => {
+  const oldHealth = { ...HEALTH, items: HEALTH.items.map(({ previous_status, status_changed_at, ...item }) => item) };
+  const view = await mount(({ path }) => path === '/api/portfolio/health' ? json(oldHealth) : book({ path }));
+  try {
+    assert.match(view.text('rule-health-red'), /History for Northwind Labs could not be read/);
+    assert.doesNotMatch(view.text('rule-health-red'), /No company in the book/);
+  } finally { await view.close(); }
+});
+
 test('populated: the register, its three mark counts, the total and the attention rules', async () => {
   const view = await mount(book);
   try {
