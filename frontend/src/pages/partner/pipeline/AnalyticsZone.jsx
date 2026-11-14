@@ -98,6 +98,8 @@ function AnalyticsTile({ label, value, note, calculation, nr = false }) {
   );
 }
 
+const recordedRate = (value) => (Number.isFinite(value) && value >= 0 && value <= 100 ? value : null);
+
 const shapeName = (s) => (s == null ? 'Not recorded' : String(s).replace(/_/g, ' '));
 
 /**
@@ -157,7 +159,7 @@ export default function PartnerPipelineAnalyticsZone() {
   // How many open quotes the forecast is over (D4838): none is "nothing open to forecast", never $0.
   const forecastOpen = Array.isArray(f?.by_stage) ? f.by_stage.reduce((n, s) => n + (Number(s?.count) || 0), 0) : 0;
   const shapes = useMemo(() => (Array.isArray(d?.by_shape) ? d.by_shape : []), [d]);
-  const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter : []), [d]);
+  const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter.map((q) => ({ ...q, win_rate_pct: recordedRate(q.win_rate_pct) })) : []), [d]);
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
   const lostCount = d?.lost_count ?? 0;
   const hasQuotes = (d?.rows_read ?? p?.quote_count ?? 0) > 0 || forecastOpen > 0 || quarters.length > 0;
