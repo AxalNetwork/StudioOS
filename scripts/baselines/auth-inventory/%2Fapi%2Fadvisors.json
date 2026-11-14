@@ -21,6 +21,11 @@
     "kind": "link_token",
     "state": "unreviewed"
   },
+  "GET /api/advisors/received/deliverables/:uid/file": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
   "PATCH /api/advisors/me/guidance/:uid": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

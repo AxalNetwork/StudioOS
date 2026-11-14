@@ -436,6 +436,12 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
       ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
       ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
+      // #5960 / migration 202611141100: a version's document as a stored file.
+      ['file_key', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_key TEXT'],
+      ['file_name', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_name TEXT'],
+      ['file_type', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_type TEXT'],
+      ['file_size', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_size INTEGER'],
+      ['file_sha256', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_sha256 TEXT'],
     ]);
     await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
