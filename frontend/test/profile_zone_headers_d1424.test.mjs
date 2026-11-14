@@ -159,17 +159,20 @@ test('Investor Home: the thesis band reads, links to Settings, and never guesses
 test('the six bespoke investor zone pages draw ZoneHeader inside a ZonePrimaryScope; the two roots and Positions carry its tools', () => {
   // D4817 part 2 (#5311, PF-02): Positions draws in the Portfolio frame, whose
   // heading and local navigation replace ZoneHeader's; it keeps the header tools.
-  for (const f of ['InvestorPortfolioUpdates', 'InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
+  // D4817 part 4 (#5311, PF-04): Reports (InvestorPortfolioUpdates) does the same.
+  for (const f of ['InvestorPortfolioValueAdd', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
     const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
     assert.match(src, /return <ZonePrimaryScope>/, `${f} is not a primary scope`);
     assert.match(src, /<\/ZonePrimaryScope>;/, `${f} does not close its scope`);
     assert.match(src, /<ZoneHeader /, `${f} lost its ZoneHeader`);
     assert.doesNotMatch(src, /<ZoneNav /, `${f} draws a second pill row`);
   }
-  const positions = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioPositions.jsx'));
-  assert.match(positions, /<PortfolioFrame\s+tab="positions"/, 'Positions left the Portfolio frame');
-  assert.doesNotMatch(positions, /<ZoneNav |<ZoneHeader /, 'Positions draws a second heading or pill row');
-  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorFundLanding']) {
+  for (const [f, tab] of [['InvestorPortfolioPositions', 'positions'], ['InvestorPortfolioUpdates', 'updates']]) {
+    const src = codeOnly(read(`frontend/src/pages/investor/${f}.jsx`));
+    assert.match(src, new RegExp(`<PortfolioFrame\\s+tab="${tab}"`), `${f} left the Portfolio frame`);
+    assert.doesNotMatch(src, /<ZoneNav |<ZoneHeader /, `${f} draws a second heading or pill row`);
+  }
+  for (const f of ['InvestorPortfolioCanvas', 'InvestorPortfolioPositions', 'InvestorPortfolioUpdates', 'InvestorFundLanding']) {
     assert.match(codeOnly(read(`frontend/src/pages/investor/${f}.jsx`)), /<ZoneHeaderTools role="investor"/, `${f} lost its header tools`);
   }
 });

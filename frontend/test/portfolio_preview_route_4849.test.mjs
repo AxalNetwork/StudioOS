@@ -45,7 +45,8 @@ const PORTFOLIO_ROUTES = {
   '/portfolio/health': 'Portfolio',
   // D4817 part 2 (#5311): Positions draws in the same frame, headed "Portfolio" (its tab is the title).
   '/portfolio/positions': 'Portfolio',
-  '/portfolio/updates': 'Updates & KPI collection',
+  // D4817 part 4 (#5311): Reports draws in the same frame, headed "Portfolio".
+  '/portfolio/updates': 'Portfolio',
   '/portfolio/performance': 'Portfolio',
   '/portfolio/value-add': 'Value-add desk',
 };

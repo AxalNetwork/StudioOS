@@ -81,4 +81,6 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 
 | `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
 | `futureClockEvidence.mjs` | D5663: complete TAP and producer provenance before health recovery. |
+| `workspaceInvariants.mjs` | D5573: the six workspace invariants (tenant isolation, reviewed deploy, no double effect, checkpoints kept, no stranded compute, revoked/disallowed never execute) over one normalized observation set; an unexercised check fails. `fromReconcileRows` reads #4594's `RECONCILE` rows. Tests in `workspaceInvariants.test.mjs`. |
+| `workspaceReport.mjs` | D5573: the validation report (evidence class, sample size, config, commit, p50/p95, success %, retry amplification, PR and Git counts) as JSON and Markdown; a mock is only ever `local_mocked` and its cost is "not measured", never 0. Tests in `workspaceReport.test.mjs`. |
 | `prRisk.mjs` | D5580: hunk-level risk classes per overlapping PR pair, the four per-PR evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the Delivery-cluster fixture. |
