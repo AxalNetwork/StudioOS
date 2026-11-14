@@ -82,3 +82,4 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
 | `futureClockEvidence.mjs` | D5663: complete TAP and producer provenance before health recovery. |
 | `prRisk.mjs` | D5580: hunk-level risk classes per overlapping PR pair, the four per-PR evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the Delivery-cluster fixture. |
+| `workIntent.mjs` | D5580 part 2: the WorkIntent view derived from the #5617 claim ref, STATUS claims and the claimant's open PRs (WorkItem fields it cannot fill are null), the duplicate/stale/disappeared-PR/invalid-slot/expiry rules and the soft proceed/coordinate/wait/serialize recommendation; tested in `workIntent.test.mjs`. |

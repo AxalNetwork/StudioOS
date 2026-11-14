@@ -93,12 +93,14 @@ export function render(pr, overlaps, { partial = false } = {}) {
     + evidence
     + '\n\nShared paths are advisory; only merge-tree determines textual conflicts. No PR code was executed.';
 }
-export function summary(overlaps, { partial = false, notes = [] } = {}) {
+/** `sections`: further Markdown sections, already escaped by their builders (D5580 part 2: "Work in flight"). */
+export function summary(overlaps, { partial = false, notes = [], sections = [] } = {}) {
   const involved = [...new Map(overlaps.flatMap(p => [p.a, p.b]).map(p => [p.number, p])).values()].filter(p => p.evidence).sort((a, b) => a.number - b.number);
   return `${MARKER}\n### Open PR overlap summary${partial ? ' (partial)' : ''}\n\n`
     + (overlaps.length ? overlaps.map(pairText).join('\n\n') : 'No overlaps found in the scanned PRs.')
     + '\n\nSuggested landing order:\n' + clusters(overlaps).map(c => '- ' + c.map(p => '#' + p.number).join(' → ')).join('\n')
     + (involved.length ? '\n\nEvidence per PR:\n' + involved.map(p => '- ' + evidenceText(p)).join('\n') : '')
     + notesText(notes)
+    + sections.map(x => `\n\n${x}`).join('')
     + '\n\nAdvisory only. Unchecked pairs are not evidence of a clean merge.';
 }
