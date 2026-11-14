@@ -23,7 +23,7 @@ import DdReviewerPanel from './duediligence/DdReviewer';
 import { ActivityTab, ChecklistTab, FlagsTab, OverviewTab, Who } from './duediligence/DdCaseWork.jsx';
 import { CrossChecksTab, DocumentsTab, RequestsTab, SignOffTab, TeamTab } from './duediligence/DdCaseDeal.jsx';
 import {
-  AssignDialog, BulkDialog, ComposeDialog, ConfirmDialog, DecisionDialog, FlagDialog, NotifyFounderDialog, RaiseFlagDialog,
+  AssignDialog, BulkDialog, ComposeDialog, ConfirmDialog, DealContextDialog, DecisionDialog, FlagDialog, NotifyFounderDialog, RaiseFlagDialog,
   ReportDialog, RequestDueDialog, VerdictDialog, WidenDialog, WithdrawDialog,
 } from './duediligence/DdCaseDialogs.jsx';
 import { ArchiveDialog, ChangeLeadDialog, TargetDateDialog } from './duediligence/DdListDialogs.jsx';
@@ -54,6 +54,7 @@ function CaseDialog({ uid, data, me, dialog, close, done }) {
     case 'widen': return <WidenDialog {...common} depth={cs.template_depth} />;
     case 'compose': return <ComposeDialog {...common} data={data} />;
     case 'assign': return <AssignDialog {...common} data={data} sectionId={props.sectionId} />;
+    case 'deal-context': return <DealContextDialog {...common} data={data} />;
     case 'bulk': return <BulkDialog {...common} data={data} kind={props.kind} itemIds={props.itemIds} />;
     case 'req-due': return <RequestDueDialog {...common} req={props.req} />;
     case 'req-withdraw': return <WithdrawDialog {...common} req={props.req} />;

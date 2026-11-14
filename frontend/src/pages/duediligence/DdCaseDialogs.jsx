@@ -16,10 +16,12 @@ import {
   decisionChoices, depthWord, flagChange, flagSourceWord, historyLines, peopleOf, personName, raiseBody, widenChoices,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
+import { priorReviewWords } from './ddDealContextModel.js';
 import { Dialog, Note, Refusal, dangerCls, fieldCls, inputCls, muted, useSend } from './DdUi.jsx';
 
 const useCaseSend = () => useSend(caseRefusal);
 const today = () => new Date().toISOString().slice(0, 10);
+export { default as DealContextDialog } from './DdDealContextDialog.jsx';
 
 /** A change that needs no field: what it does, who is told, then Cancel or the change. */
 export function ConfirmDialog({ title, testId, lines, action, danger, run, fallback, onClose, onDone, done }) {
@@ -336,8 +338,24 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
   const [pick, setPick] = useState(null);
   const [role, setRole] = useState('reviewer');
   const [found, setFound] = useState({ items: null, failed: false });
+  const [suggestions, setSuggestions] = useState({ status: 'idle', items: [] });
   const seq = useRef(0);
   const { busy, error, setError, send } = useCaseSend();
+  const section = (data.sections || []).find((s) => String(s.id) === sid);
+  const sectionKey = section?.section_key;
+  useEffect(() => {
+    let alive = true;
+    setPick(null);
+    if (!sectionKey) { setSuggestions({ status: 'idle', items: [] }); return undefined; }
+    setSuggestions({ status: 'loading', items: [] });
+    dd.experts(sectionKey).then((r) => {
+      if (alive) setSuggestions(Array.isArray(r?.suggestions)
+        ? { status: 'ready', items: r.suggestions.filter((p) => Number.isSafeInteger(Number(p.id)) && Number(p.id) > 0)
+          .map((p) => ({ id: Number(p.id), name: p.name, role: p.role, prior_reviews: p.prior_reviews })) }
+        : { status: 'unreadable', items: [] });
+    }).catch(() => { if (alive) setSuggestions({ status: 'unreadable', items: [] }); });
+    return () => { alive = false; };
+  }, [sectionKey, uid]);
   useEffect(() => {
     const mine = ++seq.current;
     const t = setTimeout(() => {
@@ -346,7 +364,6 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
-  const section = (data.sections || []).find((s) => String(s.id) === sid);
   const submit = () => {
     if (!sid) { setError('Choose the section.'); return; }
     if (!pick) { setError('Choose who to assign.'); return; }
@@ -355,11 +372,25 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
   return (
     <Dialog title="Assign to a section" sub="They are told in the bell and by email, with a link to this section that works for 14 days." testId="dd-assign" onClose={onClose} onSubmit={submit} action="Assign" busy={busy}>
       <label className="block"><span className={fieldCls}>Section</span>
-        <select className={inputCls} value={sid} onChange={(e) => setSid(e.target.value)} data-testid="dd-assign-section">
+        <select className={inputCls} value={sid} onChange={(e) => { setSid(e.target.value); setPick(null); setError(''); }} data-testid="dd-assign-section">
           <option value="">Choose…</option>
           {(data.sections || []).map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
         </select>
       </label>
+      <section className="space-y-1.5" data-testid="dd-assign-suggestions">
+        <h3 className="m-0 text-[13px] font-semibold">Suggested reviewers</h3>
+        <p className={`m-0 text-[12px] ${muted}`}>Based on recorded prior reviews for this section. Choose a name, or search below.</p>
+        {suggestions.status === 'loading' ? <p className={`m-0 text-[12px] ${muted}`} aria-busy="true">Reading suggestions…</p> : null}
+        {suggestions.status === 'unreadable' ? <p role="status" className={`m-0 text-[12px] ${muted}`}>Suggested reviewers could not be read. Search by name below.</p> : null}
+        {suggestions.status === 'idle' ? <p className={`m-0 text-[12px] ${muted}`}>{sid ? 'Suggestions are unavailable for this section. Search by name below.' : 'Choose a section to read its suggestions.'}</p> : null}
+        {suggestions.status === 'ready' && !suggestions.items.length ? <p className={`m-0 text-[12px] ${muted}`}>No suggested reviewers are recorded for this section. Search by name below.</p> : null}
+        {suggestions.items.map((p) => <button key={p.id} type="button" aria-pressed={Number(pick?.id) === Number(p.id)} onClick={() => { setPick(p); setError(''); }}
+          className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] ${Number(pick?.id) === Number(p.id) ? 'bg-violet-50 font-semibold dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+          data-testid={`dd-assign-suggestion-${p.id}`}>
+          <span>{p.name || 'Name not recorded'}{p.role ? <span className={`ml-2 text-[12px] ${muted}`}>{p.role}</span> : null}</span>
+          <span className={`text-[12px] ${muted}`}>{priorReviewWords(p.prior_reviews)}</span>
+        </button>)}
+      </section>
       <label className="block"><span className={fieldCls}>Person</span>
         <input className={inputCls} value={q} onChange={(e) => { setQ(e.target.value); setPick(null); }} placeholder="Search by name" data-testid="dd-assign-q" />
       </label>
@@ -377,6 +408,7 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
         <label className="flex items-start gap-2 text-[13px]"><input type="radio" name="dd-assign-role" checked={role === 'reviewer'} onChange={() => setRole('reviewer')} /><span>Reviewer<span className={`block text-[12px] ${muted}`}>Works the section’s checklist and flags, and records its verdict.</span></span></label>
         <label className="flex items-start gap-2 text-[13px]"><input type="radio" name="dd-assign-role" checked={role === 'observer'} onChange={() => setRole('observer')} data-testid="dd-assign-observer" /><span>Observer<span className={`block text-[12px] ${muted}`}>Reads the section; changes nothing.</span></span></label>
       </fieldset>
+      <Note>The assignment and role are recorded in case Activity.</Note>
       <Refusal text={error} testId="dd-assign-error" />
     </Dialog>
   );
