@@ -503,7 +503,33 @@ test('D686 recorded approval survives a publisher that throws; removing the catc
   const req=createRequire(pathToFileURL(resolve('cloudflare-worker/src/services/roundCalls.ts')));
   let js=stripTypeScriptTypes(modified,{mode:'strip'});
   js=js.replace(/^((?:import\s+[^'";]+|export\s*\{[^}]*\})\s+from\s*['"])([^'"]+)(['"])/gm,
-    (_all,prefix,spec,quote)=>prefix+(spec.startsWith('data:')?spec:spec.startsWith('.')?pathToFileURL(resolve('cloudflare-worker/src/services',spec+'.ts')).href:pathToFileURL(req.resolve(spec)).href)+quote);
+    (_all,prefix,spec,quote)=>{
+      if(spec.startsWith('data:'))return prefix+spec+quote;
+      const target=spec.startsWith('.')?resolve('cloudflare-worker/src/services',spec):req.resolve(spec);
+      return prefix+pathToFileURL(spec.startsWith('.')&&!existsSync(target)?target+'.ts':target).href+quote;
+    });
   const mutant=await import('data:text/javascript;base64,'+Buffer.from(js+'\n// notice regression').toString('base64'));
   await assert.rejects(()=>check(mutant),assert.AssertionError);
+});
+
+test('terms wording is flag- and owner-gated and renders only recorded financial values', async () => {
+  const f = await fixture('draft');
+  const body = { project_id: 1, ...terms };
+  assert.equal((await request(f, routes, '/new/terms-draft', 1, 'POST', body, { ROUND_CALLS_ENABLED: 'false' })).status, 503);
+  assert.equal((await request(f, routes, '/call/terms-draft', 2, 'POST', body)).status, 404);
+  assert.equal((await request(f, routes, '/new/terms-draft', 1, 'POST', { ...body, minimum_cheque_cents: 0 })).status, 400);
+  f.db.exec(readFileSync('cloudflare-worker/sql/migrations/465_ai_rail_preferences.sql','utf8'));
+  const railPage = 'Founder · Raise · Capital relationships';
+  f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('round-terms-off',1,?,'','manual')").run(railPage.toLowerCase());
+  const paused = await request(f, routes, '/new/terms-draft', 1, 'POST', body, {}, { 'X-Rail-Page': encodeURIComponent(railPage) });
+  assert.equal(paused.status, 403);
+  assert.equal(paused.body.error, 'assist_off');
+  f.db.exec("UPDATE round_calls SET state='sent' WHERE uid='call'");
+  assert.equal((await request(f, routes, '/call/terms-draft', 1, 'POST', body)).status, 409);
+  const values = { AMOUNT: '$125,000', MINIMUM: '$1,000' };
+  assert.equal(service.renderRoundTermsDraft('Raise up to {AMOUNT}. The minimum cheque is {MINIMUM}.', values), 'Raise up to $125,000. The minimum cheque is $1,000.');
+  assert.equal(service.renderRoundTermsDraft('Target: {AMOUNT} (minimum {MINIMUM}).', values), 'Target: $125,000 (minimum $1,000).');
+  for (const output of ['Raise $999 for {AMOUNT}, minimum {MINIMUM}.', '{AMOUNT} and {AMOUNT}.', '{AMOUNT} alone.', 'Guaranteed returns of {AMOUNT}, minimum {MINIMUM}.']) {
+    assert.equal(service.renderRoundTermsDraft(output, values), null);
+  }
 });
