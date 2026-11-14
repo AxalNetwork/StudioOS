@@ -519,7 +519,6 @@ sleep frontend/test/add_tokens_entry_d1288.test.mjs
 sleep frontend/test/add_tokens_models_d1285.test.mjs
 sleep frontend/test/admin_advisors_firms_d979.test.mjs
 sleep frontend/test/admin_advisors_partners_d972.test.mjs
-sleep frontend/test/admin_approvals_d1038.test.mjs
 sleep frontend/test/admin_approvals_v2_4814.test.mjs
 sleep frontend/test/admin_approvals_v2_4814_part2.test.mjs
 sleep frontend/test/admin_approvals_v2_4814_part3.test.mjs
