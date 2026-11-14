@@ -1,5 +1,5 @@
 /**
- * #4622 (Studio audit 4/5): the investor Studio's two record reads, each on its own.
+ * #4622 (Studio audit 4/5): the investor Studio's record reads, each on its own.
  *
  * `InvestorStudioHome` read the portfolio and the calendar together and committed
  * both only once both had settled, so a slow calendar held the portfolio tile on
@@ -21,7 +21,7 @@ import { fundBookletsApi } from '../../lib/api/fundBooklets.js';
 import { reportError } from '../../lib/log';
 import { INVESTOR_AGENDA_KINDS } from '../studio/studioAgenda';
 
-export function useInvestorSources({ previewing = false, client = api } = {}) {
+export function useInvestorSources({ previewing = false, client = api, noticesClient = fundNoticesApi, bookletClient = fundBookletsApi } = {}) {
   const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
   const [failures, setFailures] = useState({});
   const alive = useRef(true);
@@ -33,10 +33,10 @@ export function useInvestorSources({ previewing = false, client = api } = {}) {
     portfolio: () => client.positionsAnalytics(),
     events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }),
     fund: () => client.fundsLpPortal(),
-    notices: () => fundNoticesApi.mine(),
+    notices: () => noticesClient.mine(),
     trust: () => client.trustMe(),
-    booklet: () => fundBookletsApi.mine().catch(error => { if (error?.status === 404) return null; throw error; }),
-  }), [client]);
+    booklet: () => bookletClient.mine().catch(error => { if (error?.status === 404) return null; throw error; }),
+  }), [client, noticesClient, bookletClient]);
 
   const read = useCallback((key) => {
     const mine = (sequence.current[key] || 0) + 1;

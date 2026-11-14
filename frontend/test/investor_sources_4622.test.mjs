@@ -14,13 +14,18 @@ import { useInvestorSources } from '../src/pages/investor/useInvestorSources.js'
 const deferred = () => { let resolve; let reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 
 function setup(props = {}) {
-  const calls = { portfolio: [], events: [] };
+  const calls = { portfolio: [], events: [], fund: [], notices: [], trust: [], booklet: [] };
+  const read = (key) => () => { const d = deferred(); calls[key].push(d); return d.promise; };
   const client = {
-    positionsAnalytics: () => { const d = deferred(); calls.portfolio.push(d); return d.promise; },
-    listCalendarEvents: () => { const d = deferred(); calls.events.push(d); return d.promise; },
+    positionsAnalytics: read('portfolio'),
+    listCalendarEvents: read('events'),
+    fundsLpPortal: read('fund'),
+    trustMe: read('trust'),
   };
+  const noticesClient = { mine: read('notices') };
+  const bookletClient = { mine: read('booklet') };
   const seen = { current: null };
-  const Probe = (p) => { seen.current = useInvestorSources({ client, ...p }); return null; };
+  const Probe = (p) => { seen.current = useInvestorSources({ client, noticesClient, bookletClient, ...p }); return null; };
   return { calls, seen, mount: () => mountForm(h(Probe, props)) };
 }
 const settle = async (m) => { await m.flush(); await m.flush(); };
@@ -30,9 +35,9 @@ test('both reads start together, and each is on the page the moment it settles',
   const t = setup();
   const m = await t.mount(); await settle(m);
   assert.equal(t.calls.portfolio.length, 1); assert.equal(t.calls.events.length, 1, 'both asked before either answered');
-  assert.deepEqual(t.seen.current.records, { portfolio: undefined, events: undefined });
+  assert.deepEqual(t.seen.current.records, Object.fromEntries(Object.keys(t.calls).map(key => [key, undefined])));
   await act2(m, () => t.calls.portfolio[0].resolve({ total: 3 }));
-  assert.deepEqual(t.seen.current.records, { portfolio: { total: 3 }, events: undefined }, 'the portfolio is drawn while the calendar is still loading');
+  assert.deepEqual(t.seen.current.records, { ...Object.fromEntries(Object.keys(t.calls).map(key => [key, undefined])), portfolio: { total: 3 } }, 'the portfolio is drawn while the other sources are still loading');
   await act2(m, () => t.calls.events[0].resolve([{ id: 1 }]));
   assert.deepEqual(t.seen.current.records.events, [{ id: 1 }]);
   await m.unmount();
@@ -83,12 +88,31 @@ test('a read that a newer one has superseded is dropped', async () => {
 test('an admin previewing reads nothing, and is withheld; refresh asks for both again', async () => {
   const t = setup({ previewing: true });
   const m = await t.mount(); await settle(m);
-  assert.deepEqual([t.calls.portfolio.length, t.calls.events.length], [0, 0]);
-  assert.deepEqual(t.seen.current.records, { portfolio: null, events: null });
+  assert.ok(Object.values(t.calls).every(calls => calls.length === 0));
+  assert.deepEqual(t.seen.current.records, Object.fromEntries(Object.keys(t.calls).map(key => [key, null])));
   await m.unmount();
   const live = setup();
   const m2 = await live.mount(); await settle(m2);
   await act2(m2, () => live.seen.current.readAll());
-  assert.deepEqual([live.calls.portfolio.length, live.calls.events.length], [2, 2], 'refresh asks again for both');
+  assert.ok(Object.values(live.calls).every(calls => calls.length === 2), 'refresh asks again for each source');
   await m2.unmount();
+});
+
+
+test('fund and booklet settle independently and only the failed notice is retried', async () => {
+  const t = setup();
+  const m = await t.mount(); await settle(m);
+  assert.ok(Object.values(t.calls).every(calls => calls.length === 1));
+  await act2(m, () => {
+    t.calls.fund[0].resolve({ lp_holdings: [] });
+    t.calls.notices[0].reject(new Error('notices unavailable'));
+    t.calls.booklet[0].reject(Object.assign(new Error('not found'), { status: 404 }));
+  });
+  assert.deepEqual(t.seen.current.records.fund, { lp_holdings: [] });
+  assert.equal(t.seen.current.records.booklet, null);
+  assert.equal(t.seen.current.records.trust, undefined);
+  assert.deepEqual(t.seen.current.failures, { notices: 'notices unavailable' });
+  await act2(m, () => t.seen.current.retryFailed());
+  for (const [key, calls] of Object.entries(t.calls)) assert.equal(calls.length, key === 'notices' ? 2 : 1);
+  await m.unmount();
 });
