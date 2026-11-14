@@ -7,7 +7,7 @@
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/grow_export_6124.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -90,7 +90,9 @@ async function download(f: { env: any }, who: number, slug: string, qs = '') {
     rows: res.headers.get('X-Export-Rows'), text: await res.text() };
 }
 const lines = (text: string) => text.split('\r\n');
-const TODAY = new Date().toISOString().slice(0, 10);
+// The exports stamp today's date; the clock is frozen so the expected names and as-of dates are fixed.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-14T12:00:00Z') });
+const TODAY = '2026-11-14';
 
 function seed(db: DatabaseSync) {
   db.exec(`INSERT INTO growth_partners (uid, project_id, name, type, stage, terms) VALUES
