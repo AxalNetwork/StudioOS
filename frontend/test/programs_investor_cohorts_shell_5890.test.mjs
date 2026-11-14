@@ -66,9 +66,6 @@ async function check(suffix, registryFails, verify) {
         h(Route, { path: base, element: h(ProgramPage) }),
         h(Route, { path: `${base}/activity`, element: h(ProgramPage) }),
         investorRoutes({ guard })))))));
-    for (let attempt = 0; attempt < 60 && !byId('programs-tabs'); attempt += 1) {
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-    }
     verify(byId, text, props);
   } finally {
     await act(async () => root.unmount());
