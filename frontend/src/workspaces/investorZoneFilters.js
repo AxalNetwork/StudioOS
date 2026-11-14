@@ -30,10 +30,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * profile is empty, and it stays that way by construction: a zone without a
  * row fails the exact-set check there.
  *
- * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
- * `funds/reporting` each carry four real predicates over rows they load; their
- * entries here name the keys those pages already use, and not one predicate is
- * touched. The point of the move is the header row's shape, not a rewrite of
+ * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps`
+ * carries four real predicates over rows it loads; its entry here names the
+ * keys that page already uses, and not one predicate is touched.
+ * (`funds/reporting` was listed here too, and two of its four keys matched no
+ * stored status; #6230 fixed them.) The point of the move is the header row's shape, not a rewrite of
  * working code.
  */
 
@@ -153,15 +154,17 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Audit trail', unbuilt: NO_LEDGER_LINES },
   ],
 
-  // Four real predicates over `api.lpReportsList` / `api.fundsReportPeriods`.
-  // `Delivery` narrows on optional fields, which is honest: a period with no
-  // delivery record simply does not match, and the zone's ops half already
-  // notes that delivery is counted and never itemised.
+  // #6230: three predicates over `api.fundsReportPeriods`, the selected fund's
+  // periods. A period's `status` is `draft` or `issued` (migration 163); the
+  // keys were `published` and `drafted`, which no period carries, so both
+  // chips selected nothing. They wear the stored words now. `Delivery` narrowed
+  // on delivery fields no period has, so it also selected nothing; it is a
+  // stated gap instead.
   'funds/reporting': [
-    { canvas: 'All periods', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Drafted', key: 'drafted' },
-    { canvas: 'Delivery', key: 'delivery' },
+    { canvas: 'All periods', key: 'all', label: 'All periods {n}' },
+    { canvas: 'Published', key: 'issued', label: 'Issued {n}' },
+    { canvas: 'Drafted', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Delivery', unbuilt: 'a period records when it was issued, not which LP received it, so there is no delivery state to filter by', hover: 'Delivery to each LP is not tracked, so there is nothing to filter.' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
