@@ -84,11 +84,11 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
     [rows[index], rows[next]] = [rows[next], rows[index]];
     return { ...previous, narrative: { ...previous.narrative, [section]: rows } };
   });
+  const hasInvalidEntries = Object.entries(form.narrative).some(([section, entries]) => entries.some(entry => reportEntryError(section, entry)));
   const validate = () => {
-    const bad = Object.entries(form.narrative).some(([section, entries]) => entries.some(entry => reportEntryError(section, entry)));
     setValidated(true);
-    if (bad) setError('Correct the marked entries before saving.');
-    return !bad;
+    setError(null);
+    return !hasInvalidEntries;
   };
   const deleteDraft = async () => {
     if (!editable || !form.id || !deleting || pending) return;
@@ -149,6 +149,7 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
       {editable && <button type="button" disabled={disabled || form.narrative[section].length >= (section === 'letter' || section === 'outlook' ? 50 : 100)} onClick={() => add(section, section === 'letter' || section === 'outlook' ? '' : section === 'developments' ? { date: '', title: '', body: '' } : { d: '', e: '' })}>Add {section === 'letter' || section === 'outlook' ? `${section} paragraph` : section === 'developments' ? 'development' : 'subsequent event'}</button>}
     </article>)}
     {editable && form.updated_at && <p>Saved at <time dateTime={form.updated_at}>{form.updated_at}</time></p>}
+    {validated && hasInvalidEntries && <p role="alert">Correct the marked entries before saving.</p>}
     {error && <p role="alert">{error}</p>}
     {admin && form.id && <PackCard data={data} user={user} onChanged={() => onSaved(form.id)} />}
     <div className="fd-actions">{editable && <><button type="button" disabled={pending} onClick={() => save(false)}>{pending ? 'Saving…' : 'Save draft'}</button>{!admin && <button type="button" disabled={pending} onClick={() => { if (validate()) setConfirm(true); }}>Issue</button>}{form.id && <button type="button" disabled={pending} onClick={() => setDeleting(true)}>Delete draft</button>}</>}

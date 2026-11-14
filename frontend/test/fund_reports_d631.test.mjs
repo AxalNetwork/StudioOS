@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import FundPage, { fundMoney } from '../src/pages/FundPage.jsx';
+import { mountContracts } from './_contracts_dom.mjs';
 import FundReportPeriodPage from '../src/pages/FundReportPeriodPage.jsx';
 import { readableFund, readablePeriod } from '../src/hooks/useFundReport.js';
 import { fundReportsApi } from '../src/lib/api/fundReports.js';
@@ -50,6 +51,18 @@ test('real F2 draft renders all narrative sections and editable controls', () =>
   assert.match(html, /aria-label="Period label"[^>]*readOnly/);
   assert.doesNotMatch(html, /Issued · read-only|Issue a correcting period|role="dialog"/);
 });
+test('the report validation summary clears when the marked entry is corrected', async () => {
+  const data = { ...page, period: { ...period, narrative: { ...period.narrative, letter: [''] } } };
+  const view = await mountContracts(React.createElement(FundReportPeriodPage, { reading: ready(data) }), '/funds/10/reporting/1');
+  try {
+    await view.click('Issue');
+    assert.match(view.text(), /Correct the marked entries before saving/);
+    assert.match(view.text(), /Enter a paragraph/);
+    await view.fill('letter paragraph 1', 'Corrected paragraph.');
+    assert.doesNotMatch(view.text(), /Correct the marked entries before saving|Enter a paragraph/);
+  } finally { await view.unmount(); }
+});
+
 test('real F2 issued report is read-only, identifies issue and links its separate correction', () => {
   const issued = { ...period, status: 'issued', issued_at: '2026-07-15T10:00:00Z', issued_by: 2 };
   const html = render(FundReportPeriodPage, ready({ ...page, period: issued }));
