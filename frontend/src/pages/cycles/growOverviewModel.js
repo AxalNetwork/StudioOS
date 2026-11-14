@@ -11,7 +11,18 @@ export const GROW_AREAS = Object.freeze([
   { key: 'markets', name: 'Markets', path: '/grow/market-expansion', aliases: ['market-expansion'] },
   { key: 'company', name: 'Company', path: '/grow/durable-company-building', aliases: ['durable-company-building', 'brand'] },
 ]);
+/**
+ * #6109: the two module pages that share a tab with a desk say which half of
+ * the pair they are. The tab still lights Talent or Partnerships (D4862); the
+ * heading no longer claims to be that desk.
+ */
+export const GROW_MODULE_TITLES = Object.freeze({
+  'team-expansion': 'Talent · Roles',
+  'partner-network': 'Partnerships · Partners',
+});
 export const growArea = (key = '') => GROW_AREAS.find((a) => a.key === key || a.aliases.includes(key)) || null;
+/** A Grow module page's heading: its own title where it has one, else its area's name. */
+export const growModuleTitle = (slug = '') => GROW_MODULE_TITLES[slug] || growArea(slug)?.name || null;
 export const growTabs = (search = '', active = '') => GROW_AREAS.map((a) => ({ key: a.key, name: a.name, href: a.path + projectSearch(search), active: a === growArea(active || '') }));
 const GROW_SUBSECTIONS = [
   [{ key: 'focus', name: 'Focus' }, { key: 'revenue-and-traction', name: 'KPIs and revenue' }],
