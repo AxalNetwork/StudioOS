@@ -3,8 +3,9 @@
  * PFA16): one portfolio company's workspace at `/portfolio/companies/:uid` —
  * Overview, Financials, Reports, Support and Activity — in the shared
  * Portfolio frame. The real page is mounted against a stubbed `fetch` in its
- * populated, Not recorded and Unreadable states; Ask and Waive on Reports are
- * checked to behave exactly as before.
+ * populated, Not recorded and Unreadable states. Ask and Waive on Reports
+ * were rebuilt by part 9 (Review, a confirm naming the act, a Receipt); test
+ * 4 is re-aimed at that flow, and `portfolio_report_ask_d4817` covers it.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/portfolio_company_d4817.test.mjs
  *
@@ -22,7 +23,7 @@
  *   - the old `/terms` address drawing Overview instead of Financials'
  *     Ownership & rights → test 1;
  *   - the Activity filter leaving the other sources drawn → test 1;
- *   - the Ask dialog's confirm posting to `/waive` → test 4.
+ *   - the Ask Review's confirm posting to `/waive` → test 4.
  * (Reverted, all five pass.)
  */
 import test from 'node:test';
@@ -335,7 +336,7 @@ test('3 · Unreadable: each failed source says so with its own Retry; its neighb
   } finally { await a.close(); }
 });
 
-test('4 · Reports: the timeline’s Ask and Waive are unchanged — an in-page dialog each, nothing posted before the press', async () => {
+test('4 · Reports: the timeline’s Ask and Waive open the part 9 Review in-page; nothing is posted before the confirm', async () => {
   const posted = [];
   const routes = ROUTES({
     'POST /reporting/periods/pm9/ask': (p) => { posted.push(p); return { ok: true, asked: true }; },
@@ -348,13 +349,16 @@ test('4 · Reports: the timeline’s Ask and Waive are unchanged — an in-page 
     assert.ok(v.has('company-period-ask-pm9') && v.has('company-period-waive-pm9') && !v.has('company-period-ask-pq3'));
     assert.match(v.text('company-reports'), /Updates you received.*September note/);
     await v.click('company-period-ask-pm9');
-    assert.match(v.text('company-ask-dialog'), /Ask Acme Robotics for the Sep 2026 · Monthly financial statements\?.*The company is told.*Nobody else sees your request.*once per period/);
+    assert.match(v.text('report-review-ask'), /Ask Acme Robotics for its report.*Sep 2026 · Monthly financial statements.*once per period/);
     assert.deepEqual(v.writes(), []);
-    await v.click('company-ask-confirm');
+    assert.equal(v.text('report-review-confirm'), 'Ask Acme Robotics · Sep 2026');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask']);
+    await v.click('report-receipt-done');
     await v.click('company-period-waive-pm9');
-    assert.match(v.text('company-waive-dialog'), /Waive Sep 2026 for Acme Robotics\?.*waived by you.*cannot be undone here/);
-    await v.click('company-waive-confirm');
+    assert.match(v.text('report-review-waive'), /Waive this reporting period.*waived by you.*cannot be undone here/);
+    assert.equal(v.text('report-review-confirm'), 'Waive Acme Robotics · Sep 2026');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask', '/reporting/periods/pm9/waive']);
   } finally { await v.close(); }
 });

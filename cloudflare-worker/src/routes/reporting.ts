@@ -23,6 +23,15 @@
  *                                 tells the founder team
  *   POST /periods/:uid/waive      the period is waived by the holder
  *
+ * D4817 part 9 (#5311, addendum PFA03–PFA05, PFA10): both investor reads say
+ * whether the caller may act (`can_act`, false for a support session, with
+ * the sentence the write would refuse with), and each period carries the
+ * caller's own ask (`asked_at`) and who waived it (`waived_by_you`: true,
+ * false, or null when the row records no waiver or no waiver's author). The
+ * ask and the waive answer with the record they stored, read back: the
+ * event's time, the period, and for an ask how many of the founder team's
+ * in-app notices were stored (email delivery is never confirmed here).
+ *
  * AN INVESTOR NEVER SEES ANOTHER INVESTOR. Every investor read and write is
  * scoped by `holder_user_id = caller`; another investor's duty or period is
  * the same 404 as one that does not exist, and the investor's rows carry no
@@ -76,7 +85,7 @@ type DutyRow = {
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
   expected_on: string | null; expected_note: string | null; waived_at: string | null; met_update_id: number | null; met_at: string | null;
-  report_uid?: string | null;
+  report_uid?: string | null; waived_by?: number | null;
 };
 
 /** The duty's words and terms. `withHolder` is the founder's view; an investor's never names a holder. */
@@ -119,7 +128,7 @@ function record(periods: Array<{ duty_uid: string; state: string }>) {
 async function periodsOf(env: Env, dutyIds: number[]): Promise<PeriodRow[]> {
   if (!dutyIds.length) return [];
   const rows = (await env.DB.prepare(
-    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, met_update_id, met_at,
+    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, waived_by, met_update_id, met_at,
             (SELECT u.uid FROM portfolio_updates u WHERE u.id = reporting_periods.met_update_id) AS report_uid
        FROM reporting_periods WHERE duty_id IN (SELECT value FROM json_each(?)) ORDER BY period_start, duty_id`,
   ).bind(JSON.stringify(dutyIds)).all<PeriodRow>()).results || [];
@@ -232,10 +241,15 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
 async function companies(env: Env, userId: number, projectId: number | null) {
   const duties = await ownDuties(env, userId, projectId);
   const day = today();
-  const periods = periodsWithState(duties, await periodsOf(env, duties.map((d) => d.id)), day);
-  const asked = new Set(((await env.DB.prepare(
-    `SELECT p.uid FROM reporting_events e JOIN reporting_periods p ON p.id = e.period_id WHERE e.event = 'asked' AND e.actor_user_id = ?`,
-  ).bind(userId).all<any>()).results || []).map((x: any) => x.uid));
+  const raw = await periodsOf(env, duties.map((d) => d.id));
+  const periods = periodsWithState(duties, raw, day);
+  // D4817 part 9: who waived each period, as the caller may read it: themself, someone else (never named), or not recorded.
+  const waivedBy = new Map(raw.map((p) => [p.uid, !p.waived_at || p.waived_by == null ? null : Number(p.waived_by) === userId]));
+  // The caller's own ask per period, with when it was stored: the audit row is the record.
+  const asked = new Map(((await env.DB.prepare(
+    `SELECT p.uid, MAX(e.created_at) AS asked_at FROM reporting_events e JOIN reporting_periods p ON p.id = e.period_id
+      WHERE e.event = 'asked' AND e.actor_user_id = ? GROUP BY p.uid`,
+  ).bind(userId).all<any>()).results || []).map((x: any) => [x.uid, x.asked_at ?? null]));
   const rec = record(periods);
   const byProject = new Map<number, any>();
   for (const d of duties) {
@@ -245,15 +259,22 @@ async function companies(env: Env, userId: number, projectId: number | null) {
   }
   for (const p of periods) {
     const d = duties.find((x) => x.uid === p.duty_uid)!;
-    byProject.get(d.project_id).periods.push({ ...p, asked: asked.has(p.uid) });
+    byProject.get(d.project_id).periods.push({ ...p, asked: asked.has(p.uid), asked_at: asked.get(p.uid) ?? null, waived_by_you: waivedBy.get(p.uid) ?? null });
   }
   return { today: day, companies: [...byProject.values()] };
+}
+
+const ACT_REFUSED = 'A support session cannot ask for a report or waive a period.';
+/** D4817 part 9: whether the caller may ask or waive here, and the sentence the write would refuse with when not. */
+async function actAs(c: any) {
+  const support = await isSupportSession(c);
+  return { can_act: !support, act_refusal: support ? ACT_REFUSED : null };
 }
 
 r.get('/portfolio', async (c) => {
   const user = await requireAuth(c);
   c.header('Cache-Control', 'no-store');
-  return c.json({ ok: true, ...(await companies(c.env, Number(user.id), null)) });
+  return c.json({ ok: true, ...(await actAs(c)), ...(await companies(c.env, Number(user.id), null)) });
 });
 
 r.get('/companies/:projectUid', async (c) => {
@@ -264,7 +285,7 @@ r.get('/companies/:projectUid', async (c) => {
   const p = await c.env.DB.prepare('SELECT id FROM projects WHERE uid = ?').bind(uid).first<{ id: number }>();
   const out = p ? await companies(c.env, Number(user.id), Number(p.id)) : null;
   if (!out || !out.companies.length) throw new Refusal(404, 'not_found', 'No such company.');
-  return c.json({ ok: true, today: out.today, company: out.companies[0] });
+  return c.json({ ok: true, today: out.today, ...(await actAs(c)), company: out.companies[0] });
 });
 
 /** The caller's own period, with its duty's terms; another investor's is the same 404 as none. */
@@ -299,16 +320,28 @@ r.post('/periods/:uid/ask', async (c) => {
   ]);
   if (!Number((chase as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_asked', 'You already asked for this period’s report.');
   // The founder team is told. Best-effort: the chase and the event are the record.
+  // D4817 part 9: count the in-app notices actually stored; email delivery is not confirmed here.
+  const told: { team: number | null; in_app: number } = { team: null, in_app: 0 };
   try {
-    for (const userId of await founderTeam(c.env, Number(p.project_id))) {
-      await notify(c.env, {
+    const team = await founderTeam(c.env, Number(p.project_id));
+    told.team = team.length;
+    for (const userId of team) {
+      const notice = await notify(c.env, {
         userId, type: 'reporting_asked', title: `An investor asked for the ${p.period_label} ${KIND_WORDS[p.kind as Kind]?.toLowerCase() || 'report'}`,
         body: 'Prepare it from Reporting, or give an expected date.', link: `/grow/reporting?project_id=${p.project_id}`,
         payload: { project_id: p.project_id, period_label: p.period_label }, channels: ['in_app', 'email'], category: 'portfolio',
       });
+      if (notice != null) told.in_app += 1;
     }
   } catch { console.warn('[reporting] ask notify failed'); }
-  return c.json({ ok: true, asked: true, chase_uid: chaseUid });
+  // The receipt is the stored row, read back, never the clock of this request.
+  const stored = await c.env.DB.prepare(
+    `SELECT created_at FROM reporting_events WHERE period_id = ? AND actor_user_id = ? AND event = 'asked' ORDER BY id DESC LIMIT 1`,
+  ).bind(p.id, user.id).first<{ created_at: string | null }>();
+  return c.json({
+    ok: true, asked: true, chase_uid: chaseUid, period: { uid: p.uid, label: p.period_label }, asked_at: stored?.created_at ?? null, by_you: true,
+    told,
+  });
 });
 
 r.post('/periods/:uid/waive', async (c) => {
@@ -326,7 +359,13 @@ r.post('/periods/:uid/waive', async (c) => {
     ).bind(p.project_id, p.duty_id, p.id, user.id),
   ]);
   if (!Number((upd as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_waived', 'You already waived this period.');
-  return c.json({ ok: true, waived: true });
+  // D4817 part 9: the receipt is the row as stored.
+  const stored = await c.env.DB.prepare('SELECT waived_at, waived_by FROM reporting_periods WHERE id = ?').bind(p.id)
+    .first<{ waived_at: string | null; waived_by: number | null }>();
+  return c.json({
+    ok: true, waived: true, period: { uid: p.uid, label: p.period_label }, waived_at: stored?.waived_at ?? null,
+    waived_by_you: stored?.waived_by == null ? null : Number(stored.waived_by) === Number(user.id),
+  });
 });
 
 export default r;

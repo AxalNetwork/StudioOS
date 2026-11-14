@@ -1,0 +1,30 @@
+/* D4817 part 9 (#5311, addendum PFA03–PFA05, PFA10): the reporting obligation
+   card, and the Review and Receipt of Ask and Waive. Colours are the frame's
+   tokens (portfolio.css), which `.dark .pf-shell` redefines, so no colour here
+   needs its own dark rule. The Sheet is not portalled, so it sits inside the
+   frame and reads the same tokens. */
+.pf-ask-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;margin:0;background:var(--pf-hair);border:1px solid var(--pf-hair);border-radius:9px;overflow:hidden}
+.pf-ask-fact{display:flex;flex-direction:column;gap:2px;padding:9px 12px;background:var(--pf-card);min-width:0}
+.pf-ask-fact dt{font:600 11px var(--font-mono);color:var(--pf-mu);text-transform:none}
+.pf-ask-fact dd{margin:0;font-size:12.5px;font-weight:600;color:var(--pf-ink);overflow-wrap:anywhere}
+.pf-ask-fact:last-child:nth-child(odd){grid-column:1/-1}
+.pf-ask-record{margin:0;padding:8px 12px;border-radius:9px;border:1px solid var(--pf-lavE);background:var(--pf-lav);color:var(--pf-ink);font-size:12.5px;font-weight:700}
+.pf-ask-actions{display:flex;flex-wrap:wrap;gap:8px}
+.pf-ask-actions .pf-btn{min-height:36px}
+.pf-ask-body{display:flex;flex-direction:column;gap:12px;padding:16px 20px;color:var(--pf-ink)}
+.pf-ask-body .pf-ask-facts{grid-template-columns:1fr}
+.pf-ask-step{margin:0;font:600 11.5px var(--font-mono);color:var(--pf-mu)}
+.pf-ask-line{margin:0;font-size:13px;line-height:1.5;color:var(--pf-ink)}
+.pf-ask-ok{margin:0;padding:10px 12px;border-radius:9px;border:1px solid var(--pf-posE);background:var(--pf-posBg);color:var(--pf-pos);font-size:12.5px;font-weight:700}
+.pf-ask-error{margin:0;padding:10px 12px;border-radius:9px;border:1px solid var(--pf-amE);background:var(--pf-amBg);color:var(--pf-amT);font-size:12.5px;line-height:1.5}
+.pf-ask-code{font-family:var(--font-mono);font-size:11.5px}
+.pf-ask-kept{display:block;margin-top:4px;color:var(--pf-ink)}
+.pf-ask-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:12px 20px}
+.pf-ask-foot .pf-btn{min-height:40px}
+@media(max-width:600px){
+  .pf-ask-facts{grid-template-columns:1fr}
+  .pf-ask-actions{flex-direction:column}
+  .pf-ask-actions .pf-btn,.pf-ask-foot .pf-btn{justify-content:center;min-height:48px;flex:1 1 auto}
+  .pf-ask-foot{flex-wrap:nowrap;padding:10px 14px}
+  .pf-ask-body{padding:14px}
+}
