@@ -116,7 +116,8 @@ test('canvas layout, real activity, missing facts, omissions and empty states re
     ['rows={activity ?? record.activity}', 'rows={record.activity}'],
     ['@[760px]/cycle:grid-cols-4', 'grid-cols-4'],
     // D1454: the primary's violet is the header's (interview_record_d1454 pins it); here, the record must hand its actions to the header row.
-    ['actions={record.actions} handlers={handlers}', 'actions={[]} handlers={handlers}'],
+    // D6113: the record's own actions, without its rowOnly ones.
+    ['actions={recordOwn(record.actions)} handlers={handlers}', 'actions={[]} handlers={handlers}'],
     ['scroll-mt-4', 'scroll-mt-0'],
   ], true);
 });

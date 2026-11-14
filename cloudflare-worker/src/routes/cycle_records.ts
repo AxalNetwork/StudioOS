@@ -34,8 +34,9 @@ export function nextFor(main: RecordSection[], actions: Array<Pick<RecordAction,
   for (const section of main) {
     for (const row of section.rows) {
       if (STATUS_NEXT.test(String(row.c ?? ''))) {
-        const key = typeof row.action === 'string' ? row.action : row.action?.key ?? null;
-        return { text: row.a + (row.b ? ' · ' + row.b : ''), action: key };
+        // D6113 (#6113): a row-addressed action keeps its body, so the CTA runs on that row (an entry step's Mark done).
+        const action = typeof row.action === 'string' ? row.action : row.action ? { key: row.action.key, body: row.action.body } : null;
+        return { text: row.a + (row.b ? ' · ' + row.b : ''), action };
       }
     }
   }
@@ -163,7 +164,7 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
       if (section.gate && !await allowed(section.gate, s.ctx.project, s.ctx.user, s.ctx.env)) continue;
       if (section.when && !section.when(s.id, record)) continue;
       const data = await section.read(s.ctx, s.id, record);
-      const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
+      const rows = canWrite ? data.rows : data.rows.map(({ action: _action, actions: _actions, ...row }) => row);
       sections.push({ key: section.key, title: section.title,
         gate: section.publicGate ?? (section.gate === 'write' ? 'write' : 'read'), side: section.side, rows,
         empty: data.empty, action: canWrite ? data.action : undefined });

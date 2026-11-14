@@ -265,7 +265,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   const data = raw ? availableRecord(raw, edit) : null;
   const selected = raw && typeof location.state?.editing === 'string'
     ? rowAction(location.state.editingPayload?.record === key
-      ? { key: location.state.editing, body: location.state.editingPayload.body } : location.state.editing, declarations) : null;
+      ? { key: location.state.editing, body: location.state.editingPayload.body, values: location.state.editingValues } : location.state.editing, declarations) : null;
   const formSpec = selected ? recordFormFor(selected, raw, edit) : null;
   const closeForm = () => {
     if (currentKey.current !== key) return;
@@ -299,7 +299,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   return {
     status: state?.status ?? 'loading', data, error: state?.error, activity: state?.activity, actionError,
     link: action => { if (action.href?.startsWith('mailto:')) window.location.href = action.href; else navigate(action.href); },
-    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body } } }),
+    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body }, editingValues: action.values } }),
     write,
     client: action => { Promise.resolve().then(() => CLIENT_ACTIONS.get(action.key)?.(raw)).catch(error => {
       if (currentKey.current === key) setActionError(error?.message || 'The export could not be created.');
