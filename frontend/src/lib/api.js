@@ -1497,7 +1497,10 @@ export const api = {
   dealsTransfers: () => request('/deals/transfers'),
   dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
   dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
-  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  // D6156: an item may carry owner_user_id, owner_label, due_date (YYYY-MM-DD)
+  // and note; a PATCH sends any of those and/or state, null clearing a field.
+  // Every write appends one event, read through dealClosingHistoryApi.
+  dealClosingChecklistAddItem: (id, label, fields = {}) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ ...fields, label }) }),
   dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),

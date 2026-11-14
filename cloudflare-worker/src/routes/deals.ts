@@ -1417,8 +1417,10 @@ async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
   ).bind(dealId).first();
   if (!list) return null;
   const items = await env.DB.prepare(
-    `SELECT i.uid, i.label, i.state, i.note, i.sort, i.done_at, i.done_by, u.name AS done_by_name
+    `SELECT i.uid, i.label, i.state, i.note, i.sort, i.done_at, i.done_by, u.name AS done_by_name,
+            i.owner_user_id, ou.name AS owner_name, i.owner_label, i.due_date
        FROM deal_closing_checklist_items i LEFT JOIN users u ON u.id = i.done_by
+       LEFT JOIN users ou ON ou.id = i.owner_user_id
       WHERE i.checklist_id = ? ORDER BY i.sort ASC, i.id ASC`
   ).bind(list.id).all();
   return { ...list, items: items.results || [] };
@@ -1486,6 +1488,49 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
 });
 
+// D6156 (#6156) — a checklist item's owner and due date, and the history of
+// every write to it. Each field is absent (leave it), null (clear it) or a
+// value; rows written before migration 202611140938 read null, never a default.
+const CHECKLIST_STATES = ['pending', 'done', 'blocked', 'skipped'];
+type OwnerDue = { owner_user_id?: number | null; owner_label?: string | null; due_date?: string | null };
+
+function isCalendarDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** The owner and due fields a checklist write carries, validated, or the refusal. */
+async function checklistOwnerDue(env: any, data: any): Promise<{ fields: OwnerDue } | { refuse: { error: string; message: string } }> {
+  const fields: OwnerDue = {};
+  if (data?.owner_user_id !== undefined) {
+    if (data.owner_user_id === null || data.owner_user_id === '') fields.owner_user_id = null;
+    else {
+      const n = Number(data.owner_user_id);
+      const found = Number.isInteger(n) && n > 0
+        ? await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(n).first()
+        : null;
+      if (!found) return { refuse: { error: 'checklist_owner_unknown', message: 'The owner is a platform user. Name a user who exists, or write the owner as a label.' } };
+      fields.owner_user_id = n;
+    }
+  }
+  if (data?.owner_label !== undefined) {
+    fields.owner_label = data.owner_label == null ? null : String(data.owner_label).trim().slice(0, 120) || null;
+  }
+  if (data?.due_date !== undefined) {
+    if (data.due_date === null || data.due_date === '') fields.due_date = null;
+    else if (typeof data.due_date === 'string' && isCalendarDate(data.due_date)) fields.due_date = data.due_date;
+    else return { refuse: { error: 'checklist_due_date_invalid', message: 'A due date is a calendar date, written YYYY-MM-DD.' } };
+  }
+  return { fields };
+}
+
+/** The note a checklist write carries: absent, cleared, or text. */
+function checklistNote(data: any): string | null | undefined {
+  if (data?.note === undefined) return undefined;
+  return data.note == null ? null : String(data.note).slice(0, 2000);
+}
+
 deals.post('/:id/closing-checklist/items', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
@@ -1499,6 +1544,10 @@ deals.post('/:id/closing-checklist/items', async (c) => {
       message: 'A checklist item is the thing counsel checks — name it.',
     }, 400);
   }
+  const ownerDue = await checklistOwnerDue(c.env, data);
+  if ('refuse' in ownerDue) return c.json(ownerDue.refuse, 400);
+  const f = ownerDue.fields;
+  const note = checklistNote(data) ?? null;
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
@@ -1513,51 +1562,122 @@ deals.post('/:id/closing-checklist/items', async (c) => {
   const sort = await c.env.DB.prepare(
     'SELECT COALESCE(MAX(sort), 0) + 1 AS next FROM deal_closing_checklist_items WHERE checklist_id = ?'
   ).bind(list.id).first<{ next: number }>();
-  await c.env.DB.prepare(
-    'INSERT INTO deal_closing_checklist_items (uid, checklist_id, label, state, sort, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(newUid(), list.id, label, 'pending', sort?.next || 1, nowIso()).run();
+  const itemUid = newUid();
+  const at = nowIso();
+  // The item and its first event land in one batch, or neither does.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_items
+         (uid, checklist_id, label, state, note, sort, owner_user_id, owner_label, due_date, created_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+    ).bind(itemUid, list.id, label, note, sort?.next || 1, f.owner_user_id ?? null, f.owner_label ?? null, f.due_date ?? null, at),
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_events (uid, item_id, actor_user_id, from_state, to_state, note, at)
+       SELECT ?, id, ?, NULL, 'pending', ?, ? FROM deal_closing_checklist_items WHERE uid = ?`
+    ).bind(newUid(), user.id, note, at, itemUid),
+  ]);
   await sql.end();
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
 });
 
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
+  // D4631, kept by D6156: role partner plus canMoveRound sets state, owner, due date and note alike.
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
   const data = await c.req.json().catch(() => ({} as any));
-  const state = String(data?.state || '');
-  if (!['pending', 'done', 'blocked', 'skipped'].includes(state)) {
+  const stateGiven = data?.state !== undefined;
+  const state = stateGiven ? String(data.state ?? '') : '';
+  if (stateGiven && !CHECKLIST_STATES.includes(state)) {
     return c.json({
       error: 'checklist_item_state_invalid',
       message: 'A checklist item is pending, done, blocked or skipped.',
+    }, 400);
+  }
+  const ownerDue = await checklistOwnerDue(c.env, data);
+  if ('refuse' in ownerDue) return c.json(ownerDue.refuse, 400);
+  const f = ownerDue.fields;
+  const note = checklistNote(data);
+  if (!stateGiven && note === undefined && Object.keys(f).length === 0) {
+    return c.json({
+      error: 'checklist_item_change_required',
+      message: 'Send a state, an owner, a due date or a note to change.',
     }, 400);
   }
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
   const item = await c.env.DB.prepare(
-    `SELECT i.id, i.checklist_id FROM deal_closing_checklist_items i
+    `SELECT i.id, i.checklist_id, i.state FROM deal_closing_checklist_items i
        JOIN deal_closing_checklists l ON l.id = i.checklist_id
       WHERE i.uid = ? AND l.deal_id = ?`
   ).bind(itemUid, id).first<any>();
   if (!item) { await sql.end(); return c.json({ error: 'Item not found' }, 404); }
-  const note = data?.note !== undefined ? (data.note != null ? String(data.note).slice(0, 2000) : null) : undefined;
-  const done = state === 'done';
-  // Two static statements rather than a conditional fragment: every value is
-  // bound, and the query text never carries an interpolation.
-  if (note !== undefined) {
-    await c.env.DB.prepare(
-      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ?, note = ? WHERE id = ?'
-    ).bind(state, done ? user.id : null, done ? nowIso() : null, note, item.id).run();
-  } else {
-    await c.env.DB.prepare(
-      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ? WHERE id = ?'
-    ).bind(state, done ? user.id : null, done ? nowIso() : null, item.id).run();
-  }
+  const fromState = String(item.state);
+  const toState = stateGiven ? state : fromState;
+  const done = toState === 'done';
+  const at = nowIso();
+  // One static statement: each optional field is a bound "was it sent" flag
+  // and its value, so the query text never carries an interpolation. The
+  // event is written first and both statements are guarded on the state read
+  // above, so a write that raced another lands neither row.
+  const has = (v: unknown) => (v === undefined ? 0 : 1);
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_events (uid, item_id, actor_user_id, from_state, to_state, note, at)
+       SELECT ?, id, ?, ?, ?, ?, ? FROM deal_closing_checklist_items WHERE id = ? AND state = ?`
+    ).bind(newUid(), user.id, fromState, toState, note ?? null, at, item.id, fromState),
+    c.env.DB.prepare(
+      `UPDATE deal_closing_checklist_items SET
+         state = ?,
+         done_by = CASE WHEN ? = 1 THEN ? ELSE done_by END,
+         done_at = CASE WHEN ? = 1 THEN ? ELSE done_at END,
+         note = CASE WHEN ? = 1 THEN ? ELSE note END,
+         owner_user_id = CASE WHEN ? = 1 THEN ? ELSE owner_user_id END,
+         owner_label = CASE WHEN ? = 1 THEN ? ELSE owner_label END,
+         due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END
+       WHERE id = ? AND state = ?`
+    ).bind(
+      toState,
+      stateGiven ? 1 : 0, done ? user.id : null,
+      stateGiven ? 1 : 0, done ? at : null,
+      has(note), note ?? null,
+      has(f.owner_user_id), f.owner_user_id ?? null,
+      has(f.owner_label), f.owner_label ?? null,
+      has(f.due_date), f.due_date ?? null,
+      item.id, fromState,
+    ),
+  ]);
   await sql.end();
+  if (!(results as any[])[1]?.meta?.changes) {
+    return c.json({
+      error: 'checklist_item_changed',
+      message: 'The item changed while you were editing it. Refresh and try again.',
+    }, 409);
+  }
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) });
+});
+
+// D6156 — the Audit tab: every write to this deal's checklist items, oldest
+// first, under the checklist's own read rule.
+deals.get('/:id/closing-checklist/events', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const ctx = await loadDealForRead(c, id);
+  if (ctx.error) return ctx.error;
+  const { sql } = ctx;
+  const rows = await c.env.DB.prepare(
+    `SELECT e.uid, i.uid AS item_uid, i.label AS item_label, e.actor_user_id, u.name AS actor_name,
+            e.from_state, e.to_state, e.note, e.at
+       FROM deal_closing_checklist_events e
+       JOIN deal_closing_checklist_items i ON i.id = e.item_id
+       JOIN deal_closing_checklists l ON l.id = i.checklist_id
+       LEFT JOIN users u ON u.id = e.actor_user_id
+      WHERE l.deal_id = ? ORDER BY e.id ASC LIMIT 2000`
+  ).bind(id).all<any>();
+  await sql.end();
+  return c.json({ events: rows.results || [] });
 });
 
 // ---------------------------------------------------------------------------
