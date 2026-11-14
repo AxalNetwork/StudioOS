@@ -25,6 +25,7 @@ import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPe
 import DealOverview from './deal/DealOverview';
 import DealNotes, { DealActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
+import { commitAction, commitRefusal, myCommitment } from './deal/dealWorkModel';
 import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
 import { DealMarket, DealTeam, DealTraction } from './deal/DealInsightTabs';
@@ -64,7 +65,8 @@ export default function DealRoomPage() {
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(!blocked);
   const [error, setError] = useState(null);
-  const [commitOpen, setCommitOpen] = useState(false);
+  // D6191: null, or { current } — the live commitment a change starts from (null for a new one).
+  const [commitOpen, setCommitOpen] = useState(null);
   // D752 (#1891): the investor's share sheet, opened from their own row or after a commitment.
   const [proofSheet, setProofSheet] = useState(null); // { target, consent, minimumCents }
   const [proofKey, setProofKey] = useState(0);
@@ -145,6 +147,8 @@ export default function DealRoomPage() {
   const canInvite = isAdmin && (deal.status === 'active' || deal.status === 'scored');
   if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
   const track = isInvestor ? trackOf(stage) : null;
+  // D6191: Commit only when it can succeed; Change amount on a Pending one; nothing on a Confirmed one.
+  const headerCommit = isInvestor && deal ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
 
   return (
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
@@ -170,8 +174,11 @@ export default function DealRoomPage() {
             {canInvite && (
               <button type="button" onClick={() => setInviteOpen(true)} className={BTN_S}><Users size={14} /> Invite Investors</button>
             )}
-            {isInvestor && (
-              <button type="button" onClick={() => setCommitOpen(true)} className={BTN_P}><DollarSign size={14} /> Commit Capital</button>
+            {isInvestor && headerCommit.kind === 'commit' && (
+              <button type="button" onClick={() => setCommitOpen({ current: null })} className={BTN_P} data-testid="deal-header-commit"><DollarSign size={14} /> Commit</button>
+            )}
+            {isInvestor && headerCommit.kind === 'change' && (
+              <button type="button" onClick={() => setCommitOpen({ current: headerCommit.row })} className={BTN_S} data-testid="deal-header-change">Change amount</button>
             )}
           </div>
         </div>
@@ -201,7 +208,7 @@ export default function DealRoomPage() {
       {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}
       {tab === 'terms' && <DealTerms deal={deal} investor={isInvestor} />}
       {/* D1213 (#2424): the round's closing room, its own address under the deal. */}
-      {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={() => setCommitOpen(true)} onShare={openProof} />}
+      {tab === 'commitment' && isInvestor && <DealCommitment key={proofKey} deal={deal} user={user} onChangeAmount={(row) => setCommitOpen({ current: row || null })} onShare={openProof} />}
       {tab === 'commitment' && !isInvestor && <p className="m-0 text-sm"><Link to={tabHref(deal.id, 'closing')} className="font-semibold underline" data-testid="deal-closing-door">Open the closing room</Link> for the round's lines, checklist and what is received.</p>}
       {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
@@ -215,8 +222,8 @@ export default function DealRoomPage() {
       {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin} />}
 
       {respondTo && <RespondDialog answer={respondTo} onConfirm={respond} onClose={() => setRespondTo(null)} />}
-      {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
-        setCommitOpen(false); loadDeal(); loadMine(); setProofKey((k) => k + 1); navigate(tabHref(deal.id, 'commitment'));
+      {commitOpen && <CommitModal deal={deal} user={user} current={commitOpen.current} onClose={() => setCommitOpen(null)} onDone={async (opts) => {
+        setCommitOpen(null); loadDeal(); loadMine(); setProofKey((k) => k + 1); navigate(tabHref(deal.id, 'commitment'));
         if (!opts?.share || !showsProof(user)) return;
         try {
           const read = await mercuryAttestationsApi.targets();
@@ -290,9 +297,15 @@ function DocumentsTab({ dealId }) {
   );
 }
 
-export function CommitModal({ deal, onClose, onDone, user = null }) {
-  const [amount, setAmount] = useState(deal.minimum_check || '');
-  const [notes, setNotes] = useState('');
+/**
+ * D6191 (#6191): a new commitment starts at the deal minimum with no note; a change starts from
+ * `current`, the live commitment, so saving without touching the note keeps it (the Worker sets
+ * `amount` and `notes` from the body). A refusal stays in the dialog, in words.
+ */
+export function CommitModal({ deal, onClose, onDone, user = null, current = null }) {
+  const changing = !!current;
+  const [amount, setAmount] = useState(changing && current.amount != null ? String(current.amount) : (deal.minimum_check || ''));
+  const [notes, setNotes] = useState(changing && current.notes != null ? String(current.notes) : '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   // D752 (#1891): an optional last step for an investor on HQ, once the commitment is recorded.
@@ -306,7 +319,7 @@ export function CommitModal({ deal, onClose, onDone, user = null }) {
       await api.createCommitment(deal.id, { amount: amt, notes: notes || null });
       if (showsProof(user)) setRecorded(true);
       else onDone();
-    } catch (e) { setErr(e.message || 'Could not record commitment'); reportError('CommitModal', e); }
+    } catch (e) { setErr(commitRefusal(e, deal)); reportError('CommitModal', e); }
     finally { setSaving(false); }
   };
   const input = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-violet-500 focus:ring-1 focus:ring-violet-200 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
@@ -336,26 +349,26 @@ export function CommitModal({ deal, onClose, onDone, user = null }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-xl w-full max-w-md dark:bg-gray-900">
           <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Commit Capital</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100" data-testid="commit-title">{changing ? 'Change your commitment' : 'Commit capital'}</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1"><X size={18} /></button>
           </div>
           <div className="p-5 space-y-4">
-            <p className="text-sm text-gray-500">Committing to <span className="font-medium text-gray-800 dark:text-gray-200">{deal.project_name}</span>. This records your intent — no funds move.</p>
+            <p className="text-sm text-gray-500">{changing ? 'Changing your commitment to ' : 'Committing to '}<span className="font-medium text-gray-800 dark:text-gray-200">{deal.project_name}</span>. This records your intent — no funds move.</p>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Amount ({deal.currency || 'USD'})</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={input} placeholder="50000" />
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={input} placeholder="50000" data-testid="commit-amount" />
               {deal.minimum_check ? <div className="text-xs text-gray-400 mt-1">Minimum check: {fmtMoney(deal.minimum_check, deal.currency)}</div> : null}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Notes (optional)</label>
-              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className={input} />
+              <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} className={input} data-testid="commit-notes" />
             </div>
-            {err && <div className="text-sm text-red-600">{err}</div>}
+            {err && <div role="alert" className="text-sm text-red-600" data-testid="commit-error">{err}</div>}
           </div>
           <div className="p-5 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-2">
             <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400">Cancel</button>
             <button onClick={submit} disabled={saving} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center gap-2">
-              {saving && <Loader2 size={14} className="animate-spin" />} Confirm Commitment
+              {saving && <Loader2 size={14} className="animate-spin" />} {changing ? 'Save the change' : 'Confirm Commitment'}
             </button>
           </div>
         </div>
