@@ -83,7 +83,7 @@ const LOG_KEYS = new Set([...LOG_SELECT.slice(0, LOG_SELECT.indexOf('FROM adviso
   .matchAll(/(?:AS (\w+)|l\.(\w+))/g)].map((m) => m[1] || m[2]));
 
 const version = (over = {}) => ({
-  uid: 'v-1', version: 1, label: null, summary: null, link_url: null,
+  uid: 'v-1', version: 1, label: null, summary: null, version_summary: null, link_url: null,
   sent_at: null, opened_at: null, signed_off_at: null,
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });
