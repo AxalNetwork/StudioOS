@@ -76,7 +76,7 @@ const labelIn = (options, value) => options.find(([v]) => v === value)?.[1] || v
 export const FILTER_BUTTONS = Object.freeze([
   ['type', 'Agreement type', 'Type'], ['state', 'Legal state', 'Legal state'], ['licence', 'Licence / territory', 'Licence'],
   ['program', 'Program', 'Program'], ['package', 'Axal VC package', 'Package'], ['template', 'Template', 'Template'],
-  ['signed', 'Signed date', 'Signed'],
+  ['signed', 'Executed date', 'Executed'],
 ]);
 
 /** What one filter button reads after its name: the value (one), the count (several), or null while unset. */
@@ -105,8 +105,8 @@ export function activeAgreementChips(filters = {}) {
   if (f.program) chips.push({ key: 'program', label: `Program: ${labelIn(PROGRAM_OPTIONS, f.program)}` });
   if (f.package) chips.push({ key: 'package', label: `Package: ${labelIn(PACKAGE_OPTIONS, f.package)}` });
   if (f.template) chips.push({ key: 'template', label: `Template: ${f.template}` });
-  if (f.signed_from) chips.push({ key: 'signed_from', label: `Signed from ${f.signed_from}` });
-  if (f.signed_to) chips.push({ key: 'signed_to', label: `Signed to ${f.signed_to}` });
+  if (f.signed_from) chips.push({ key: 'signed_from', label: `Executed from ${f.signed_from}` });
+  if (f.signed_to) chips.push({ key: 'signed_to', label: `Executed to ${f.signed_to}` });
   return chips;
 }
 

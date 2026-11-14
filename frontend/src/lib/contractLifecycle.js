@@ -154,8 +154,7 @@ export function agreementLifecycle(row) {
  * API value stays `signed`; only the words change. The metric strip already
  * said Executed, and these are the words the agreements list's status chips
  * and its sort read, so the chip, the filter and the strip say one thing.
- * `AgreementList.jsx` is slot S23's file while #5050 is open: it takes these
- * lists in place of its inline arrays (the hand-off is on #4811).
+ * `AgreementList.jsx` draws its chips and its sort from these lists (part 23).
  */
 export const AGREEMENT_STATUS_FILTERS = Object.freeze([
   Object.freeze(['All', '']),
