@@ -22,7 +22,7 @@
  * ONLY THE INVESTOR, ONLY ON THEIR OWN PAGES. Every read and write here is
  * keyed by the caller's own user id: their commitments, the funds they are GP
  * of (`vc_funds.gp_user_id`) or administer (`fund_admin_user_id`). Nothing
- * here is read by a founder, admin or LP route, and the capacity figure is
+ * here is exposed by a founder, admin or LP route, and the capacity figure is
  * never added to a commitment, a deal or a notification.
  *
  * NO FIGURE IN A LOG. A failed read is the code alone; the route's log row
@@ -42,6 +42,36 @@ import { recordReceipt } from '../fundCallLedger';
 import { LedgerRefusal, postLedgerEntry } from '../fundLedger';
 import { newUid } from './store';
 import { recompute as recomputeClosingLine } from '../closings';
+
+/**
+ * The report service receives only a deletion result or the existence of a
+ * dependency. Proposal data remains private to Mercury. The dependency checks
+ * share a transaction with the audit receipt and delete.
+ */
+export function deleteReportWithoutStatement(env: Env, row: {
+  fundId: number; periodId: number; actorId: number; notes: string | null;
+  updatedAt: string | null; details: string;
+}) {
+  const args = [row.fundId, row.periodId, row.notes, row.updatedAt];
+  return env.DB.batch([
+  env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
+   SELECT ?,?,?,? FROM fund_report_periods
+   WHERE fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
+   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)
+   AND NOT EXISTS(SELECT 1 FROM mercury_investor_proposals WHERE fund_id=fund_report_periods.fund_id AND target_id=fund_report_periods.id AND target_kind='fund_report_period' AND state<>'dismissed')`)
+   .bind('fund_report_draft_deleted',row.details,String(row.actorId),row.actorId,...args),
+  env.DB.prepare(`DELETE FROM fund_report_periods
+   WHERE fund_id=? AND id=? AND status='draft' AND notes IS ? AND updated_at IS ?
+   AND NOT EXISTS(SELECT 1 FROM fund_report_drafts WHERE report_period_id=fund_report_periods.id)
+   AND NOT EXISTS(SELECT 1 FROM mercury_investor_proposals WHERE fund_id=fund_report_periods.fund_id AND target_id=fund_report_periods.id AND target_kind='fund_report_period' AND state<>'dismissed')`).bind(...args),
+  ]);
+}
+
+export async function reportHasStatement(env: Env, fundId: number, periodId: number): Promise<boolean> {
+  return Boolean(await env.DB.prepare(
+    "SELECT 1 FROM mercury_investor_proposals WHERE fund_id=? AND target_id=? AND target_kind='fund_report_period' AND state<>'dismissed' LIMIT 1",
+  ).bind(fundId, periodId).first());
+}
 
 /** A reader of the investor's own Mercury: what this file uses. */
 export type InvestorReader = Pick<MercuryReads, 'accounts' | 'transactions' | 'statements' | 'statementPdf'>;
