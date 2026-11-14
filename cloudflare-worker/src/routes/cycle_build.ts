@@ -527,16 +527,52 @@ async function mustHaves(env: Env, projectId: number): Promise<any[]> {
   ).bind(projectId).all<any>());
 }
 
+const BURN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** A real day's ISO week: its Monday (`YYYY-MM-DD`) and its number. */
+function isoWeekOf(day: Date): { monday: string; week: number } {
+  const monday = new Date(day.valueOf() - ((day.getUTCDay() + 6) % 7) * 86400_000);
+  const thursday = new Date(monday.valueOf() + 3 * 86400_000);
+  const jan1 = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return { monday: monday.toISOString().slice(0, 10), week: 1 + Math.floor((thursday.valueOf() - jan1) / (7 * 86400_000)) };
+}
+/**
+ * D6025 (#6025): the burn-up's points, from Done must-haves per day of completion. By month when
+ * completions fall in three months or more (`2026-07`, dated the 1st, as before); otherwise by ISO
+ * week (`W45`, dated its Monday) when they fall in three weeks or more; otherwise by day (`12 Nov`).
+ * Only real days are grouped by week or day; a line still needs three real points, so fewer stays
+ * `too_little` and no point is invented. Each point's value is the count in that period, in date order.
+ */
+export function burnupPoints(perDay: Array<[string, number]>): Array<{ date: string; label: string; n: number }> {
+  const add = (into: Map<string, { date: string; label: string; n: number }>, key: string, date: string, label: string, n: number) => {
+    const at = into.get(key);
+    if (at) at.n += n; else into.set(key, { date, label, n });
+  };
+  const months = new Map<string, { date: string; label: string; n: number }>();
+  for (const [day, n] of perDay) add(months, day.slice(0, 7), `${day.slice(0, 7)}-01`, day.slice(0, 7), n);
+  const sorted = (m: Map<string, { date: string; label: string; n: number }>) => [...m.values()].sort((a, b) => a.date.localeCompare(b.date));
+  if (months.size >= 3) return sorted(months);
+  const weeks = new Map<string, { date: string; label: string; n: number }>();
+  const days = new Map<string, { date: string; label: string; n: number }>();
+  for (const [raw, n] of perDay) {
+    const day = dateOnly(raw.slice(0, 10));
+    if (!day) continue;
+    const { monday, week } = isoWeekOf(day);
+    add(weeks, monday, monday, `W${String(week).padStart(2, '0')}`, n);
+    add(days, raw.slice(0, 10), raw.slice(0, 10), `${day.getUTCDate()} ${BURN_MONTHS[day.getUTCMonth()]}`, n);
+  }
+  return weeks.size >= 3 ? sorted(weeks) : days.size >= 3 ? sorted(days) : sorted(months);
+}
+
 async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads a must-have row.
-  // #4603 part 3: one scan of the must-haves, grouped by state, hypothesis and month of completion (a Done
-  // must-have's, when dated), gives the counts, the burn-up and the Hypothesis filter's options; each group's
+  // #4603 part 3: one scan of the must-haves, grouped by state, hypothesis and day of completion (a Done
+  // must-have's, when dated; D6025 made it the day, so the burn-up can fall back to weeks or days), gives the counts, the burn-up and the Hypothesis filter's options; each group's
   // claim is looked up once. `missing` is the page's dominant action (D6031, BD8): the next blocked
   // must-have, else the next one due (the earliest due date), else the first not done, each in read order
   // on a tie; as `[title, status]`. Three LIMIT 1 subqueries rather than one sorted scan, so each stops at
   // its first match: the blocked one on `idx_mvp_features_must_groups`, the due one on `idx_mvp_features_must_due`.
   const groups = rows(await env.DB.prepare(
-    `SELECT g.status, g.hypothesis_id, h.claim AS test_hypothesis, g.month, g.n,
+    `SELECT g.status, g.hypothesis_id, h.claim AS test_hypothesis, g.day, g.n,
             COALESCE(
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status = 'Blocked'
                 ORDER BY sort_order, id LIMIT 1),
@@ -547,12 +583,12 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
             (SELECT COUNT(*) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > '' AND due_date < ?
                 AND delivery_status IS NOT 'Done') AS overdue
        FROM (SELECT delivery_status AS status, hypothesis_id,
-                    CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
+                    CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 10) END AS day,
                     COUNT(*) AS n
                FROM mvp_features WHERE project_id = ? AND is_must_have = 1
-              GROUP BY delivery_status, hypothesis_id, month) g
+              GROUP BY delivery_status, hypothesis_id, day) g
        LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
-  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null; overdue: number | null }>());
+  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; day: string | null; n: number; missing: string | null; overdue: number | null }>());
   const total = groups.reduce((t, g) => t + number(g.n), 0);
   const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
   const blockedCount = groups.filter(g => g.status === 'Blocked').reduce((t, g) => t + number(g.n), 0);
@@ -563,12 +599,10 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   // first ten characters with today's ten; the range walks D6031's `idx_mvp_features_must_due`, so only must-haves
   // dated before today are read.
   const overdue = number(groups[0]?.overdue);
-  // Done must-haves per month of completion.
-  const history = new Map<string, number>();
-  for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
-  const points = [...history.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  // Done must-haves per month, week or day of completion (D6025).
+  const points = burnupPoints(groups.filter(g => g.day != null).map(g => [String(g.day), number(g.n)]));
   let cumulative = 0;
-  const dated: Array<{ date: string; value: number | null; label: string }> = points.map(([month, n]) => ({ date: `${month}-01`, value: (cumulative += n), label: month }));
+  const dated: Array<{ date: string; value: number | null; label: string }> = points.map(point => ({ date: point.date, value: (cumulative += point.n), label: point.label }));
   const ship = dateOnly(p.mvp_target_date);
   if (ship) dated.push({ date: p.mvp_target_date!, value: null, label: 'Ship' });
   dated.sort((a, b) => a.date.localeCompare(b.date));

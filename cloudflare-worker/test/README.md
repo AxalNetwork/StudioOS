@@ -360,3 +360,4 @@ catalogue version only in the fixture.
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |
 | `magic_link_insert_canary.test.ts` | The production-only scheduled insert probe claims each slot once, records its own token and send row IDs, and rejects stale completions. |
+| `build_burnup_weekly_6025.test.ts` | D6025: Prototype / MVP's burn-up by month, ISO week or day of completion over the real schema: three weeks of one month draw week labels with the Ship mark in date order, three days in two weeks draw by day, fewer than three dated completions still read the too-little sentence, three months still draw by month, the same statements at every grain, and `burnupPoints` across a 53-week year. |
