@@ -187,6 +187,7 @@ test('Studio reads only linked holdings and leaves legacy rows for the LP portal
   env.__db.exec("UPDATE limited_partners SET user_id=NULL WHERE id=101");
   const studio = await call(env, LP_A, '/lp-portal?view=studio');
   assert.equal(studio.status, 200);
+  assert.equal(studio.body.unlinked_commitment, true);
   assert.deepEqual(studio.body.lp_holdings.map((row: { id: number }) => row.id), [100]);
   assert.equal(env.__db.prepare('SELECT user_id FROM limited_partners WHERE id=101').get().user_id, null);
   const portal = await call(env, LP_A, '/lp-portal');

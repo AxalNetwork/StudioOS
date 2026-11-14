@@ -113,7 +113,9 @@ function commitmentTiles(records, failures, retry) {
   };
   const holdings = sourceState.fund.unreadable ? [] : commitmentsByFund(fund);
   const callsUnreadable = holdings.some(row => !row.calls_known);
+  const unlinked = !sourceState.fund.unreadable && fund?.unlinked_commitment === true;
   const rows = { fund: [], notices: [], booklet: [], trust: [] };
+  if (unlinked) rows.fund.push({ key: 'link-lp', label: 'Open the LP workspace to link your commitment', to: LP_WORKSPACE });
   const seenCalls = new Set();
   for (const holding of holdings) {
     if (!holding.lpa_signed) rows.fund.push({ key: `lpa-${holding.lp_id}`, label: 'Sign the LPA' + (holding.fund_name ? ` · ${holding.fund_name}` : ''), to: COMMITMENT });
@@ -143,8 +145,10 @@ function commitmentTiles(records, failures, retry) {
   return {
     fund_commitment: sourceState.fund.unreadable ? { state: TILE.UNREADABLE, onRetry: () => retry('fund') }
       : sourceState.fund.loading ? { state: TILE.LOADING }
+      : unlinked && !holdings.length ? { state: TILE.READY, href: LP_WORKSPACE, body: <p>Open the LP workspace to link your commitment.</p> }
       : !holdings.length ? { state: TILE.EMPTY, empty: 'No commitment is recorded.', href: COMMITMENT, openLabel: 'Open My commitment' }
       : { state: TILE.READY, href: COMMITMENT, openLabel: 'Open My commitment', body: <>
+          {unlinked && <p><Link to={LP_WORKSPACE}>Open the LP workspace to link the rest of your commitments.</Link></p>}
           {callsUnreadable && <Unreadable what="Capital calls" onRetry={() => retry('fund')} />}
           {holdings.map(row => <section key={row.lp_id}>
             {row.fund_name && <h4>{row.fund_name}</h4>}

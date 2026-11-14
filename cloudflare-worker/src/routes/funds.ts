@@ -163,6 +163,10 @@ funds.get('/lp-portal', async (c) => {
 
   const my = await LPs.listByUser(c.env, actor);
   const lpRows: any[] = my.results || [];
+  const unlinked = readOnly && Boolean(await c.env.DB.prepare(
+    'SELECT 1 FROM limited_partners WHERE user_id IS NULL AND LOWER(email)=LOWER(?) LIMIT 1',
+  ).bind(user.email ?? null).first());
+
 
   // Aggregate cash flows per-fund for TVPI / DPI
   const distRows = await Distributions.listByUser(c.env, actor, 200);
@@ -252,6 +256,7 @@ funds.get('/lp-portal', async (c) => {
   return c.json({
     ok: true,
     lp_holdings: lpRows,
+    ...(readOnly ? { unlinked_commitment: unlinked } : {}),
     capital_calls: calls,
     capital_calls_recorded: callsRecorded,
     distributions: distRows,

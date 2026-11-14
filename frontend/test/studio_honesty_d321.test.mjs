@@ -180,6 +180,9 @@ test('Fund and Needs you use recorded LP, booklet and Trust data and retry failu
   const empty = investorTiles({ ...opts, records: { fund: { lp_holdings: [] }, notices: { notices: [] }, booklet: null, trust: { obligations: [] } } });
   assert.equal(empty.fund_commitment.state, 'empty');
   assert.equal(empty.needs_you.state, 'empty');
+  const legacy = investorTiles({ ...opts, records: { ...records, fund: { lp_holdings: [], unlinked_commitment: true } } });
+  assert.match(draw(legacy.fund_commitment.body), /Open the LP workspace to link your commitment/);
+  assert.match(draw(legacy.needs_you.body), /Open the LP workspace to link your commitment/);
   const preview = investorTiles({ ...opts, records, previewing: true });
   assert.equal(preview.fund_commitment.state, 'withheld');
   assert.equal(preview.needs_you.state, 'withheld');
