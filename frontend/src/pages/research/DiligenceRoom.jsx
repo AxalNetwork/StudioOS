@@ -11,6 +11,7 @@ import { StatedLimit } from '../advisor/expertise/kit';
 import { activityLine, day, fileSize, roomFileState, when } from './diligenceRead';
 import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
 import { createRecordGate } from './recordGate.js';
+import RoomDeals from './RoomDeals';
 
 /**
  * `/research/diligence/:grantUid` — one data room, read by the investor who
@@ -108,7 +109,6 @@ export default function DiligenceRoom({ role = 'investor' }) {
             ? `${room.project.name}: ${room.file_open} of ${room.file_total} open to you`
             : 'One data room you hold a grant on']}
           unavailable={[
-            ['Deal stage', 'A grant and a deal are separate records with no key between them.'],
             ['Requesting files', 'The grant is the founder’s to make and to widen. Nothing here asks for more.'],
           ]}
         />
@@ -290,8 +290,8 @@ export default function DiligenceRoom({ role = 'investor' }) {
 
             <div className="rounded-2xl border border-axal-hairline bg-axal-ground p-4 dark:border-gray-800 dark:bg-gray-950">
               <div className={eyebrow}>Deal stage</div>
-              <div className="mt-1.5"><Unrecorded reason={room.deal_stage_note} /></div>
-              <p className="mt-1.5 max-w-3xl text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{room.deal_stage_note}</p>
+              {/* D6266: the deals on this company you may open; none is said in plain words, not as Not recorded. */}
+              <div className="mt-1.5"><RoomDeals deals={room.deals} note={room.deal_stage_note} /></div>
             </div>
 
             <Card data-testid="room-activity">

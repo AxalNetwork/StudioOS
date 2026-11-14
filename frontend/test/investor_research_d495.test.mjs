@@ -20,12 +20,16 @@ test('IR1 Clear history is held on the owner’s decision, not presented as one'
   assert.doesNotMatch(clear.title, /declines|irreversible/, 'an undecided refusal is still worded as policy');
 });
 
-test('IR2 New request and Attach to deal say they wait on the deal routes, which are slot S02’s', () => {
-  for (const label of ['New request', 'Attach to deal']) {
-    const a = op('research/diligence', label);
-    assert.equal(a.disabled, true, `${label} can be pressed`);
-    assert.match(a.title, /deal.*routes \(slot S02\)/, `${label} does not say what it waits on`);
-  }
+test('IR2 New request says it waits on the deal routes, which are slot S02’s', () => {
+  const a = op('research/diligence', 'New request');
+  assert.equal(a.disabled, true, 'New request can be pressed');
+  assert.match(a.title, /deal.*routes \(slot S02\)/, 'New request does not say what it waits on');
+});
+
+test('IR2 Attach to deal: D6266 shows each room’s deal by itself, so there is nothing to attach by hand', () => {
+  const a = op('research/diligence', 'Attach to deal');
+  assert.equal(a.disabled, true, 'Attach to deal can be pressed');
+  assert.match(a.title, /already shows its deal/);
 });
 
 test('IR4: the investor’s Markets zone states that theses wait on a decision', () => {

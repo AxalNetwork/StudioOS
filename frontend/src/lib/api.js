@@ -5448,7 +5448,9 @@ export const api = {
     ),
 
     // Diligence — no store of its own. Room access assembled from the grants
-    // this investor already holds.
+    // this investor already holds. D6266: each room carries `deals`, the deals
+    // on its company the investor may open (`{ id, stage, name }`), and
+    // `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
