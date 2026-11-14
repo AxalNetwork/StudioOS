@@ -181,7 +181,7 @@ function genToken(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-interface AuditEntry {
+export interface AuditEntry {
   ts: string;
   signer_id: number | null;
   signer_email: string | null;
@@ -191,7 +191,7 @@ interface AuditEntry {
   meta?: Record<string, unknown>;
 }
 
-async function appendAudit(env: Env, envelopeId: number, entry: AuditEntry): Promise<void> {
+export async function appendAudit(env: Env, envelopeId: number, entry: AuditEntry): Promise<void> {
   try {
     // Append-only insert — no RMW, no lost-update window. Source of truth
     // for the compliance audit trail.

@@ -103,7 +103,14 @@ const CARRIED = new Set(['rules', 'observability', 'observability.logs', 'observ
  * `ids` are the identities `wrangler` printed when it created them:
  * `{ d1: <uuid>, kv: { TOKENS: <id>, RATE_LIMITS: <id>, OAUTH_KV: <id> } }`.
  */
-export function stageASections(tomlSrc, run, ids) {
+/** S1's #4555 pass: the one variable the skill-runtime redeploy adds, on the throwaway Worker only. */
+export const SKILL_RUNTIME_VARS = Object.freeze({ AGENT_SKILL_RUNTIME: 'cloudflare_sdk' });
+
+/**
+ * `opts.skillRuntime` true adds `SKILL_RUNTIME_VARS` (the #4555 pass); nothing else changes, so the
+ * redeploy keeps every identity the #4566 preflight passed.
+ */
+export function stageASections(tomlSrc, run, ids, opts = {}) {
   const n = stageANames(run);
   if (!/^[0-9a-f-]{36}$/i.test(String(ids?.d1 ?? ''))) throw new Error('refusing a config without the run\'s database id');
   const { root, sections } = parseToml(tomlSrc);
@@ -117,6 +124,7 @@ export function stageASections(tomlSrc, run, ids) {
     switch (kind) {
       case 'vars':
         for (const [k, v] of Object.entries(STAGE_A_VARS)) kv.set(k, q(v));
+        if (opts.skillRuntime) for (const [k, v] of Object.entries(SKILL_RUNTIME_VARS)) kv.set(k, q(v));
         kv.set('APP_URL', q(`https://${n.worker}.workers.dev`));
         kv.set('EXTRA_DEV_ORIGINS', q(''));
         break;
@@ -236,10 +244,46 @@ export function extraSeed(run) {
   ];
 }
 
+/**
+ * S1's #4555 pass: one published HQ skill with one version, pinned to the synthetic agent at
+ * version 1, as `skill_runtime_run_path_4555` seeds one. Synthetic text, no tools (the agent holds no
+ * grants), the agent's own role. Its uid is the run's (`syn-<run>-skill`), so cleanup by mark finds it.
+ */
+export function skillSeed(run) {
+  stageANames(run);
+  const sponsor = `syn-${run}-t0@synthetic.invalid`;
+  const uid = `syn-${run}-skill`;
+  const slug = `synthetic-${run}-brief`;
+  const md = `---\nname: ${slug}\n---\nSynthetic SKILL.md for hosted Stage A (#4594). It proposes a brief; a named person decides.`;
+  return [
+    { sql: `INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, steps_json, allowed_tools_json, output_kind, status, current_version, created_by)
+       VALUES (?, 'hq', NULL, ?, 'Synthetic Stage A brief', 'Synthetic skill for hosted Stage A.', '["Draft a short synthetic brief."]', '[]', 'brief', 'published', 1, (SELECT id FROM users WHERE email = ?))`,
+      args: [uid, slug, sponsor] },
+    { sql: `INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+       VALUES ((SELECT id FROM agent_skills WHERE uid = ?), 1, ?, 'Synthetic Stage A brief', 'Synthetic skill for hosted Stage A.', '["Draft a short synthetic brief."]', '[]', 'brief', '[]', '["ceo"]', (SELECT id FROM users WHERE email = ?))`,
+      args: [uid, md, sponsor] },
+    { sql: `INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by)
+       VALUES ((SELECT id FROM team_agents WHERE uid = ?), (SELECT id FROM agent_skills WHERE uid = ?), 1, (SELECT id FROM users WHERE email = ?))`,
+      args: [`syn-${run}-t0-a0`, uid, sponsor] },
+  ];
+}
+
+/** What one skill run must show (#4555): the runtime it asked for, the pinned version, and one usage row. */
+export function skillRunVerdict({ event, usage, want }) {
+  if (!event || !Array.isArray(usage)) return { ok: false, reason: 'the run event or its usage row could not be read' };
+  const rt = event.skill_runtime ?? null;
+  const problems = [];
+  if (usage.length !== 1) problems.push(`${usage.length} usage rows for one run`);
+  if (usage[0] && Number(usage[0].skill_version) !== 1) problems.push(`ran skill version ${usage[0]?.skill_version}, not the pinned 1`);
+  if (want === 'legacy' && rt) problems.push(`asked for legacy, the event names ${JSON.stringify(rt)}`);
+  if (want === 'cloudflare_sdk' && !rt) problems.push('asked for the SDK, the event names no runtime');
+  return { ok: !problems.length, reason: problems.join('; ') || null, runtime: rt?.runtime ?? 'legacy', fallback: rt?.fallback ?? null };
+}
+
 /** The fixtures' ids for tenant 0, agent 0: the sponsor, the agent and its first task. */
 export function fixtureIds(run) {
   stageANames(run);
-  return { sponsorEmail: `syn-${run}-t0@synthetic.invalid`, agentUid: `syn-${run}-t0-a0`, taskUid: `syn-${run}-t0-a0-k0` };
+  return { sponsorEmail: `syn-${run}-t0@synthetic.invalid`, agentUid: `syn-${run}-t0-a0`, taskUid: `syn-${run}-t0-a0-k0`, skillUid: `syn-${run}-skill` };
 }
 
 /**

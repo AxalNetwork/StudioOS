@@ -82,11 +82,14 @@ test('the handler follows the control: a band drafts, an ask is a form, a docume
 // ------------------------------------------------------------------ the boards that drew no rail
 
 test('I8 Performance draws the investor rail in the shared frame; an admin\'s Performance tab is unchanged', async () => {
+  // D4817 part 3 (#5311, PF-03): the investor's Performance is its own board in
+  // the Portfolio frame, which places that board's one rail.
   const { default: PortfolioWorkspace } = await import('../src/pages/PortfolioWorkspace.jsx');
   const at = (activeRole) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/portfolio/performance'] }, h(PortfolioWorkspace, { activeRole })));
-  assert.match(at('investor'), /data-testid="portfolio-performance-frame"/);
-  assert.doesNotMatch(at('admin'), /portfolio-performance-frame/);
-  assert.match(read('pages/PortfolioWorkspace.jsx'), /<WorkerRail workspace="Portfolio" role="investor"/);
+  assert.match(at('investor'), /data-testid="investor-portfolio-performance"/);
+  assert.match(at('investor'), /data-testid="investor-performance-rail"/);
+  assert.doesNotMatch(at('admin'), /investor-portfolio-performance|investor-performance-rail/);
+  assert.match(read('pages/investor/InvestorPortfolioPerformance.jsx'), /<WorkerRail\s+workspace="Portfolio"\s+role="investor"/);
 });
 
 test('I11 Axal VC Fund keeps its content without the owner-removed AI rail', async () => {

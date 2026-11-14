@@ -551,7 +551,7 @@ import RecordingPill from './pages/founder/RecordingPill';
 import { ONBOARDING_COMPLETE_EVENT, ONBOARDING_LICENCE_CHOSEN_EVENT, TERMS_ACCEPTED_EVENT } from './lib/onboarding';
 import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
-import { connectorsRedirect } from './pages/account/connectorsModel';
+import { connectorsRedirect, takeSignInFrom } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
@@ -789,7 +789,9 @@ function SupportRedirect() {
 // Connectors" notice.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={connectorsRedirect(loc)} state={{ connectorsMoved: true }} replace />;
+  // D5810: a Microsoft sign-in begun on the Teams page returns there; the marker is read once.
+  const [from] = useState(() => takeSignInFrom());
+  return <Navigate to={connectorsRedirect(loc, { from })} state={{ connectorsMoved: true }} replace />;
 }
 
 
@@ -2524,6 +2526,12 @@ function AppInner() {
   // Same rule as researchRole, and the same reason it lives below
   // effectiveRole rather than above it.
   const networkRole = researchRole;
+  // #6265: a Research zone the founder shell does not list (diligence, benchmarking, client prep)
+  // sends an admin who is not previewing back to `/research`. It cannot be done by leaving `admin`
+  // out of `labRoles([...])`, because labRoles adds `viewMode`, which is 'admin' for that admin.
+  // These routes use a plain `guard([...])` inside this, so View as Investor / Advisor / Partner
+  // (effectiveRole = the previewed role) still passes RoleGuard.
+  const adminToResearch = (element) => (effectiveRole === 'admin' ? <Navigate to="/research" replace /> : element);
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
@@ -2922,12 +2930,17 @@ function AppInner() {
       <Route path="/research/funds/catalog/:id" element={guard(labRoles(['admin', 'founder']), <FundCatalogProfile role={researchRole} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
-      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      {/* #6265: no `admin` on diligence, benchmarking or client prep. An admin browses Research as
+          the founder shell (`researchRole`), which lists none of the three, so the zone resolved to
+          null and drew "Nothing serves this zone yet"; the diligence reads are keyed to the caller
+          as the investor, so an admin holds no rooms either. `adminToResearch` sends that admin to
+          /research; View as Investor / Advisor / Partner still opens them through RoleGuard. */}
+      <Route path="/research/diligence" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/diligence/:grantUid" element={adminToResearch(guard(['investor'], <DiligenceRoom role={researchRole} />))} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={adminToResearch(guard(['investor'], <DiligenceFile role={researchRole} />))} />
+      <Route path="/research/benchmarking" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/benchmarking/:uid" element={adminToResearch(guard(['investor'], <BenchmarkDetail role={researchRole} />))} />
+      <Route path="/research/client-prep" element={adminToResearch(guard(['advisor', 'partner'], <ResearchWorkspace role={researchRole} user={user} />))} />
       {/* Legacy Customer Discovery lands on Validate · Customer research (#2335). */}
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
@@ -3775,6 +3788,9 @@ function AppInner() {
       <Route path="/portfolio/companies/:uid" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/reports" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/companies/:uid/terms" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/financials" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/support" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/activity" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links

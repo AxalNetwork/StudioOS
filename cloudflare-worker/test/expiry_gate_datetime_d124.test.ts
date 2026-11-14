@@ -225,6 +225,8 @@ test('no access-control gate compares a bare timestamp column', () => {
     'routes/market_intel.ts', 'services/trust.ts',
     // D4631 part 2: the data room's two NDA reads moved into the shared rule.
     'services/dealAccess.ts',
+    // D4570-p7: brief notes moved here from research.ts (D4574-p8) and now gate on grant expiry.
+    'routes/research_client_prep.ts',
   ];
   // A bare column on either side of a comparison against the clock. The
   // negative lookbehind lets `datetime(expires_at)` through and nothing else.
@@ -240,5 +242,7 @@ test('no access-control gate compares a bare timestamp column', () => {
   // project-founder NDA gates. D1102 adds the active/expired grant summary,
   // and D1104 the founder's NDA route's live-grant check in data_room.ts:
   // D4631 keeps the two shared NDA reads by founder and project. D4672 adds the open proof-consent request.
-  assert.equal(wrapped, 19, `expected 19 normalised comparisons across the gated files, found ${wrapped}`);
+  // D4570-p7 adds six: a share reads only through a live advisor grant (readableDoc, the library list's
+  // two columns), the brief draft's and brief notes' grant lookups, and the grant revoke's other-grant guard.
+  assert.equal(wrapped, 25, `expected 25 normalised comparisons across the gated files, found ${wrapped}`);
 });

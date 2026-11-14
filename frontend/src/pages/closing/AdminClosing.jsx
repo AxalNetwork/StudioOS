@@ -23,7 +23,7 @@ import PaperDrawer from './PaperDrawer';
 import PaperState from './PaperState';
 import { FundCard, SyndicatePanel, ThirdPartyDrawer } from './RoutePanels';
 import {
-  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, lineStatus, moneyCents, routeWord,
+  FUND_CALLS_PATH, NO_ROUTE_YET, actControl, activityRows, awaitingRelease, closeState, closingFigures, envelopesOf, lineStatus, moneyCents, paperEnvelopes, routeWord,
 } from './deskModel';
 import { closingPaperLifecycle } from '../../lib/contractLifecycle';
 
@@ -58,7 +58,8 @@ function usePaper(lines, tick) {
     for (const l of lines) {
       if (!l.commitment_id) continue;
       stagedSigningApi.line(l.commitment_id).then(
-        (d) => { if (live) setPaper((p) => ({ ...p, [l.uid]: { status: 'ok', envelopes: Array.isArray(d?.envelopes) ? d.envelopes : [] } })); },
+        // D4811 part 24: an answer with no list is Unreadable, never "No paper sent".
+        (d) => { if (live) setPaper((p) => ({ ...p, [l.uid]: envelopesOf(d) ? { status: 'ok', envelopes: envelopesOf(d) } : { status: 'error', envelopes: [] } })); },
         () => { if (live) setPaper((p) => ({ ...p, [l.uid]: { status: 'error', envelopes: [] } })); },
       );
     }
@@ -209,9 +210,9 @@ export default function AdminClosing({ summary, onChanged }) {
           : <ul className="m-0 flex list-none flex-col p-0">{activity.slice(0, 5).map((r) => <ActivityRow key={r.key} r={r} />)}</ul>}
       </section>
 
-      {open?.kind === 'route' && <RouteDialog closing={closing} line={open.line} envelopes={paper[open.line.uid]?.envelopes} onClose={() => setOpen(null)} onSaved={done} />}
+      {open?.kind === 'route' && <RouteDialog closing={closing} line={open.line} envelopes={paperEnvelopes(paper[open.line.uid])} onClose={() => setOpen(null)} onSaved={done} />}
       {open?.kind === 'paper' && <PaperDrawer closing={closing} company={company} line={open.line} founderUserId={founderUserId} onClose={() => setOpen(null)} onSent={done} />}
-      {open?.kind === 'third' && <ThirdPartyDrawer closing={closing} line={open.line} envelopes={paper[open.line.uid]?.envelopes} onClose={() => setOpen(null)} onSaved={done} />}
+      {open?.kind === 'third' && <ThirdPartyDrawer closing={closing} line={open.line} envelopes={paperEnvelopes(paper[open.line.uid])} onClose={() => setOpen(null)} onSaved={done} />}
       {open?.kind === 'withdraw' && <WithdrawLineDialog closing={closing} line={open.line} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'complete' && <CompleteDialog closing={closing} onClose={() => setOpen(null)} onDone={done} />}
       {open?.kind === 'countersign' && <CountersignDialog envelope={open.envelope} onClose={() => setOpen(null)} onDone={() => setRev((n) => n + 1)} />}

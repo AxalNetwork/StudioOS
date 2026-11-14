@@ -173,7 +173,9 @@ test('the Rules chip is live, and it is a view rather than a predicate that empt
 
   // The page implements it, and implements it as a swap.
   assert.match(P, /const showingRules = filter === 'rules';/, 'the page does not implement the Rules key');
-  assert.match(P, /\{showingRules\s*\?\s*<RuleSet/, 'the Rules chip no longer opens the rule set');
+  // D4817 part 4 (#5311, PF-04): while the reporting read is still answering,
+  // the swap draws a skeleton, never an empty rule set.
+  assert.match(P, /\{showingRules\s*\?\s*\(reads\.compliance\.state === 'loading' \? <section className="pf-card"><Skeleton rows=\{3\} \/><\/section> : <RuleSet/, 'the Rules chip no longer opens the rule set');
   // The dead predicates that used to return false are not back. `visible` is
   // the only row filter on this page and it may only narrow on `overdue`.
   const visible = P.slice(P.indexOf('const visible = rows.filter'), P.indexOf('\n', P.indexOf('const visible = rows.filter')));
@@ -186,7 +188,10 @@ test('the panel tells an unreadable rule set apart from an empty one', () => {
   // Three branches. Collapsing the first two would report "the source could not
   // be read" as "companies are asked for nothing", which on this page is the
   // difference between silence and a standard.
-  assert.match(P, /const kpiSet = complianceUnavailable \? null : \(state\.compliance\?\.kpi_set \|\| \[\]\);/,
+  // D4817 part 4 (#5311, PF-04): each source is its own read (`usePortfolioReads`).
+  assert.match(P, /const complianceUnavailable = reads\.compliance\.state === 'unreadable';/,
+    'an unreadable reporting read is no longer told apart');
+  assert.match(P, /const kpiSet = complianceUnavailable \? null : \(reads\.compliance\.value\?\.kpi_set \|\| \[\]\);/,
     'the null / empty distinction is gone from the derivation');
   assert.match(body, /kpiSet === null/, 'the panel has no unreadable state');
   assert.match(body, /kpiSet\.length === 0/, 'the panel has no empty state');
@@ -211,7 +216,7 @@ test('the rows shown are one cadence, and the panel says so', () => {
 
   // The cadence named on screen is the one the SERVER answered with. A
   // hard-coded word would keep saying "quarterly" after the request changed.
-  assert.match(P, /const cadence = state\.compliance\?\.cadence \|\| 'quarterly';/,
+  assert.match(P, /const cadence = reads\.compliance\.value\?\.cadence \|\| 'quarterly';/,
     'the panel names a cadence the response did not state');
   const body = panel();
   assert.match(body, /at the \{cadence\} cadence/, 'the seam note no longer names which slice this is');
@@ -226,9 +231,9 @@ test('“Carried by” counts stored updates, and a blank arrival is not a carri
   assert.match(body, /value !== undefined && value !== null && String\(value\)\.trim\(\) !== ''/,
     'a blank value now counts as a carried figure');
   // No denominator means no count — never zero out of zero.
-  assert.match(P, /const storedUpdates = state\.unavailable\.updates \? null : rows\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
+  assert.match(P, /const storedUpdates = reads\.updates\.state !== 'ok' \? null : rows\.map\(\(row\) => row\.update\)\.filter\(Boolean\);/,
     'the denominator no longer distinguishes an unreadable update source');
-  assert.match(body, /held === null \? <span className="ip2-muted">Unavailable<\/span>/,
+  assert.match(body, /held === null \? <span className="pf-unreadable">Unavailable<\/span>/,
     'an unreadable update source is counted rather than labelled');
   // And it is not sold as compliance. Each row's update is the company's
   // latest, whatever period it speaks for.
@@ -284,7 +289,9 @@ test('the three ops reasons are each true about their own object', () => {
   assert.match(PORTFOLIO, /type: 'portfolio_update_chase'/, 'the founder notification is gone');
   assert.match(API, /portfolioChase: \(projectIds\) =>/, 'api.js lost the chase write');
   // The page chases its own overdue set and nothing else.
-  assert.match(P, /api\.portfolioChase\(overdueRows\.map\(\(row\) => row\.project_id\)\)/,
+  assert.match(P, /const overdueRows = rows\.filter\(\(row\) => row\.reported === false\);/,
+    'the overdue set is no longer the companies the reporting read says have not reported');
+  assert.match(P, /api\.portfolioChase\(overdueRows\.map\(\(row\) => row\.projectId\)\)/,
     'Chase all overdue must hand the route the page’s own overdue set');
   // The founder-side fan-out is untouched by any of this.
   assert.match(UPDATES, /async function notifyProjectFollowers/, 'the follower fan-out the reason describes is gone');
@@ -338,21 +345,26 @@ test('the AI band mounts the half that has somewhere to land, and refuses the ha
     'the card no longer explains the source-preservation boundary');
   assert.doesNotMatch(card, /parse-review|proposal queue|#\d+|IP2/,
     'the card exposes internal working copy');
-  assert.match(P, /<Stat label="Source handling" value="Source-preserved"/,
+  assert.match(P, /<SummaryTile label="Source handling" value="Source-preserved"/,
     'the strip no longer explains how submitted updates are handled');
 });
 
 test('the strip, the instrument and the header row still match the artboard', () => {
   const board = ip2();
-  const head = /head:\[([^\]]*)\]/.exec(board);
-  assert.ok(head, 'the IP2 artboard no longer declares an instrument head');
-  const columns = head[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(columns, ['Company', 'Arrived', 'State', 'What came in']);
+  // D4817 part 4 (#5311): the instrument is Portfolio v2's PF-04 obligations
+  // table now (`Portfolio v2 Page.dc.html`, `reports()`), which replaces IP2's
+  // head; the strip is the frame's tiles. IP2's header row still holds below.
+  const PF = read('design/incoming/Portfolio v2 Page.dc.html');
+  const at = PF.indexOf('const reports = (detail) =>');
+  assert.ok(at > 0, 'the PF-04 board is gone from the Portfolio v2 canvas');
+  const pf04 = PF.slice(at, PF.indexOf('</thead>', at));
+  const columns = [...pf04.matchAll(/<th>([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(columns, ['Company', 'Due', 'Received', 'Status', 'Missing', 'Last chase']);
   for (const col of columns) {
-    assert.ok(P.includes(`<th>${col}</th>`), `the update inbox lost its ${col} column`);
+    assert.ok(P.includes(`<th scope="col">${col}</th>`), `the obligations inbox lost its ${col} column`);
   }
-  for (const label of ['Arrived', 'Never arrived', 'Source handling', 'Runway alerts']) {
-    assert.ok(P.includes(`label="${label}"`), `the strip lost its ${label} tile`);
+  for (const label of ['Received', 'Not received', 'Due date', 'Source handling']) {
+    assert.ok(P.includes(`<SummaryTile label="${label}"`), `the strip lost its ${label} tile`);
   }
   // The header row's two halves, verbatim from the artboard.
   const filters = /filters: fil\(\[([^\]]*)\]/.exec(board);
@@ -366,6 +378,8 @@ test('the strip, the instrument and the header row still match the artboard', ()
   }
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Updates eyebrow is back');
-  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
-  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Updates & KPI collection"/, 'the heading went with the eyebrow');
+  // D1424 (#3700) drew the heading with the shared ZoneHeader; D4817 part 4
+  // (#5311, PF-04) draws it in the Portfolio frame, the Reports tab current.
+  assert.match(P, /<PortfolioFrame\s+tab="updates"/, 'Reports left the Portfolio frame');
+  assert.doesNotMatch(P, /<ZoneHeader /, 'a second heading is drawn');
 });

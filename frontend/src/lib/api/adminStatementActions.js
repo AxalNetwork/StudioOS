@@ -18,6 +18,10 @@ export const adminStatementActionsApi = {
   issue: (uid, body) => request(`/admin/statements/${enc(uid)}/issue`, { method: 'POST', body: JSON.stringify(body || {}) }),
   recordPayment: (uid, body) => request(`/admin/statements/${enc(uid)}/payments`, { method: 'POST', body: JSON.stringify(body || {}) }),
   void: (uid, body) => request(`/admin/statements/${enc(uid)}/void`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  recordDispute: (uid, body) => request(`/admin/statements/${enc(uid)}/disputes`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  setDueDate: (uid, body) => request(`/admin/statements/${enc(uid)}/due-date`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  history: (uid, cursor) => request(`/admin/statements/${enc(uid)}/actions${cursor ? `?cursor=${enc(cursor)}` : ''}`),
+  promotionReadback: (uid, period) => request(`/admin/promo-ceilings/${enc(uid)}/read-back?period=${enc(period)}`),
   licencePicker: ({ q, cursor, limit } = {}) => {
     const s = new URLSearchParams();
     if (q) s.set('q', String(q));

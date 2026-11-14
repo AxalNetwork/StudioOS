@@ -26,6 +26,7 @@
 import { branchSegmentOverview } from '../services/personaSegmentScopes';
 import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { promoCeilingReadback } from '../services/promoCeilingReadback';
 import type { Env } from '../types';
 import type { GameSet } from '../services/gameLibrary';
 import {
@@ -97,6 +98,8 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   applyPromoCeiling(c: { period: string; ceiling_cents: number; currency: string; pushed_at: string }) {
     return applyPromoCeiling(this.env, c);
   }
+
+  promoCeilingReadback() { return promoCeilingReadback(this.env); }
 
   applyEscalationAnswer(a: EscalationAnswer) { return applyEscalationAnswer(this.env, a); }
 

@@ -24,7 +24,9 @@ test('I4 renders the requested portfolio decision surfaces', () => {
   // D4817 part 1 (#5311, PF-01): the overview is the Portfolio v2 Overview in
   // the shared frame. Its order is the canvas's decision order: performance,
   // Needs attention, Reporting and Value-add, then the company table.
-  const order = ['<Performance ', '<NeedsAttention ', '<ReportingCard ', '<ValueAddCard ', '<CompanyTable '].map((tag) => portfolio.indexOf(tag));
+  // D4817 part 3: the performance summary is the shared `PerformanceSummary`
+  // part, which Performance (PF-03) draws too.
+  const order = ['<PerformanceSummary ', '<NeedsAttention ', '<ReportingCard ', '<ValueAddCard ', '<CompanyTable '].map((tag) => portfolio.indexOf(tag));
   assert.ok(order.every((at) => at > 0), 'the overview draws all five PF-01 surfaces');
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'in the canvas order');
   assert.match(portfolio, /<PortfolioFrame\b/, 'inside the shared Portfolio frame');
@@ -93,7 +95,9 @@ test('I4 is wired to real portfolio sources and preserves detailed tools', () =>
   assert.ok(app.includes('path="/portfolio/value-add"'), 'nothing routes /portfolio/value-add');
   assert.match(portfolio, /Missing values stay blank rather than being estimated/);
   assert.match(portfolio, /At cost/);
-  assert.match(portfolio, /mark coverage/);
+  // D4817 part 3: the summary moved to the shared parts; its coverage line is the model's.
+  assert.match(portfolio, /<PerformanceSummary perf=\{perf\}/);
+  assert.match(model, /% mark coverage\)/);
   assert.doesNotMatch(portfolio, /portfolioHealthRecomputeAll/);
 });
 

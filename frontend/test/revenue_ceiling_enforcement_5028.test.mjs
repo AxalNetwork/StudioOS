@@ -54,27 +54,27 @@ test('saved, pushed, enforced, issued and remaining are five separate facts', ()
   assert.equal(unpushed.saved.yes, true);
   assert.equal(unpushed.pushed.yes, false);
   assert.equal(unpushed.pushed.label, 'Not pushed to the branch');
-  assert.equal(unpushed.enforced.state, 'not_received');
-  assert.match(unpushed.enforced.label, /allows discounts/);
+  assert.equal(unpushed.enforced.state, 'not_checked');
+  assert.match(unpushed.enforced.label, /needs a branch checkout read-back/);
 
   // Pushed with the latest save: enforced.
   const pushed = ceilingFacts(row({ pushed_at: '2026-11-08T10:00:00.000Z' }), NOW);
   assert.equal(pushed.pushed.yes, true);
-  assert.equal(pushed.pushed.label, 'Pushed to the branch 2026-11-08');
-  assert.equal(pushed.enforced.state, 'enforced');
+  assert.equal(pushed.pushed.label, 'Push accepted 2026-11-08');
+  assert.equal(pushed.enforced.state, 'not_checked');
 
   // Saved again, push failed: the branch holds the EARLIER figure, and HQ says so rather than "pushed".
   const stale = ceilingFacts(row({ pushed_at: '2026-11-01T09:00:00.000Z', updated_at: '2026-11-08T10:00:00.000Z' }), NOW);
   assert.equal(stale.pushed.yes, false);
   assert.equal(stale.pushed.label, 'The latest figure was not pushed');
-  assert.equal(stale.enforced.state, 'earlier_figure');
-  assert.match(stale.enforced.label, /last received, not this one/);
+  assert.equal(stale.enforced.state, 'not_checked');
+  assert.match(stale.enforced.label, /push acceptance is a separate fact/);
 
   // A ceiling for another quarter governs no checkout now, pushed or not.
   for (const pushed_at of [null, '2026-11-08T10:00:00.000Z']) {
     const old = ceilingFacts(row({ period: '2026-Q3', pushed_at }), NOW);
     assert.equal(old.enforced.state, 'other_period');
-    assert.match(old.enforced.label, /governs no checkout now/);
+    assert.match(old.enforced.label, /read-back covers current checkout only/);
   }
   assert.equal(ceilingFacts(row(), undefined).enforced.state, 'other_period', 'an unknown current quarter is not assumed');
 });

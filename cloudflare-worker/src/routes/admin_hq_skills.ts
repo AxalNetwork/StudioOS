@@ -21,7 +21,7 @@
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
  *                                    publish refuses on), each review's `changes`, each version's `evidence` (null: no manifest)
- *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
+ *   GET  /:uid/diff?from=source|vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed;
  *                                    D4533: `evidence`, the cases added and removed, the required models and the evaluator
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft, on its evidence
  *   POST /:uid/review/approve        { comment? }       the named reviewer approves; never the draft's author
@@ -384,10 +384,25 @@ adminHqSkills.get('/:uid/diff', async (c) => {
     return row ? { parts: versionParts(row), evidence: parseEvidence(row.evidence_json) } : null;
   };
   const fromDefault = s.current_version > 0 ? `v${s.current_version}` : 'draft';
-  const from = await side(c.req.query('from'), fromDefault);
-  const to = await side(c.req.query('to'), 'draft');
-  if (!from || !to) return say(c, 400, 'version_unknown', 'Compare a published version (v1, v2, …) or the draft.');
-  return c.json({ from: c.req.query('from') ?? fromDefault, to: c.req.query('to') ?? 'draft', ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
+  const fromLabel = c.req.query('from') ?? fromDefault;
+  const toLabel = c.req.query('to') ?? 'draft';
+  let from;
+  if (fromLabel === 'source') {
+    const entries = await loadSkillLibrary(c.env);
+    if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
+    const matches = entries.filter((entry) => entry.slug === s.slug);
+    if (!matches.length) return say(c, 404, 'source_missing', 'This HQ skill has no matching library source.');
+    if (matches.length > 1) return say(c, 409, 'source_ambiguous', 'More than one library source matches this skill.');
+    const tax = await taxonomyMaps(c.env);
+    const [checked] = checkLibrary(new Set(tax.category.keys()), matches);
+    if (!checked.ok) return say(c, 409, 'source_invalid', 'The matching library source could not be validated.');
+    from = { parts: checked.draft, evidence: null };
+  } else {
+    from = await side(fromLabel, fromDefault);
+  }
+  const to = await side(toLabel, 'draft');
+  if (!from || !to) return say(c, 400, 'version_unknown', 'Compare the library source, a published version (v1, v2, …) or the draft.');
+  return c.json({ from: fromLabel, to: toLabel, ...diffParts(from.parts, to.parts), evidence: diffEvidence(from.evidence, to.evidence) });
 });
 
 // D4531 slice 3 (section E): the candidate's results against the baseline's, per case and per model.

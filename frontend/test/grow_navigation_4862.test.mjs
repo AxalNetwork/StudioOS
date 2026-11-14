@@ -8,6 +8,7 @@ import FounderGrowCustomers from '../src/pages/founder/FounderGrowCustomers.jsx'
 import FounderGrowTalent from '../src/pages/founder/FounderGrowTalent.jsx';
 import FounderGrowPartnerships from '../src/pages/founder/FounderGrowPartnerships.jsx';
 import FounderGrowLaunch from '../src/pages/founder/FounderGrowLaunch.jsx';
+import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { readRoutesSource } from './_routesSource.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -64,4 +65,27 @@ test('GR-04 entry points and existing module, Distribution and Reporting deep li
   }
   check('/grow/distribution/campaigns/new');
   check('/grow/distribution/campaigns/campaign-123', '/grow/distribution/campaigns/:uid');
+});
+
+test('Focus and Customers subsections link both ways and preserve only the project query', () => {
+  for (const [root, slug, title] of [
+    ['focus', 'revenue-and-traction', 'KPIs and revenue'],
+    ['customers', 'product-improvement', 'Feedback'],
+  ]) {
+    for (const [query, canonical] of [['?project_id=41&tab=old', '?project_id=41'], ['?project=19', '?project_id=19'], ['', '']]) {
+      for (const active of [root, slug]) {
+        const page = active === root
+          ? React.createElement(pages[root])
+          : React.createElement(CycleHeader, { cycle: 'grow', cards: [], active, title: 'Legacy name', search: query });
+        const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/grow/' + active + query] }, page));
+        const strip = html.match(/<nav[^>]+data-testid="grow-subsections"[^>]*>(.*?)<\/nav>/)?.[1];
+        for (const key of [root, slug]) {
+          const link = strip?.match(new RegExp('<a[^>]+href="/grow/' + key + '[^"]*"[^>]*>'))?.[0];
+          assert.ok(link?.includes('href="/grow/' + key + canonical + '"'));
+          assert.equal(link.includes('aria-current="page"'), key === active);
+        }
+        if (active === slug) assert.match(html, new RegExp('<h1[^>]*>' + title + '<'));
+      }
+    }
+  }
 });

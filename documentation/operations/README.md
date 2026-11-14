@@ -46,6 +46,9 @@ and a link in `documentation/README.md`.
 
 | `ENGINEERING_EVENTS_5664.md` | D5664: read-only workflow/provider inventory, pilot counts and deployment gaps. |
 | `ENGINEERING_SLACK_5665.md` | D5665: destination kill switches, canary and uncertain-send recovery. |
+| `ENGINEERING_SLACK_ROLLOUT_5668.md` | #5668: public rehearsal evidence and rollout acceptance checklist. |
 | `CLOUDFLARE_ROLLOUT_5670.md` | D5670: source-to-receipt rollout, privacy, outage and rollback checklist. |
 | `CLOUDFLARE_DELIVERY_5671.md` | D5671: private registry/secret setup, connectivity versus receipts, canary, fallback and rollback. |
 | `AGENT_COMPUTE_4557.md` | D4557: local image evidence, immutable scheduling gate, preview acceptance and rollback. |
+| `WORKFLOW_SLACK_6370.md` | D6370: configure the sender, validate a workflow attempt and pause delivery. |
+| `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |

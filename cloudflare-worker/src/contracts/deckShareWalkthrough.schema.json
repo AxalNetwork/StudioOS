@@ -1,0 +1,39 @@
+{
+  "$id": "deckShareWalkthrough",
+  "title": "GET /api/decks/share/:token/walkthrough (D5791, #5791)",
+  "description": "The walkthrough attached to one investor share link, as the share viewer plays it (`routes/deck_share_walkthrough.ts`, `services/decks/recordings.ts` sharedWalkthroughOf). `attached` is false, with no takes, when nothing is attached to this link. Each take is the maker's newest of a card the link sends, in card order, named by the card's uid; it carries nothing of the member (no caption model, charge, size or date). Captions that were not recorded are null, never an empty list. Not an adapter method: the share viewer calls its own client (`frontend/src/lib/api/deckShareWalkthrough.js`), as the other share reads do, so this schema is checked by `deck_share_walkthrough_d5791.test.ts`, not listed in `CONTRACTS`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attached", "takes"],
+  "properties": {
+    "attached": { "type": "boolean" },
+    "takes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["uid", "card", "card_uid", "take", "duration_ms", "media_mime", "captions"],
+        "properties": {
+          "uid": { "type": "string" },
+          "card": { "type": "integer", "minimum": 1 },
+          "card_uid": { "type": "string" },
+          "take": { "type": "integer", "minimum": 1 },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "media_mime": { "type": "string" },
+          "captions": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["start_ms", "end_ms", "text"],
+              "properties": {
+                "start_ms": { "type": "number", "minimum": 0 },
+                "end_ms": { "type": "number", "minimum": 0 },
+                "text": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

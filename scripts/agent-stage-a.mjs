@@ -30,9 +30,12 @@
  * bearer token with the run's JWT_SECRET, the same HS256 token the Worker
  * issues at sign-in. No endpoint is added, and nothing is bypassed.
  *
- * NOT IN THIS SCRIPT YET: S1's #4555 pass with `AGENT_SKILL_RUNTIME =
- * "cloudflare_sdk"`. It needs a published skill pinned to the synthetic
- * agent, and the #4566 fixtures seed none (D4594-p3 §4).
+ * S1'S #4555 PASS (`skill_runtime_pass`, D4594 part 4): one published HQ
+ * skill pinned at version 1 to the synthetic agent (`skillSeed`). The sponsor
+ * runs it three times on the manual path: legacy loader; then redeployed with
+ * `AGENT_SKILL_RUNTIME = "cloudflare_sdk"` on this throwaway Worker only; then
+ * redeployed without it. Each run must show one usage row on version 1 and the
+ * runtime it asked for, or a recorded fallback (`skillRunVerdict`).
  *
  * The log, the step summary and the artifact hold names, counts, states and
  * timings only. Wrangler output that could quote SQL or a secret is withheld.
@@ -45,7 +48,7 @@ import { join, resolve } from 'node:path';
 
 import {
   CEILINGS, RECONCILE, STAGE_A_ENV, STAGE_A_VARS, checkFlat, envView, extraSeed, fixtureIds, reconcile, renderFlat,
-  stageANames, stageASections, toCreate,
+  skillRunVerdict, skillSeed, stageANames, stageASections, toCreate,
 } from './lib/stageARun.mjs';
 import { createdDatabaseId, rehearsalConfig } from './lib/schemaRehearsal.mjs';
 import { rehearsalConfigPath } from './lib/migrationTargets.mjs';
@@ -222,7 +225,7 @@ try {
   let sponsorId;
   await step('seed', () => {
     const file = join(TMP, 'seed.sql');
-    writeFileSync(file, toSqlFile([...seedStatements({ run: n.run, tenants: 1, agentsPerTenant: 1, tasksPerAgent: 2 }), ...extraSeed(n.run)]));
+    writeFileSync(file, toSqlFile([...seedStatements({ run: n.run, tenants: 1, agentsPerTenant: 1, tasksPerAgent: 2 }), ...extraSeed(n.run), ...skillSeed(n.run)]));
     d1(['execute', '--file', file]);
     sponsorId = Number(query(`SELECT id FROM users WHERE email = '${ids0.sponsorEmail}'`)[0]?.id);
     if (!Number.isSafeInteger(sponsorId)) throw new Error('the synthetic sponsor was not seeded');
@@ -278,6 +281,40 @@ try {
     if (decided.status !== 200) throw new Error(`the decision answered ${decided.status}`);
     summary.paths.manual = { charged: ran.body.charged ?? null, ms_total: Date.now() - t0 };
     return { status: 'accepted' };
+  });
+
+  await step('skill_runtime_pass', async () => {
+    // Redeploys only ever change AGENT_SKILL_RUNTIME (stageARun.test.mjs holds that), so the preflight still holds.
+    const redeploy = async (skillRuntime) => {
+      const flat = renderFlat(stageASections(TOML, n.run, ids, { skillRuntime }));
+      checkFlat(flat, TOML);
+      writeFileSync(FLAT_PATH, flat);
+      wrangler(['deploy', '--config', FLAT_PATH]);
+      await sleep(10_000); // let the new version take the route before the next run
+    };
+    const runs = [];
+    const one = async (want) => {
+      const before = Number(query('SELECT COALESCE(MAX(id), 0) AS m FROM ai_usage_logs')[0]?.m);
+      if (!Number.isSafeInteger(before)) throw new Error('the usage ledger could not be read before the skill run');
+      const ran = await api(token, 'POST', `/agents/${encodeURIComponent(ids0.agentUid)}/run`,
+        { module: SYNTHETIC_MODULE, option: SYNTHETIC_OPTION, prompt: 'Draft a short synthetic brief.', skill: ids0.skillUid });
+      if (ran.status !== 200 || !ran.body?.proposal?.uid) throw new Error(`the ${want} skill run answered ${ran.status}`);
+      const decided = await api(token, 'POST', `/queue/${encodeURIComponent(ran.body.proposal.uid)}/decide`, { decision: 'accept' });
+      if (decided.status !== 200) throw new Error(`the ${want} skill run's decision answered ${decided.status}`);
+      const usage = query(`SELECT id, skill_version FROM ai_usage_logs WHERE agent_id IS NOT NULL AND guard_for IS NULL AND id > ${before}`);
+      let event = null;
+      try { event = JSON.parse(query("SELECT detail_json FROM team_agent_events WHERE kind = 'run' ORDER BY id DESC LIMIT 1")[0]?.detail_json ?? 'null'); } catch { event = null; }
+      const v = skillRunVerdict({ event, usage, want });
+      if (!v.ok) throw new Error(`${want} skill run: ${v.reason}`);
+      runs.push({ asked: want, runtime: v.runtime, fallback: v.fallback, skill_version: 1 });
+    };
+    await one('legacy');
+    await redeploy(true);
+    await one('cloudflare_sdk');
+    await redeploy(false);
+    await one('legacy');
+    summary.skill_pass = runs;
+    return { runs: runs.length };
   });
 
   await step('reconcile', () => {

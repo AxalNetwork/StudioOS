@@ -1031,10 +1031,15 @@ settings.post('/sessions/:id/revoke', async (c) => {
   // to the caller's own rows.
   const out = await revokeUserSession(c.env, id, user.id);
   if (out.outcome === 'not_found') return c.json({ error: 'Not found' }, 404);
-  const sql = getSQL(c.env);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-            VALUES ('session_revoked', ${`User revoked session ${id} from /settings`}, ${user.email}, ${user.id})`;
-  await sql.end();
+  // D4614 — one revocation, one audit row. `already_revoked` (a repeat, or the
+  // loser of a concurrent revoke) changed nothing, so it records nothing; the
+  // caller is still told the session is ended, as before (D4618).
+  if (out.outcome === 'revoked') {
+    const sql = getSQL(c.env);
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('session_revoked', ${`User revoked session ${id} from /settings`}, ${user.email}, ${user.id})`;
+    await sql.end();
+  }
   return c.json({ ok: true });
 });
 

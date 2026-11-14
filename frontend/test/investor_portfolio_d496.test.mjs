@@ -23,8 +23,9 @@ test('IP2: internal parse-review working copy is not offered to investors', () =
 test('IP2: the page explains source handling without exposing implementation decisions', () => {
   const t = renderedText(renderToStaticMarkup(createElement(MemoryRouter, null, createElement(InvestorPortfolioUpdates))));
   const src = readFileSync(new URL('../src/pages/investor/InvestorPortfolioUpdates.jsx', import.meta.url), 'utf8');
-  assert.match(src, /<Stat label="Source handling" value="Source-preserved"/);
-  assert.doesNotMatch(src, /asked on #\d+|<Stat label="Parse review"/);
+  // D4817 part 4 (#5311, PF-04): the strip is the Portfolio frame's SummaryTile.
+  assert.match(src, /<SummaryTile label="Source handling" value="Source-preserved"/);
+  assert.doesNotMatch(src, /asked on #\d+|<(?:Stat|SummaryTile) label="Parse review"/);
   assert.doesNotMatch(t, /Parse review/i);
 });
 

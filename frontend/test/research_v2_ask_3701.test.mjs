@@ -89,6 +89,17 @@ test('each source shows its passage, or says it was not recorded, and whether it
   } finally { await m.close(); }
 });
 
+test('answered and model-unavailable rows both keep their recorded passage beside Save to project', async () => {
+  const m = await mountAsk([ANSWERED, { ...ANSWERED, uid: 'model-down', reason: 'model_unavailable', answer: null }]);
+  try {
+    for (const uid of ['a', 'model-down']) {
+      assert.equal(textOf(byTid(m, `ask-passage-${uid}-0`)).trim(), 'The C5 criteria catalogue applies to cloud providers', uid);
+    }
+    assert.equal(Boolean(byTid(m, 'button-ask-save-project-a')), true, 'an answered row can be saved');
+    assert.equal(Boolean(byTid(m, 'button-ask-save-project-model-down')), false, 'a model failure cannot be saved as an answer');
+  } finally { await m.close(); }
+});
+
 test('the tabs change the read; Archived is its own read, not a filter over All', async () => {
   const m = await mountAsk([ANSWERED]);
   try {
@@ -128,6 +139,8 @@ test('Copy with citations writes the answer and its sources; Evidence scope star
     assert.match(written[0], /^C5 in Germany \[1\]\.\n\nSources\n\[1\] BSI C5 \(page 4, passage 1\)/);
     assert.match(textOf(byTid(m, 'button-ask-copy-a')), /Copied/);
     assert.equal(byTid(m, 'button-ask-copy-b'), null, 'an unanswered question has nothing to copy');
+    assert.ok(byTid(m, 'button-ask-save-project-a'));
+    assert.equal(byTid(m, 'button-ask-save-project-b'), null);
     const scope = byTid(m, 'ask-evidence-scope');
     assert.equal(scope?.tagName, 'DETAILS');
     assert.equal(m.props(scope).open, undefined, 'collapsed by default');

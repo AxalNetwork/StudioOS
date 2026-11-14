@@ -45,6 +45,7 @@ function world() {
   // The data room's requests read joins its own access requests and round calls.
   for (const f of ['436_round_calls.sql']) { try { w.db.exec(read(`sql/migrations/${f}`)); } catch { /* already in the baseline */ } }
   try { w.db.exec(read('sql/migrations/595_data_room_access_requests.sql').split('INSERT OR IGNORE')[0]); } catch { /* already in the baseline */ }
+  addColumnsFrom(w.db, stripForeignKeys(read('sql/migrations/620_dd_case_lifecycle.sql')), 'dd_cases');
   w.db.exec(MIG622);
   const u = w.db.prepare('INSERT INTO users (id, name, email, role, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'Ada Admin', 'ada@example.test', 'admin', null);
@@ -177,6 +178,50 @@ test('remind: the owner or an admin, once a day, only while the request waits; e
   assert.equal((await call(w, OWNER, 'POST', '/dd/cases/case-dd/requests/61/remind')).body.code, 'answered');
   assert.equal((await call(w, REV_A, 'POST', '/dd/cases/case-dd/requests/63/remind')).status, 403, 'a section reviewer reminded the subject');
   assert.equal((await call(w, OWNER, 'POST', '/dd/cases/case-dd/requests/999/remind')).status, 404);
+});
+
+test('the subject sees their ventures and request fields only', async () => {
+  const w = world();
+  w.db.prepare("UPDATE dd_cases SET subject_label = 'Old venture name' WHERE id = 40").run();
+  w.db.prepare("INSERT INTO projects (id, uid, name, founder_id) VALUES (8, 'p-second', 'Second venture', 100)").run();
+  w.db.prepare("INSERT INTO dd_cases (id, uid, subject_type, subject_id, subject_label, owner_user_id) VALUES (41, 'case-second', 'project', 8, 'Second venture', ?)").run(OWNER);
+  w.db.prepare("INSERT INTO dd_requests (id, case_id, title, state) VALUES (64, 41, 'Second request', 'requested')").run();
+  const mine = await call(w, FOUNDER, 'GET', '/dd/requests/mine');
+  assert.equal(mine.status, 200);
+  assert.deepEqual(Object.keys(mine.body), ['items']);
+  assert.deepEqual(mine.body.items.map((row: any) => [row.project_id, row.project_uid, row.project_name]).sort((a: any, b: any) => a[0] - b[0]), [
+    ...Array.from({ length: 4 }, () => [7, 'p-room', 'Roomco']),
+    [8, 'p-second', 'Second venture'],
+  ]);
+  const fields = ['id', 'title', 'details', 'state', 'due_date', 'responded_at', 'response_note', 'response_url', 'created_at',
+    'subject_type', 'subject_label', 'project_id', 'project_uid', 'project_name', 'asking_team_name', 'file_names'].sort();
+  for (const row of mine.body.items) assert.deepEqual(Object.keys(row).sort(), fields);
+  const unrelated = await call(w, OTHER, 'GET', '/dd/requests/mine');
+  assert.deepEqual(unrelated.body.items, []);
+});
+
+test('the asking party is named only from a matching deal, with ambiguous firms omitted', async () => {
+  const w = world();
+  w.db.exec(`INSERT INTO deals (id, project_id, lead_partner_id) VALUES (50, 7, NULL), (51, 9, NULL), (52, 7, ${OWNER});
+    INSERT INTO company_profiles (id, uid, company_name) VALUES (21, 'firm-cedar', 'Cedar Ventures'), (22, 'firm-oak', 'Oak Ventures');
+    INSERT INTO commitments (deal_id, investor_user_id, company_id, amount) VALUES (50, ${REV_B}, 21, 1000), (51, ${REV_A}, 22, 1000);
+    INSERT INTO deal_invitations (deal_id, investor_user_id) VALUES (50, ${ADMIN});
+    UPDATE dd_requests SET created_by_user_id = ${REV_B} WHERE id = 60;
+    UPDATE dd_requests SET created_by_user_id = ${REV_A} WHERE id = 61;
+    UPDATE dd_requests SET created_by_user_id = ${OWNER} WHERE id = 62;
+    UPDATE dd_requests SET created_by_user_id = ${ADMIN} WHERE id = 63;`);
+  const names = async () => {
+    const { status, body } = await call(w, FOUNDER, 'GET', '/dd/requests/mine');
+    assert.equal(status, 200);
+    return Object.fromEntries(body.items.map((row: any) => [row.id, row.asking_team_name]));
+  };
+  assert.deepEqual(await names(), { 60: 'Cedar Ventures', 61: null, 62: 'Olu Owner', 63: 'Ada Admin' });
+  w.db.exec('UPDATE dd_cases SET deal_id = 50 WHERE id = 40');
+  assert.deepEqual(await names(), { 60: 'Cedar Ventures', 61: null, 62: null, 63: 'Ada Admin' });
+  w.db.exec(`INSERT INTO commitments (deal_id, investor_user_id, company_id, amount) VALUES (50, ${REV_B}, 22, 1000)`);
+  assert.equal((await names())[60], null);
+  w.db.exec('UPDATE dd_cases SET deal_id = 51 WHERE id = 40');
+  assert.deepEqual(await names(), { 60: null, 61: null, 62: null, 63: null });
 });
 
 test('withdraw: it leaves the subject\'s pages, takes no answer and no reminder; a reviewed request stays', async () => {

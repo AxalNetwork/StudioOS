@@ -92,7 +92,13 @@ test('the Product testing section draws its skeleton, then the real card through
 
 test('the skills radar holds its box at the radar height, then mounts the recharts chart', async () => {
   const prev = globalThis.ResizeObserver;
-  globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  globalThis.ResizeObserver = class {
+    // This zero-size fixture accepts the browser callback and emits no resize entries.
+    constructor(_callback) {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
   const m = await mount(h(SkillRadarLazy, { skillVector: {}, height: 210 }), { measured: true });
   try {
     // Before the dynamic import settles, the fallback holds the radar's own height.

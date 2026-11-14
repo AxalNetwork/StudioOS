@@ -7,6 +7,13 @@
  *             their statuses (`advisor_bookings.booking_link_id`, migration 394).
  *   writing   the advisor's published pieces and their opens here on Axal
  *             (`articles.views`, lifetime: a counter, not a windowed figure).
+ *             D4827 (#4827): `top` is the most-opened pieces (at most
+ *             TOP_ARTICLES, by opens) and `others` the rest, as a count and
+ *             their opens, so the parts add up to the whole.
+ *   unlinked_services
+ *             D4827: the advisor's active session types that no active booking
+ *             link sells, so a founder cannot book them from a link. At most
+ *             UNLINKED_PAGE, with `more` when there are others.
  *   views, engagements
  *             always null, each with its sentence. No profile view is recorded
  *             anywhere (owner answer H = b, 2026-11-01), and no engagement
@@ -32,6 +39,11 @@ import { pageFacts, pageWindow, type PageFacts, type PageWindow } from './listPa
 
 /** The most booking links one page of `surfaces` holds. */
 export const LINKS_PAGE = 100;
+
+/** D4827: the most-opened pieces the writing block names one by one. */
+export const TOP_ARTICLES = 3;
+/** D4827: the most session types without a booking link the read lists. */
+export const UNLINKED_PAGE = 20;
 
 export const MIN_DAYS = 1;
 export const MAX_DAYS = 370;
@@ -64,13 +76,21 @@ export interface Surface {
   note?: string;
 }
 
+export interface ArticleOpens { slug: string; title: string; opens: number; published_at: string | null }
+
 export interface Writing {
   published: number;
   opens: number;
   opens_note: string;
+  /** D4827: the most-opened pieces, by opens (lifetime, as `opens`). */
+  top: ArticleOpens[];
+  /** D4827: every other published piece, so `top` and `others` add up to `published` and `opens`. */
+  others: { count: number; opens: number };
   requests: null;
   requests_note: string;
 }
+
+export interface UnlinkedServices { items: Array<{ uid: string; name: string }>; more: boolean }
 
 type LinkRow = { id: number; uid: string; slug: string; audience: string; is_active: number };
 type CountRow = { link_id: number | null; status: string; n: number };
@@ -132,17 +152,43 @@ async function readWriting(env: Env, authorUserId: number): Promise<Writing> {
     `SELECT COUNT(*) AS published, COALESCE(SUM(views), 0) AS opens FROM articles
       WHERE author_user_id = ? AND status = 'published'`,
   ).bind(authorUserId).first<{ published: number; opens: number }>();
+  const top = await env.DB.prepare(
+    `SELECT slug, title, views AS opens, published_at FROM articles
+      WHERE author_user_id = ? AND status = 'published'
+      ORDER BY views DESC, id ASC LIMIT ?`,
+  ).bind(authorUserId, TOP_ARTICLES).all<{ slug: string; title: string; opens: number; published_at: string | null }>();
+  const published = Number(row?.published) || 0;
+  const opens = Number(row?.opens) || 0;
+  const named = (top.results || []).map((a) => ({ slug: String(a.slug), title: String(a.title), opens: Number(a.opens) || 0, published_at: a.published_at ?? null }));
   return {
-    published: Number(row?.published) || 0,
-    opens: Number(row?.opens) || 0,
+    published,
+    opens,
     opens_note: OPENS_NOTE,
+    top: named,
+    others: { count: Math.max(0, published - named.length), opens: Math.max(0, opens - named.reduce((t, a) => t + a.opens, 0)) },
     requests: null,
     requests_note: WRITING_REQUESTS_NOTE,
   };
 }
 
-/** The two reads, replaceable in tests so one can fail alone. */
-export const visibilityReads = { readSurfaces, readWriting };
+/**
+ * D4827: the advisor's active session types that no active booking link sells. A link with no session type sells
+ * none in particular, so it does not count for one.
+ */
+async function readUnlinkedServices(env: Env, advisorId: number): Promise<UnlinkedServices> {
+  const rows = await env.DB.prepare(
+    `SELECT t.uid, t.name FROM advisor_session_types t
+      WHERE t.advisor_id = ? AND t.is_active = 1
+        AND NOT EXISTS (SELECT 1 FROM advisor_booking_links l
+                         WHERE l.advisor_id = t.advisor_id AND l.session_type_id = t.id AND l.is_active = 1)
+      ORDER BY t.sort_order, t.id LIMIT ?`,
+  ).bind(advisorId, UNLINKED_PAGE + 1).all<{ uid: string; name: string }>();
+  const all = (rows.results || []).map((r) => ({ uid: String(r.uid), name: String(r.name) }));
+  return { items: all.slice(0, UNLINKED_PAGE), more: all.length > UNLINKED_PAGE };
+}
+
+/** The reads, replaceable in tests so one can fail alone. */
+export const visibilityReads = { readSurfaces, readWriting, readUnlinkedServices };
 
 export async function advisorVisibility(
   env: Env, who: { advisorId: number; userId: number }, rawDays: unknown, now = Date.now(),
@@ -150,9 +196,10 @@ export async function advisorVisibility(
 ) {
   const window = visibilityWindow(rawDays, now);
   const page = pageWindow(rawPage, LINKS_PAGE);
-  const [read, writing] = await Promise.all([
+  const [read, writing, unlinked] = await Promise.all([
     visibilityReads.readSurfaces(env, who.advisorId, window, page).catch((e) => { console.warn('[advisor_visibility] surfaces unreadable', e); return null; }),
     visibilityReads.readWriting(env, who.userId).catch((e) => { console.warn('[advisor_visibility] writing unreadable', e); return null; }),
+    visibilityReads.readUnlinkedServices(env, who.advisorId).catch((e) => { console.warn('[advisor_visibility] session types unreadable', e); return null; }),
   ]);
   const surfaces = read ? read.surfaces : null;
   return {
@@ -162,8 +209,10 @@ export async function advisorVisibility(
     links: read ? read.links : null,
     requests: read ? read.requests : null,
     writing,
+    // D4827: null when the session types could not be read, never an empty list.
+    unlinked_services: unlinked,
     // Which block failed is the one that is null; this says that one did.
-    unreadable: surfaces === null || writing === null,
+    unreadable: surfaces === null || writing === null || unlinked === null,
     engagements: null,
     engagements_note: ENGAGEMENTS_NOTE,
     views: null,

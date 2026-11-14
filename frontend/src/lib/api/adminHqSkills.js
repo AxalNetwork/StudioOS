@@ -14,7 +14,7 @@
 //                                                    D4574 H3: 503 library_unreadable when the library's static asset cannot be read
 //   GET  /admin/ai-agents/skills/:uid               → { skill, review: { open, approved, history }, cases, evals, versions, retired }
 //                                                    D4533 (B1): versions[].release_note, the publisher's note, null when none was written
-//   GET  /admin/ai-agents/skills/:uid/diff?from=vN&to=draft|vM → { from, to, frontmatter: [{ field, from, to }], steps: [{ op, text }] }
+//   GET  /admin/ai-agents/skills/:uid/diff?from=source|vN&to=draft|vM → { from, to, frontmatter: [{ field, from, to }], steps: [{ op, text }] }
 //   POST /admin/ai-agents/skills/:uid/review         { reviewer_uid } → 201 { status: 'in_review', review };
 //                                                    422 reviewer_invalid | reviewer_is_author; 409 review_open | retired
 //   POST /admin/ai-agents/skills/:uid/review/approve { comment? } → { status, review }; 403 self_approval | not_reviewer; 409 no_review | review_stale

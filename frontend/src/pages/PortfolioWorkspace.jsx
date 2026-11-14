@@ -19,6 +19,7 @@ import InvestorPortfolioCanvas from './investor/InvestorPortfolioCanvas';
 import InvestorPortfolioPositions from './investor/InvestorPortfolioPositions';
 import InvestorPortfolioUpdates from './investor/InvestorPortfolioUpdates';
 import InvestorPortfolioValueAdd from './investor/InvestorPortfolioValueAdd';
+import InvestorPortfolioPerformance from './investor/InvestorPortfolioPerformance';
 import RailFrame from '../ui/RailFrame';
 import WorkerRail from '../ui/WorkerRail';
 
@@ -60,6 +61,11 @@ export default function PortfolioWorkspace({ activeRole }) {
   if ((activeRole || role) === 'investor' && active === 'growth') {
     return <InvestorPortfolioValueAdd />;
   }
+  // D4817 part 3 (#5311, PF-03): the investor's Performance draws in the
+  // Portfolio frame with its own rail, as every other investor board does.
+  if ((activeRole || role) === 'investor' && active === 'performance') {
+    return <InvestorPortfolioPerformance />;
+  }
 
   const body = (
     <div className="p-6 max-w-7xl mx-auto">
@@ -76,9 +82,9 @@ export default function PortfolioWorkspace({ activeRole }) {
       {active === 'growth' && <PortfolioGrowthPage embedded />}
     </div>
   );
-  // D772 (#2098): an investor reaches this branch only on Performance (I8),
-  // the one Portfolio board whose page draws no rail of its own. It gets the
-  // investor's rail in the shared frame.
+  // D772 (#2098) drew the investor's Performance here in a rail frame; since
+  // D4817 part 3 every investor board returns above, so only the partner's
+  // rail remains.
   // D773 (#2099): an operating partner reaches /portfolio from Delivery's "Also
   // in" list (PAGE_HOMES), and the page map gives it Delivery's key, so it
   // draws the partner's rail the same way. Any other viewer's page is unchanged.
@@ -91,11 +97,5 @@ export default function PortfolioWorkspace({ activeRole }) {
       )}>{body}</RailFrame>
     );
   }
-  if (viewer !== 'investor') return body;
-  return (
-    <RailFrame data-testid="portfolio-performance-frame" rail={(
-      <WorkerRail workspace="Portfolio" role="investor"
-        note="Performance is read from your recorded positions and their marks. Nothing here is estimated, and no figure is filled in by a model." />
-    )}>{body}</RailFrame>
-  );
+  return body;
 }

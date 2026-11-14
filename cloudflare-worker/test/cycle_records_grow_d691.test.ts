@@ -315,6 +315,29 @@ test('6: Edit carries the PATCH\'s fields with their current values', async () =
   assert.equal((db.prepare('SELECT title, status FROM job_postings WHERE id = 31').get() as any).title, 'Engineer');
 });
 
+test('D6116: market Edit shares Research country choices and saves their codes with the decision', async () => {
+  const db = fixture();
+  db.exec("DELETE FROM research_countries");
+  const fields = async () => (await rec(db, 'market-expansion', 'mka1')).body.actions
+    .find((action: any) => action.key === 'edit').form.fields;
+  const country = async () => (await fields()).find((field: any) => field.key === 'geography_ref');
+  assert.deepEqual(await country(), {
+    key: 'geography_ref', label: 'Attach a country', kind: 'CH', value: '', options: [{ value: '', label: 'Nothing yet' }],
+  });
+
+  db.exec("INSERT INTO research_countries (code, name, region) VALUES ('CH', 'Switzerland', 'Europe'), ('CA', 'Canada', 'North America')");
+  assert.deepEqual((await country()).options, [
+    { value: '', label: 'Nothing yet' }, { value: 'CA', label: 'Canada' }, { value: 'CH', label: 'Switzerland' },
+  ]);
+  assert.equal((await fields()).find((field: any) => field.key === 'decision')?.kind, 'CH');
+  assert.equal((await patch(db, 'market-expansion', 'mka1', { geography_ref: 'CH', decision: 'enter' })).status, 200);
+  assert.deepEqual({ ...db.prepare("SELECT geography_ref, decision FROM markets WHERE uid = 'mka1'").get() },
+    { geography_ref: 'CH', decision: 'enter' });
+  assert.equal((await country()).value, 'CH');
+  assert.equal((await patch(db, 'market-expansion', 'mka1', { geography_ref: '' })).status, 200);
+  assert.equal((await country()).value, '');
+});
+
 test('6: Open minutes refuses a key outside this venture\'s prefix and opens one inside it', async () => {
   const db = fixture();
   const kv = new Map<string, string>();

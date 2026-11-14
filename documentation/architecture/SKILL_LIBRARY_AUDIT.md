@@ -281,11 +281,18 @@ on through the route named in the table, by a person.
 | --- | --- | --- |
 | `source_only` | seed | The existing Super Admin action `POST /library/seed` (D4225), which adds each skill as a draft with its cases. No new issue is needed. |
 | `persisted_only` | report | None needed. The row is kept, never deleted or renamed. A Super Admin decides whether to retire it through `POST /:uid/retire`. |
-| `content_drift` | report | A Super Admin compares the draft against its source (`GET /:uid/diff`). Either the source changes in a PR through the CI gate, or the draft gets a reviewed edit (`PATCH /api/teams/skills/:uid`). The screen that lists the drifted skills is #4956. |
+| `content_drift` | report | A Super Admin compares the draft against its deployed library source (`GET /:uid/diff?from=source&to=draft`). Either the source changes in a PR through the CI gate, or the draft gets a reviewed edit (`PATCH /api/teams/skills/:uid`). The screen that lists the drifted skills is #4956. |
 | `case_drift` | report | The seed run on a draft adds a source case whose identity no live case has (D5336). A changed case goes through the reviewed `PUT /:uid/cases`. A historical case is never edited. The screen is #4956. |
 | `missing_case` | report | Same route as `case_drift`: `PUT /:uid/cases`, or the seed on a draft. The skill is below the publish bar until then. The screen is #4956. |
 | `duplicate_identity` | fail | None needed while the count is 0. D1's unique index (`759_agent_skills.sql:48`) cannot hold two HQ rows of one slug, and the CI gate fails two sources of one. A count above 0 means a new issue for the owner. |
 | `invalid_reference` | fail | On production this means the store's taxonomy no longer has a tag that the files use. The fix is a PR to the source or the taxonomy, through the CI gate. None needed while the count is 0. |
+
+#### #5790 production batches
+
+- A signed-in Super Admin reads the current production reconciliation report before seeding. The November 13 row is a baseline. Run the existing seed with an audit reason. It creates absent HQ drafts with their cases and can add missing cases to existing drafts while retaining their definition. Read the reconciliation report again after the batch. If a seed times out, reconcile before retrying.
+- Review each persisted-only skill in HQ and record the decision there: keep it as HQ-authored, propose a source PR, or retire it through the existing lifecycle. Retirement requires a valid replacement. Preserve the skill identity. Use a private review record for per-skill decisions.
+- For each content drift, use the explicit source comparison. The default comparison for a skill with no published version is draft against draft. Source compare uses the deployed asset and shows definition changes. It does not supply a published evaluation manifest. Apply a reviewed draft edit with the current expected hash, or propose a source PR through the skill-library CI gate. Re-read after each batch.
+- Append only the verified production response's UTC read time and class totals to the table above. Keep skill content, identities, hashes and review notes in HQ.
 
 ## 11. Tests
 

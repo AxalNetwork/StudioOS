@@ -19,7 +19,7 @@ import { revenuePart } from './_revenuePage.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   ACTION_REASON_MIN, FLOW_STEPS, actionAvailability, actionBody, classifyOutcome, createActionRunner,
-  newIdempotencyKey, paymentPreview, pendingStep, receiptRows, revisionOf, statusPreview,
+  newIdempotencyKey, paymentPreview, pendingStep, receiptRows, revisionOf, statusPreview, adjustmentPreview,
 } from '../src/pages/hq/revenue/statementActionModel.js';
 import { FlowOutcome, StatementActionFlow } from '../src/pages/hq/revenue/StatementActionFlow.jsx';
 import { StatementActions } from '../src/pages/hq/RevenuePage.jsx';
@@ -219,7 +219,7 @@ test('the footer opens the flows; the drawer swaps in the flow and holds Escape 
   const h = renderedText(renderToStaticMarkup(React.createElement(StatementActions, { statement: st(), onUpdate: async () => ({}), onStart: () => {} })));
   assert.match(h, /Record payment…/);
   assert.match(h, /Record dispute…/);
-  assert.match(h, /a payment and a void ask for your authenticator code/);
+  assert.match(h, /payments, voids, disputes and due dates require recent authentication/);
   const drawer = codeOnly(revenuePart('Receivables.jsx'));
   assert.match(drawer, /<StatementActionFlow\b/);
   assert.match(drawer, /onEscape=\{flow \? \(\) => \{ if \(!flowBusy\) setFlow\(null\); \} : undefined\}/);
@@ -228,5 +228,41 @@ test('the footer opens the flows; the drawer swaps in the flow and holds Escape 
     const src = codeOnly(revenuePart(f));
     assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, f);
     assert.doesNotMatch(src, /text-\[(8|9|10|11)(\.\d)?px\]/, `${f}: type under 12px`);
+  }
+});
+
+test('dispute review uses native minor units and refuses missing or over-owed figures', () => {
+  const preview = (extra = {}) => adjustmentPreview({ kind: 'record_dispute', statement: st(), amountText: '25.50', reason: REASON, ...extra });
+  assert.deepEqual(preview().body, { disputed_cents: 2550 });
+  assert.equal(preview().rows[1].after, '€3,774.50');
+  assert.ok(preview({ amountText: '' }).error);
+  assert.ok(preview({ amountText: '3800.01' }).error);
+  assert.ok(preview({ statement: st({ owed_cents: null }) }).error);
+  assert.ok(preview({ amountText: '0', reason: '' }).error);
+  assert.deepEqual(preview({ amountText: '0' }).body, { disputed_cents: 0 });
+  const jpy = preview({ statement: st({ currency: 'JPY' }), amountText: '25' });
+  assert.equal(jpy.body.disputed_cents, 25);
+});
+
+test('due-date review preserves unknown dates, validates calendar days and shows explicit clearing', () => {
+  const preview = (extra = {}) => adjustmentPreview({ kind: 'set_due_date', statement: st(), dueOn: '2026-12-01', reason: REASON, ...extra });
+  assert.deepEqual(preview().body, { due_on: '2026-12-01' });
+  assert.equal(preview().rows[0].before, 'Not recorded');
+  assert.ok(preview({ dueOn: '2026-02-30' }).error);
+  assert.ok(preview({ statement: st({ status: 'paid' }) }).error);
+  const clear = preview({ dueOn: '', statement: st({ due_on: '2026-12-01' }) });
+  assert.deepEqual(clear.body, { due_on: null });
+  assert.match(clear.rows[0].after, /cleared/);
+});
+
+test('new adjustments retain review, confirmation, authentication and exact request fields', () => {
+  for (const kind of ['record_dispute', 'set_due_date']) {
+    assert.deepEqual(FLOW_STEPS[kind], ['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt']);
+    const fields = kind === 'record_dispute' ? { disputed_cents: 0 } : { due_on: null };
+    assert.deepEqual(actionBody({ kind, statement: st(), fields, reason: REASON, key: 'test-key' }), {
+      ...fields, reason: REASON, expected_revision: 4, idempotency_key: 'test-key',
+    });
+    assert.match(renderToStaticMarkup(React.createElement(StatementActionFlow, { kind, statement: st() })), kind === 'record_dispute' ? /Disputed amount/ : /Due date · UTC/);
+    assert.equal(classifyOutcome({ kind, result: { outcome: 'applied' } }).title, kind === 'record_dispute' ? 'Dispute recorded' : 'Due date recorded');
   }
 });

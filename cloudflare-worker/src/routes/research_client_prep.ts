@@ -272,7 +272,9 @@ async function grantedProjectId(c: { env: Env }, userId: number, projectUid: str
     `SELECT p.id AS id
        FROM advisor_client_grants g
        JOIN projects p ON p.id = g.project_id
-      WHERE g.advisor_user_id = ? AND g.status = 'active' AND p.uid = ?
+      WHERE g.advisor_user_id = ? AND g.status = 'active'
+        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
+        AND p.uid = ?
       ORDER BY g.id DESC LIMIT 1`
   ).bind(userId, projectUid).first<{ id: number }>();
   return row?.id ?? null;

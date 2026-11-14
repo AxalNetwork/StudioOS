@@ -37,6 +37,7 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import {
   drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
 } from '../services/statements';
+import { statementOverdue } from '../services/statementAdjustments';
 import { branchByCode } from '../services/branches';
 import { currencyCode } from '../services/currencies';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -91,7 +92,7 @@ type StatementRow = {
   disputed_cents: number; dispute_note: string | null;
   status: string; reports_as_of: string | null; created_at: string; updated_at: string;
   // Migration 202611090909 (D5039): bumped by every write; the governed actions name it.
-  revision: number; last_action_uid: string | null;
+  revision: number; last_action_uid: string | null; due_on?: string | null;
 };
 
 /** Parse `streams_json` back, never throwing a stored row's shape at the page. */
@@ -101,6 +102,7 @@ function withStreams(row: StatementRow) {
   return {
     ...row,
     streams_json: undefined,
+    overdue: statementOverdue(row),
     streams,
     // Said on every row rather than computed by each reader: an owed figure
     // drawn over streams nobody could report is a FLOOR, and a screen showing
@@ -336,69 +338,13 @@ r.post('/statements/draw', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// PATCH /api/admin/statements/:uid  — the HQ-entered dispute (D.8, D514)
-//
-// D5039 — PAID AND STATUS LEFT THIS ROUTE. Setting a paid total, marking a
-// statement issued or paid, and voiding it are the governed actions below,
-// each with a reason, the revision it read, a client idempotency key and, where
-// money moves, the step-up. Left here, the same changes would be one PATCH
-// away with none of those, so a body carrying `paid_cents` or `status` is
-// refused with the route to use, and nothing in it is written.
+// The retired PATCH cannot bypass revision, reason, idempotency or step-up (#5039).
 r.patch('/statements/:uid', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
-    const uid = str(c.req.param('uid'), 80);
-    const row = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?')
-      .bind(uid).first<StatementRow>();
+    await requireSuperAdmin(c);
+    const row = await c.env.DB.prepare('SELECT uid FROM subsidiary_statements WHERE uid = ?').bind(c.req.param('uid')).first();
     if (!row) return c.json({ error: 'not_found' }, 404);
-
-    const b = await c.req.json().catch(() => ({} as any));
-    if (b?.paid_cents !== undefined || b?.status !== undefined) {
-      return c.json({
-        error: 'governed_action_required',
-        message: 'A payment, Mark issued and Void are governed actions now: each says why, names the revision it read '
-          + 'and carries an idempotency key. Use POST /api/admin/statements/:uid/payments, /issue or /void. Nothing was written.',
-      }, 409);
-    }
-    if (b?.disputed_cents === undefined) return c.json({ error: 'nothing_to_update' }, 400);
-
-    const disputed = typedCents(b.disputed_cents);
-    if (disputed === null) {
-      return c.json({ error: 'bad_amount', message: 'disputed_cents must be a whole number of minor units, 0 or more.' }, 400);
-    }
-    const paid = Number(row.paid_cents) || 0;
-    // D514 — PAID AND DISPUTED TOGETHER NEVER EXCEED OWED.
-    if (paid + disputed > row.owed_cents) {
-      return c.json({
-        error: 'over_owed',
-        message: `Paid (${paid}) and disputed (${disputed}) together would exceed the ${row.owed_cents} minor units this statement claims.`,
-      }, 409);
-    }
-    const note = str(b?.dispute_note, 500);
-    // A DISPUTE WITHOUT A REASON IS NOT A DISPUTE. Clearing one (0) needs none.
-    if (disputed > 0 && !note) {
-      return c.json({ error: 'dispute_note_required', message: 'A disputed amount must say why.' }, 400);
-    }
-    await c.env.DB.prepare(
-      `UPDATE subsidiary_statements
-          SET disputed_cents = ?, dispute_note = ?, revision = revision + 1, updated_at = ?
-        WHERE uid = ?`,
-    ).bind(disputed, disputed > 0 ? note : null, nowIso(), uid).run();
-
-    await logAdminAction(c.env, admin.id, admin.email, disputed > 0 ? 'subsidiary_statement_dispute' : 'subsidiary_statement_dispute_cleared', {
-      statement_uid: uid,
-      uid,
-      licence_uid: row.licence_uid,
-      period: row.period,
-      from_status: row.status,
-      currency: row.currency,
-      amounts: { disputed_cents: disputed },
-      ...(disputed > 0 ? { note } : {}),
-    });
-
-    const after = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?')
-      .bind(uid).first<StatementRow>();
-    return c.json(withStreams(after!));
+    return c.json({ error: 'governed_action_required', message: 'Use POST /api/admin/statements/:uid/payments, /issue or /void for those actions; use /disputes or /due-date to adjust recorded facts. Nothing was written.' }, 409);
   } catch (e) { return mapError(c, e); }
 });
 

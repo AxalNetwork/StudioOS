@@ -1,3 +1,4 @@
+import { PromotionReadback } from './PromotionReadback.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { Unreadable } from '../../../ui';
 import { currencyCode, parseMinor } from '../../../lib/money.js';
@@ -15,8 +16,8 @@ import {
  *
  * REMAINING IS NEVER WORKED OUT FROM AN UNREPORTED ISSUED FIGURE: it is the
  * Worker's, and drawn only when `ceilingFacts` says an issued figure exists
- * (D5028). "Enforced" is read from an accepted push; the branch reports no
- * enforcement back, which the coverage drawer says once.
+ * (D5028). Enforcement is read from checkout through the branch binding; an accepted push alone
+ * establishes no checkout state. Read-back is explicit and dated.
  *
  * The ceiling editor (D228) is today's write. Since D5039 part 2 it picks its
  * licence from the scoped picker (`GET /api/admin/licence-picker`: uid, name
@@ -221,17 +222,9 @@ const HQ = `${BADGE} border-violet-200 bg-violet-50 text-violet-800 dark:border-
 /** The Branch and Enforcement badges: glyph and word, the long sentence as their title. */
 function branchBadge(facts) {
   return facts.pushed.yes
-    ? <span className={OK} title={facts.pushed.label}><span aria-hidden="true">✓</span> Branch synced</span>
-    : <span className={WARN} title={facts.pushed.label}><span aria-hidden="true">▲</span> Not synced</span>;
+    ? <span className={OK} title={facts.pushed.label}><span aria-hidden="true">✓</span> Push accepted</span>
+    : <span className={WARN} title={facts.pushed.label}><span aria-hidden="true">▲</span> Push not confirmed</span>;
 }
-function enforcementBadge(facts) {
-  const s = facts.enforced.state;
-  if (s === 'enforced') return <span className={OK} title={facts.enforced.label}><span aria-hidden="true">✓</span> Enforced</span>;
-  if (s === 'other_period') return <span className={PLAIN} title={facts.enforced.label}><span aria-hidden="true">–</span> Not this quarter</span>;
-  if (s === 'earlier_figure') return <span className={WARN} title={facts.enforced.label}><span aria-hidden="true">◐</span> Earlier figure enforced</span>;
-  return <span className={PLAIN} title={facts.enforced.label}><span aria-hidden="true">○</span> Not enforced</span>;
-}
-
 export function PromotionsSection({ summary, ceilings, coverage, period, licenceUid, searchLicences, onSave, onRetry, onWhy }) {
   // D5039: the editor, and so the picker's read, mounts only once "Set a ceiling…" is opened.
   const [editing, setEditing] = useState(false);
@@ -293,7 +286,7 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
                     <td className={`${TD} ${NUM} font-mono`}>{money(x.ceiling_cents, x.currency)}</td>
                     <td className={TD}><span className={HQ} title={facts.saved.label}>HQ saved</span></td>
                     <td className={TD}>{branchBadge(facts)}</td>
-                    <td className={TD}>{enforcementBadge(facts)}</td>
+                    <td className={TD}><PromotionReadback key={`${x.licence_uid}:${x.period}:${x.ceiling_cents}:${x.currency}:${x.updated_at}`} licenceUid={x.licence_uid} period={x.period} /></td>
                     {/* NULL ISSUED IS NOT ZERO ISSUED, AND GIVES NO REMAINING. HQ's copy is only what a branch reports. */}
                     <td className={`${TD} ${NUM} font-mono`}>
                       {facts.issued.known ? money(x.issued_cents, x.currency) : <StateMark state="not_reported" />}
@@ -311,7 +304,7 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
                   <td className={`${TD} whitespace-nowrap`}>{periodLabel(period)}</td>
                   <td className={TD} colSpan={7}>
                     <span className={PLAIN}><span aria-hidden="true">○</span> No ceiling configured</span>
-                    {period === currentPeriod && <span className="ml-1.5 text-[13px] text-axal-muted dark:text-gray-400">· Discounts currently allowed</span>}
+                    <PromotionReadback key={`${l.licence_uid}:${period}:none`} licenceUid={l.licence_uid} period={period} />
                   </td>
                 </tr>
               ))}

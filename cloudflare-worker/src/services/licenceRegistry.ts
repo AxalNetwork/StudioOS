@@ -57,7 +57,8 @@ const missing = (e: unknown) => MISSING_TABLE.test(String((e as Error)?.message 
 const HOLDER = /^(user|entity):[A-Za-z0-9_:-]{1,120}$/;
 const STATUS = /^[a-z_]{1,40}$/;
 const UID = /^[A-Za-z0-9_-]{1,80}$/;
-export const ENTITLEMENTS_REASON = 'Program entitlements from a user licence are not recorded yet: #5059 derives them from the licences held.';
+// D5060 part 3: #5059 has merged, so the entitlements exist; the ledger page only does not expand them per row.
+export const ENTITLEMENTS_REASON = 'The ledger does not expand a user licence’s program entitlements (#5059); the licence detail reads them.';
 
 export type RegistryQuery = { family: RegistryFamily; holder: { type: string; id: string } | null; status: string | null; q: string | null; limit: number; after: string | null };
 

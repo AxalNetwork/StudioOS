@@ -64,10 +64,10 @@ function app() {
   a.route(mount.path, mount.router);
   return a;
 }
-async function get(w: W, who: number) {
+async function get(w: W, who: number, path = PATH) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(w.env.JWT_SECRET));
-  const r = await app().request(PATH, { headers: { Authorization: `Bearer ${jwt}` } }, w.env);
+  const r = await app().request(path, { headers: { Authorization: `Bearer ${jwt}` } }, w.env);
   const text = await r.text();
   let body: any = null;
   try { body = JSON.parse(text); } catch { body = null; }
@@ -235,4 +235,20 @@ test('check-skill-library --persisted reads the route\'s JSON as its manifest', 
   const refused = run(bad);
   assert.equal(refused.status, 1, refused.stdout);
   assert.match(refused.stderr, /no "manifest" array/);
+});
+
+test('Super Admin can compare a version-zero HQ draft against the deployed source without editing it', async () => {
+  const w = await arranged();
+  const uidOf = (slug: string) => (w.db.prepare("SELECT uid FROM agent_skills WHERE scope = 'hq' AND slug = ?").get(slug) as { uid: string }).uid;
+  const diff = (slug: string) => `${mount.path}/${uidOf(slug)}/diff?from=source&to=draft`;
+  const before = counts(w);
+  assert.equal((await get(w, ADMIN, diff(CONTENT))).status, 403);
+  const result = await get(w, SUPER, diff(CONTENT));
+  assert.equal(result.status, 200, result.text);
+  assert.equal(result.body.from, 'source');
+  assert.equal(result.body.to, 'draft');
+  assert.ok(result.body.steps.some((step: { op: string; text: string }) => step.op === 'added' && step.text === SECRET_STEP));
+  assert.equal(result.body.evidence.recorded.from, false);
+  assert.equal((await get(w, SUPER, diff('hq-only-5335'))).body.error, 'source_missing');
+  assert.deepEqual(counts(w), before);
 });

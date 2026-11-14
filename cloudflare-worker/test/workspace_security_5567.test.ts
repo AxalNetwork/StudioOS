@@ -143,7 +143,11 @@ test('AES-GCM snapshots/logs authenticate immutable tenant/object metadata; key 
   const envelope = value(await f.security.seal(await f.issue(upload), upload, plaintext));
   assert.equal(Buffer.from(envelope.ciphertext, 'base64url').length, plaintext.length + 16, 'AES-GCM ciphertext includes its authentication tag');
   assert.deepEqual(value(await f.security.open(await f.issue(read), read, envelope)), plaintext);
-  denied(await f.security.open(await f.issue(read), read, { ...envelope, ciphertext: envelope.ciphertext.slice(0, -2) + 'AA' }), 'artifact_ciphertext_invalid');
+  // Flip a bit of the last tag byte rather than overwriting the tail: the tag is
+  // random, so a fixed overwrite left the ciphertext unchanged about 1 run in 256.
+  const tampered = Buffer.from(envelope.ciphertext, 'base64url'); tampered[tampered.length - 1] ^= 0x01;
+  assert.notEqual(tampered.toString('base64url'), envelope.ciphertext, 'the tampered ciphertext differs from the sealed one');
+  denied(await f.security.open(await f.issue(read), read, { ...envelope, ciphertext: tampered.toString('base64url') }), 'artifact_ciphertext_invalid');
   f.flags.keyAvailable = false; denied(await f.security.open(await f.issue(read), read, envelope), 'artifact_key_unavailable'); f.flags.keyAvailable = true;
   const other = { ...f.object, ref: 'object-other' }; f.objects.set(other.ref, other);
   const otherTarget = { ...read, object_ref: other.ref };

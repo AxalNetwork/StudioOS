@@ -12,6 +12,7 @@ import ShareDeckCTA from '../components/ShareDeckCTA';
 import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
 import { CardVoices, ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
 import DeckCardView from './raise/pitch/DeckCardView';
+import ShareWalkthrough from './raise/pitch/ShareWalkthrough';
 import { CARD_VIEW, PHONE_WIDTH, SLIDE_VIEW } from './raise/pitch/cardViewModel';
 import { viewerNote } from './raise/pitch/shareModel';
 import { offersDealPack } from '../lib/shareDeckAudience';
@@ -858,6 +859,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       <div className="bg-gray-100 min-h-screen dark:bg-slate-950" data-testid="share-card-view">
         {Header}
         <DeckCardView deck={deck} watermark={deck.watermark || null} />
+        {/* D5791 (#5791): the walkthrough attached to this link, drawn only when one is. */}
+        <ShareWalkthrough token={token} slides={deck.slides} />
         {cta && <div className="deck-print-cta">{cta}</div>}
       </div>
     );
@@ -903,6 +906,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         {!isFullscreen && shareMode ? <FigureSources slides={deck.slides} /> : null}
         {/* D1569 (#3816): the cards' AI voice-overs, labelled "AI voice". */}
         {!isFullscreen && shareMode ? <CardVoices slides={deck.slides} /> : null}
+        {/* D5791 (#5791): the walkthrough attached to this link, drawn only when one is. */}
+        {!isFullscreen && shareMode ? <ShareWalkthrough token={token} slides={deck.slides} /> : null}
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
           <>
@@ -998,6 +1003,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         ))}
         {shareMode ? <FigureSources slides={deck.slides} /> : null}
         {shareMode ? <CardVoices slides={deck.slides} /> : null}
+        {shareMode ? <ShareWalkthrough token={token} slides={deck.slides} /> : null}
         {cta}
       </div>
     </div>
