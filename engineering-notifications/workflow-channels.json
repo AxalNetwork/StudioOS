@@ -1,0 +1,290 @@
+{
+  "repository": "AxalNetwork/StudioOS",
+  "workflows": [
+    {
+      "id": 416675427,
+      "path": ".github/workflows/agent-compute-image.yml",
+      "channel": "#axalvc-actions-agent-compute-image"
+    },
+    {
+      "id": 417238805,
+      "path": ".github/workflows/agent-compute-preview.yml",
+      "channel": "#axalvc-actions-agent-compute-preview"
+    },
+    {
+      "id": 417193959,
+      "path": ".github/workflows/agent-stage-a.yml",
+      "channel": "#axalvc-actions-agent-stage-a"
+    },
+    {
+      "id": 280437834,
+      "path": ".github/workflows/backup-d1.yml",
+      "channel": "#axalvc-actions-backup-d1"
+    },
+    {
+      "id": 280437835,
+      "path": ".github/workflows/beta-readiness-reaudit.yml",
+      "channel": "#axalvc-actions-beta-readiness-reaudit"
+    },
+    {
+      "id": 358644715,
+      "path": ".github/workflows/branch-provision.yml",
+      "channel": "#axalvc-actions-branch-provision"
+    },
+    {
+      "id": 383619772,
+      "path": ".github/workflows/build-worker-contracts.yml",
+      "channel": "#axalvc-actions-build-worker-contracts"
+    },
+    {
+      "id": 389078766,
+      "path": ".github/workflows/changelog-gate.yml",
+      "channel": "#axalvc-actions-changelog-gate"
+    },
+    {
+      "id": 383722055,
+      "path": ".github/workflows/channel-worker-contracts.yml",
+      "channel": "#axalvc-actions-channel-worker-contracts"
+    },
+    {
+      "id": 415189216,
+      "path": ".github/workflows/ci-scorecard.yml",
+      "channel": "#axalvc-actions-ci-scorecard"
+    },
+    {
+      "id": 271983865,
+      "path": ".github/workflows/ci.yml",
+      "channel": "#axalvc-actions-ci"
+    },
+    {
+      "id": 415288589,
+      "path": ".github/workflows/claims-reaper.yml",
+      "channel": "#axalvc-actions-claims-reaper"
+    },
+    {
+      "id": 280914787,
+      "path": ".github/workflows/claude-code.yml",
+      "channel": "#axalvc-actions-claude-code"
+    },
+    {
+      "id": 387466304,
+      "path": ".github/workflows/claude-review.yml",
+      "channel": "#axalvc-actions-claude-review"
+    },
+    {
+      "id": 416374936,
+      "path": ".github/workflows/cloudflare-heartbeat-5671.yml",
+      "channel": "#axalvc-actions-cloudflare-heartbeat-5671"
+    },
+    {
+      "id": 348320146,
+      "path": ".github/workflows/cloudflare-worker-deploy.yml",
+      "channel": "#axalvc-actions-cloudflare-worker-deploy"
+    },
+    {
+      "id": 271924731,
+      "path": ".github/workflows/codeql.yml",
+      "channel": "#axalvc-actions-codeql"
+    },
+    {
+      "id": 366466560,
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "channel": "#axalvc-actions-copilot-setup-steps"
+    },
+    {
+      "id": 349163829,
+      "path": ".github/workflows/d1-migrate.yml",
+      "channel": "#axalvc-actions-d1-migrate"
+    },
+    {
+      "id": 403922592,
+      "path": ".github/workflows/deck-visual.yml",
+      "channel": "#axalvc-actions-deck-visual"
+    },
+    {
+      "id": 280437837,
+      "path": ".github/workflows/dr-drill.yml",
+      "channel": "#axalvc-actions-dr-drill"
+    },
+    {
+      "id": 385718276,
+      "path": ".github/workflows/form-lightbox-contracts.yml",
+      "channel": "#axalvc-actions-form-lightbox-contracts"
+    },
+    {
+      "id": 412302440,
+      "path": ".github/workflows/github-alerts.yml",
+      "channel": "#axalvc-actions-github-alerts"
+    },
+    {
+      "id": 271983867,
+      "path": ".github/workflows/gitleaks.yml",
+      "channel": "#axalvc-actions-gitleaks"
+    },
+    {
+      "id": 374048125,
+      "path": ".github/workflows/labels-sync.yml",
+      "channel": "#axalvc-actions-labels-sync"
+    },
+    {
+      "id": 415180957,
+      "path": ".github/workflows/landing-policy.yml",
+      "channel": "#axalvc-actions-landing-policy"
+    },
+    {
+      "id": 280914788,
+      "path": ".github/workflows/lfs-budget.yml",
+      "channel": "#axalvc-actions-lfs-budget"
+    },
+    {
+      "id": 356755115,
+      "path": ".github/workflows/magic-link-insert-probe.yml",
+      "channel": "#axalvc-actions-magic-link-insert-probe"
+    },
+    {
+      "id": 356728695,
+      "path": ".github/workflows/magic-link-probe.yml",
+      "channel": "#axalvc-actions-magic-link-probe"
+    },
+    {
+      "id": 384104652,
+      "path": ".github/workflows/mcp-worker-contracts.yml",
+      "channel": "#axalvc-actions-mcp-worker-contracts"
+    },
+    {
+      "id": 395019406,
+      "path": ".github/workflows/meeting-bot-deploy.yml",
+      "channel": "#axalvc-actions-meeting-bot-deploy"
+    },
+    {
+      "id": 393240969,
+      "path": ".github/workflows/meeting-bot-image.yml",
+      "channel": "#axalvc-actions-meeting-bot-image"
+    },
+    {
+      "id": 383638715,
+      "path": ".github/workflows/meeting-worker-contracts.yml",
+      "channel": "#axalvc-actions-meeting-worker-contracts"
+    },
+    {
+      "id": 416005175,
+      "path": ".github/workflows/merge-control-deploy.yml",
+      "channel": "#axalvc-actions-merge-control-deploy"
+    },
+    {
+      "id": 366792790,
+      "path": ".github/workflows/migration-immutability.yml",
+      "channel": "#axalvc-actions-migration-immutability"
+    },
+    {
+      "id": 295717983,
+      "path": ".github/workflows/post-deploy-smoke.yml",
+      "channel": "#axalvc-actions-post-deploy-smoke"
+    },
+    {
+      "id": 415788595,
+      "path": ".github/workflows/pr-overlap.yml",
+      "channel": "#axalvc-actions-pr-overlap"
+    },
+    {
+      "id": 349437953,
+      "path": ".github/workflows/pr-preview.yml",
+      "channel": "#axalvc-actions-pr-preview"
+    },
+    {
+      "id": 404322234,
+      "path": ".github/workflows/prompt-eval-gate.yml",
+      "channel": "#axalvc-actions-prompt-eval-gate"
+    },
+    {
+      "id": 385334346,
+      "path": ".github/workflows/record-page-contracts.yml",
+      "channel": "#axalvc-actions-record-page-contracts"
+    },
+    {
+      "id": 397598132,
+      "path": ".github/workflows/release-alpha-rename.yml",
+      "channel": "#axalvc-actions-release-alpha-rename"
+    },
+    {
+      "id": 393952015,
+      "path": ".github/workflows/release-draft.yml",
+      "channel": "#axalvc-actions-release-draft"
+    },
+    {
+      "id": 393952017,
+      "path": ".github/workflows/release-published.yml",
+      "channel": "#axalvc-actions-release-published"
+    },
+    {
+      "id": 415055620,
+      "path": ".github/workflows/release-rehearsal.yml",
+      "channel": "#axalvc-actions-release-rehearsal"
+    },
+    {
+      "id": 377491625,
+      "path": ".github/workflows/research-import.yml",
+      "channel": "#axalvc-actions-research-import"
+    },
+    {
+      "id": 384017598,
+      "path": ".github/workflows/round-call-worker-contracts.yml",
+      "channel": "#axalvc-actions-round-call-worker-contracts"
+    },
+    {
+      "id": 416139951,
+      "path": ".github/workflows/runner-benchmark.yml",
+      "channel": "#axalvc-actions-runner-benchmark"
+    },
+    {
+      "id": 412401690,
+      "path": ".github/workflows/schema-rehearsal.yml",
+      "channel": "#axalvc-actions-schema-rehearsal"
+    },
+    {
+      "id": 274932014,
+      "path": ".github/workflows/semgrep.yml",
+      "channel": "#axalvc-actions-semgrep"
+    },
+    {
+      "id": 415979910,
+      "path": ".github/workflows/workspace-image.yml",
+      "channel": "#axalvc-actions-workspace-image"
+    },
+    {
+      "id": 400027153,
+      "path": ".github/workflows/zz-latency-probe.yml",
+      "channel": "#axalvc-actions-zz-latency-probe"
+    },
+    {
+      "id": 383324611,
+      "path": "dynamic/codespaces/create_codespaces_prebuilds",
+      "channel": "#axalvc-actions-codespaces-create-codespaces-prebuilds"
+    },
+    {
+      "id": 271983937,
+      "path": "dynamic/dependabot/dependabot-updates",
+      "channel": "#axalvc-actions-dependabot-dependabot-updates"
+    },
+    {
+      "id": 267816512,
+      "path": "dynamic/dependabot/update-graph",
+      "channel": "#axalvc-actions-dependabot-update-graph"
+    },
+    {
+      "id": 343193387,
+      "path": "dynamic/github-code-quality/codeql",
+      "channel": "#axalvc-actions-github-code-quality-codeql"
+    },
+    {
+      "id": 271863507,
+      "path": "dynamic/github-code-scanning/codeql",
+      "channel": "#axalvc-actions-github-code-scanning-codeql"
+    },
+    {
+      "id": 254324228,
+      "path": "dynamic/pages/pages-build-deployment",
+      "channel": "#axalvc-actions-pages-pages-build-deployment"
+    }
+  ]
+}

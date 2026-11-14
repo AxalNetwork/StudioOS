@@ -12,7 +12,7 @@ these through its `ZONE` map. The Expertise board's sections
 | `ServicesZone.jsx` | Services & pricing | `/expertise/services` | `GET /api/advisors/me/services` (200 a page) |
 | `ProofZone.jsx` | Proof | `/expertise/proof` | `GET /api/advisors/me/proof` (200 a page) |
 | `ThinkingZone.jsx` | Published thinking | `/expertise/thinking` | `GET /api/advisors/me/thinking` (100 a page) |
-| `VisibilityZone.jsx` | Where you appear | `/expertise/visibility` | `GET /api/advisors/me/visibility?days=30` (100 links a page; D1597) |
+| `VisibilityZone.jsx` | Visibility (EX-12, D4827) | `/expertise/visibility` | `GET /api/advisors/me/visibility?days=7\|30\|90` (100 links a page; D1597; top articles and session types without a link, D4827) |
 
 The modules they share:
 

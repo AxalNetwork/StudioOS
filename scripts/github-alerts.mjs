@@ -16,7 +16,7 @@ import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, queueStallState, queueState, re
 import { safeGithubUrl } from './lib/ciClassify.mjs';
 import { readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
-import { createHealthMonitor } from './health-alert-episodes.mjs';
+import { createHealthMonitor, runSource } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
 
@@ -46,11 +46,6 @@ const apply = async (kind, active, facts, source) => {
   const result = await monitor.apply(kind, active, facts, source);
   if (result.delivery.some(i => i.state !== 'acknowledged')) process.exitCode = 1;
   return result;
-};
-const runSource = (runId, attempt = 1) => {
-  const value = Number(runId) * 1000 + Number(attempt);
-  if (!Number.isSafeInteger(value) || Number(attempt) < 1 || Number(attempt) > 999) throw new Error('source_identity_invalid');
-  return value;
 };
 
 async function main() {

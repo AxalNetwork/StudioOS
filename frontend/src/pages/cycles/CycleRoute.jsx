@@ -884,6 +884,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
+    // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
+    const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
+    const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     body = (
       <ModulePage
         cycle={cycle}
@@ -924,7 +927,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
-          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
+          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+        {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
