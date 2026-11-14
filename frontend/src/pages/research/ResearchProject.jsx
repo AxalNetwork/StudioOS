@@ -37,6 +37,8 @@ import { researchProjectFindingsApi } from '../../lib/api/researchProjectFinding
 import { findingsBadge } from './researchFindings.js';
 import { ProjectComparisons } from './ProjectComparisons.jsx';
 import ProjectBrief from './ProjectBrief.jsx';
+import ResearchContext from './ResearchContext.jsx';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
 import { researchProjectBriefsApi } from '../../lib/api/researchProjectBriefs.js';
 import { researchProjectComparisonsApi } from '../../lib/api/researchProjectComparisons.js';
 import { comparisonsBadge } from './researchComparisons.js';
@@ -356,6 +358,9 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   const [brief, retryBrief] = useProjectRead(() => researchProjectBriefsApi.read(uid), `${uid}:${version}`);
   const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get('add') === '1');
   const [archiving, setArchiving] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const contextOpener = useRef(null);
+  const contextOverlay = usePhoneWidth('(max-width: 1023px)');
   const [restoreFailure, setRestoreFailure] = useState(null);
   const opener = useRef(null);
   const reload = () => setVersion((n) => n + 1);
@@ -363,6 +368,9 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   const item = data?.item || null;
   const archived = item?.status === 'archived';
   const status = statusOf(item);
+  const context = contextOpen && item ? <ResearchContext data={data} findings={findings} compared={compared}
+    retryFindings={retryFindings} retryCompared={retryCompared} opener={contextOpener} overlay={contextOverlay}
+    onClose={() => setContextOpen(false)} /> : null;
 
   const restore = async () => {
     setRestoreFailure(null);
@@ -375,8 +383,10 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
 
   return (
     <WorkspaceShell role={role} title={item?.title || 'Research project'} activeSlug="projects" ask={null}
+      rail={contextOverlay ? null : context}
       primary={item && !archived ? { label: 'Add evidence', onClick: addEvidence, testid: 'button-add-evidence' } : null}>
       <div className="flex flex-col gap-4" data-testid="research-project">
+        {contextOverlay ? context : null}
         {read.status === 'loading' && !data ? <p className={MUTED} role="status">Reading the project…</p> : null}
         {read.status === 'not_found' ? (
           <section className={CARD} data-testid="project-not-found">
@@ -400,6 +410,8 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
                 <span>{(data.evidence || []).length} {(data.evidence || []).length === 1 ? 'source' : 'sources'}</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button type="button" ref={contextOpener} className={SECONDARY} aria-expanded={contextOpen}
+                  onClick={() => setContextOpen((open) => !open)}>Research context</button>
                 {/* RS-02's bar: Compare opens the Comparisons tab, where a comparison is made. */}
                 {tab !== 'comparisons' ? <Link className={SECONDARY} to={`/research/projects/${encodeURIComponent(item.uid)}/comparisons`} data-testid="button-project-compare">Compare</Link> : null}
                 {archived
