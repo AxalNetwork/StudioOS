@@ -18,3 +18,9 @@ Bearer token: GET /status, POST /switch {on}, POST /claims
 Save the returned fence and present it on renew/release. If the service cannot
 be reached, use the claim ref CLI from #5617 and record the fallback in STATUS.
 Ref mirrors are observation only; they never replace a live server lease.
+
+D5620: `src/policy.ts` bundles the classifier `scripts/merge-policy.mjs` uses,
+from `src/lib/classify.mjs`. The deploy job injects the commit as
+`policy_version` with `--define`; a build without it fails at startup.
+GET /status reports it. `src/policyCheck.ts` evaluates a compare and fails
+closed; posting the check is #5990.

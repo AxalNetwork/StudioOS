@@ -1,5 +1,6 @@
 /** D5618: independent authenticated webhook ingress, queue dispatch, status and fenced issue claims. */
 import { RepoControl } from './repoControl.ts';
+import { POLICY_VERSION } from './policy.ts';
 import { limitedBody, ownerAuthorized, webhook } from './webhook.ts';
 import type { Delivery, Env } from './types.ts';
 import type { LeaseInput } from './lib/lease.ts';
@@ -11,7 +12,7 @@ export default {
       if (path === '/webhook' && request.method === 'POST') return await webhook(request, env);
       if (!ownerAuthorized(request, env.OWNER_TOKEN)) return new Response('unauthorized', { status: 401 });
       const control = env.REPO_CONTROL.getByName(env.REPOSITORY);
-      if (path === '/status' && request.method === 'GET') return Response.json(await control.status());
+      if (path === '/status' && request.method === 'GET') return Response.json({ ...await control.status(), policy_version: POLICY_VERSION });
       if (request.method !== 'POST' || !['/claims','/switch'].includes(path)) return new Response('not found', { status: 404 });
       let body: Record<string, unknown>;
       try { body = JSON.parse(new TextDecoder().decode(await limitedBody(request, 4096))); } catch { return new Response('invalid body', { status: 400 }); }
