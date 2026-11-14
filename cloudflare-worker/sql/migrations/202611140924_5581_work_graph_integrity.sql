@@ -43,7 +43,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS work_graph_blobs_no_delete
 BEFORE DELETE ON work_graph_blobs
 BEGIN
-  SELECT RAISE(ABORT, 'work_graph_blobs is never deleted; set deleted_at (D5581 part 3).');
+  SELECT RAISE(ABORT, 'work_graph_blobs is never deleted, set deleted_at (D5581 part 3).');
 END;
 
 CREATE TABLE IF NOT EXISTS work_graph_revision_flags (
@@ -65,13 +65,13 @@ WHEN NEW.revision_uid IS NOT OLD.revision_uid OR NEW.flag IS NOT OLD.flag OR NEW
   OR NEW.company_id IS NOT OLD.company_id OR NEW.asset_uid IS NOT OLD.asset_uid
   OR (OLD.flag = 'bytes_deleted' AND NEW.cleared_at IS NOT NULL)
 BEGIN
-  SELECT RAISE(ABORT, 'work_graph_revision_flags: only set_at and cleared_at change; bytes_deleted is permanent (D5581 part 3).');
+  SELECT RAISE(ABORT, 'work_graph_revision_flags: only set_at and cleared_at change, bytes_deleted is permanent (D5581 part 3).');
 END;
 
 CREATE TRIGGER IF NOT EXISTS work_graph_revision_flags_no_delete
 BEFORE DELETE ON work_graph_revision_flags
 BEGIN
-  SELECT RAISE(ABORT, 'work_graph_revision_flags is never deleted; clear it (D5581 part 3).');
+  SELECT RAISE(ABORT, 'work_graph_revision_flags is never deleted, clear it (D5581 part 3).');
 END;
 
 CREATE TABLE IF NOT EXISTS work_graph_holds (
@@ -100,7 +100,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS work_graph_holds_no_delete
 BEFORE DELETE ON work_graph_holds
 BEGIN
-  SELECT RAISE(ABORT, 'work_graph_holds is never deleted; release it (D5581 part 3).');
+  SELECT RAISE(ABORT, 'work_graph_holds is never deleted, release it (D5581 part 3).');
 END;
 
 CREATE TABLE IF NOT EXISTS work_graph_integrity_events (
@@ -175,7 +175,7 @@ WHEN OLD.state IN ('applied', 'dead')
   OR NEW.request_hash IS NOT OLD.request_hash OR NEW.payload_json IS NOT OLD.payload_json
   OR NEW.attempts < OLD.attempts
 BEGIN
-  SELECT RAISE(ABORT, 'work_graph_effects: applied and dead are terminal; identity is fixed (D5581 part 3).');
+  SELECT RAISE(ABORT, 'work_graph_effects: applied and dead are terminal, identity is fixed (D5581 part 3).');
 END;
 
 CREATE TRIGGER IF NOT EXISTS work_graph_effects_no_delete
