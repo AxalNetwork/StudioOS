@@ -164,6 +164,19 @@ test('D659: a new venture — every card empty with its one starting action, eve
 // The five states
 // ---------------------------------------------------------------------------
 
+test('a waitlist bar persists without sign-ups; the card stays empty until sign-ups arrive', async () => {
+  const db = fixture();
+  const url = `/modules/demand-signals?project=${P}`;
+  const target = `/waitlist-target?project=${P}`;
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: 40 })).status, 200);
+  const saved = (await call(db, FOUNDER, 'GET', url)).body;
+  assert.equal(saved.card.state, 'empty');
+  assert.equal(saved.card.series, null);
+  assert.equal(saved.parts.waitlist_bar, 40);
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: null })).status, 200);
+  assert.equal((await call(db, FOUNDER, 'GET', url)).body.parts.waitlist_bar, null);
+});
+
 test('D659: one failing source makes only its own card unreadable, naming the source', async () => {
   const db = fixture();
   interview(db, P, { pains: ['slow dispatch'] });

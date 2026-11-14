@@ -48,7 +48,7 @@ import { canReadBoard, canReadDecision, canWrite, ownsVenture, type ProjectRef }
 import { focusOf, indexOf, meterOf } from '../services/validateFocus';
 import { part } from '../services/cycleFocus';
 import {
-  CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
+  CYCLE, QUESTION, MODULES, CARD_FOR, readWaitlistBar, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
   type Ctx, type ModuleSlug,
 } from '../services/cycleValidate';
 import {
@@ -175,7 +175,10 @@ cycleValidate.get('/modules/:slug', async (c) => {
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
   if (slug === 'demand-signals' && card.state !== 'unreadable') {
     const series = card.series as { bar?: number | null } | null;
-    parts = { ...parts, waitlist_bar: series?.bar ?? null };
+    try {
+      const bar = card.state === 'empty' ? await readWaitlistBar(ctx) : series?.bar ?? null;
+      parts = { ...parts, waitlist_bar: bar };
+    } catch { /* The target is unavailable, so leave the editor hidden. */ }
   }
   if (slug === 'demand-signals' && writer) {
     const linked = await c.env.DB.prepare(
