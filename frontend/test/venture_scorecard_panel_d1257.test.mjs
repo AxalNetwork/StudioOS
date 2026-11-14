@@ -204,7 +204,7 @@ const styleOf = (v, n) => v.props(n).style || {};
 test('SC1: the open read draws each scope, the chart and what it rests on; no missing scope is a zero', async () => {
   const v = await mount(panel());
   try {
-    assert.deepEqual(v.calls.filter((c) => c.path.startsWith('/api/venture-scores')).map((c) => `${c.method} ${c.path}`), ['GET /api/venture-scores/deal/4']);
+    assert.deepEqual(v.calls.filter((c) => c.path.startsWith('/api/venture-scores')).map((c) => `${c.method} ${c.path}`), ['GET /api/venture-scores/deal/4', 'GET /api/venture-scores/weights'], '#6169: an investor’s weighting is read once the panel opens');
     assert.match(v.of('scorecard-model'), /Model v ?1\.0/);
     assert.match(v.of('scorecard-computed'), /27 Oct 2026, 09:40/);
     assert.match(v.of('scorecard-scope-team'), /Team.*Fair.*62/);

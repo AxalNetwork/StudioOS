@@ -7,6 +7,7 @@
  * DLS7b: a click on a score opens SCORING's own breakdown panel
  * (`VentureScorecard`, D1257) for that deal, by its visibility rule: only on a
  * deal the investor may read (`can_open`). Eadwyn never changes a score here.
+ * Its weighting stays on Deal flow's toolbar (#6169), whose sort re-reads it on save.
  */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -114,7 +115,7 @@ export default function PeekDrawer({ row, picked = [], onClose, onMove, onPass, 
       </div>
       {breakdown && (
         <Sheet label="Scoring breakdown panel" title="Scoring breakdown" sub={row.name} onClose={() => setBreakdown(false)} width={760} testId="dealflow-peek-breakdown">
-          <VentureScorecard dealId={row.id} />
+          <VentureScorecard dealId={row.id} weighting={false} />
         </Sheet>
       )}
     </Sheet>
