@@ -74,3 +74,25 @@ test('403 requests explicit label fallback; other API errors propagate', async (
   assert.equal(await runClaim({ ...identity, api: async () => { throw Object.assign(new Error('read forbidden'), { status: 403 }); }, command: 'claim' }), 4);
   await assert.rejects(runClaim({ ...identity, command: 'claim', api: async () => { throw new Error('offline'); } }), /offline/);
 });
+
+test('claim reports WIP, blocks before writes at the cap, and proceeds when unset', async () => {
+  const f = fake();
+  const output = [];
+  const options = { ...identity, ...f, command: 'claim', log: value => output.push(value),
+    wipReport: async () => new Map([['S39', { pulls: [
+      { number: 123, state: 'draft', weight: 1 }, { number: 124, state: 'green', weight: 1 },
+    ], expired: [] }]]) };
+  assert.equal(await runClaim({ ...options, wipCap: '1' }), 5);
+  assert.deepEqual(f.writes, []);
+  assert.match(output.at(-1), /finish #123 before claiming/);
+  assert.doesNotMatch(output.at(-1), /#124/);
+  assert.equal(await runClaim(options), 0);
+});
+
+test('a report outage is advisory with no cap and stops an enforced claim', async () => {
+  const f = fake();
+  const options = { ...identity, ...f, command: 'claim', wipReport: async () => { throw Object.assign(new Error('offline'), { status: 403 }); } };
+  await assert.rejects(runClaim({ ...options, wipCap: '3' }), /offline/);
+  assert.deepEqual(f.writes, []);
+  assert.equal(await runClaim(options), 0);
+});
