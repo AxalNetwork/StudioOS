@@ -324,3 +324,4 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+| `azure_jobs_executor_5571.test.ts` | D5571: disabled Azure Container Apps Jobs adapter on a synthetic ARM endpoint: digest-pinned secret-free template, fail-closed capabilities, ambiguous start located without a second start, status mapping, quota/revoked-identity/cross-region refusals; twelve mutations killed. |

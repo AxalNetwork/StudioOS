@@ -125,3 +125,4 @@ and citations by number keep working.
 | `D5039-p3.md` | Governed statement disputes and due dates, actual action history, Stream control and dated branch checkout read-back (#5039). |
 | `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
+| `D5571.md` | Azure Container Apps Jobs as the first external executor: disabled adapter, fail-closed capabilities, ambiguous-start handling, and the staged Azure runbook. |
