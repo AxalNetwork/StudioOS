@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Account · v2 · #4955</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Account — understand your status, find a setting, change it safely, see that it saved</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An Overview of status cards leads the page, each card drawn from its own section’s read. It shows one context-aware action, and a section that couldn’t be read says so instead of looking empty. The section nav stays on desktop, and the phone index and every existing route are kept. Full name, display name, username, verified contacts, legal identity and public archetype are separate fields with one editor each. Security changes are guided steps with confirmations. Privacy is grouped by audience, with a preview drawn from what the server returns. Notifications are a grid of events by channels, with required notices shown as required. Billing tells “no card” apart from “payment details unavailable”. Connectors tell a failed status read apart from “not connected”. Unconfirmed parts are tagged Requires verification or Backend required.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 8 Nov 2026 · founder member · names, contacts, cards and invoices are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Account v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['AC-0', 'Information architecture and navigation map', 'Sections, routes kept as they are, the account menu under the #3704 rule, and what is observed versus inferred.', [W('AC00')]],
+      ['AC-1', 'Overview', 'A · Status cards for Profile, Sign-in & Security, Privacy, Plan & Billing, Usage and Connectors, with one context-aware action (add an authenticator). B · The same cards when sections are unreadable, saving, partly read, Not recorded or status unknown, never shown as empty or off.', [F('AC01', 'A · Default', 760), F('AC01b', 'B · Read states', 720)]],
+      ['AC-2', 'Profile and identity', 'A · Personal details, legal identity (contained, behind Trust Center review) and public archetype, each with one editor and a preview from server fields. B · Editing, with a field error tied to its input and the unsaved-changes bar.', [F('AC02', 'A · Read', 1180), F('AC02b', 'B · Editing with an error', 1100)]],
+      ['AC-3', 'Sign-in and security', 'A · Methods, recovery and sessions, with this device marked; passkeys aren’t offered today. B · Guided authenticator setup with a code error. C · Signing out other sessions, with the server-confirmed result.', [F('AC03', 'A · Workspace', 1050), C('AC03b', 'B · Authenticator setup', 640, 560), C('AC03c', 'C · Sign out other sessions', 560, 360)]],
+      ['AC-4', 'Privacy', 'Grouped by audience (public, members, never shown), with per-switch save state including a failed save and Retry, and a preview of what others see.', [F('AC04', false, 980)]],
+      ['AC-5', 'Notifications', 'Events × in-app, email and push; required notices locked; push per browser; digest and quiet hours need backend work.', [F('AC05', false, 1000)]],
+      ['AC-6', 'Billing and usage', 'A · Plan, tokens, top-up balance, card, auto-reload and invoices. B · Payment details unavailable — not the same as no card.', [F('AC06', 'A · Populated', 1100), F('AC06b', 'B · Payment details unavailable', 1100)]],
+      ['AC-7', 'Connectors', 'A · Connected, needs reconnect, status unknown (Retry, not Connect), available and coming soon. B · The provider sheet with permissions, history and Reconnect.', [F('AC07', 'A · Workspace', 760), F('AC07b', 'B · Provider sheet', 760)]],
+      ['AC-8', 'Mobile 390', 'A · The account index with section statuses. B · Sign-in and security. C · Editing with an error and a sticky Save. D · Billing with payment details unavailable.', [P('AC08a', 'A · Index'), P('AC08b', 'B · Security'), P('AC08c', 'C · Editing'), P('AC08d', 'D · Billing')]],
+      ['AC-9', 'State matrix', 'Loading, populated, empty, Not recorded, Unreadable, partial, saving, saved, save failed, locked by plan and forbidden, plus the stale-response rule.', [C('AC09', false, 1300, 420)]],
+      ['AC-10', 'Dark mode', 'The Overview on #0b1220 / #111827 with violet #a78bfa.', [F('AC10', false, 760)]],
+      ['AC-11', 'Components, accessibility and handoff', 'Each area mapped to its existing components and API fields, what needs verification or backend work, accessibility, and the #4614–#4618 and #3703 coordination.', [W('AC11')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

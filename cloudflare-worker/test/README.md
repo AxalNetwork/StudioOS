@@ -332,3 +332,5 @@ versions and offer-bound agreements, normal branch delivery failure, and
 read-only historical contract values. Seeded HQ-only/unready items are refused
 without weakening Program Grants; successful cases publish a compatible test
 catalogue version only in the fixture.
+| `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
+| `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |

@@ -140,8 +140,9 @@ test('a draft is neither listed nor openable, and the card says why', () => {
   // count over the file finds four — the self-matching trap, one more time.
   const code = codeOnly(WORKER);
   const routes = code.slice(code.indexOf("advisors.get('/received/deliverables'"));
-  assert.equal((routes.match(/sent_at IS NOT NULL/g) || []).length, 4,
-    'the read filters twice (row and version), and both open and acceptance require a sent version');
+  // #5960 (D5960): and the file download, the fifth client route, requires a sent version too.
+  assert.equal((routes.match(/sent_at IS NOT NULL/g) || []).length, 5,
+    'the read filters twice (row and version), and open, acceptance and the file download require a sent version');
   assert.match(GRANT, /work in progress until they hand it over/);
 });
 

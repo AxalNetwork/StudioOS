@@ -346,9 +346,9 @@ test('Prototype / MVP\'s read carries each fed must-have\'s state and link, and 
     ['v1.0', ['Search'], ['Sketch onboarding', 'Add CSV export', 'Login with Google', 'Billing page', 'Dark mode']],
   ], 'newest first: in, then not in');
   assert.equal(g.releases_total, 2);
-  // The canvas's table is unchanged, and a Dropped must-have has left it.
+  // D6031: BD8's columns (Test, Built and Tested added), and a Dropped must-have has left the table.
   const table = body.records ?? body;
-  assert.deepEqual(table.cols.map((c: any) => c.label), ['Must-have', 'Tests', 'State', 'Owner', 'Due']);
+  assert.deepEqual(table.cols.map((c: any) => c.label), ['Must-have', 'Test', 'State', 'Owner', 'Due', 'Built', 'Tested']);
   assert.ok(table.rows.length === 7 && !JSON.stringify(table.rows).includes('Old idea'), 'seven must-haves; the Dropped one has left the table');
 });
 
