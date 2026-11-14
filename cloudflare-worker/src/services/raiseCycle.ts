@@ -39,7 +39,7 @@ import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 import { deckReaders, readBySentence } from './narrative/readers';
 import { readObjections } from './narrative/objections';
-import { claimTally } from './narrative/claimTally';
+import { claimTally, type SectionOf } from './narrative/claimTally';
 import { inputsFrom, readCapTable } from './capTableToday';
 import { simulate } from './captable';
 import { deckShareMetrics } from './deckShareUse';
@@ -934,10 +934,11 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
  *   - `objections` (D913): the objections investors raised, project-wide,
  *     `{ state: 'unreadable' }` on its own when the feedback cannot be read.
  *   - `claims` (D6068): the newest version's claim store tally, backed of
- *     total and the sections with a Mismatch (`narrative/claimTally.ts`),
+ *     total and the sections with a Mismatch (`narrative/claimTally.ts`, by
+ *     the caller's `sectionOf`, the route's `sectionOfField`),
  *     `{ state: 'unreadable' }` on its own; null with no version.
  */
-export async function narrativeHome(ctx: Ctx) {
+export async function narrativeHome(ctx: Ctx, sectionOf: SectionOf) {
   const [versions, readers, objections] = await Promise.all([
     loadVersions(ctx), deckReaders(ctx.env, ctx.projectId),
     readObjections(ctx.env, ctx.projectId).catch((e) => {
@@ -948,7 +949,7 @@ export async function narrativeHome(ctx: Ctx) {
   const newest = versions[0] ?? null;
   const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
   const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
-  const claims = newest ? await claimTally(ctx.env, ctx.projectId, Number(newest.version)) : null;
+  const claims = newest ? await claimTally(ctx.env, ctx.projectId, Number(newest.version), sectionOf) : null;
   return {
     state: 'ok' as const,
     versions: versions.map((v) => {

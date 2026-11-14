@@ -13,11 +13,11 @@
  *   unreadable   the store could not be read; the page shows a dash and says
  *                so, never 0.
  *
- * `raiseCycle.ts` reads this for Home's part, and `claims.ts` imports
- * `raiseCycle.ts` at load, so `sectionOfField` is imported when the tally
- * runs, never at load: a static import here would close that cycle and leave
- * `raiseCycle.ts`'s constants uninitialised (as `index.ts` already does for
- * its late services).
+ * `raiseCycle.ts` reads this for Home's part, and the route hands it
+ * `sectionOfField` (`sectionOf`). This file imports nothing of `claims.ts`:
+ * `claims.ts` imports `raiseCycle.ts` at load (a static import closes that
+ * cycle), and through `store.ts` reaches the deck routes, which the fund
+ * modules' import guards (D707, D714) must never reach from `raiseCycle.ts`.
  *
  * All SQL is bound; no figure is read or logged.
  */
@@ -27,18 +27,20 @@ export type ClaimTally =
   | { state: 'ok'; version: number; backed: number; total: number; checked_at: string | null; mismatch_sections: string[] }
   | { state: 'unreadable'; version: number; reason: string };
 
+/** A claim field's section, as `claims.ts`'s `sectionOfField` maps it. */
+export type SectionOf = (field: string) => { key: string } | null;
+
 export const CLAIMS_UNREADABLE_REASON = 'The claims could not be read';
 
-export async function claimTally(env: Env, projectId: number, version: number): Promise<ClaimTally> {
+export async function claimTally(env: Env, projectId: number, version: number, sectionOf: SectionOf): Promise<ClaimTally> {
   try {
-    const { sectionOfField } = await import('./claims');
     const rows = (await env.DB.prepare(
       `SELECT field_key, state, checked_at FROM raise_claims WHERE project_id = ? AND surface = 'narrative' AND surface_version = ? ORDER BY id`,
     ).bind(projectId, `v${version}`).all<{ field_key: string; state: string; checked_at: string | null }>()).results || [];
     const sections = new Set<string>();
     for (const r of rows) {
       if (r.state !== 'mismatch') continue;
-      const s = sectionOfField(String(r.field_key).split('#')[0]);
+      const s = sectionOf(String(r.field_key).split('#')[0]);
       if (s) sections.add(s.key);
     }
     return {

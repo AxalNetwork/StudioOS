@@ -415,7 +415,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
-    parts.narrative = await narrativeHome(ctx).catch((e) => {
+    parts.narrative = await narrativeHome(ctx, sectionOfField).catch((e) => {
       console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
       return { state: 'unreadable', reason: 'The narrative versions could not be read' };
     });

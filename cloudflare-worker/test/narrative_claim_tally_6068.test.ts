@@ -24,6 +24,7 @@ import { SignJWT } from 'jose';
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import { claimTally, CLAIMS_UNREADABLE_REASON } from '../src/services/narrative/claimTally.ts';
+import { sectionOfField } from '../src/services/narrative/claims.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -138,5 +139,5 @@ test('D6068: a claim store that cannot be read is unreadable on its own; the res
   assert.equal(p.versions.length, 1, 'the versions still read');
   // The helper on its own says the same.
   const saved = console.warn; console.warn = () => {};
-  try { assert.equal((await claimTally({ DB: broken } as any, PID, v)).state, 'unreadable'); } finally { console.warn = saved; }
+  try { assert.equal((await claimTally({ DB: broken } as any, PID, v, sectionOfField)).state, 'unreadable'); } finally { console.warn = saved; }
 });
