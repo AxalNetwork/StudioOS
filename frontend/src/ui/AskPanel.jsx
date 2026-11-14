@@ -11,6 +11,7 @@ import {
 import { blockHref, needsBlockPage } from './sessionsBlockHandoff.js';
 import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
 import { ADVISOR_ASK_CHIPS } from '../lib/railOptions/advisor.js';
+import { useAskPageBody } from './askPageBody.js';
 import './askPanel.css';
 
 /**
@@ -40,7 +41,8 @@ const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHI
 
 export default function AskPanel({ page, label, crumb, options = [], prompts = null, aiOn = true, layout = 'dock', onClose, onNavigate }) {
   const intent = useAskPanel().intent;
-  const exclusive = !!intent?.exclusive;
+  const pageBody = useAskPageBody(page);
+  const exclusive = !!intent?.exclusive || !!pageBody;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
@@ -189,12 +191,13 @@ export default function AskPanel({ page, label, crumb, options = [], prompts = n
           <b>{name}</b>
           <span className="ead-ask-eyebrow">{`Eadwyn · ${crumb || name}`}</span>
         </span>
-        <button type="button" className="ead-ask-close" aria-label="Close Eadwyn" onClick={() => onClose?.('close')} data-testid="ask-panel-close">
+        <button type="button" className="ead-ask-close" style={pageBody ? { minHeight: 44, minWidth: 44 } : undefined} aria-label="Close Eadwyn" onClick={() => onClose?.('close')} data-testid="ask-panel-close">
           <X size={16} aria-hidden="true" />
         </button>
       </header>
 
       <div className="ead-ask-body">
+        {pageBody && <div key={`${page}:${pageBody.scope}`} data-testid="ask-page-body">{pageBody.render({ onNavigate, onClose })}</div>}
         {/* D1443 part 4 (#3992): a page's own task (a form's Sources and Preview, a module's row proposals) is drawn here, by its host's AskIntent. */}
         {intent ? <div ref={setAskSlot} className="ead-ask-intent" data-testid="ask-panel-intent" /> : null}
         {!exclusive && chips.length > 0 && (

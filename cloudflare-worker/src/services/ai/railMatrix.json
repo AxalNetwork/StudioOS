@@ -1025,9 +1025,129 @@
    "pageKey": "Admin · Home",
    "kind": "chat",
    "routeTask": "rail_chat"
+  },
+  {
+   "pageKey": "Admin · Fund Admin",
+   "kind": "numbers",
+   "routeTask": "rail_numbers"
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "kind": "numbers",
+   "routeTask": "rail_numbers"
   }
  ],
  "options": [
+  {
+   "pageKey": "Admin · Fund Admin",
+   "optionKey": "explain:fund-outstanding",
+   "optionLabel": "Explain outstanding capital",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Admin · Fund Admin",
+   "optionKey": "identify:fund-overdue-lps",
+   "optionLabel": "Identify overdue LPs",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Admin · Fund Admin",
+   "optionKey": "summarize:fund-reconciliation",
+   "optionLabel": "Summarize reconciliation exceptions",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Admin · Fund Admin",
+   "optionKey": "prepare:fund-capital-call",
+   "optionLabel": "Prepare a capital call",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Admin · Fund Admin",
+   "optionKey": "identify:fund-incomplete-setup",
+   "optionLabel": "Identify incomplete fund setup",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "optionKey": "explain:fund-outstanding",
+   "optionLabel": "Explain outstanding capital",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "optionKey": "identify:fund-overdue-lps",
+   "optionLabel": "Identify overdue LPs",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "optionKey": "summarize:fund-reconciliation",
+   "optionLabel": "Summarize reconciliation exceptions",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "optionKey": "prepare:fund-capital-call",
+   "optionLabel": "Prepare a capital call",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
+   "pageKey": "Super Admin · Fund Admin",
+   "optionKey": "identify:fund-incomplete-setup",
+   "optionLabel": "Identify incomplete fund setup",
+   "kind": "numbers",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
   {
    "pageKey": "Founder · Studio",
    "optionKey": "ask:studio",

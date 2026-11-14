@@ -18,6 +18,7 @@ import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
+import { useAskPageBody } from './askPageBody.js';
 import { PageAsk } from './AskButton.jsx';
 import { askDock, askLayout, askServes } from './askPanelModel.js';
 import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
@@ -603,7 +604,8 @@ export default function WorkerRail({
   // is stored for the open option (#4313: the page itself has no pick); the
   // re-read after it is the Worker's answer.
   const railPage = useRailPage();
-  const pageKey = railPage?.offCanvas ? null : railPage?.page ?? null;
+  const pageBody = useAskPageBody(railPage?.page);
+  const pageKey = railPage?.offCanvas && !pageBody ? null : railPage?.page ?? null;
   const optionKey = railPage?.option?.key ?? null;
   const row = useRailRow(pageKey, optionKey);
   const [picked, setPicked] = useState(null);

@@ -33,6 +33,8 @@ import { withQuery } from './lpsModel';
 import { FundsTab } from './FundsTab';
 import { FundPage } from './FundPage';
 import { fundIdFrom } from './fundsModel';
+import FundAdminAsk from './FundAdminAsk.jsx';
+import AdminBoardFrame from '../AdminBoardFrame.jsx';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -160,6 +162,8 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   return (
     <LightboxPhoneProvider phone="sheet">
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
+      <FundAdminAsk user={user} api={apis.fundAdmin} fundId={oneFund ?? scopeId ?? (PER_FUND_VIEWS.includes(tab) ? fund?.id ?? null : null)}
+        scopeLabel={oneFund ? 'Fund setup' : scopeId != null || PER_FUND_VIEWS.includes(tab) ? fund?.name || 'Chosen fund' : 'All administered funds'} />
       <div className="px-4 pt-5 sm:px-6">
         <AdminPageHeader
           crumb={view === 'funds' ? { label: TITLE, to: `/admin/fund-admin${keep}`, current: oneFund ? 'Fund' : 'Funds' } : null}
@@ -289,5 +293,6 @@ function downloadCsv(text) {
 
 export default function FundAdminConsole() {
   const { user } = useAuth() || {};
-  return <FundAdminConsoleView user={user} />;
+  const content = <FundAdminConsoleView user={user} />;
+  return branchOfUser(user) ? content : <AdminBoardFrame workspace="Fund Admin" note="Eadwyn prepares, explains and navigates. It never issues, records or moves money." operations>{content}</AdminBoardFrame>;
 }

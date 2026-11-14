@@ -90,7 +90,9 @@
   "searchIndexKinds": ["research", "search"],
   "searchIndexModel": "@cf/baai/bge-base-en-v1.5",
   "pages": {
-    "Admin · Home": { "kind": "chat", "why": "Admin has no Home on the canvas. D720 §5 gives it the models every other Home row takes (the canvas's Home kind), for /admin/commissions, /branch/* and /admin/fund-admin." },
-    "Admin · Licences": { "kind": "plan", "keepKind": true, "why": "D796 (#2229): the Admin's \"Settings\" board was renamed \"Licences\" (/admin/my-licence, the administrator's own licence). It keeps the plan models it had as Settings; the canvas's \"Licences\" kind (legal) is the Super Admin's ledger of every licence." }
+    "Admin · Home": { "kind": "chat", "why": "Admin has no Home on the canvas. D720 §5 gives it the models every other Home row takes (the canvas's Home kind), for /admin/commissions and /branch/*." },
+    "Admin · Licences": { "kind": "plan", "keepKind": true, "why": "D796 (#2229): the Admin's \"Settings\" board was renamed \"Licences\" (/admin/my-licence, the administrator's own licence). It keeps the plan models it had as Settings; the canvas's \"Licences\" kind (legal) is the Super Admin's ledger of every licence." },
+    "Admin · Fund Admin": { "kind": "numbers", "why": "D6397: Fund Admin has its own recorded-read Ask tasks, separate from Admin Home." },
+    "Super Admin · Fund Admin": { "kind": "numbers", "why": "D6397: the HQ Fund Admin console has its own recorded-read Ask tasks, separate from Funds." }
   }
 }

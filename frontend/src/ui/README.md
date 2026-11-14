@@ -92,3 +92,5 @@ D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_
 D1165: `LightboxPhoneProvider` scopes the phone form to a page. Fund admin
 uses `phone="sheet"` for its nested drawers, including reused connection
 sheets. An explicit `phone` on a Lightbox wins; other pages keep `full`.
+
+| `askPageBody.js` | D6397: page-owned recorded task bodies in the existing Ask panel, registered and cleaned up with the page; explicit off-canvas Ask opt-in. |

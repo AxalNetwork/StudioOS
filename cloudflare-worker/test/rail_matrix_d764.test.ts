@@ -79,7 +79,7 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
   const keys = ROWS.map((r) => r.pageKey);
   assert.equal(new Set(keys).size, keys.length, 'a page key is used twice');
   for (const k of expected) assert.ok(keys.includes(k), `${k} has no row`);
-  assert.deepEqual(keys.filter((k) => !expected.includes(k)), ['Admin · Home']);
+  assert.deepEqual(keys.filter((k) => !expected.includes(k)), ['Admin · Home', 'Admin · Fund Admin', 'Super Admin · Fund Admin']);
   assert.ok(keys.includes('Founder · Studio'), 'Founder\'s home is Studio');
   for (const p of ['Investor', 'Advisor', 'Operating Partner']) assert.ok(keys.includes(`${p} · Home`), `${p} · Home`);
   const home = ROWS.find((r) => r.pageKey === 'Investor · Home')!;
@@ -88,7 +88,7 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
     const name = r.pageKey.split(' · ').at(-1)!;
     // D796 (#2229): a renamed board may keep the kind it had, as its override says and why.
     const kept = OVERRIDES.pages[r.pageKey];
-    if (kept?.keepKind) {
+    if (kept?.keepKind || !expected.includes(r.pageKey)) {
       assert.ok(String(kept.why || '').length > 20, `${r.pageKey}: a kept kind says why`);
       assert.equal(r.kind, kept.kind, `${r.pageKey}: its kind is the one its override keeps`);
     } else if (r.pageKey !== 'Admin · Home') assert.equal(r.kind, CANVAS.task_kind[name], `${r.pageKey}: its kind is the canvas's`);
@@ -97,7 +97,7 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
 });
 
 test('#4313 part 3: a page row stores no model list, only its page, its kind and its router task', () => {
-  assert.equal(ROWS.length, 205);
+  assert.equal(ROWS.length, 207);
   for (const r of MATRIX.rows) assert.deepEqual(Object.keys(r), ['pageKey', 'kind', 'routeTask'], `${r.pageKey}: a page row carries a model list again`);
   // What the page lists is its kind's job, as the rail draws it (D4313 part 2).
   for (const r of ROWS) {

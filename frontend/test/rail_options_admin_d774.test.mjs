@@ -1,3 +1,4 @@
+import { ADMIN_ASK_CHIPS } from '../src/lib/railOptions/admin.js';
 /**
  * D774 (#2100) PR 1 — the Admin's boards draw the rail, and their options
  * are listed for D764.
@@ -239,4 +240,15 @@ test('the rail lists no option, because none of them runs a model today', () => 
   const report = dd.slice(dd.indexOf("dd.post('/cases/:uid/report'"), dd.indexOf("dd.post('/cases/:uid/report/share'"));
   assert.ok(report.length > 0, 'the report route moved');
   assert.doesNotMatch(report, /\.run\(|env\.AI\b|aiRun|runModel/, 'the report route now calls a model: make it an option');
+});
+
+// D6397: the off-canvas Fund Admin page keeps its no-model tasks out of unrelated boards.
+test('D6397: Admin · Fund Admin offers exactly the canvas five recorded-read Ask chips', () => {
+  assert.deepEqual(ADMIN_ASK_CHIPS.map(chip => chip.label), ['Explain outstanding capital','Identify overdue LPs','Summarize reconciliation exceptions','Prepare a capital call','Identify incomplete fund setup']);
+  assert.ok(ADMIN_ASK_CHIPS.every(chip => chip.page === 'Admin · Fund Admin' && chip.route === '/admin/fund-admin' && chip.handler === 'none' && chip.noModel === true));
+  const matrix = JSON.parse(readFileSync(new URL('../../cloudflare-worker/src/services/ai/railMatrix.json', import.meta.url), 'utf8'));
+  const rows = matrix.options.filter(row => row.pageKey === 'Admin · Fund Admin');
+  assert.deepEqual(rows.map(row => row.optionKey), ADMIN_ASK_CHIPS.map(chip => chip.key));
+  assert.ok(rows.every(row => row.noModel === true && row.routeTask === 'none' && row.models.length === 0));
+  assert.deepEqual([...new Set(matrix.options.filter(row => ADMIN_ASK_CHIPS.some(chip => chip.key === row.optionKey)).map(row => row.pageKey))].sort(), ['Admin · Fund Admin', 'Super Admin · Fund Admin']);
 });

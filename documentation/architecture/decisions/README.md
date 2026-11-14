@@ -130,4 +130,4 @@ and citations by number keep working.
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
 
-| `D6397.md` | Recorded, no-model Fund Admin prompt answers and preparation navigation; shared-rail placement pending (#6397). |
+| `D6397.md` | Five recorded Fund Admin tasks in today’s shared Ask panel, with scoped navigation and no models or financial acts (#6397). |
