@@ -5,7 +5,7 @@ import { request } from '../api.js';
 // routes/dd.ts, migration 623. No page reads these yet: the list is part 6
 // (#3265), the case tabs part 7 (#3266), the reviewer views part 8 (#3267).
 //
-//   cases          GET    /dd/cases?q=&subject_type=&stage=&lead=&template=&risk_band=&decision=&past_target=&sort=&page=&page_size=
+//   cases          GET    /dd/cases?q=&subject_type=&subject_id=&stage=&lead=&template=&risk_band=&decision=&past_target=&sort=&page=&page_size=
 //                         → { items, total, page, page_size, sort }; each row with stage, checklist, open flags, requests waiting
 //   overview       GET    /dd/overview          → { stages, severe_flags, requests, ages, decisions }; 503 when it cannot be read
 //   myReviews      GET    /dd/my-reviews        → { items }

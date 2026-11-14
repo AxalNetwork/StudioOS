@@ -53,13 +53,14 @@ test('the room\'s three access states; behind an NDA the withheld files are a co
   assert.equal(roomStateOf({ status: 'unreadable' }).state, 'unreadable');
 });
 
-test('Diligence: your case on this company only, its card and requests; a list cut short is not "no case"', () => {
-  // Mutation checked: another company's case taken; an archived case taken; the cap ignored; waiting days miscounted; a withdrawn request waiting.
+test('Diligence: your case on this company only, its card and requests', () => {
+  // Mutation checked: another company's case taken; an archived case taken; waiting days miscounted; a withdrawn request waiting.
+  // D6181 (#6181): the list is read for this company alone, so a large total is no longer "not in the read".
   const read = ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8, status: 'open' }, { uid: 'old', subject_type: 'project', subject_id: 7, status: 'archived' }, { uid: 'dd1', subject_type: 'project', subject_id: 7, status: 'in_review', stage: 'in_review', subject_label: 'Harbor Ledger', checklist_total: 52, checklist_worked: 38, open_flags: 3, risk_band: 'moderate', created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21 }], total: 3 });
   const found = caseForDeal(read, 7);
   assert.equal(found.row.uid, 'dd1');
   assert.equal(caseForDeal(ready({ items: [], total: 0 }), 7).state, 'none');
-  assert.equal(caseForDeal(ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8 }], total: 400 }), 7).state, 'not_in_read');
+  assert.equal(caseForDeal(ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8 }], total: 400 }), 7).state, 'none', 'D6181: no not_in_read state');
   const card = caseCard(found.row, { sections: [{ id: 1, title: 'Financial health', status: 'assigned', assignee_user_id: 21 }, { id: 2, title: 'Legal', status: 'assigned', assignee_user_id: 9 }], reviewers: [] }, 21);
   assert.deepEqual([card.stage, card.risk, card.items.line, card.items.pct, card.flags, card.opened, card.href], ['In review', 'Moderate risk', '38 of 52 items worked', 73, '3 open flags', 'Opened 1 Oct 2026 · led by Ada', '/admin/due-diligence/dd1']);
   assert.deepEqual(card.yours, [{ title: 'Financial health', status: 'Open' }]);
@@ -212,6 +213,56 @@ test('Diligence with no case: DL7n, and Open a diligence case asks before it ope
     const sent = v.posts(/\/dd\/cases$/);
     assert.equal(sent.length, 1);
     assert.deepEqual([sent[0].body.subject_type, sent[0].body.subject_id], ['project', 7]);
+  } finally { await v.close(); }
+});
+
+// D6181 (#6181) — the tab asks the Worker for this company's cases exactly (`subject_id`), so a caller with 201+
+// cases still finds the one on this company, and Open a diligence case is never offered beside a live case.
+// Mutation checked (each fails a test below):
+//   - DealDiligence's `subject_id: deal.project_id` dropped → the stub answers the newest 200 of 251 other cases, no card,
+//     and Open a diligence case is offered;
+//   - caseForDeal's `c.status !== 'archived'` dropped → the archived case is taken over the live one;
+//   - DealWorkTabs' none card also drawn for a ready case (`found.state === 'none' || found.state === 'ready'`) → Open a
+//     diligence case is offered beside the live case.
+const OTHER_CASES = Array.from({ length: 200 }, (_, i) => ({ uid: `other-${i}`, subject_type: 'project', subject_id: 1000 + i, status: 'open' }));
+const LIVE_CASE = { uid: 'dd-live', subject_type: 'project', subject_id: 7, status: 'open', stage: 'not_started', subject_label: 'Harbor Ledger', checklist_total: 4, checklist_worked: 1, open_flags: 0, created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21 };
+const ARCHIVED_CASE = { ...LIVE_CASE, uid: 'dd-archived', status: 'archived', stage: 'archived' };
+const casesBySubject = (forCompany) => ({
+  'dd/cases\\?': (u, m) => {
+    if (m !== 'GET') return null;
+    const params = new URL(u, 'https://x.test').searchParams;
+    if (params.get('subject_id') === '7') return response({ items: forCompany, total: forCompany.length });
+    return response({ items: OTHER_CASES, total: 251 });
+  },
+  'dd/cases/dd-live': (u, m) => (m === 'GET' ? response({ sections: [], reviewers: [], requests: [] }) : null),
+});
+
+test('D6181: with 251 cases the Diligence tab asks for this company exactly, shows its live case and never offers to open another', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, handlerWith(casesBySubject([ARCHIVED_CASE, LIVE_CASE])));
+  try {
+    const list = v.requests.filter((r) => /^GET .*\/api\/dd\/cases\?/.test(r.line));
+    assert.ok(list.length >= 1, 'the case list was read');
+    for (const r of list) {
+      const params = new URL(r.line.slice(4), 'https://x.test').searchParams;
+      assert.deepEqual([params.get('subject_type'), params.get('subject_id')], ['project', '7'], 'the list is read for this company');
+    }
+    assert.ok(v.has('deal-dd-case'), 'the live case on this company is found');
+    assert.match(v.textOf('deal-dd-case'), /Harbor Ledger/);
+    const door = v.byId('deal-dd-door')[0];
+    assert.ok(door, 'the case door is drawn');
+    const doorProps = Object.entries(door).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+    assert.match(String(doorProps.href ?? ''), /\/admin\/due-diligence\/dd-live$/, 'the live case, not the archived one');
+    assert.equal(v.has('deal-dd-none'), false);
+    assert.equal(v.has('deal-dd-open'), false, 'Open a diligence case is never offered beside a live case');
+  } finally { await v.close(); }
+});
+
+test('D6181: only an archived case on this company is no live case, and the tab offers to open one', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, handlerWith(casesBySubject([ARCHIVED_CASE])));
+  try {
+    assert.ok(v.has('deal-dd-none'));
+    assert.ok(v.has('deal-dd-open'));
+    assert.doesNotMatch(v.textOf('deal-dd-none'), /newest/, 'no "only your newest N cases" line any more');
   } finally { await v.close(); }
 });
 

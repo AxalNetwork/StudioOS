@@ -5464,6 +5464,8 @@ export const api = {
 // founders are blocked at the worker level (any 403 surfaces directly).
 export const dd = {
   catalog: () => request('/dd/catalog'),
+  // Every filter the Worker's list reads passes through, `subject_id` among
+  // them (D6181: one subject's cases, exactly, under the same reader scope).
   listCases: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/dd/cases${q ? `?${q}` : ''}`);
