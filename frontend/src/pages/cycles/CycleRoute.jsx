@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -693,6 +693,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
         <FormLightbox key={`edit-${projectId}-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
+          focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
           renderAssistant={uofAssistant}
           fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
@@ -705,6 +706,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${projectId}-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
+        focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
         renderAssistant={uofAssistant}
         fill={fillFor(edit, edit.idOf(editing))}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -911,6 +913,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
+          // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
+          ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
