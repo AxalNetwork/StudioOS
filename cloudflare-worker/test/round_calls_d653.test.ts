@@ -507,3 +507,16 @@ test('D686 recorded approval survives a publisher that throws; removing the catc
   const mutant=await import('data:text/javascript;base64,'+Buffer.from(js+'\n// notice regression').toString('base64'));
   await assert.rejects(()=>check(mutant),assert.AssertionError);
 });
+
+test('terms wording is flag- and owner-gated and renders only recorded financial values', async () => {
+  const f = await fixture('draft');
+  const body = { project_id: 1, ...terms };
+  assert.equal((await request(f, routes, '/new/terms-draft', 1, 'POST', body, { ROUND_CALLS_ENABLED: 'false' })).status, 503);
+  assert.equal((await request(f, routes, '/call/terms-draft', 2, 'POST', body)).status, 404);
+  assert.equal((await request(f, routes, '/new/terms-draft', 1, 'POST', { ...body, minimum_cheque_cents: 0 })).status, 400);
+  const values = { AMOUNT: '$125,000', MINIMUM: '$1,000' };
+  assert.equal(service.renderRoundTermsDraft('Raise up to {AMOUNT}. The minimum cheque is {MINIMUM}.', values), 'Raise up to $125,000. The minimum cheque is $1,000.');
+  for (const output of ['Raise $999 for {AMOUNT}, minimum {MINIMUM}.', '{AMOUNT} and {AMOUNT}.', '{AMOUNT} alone.', 'Guaranteed returns of {AMOUNT}, minimum {MINIMUM}.']) {
+    assert.equal(service.renderRoundTermsDraft(output, values), null);
+  }
+});

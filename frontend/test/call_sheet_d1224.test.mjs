@@ -231,3 +231,24 @@ test('6. a draft opens under Calls, and its Continue draft opens the sheet on it
   } finally { Object.assign(roundCallsApi, saved); }
   assert.match(readFileSync('frontend/src/pages/founder/RoundCallPage.jsx', 'utf8'), /if\(read\.data\?\.viewer==='founder'\)return <Navigate to=\{'\/raise\/capital-relationships\/calls\/'\+encodeURIComponent\(uid\)\} replace\/>;/);
 });
+
+test('Eadwyn drafts only on request and only an explicit edit or accept applies its text', async () => {
+  const s = await mountSheet({
+    availability: { enabled: true }, context: CONTEXT, list: { items: [] },
+    termsDraft: [refusal(402, 'budget_user_day'), { draft: 'Reviewed wording from recorded terms.' }],
+  });
+  try {
+    await s.click('SAFE');
+    await s.set('call-minimum', '25000');
+    assert.equal(s.names().includes('termsDraft'), false);
+    await s.click('Ask Eadwyn to draft');
+    assert.match(s.text(), /The Worker refused it/);
+    assert.doesNotMatch(s.text(), /Proposed by Eadwyn/);
+    await s.click('Ask Eadwyn to draft');
+    assert.match(s.text(), /Proposed by Eadwyn/);
+    assert.equal(s.value('call-terms'), '');
+    assert.equal(s.names().includes('create'), false);
+    await s.click('Edit');
+    assert.equal(s.value('call-terms'), 'Reviewed wording from recorded terms.');
+  } finally { await s.done(); }
+});

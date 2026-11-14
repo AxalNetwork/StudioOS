@@ -10,6 +10,7 @@ export const roundCallsApi = {
   page: uid => request(`/round-calls/${encodeURIComponent(uid)}`),
   create: body => request('/round-calls', {method:'POST',body:JSON.stringify(body)}),
   save: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}`, {method:'PUT',body:JSON.stringify(body)}),
+  termsDraft: (uid, body) => request(`/round-calls/${encodeURIComponent(uid || 'new')}/terms-draft`, {method:'POST',body:JSON.stringify(body)}),
   previewAudience: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/audience-preview`, {method:'POST',body:JSON.stringify(body)}),
   audience: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/audience`, {method:'PUT',body:JSON.stringify(body)}),
   send: (uid,body) => request(`/round-calls/${encodeURIComponent(uid)}/send`, {method:'POST',body:JSON.stringify(body)}),
