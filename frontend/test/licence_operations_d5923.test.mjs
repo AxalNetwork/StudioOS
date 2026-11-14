@@ -94,7 +94,7 @@ const LICENCE = {
   starts_on: '2026-03-02', renews_on: '2099-03-01', terms_revision: 4, deployment: null, deployment_available: true,
   domain: null, domain_available: true, sync: null, blockers: [], events: [],
 };
-const ago = (hours) => new Date(Date.now() - hours * 3_600_000).toISOString();
+const ago = (hours) => new Date(Date.now() - hours * 3_600_000).toISOString(); // clock-ok: relative
 const REQUESTS = {
   available: true, total: 2, next_cursor: null, branch_readable: true, items: [
     { uid: 'r_seats', kind: 'seat_increase', subject: 'Add 5 founder seats', raised_by_name: 'C. Martin', created_at: ago(4 * 24 + 1), sla: 'past', branch_code: 'hq', request: { seat_type: 'founder', seats: 5 } },
@@ -152,7 +152,7 @@ async function mount(handle, startTab) {
   }
   const rootNode = createRoot(container);
   await act(async () => rootNode.render(h(MemoryRouter, null, h(Host))));
-  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
@@ -290,7 +290,7 @@ async function mountInvoices(api) {
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setImmediate(r)); });
   await act(async () => { root.render(h(LicenceFeeInvoices, { licence: { uid: 'lic_fr' }, api, today: '2026-11-07' })); });
   await flush();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
