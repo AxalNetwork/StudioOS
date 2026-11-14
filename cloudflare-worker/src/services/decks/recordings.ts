@@ -10,6 +10,9 @@
  *   - A row that leaves by a cascade (its deck, venture or account deleted)
  *     leaves its object behind; the daily cleanup's `sweepOrphanRecordings`
  *     deletes an object under `deck-recordings/` whose row is gone.
+ *
+ * D5791 (#5791): `sharedWalkthroughOf` is the attached walkthrough as an
+ * investor's share link plays it (`routes/deck_share_walkthrough.ts`).
  */
 import type { Env } from '../../types';
 import type { Caption } from '../ai/speechJobs';
@@ -62,6 +65,30 @@ export function walkthroughOf(rows: TakeRow[], cards: number) {
     return r ? takeView(r) : null;
   });
   return { cards: takes, recorded: takes.filter(Boolean).length };
+}
+
+/**
+ * D5791 (#5791) — the walkthrough as an investor's share link plays it: the
+ * maker's newest take of each card the link sends, in the version's card
+ * order. `cards` are the version's cards as the Worker numbers them (a take's
+ * `card` is its 1-based place, hidden cards included); `sentUids` are the
+ * cards the link sends. A take of a card the link does not send is left out.
+ * Only what playback needs: no caption model, charge, size or date.
+ */
+export function sharedWalkthroughOf(rows: TakeRow[], cards: ReadonlyArray<{ uid?: unknown } | null | undefined>, sentUids: ReadonlySet<string>) {
+  const newest = new Map<number, TakeRow>();
+  for (const r of rows) {
+    const had = newest.get(Number(r.card));
+    if (!had || Number(r.take) > Number(had.take)) newest.set(Number(r.card), r);
+  }
+  return [...newest.values()]
+    .sort((a, b) => Number(a.card) - Number(b.card))
+    .flatMap((r) => {
+      const uid = cards[Number(r.card) - 1]?.uid;
+      if (typeof uid !== 'string' || !sentUids.has(uid)) return [];
+      const v = takeView(r);
+      return [{ uid: v.uid, card: v.card, card_uid: uid, take: v.take, duration_ms: v.duration_ms, media_mime: v.media_mime, captions: v.captions }];
+    });
 }
 
 /** Delete a take: the R2 object first, then the row. False when the object could not be deleted (the row stays, so nothing is lost track of). */
