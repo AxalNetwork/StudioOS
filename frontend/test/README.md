@@ -201,3 +201,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
 | `onboarding_followups_d6135.test.mjs` | D6135: actual investor wizard failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal and role-safe fund handoff. |
+| `diligence_doors_d6292.test.mjs` | D6292: investor sidebar eligibility, scoped recorded context links, shared URL reload, filters/search/history/paging and stale response protection. |

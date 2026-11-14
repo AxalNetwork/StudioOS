@@ -150,7 +150,7 @@ test('the answer: a note, a link, a data-room file, or any of them; a link is ht
 
 // ------------------------------------------------------------------ the sidebar row (owner question 1)
 
-test('"Diligence" is added only for a partner, investor or advisor who leads or reviews a case, after Research, never twice', () => {
+test('"Diligence" is always added for investors; partners/advisors require involvement, after Research, never twice', () => {
   for (const role of ['partner', 'investor', 'advisor']) {
     const groups = SIDEBAR_GROUPS[role];
     assert.ok(!groups.some((g) => g.items.some((i) => i.to === '/due-diligence')), `${role} has no row of its own`);
@@ -161,8 +161,13 @@ test('"Diligence" is added only for a partner, investor or advisor who leads or 
     assert.equal(items[at - 1].label, 'Research', `${role}: after Research`);
     assert.equal(items[at].label, 'Diligence');
     assert.equal(withDiligenceRow(out, role, true).flatMap((g) => g.items).filter((i) => i.to === '/due-diligence').length, 1, 'never twice');
-    assert.equal(withDiligenceRow(groups, role, false), groups, `${role} not on a case: no row`);
-    assert.equal(withDiligenceRow(groups, role, undefined), groups, 'unread is no row');
+    if (role !== 'investor') {
+      assert.equal(withDiligenceRow(groups, role, false), groups, `${role} not on a case: no row`);
+      assert.equal(withDiligenceRow(groups, role, undefined), groups, 'unread is no row');
+    } else {
+      assert.ok(withDiligenceRow(groups, role, false).flatMap(g => g.items).some(i => i.to === '/due-diligence'));
+      assert.ok(withDiligenceRow(groups, role, undefined).flatMap(g => g.items).some(i => i.to === '/due-diligence'));
+    }
   }
   for (const role of ['founder', 'admin', 'super_admin']) {
     const groups = SIDEBAR_GROUPS[role] || [];
@@ -194,7 +199,7 @@ test('the row\'s read: one case on the caller\'s list is a yes; a failed read is
     assert.equal(out.value, false);
     await m.unmount();
   }
-  assert.deepEqual(calls, ['investor', 'advisor', 'partner'], 'no read for a founder or an admin');
+  assert.deepEqual(calls, ['advisor', 'partner'], 'investors need no involvement read; founder/admin behavior is unchanged');
   const again = { value: null };
   m = await mount(h(Probe, { user: { id: 3 }, role: 'investor', load: async () => { calls.push('again'); return { total: 1 }; }, out: again }));
   assert.equal(again.value, true);

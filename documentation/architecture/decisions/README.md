@@ -130,3 +130,4 @@ and citations by number keep working.
 | `D6093.md` | Reporting phone writers reach Reminder settings through the existing More menu, with reader gates and the Prepare bar preserved (#6093). |
 | `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
 | `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
+| `D6292.md` | Investor Diligence door, recorded member context links and validated Cases list state in the address (#6292). |
