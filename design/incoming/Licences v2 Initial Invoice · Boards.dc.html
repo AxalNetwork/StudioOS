@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licences v2 Initial Invoice · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Licences · v2 addendum · initial invoice · #5955</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Licences v2 · the one-off initial invoice on a licence’s Fees view, and where Apply’s five figures land</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Licences and Contracts v2 Addendum at L41, beside L26 (Terms › Pricing &amp; Market); it does not fork it. Same shell, tokens, chips and licence-detail frame. A: the licence’s Fees view gets a separate “Initial invoice · one-off” card above the unchanged annual licence-year list: two lines (initial fee; regulatory surcharge with its class), frozen at issue, one per licence ever. B: the Apply review on Pricing &amp; Market shows, row by row, where each of the five figures goes. Money follows Prepare → Review → Confirm → Authenticate → Receipt; nothing issues, sends or reprices itself. Not recorded, Unavailable and €0 never look alike. Violet dashed ◇ tags name the backend issue (#5953, #5954). Eadwyn (#5130) proposes; HQ accepts, edits or discards.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Axal VC Belgium, Axal VC Luxembourg, Axal VC Benelux, M. Okafor, A. Peeters and every figure are fictional samples</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Licences v2 Initial Invoice Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['L41', 'Fees · initial invoice issued · #5955', 'The Fees section with the licence currency, then the “Initial invoice · one-off” card: initial fee €50,000 and regulatory surcharge €8,000 (class high), total €58,000, reference, issued, due, paid so far, PDF, Record payment and Void (only while nothing is paid). The annual licence-year list below is unchanged. The footnote names the pricing decision and says the invoice is frozen at issue.', [F('LFI41', false, 960), F('LFI41B', 'Overdue · Eadwyn proposes a reminder note, sends nothing', 1160)]],
+      ['L42', 'Issue initial invoice… · review sheet', 'The D4819 consequence sheet over the not-yet-issued card: the two amounts in the decision’s currency, the decision it comes from, payee and payment terms (due in 30 days), what happens (one invoice, frozen; never a second, even after a void; annual invoices unaffected) and how to undo it. Receipt: the sheet closes and the card shows the new invoice with an “Issued” toast.', [F('LFI42', false, 1160), C('LFI42B', 'Receipt', 1340, 420)]],
+      ['L43', 'Initial invoice · lifecycle states', 'Not yet issued; licence not started (“Can be issued from 1 Dec 2026”); no start date recorded; paid; part paid (no Void); voided (struck, PDF hidden, no second invoice); draft, pending activation or terminated (not invoiced); a basket licence naming each country’s class, one Not recorded.', [C('LFI43', '1 of 2', 1440, 1310), C('LFI43B', '2 of 2', 1440, 1340)]],
+      ['L44', 'Fees · no pricing accepted', '“No pricing has been accepted for this licence, so there is no initial fee to invoice.” One action: Open Pricing &amp; Market. The annual list keeps its own empty state.', [F('LFI44', false, 800)]],
+      ['L45', 'Fees · data states', 'Loading (card and list apart); initial fee Not recorded (Issue off, with why); surcharge Not recorded (one line only, never €0); invoices unreadable (Issue off: it could be a second one); decision unreadable; Refused; revision conflict on Record payment; an Issue refusal shown as the Worker gives it, sheet kept open; and the refusal sentences.', [C('LFI45', '1 of 2', 1440, 970), C('LFI45B', '2 of 2', 1440, 1270), F('LFI45C', 'Issue refused · sheet kept open', 1160), C('LFI45D', 'Refusal sentences', 1340, 400)]],
+      ['L46', 'Licensee view · Statements', 'The Administrator’s own Statements tab: the initial invoice as a read-only card, then annual invoices and royalty statements. No HQ notes, no actions. Unreadable: their own sentence while statements still show.', [F('LFI46', false, 900), F('LFI46B', 'Fee invoices unreadable', 700)]],
+      ['L47', 'Terms › Pricing &amp; Market · Apply review', 'Extends L26’s Apply step: five rows, before → after, each with Goes to: annual fee and royalty to core terms, minimum royalty to the schedule’s § 4.4 minimum guarantee (◇ #5953), initial fee and surcharge to the one-off initial invoice. Issued invoices stay as issued. Eadwyn summarises and proposes the reason. Receipt links to Fees.', [F('LFI47', false, 1200), C('LFI47B', 'Receipt · “Initial invoice: issue it from Fees”', 1140, 440)]],
+      ['L48', 'Apply review · states', 'Not recorded figures (“no change”, never 0); no recommended annual fee (Override only); agreement acknowledgement required; initial invoice already issued (decision only) and invoices unreadable; then stale terms, stale snapshot, currency mismatch, agreement unreadable, terminated, loading, unreadable, refused, saving and save failed.', [C('LFI48', '1 of 2', 1440, 1250), C('LFI48B', '2 of 2', 1440, 610)]],
+      ['L49', 'Tablet 834', 'Fees with the initial invoice card full width above the list; the Apply table keeps five rows with Goes to under each figure.', [C('LFI49A', 'Fees', 834, 1080), C('LFI49B', 'Apply review', 834, 1020)]],
+      ['L50', 'Phone 390', 'Fees with the initial invoice first and 44 px full-width actions; Issue as a bottom sheet; Apply review as one card per figure with the acknowledgement and Apply pinned.', [P('LFI50A', false), P('LFI50B', false), P('LFI50C', false)]],
+      ['L51', 'Dark', 'L41 and L47 on the dark tokens; Not recorded, Void and Unavailable keep their words and shapes.', [F('LFI51A', false, 960), F('LFI51B', false, 1240)]],
+      ['L52', 'Handoff', 'Checked on main, preserved, frontend only, backend required (#5953, #5954), owner answers already given, open points and accessibility.', [W('LFI52')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

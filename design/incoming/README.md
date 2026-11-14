@@ -2657,3 +2657,76 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 - **`Expertise v2 Page.dc.html`**, **`Expertise v2 · Boards.dc.html`**: boards EX-01 to EX-16 (D4823). Each file is byte-for-byte the approved export: SHA-256 `b0c44c7c…5e01a40` (page) and `a3fed64f…e4bd446d` (boards), the digests recorded on #4823.
 
 Not built yet. People, companies, services and articles are sample content; D4823 lists what is frontend-only and what needs backend work (#5315).
+
+## Landed 2026-11-14 — 49 canvases: Validate, Build, Raise and Grow addenda, the investor surfaces, and Admin and HQ
+
+Forty-nine board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-14 from the issue briefs, each as a page plus its boards under the names Claude Design gave them. Most are addenda to canvases already here and continue their look; where several addenda to one canvas start from the same board number, they are renumbered in landing order, as each decision says.
+
+**Validate**
+- **`Validate v2 Discovery and ICP Page.dc.html`**, **`Validate v2 Discovery and ICP · Boards.dc.html`**: Validate v2 Addendum · Discovery and ICP (#5995, D5995).
+- **`Validate v2 Market and Demand Page.dc.html`**, **`Validate v2 Market and Demand · Boards.dc.html`**: Validate v2 Addendum · Market and Demand (#6009, D6009).
+- **`Validate v2 Verdict Page.dc.html`**, **`Validate v2 Verdict · Boards.dc.html`**: Validate v2 Addendum · Verdict (#6021, D6021).
+
+**Build**
+- **`Build v2 Not Drawn Page.dc.html`**, **`Build v2 Not Drawn · Boards.dc.html`**: Build v2 Addendum · Not Drawn (#6026, D6026).
+- **`Build v2 Roadmap and Team Page.dc.html`**, **`Build v2 Roadmap and Team · Boards.dc.html`**: Build v2 Addendum · Roadmap and Team (#6034, D6034).
+- **`Build v2 Company Creation Page.dc.html`**, **`Build v2 Company Creation · Boards.dc.html`**: Build v2 Addendum · Company Creation (#6035, D6035).
+
+**Raise**
+- **`Raise v2 Calls Follow-through Page.dc.html`**, **`Raise v2 Calls Follow-through · Boards.dc.html`**: Raise v2 Addendum · Calls Follow-through (#6053, D6053).
+- **`Raise v2 Prepare Export and Evidence Page.dc.html`**, **`Raise v2 Prepare Export and Evidence · Boards.dc.html`**: Raise v2 Addendum · Prepare Export and Evidence (#6054, D6054).
+- **`Raise v2 Investor Narrative Page.dc.html`**, **`Raise v2 Investor Narrative · Boards.dc.html`**: Raise v2 Addendum · Investor Narrative (#6067, D6067).
+- **`Raise v2 Data Room Page.dc.html`**, **`Raise v2 Data Room · Boards.dc.html`**: Raise v2 Addendum · Data Room (#6071, D6071).
+- **`Raise v2 Cap Table and Use of Funds Page.dc.html`**, **`Raise v2 Cap Table and Use of Funds · Boards.dc.html`**: Raise v2 Addendum · Cap Table and Use of Funds (#6088, D6088).
+
+**Grow**
+- **`Grow v2 Report Questions Page.dc.html`**, **`Grow v2 Report Questions · Boards.dc.html`**: Grow v2 · Report Questions (#6096, D6096).
+- **`Grow v2 Feedback Page.dc.html`**, **`Grow v2 Feedback · Boards.dc.html`**: Grow v2 · Feedback (#6099, D6099).
+- **`Grow v2 Markets Page.dc.html`**, **`Grow v2 Markets · Boards.dc.html`**: Grow v2 · Markets (#6119, D6119).
+- **`Grow v2 Company Page.dc.html`**, **`Grow v2 Company · Boards.dc.html`**: Grow v2 · Company (#6121, D6121).
+- **`Grow v2 From Facebook Page.dc.html`**, **`Grow v2 From Facebook · Boards.dc.html`**: Grow v2 · From Facebook (#5861, D5861).
+- **`Grow v2 From TikTok Page.dc.html`**, **`Grow v2 From TikTok · Boards.dc.html`**: Grow v2 · From TikTok (#5865, D5865).
+
+**Investor home, fund and settings**
+- **`Investor Studio Home v2 Page.dc.html`**, **`Investor Studio Home v2 · Boards.dc.html`**: Investor Studio Home v2 (#6126, D6126).
+- **`Axal VC Fund v2 and LP Workspace Page.dc.html`**, **`Axal VC Fund v2 and LP Workspace · Boards.dc.html`**: Axal VC Fund v2 and LP Workspace (#6127, D6127).
+- **`Investor Onboarding v2 Page.dc.html`**, **`Investor Onboarding v2 · Boards.dc.html`**: Investor Onboarding v2 (#6128, D6128).
+- **`Investor Fund v2 Page.dc.html`**, **`Investor Fund v2 · Boards.dc.html`**: Investor Fund v2 (#6229, D6229).
+- **`Investor Fund Detail Pages Page.dc.html`**, **`Investor Fund Detail Pages · Boards.dc.html`**: Investor Fund Detail Pages (#6244, D6244).
+- **`Investor Firm Settings Page.dc.html`**, **`Investor Firm Settings · Boards.dc.html`**: Investor Firm Settings (#6286, D6286).
+
+**Investor deals**
+- **`Deals v2 Deal Rooms and Phone Page.dc.html`**, **`Deals v2 Deal Rooms and Phone · Boards.dc.html`**: Deals v2 Addendum · Deal Rooms and Phone (#6141, D6141).
+- **`Deals v2 IC Actions Page.dc.html`**, **`Deals v2 IC Actions · Boards.dc.html`**: Deals v2 Addendum · IC Actions (#6142, D6142).
+- **`Deals v2 IC Decision Record Page.dc.html`**, **`Deals v2 IC Decision Record · Boards.dc.html`**: Deals v2 Addendum · IC Decision Record (#6153, D6153).
+- **`Deals v2 Closing Workspace Page.dc.html`**, **`Deals v2 Closing Workspace · Boards.dc.html`**: Deals v2 Addendum · Closing Workspace (#6158, D6158).
+- **`Deals v2 Round Calls Page.dc.html`**, **`Deals v2 Round Calls · Boards.dc.html`**: Deals v2 Addendum · Round Calls (#6159, D6159).
+- **`Deals v2 Deal Page Evidence Page.dc.html`**, **`Deals v2 Deal Page Evidence · Boards.dc.html`**: Deals v2 Addendum · Deal Page Evidence (#6163, D6163).
+- **`Deals v2 Diligence and Data Room Page.dc.html`**, **`Deals v2 Diligence and Data Room · Boards.dc.html`**: Deals v2 Addendum · Diligence and Data Room (#6176, D6176).
+- **`Deals v2 Terms and Closing Room Page.dc.html`**, **`Deals v2 Terms and Closing Room · Boards.dc.html`**: Deals v2 Addendum · Terms and Closing Room (#6188, D6188).
+
+**Investor portfolio**
+- **`Portfolio v2 Reporting Settings Page.dc.html`**, **`Portfolio v2 Reporting Settings · Boards.dc.html`**: Portfolio v2 Addendum · Reporting Settings (#6213, D6213).
+- **`Portfolio v2 Founder Asks Page.dc.html`**, **`Portfolio v2 Founder Asks · Boards.dc.html`**: Portfolio v2 Addendum · Founder Asks (#6215, D6215).
+- **`Portfolio v2 Shareable Statement Page.dc.html`**, **`Portfolio v2 Shareable Statement · Boards.dc.html`**: Portfolio v2 Addendum · Shareable Statement (#6217, D6217).
+- **`Portfolio v2 Exit Waterfall Page.dc.html`**, **`Portfolio v2 Exit Waterfall · Boards.dc.html`**: Portfolio v2 Addendum · Exit Waterfall (#6220, D6220).
+- **`Portfolio v2 Rights and Request a Mark Page.dc.html`**, **`Portfolio v2 Rights and Request a Mark · Boards.dc.html`**: Portfolio v2 Addendum · Rights and Request a Mark (#6228, D6228).
+
+**Investor network, research and diligence**
+- **`Network v2 Investor Page.dc.html`**, **`Network v2 Investor · Boards.dc.html`**: Network v2 Addendum · Investor (#6256, D6256).
+- **`Investor Research v2 Rooms Page.dc.html`**, **`Investor Research v2 Rooms · Boards.dc.html`**: Investor Research v2 · Rooms (#6268, D6268).
+- **`Investor Research v2 Benchmarking and Library Page.dc.html`**, **`Investor Research v2 Benchmarking and Library · Boards.dc.html`**: Investor Research v2 · Benchmarking and Library (#6273, D6273).
+- **`Investor Research v2 Data Room to Library Page.dc.html`**, **`Investor Research v2 Data Room to Library · Boards.dc.html`**: Investor Research v2 · Data Room to Library (#6283, D6283).
+- **`Eadwyn on a Diligence Case Page.dc.html`**, **`Eadwyn on a Diligence Case · Boards.dc.html`**: Eadwyn on a Diligence Case (#6294, D6294).
+
+**Admin and HQ**
+- **`Approvals v2 Best-Fit Consultation Page.dc.html`**, **`Approvals v2 Best-Fit Consultation · Boards.dc.html`**: Approvals v2 Addendum · Best-Fit Consultation (#5884, D5884).
+- **`Licences v2 New Licence Steps Page.dc.html`**, **`Licences v2 New Licence Steps · Boards.dc.html`**: Licences v2 Addendum · New Licence Steps (#5930, D5930).
+- **`Licences v2 Initial Invoice Page.dc.html`**, **`Licences v2 Initial Invoice · Boards.dc.html`**: Licences v2 Addendum · Initial Invoice (#5955, D5955).
+- **`Pricing Outcome Examples Page.dc.html`**, **`Pricing Outcome Examples · Boards.dc.html`**: Pricing Outcome Examples (#5957, D5957).
+- **`Skill Library v2 Extension Compare Page.dc.html`**, **`Skill Library v2 Extension Compare · Boards.dc.html`**: Skill Library v2 Addendum · Extension Compare (#5963, D5963).
+- **`HQ Advisory Refunds Page.dc.html`**, **`HQ Advisory Refunds · Boards.dc.html`**: HQ Advisory Refunds (#5305, D5305).
+- **`Help Center v2 Page.dc.html`**, **`Help Center v2 · Boards.dc.html`**: Help Center v2 (#4957, D4957).
+- **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580).
+
+None is built yet. Ventures, investors, funds, people and amounts are sample content. Owner questions in the briefs are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.

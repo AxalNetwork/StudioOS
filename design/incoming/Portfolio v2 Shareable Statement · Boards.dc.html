@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Shareable Statement · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Portfolio · Portfolio v2 addendum · PF-13 · #6217 (continues #4817, PF-01 to PF-12)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Portfolio statement — one PDF of the book as of a quarter-end, that an investor downloads and hands on</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Portfolio v2 canvas (PF-01 to PF-12, D4817) with one board, PF-13, frames PF13a to PF13i: same PortfolioFrame (Account › Portfolio, Overview · Positions · Reports · Performance · Value-add, the rail slot), FinancialMetric and BasisStrip parts, type and colours. A Statement action on Overview and Performance opens a sheet: choose a completed quarter-end, check the preview, download. The PDF is US Letter portrait in the layout of the fund LP report (quarterlyReportPdf.js), never its net figures: Summary, Positions, NAV at quarter-ends, Cohorts, Methodology. Every figure says what it counts and for which date, and every page says Gross of fees and carry; unmarked positions carry at cost and say so. IRR is a rate, −100% Total loss, or Unavailable with its reason, never 0%. Zero, Not recorded and Unreadable never look alike, and a read that fails produces no statement, except one quarter-end point, drawn as a Not read gap. Pills carry a word and a glyph so the PDF reads in greyscale. Eadwyn only proposes a covering note; nothing is added, sent or kept by itself. The #3704 shell stays. Violet dashed ◇ tags mark backend work (positions cut at the date, net basis); amber ⚑ tags mark the four owner picks, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Investor name], [Company A] to [Company I], Harbor Capital and every figure are fictional sample content (USD, gross): NAV $11.1m, paid-in $7.0m, distributed $0.9m, TVPI 1.71×, DPI 0.13×, as on Portfolio v2</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Shareable Statement Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, b === 'PST13z' ? 1200 : 1440, 0, 12, b === 'PST13z' ? 1250 : 870);
+    const boards = [
+      ['PF13a', 'Statement sheet · choose the quarter-end · desktop 1440', 'Overview behind; the sheet lists completed quarter-ends newest first (31 Mar 2025, before the first cheque, reads No book and cannot be chosen), a preview strip for the date with its basis, the ◇ mismatch note, the contents of the PDF, the scope sentence and “This file is for you to share. Axal does not send it or keep a copy.” One primary action, Download PDF. Eadwyn in the rail proposes a covering note: Copy, Edit or Discard; it enters the PDF only through “Include as a cover note”. After download, the sheet confirms and offers Open Performance at the same date.', [F('PST13a', false, 1060), F('PST13a2', 'Downloaded · handoff to Performance', 1000)]],
+      ['PF13b', 'Page 1 · Summary · US Letter at 100%', 'Page head, then eleven dotted key/value rows, each naming what it counts and for which date: NAV, paid-in, distributed, total value, TVPI, DPI, RVPI, IRR, mark coverage 5 of 8, 3 at cost, 1 unusable mark. Scope, then the basis with “Net returns: Not recorded”. Right: the investor’s accepted cover note, marked as their own words.', [W('PST13b')]],
+      ['PF13c', 'Page 2 · Positions', 'Nine companies: three at round price, one GP estimate, one write-down Below cost, two at cost, one fund marks conflict, and [Company I] marked “Funded after 30 Sep 2026”. Each at-cost or unusable row carries the API’s sentence; long names wrap. The ◇ mismatch note heads the page and the totals row sits beside the summary’s cut figures. Below: the header repeating on a continuation page.', [W('PST13c'), C('PST13c2', 'Continuation page', 640, 340)]],
+      ['PF13d', 'Page 3 · NAV at quarter-ends', 'Seven quarter-end reads, 31 Mar 2025 to 30 Sep 2026, as bars with no interpolation; 31 Mar 2025 is an empty dashed slot labelled No book. The same points as a table: NAV, paid-in, distributed, TVPI, coverage.', [W('PST13d')]],
+      ['PF13e', 'Pages 4–5 · Cohorts and Methodology', 'Cohorts by the year of the first cheque with carrying ÷ invested, the not-TVPI line and the undated count; the ◇ note that 2026 includes a company funded after the date. Methodology: the Performance page’s ten definitions, word for word; the last footer names the investor, the date and “not an audited statement”.', [W('PST13e')]],
+      ['PF13f', 'Empty · nothing recorded', 'No position in the book: one sentence and Go to Positions; Download is absent. Variant: a book whose first cheque came after the last completed quarter-end, so every listed date reads No book and the chooser says “No completed quarter-end yet”.', [F('PST13f', false, 900), F('PST13f2', 'No completed quarter-end yet', 900)]],
+      ['PF13g', 'States', 'Loading with Download held, Refused, Producing, Production failed, the GP of record’s second scope sentence, and every Not recorded, Unavailable, zero and gap value in place on the preview and in the PDF. Unreadable: the sheet names the failed read, says nothing was downloaded, keeps the date and retries that read only. The exception: one quarter-end point fails and page 3 is still made, with a Not read gap. Admin preview: the PF-08 banner, “Every position the studio recorded.” and every page watermarked.', [C('PST13g', false, 1440, 1020), F('PST13g2', 'Unreadable · no statement produced', 900), W('PST13g3'), F('PST13g4', 'Preview as Investor (admin)', 1000), W('PST13g5')]],
+      ['PF13h', 'Phone 390', 'A full-height sheet: native As of select, the preview as stacked cards, the ◇ mismatch note, Eadwyn’s note as a collapsible card with Copy, Edit and Discard at 44px, a page 1 thumbnail that opens full screen, and a sticky Download PDF bar. Unreadable and Empty at 390.', [P('PST13h1', false), P('PST13h2', 'Scrolled · cover note open'), P('PST13h3', 'Unreadable'), P('PST13h4', 'Empty')]],
+      ['PF13i', 'Dark', 'PF13a on the dark tokens; states keep their words and shapes. The PDF pages stay paper on the dark canvas.', [F('PST13i', false, 1060), W('PST13i2')]],
+      ['PF13-H', 'Handoff', 'What was checked on main, what needs the backend (positions cut at the date, net basis, per-company distributions, a statement record, sending), the four owner picks, frontend-only work and accessibility.', [W('PST13z')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

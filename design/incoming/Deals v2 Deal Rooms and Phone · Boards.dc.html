@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Deal Rooms and Phone · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals · Deals v2 addendum A · #6141 (continues #4815, DE19 onward, sections DX17 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Deals v2 addendum A — the Deal rooms page, and Screening, Investment committee and Compare on a phone</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Deals v2 canvas (DE01 to DE18) with its frame, components, type and colours, numbered DE19 to DE30 in sections DX17 to DX20 and DX-H2. /deals/rooms lists every live deal (Rejected is filtered out), which rooms the investor can open, which they asked into and how much of their room allowance is used, and lets them move a deal into their own deal flow. It gets no pill: it is reached from the “Other deal activity” line, as Compare is (D4815). The #3704 shell stays: company/project switcher top-left, the Investor union sidebar, no licence switcher; Eadwyn is the shared rail (#5130, as DE18) and only ever proposes. Company status (square CO tag), my process (violet pill) and transaction stay three families; access Open, Invitation needed and Unreadable never look alike, and Unreadable offers Try again, never Request an invitation. Zero, Not recorded and Unreadable never look alike; an unread list shows no counts. Request an invitation and Leave go Scope → Review → Result; nothing is sent, granted or notified by itself. Phones are 390 wide with 44px targets, cards instead of tables, sheets for forms and nothing scrolling sideways. Violet dashed ◇ tags mark values that need backend work (three row values on Deal rooms and the Eadwyn tasks); amber ⚑ tags mark the owner picks, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Northwind Ventures, the twelve ventures, Name A to Name F and every amount are fictional sample content (bracketed names and amounts)</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Deal Rooms and Phone Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DE19', 'DX17 · Deal rooms · All live deals · desktop 1440', 'Title and subtitle, the zone row with nothing selected (no pill), the allowance line “3 of 5 rooms used · Professional plan” (counted across all firms; 2 under this firm), the request note, the three views with counts, search and the table: venture and sector, company status, my process or Not in my deal flow, round with “confirmed in this round, all investors”, invitation with its date, the three ◇ columns and the access action. Open deal on the first open row is the one primary action. B · Eadwyn: “Which of these rooms fit my thesis?” proposes a ranked list with sources; Add to my deal flow, Edit list or Discard.', [F('DRA19', false, 1370), C('DRA19B', 'B · Eadwyn rail · task, proposal, result', 1140, 723)]],
+      ['DE20', 'DX17 · Deal rooms · rows, request and allowance', 'One row per case: Open, Refused, Unreadable (Try again), Requested · Leave, Invited and not answered, Interested, in my flow at Diligence, Not in my flow with More → Add to my deal flow, and “Added to Sourcing” inline. Request an invitation as Scope → Review → Result with the brief’s sentences. Allowance within the cap, Unlimited, full on Plus and on Professional, and unreadable.', [C('DRA20', 'Row examples', 1480, 782), C('DRA20B', 'Request an invitation · Scope → Review → Result', 1340, 489), C('DRA20C', 'Room allowance variants', 1280, 429)]],
+      ['DE21', 'DX17 · Deal rooms · empty', 'One empty board per view, each with its one action: no live deals (Go to Deal flow), nothing open to you yet, and nothing requested (Show all live deals).', [F('DRA21A', 'All live deals', 640), F('DRA21B', 'You can open', 640), F('DRA21C', 'Requested', 640)]],
+      ['DE22', 'DX17 · Deal rooms · states', 'Loading with no counts on the tabs; the list unreadable while the allowance still shows; ask, instrument and sector Not recorded; no Investor licence; the 402 (allowance filled meanwhile, naming the plan and the next); the 409 (requested under another firm, Switch company); saving and save failed for Request, Leave and Add, with the row keeping its state.', [C('DRA22', false, 1440, 1144)]],
+      ['DE23', 'DX17 · Deal rooms · Phone 390', 'A · List: allowance line, views as a segmented control, rows as cards with one full-width action and More as a sheet. B · Allowance full as a bottom sheet. C–E · Request an invitation as Scope → Review → Result. F · Leave the room, reviewed.', [P('DRA23A', 'A · List'), P('DRA23B', 'B · Allowance full'), P('DRA23C', 'C · Request · Scope'), P('DRA23D', 'D · Request · Review'), P('DRA23E', 'E · Request · Result'), P('DRA23F', 'F · Leave · Review')]],
+      ['DE24', 'DX17 · Deal rooms · Dark', 'DE19 on the dark tokens. The three access states keep their words and shapes.', [F('DRA24', false, 1370)]],
+      ['DE25', 'DX18 · Screening · states', 'A · Pass reasons expanded: my reasons with revisit, and “Studio passes by reason, all time” with Reason not recorded and its note; Not raising counted apart (18), never as a pass. E · Pass dialog: five reasons (required), revisit next round or a date after today, a private note, and the Result line. B empty, C unreadable (Deal flow still works), D no permission, F loading, G sector Not recorded, and the already-passed refusal.', [C('DRA25', 'A · Pass reasons and E · Pass dialog', 1440, 768), C('DRA25B', 'B, C, D, F, G · states', 1440, 477)]],
+      ['DE26', 'DX18 · Screening · Phone 390', 'Cards with venture, sector, company status and my stage; Move to diligence and Pass… at full width; Pass reasons disclosure under the cards; Pass as a sheet; the Worker’s conflict sentence when the deal moved first; Eadwyn behind a sheet (accept, edit or discard).', [P('DRA26A', 'A · Cards'), P('DRA26B', 'B · Pass sheet'), P('DRA26C', 'C · Conflict'), P('DRA26D', 'D · Eadwyn sheet')]],
+      ['DE27', 'DX19 · Investment committee · Phone 390', 'A · Decision open: title and Voting status, memo disclosure, tally Yes 3 · No 1 · Abstain 1 with Recused 1 beside it, vote cards with rationale, conditions (Open · blocks Closing links to DE08, Met, Waived), Minutes Not recorded, a sticky Vote that opens a sheet (rationale required), and Eadwyn behind a sheet. B–E · empty, unreadable, loading with no tally, refused.', [P('DRA27A', 'A · Decision'), P('DRA27B', 'A · Conditions and minutes'), P('DRA27C', 'A · Vote sheet'), P('DRA27D', 'A · Eadwyn sheet'), C('DRA27S', 'B–E · Empty, unreadable, loading, refused', 1680, 485)]],
+      ['DE28', 'DX20 · Compare · states · desktop', 'A one venture picked; B a pick not on the deal list; C remove from the sticky header; D add a venture with picks kept and the 5th tick disabled with its reason; E saved notes partly unreadable; F loading; G scorecard unreadable or locked in one column (words, never a zero bar); H Eadwyn refused; I no Investor licence.', [C('DRA28', false, 1480, 770)]],
+      ['DE29', 'DX20 · Compare · Phone 390', 'A · Two ventures: sticky switcher with the venture colours and scopes as stacked sections showing both ventures. B · Four ventures: chips scroll inside their row, one section open at a time. C · Eadwyn’s comparison draft as a proposal (Save to notes / Discard).', [P('DRA29A', 'A · Two ventures'), P('DRA29B', 'B · Four ventures'), P('DRA29C', 'C · Eadwyn draft')]],
+      ['DE30', 'DX-H2 · Addendum handoff · Backend fit', 'For each board the Worker reads and writes it uses, what is frontend-only and the ◇ items; the three ◇ row values and why the list cannot show them; the bulk decision (A: none in this version); no pill for Deal rooms (D4815); copy changes; handoff targets and accessibility.', [W('DRA30')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

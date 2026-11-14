@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Markets · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · Markets · #6119 · continues Grow v2 (GR-01 to GR-20)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Markets — which market next, and why, then run its entry plan until it is served</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Markets (/grow/market-expansion, no new route) ranks a venture’s markets by readiness out of 40: the sum of four parts, Demand, Regulation, Partners and Cost to enter, each scored 0–10 with the source it came from. Readiness shows only when all four are scored; otherwise it reads Not recorded with the missing parts named, and those markets sort last. A market opens at its record: the part tiles with an evidence strip from Research › Geographies, the entry plan, three localisation checks, the attached country, size, replies to a market ask and history. Compare is a panel on the same page. Eadwyn proposes scores, plans and comparisons with citations; the founder accepts, edits or discards, and nothing is written without an accept. States follow Platform States (D5129): a measured 0, Not recorded and Unavailable never look alike. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026, 14:30 · checked against main 6d7712c6d1 (brief written on 2ec47b843d) · Lumen Robotics, every bracketed market, country, person, investor and figure are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Markets Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-21', 'Markets · ranked list', 'Sorted by readiness: Market, State, Readiness /40, Weakest part, Decision and Next step. [Market C] is unscored on two parts, reads Not recorded with them named, and sorts last. Filter by state (Served 0 is a count, not an absence) and sort by readiness or name. The next step names the first unscored part; the entry-plan and localisation steps are ◇ examples. Two picked rows open Compare. Eadwyn offers a comparison and ◇ proposed scores.', [F('GRM21', false, 900)]],
+      ['GR-22', 'Market record', '[Market A], Entering, Enter decided 2 Oct, 28 / 40. Four part tiles with score, source and an evidence strip (on record from Research with as-of dates; ◇ customers, partners and indices). The entry plan with one step overdue, done, edit and remove shipping with #6113; localisation 1 of 3 with Legal entity linking to Company; attached country, size, replies and history in the side column. Eadwyn drafts entry steps; each is accepted, edited or discarded.', [F('GRM22', false, 1540)]],
+      ['GR-23', 'Compare two markets', 'A panel on Markets: the four parts with score and source, readiness, weakest part, localisation done, open entry steps, size and decision, with the differences named in words. Against [Market C], the unscored parts read Not recorded and are not compared. Eadwyn’s written comparison is kept as a note or discarded (◇).', [F('GRM23', false, 900), C('GRM23B', 'Against a market with unscored parts', 1140, 693)]],
+      ['GR-24', 'Eadwyn proposals on a market', 'Proposed scores for [Market C], one card per part, each citing its Research source beside the current score; Accept writes the score and its source in one save through Edit market. The drafted entry plan and the comparison sit below. Eadwyn does not decide whether to enter; the founder sets the decision.', [F('GRM24', false, 1010)]],
+      ['GR-25', 'First use and one market', 'Nothing recorded: one action, Add your first market, with a name, an optional Research country and an optional state. After saving: one row, four unscored parts, the next step “Score demand, and say where it came from”, and Compare disabled with its reason.', [F('GRM25', 'First use', 760), C('GRM25C', 'Add your first market', 640, 427), F('GRM25B', 'One market', 900)]],
+      ['GR-26', 'States', 'Loading; each Not recorded case (readiness, a part, decision, size, step owner and due date, attached country, per-country demand); measured 0 vs Not recorded vs Unavailable; no replies. Unavailable when the list, Research, the whole record or a later history page fails, each on its own. Refused, read only for an advisor member, saving, and save failed with the edits kept.', [C('GRM26', 'Loading and Not recorded', 1440, 547), F('GRM26B', 'The market list is unavailable', 760), C('GRM26C', 'Record, Research and history failures', 1440, 363), C('GRM26D', 'Refused and read only', 1440, 392), C('GRM26E', 'Saving and save failed', 1740, 521)]],
+      ['GR-27', 'Phone 390', 'Cards ordered by readiness; the record top to bottom with collapsed part rows, 44px checkboxes, localisation, and country, size, replies and history in disclosure rows; Compare stacked per part; Add entry step as a sheet.', [P('GRM27A', 'Markets'), P('GRM27B', 'Record · top'), P('GRM27C', 'Record · lower'), P('GRM27D', 'Compare'), P('GRM27E', 'Add entry step')]],
+      ['GR-28', 'Dark', 'GR-22 on the dark tokens. States keep their words, glyphs and borders.', [F('GRM28', false, 1540)]],
+      ['GR-29', 'Handoff', 'What main serves today, the ◇ backend items, the owner questions drawn as option A, frontend-only work and accessibility.', [W('GRM29')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

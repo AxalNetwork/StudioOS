@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 Cap Table and Use of Funds · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Raise · Cap table, Use of funds, Capital relationships · #6088 · addendum to Raise v2, RA-27 onward</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Raise v2 addendum — record a grant with its vesting, keep an investor’s facts right and archive, and tie a plan to the round that pays for it</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An addendum to Raise v2 (RA-01 to RA-26, RA-A to RA-D). It continues RA-20 Cap table, RA-21 Use of funds and RA-22 Capital relationships, and redraws none of them: the Grants table, the “Raise differs” line and the “Without the raise” series stay as drawn. The founder (owner) records; an accepted co-founder proposes; an Admin records only with a reason the founder reads. Investors never see these pages, and there are no new routes. Recorded is solid ink, Modelled is a dashed violet hatch, and they never share a number without a tag; the vesting preview and Founders after the round are Modelled. A failed read says Unavailable (Platform States, #5129) and a missing value says Not recorded, never 0. Eadwyn, the one shared rail, never sets an amount, a share count, a status or a Fit. Violet dashed ◇ tags name the build issue that must add the backend (#6085, #6086, #6087); amber ⚑ tags mark the four owner questions, each drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Northwind Labs, Founder A, Founder B, Mara Quinn, Lee Park, Sam Ortiz, Fund name and every figure (the 1,000,000-option pool, the $1.5m raise, the scenarios) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise v2 Cap Table and Use of Funds Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RA-27', 'Cap table · Record a grant', 'A side sheet over RA-20 A: Holder, From pool (968,000 unallocated), Options, Granted on, ◇ vesting presets with Start, Months and Cliff months and a Modelled preview, Document and Note. The footer gives the pool room after the grant (928,000) beside Record grant; the source reads Typed. B · Eadwyn reads a signed grant letter: Holder and Granted on arrive as proposals with their pages, Options shows only “see page 3”. C · the Admin reason, the letter picker, a term not found, and Eadwyn unavailable. D · back on the Grants table with the new row highlighted.', [F('RAT27', 'A · Owner, typed', 1000), F('RAT27B', 'B · Drafted from a signed letter', 1040), C('RAT27C', 'C · Admin, picker, not found, Eadwyn unavailable', 1340, 372), C('RAT27D', 'D · Handoff to the Grants table', 1140, 359)]],
+      ['RA-28', 'Cap table · A co-founder proposes a grant', 'A · the same sheet as a co-founder sees it: Propose grant, “[Founder A] records it, or dismisses it.”, Granted on left blank. B · the owner opens the Needs you row at /raise/cap-table/proposal/:proposal: the proposal beside the pool room; Accept is blocked and names Granted on, so Edit then accept is the primary, with Dismiss. C · dismiss with an optional reason, accepted, and what the co-founder sees.', [F('RAT28', 'A · Co-founder', 1000), F('RAT28B', 'B · Owner reviews the proposal', 960), C('RAT28C', 'C · Dismiss, accept, the proposer’s view', 1280, 266)]],
+      ['RA-29', 'Cap table · Grant form states', 'No option pool (Add pool); a pool with no size (room Not recorded); over the pool, warned before saving with the numbers and the Fully diluted consequence, and the ◇ refused variant; missing what the record needs; a cliff longer than the total. Then loading, Unavailable with typed values kept, the two refusals, saving, save failed and Changed since you opened it (RA-24).', [C('RAT29', 'Pool and validation', 1440, 529), C('RAT29B', 'Read, refusal, save, conflict', 1440, 623)]],
+      ['RA-30', 'Capital relationships · Investor facts in edit mode', 'A · the RA-22 D sheet with Facts in edit: Investor (a linked fund sets name and firm), Email, ◇ Firm, ◇ Check size as a founder figure never added to Committed; Stage, Warm path, Next step and Notes stay in read style. ◇ Eadwyn proposes a firm it read in a logged note, with its source line. B · loading, Unavailable, Refused, the name rule, the duplicate email, saving, save failed and the conflict.', [F('RAT30', 'A · Facts editing', 1000), C('RAT30B', 'B · States', 1440, 425)]],
+      ['RA-31', 'Capital relationships · ◇ Archive', 'A · the sheet’s overflow menu keeps Mark passed (a pipeline outcome, on main) apart from Archive (a filing action), then the confirm: secondary, not danger. B · the Archived filter with its count and Unarchive on each row. C and D · empty, loading, Unavailable with no count, Refused, and the toast with Undo after Archive (pipeline 18 → 17).', [F('RAT31', 'A · Overflow menu', 900), C('RAT31B', 'A · Confirm', 680, 280), F('RAT31C', 'B · Archived list', 760), C('RAT31D', 'C and D · States and the toast', 1440, 306)]],
+      ['RA-32', 'Use of funds · Link a cap-table scenario', 'The plan header gets “Paid for by: [Seed · Scenario B] (Modelled)” with Change; ◇ saving the link. Founders after the round gives each founder before and after the round, Modelled from the linked scenario, with the change in points and Open in Cap table. B · the picker: each scenario with its investment, updated date and Raise differs; Eadwyn suggests the one whose investment matches.', [F('RAT32', 'A · Linked', 1060), C('RAT32B', 'B · Picker', 800, 485)]],
+      ['RA-33', 'Use of funds · Link states', 'Not linked (today’s default), no scenarios yet, the linked scenario deleted, Founders after the round Not recorded and Unavailable, Raise differs with both amounts, loading and Refused.', [C('RAT33', false, 1440, 468)]],
+      ['RA-34', 'Phone 390', 'A · Record a grant as a full-height sheet, vesting presets as 44px segmented buttons and the preview under them. B · investor facts edit, with Archive at the bottom; C · its confirm. D · “Paid for by” as a row and Founders after the round as stacked cards; E · the picker sheet. Nothing is wider than the screen; targets are 44px.', [P('RAT34A', 'A · Record a grant'), P('RAT34B', 'B · Investor facts'), P('RAT34C', 'C · Archive confirm'), P('RAT34D', 'D · Use of funds'), P('RAT34E', 'E · Scenario picker')]],
+      ['RA-35', 'Dark · desktop 1440', 'RA-27 and RA-32 on the dark tokens (#0B1220 / #111827, violet #A78BFA). Recorded, Modelled, Not recorded, Unavailable and Refused keep their words, glyphs and borders.', [F('RAT35', 'RA-27 · dark', 1000), F('RAT35B', 'RA-32 · dark', 1060)]],
+      ['RA-36', 'Handoff', 'What was checked on main, the backend each ◇ needs (#6085, #6086, #6087), the four owner questions, frontend-only work, the handoffs, accessibility and open questions.', [W('RAT36')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

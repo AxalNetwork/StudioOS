@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate v2 Discovery and ICP · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Validate · UX V2 addendum · #5995 (continues #4837, V17 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Validate v2 addendum — ranked problems, who the customer is, and the next interviews</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Validate v2 canvas (V0 to V16) with its frame, components, type and colours, numbered V17 to V31. Problem discovery turns what interviews said into ranked themes; Ideal customer profile turns them into segments; Customer research keeps the next interviews coming and asking the right questions. Every figure names what it counts and for which period. Zero, Not recorded and Unavailable never look alike (Platform States, D5129). Severity, fit, step state and stage each carry a word and a glyph. Evidence stops at Pattern. A quote without consent is never shown to a partner. Eadwyn proposes; the founder accepts, edits or discards, and nothing is saved until accepted. Violet dashed ◇ tags name the issue that carries backend work (#6001, #6002, #6003, #6006, #6007, #6008); amber ⚑ tags mark the owner questions, drawn as option A. Tags are annotations, not product copy. No new route is drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · the venture [Tidepool], its 12 held interviews, people, companies, quotes and figures are fictional sample content (bracketed); a later snapshot than V1–V16’s 7 Nov sample</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Validate v2 Discovery and ICP Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['V17', 'Problem discovery · desktop', 'The labelled stats strip (themes, held interviews, phrases in no theme, and themes with a need-to-have, ICP or fit-not-recorded mention), filters and sort. Ranked themes: mentions as distinct interviews of 12, severity word and glyph, trend (last 30 days vs the 30 before), ICP / need / fit-not-recorded counts and hypothesis codes; ◇ sources vs mentions, supporting vs contradicting and the rank reason. One-phrase themes read Not grouped and open no record. The first row\'s menu holds the handoffs. Unthemed quotes count each phrase once per interview, labelled apart from the strip. Eadwyn suggests a severity (real today) and ◇ groupings as sets.', [F('VAP17', false, 1880)]],
+      ['V18', 'Problem discovery · empty', 'A · No interview yet: one action, Record your first session (the existing record lightbox). B · Pains logged, none grouped (a venture with 3 interviews): every row Not grouped, every quote in Unthemed, 0 themes, need-to-have Not recorded because none was ever recorded; the action is New theme.', [F('VAP18', 'A · No interview yet', 900), F('VAP18B', 'B · Pains logged, none grouped', 1120)]],
+      ['V19', 'Theme record', 'Mentioned in 7 of 12 interviews, Severe and Frequent. Facts: how often, how severe, trend, first heard. ◇ Problem statement (no field yet) with Eadwyn\'s draft citing its quotes. Quotes with consent state, hypotheses it feeds with direction and status, segments of the interviews that name it, ◇ used on slide. B · Edit, Merge, Split and Delete, with the delete sentence from the brief and the result.', [F('VAP19', 'A · Record', 1420), C('VAP19B', 'B · Edit, Merge, Split, Delete', 1440, 520)]],
+      ['V20', 'Problem discovery and theme record · states', 'Loading; Not recorded in the list and on the record; zero as a value beside Not recorded; Unavailable for the theme list (Unthemed and Record still work) and for Eadwyn\'s suggestions (never an empty list); Refused for a partner (no write tools, no export, quotes withheld); Saving and save failed on Assign, Merge and Split with the selection kept; a stale link\'s 404 sentence.', [C('VAP20', false, 1440, 640)]],
+      ['V21', 'Ideal customer profile · desktop', 'Customer fit by segment (strong, partial, none, not recorded; held interviews, all time), with the 3 interviews in no segment shown apart. Segments with source, interviews, strong fit, Anecdote or Pattern, updated, and the ◇ Primary marker. Filters and sort. Interviews in no segment: the count today, ◇ its rows with Assign to a segment (#6002). Eadwyn suggests a segment, a firmographic and a job to be done, each naming its interview.', [F('VAP21', false, 1280)]],
+      ['V22', 'Ideal customer profile · empty', 'A · No segment yet: one action, Start the profile, and the chart waiting for 3 placed interviews. B · One segment with 1 interview placed: “1 interview placed in a segment so far. The chart appears at 3.”', [F('VAP22', 'A · No segment yet', 900), F('VAP22B', 'B · Chart waiting at 1', 900)]],
+      ['V23', 'Segment record', 'One of 3 segments, Pattern, ◇ Primary ICP toggle. Facts, then the five steps with Done / Missing / Needs a source, each editable in place; Value promised with its source; ◇ a source on every step (no issue yet). Score against interviews since, the interviews scored against it (fit labels, no computed score), pain themes, findings traced to interviews, ◇ firmographics and disqualifiers, the persona card. Eadwyn ◇ proposes step text naming its interviews. B · inline edit and ◇ Archive.', [F('VAP23', 'A · Record', 1300), C('VAP23B', 'B · Step edit and Archive', 1300, 420)]],
+      ['V24', 'Compare segments ◇', 'Three segments side by side: the five steps, value source, interviews and fit split, evidence, top pain themes, ◇ disqualifiers. Unwritten values read Not recorded. Remove and add columns (2 to 4), set primary from a column header. ⚑ Drawn as a mode on the module page (option A), no new route.', [F('VAP24', false, 1000)]],
+      ['V25', 'ICP and segment · states', 'Loading; Not recorded steps, urgency Not set and fit not recorded; evidence stops at Pattern; Unavailable segment read with the unassigned panel still working; Refused for a partner, naming who can grant; Saving and save failed on an inline step edit with the text kept; the chart waiting; an archived segment\'s stale link.', [C('VAP25', false, 1440, 600)]],
+      ['V26', 'Customer research · recruiting', 'On top of V3: the cumulative funnel Lead 24 → Invited 20 → Booked 14 → Done 12, labelled “reached … or later”, with waitlist sign-ups counted in Lead and Invited. Stage chips count rows at a stage now (◇ Stage filter). Each row shows its stage and the date reached, with Move stage open on one row. Waitlist leads: Invite, Follow up, Promote (⚑ ◇ at stage Lead), Promoted linking to its interview. The overview card\'s next link. B · Add a lead ◇, Move stage, and where the next link lands.', [F('VAP26', 'A · Recruiting', 1340), C('VAP26B', 'B · Add a lead, Move stage, landing', 1440, 520)]],
+      ['V27', 'Interview guide ◇', 'A · A panel in the recording lightbox. B · A sheet from Customer research (Prepare questions). Questions grouped under each open hypothesis by code and claim, plus an unjudged theme; editable, reorderable, removable. Eadwyn drafts for a chosen segment with the cost hold shown before it runs; drafts are marked Eadwyn\'s until edited. C · No open hypothesis (labelled defaults) and AI off (the guide stays writable). ⚑ Kept per venture, copied onto an interview when used.', [C('VAP27', 'A · In the recording lightbox', 1150, 760), F('VAP27B', 'B · Prepare questions sheet', 1000), C('VAP27C', 'C · No open hypothesis · AI off', 1200, 860)]],
+      ['V28', 'Recruiting and guide · states', 'Loading; no stage shown as Done and no channel; Unavailable funnel (the list still works) and waitlist (the funnel counts interviews only and says so); Refused for a partner; Saving and save failed on a stage move (the row stays at its stage, the date kept); Invite refused with the Worker\'s sentence; the guide unavailable and a failed draft.', [C('VAP28', false, 1440, 480)]],
+      ['V29', 'Phone 390', 'Problem discovery with two-column stat chips and theme cards; Unthemed as a tap-to-select list with Assign 2 and Eadwyn\'s grouping cards; the theme record with actions in a sheet; ICP cards with the segment picker sheet; the segment record as an accordion; Compare as a pager of one segment per screen; the funnel as a segmented control with Move stage as a sheet; the guide during a recording, one question per card. Targets 44px, forms in sheets.', [P('VAP29A', 'Problem discovery'), P('VAP29B', 'Unthemed · select and group'), P('VAP29C', 'Theme record · actions sheet'), P('VAP29D', 'ICP · segment picker'), P('VAP29E', 'Segment · steps accordion'), P('VAP29F', 'Compare · pager'), P('VAP29G', 'Recruiting · Move stage'), P('VAP29H', 'Guide while recording')]],
+      ['V30', 'Dark', 'V17, V21 and V23 on the dark tokens; states keep their words and shapes.', [F('VAP30A', 'Problem discovery · dark', 1880), F('VAP30B', 'Ideal customer profile · dark', 1280), F('VAP30C', 'Segment record · dark', 1300)]],
+      ['V31', 'Developer handoff · addendum', 'Every ◇ with the issue that carries it, what is working on main, the owner questions drawn as option A, frontend-only work and notes.', [W('VAP31')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

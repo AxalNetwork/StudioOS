@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Terms and Closing Room · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals v2 addendum · Terms, Notes, Investment and the closing room · #6188 (under #4815)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deals v2 addendum: Terms, Notes, Investment extras and the investor’s closing room</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Deals v2 (D4815) from DE19, in sections DX17 to DX21, with DE04’s deal header, figures strip and eight tabs, the three status families, the #3704 Investor shell and the shared Eadwyn rail (DE18, #5130). An investor reads the proposed terms and the paper, keeps the firm’s thinking on the deal, shows Axal they can fund it, and goes from signed to paid to Closed in their own closing room, which shows their line only. The platform records money; it never moves it: Received comes only from the company’s bank, and the investor’s own word is Sent. Value, None, Not recorded, Not applicable, Unavailable, Refused and Stale each carry their own word and glyph, and Not recorded or Unavailable are never drawn as 0. The four owner questions are drawn as option A (amber ⚑); violet dashed ◇ tags mark backend work, citing #6195 and #6200 where already filed. Neither tag is product copy. Numbering is provisional until this addendum lands.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Acme Robotics, Northwind Ventures, Founder A, Names A to C, the syndicates, accounts and every figure are fictional; amounts in USD</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Terms and Closing Room Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DX17', 'Terms', 'DE19: the changed-since line (12 Nov 2026) with the kinds that changed and ◇ per-term marks; twelve proposed terms, value right and source under the label, 7 recorded, Management fee Not recorded (“The deal does not record it.”) and four with no field yet; the legal paper card with Preview; the cap table by class; how you invest, with the studio’s route marked and ◇ your preference (#6195); Export. One primary action, Continue to signing. The rail explains Valuation cap with sources, not advice: Save to my notes or Discard. DE19b: the paper Preview sheet with filled and open fields.', [F('DPT19', 'DE19 · Terms tab', 1600), F('DPT19B', 'DE19b · Legal paper Preview', 1600)]],
+      ['DX17b', 'Terms · not released, states, phone and dark', 'DE20 not released yet (⚑ Q3 A, ◇ flag): what still works and one action, Ask the studio. DE21 states: loading, Not recorded, the deal read Unavailable (header and tabs stay), the cap table Unavailable alone, Refused with Request an invitation, and the first visit. DE22 phone 390. DE23 DE19 on the dark tokens.', [F('DPT20', 'DE20 · Terms not released yet', 900), C('DPT21', 'DE21 · Terms states', 1400, 572), P('DPT22A', 'DE22a · Terms, phone'), P('DPT22B', 'DE22b · Paper, cap table, route'), F('DPT23', 'DE23 · Terms, dark', 1600)]],
+      ['DX18', 'Notes · inside Activity (⚑ Q1 A)', 'DE24: “Notes and activity” on the Activity tab: New note with the four tags and Save (the one primary), ◇ search and tag filter, “38 notes · showing 1–25”, each note with date, You or Your firm (◇ the colleague’s name), tag and text, Edit and Delete on your own only, ◇ Linked to: Valuation cap, ◇ Export all notes; then the deal’s activity. The rail drafts a note from the company, stage and your firm’s notes (◇ the whole deal record). DE24b Edit and Delete dialogs and their results.', [F('DPT24', 'DE24 · Notes and activity', 1560), C('DPT24B', 'DE24b · Edit and Delete', 1400, 436)]],
+      ['DX18b', 'Notes · empty, states, phone and dark', 'DE25 empty, with the form as the one action and the note at the top after Save. DE26 loading, Unavailable (“That is not a claim that there are none.”, the form still works), Refused, saving, save failed with the text kept, and Eadwyn’s draft failed. DE27 phone 390: Load more, and New note as a sheet. DE28 dark.', [F('DPT25', 'DE25 · No notes yet', 820), C('DPT26', 'DE26 · Notes states', 1400, 609), P('DPT27A', 'DE27a · Notes, phone'), P('DPT27B', 'DE27b · New note sheet'), F('DPT28', 'DE28 · Notes, dark', 1560)]],
+      ['DX19', 'Investment tab extras (below DE09)', 'DE29, under DE09’s blocks (not redrawn): what Confirmed needs, Pending → Sent (your accepted Mercury match) → Confirmed (the company’s bank); Mercury capacity, $240,000 from accounts ending 4821 and 0917 as of 14 Nov 2026; proof of funds (D752) with an Active statement opened 2 times and Revoke, and a Replaced one; syndicates you lead or are in, ◇ Funded, and ◇ open ones you are not in with Join (#6200); the withdrawn $50,000 commitment of 3 Oct. The rail stays on its task list. DE30 the proof sheet: accounts, the statement capped at your $100,000 commitment, consent, Share and its result; never a balance.', [F('DPT29', 'DE29 · Investment extras', 1500), F('DPT30', 'DE30 · Proof of funds sheet', 1500)]],
+      ['DX19b', 'Join, empty and states, phone and dark', 'DE31 ◇ Join a syndicate (#6200): amount at or above the minimum, “its lead signs for its members”, identity not approved, and the result “A pledge is not a payment.” DE32 empty (no commitment, no syndicate, Mercury Not connected never $0, no proof) and states (loading, Unavailable per card, Refused Join, saving and failed, Expired and Revoked). DE33 phone 390. DE34 dark.', [C('DPT31', 'DE31 · Join a syndicate', 1400, 442), C('DPT32', 'DE32 · Empty and states', 1400, 785), P('DPT33A', 'DE33a · Investment, phone'), P('DPT33B', 'DE33b · Syndicates, phone'), F('DPT34', 'DE34 · Investment extras, dark', 1500)]],
+      ['DX20', 'The investor’s closing room (v2 of CP2, CP4, CP9–CP12, CP20)', 'DE35: Acme Robotics · Seed round, Closing · Open; the seven steps with Sign now and its reason; your line $100,000, Direct, Open; your paper with who signs next and Review and sign (the one primary); the deadline 20 Dec 2026, in 36 days; your firm’s committee conditions, open, met and waived (◇ holds Closed); evidence with the receiving side and the sending side kept apart. The rail proposes a ◇ clause summary with sources: “Eadwyn summarises and never gives advice; your counsel decides.” DE35b: the one primary action by step.', [F('DPT35', 'DE35 · Your line, Sign now', 1100), C('DPT35B', 'DE35b · The primary action by step', 1400, 231)]],
+      ['DX20b', 'Payment instructions and Sent', 'DE36: the payment sheet at Pay now: the warning first, the account masked to ••••3392, Reveal full number (recorded, 30 seconds), the change notice, and a Mercury payment that fits the line. DE36b: revealed with its countdown, masked again, and Accept recording Sent, not Confirmed (◇ “I sent it” without a match, ⚑ Q4 A). DE36c: your line Sent, Receipt now, waiting for the company’s bank.', [F('DPT36', 'DE36 · Payment instructions', 1100), C('DPT36B', 'DE36b · Reveal and accept a match', 1400, 502), F('DPT36C', 'DE36c · Sent, waiting for receipt', 1100)]],
+      ['DX20c', 'After Closed, not opened, states, phone and dark', 'DE37 a later sample: Closed 4 Dec 2026, your line Received on the company’s evidence, what you hold, ◇ your reporting duties, and Open in Portfolio with the venture and the line. DE38 no closing opened yet, with Back to Investment. DE39 states: loading, Not recorded, the closing Unavailable (your commitment still shows), one block alone, Refused (no commitment), reveal refused and failed, accept failed, a Withdrawn line and a Cancelled closing. DE40 phone 390. DE41 dark.', [F('DPT37', 'DE37 · After Closed', 900), F('DPT38', 'DE38 · No closing opened yet', 760), C('DPT39', 'DE39 · Closing room states', 1400, 763), P('DPT40A', 'DE40a · Closing room, phone'), P('DPT40B', 'DE40b · Payment sheet, phone'), F('DPT41', 'DE41 · Closing room, dark', 1100)]],
+      ['DX21', 'Backend fit and handoff', 'DE42: each board with the Worker route it reads on main, the ◇ list with #6195 and #6200 marked as filed, the answers drawn to questions 1 to 4, frontend-only work, the hand-offs and accessibility.', [W('DPT42')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

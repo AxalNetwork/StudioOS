@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eadwyn on a Diligence Case · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.dsh{display:grid;grid-template-columns:212px minmax(0,1fr) 44px}
+.dsh.wr{grid-template-columns:212px minmax(0,1fr) 320px}
+.dsd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.dsd .co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg)}
+.dsd .co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.dsd .co span{margin-left:auto;color:var(--mu);font-weight:500}
+.dsd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.dsd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.dsd .sep{height:1px;background:var(--hair);margin:6px 14px}
+.zn{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.zn a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.zn a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.zn a span{font:600 10.5px var(--mo);color:var(--mu)}
+.fco{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;border:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--card);white-space:nowrap}
+.fco:before{content:"CO";color:var(--mu);font-weight:600;margin-right:2px}
+.fme{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 11px var(--sg);border:1px solid var(--lavE);white-space:nowrap}
+.fme:before{content:"";width:6px;height:6px;border-radius:999px;background:#7c3aed}
+.ftx{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:6px;border:1px solid var(--hair2);border-left:3px solid #0f766e;font:700 11px var(--sg);color:#0f766e;background:var(--card);white-space:nowrap}
+.ftx.w{border-left-color:var(--amD);color:var(--amT)}
+.ab{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);white-space:nowrap}
+.ab.anr{color:var(--mu);font-style:italic}
+.ab.anp{color:var(--mu);text-decoration:underline dashed;text-underline-offset:3px}
+.ab.ane{color:var(--mu);opacity:.8}
+.ab.aur{color:var(--neg)}
+.ab.alk{color:var(--ink)}
+.scs{display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden}
+.scs i{flex:1;background:var(--hair)}
+.scs i.h{background:#7c3aed}.scs i.m{background:#a78bfa}.scs i.l{background:#ddd6fe}.scs i.x{background:repeating-linear-gradient(45deg,var(--hair) 0 3px,transparent 3px 6px)}
+.sc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sc3>div{border:1px solid var(--hair);border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.sc3 small{font-size:10.5px;color:var(--mu)}
+.sc3 b{font:700 15px var(--mo)}
+.sc3 em{font-style:normal;font-size:10.5px;color:var(--mu)}
+.sc3 .dlt{color:var(--pos);font:700 10.5px var(--mo)}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.col{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.col h3{font-size:13px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+.col h3 span{font:500 11px var(--mo);color:var(--mu)}
+.dcard{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+.dcard .t{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.dc b.n{font-size:13.5px;font-weight:800}
+.dcard .mt{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dcard .ft{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:6px}
+.dcard.stale{border-color:var(--amE)}
+.dcard.pass{opacity:.7;border-style:dashed}
+.prog8{display:flex;gap:0}
+.prog8 span{flex:1;text-align:center;padding:7px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.prog8 span+span{border-left:0}
+.prog8 span:first-child{border-radius:8px 0 0 8px}.prog8 span:last-child{border-radius:0 8px 8px 0}
+.prog8 span.dn{color:var(--ink);background:var(--raised)}
+.prog8 span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.fin5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.fin5>div{padding:11px 14px;border-right:1px solid var(--hair)}
+.fin5>div:last-child{border-right:0}
+.fin5 small{display:block;font-size:11.5px;color:var(--mu)}
+.fin5 b{font:700 18px var(--mo)}
+.s11{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:4px}
+.s11>div{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.s11 i{display:block;width:100%;height:30px;border-radius:5px;background:var(--hair);position:relative}
+.s11 i b{position:absolute;inset:auto 0 0 0;border-radius:5px}
+.s11 small{font-size:10px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.s11 span{font:700 12px var(--mo)}
+.cmpb{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--hair)}
+.cmpb .br{height:12px;border-radius:3px}
+.cmpb .bw{display:flex;align-items:center;gap:6px}
+.stk{position:sticky;left:0;background:var(--card)}
+.dv{display:flex;justify-content:space-between;gap:10px}
+.sc3 em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc3 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsd .co{justify-content:flex-start;text-align:left}
+.rz li>.fco,.rz li>.fme,.rz li>.ftx,.rz li>.ab{justify-self:start}
+.dsd .co{background:var(--card);color:var(--ink)}
+.dpd-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed var(--amD);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.ab.dpd-rf{color:var(--ink);font-weight:700}
+.dpd-sub{display:flex;flex-direction:column;margin:0 8px 4px 22px;border-left:1px solid var(--hair);padding-left:4px}
+.dpd-sub a{min-height:28px!important;font-size:12.5px!important;color:var(--mu)!important}
+.dpd-sub a[aria-current=page]{color:var(--vt)!important}
+.dpd-tabrow{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:1px solid var(--hair)}
+.dpd-tabrow .ptabs{border-bottom:0}
+.dpd-tabrow>.raw{padding-bottom:10px;white-space:nowrap}
+.dpd-onp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dpd-onp a{padding:4px 10px;border-radius:999px;border:1px solid var(--hair);font:600 12px var(--sg);color:var(--mu)!important;background:var(--card)}
+.dpd-onp a[aria-current=true]{border-color:var(--vi);color:var(--vt)!important;background:var(--lav);font-weight:800}
+.dpd-tiles{display:grid;gap:8px}
+.dpd-tile{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0;background:var(--card)}
+.dpd-tile small{font-size:11.5px;color:var(--mu);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dpd-tile b{font:700 20px var(--mo);letter-spacing:-.01em}
+.dpd-tile span{font:500 11px var(--mo);color:var(--ink)}
+.dpd-tile em{font-style:normal;font-size:10.5px;color:var(--mu);line-height:1.35}
+.dpd-tile.dpd-nrt{border-style:dashed;background:var(--raised)}
+.dpd-tile.dpd-nrt b{font-size:13px;font-family:var(--sg)}
+.dpd-fig{margin:0;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.dpd-fig figcaption{font:700 12.5px var(--sg)}
+.dpd-pt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;border-top:1px solid var(--hair);padding-top:6px;font-size:11.5px;color:var(--mu)}
+.dpd-pt b{color:var(--ink);font-size:12px}
+.dpd-pt a{font-weight:700;color:var(--vt)}
+.dpd-off{opacity:.55}
+.dpd-tt td small{display:block;font:500 10px var(--mo);color:var(--mu)}
+.dpd-tt td b.mo{font-size:13px}
+.dpd-tt td.n,.dpd-tt th.n{text-align:right}
+.dpd-gap td{background:var(--raised)}
+.dpd-ol{font-weight:700;color:var(--vt)!important}
+.dpd-opt{border:1.5px dashed var(--lavE);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.dpd-mini11{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.dpd-mini11>span{border:1px solid var(--hair);border-radius:8px;padding:5px 9px;display:flex;flex-direction:column}
+.dpd-mini11 small{font-size:10.5px;color:var(--mu)}
+.dpd-legend{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dpd-legend>span{border:1px solid var(--hair);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.dpd-legend small{font-size:11.5px;color:var(--mu)}
+.dpd-sev{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;font:700 11px var(--sg);border:1px solid var(--hair2);white-space:nowrap;background:var(--card)}
+.dpd-sev.critical{color:#fff;background:var(--neg);border-color:var(--neg)}
+.dpd-sev.high{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.dpd-sev.medium{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.dpd-sev.low{color:var(--mu)}
+.dpd-vd{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);white-space:nowrap}
+.dpd-vpass{color:var(--pos)}.dpd-vwarn{color:var(--amT)}.dpd-vfail{color:var(--neg)}.dpd-vna,.dpd-vnone{color:var(--mu);font-weight:600}
+.dpd-risk{display:inline-flex;align-items:center;gap:4px;padding:0 8px;border-radius:999px;border:1px solid var(--amE);color:var(--amT);background:var(--amBg);font:700 11.5px var(--sg);white-space:nowrap}
+.dpd-sig{display:inline-flex;align-items:center;gap:4px;padding:1px 8px 1px 7px;border-radius:6px;border:1px solid var(--hair2);border-left:3px solid #0f766e;font:700 11px var(--sg);color:#0f766e;background:var(--card);white-space:nowrap}
+.dpd-sig.w{border-left-color:var(--amD);color:var(--amT)}
+.dpd-sig.r{border-left-color:var(--neg);color:var(--neg)}
+.dpd-sig.m{border-left-color:var(--hair2);color:var(--mu);text-decoration:line-through;text-decoration-thickness:1px}
+.dpd-dec{display:inline-flex;align-items:center;gap:6px;font:800 inherit var(--sg)}
+.dpd-dp,.dpd-dpc{color:var(--pos)}.dpd-ddn{color:var(--neg)}.dpd-dw{color:var(--mu)}
+.dpd-stage{display:inline-flex;align-items:center;gap:5px;font:700 12.5px var(--sg);white-space:nowrap}
+.dpd-sum{grid-template-columns:1fr 1fr 1.2fr 1.4fr 1.3fr 1fr 1fr!important}
+.dpd-sum>div{gap:5px!important;min-width:0}
+.dpd-sum span{font-size:12.5px}
+.dpd-sum .raw{display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center}
+.dpd-blk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;border:1px solid var(--ink);font:700 10.5px var(--sg);white-space:nowrap}
+.dpd-list{display:flex;flex-direction:column}
+.dpd-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.dpd-list li:last-child{border-bottom:0}
+.dpd-q{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.dpd-q>.ptag{align-self:flex-start}
+.dpd-qi{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px;padding:9px 10px;border:1px solid var(--hair);border-radius:9px;font-size:12.5px}
+.dpd-qi>span{display:flex;flex-direction:column;gap:3px}
+.dpd-qi small{color:var(--mu);font-size:11.5px}
+.dpd-qa{display:flex;gap:4px}
+.dpd-e{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#7c3aed;color:#fff;font:800 11px var(--sg);margin-right:4px;vertical-align:-3px}
+.dpd-doors{flex-direction:row!important;align-items:center;justify-content:space-between;padding:12px 18px!important}
+.dpd-doors>div:first-child{display:flex;flex-direction:column;gap:2px}
+.dpd-dis{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px}
+.dpd-dis button{opacity:.55;cursor:not-allowed}
+.dpd-dis small{font-size:10.5px;color:var(--mu);max-width:220px;line-height:1.3}
+.dpd-ic{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1.5px solid var(--vi);color:var(--vt);font:700 12.5px var(--sg);background:var(--lav)}
+.dpd-decided{border-left:4px solid var(--pos)!important}
+.dpd-why{display:block;color:var(--neg);font-size:11.5px;font-weight:600;margin-top:2px}
+.dpd-info{background:var(--lav)!important;border-color:var(--lavE)!important}
+.dpd-acc{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px}
+.dpd-ghost{border-style:dashed!important;color:var(--mu)}
+.dpd-new{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:999px;border:1px dashed #a78bfa;background:var(--lav);color:var(--vt);font:700 12px var(--sg)}
+.dpd-nw{font:700 10px var(--mo);color:var(--vt);margin-left:6px;white-space:nowrap}
+.dpd-ft td{padding:6px 10px}
+.dpd-ft td.n,.dpd-ft th.n{text-align:right}
+.dpd-fold li{cursor:pointer}
+.dpd-fold li[aria-current=true]{background:var(--lav)}
+.dpd-fold li[aria-current=true] b{color:var(--vt)}
+.dpd-deck{display:flex;gap:12px;align-items:center;border:1.5px dashed var(--lavE);border-radius:10px;padding:12px}
+.dpd-deck>span{font-size:28px;color:var(--mu)}
+.dpd-prev{font:500 10px var(--mo);color:var(--mu);margin-left:4px}
+.dpd-chk{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.dpd-chk .ck{min-height:32px;font-size:12.5px}
+.dpd-coll{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:0 14px}
+.dpd-coll>button{display:flex;width:100%;align-items:center;gap:8px;min-height:48px;background:none;border:0;font:inherit;color:var(--ink);text-align:left;padding:0}
+.dpd-coll>button b{flex:1;font-size:13.5px}
+.dpd-coll>button span{font-size:11px;color:var(--mu)}
+.dpd-fc{font:600 11.5px var(--sg);color:var(--mu);margin-left:6px}
+.dpd-note{font-size:11.5px;color:var(--mu);line-height:1.4;margin-top:2px}
+.mc .dpd-sig,.mc .pl{align-self:flex-start}
+.cv .tbl td,.cv .tbl td b{color:var(--ink)}
+
+.edc-sh{display:grid;grid-template-columns:212px minmax(0,1fr) 372px}
+.edc-sh.edc-nor{grid-template-columns:212px minmax(0,1fr) 44px}
+.edc-rail{background:var(--card);border-left:1px solid var(--hair);display:flex;flex-direction:column;min-width:0}
+.edc-rh{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.edc-rh>div{flex:1;display:flex;flex-direction:column;min-width:0}
+.edc-rh b{font-size:13.5px}
+.edc-rh small{font-size:11px;color:var(--mu)}
+.edc-e{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg);flex:none}
+.edc-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.edc-rf{padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.edc-rfl{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;color:var(--mu)}
+.edc-tasks{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.edc-tasks button{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;min-height:40px;padding:8px 10px;border:1px solid var(--hair);border-radius:9px;background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.edc-tasks button[aria-current=true]{border-color:var(--vi);background:var(--lav);color:var(--vt);font-weight:800}
+.edc-tasks .ptag{font-size:9.5px}
+.edc-card{border:1px solid var(--lavE);border-radius:12px;background:var(--card);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.edc-cardh{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+.edc-part{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--hair);padding-top:8px}
+.edc-part h3{font:700 12.5px var(--sg);margin:0;color:var(--ink)}
+.edc-part h3 .mo{font-size:12.5px}
+.edc-blocks{border-top:2px solid var(--ink)}
+.edc-lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.edc-lines li{display:flex;flex-direction:column;gap:2px;font-size:12px;line-height:1.4;color:var(--ink)}
+.edc-lines li>div{display:flex;gap:5px;align-items:baseline;flex-wrap:wrap}
+.edc-src{display:inline-flex;align-self:flex-start;align-items:center;gap:4px;font:500 10.5px var(--mo);color:var(--mu);border:1px solid var(--hair);border-radius:4px;padding:0 5px;line-height:1.6;max-width:100%}
+.edc-src:before{content:"↳";color:var(--vt)}
+.edc-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.edc-made{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--mu)}
+.edc-made .lk{font-size:11px}
+.edc-fine{font-size:11px;color:var(--mu);line-height:1.45;margin:0}
+.edc-p{font-size:12.5px;line-height:1.5;margin:0;color:var(--ink)}
+.edc-late{color:var(--neg)!important}
+.edc-late div{font:600 10.5px var(--sg)}
+.edc-crumb{font:600 11px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--vt);display:flex;gap:8px;align-items:center}
+.edc-crumb span{color:var(--mu)}
+.edc-crumb em{font-style:normal;margin-left:auto;text-transform:none;letter-spacing:0;color:var(--mu)}
+.edc-ch{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.edc-ch h1{font-size:26px;margin:0}
+.edc-cht{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.edc-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 9px;border-radius:999px;border:1px solid var(--hair2);font:600 11.5px var(--sg);color:var(--ink);background:var(--card);white-space:nowrap}
+.edc-chip-v{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.edc-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--mu);margin-top:6px}
+.edc-meta b{color:var(--ink)}
+.edc-meta .mo{color:var(--ink);font-size:11.5px}
+.edc-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);overflow:hidden}
+.edc-tabs a{padding:8px 10px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:4px;align-items:baseline;white-space:nowrap}
+.edc-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.edc-tabs a span{font:600 10.5px var(--mo)}
+.edc-tabs a i{font-style:normal;color:var(--amD);font-size:9px}
+.edc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.edc-kpis>div{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.edc-kpis small{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.edc-kpis b{font:700 20px var(--mo);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.edc-kpis span{font-size:11.5px;color:var(--mu)}
+.edc-dec{flex-direction:row!important;align-items:center;gap:12px!important;padding:12px 16px!important}
+.edc-dec>div{flex:1;display:flex;flex-direction:column;gap:2px}
+.edc-dico{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:var(--lav);color:var(--vt);flex:none}
+.edc-row{flex-direction:row!important;justify-content:space-between;align-items:center}
+.edc-ss{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);white-space:nowrap;color:var(--ink)}
+.edc-ss-done{color:var(--pos)}.edc-ss-pen,.edc-ss-asg{color:var(--mu)}
+.edc-st{display:inline-flex;align-items:center;gap:3px;padding:0 7px;border-radius:5px;font:700 11px var(--sg);white-space:nowrap;line-height:1.7}
+.edc-st-nr{color:var(--mu);font-style:italic;border:1px dashed var(--hair2)}
+.edc-st-ur{color:var(--neg);border:1px solid var(--negE);background:var(--negBg)}
+.edc-st-rf{color:var(--ink);border:1.5px solid var(--ink)}
+.edc-st-none{color:var(--mu);border:1px solid var(--hair2)}
+.edc-st-na{color:var(--mu);border:1px dotted var(--hair2)}
+.edc-st-stale{color:var(--amT);border:1px solid var(--amE);background:var(--amBg)}
+.edc-sect td,.edc-sect th{white-space:nowrap}
+.edc-sect td.n,.edc-sect th.n{text-align:right}
+.edc-banner{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:10px;border:1px solid var(--lavE);background:var(--lav);font-size:12px;color:var(--ink)}
+.edc-banner b{font-size:12.5px}
+.edc-banner span{color:var(--mu);font-size:11.5px}
+.edc-draft{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 12px;display:flex;flex-direction:column;gap:7px;font-size:12.5px;min-width:0}
+.edc-draft>b{font-size:13px}
+.edc-draft p{margin:0;line-height:1.45;color:var(--ink)}
+.edc-drh{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.edc-stale{border-style:dashed;border-color:var(--amE)}
+.edc-stale>b,.edc-stale>p{color:var(--mu)}
+.edc-why{font-size:11.5px;color:var(--amT)!important;font-weight:600}
+.edc-kv{display:grid;grid-template-columns:62px minmax(0,1fr);gap:3px 8px;margin:0;font-size:11.5px}
+.edc-kv dt{color:var(--mu)}
+.edc-kv dd{margin:0;color:var(--ink)}
+.edc-kv .mo{font-size:11.5px}
+.edc-dlg{background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.14);display:flex;flex-direction:column}
+.edc-pre{display:flex;align-items:center;gap:4px;font:600 11.5px var(--sg);color:var(--vt);background:var(--lav);border-radius:8px;padding:6px 9px}
+.edc-mp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;border-top:1px solid var(--hair);padding-top:12px}
+.edc-mpl,.edc-mpr{display:flex;flex-direction:column;gap:6px;min-width:0}
+.edc-mpr{border:1px dashed var(--lavE);border-radius:10px;padding:10px;background:var(--lav)}
+.edc-mpr p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink)}
+.edc-mph{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.edc-mph .mo{font-size:10.5px}
+.edc-ta{min-height:64px;font-size:12.5px!important;padding:8px 10px!important;line-height:1.5}
+.edc-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.edc-steps li{display:flex;flex-direction:column;gap:2px;font-size:12.5px;border-bottom:1px solid var(--hair);padding-bottom:8px}
+.edc-steps li:last-child{border-bottom:0}
+.edc-steps span{font-size:11.5px;color:var(--mu)}
+.edc-freq{gap:10px!important}
+.edc-fh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.edc-fh>div:first-child{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--mu)}
+.edc-fh b{font-size:14px;color:var(--ink)}
+.edc-fm{display:flex;gap:10px;align-items:center;font-size:11.5px;color:var(--mu);white-space:nowrap;flex-wrap:wrap}
+.edc-fm .mo{font-size:11.5px}
+.edc-help{border:1px solid var(--lavE);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:9px;background:var(--raised)}
+.edc-file{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--hair);border-radius:9px;padding:8px 10px;background:var(--card)}
+.edc-file>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.edc-file b{font-size:12.5px}
+.edc-file small{font:500 10.5px var(--mo);color:var(--mu);line-height:1.4}
+.edc-off{opacity:.6;border-style:dashed}
+.edc-ref{gap:6px!important;padding:12px!important}
+.edc-ref b{font-size:12.5px;line-height:1.4}
+.edc-ref p{margin:0}
+.edc-ref code{font:500 10px var(--mo);color:var(--mu);margin-top:auto}
+.edc-fab{position:absolute;right:16px;bottom:20px;min-height:48px;padding:0 16px;border-radius:999px;border:0;background:#7c3aed;color:#fff;font:800 13px var(--sg);box-shadow:0 8px 20px rgba(124,58,237,.3)}
+.edc-pch{display:flex;flex-direction:column;gap:4px}
+.edc-pch b{font-size:18px}
+.edc-pch .edc-chip{align-self:flex-start}
+.edc-ptabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);overflow:hidden}
+.edc-ptabs a{min-height:44px;display:inline-flex;align-items:center;padding:0 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;white-space:nowrap}
+.edc-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.edc-p44 .btn{min-height:44px!important;padding:0 14px}
+.edc-psticky{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;background:var(--card);border-top:1px solid var(--hair)}
+.edc-psheet{border:1px solid var(--hair);border-radius:16px 16px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.08);padding:10px 14px 80px;display:flex;flex-direction:column;gap:9px;background:var(--card)}
+.edc-grab{align-self:center;width:40px;height:4px;border-radius:4px;background:var(--hair2)}
+.cv .btn.p{background:var(--btnp)!important;border-color:var(--btnp)!important;color:var(--btnpt)!important}
+.edc-ch .ctl{display:flex;gap:8px;flex-wrap:nowrap;align-items:center;flex:none}
+.edc-meta{gap:4px 14px}
+.edc-cardh .ptag{font-size:10px}
+.edc-vl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.edc-vl li{display:grid;grid-template-columns:62px minmax(0,1fr);gap:6px;font-size:12px;align-items:baseline}
+.edc-due{white-space:nowrap}
+.edc-sub{font-size:12px;color:var(--mu)}
+.edc-fh>div:first-child{flex:1;min-width:0}
+.edc-fm{flex-wrap:nowrap}
+.edc-kpis b .edc-st{font-size:12px;margin-top:6px}
+.cv .tbl td.edc-due{white-space:nowrap}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "1180px"}, "board": {"editor": "enum", "default": "EDC20", "options": ["EDC20", "EDC21", "EDC21B", "EDC22", "EDC22B", "EDC23", "EDC23B", "EDC24", "EDC25", "EDC25B", "EDC26", "EDC26B", "EDC28", "EDC27A", "EDC27B", "EDC27B2", "EDC27C", "EDC29"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'EDC20';
+    const dark = ['EDC28'].includes(B);
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', btnp: '#a78bfa', btnpt: '#0b1220' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1', btnp: '#7c3aed', btnpt: '#ffffff' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const LK = '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+    const PT = (t) => '<span class="ptag" title="Needs backend work">◇ ' + t + '</span>';
+    const FL = (t) => '<span class="dpd-flag" title="Owner decision">⚑ ' + t + '</span>';
+
+    /* ---------- vocabulary: words + glyphs (Deals v2, dpd) ---------- */
+    const SEV = { Critical: '◆◆', High: '▲', Medium: '◆', Low: '○', Info: 'i' };
+    const sev = (s) => '<span class="dpd-sev ' + s.toLowerCase() + '">' + SEV[s] + ' ' + s + '</span>';
+    const VD = { pass: ['✓', 'Pass'], warn: ['!', 'Warn'], fail: ['✕', 'Fail'], na: ['–', 'n/a'], none: ['○', 'No verdict yet'] };
+    const vd = (v) => '<span class="dpd-vd dpd-v' + v + '">' + VD[v][0] + ' ' + VD[v][1] + '</span>';
+    const blk = '<span class="dpd-blk">' + LK + ' Blocking</span>';
+    const SS = { done: ['●', 'Completed'], rev: ['◷', 'In review'], asg: ['◌', 'Assigned'], pen: ['○', 'Pending'], blkd: ['⛔', 'Blocked'] };
+    const sst = (k) => '<span class="edc-ss edc-ss-' + k + '">' + SS[k][0] + ' ' + SS[k][1] + '</span>';
+    const ST = { nr: ['— ', 'Not recorded'], ur: ['! ', 'Unavailable'], rf: ['⊘ ', 'Refused'], none: ['∅ ', 'None'], na: ['– ', 'Not applicable'], stale: ['◷ ', 'Stale'] };
+    const st = (k, extra) => '<span class="edc-st edc-st-' + k + '">' + ST[k][0] + ST[k][1] + (extra ? ' · ' + extra : '') + '</span>';
+    const src = (t) => '<span class="edc-src">' + t + '</span>';
+    const btn = (t, k, extra) => '<button type="button" class="btn ' + (k || '') + ' bsm"' + (extra || '') + '>' + t + '</button>';
+    const ead = '<span class="dpd-e" aria-hidden="true">E</span>';
+
+    /* ---------- sample case: [Company Alpha] ---------- */
+    // [name, blocking, worked, total, status, verdict, reviewer, pending, pastDue]
+    const SEC = [
+      ['Corporate & Legal Structure', true, 6, 8, 'rev', 'none', 'Ada Example', 2, 1],
+      ['Financial Health & Runway', true, 5, 9, 'rev', 'none', 'Ben Sample', 4, 1],
+      ['Product & Technology Risk', false, 7, 7, 'done', 'pass', 'Dev Testcase', 0, 0],
+      ['Market & Traction', false, 7, 7, 'done', 'pass', 'Dev Testcase', 0, 0],
+      ['Market Position & Competitors', false, 5, 5, 'done', 'warn', 'Eva Demo', 0, 0],
+      ['Compliance / AML / Sanctions', true, 6, 6, 'done', 'pass', 'Chloé Placeholder', 0, 0],
+      ['Reputation & Press Signals', false, 4, 4, 'done', 'pass', 'Eva Demo', 0, 0],
+      ['Cyber & Data Posture', false, 1, 6, 'pen', 'none', null, 5, 0]
+    ];
+    const WORKED = SEC.reduce((a, s) => a + s[2], 0), TOTAL = SEC.reduce((a, s) => a + s[3], 0), PEND = SEC.reduce((a, s) => a + s[7], 0), LATE = SEC.reduce((a, s) => a + s[8], 0), DONE = SEC.filter(s => s[4] === 'done').length;
+    const FLAGS = [['High', 'IP assignment from the departed co-founder is not signed', 'Checklist · Corporate & Legal', 'Corporate & Legal', 'Open', 'Ada Example'], ['Medium', 'Pilot revenue recognised before invoicing', 'Checklist · Financial Health', 'Financial Health', 'In progress', 'Ben Sample'], ['Medium', 'Registered address differs from the latest filing', 'Flag · [OpenCorporates]', 'Corporate & Legal', 'Open', 'Ada Example']];
+
+    /* ---------- shell (#3704 union sidebar, de.js) + Eadwyn rail (#5130) ---------- */
+    const INV_NAV = ['Studio', 'Spin-Out Lab', 'Deals', 'Axal VC Fund', 'Fund', 'Trust', 'Network', 'Research'];
+    const FND_NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const railCollapsed = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const rail = (o) => '<aside class="edc-rail" aria-label="Eadwyn">'
+      + '<div class="edc-rh"><span class="edc-e" aria-hidden="true">E</span><div><b>Eadwyn</b><small>' + o.scope + '</small></div><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div>'
+      + '<div class="edc-rb">' + (o.tasks ? '<span class="eye">' + (o.tasksTitle || 'Tasks for this case') + '</span><ul class="edc-tasks">' + J(o.tasks.map(t => '<li><button type="button"' + (t[1] ? ' aria-current="true"' : '') + '><span>' + t[0] + '</span>' + (t[2] || '') + '</button></li>')) + '</ul>' : '') + (o.body || '') + '</div>'
+      + '<div class="edc-rf"><div class="inp" style="min-width:0;min-height:38px">' + (o.ask || 'Ask about this case…') + '</div><div class="edc-rfl"><span>Runs on your own tokens · the cost is in Settings</span>' + FL('Q2 · A') + '</div></div></aside>';
+    const shell = (body, o) => {
+      const nav = o.founder ? FND_NAV : INV_NAV;
+      const cur = o.founder ? 'Raise' : 'Deals';
+      const coName = o.founder ? '[Company Alpha]' : '[Harbor Seed Fund]';
+      return '<div class="edc-sh' + (o.rail ? '' : ' edc-nor') + '" style="min-height:' + (o.h || 900) + 'px">'
+        + '<aside class="dsd"><div class="lg" style="padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="co" aria-label="Company or project: ' + coName + '"><i aria-hidden="true"' + (o.founder ? ' style="background:#7c3aed"' : '') + '></i>' + coName + '<span>▾</span></button><nav aria-label="Workspace">' + J(nav.map(t => ((t === 'Trust') ? '<div class="sep"></div>' : '') + '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+        + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">' + (o.av || 'AE') + '</button></div></div>'
+        + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.rail ? rail(o.rail) : railCollapsed) + '</div>';
+    };
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const box = (t, inner, span) => '<section class="cd" style="gap:8px' + (span ? ';grid-column:span ' + span : '') + '"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+
+    /* ---------- case header + nine tabs (DDL3 frame) ---------- */
+    const TABS9 = [['Overview'], ['Checklist', '52'], ['Flags', '3', 1], ['Requests', '7', 1], ['Documents', '9'], ['Cross-checks'], ['Team', '5'], ['Sign-off'], ['Activity']];
+    const TABS_REV = [['Overview'], ['Checklist', '9'], ['Flags', '1'], ['Activity']];
+    const caseHead = (o) => '<div class="edc-crumb">Due diligence <span>›</span> [Company Alpha]<em>' + (o.route || '/due-diligence/:uid') + '</em></div>'
+      + '<header class="edc-ch"><div><div class="edc-cht"><h1>[Company Alpha]</h1><span class="edc-chip">Startup</span><span class="edc-chip">Standard</span>' + (o.newCase ? '<span class="edc-chip edc-chip-v">○ Open</span>' : '<span class="edc-chip edc-chip-v">◷ In review</span>') + '</div>'
+      + '<div class="edc-meta"><span class="mo">7f3a…21c9</span><span>Lead <b>Ada Example</b></span><span>Opened <span class="mo">' + (o.newCase ? '14 Nov 2026' : '2 Oct 2026') + '</span> · Ines Sample</span><span>Target IC date ' + (o.noIc ? st('nr') : '<span class="mo">3 Dec 2026</span> · in 19 days') + '</span><span>Round ' + (o.newCase ? st('nr') : '<b>[Series A]</b>') + '</span></div></div>'
+      + '<div class="ctl">' + (o.cta || '') + '</div></header>'
+      + '<nav class="edc-tabs" aria-label="Case">' + J((o.tabs || TABS9).map(t => '<a href="#"' + (t[0] === o.tab ? ' aria-current="page"' : '') + '>' + t[0] + (t[1] ? '<span>' + (o.newCase ? '0' : t[1]) + '</span>' : '') + (t[2] && !o.newCase ? '<i aria-label="needs attention">●</i>' : '') + '</a>')) + '</nav>';
+    const kpis = (k) => '<div class="edc-kpis">' + J(k.map(x => '<div><small>' + x[0] + '</small><b>' + x[1] + '</b><span' + (x[3] ? ' class="edc-late"' : '') + '>' + x[2] + '</span></div>')) + '</div>';
+    const decisionBar = () => '<section class="cd edc-dec"><span class="edc-dico" aria-hidden="true">✎</span><div><b>Decision: not recorded.</b><span class="edc-sub">Only the lead or an Admin records the decision. Eadwyn never does.</span></div><a class="btn bsm" href="#">Go to sign-off</a></section>';
+    const secTable = (o) => '<table class="tbl edc-sect"><thead><tr><th>Section</th><th>Blocks Proceed</th><th>Status</th><th>Verdict</th><th class="n">Items worked</th><th>Reviewer</th></tr></thead><tbody>'
+      + J(SEC.map((s, i) => '<tr' + (o && o.open === i ? ' class="sel"' : '') + '><td><b>' + s[0] + '</b></td><td>' + (s[1] ? blk : '<span class="raw">–</span>') + '</td><td>' + sst(s[4]) + '</td><td>' + vd(s[5]) + '</td><td class="n mo">' + s[2] + ' of ' + s[3] + '</td><td>' + (s[6] || '<span class="edc-late">No reviewer</span>') + '</td></tr>')) + '</tbody></table>';
+
+    /* ---------- DDL20 · case summary in the rail ---------- */
+    const ln = (main, source, extra) => '<li><div>' + main + '</div>' + src(source) + (extra || '') + '</li>';
+    const sumCard = (o) => {
+      o = o || {};
+      return '<div class="edc-card" aria-label="Eadwyn proposal: case summary"><div class="edc-cardh"><span class="eye">Proposal · a note, not saved</span>' + PT('dd:summary') + '</div>'
+        + '<div class="edc-part"><h3>Worked · <span class="mo">' + DONE + ' of ' + SEC.length + '</span> sections completed</h3><ul class="edc-vl">' + J(SEC.filter(s => s[4] === 'done').map(s => '<li>' + vd(s[5]) + '<span>' + s[0] + '</span></li>')) + '</ul>' + src('Sections · 5 verdicts recorded') + '</div>'
+        + '<div class="edc-part"><h3>Open · <span class="mo">' + PEND + '</span> items pending today · <span class="mo edc-late">' + LATE + '</span> past due</h3><ul class="edc-lines">'
+        + ln('Corporate & Legal · 2 pending, 1 past due (10 Nov)', 'Checklist · Corporate & Legal')
+        + ln('Financial Health · 4 pending, 1 past due (10 Nov)', 'Checklist · Financial Health')
+        + ln('Cyber & Data · 5 pending, no reviewer', 'Checklist · Cyber & Data')
+        + ln(sev('Medium') + ' Registered address differs', 'Flag · [OpenCorporates]') + '</ul></div>'
+        + '<div class="edc-part edc-blocks"><h3>Blocks Proceed</h3><ul class="edc-lines">'
+        + ln(blk + ' Corporate & Legal · not completed', 'Section · Corporate & Legal')
+        + ln(blk + ' Financial Health · not completed', 'Section · Financial Health')
+        + ln(sev('High') + ' IP assignment from the departed co-founder not signed', 'Flag · Checklist · Corporate & Legal') + '</ul></div>'
+        + '<button type="button" class="btn ' + (o.noPrimary ? '' : 'p ') + 'bsm" style="width:100%">Open the blocking item</button><div class="edc-acts">' + btn('Keep as note') + btn('Discard') + '</div>'
+        + '<div class="edc-made"><span>' + LK + ' Reads this case only</span><span class="mo">Made today · 15:42</span><button type="button" class="lk">Refresh</button></div>'
+        + '<p class="edc-fine">Reads flag detail; never the subject’s email or legal name. ' + FL('Q1 · A') + '</p></div>';
+    };
+    const leadTasks = (cur) => [['Summarise this case', cur === 0, PT('dd:summary')], ['Draft requests from pending and flagged items', cur === 1, PT('dd:request_drafts')], ['Draft the memo', cur === 2, PT('dd:memo_draft')]];
+    const overview = (o) => caseHead({ tab: 'Overview', cta: '<button type="button" class="btn">Assign reviewers</button><button type="button" class="ib" aria-label="More actions">…</button>' })
+      + decisionBar()
+      + kpis([['Checklist', WORKED + ' of ' + TOTAL, 'items worked on this case'], ['Open flags', '3', '1 High, 2 Medium'], ['Requests waiting', '2', '1 past due', true], ['Sections completed', DONE + ' of ' + SEC.length, (SEC.length - DONE) + ' still open']])
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:14px 16px 8px"><h2>Sections</h2><span class="raw">2 blocking sections not completed</span></div>' + secTable() + '</section>'
+      + '<section class="cd" style="gap:8px"><div class="ch"><h2>Open flags</h2><span class="raw">3 open on this case today</span></div><ul class="dpd-list">' + J(FLAGS.map(f => '<li><div>' + sev(f[0]) + ' <b>' + f[1] + '</b><div class="raw">' + f[2] + ' · ' + f[4] + ' · owner ' + f[5] + '</div></div><a href="#" class="dpd-ol">Open</a></li>')) + '</ul></section>';
+    const ovRail = () => ({ scope: 'Reads this case only · lead', tasks: leadTasks(0), body: sumCard() });
+
+    /* ---------- DDL21 · request drafts ---------- */
+    const REQ = [['Signed IP assignment from [Founder B]', 'Corporate & Legal', 'w', '22 Oct 2026', '1 Nov 2026', true], ['Q3 bank statements', 'Financial Health', 'w', '29 Oct 2026', '18 Nov 2026'], ['Revenue by customer, last 12 months', 'Financial Health', 'r', '18 Oct 2026', '25 Oct 2026'], ['Penetration test scope', 'Cyber & Data', 'r', '27 Oct 2026', '3 Nov 2026'], ['Customer references (3)', 'Market & Traction', 'v', '6 Oct 2026', '13 Oct 2026'], ['Competitor list', 'Market Position', 'v', '8 Oct 2026', '15 Oct 2026'], ['Data room access for the case lead', 'Case-wide', 'v', '3 Oct 2026', '10 Oct 2026']];
+    const reqSt = (k) => k === 'w' ? '<span class="pl a">◷ Requested</span>' : k === 'r' ? '<span class="pl v">↩ Received</span>' : '<span class="pl g">✓ Reviewed</span>';
+    const reqTable = (extra) => '<table class="tbl"><thead><tr><th>Request</th><th>Section</th><th>State</th><th>Asked</th><th>Due</th></tr></thead><tbody>' + (extra || '') + J(REQ.map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td><td>' + reqSt(r[2]) + '</td><td class="mo">' + r[3] + '</td><td class="mo' + (r[5] ? ' edc-late' : '') + '">' + r[4] + (r[5] ? '<div>13 days past due</div>' : '') + '</td></tr>')) + '</tbody></table>';
+    const DRAFTS = [
+      ['Cap table reconciled to your share register', 'Please share the current share register and the cap table it was reconciled against, with any differences explained.', 'Corporate & Legal Structure', '24 Nov 2026', 'item “Cap table reconciled” · pending'],
+      ['Invoices behind pilot revenue, July to September 2026', 'Please share the invoices for pilot revenue booked in July, August and September 2026, with the date each was sent.', 'Financial Health & Runway', '24 Nov 2026', 'flag “Pilot revenue recognised before invoicing” · in progress'],
+      ['Confirmation of your registered address', 'Please confirm the company’s current registered address and share the filing that records it.', 'Corporate & Legal Structure', '24 Nov 2026', 'flag [OpenCorporates] “Registered address differs” · open']
+    ];
+    const draftCard = (d, i, o) => '<article class="edc-draft' + (o && o.stale === i ? ' edc-stale' : '') + '" aria-label="Draft request ' + (i + 1) + '"><div class="edc-drh"><span class="eye">Draft ' + (i + 1) + ' of 3</span>' + (o && o.stale === i ? st('stale', 'withdrawn') : '') + '</div><b>' + d[0] + '</b><p>' + d[1] + '</p><dl class="edc-kv"><dt>Section</dt><dd>' + d[2] + '</dd><dt>Due</dt><dd class="mo">' + d[3] + ' <span class="raw">suggested</span></dd><dt>From</dt><dd>' + d[4] + '</dd></dl>'
+      + (o && o.stale === i ? '<p class="edc-why">Withdrawn: the item was marked Pass at 15:58, after this draft was made. Nothing was sent.</p>' : '<div class="edc-acts">' + btn('Edit') + btn('Send') + btn('Discard') + '</div>') + '</article>';
+    const draftsBody = (o) => '<div class="edc-banner"><b>Nothing is sent until you send it.</b><span>Send goes through the normal request path, as you.</span></div>' + J(DRAFTS.map((d, i) => draftCard(d, i, o))) + '<div class="edc-made"><span>' + LK + ' Reads this case only · 4 pending and flagged items read</span><span class="mo">Made 15:46</span></div>';
+    const requestsPage = () => caseHead({ tab: 'Requests', cta: '<button type="button" class="ib" aria-label="More actions">…</button>' })
+      + kpis([['Total', '7', 'sent on this case'], ['Waiting on the subject', '2', '1 past due', true], ['Received', '2', 'to review'], ['Reviewed', '3', 'closed out']])
+      + '<div class="tools" style="justify-content:space-between"><div class="tools"><div class="inp" style="min-width:240px">⌕ Search requests</div><button type="button" class="dd">State: any ▾</button><button type="button" class="dd">Section: any ▾</button></div><button type="button" class="btn p">Compose request</button></div>'
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden">' + reqTable() + '</section><p class="raw">The subject sees the request text only, on their own page. A section reviewer never sees request drafts.</p>';
+    const reqRail = (o) => ({ scope: 'Reads this case only · lead', tasks: leadTasks(1), body: draftsBody(o) });
+    const sheet6b = () => crop('<span class="eye">Edit opens the DDL6b sheet prefilled · Send request is the member’s own send</span><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start">'
+      + '<div role="dialog" aria-modal="true" aria-labelledby="e6b" class="edc-dlg"><div class="mdh"><h2 id="e6b" style="font-size:16px">Compose request</h2><button type="button" class="ib" aria-label="Cancel and close">✕</button></div><div class="mdb"><div class="edc-pre">' + ead + ' Prefilled from Eadwyn’s draft 1 · edit anything</div>'
+      + '<div class="fld"><label>What you need <span>· required</span></label><div class="ta" style="min-height:36px;font-size:12.5px;padding:8px 10px">' + DRAFTS[0][0] + '</div></div><div class="fld"><label>Details</label><div class="ta" style="min-height:56px;font-size:12.5px;padding:8px 10px">' + DRAFTS[0][1] + '</div></div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="fld"><label>Section</label><div class="ta" style="min-height:36px;font-size:12.5px;padding:8px 10px">Corporate & Legal Structure ▾</div></div><div class="fld"><label>Due date</label><div class="ta mo" style="min-height:36px;font-size:12.5px;padding:8px 10px">24 Nov 2026 ▾</div></div></div>'
+      + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div>The subject sees exactly this text. Requests never show the case, its score or its findings.</div></div></div><div class="mdf">' + btn('Cancel') + '<button type="button" class="btn p bsm">Send request</button></div></div>'
+      + '<div style="display:flex;flex-direction:column;gap:12px"><div class="nt"><span class="ic" aria-hidden="true">✓</span><div><b>Request sent to [Founder Name].</b><div>Back on Requests, the new row reads ◷ Requested · due 24 Nov 2026. Draft 1 is marked accepted; drafts 2 and 3 stay.</div></div></div>'
+      + '<table class="tbl"><thead><tr><th>Request</th><th>Section</th><th>State</th><th>Due</th></tr></thead><tbody><tr class="sel"><td><b>' + DRAFTS[0][0] + '</b><div class="raw">New · asked 14 Nov 2026 by Ada Example</div></td><td>Corporate & Legal</td><td>' + reqSt('w') + '</td><td class="mo">24 Nov 2026</td></tr></tbody></table>'
+      + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Edited before sending.</b><div>The proposal is recorded as edited, with the run that made it. Discard records discarded; nothing reaches the subject.</div></div></div></div></div>', 1200);
+
+    /* ---------- DDL22 · memo drafts ---------- */
+    const MEMO = [
+      ['Summary', 'A credible Series A with real pilot pull. IP from a departed co-founder is the one open legal risk; revenue recognition is being restated.', '5 of 8 sections are completed. Corporate & Legal and Financial Health are blocking and still open. One High flag is open: the IP assignment from the departed co-founder is not signed.', 'Sections · all 8 · Flag · Checklist · Corporate & Legal'],
+      ['What we verified', 'Incorporation, board minutes and option plan; burn against bank statements; three customer references.', 'Pass on Product & Technology (7 of 7), Market & Traction (7 of 7), Compliance / AML / Sanctions (6 of 6) and Reputation & Press (4 of 4). Warn on Market Position: “We lose to [Competitor A] on price, mostly in the UK.”', 'Sections · 5 completed · Request · Competitor list'],
+      ['What we take on trust', null, 'The customer count of 41 paying accounts comes from the founder’s answer to “Customer references (3)” and was not cross-checked.', 'Request · Customer references (3)'],
+      ['Conditions to close', 'No third-party security test. Owner Ada Example, due 30 Nov 2026.', 'Signed IP assignment from the departed co-founder before Closing. Pilot revenue restated to invoice dates.', 'Flag · High · Corporate & Legal · Flag · Medium · Financial Health']
+    ];
+    const n8 = (s) => (s ? s.length : 0).toLocaleString('en-US') + ' / 8,000';
+    const memoPart = (m, ro) => '<div class="edc-mp"><div class="edc-mpl"><div class="edc-mph"><b>' + m[0] + '</b><span class="raw mo">' + n8(m[1]) + '</span></div><div class="ta edc-ta">' + (m[1] || st('nr', 'left blank')) + '</div></div>'
+      + '<div class="edc-mpr"><div class="edc-mph"><span class="eye">' + ead + ' Draft · ' + m[0] + '</span><span class="raw mo">' + n8(m[2]) + '</span></div><p>' + m[2] + '</p>' + src('Used: ' + m[3]) + (ro ? '<span class="raw">Read-only for you</span>' : '<div class="edc-acts">' + btn('Accept') + btn('Edit') + btn('Discard') + '</div>') + '</div></div>';
+    const memoCard = (ro) => '<section class="cd" style="gap:12px"><div class="ch"><h2>Deal team’s memo</h2><span class="raw">Last saved 12 Nov 2026 · 10:12 by Ada Example</span></div>' + (ro ? '<div class="nt"><span class="ic" aria-hidden="true">' + LK + '</span><div><b>Only the lead or an Admin saves the memo.</b><div>You opened this case, so you read the memo and Eadwyn’s drafts. Accept, Edit and Save are not offered.</div></div></div>' : '<div class="edc-banner"><b>Accept puts a draft into the memo field. Nothing is saved until you press Save memo.</b><span>Each part is at most 8,000 characters.</span></div>')
+      + J(MEMO.map(m => memoPart(m, ro))) + (ro ? '' : '<div class="edc-acts" style="justify-content:flex-end"><span class="raw">Unsaved: none yet</span><button type="button" class="btn p">Save memo</button></div>') + '</section>';
+    const signoffPage = () => caseHead({ tab: 'Sign-off', cta: '<button type="button" class="btn">Record decision</button><button type="button" class="ib" aria-label="More actions">…</button>' })
+      + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:14px 16px 8px"><h2>Section sign-offs</h2><span class="raw">' + DONE + ' of 8 completed</span></div>' + secTable() + '</section>'
+      + memoCard(false)
+      + '<section class="cd edc-row"><div><b>Decision</b><div class="raw">Not recorded. After saving the memo, Record decision is the lead’s own step.</div></div>' + st('nr') + '</section>';
+    const memoRail = (ro) => ({ scope: 'Reads this case only · ' + (ro ? 'opener' : 'lead'), tasks: ro ? [['Summarise this case', false, PT('dd:summary')], ['Draft the memo', true, PT('dd:memo_draft')]] : leadTasks(2), body: '<div class="edc-card"><div class="edc-cardh"><span class="eye">Memo draft · 4 parts</span>' + PT('dd:memo_draft') + '</div><p class="edc-p">Drafted from the 8 sections, 3 open flags and 3 reviewed answers on this case. Each draft sits beside its part on the page and names what it used.</p><ul class="edc-lines">' + J(MEMO.map(m => '<li><div><b>' + m[0] + '</b></div>' + src(m[3]) + '</li>')) + '</ul><div class="edc-made"><span>' + LK + ' Reads this case only</span><span class="mo">Made 15:51</span><button type="button" class="lk">Refresh</button></div></div>' });
+    const memoRO = () => crop('<span class="eye">DDL22 · the opener who is not the lead · drafts read-only</span>' + memoCard(true), 1100);
+
+    /* ---------- DDL23 · reviewer ---------- */
+    const ITEMS = [['pass', 'Monthly burn reconciles to bank statements', '–'], ['flag', 'Revenue recognition policy', '–'], ['pass', 'Runway of 12 months or more at current burn', '–'], ['pen', 'Audited or reviewed accounts', '10 Nov 2026', true], ['pass', 'Debt and liabilities schedule', '–'], ['pen', 'Gross margin by product line', '20 Nov 2026'], ['pass', 'Customer concentration under 30%', '–'], ['pen', 'Payroll and tax filings current', '20 Nov 2026'], ['pen', 'Use of funds matches the round', '20 Nov 2026']];
+    const itSt = (k) => k === 'pass' ? '<span class="pl g">✓ Pass</span>' : k === 'flag' ? '<span class="pl a">⚐ Flag</span>' : '<span class="pl">○ Pending</span>';
+    const reviewerPage = (observer) => caseHead({ tab: 'Checklist', tabs: TABS_REV, cta: observer ? '' : '<button type="button" class="btn p">Record verdict</button>' })
+      + '<div class="nt dpd-info"><span class="ic" aria-hidden="true">i</span><div>You’re ' + (observer ? 'observing' : 'reviewing') + ' <b>Financial Health & Runway</b> as an invited ' + (observer ? 'observer' : 'expert') + '. You see your section only.</div></div>'
+      + '<div style="display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;align-items:start"><section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:14px 16px 8px"><h2>Financial Health & Runway</h2><span class="raw">' + blk + ' · 5 of 9 worked · 1 flagged</span></div><table class="tbl"><thead><tr><th>Status</th><th>Item</th><th>Severity</th><th>Due</th></tr></thead><tbody>'
+      + J(ITEMS.map(it => '<tr><td>' + itSt(it[0]) + '</td><td><b>' + it[1] + '</b></td><td>' + (it[0] === 'flag' ? sev('Medium') : '<span class="raw">–</span>') + '</td><td class="mo' + (it[3] ? ' edc-late' : '') + '">' + it[2] + (it[3] ? '<div>4 days past due</div>' : '') + '</td></tr>')) + '</tbody></table></section>'
+      + '<section class="cd" style="gap:10px"><h2 style="font-size:14px">Your steps</h2><ul class="edc-steps"><li><b>✓ Sign the NDA</b><span>Signed 17 Oct 2026</span></li><li><b>' + (observer ? '– Declare conflicts' : '✓ Declare conflicts') + '</b><span>' + (observer ? 'Not applicable to an observer' : 'Declared 18 Oct 2026') + '</span></li><li><b>' + (observer ? '– Record the verdict' : '3 · Work the checklist and record your verdict') + '</b><span>' + (observer ? 'Observers read this section and do not record its verdict' : '4 of 9 items still pending') + '</span></li></ul></section></div>';
+    const revBody = (observer) => '<div class="edc-card"><div class="edc-cardh"><span class="eye">Summary · my section · a note, not saved</span>' + PT('dd:section_summary') + '</div>'
+      + '<div class="edc-part"><h3>Items <span class="mo">5 of 9</span> worked</h3><ul class="edc-lines">' + ln('4 Pass, 1 Flag', 'Checklist · Financial Health') + '</ul></div>'
+      + '<div class="edc-part"><h3>Flags <span class="mo">1</span> open</h3><ul class="edc-lines">' + ln(sev('Medium') + ' Pilot revenue recognised before invoicing · in progress', 'Flag · Checklist · Financial Health') + '</ul></div>'
+      + '<div class="edc-part"><h3>Still pending <span class="mo">4</span> · <span class="edc-late mo">1</span> past due</h3><ul class="edc-lines">' + ln('Audited or reviewed accounts · due 10 Nov', 'Checklist · Financial Health') + ln('Gross margin, payroll and tax, use of funds · due 20 Nov', 'Checklist · Financial Health') + '</ul></div>'
+      + '<div class="edc-acts">' + btn('Keep as note') + btn('Discard') + '</div></div>'
+      + (observer ? '<div class="nt"><span class="ic" aria-hidden="true">i</span><div>Observers read this section and do not record its verdict.</div></div>'
+        : '<div class="edc-card"><div class="edc-cardh"><span class="eye">Draft · my verdict note</span>' + PT('dd:section_summary') + FL('Q3 · A') + '</div><p class="edc-p">“Burn, runway, debt and concentration reconcile to the bank statements. Revenue recognition is flagged: pilot revenue is booked before invoicing. Four items are pending, one past due.”</p>' + src('Used: 5 worked items · 1 flag · Financial Health') + '<p class="edc-fine">No verdict is suggested. You choose Pass, Warn, Fail or n/a and edit this note in Record verdict.</p><div class="edc-acts">' + btn('Use in Record verdict') + btn('Discard') + '</div></div>')
+      + '<div class="edc-made"><span>' + LK + ' Eadwyn reads your section only</span><span class="mo">Made 15:40</span></div>';
+    const revRail = (observer) => ({ scope: 'Reads Financial Health & Runway only', tasksTitle: 'Tasks for my section', tasks: observer ? [['Summarise my section', true, PT('dd:section_summary')]] : [['Summarise my section', true, PT('dd:section_summary')], ['Draft my verdict note', false, '<span class="raw">NDA signed 17 Oct</span>']], body: revBody(observer), ask: 'Ask about my section…' });
+
+    /* ---------- DDL24 · founder answer from data room ---------- */
+    const FREQ = [['Q3 bank statements', 'All accounts, July to September 2026.', '29 Oct 2026', '18 Nov 2026', 'w'], ['Signed IP assignment from [Founder B]', 'The countersigned assignment of inventions, or counsel’s draft and timeline.', '22 Oct 2026', '1 Nov 2026', 'w', true], ['Revenue by customer, last 12 months', 'Monthly, by customer, as invoiced and as recognised.', '18 Oct 2026', '25 Oct 2026', 's'], ['Customer references (3)', 'Names and contacts for three paying customers.', '6 Oct 2026', '13 Oct 2026', 'v']];
+    const fSt = (k) => k === 'w' ? '<span class="pl a">◷ Waiting on you</span>' : k === 's' ? '<span class="pl v">→ Sent, under review</span>' : k === 'a' ? '<span class="pl v">✓ Answered</span>' : '<span class="pl g">✓ Reviewed</span>';
+    const FILES = [['Bank statements Q3 2026 · all accounts.pdf', 'p. 1 · “Statement period 1 Jul 2026 to 30 Sep 2026 · Operating account, Payroll account, Reserve account”'], ['Management accounts Sep 2026.xlsx', 'Sheet “Cash” · “Closing balances by account, 30 Sep 2026, reconciled to bank”']];
+    const fileChip = (f, kept) => '<div class="edc-file' + (kept ? '' : ' edc-off') + '"><div><b>▤ ' + f[0] + '</b><small>' + f[1] + '</small></div>' + (kept ? btn('Remove') : btn('Keep')) + '</div>';
+    const helpPanel = () => '<div class="edc-help"><div class="edc-cardh"><span class="eye">' + ead + ' Eadwyn · proposed answer</span>' + PT('dd:answer_from_room') + '</div>'
+      + '<div class="fld"><label>Your answer <span>· note, edit freely</span></label><div class="ta" style="min-height:52px;font-size:12.5px;padding:8px 10px">Attached are the statements for all three accounts, July to September 2026, and the September management accounts that reconcile to them.</div></div>'
+      + '<span class="eye">Files from your data room · 2 matched “Q3 bank statements”</span>' + fileChip(FILES[0], true) + fileChip(FILES[1], true)
+      + '<p class="edc-fine">' + LK + ' Eadwyn reads your data room only. Axal VC sees what you send.</p>'
+      + '<div class="edc-acts" style="justify-content:flex-end">' + btn('Cancel') + '<button type="button" class="btn p bsm">Send answer · note and 2 files</button></div>'
+      + '<span class="raw">Send answer attaches each kept file to this request in turn, then saves the note.</span></div>';
+    const founderPage = () => '<h1 style="font-size:26px">Requests from Axal VC</h1><p class="mu" style="font-size:13px;margin-top:-8px">The investment team needs these to complete its review. You see only what they asked.</p>'
+      + '<div class="chips"><button type="button" aria-pressed="true">Waiting on you 2</button><button type="button">Sent 1</button><button type="button">Reviewed 1</button></div>'
+      + J(FREQ.map((r, i) => '<section class="cd edc-freq"><div class="edc-fh"><div><b>' + r[0] + '</b><span>' + r[1] + '</span></div><div class="edc-fm"><span>Asked <span class="mo">' + r[2] + '</span></span><span class="mo' + (r[5] ? ' edc-late' : '') + '">Due ' + r[3] + (r[5] ? ' · 13 days late' : '') + '</span>' + fSt(r[4]) + '</div></div>'
+        + (i === 0 ? '<div class="edc-acts">' + btn(ead + 'Help me answer', '', ' aria-expanded="true"') + btn('Answer myself') + '</div>' + helpPanel() : '') + '</section>'));
+    const fRail = () => ({ scope: 'Reads your data room only', tasksTitle: 'On this request', tasks: [['Help me answer “Q3 bank statements”', true, PT('dd:answer_from_room')]], body: '<div class="edc-card"><p class="edc-p">Searched your data room for this request’s words and found 2 files. The proposal is on the request card; you keep, remove or edit, then send.</p><div class="edc-made"><span>' + LK + ' Reads your data room only</span><span class="mo">Made 16:02</span></div></div><p class="edc-fine">You never see the case, its flags or its score, and Eadwyn does not read them for you.</p>', ask: 'Ask about your requests…' });
+
+    /* ---------- DDL25 · empty ---------- */
+    const emptyPage = () => caseHead({ tab: 'Overview', newCase: true, noIc: true, cta: '<button type="button" class="btn">Run cross-checks</button><button type="button" class="ib" aria-label="More actions">…</button>' })
+      + '<section class="cd edc-dec"><span class="edc-dico" aria-hidden="true">✎</span><div><b>Decision: not recorded.</b><span class="edc-sub">Nothing on this case is worked yet.</span></div></section>'
+      + kpis([['Checklist', '0 of 52', 'items worked on this case'], ['Open flags', '0', 'none raised'], ['Requests', '0', 'none sent'], ['Indicative risk', st('nr'), 'Not scored yet · never drawn as Green']])
+      + '<section class="cd" style="gap:10px;align-items:flex-start;padding:28px"><h2 style="font-size:18px">No reviewers are assigned yet.</h2><p class="raw">8 sections, 52 checklist items. Assign a reviewer to each section, or run the cross-checks first.</p><button type="button" class="btn p">Assign reviewers</button><span class="raw">An Admin, or an Operating Partner who leads, opened or reviews this case.</span></section>';
+    const emptyRail = () => ({ scope: 'Reads this case only · lead', tasks: [['Summarise this case', true, PT('dd:summary')]], body: '<div class="edc-card"><b style="font-size:13.5px">Nothing to summarise yet</b><p class="edc-p">No item is worked, no flag is raised and no request is sent on this case today. Request drafts and the memo draft appear once there is something to draft from.</p><div class="edc-made"><span>' + LK + ' Reads this case only</span></div></div>' });
+    const founderEmpty = () => crop('<span class="eye">DDL25 · the founder’s page when there is nothing to search</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start">'
+      + box('Room not indexed yet', '<b>Q3 bank statements</b><div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Your data room has no searchable files yet.</b><div>Files you add are indexed before Eadwyn can match them.</div></div></div><div class="edc-acts">' + btn('Open data room') + btn('Answer myself') + '</div>')
+      + box('Search not switched on', '<b>Q3 bank statements</b><div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Data room search is not switched on yet.</b><div>Answer with a note, a link or a file you pick.</div></div></div><div class="edc-acts">' + btn('Answer myself') + '</div>')
+      + box('No venture data room', '<b>Q3 bank statements</b><p class="raw">This case is about you personally, not a venture, so there is no data room to search. “Help me answer” is not offered.</p><div class="fld"><label>Your answer · a note or a link</label><div class="ta" style="min-height:44px"></div></div><div class="edc-acts">' + btn('Send answer', 'p') + '</div>')
+      + '</div>', 1300);
+
+    /* ---------- DDL26 · states ---------- */
+    const states = () => crop('<span class="eye">DDL26 · states · the case page and its rail</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start">'
+      + box('Loading', '<div class="edc-tabs" style="margin:0"><a aria-current="page">Overview</a><a>Checklist</a><a>Flags</a><a>Requests</a></div><span class="raw">Tabs render at once; the summary loads.</span><div class="edc-card" aria-busy="true"><span class="sk" style="height:14px;width:50%"></span><span class="sk" style="height:10px"></span><span class="sk" style="height:10px;width:80%"></span><span class="sk" style="height:10px;width:65%"></span></div>')
+      + box('Not recorded', '<dl class="edc-kv"><dt>Target IC</dt><dd>' + st('nr') + '</dd><dt>Due date</dt><dd>' + st('nr') + '</dd><dt>Memo · trust</dt><dd>' + st('nr', 'left blank') + '</dd></dl><div class="edc-card"><p class="edc-p">' + ead + ' “No target IC date is recorded on this case.”</p>' + src('Case · target IC date') + '</div><span class="raw">The draft says Not recorded and makes nothing up.</span>')
+      + box('Unreadable · case read failed', '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The case could not be read.</b><div>Sections, requests and flags are not shown as empty. The Overview and Requests tabs already loaded still open.</div></div></div><div class="edc-acts">' + btn('Try again') + '</div>')
+      + box('Summary run failed', '<div class="edc-card">' + st('stale', 'made 14 Nov 2026 · 15:42') + '<p class="edc-p">The last summary stays in place, dated. “5 of 8 sections completed…”</p></div><div class="nt a"><span class="ic" aria-hidden="true">!</span><div>The new summary did not run. ' + btn('Try again') + '</div></div>')
+      + box('Eadwyn unavailable', '<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>' + st('ur') + '</b><div>The AI check could not run. Nothing was charged.</div></div></div><p class="raw">The page works without Eadwyn: tabs, requests and the memo are unchanged.</p>')
+      + box('AI paused', '<div class="nt a"><span class="ic" aria-hidden="true">i</span><div><b>Eadwyn is paused for this organisation.</b><div>Everything on the case still works by hand.</div></div></div>')
+      + box('Draft gone stale', draftCard(DRAFTS[0], 0, { stale: 0 }), 2)
+      + box('Saving · save failed', '<p class="raw">◌ Saving memo…</p><div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The memo was not saved.</b><div>Your edits and accepted drafts are kept on this page. ' + btn('Try again') + '</div></div></div>', 2)
+      + box('Request draft send failed', '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The request was not sent.</b><div>The draft is kept. Nothing reached the subject.</div></div></div>', 2)
+      + '</div>', 1400);
+    const REF = [
+      ['Out of tokens · today', 'You have used today’s tokens.', 'Add tokens', 'budget_user_day'],
+      ['Out of tokens · this month', 'You have used this month’s tokens.', 'Add tokens', 'budget_user_month'],
+      ['Organisation budget', 'Your organisation’s monthly budget is used up.', 'Add tokens', 'budget_org_month'],
+      ['Under budget review', 'Your token budget is under review.', 'Add tokens', 'budget_review'],
+      ['Spend limit', 'This run would pass your spend limit.', 'Add tokens', 'spend_limit'],
+      ['Switched off here', 'Eadwyn is switched off on this page.', 'Turn it back on', 'assist_off'],
+      ['Blocked by the check', 'Eadwyn cannot help with that.', null, 'guard_blocked'],
+      ['Model not on plan', 'This model is not on your plan.', null, 'plan_locked'],
+      ['No licence', 'Diligence needs an Investor, Advisor or Operating Partner licence.', 'An Admin grants it', 'requireDdReader'],
+      ['Not on this case', 'Ask the case’s lead to add you.', null, 'case scope']
+    ];
+    const refusals = () => crop('<span class="eye">DDL26 · refused · one sentence each, never a disabled button</span><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:stretch">'
+      + J(REF.map(r => '<section class="cd edc-ref"><span class="raw">' + r[0] + '</span><p>' + st('rf') + '</p><b>' + r[1] + '</b>' + (r[2] ? (r[2].indexOf('Admin') >= 0 ? '<span class="raw">' + r[2] + '</span>' : '<a href="#" class="dpd-ol">' + r[2] + (r[2] === 'Add tokens' ? ' · in Settings' : '') + '</a>') : '') + '<code>' + r[3] + '</code></section>')) + '</div>', 1400);
+
+    /* ---------- phone 390 ---------- */
+    const phone = (title, body, extra) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Back">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="More">…</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (extra || '') + '</div></div>';
+    const pfab = '<button type="button" class="edc-fab" aria-label="Open Eadwyn">E · Eadwyn</button>';
+    const pHead = '<div class="edc-pch"><b>[Company Alpha]</b><span class="edc-chip edc-chip-v">◷ In review</span><span class="raw">Lead Ada Example · IC 3 Dec 2026</span></div>';
+    const pTabs = (cur) => '<nav class="edc-ptabs" aria-label="Case">' + J(['Overview', 'Checklist', 'Flags', 'Requests', 'Documents', 'Sign-off'].map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const pSticky = (t) => '<div class="edc-psticky"><button type="button" class="btn p" style="width:100%;min-height:48px">' + t + '</button></div>';
+    const MOB = {
+      EDC27A: () => phone('Due diligence', pHead + '<div class="edc-card"><div class="edc-cardh"><span class="eye">' + ead + ' Summary · a note, not saved</span></div>'
+        + '<div class="edc-part"><h3>Worked <span class="mo">5 of 8</span> sections</h3><span class="raw">4 Pass, 1 Warn · Sections</span></div>'
+        + '<div class="edc-part"><h3>Open <span class="mo">11</span> items · <span class="mo edc-late">2</span> past due</h3><span class="raw">Checklist · Corporate & Legal, Financial, Cyber</span></div>'
+        + '<div class="edc-part edc-blocks"><h3>Blocks Proceed</h3><ul class="edc-lines">' + ln(blk + ' Corporate & Legal · Financial Health', 'Sections') + ln(sev('High') + ' IP assignment not signed', 'Flag · Checklist · Corporate & Legal') + '</ul></div>'
+        + '<div class="edc-acts edc-p44"><button type="button" class="btn p bsm">Open the blocking item</button>' + btn('Keep') + btn('Discard') + '</div><div class="edc-made"><span>' + LK + ' This case only</span><span class="mo">15:42</span></div></div>'
+        + pTabs('Overview') + '<div class="mc"><div class="dv"><span>Checklist</span><b class="mo">41 of 52</b></div><div class="dv"><span>Open flags</span><b class="mo">3</b></div><div class="dv"><span>Sections completed</span><b class="mo">5 of 8</b></div></div>', pfab),
+      EDC27B: () => phone('Eadwyn · request drafts', '<div class="edc-banner"><b>Nothing is sent until you send it.</b></div>' + J(DRAFTS.slice(0, 2).map((d, i) => '<article class="edc-draft"><span class="eye">Draft ' + (i + 1) + ' of 3</span><b>' + d[0] + '</b><p>' + d[1] + '</p><dl class="edc-kv"><dt>Section</dt><dd>' + d[2] + '</dd><dt>Due</dt><dd class="mo">' + d[3] + '</dd><dt>From</dt><dd>' + d[4] + '</dd></dl><div class="edc-acts edc-p44">' + btn('Edit') + btn('Send') + btn('Discard') + '</div></article>')) + '<span class="raw">Draft 3 of 3 below · ' + LK + ' Reads this case only</span>'),
+      EDC27B2: () => phone('Compose request', '<div class="edc-pre">' + ead + ' Prefilled from draft 1 · edit anything</div><div class="fld"><label>What you need <span>· required</span></label><div class="ta" style="min-height:44px;font-size:13px;padding:10px">' + DRAFTS[0][0] + '</div></div><div class="fld"><label>Details</label><div class="ta" style="min-height:96px;font-size:13px;padding:10px">' + DRAFTS[0][1] + '</div></div><div class="fld"><label>Section</label><div class="ta" style="min-height:44px;font-size:13px;padding:10px">Corporate & Legal Structure ▾</div></div><div class="fld"><label>Due date</label><div class="ta mo" style="min-height:44px;font-size:13px;padding:10px">24 Nov 2026 ▾</div></div><p class="raw">The subject sees exactly this text. Full-height sheet; Cancel returns to the drafts.</p>', pSticky('Send request')),
+      EDC27C: () => phone('Requests from Axal VC', '<section class="cd edc-freq"><b>Q3 bank statements</b><span class="raw">All accounts, July to September 2026.</span><div class="edc-fm"><span class="mo">Due 18 Nov 2026</span>' + fSt('w') + '</div></section><div class="edc-psheet"><span class="edc-grab" aria-hidden="true"></span><div class="edc-cardh"><span class="eye">' + ead + ' Help me answer</span></div><div class="ta" style="min-height:64px;font-size:12.5px;padding:8px 10px">Attached are the statements for all three accounts, July to September 2026, and the September management accounts that reconcile to them.</div>'
+        + J(FILES.map(f => '<div class="edc-file"><div><b>▤ ' + f[0] + '</b><small>' + f[1] + '</small></div><button type="button" class="btn bsm" style="min-height:44px">Remove</button></div>')) + '<p class="edc-fine">' + LK + ' Eadwyn reads your data room only. Axal VC sees what you send.</p></div>', pSticky('Send answer · note and 2 files'))
+    };
+
+    /* ---------- DDL29 · handoff ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      EDC29: () => dk('<h1>Handoff · Eadwyn on a diligence case · DDL20 to DDL29</h1><p>Checked on main <code>6d7712c6d1</code> (14 Nov 2026). Component keys are <code>EDC20</code> to <code>EDC29</code>; the landing names them DDL20 to DDL29 in the Due Diligence Desk grid. Nothing here sends, saves, records a verdict, raises or resolves a flag, or decides.</p>'
+        + '<h2>Checked on main</h2>' + tbl(['File', 'What it shows'], [
+          ['<code>pages/admin/AdminBoardFrame.jsx</code>', 'The rail is drawn only for a Super Admin or <code>role === &quot;admin&quot;</code>. <code>AdminDueDiligenceCasePage.jsx</code> wraps the case in it, so an investor, Operating Partner or advisor on a case gets no Eadwyn.'],
+          ['<code>App.jsx</code>', '<code>/due-diligence</code>, <code>/my-reviews</code>, <code>/:uid</code>, <code>/:uid/:tab</code> mount the same pages as <code>/admin/due-diligence/*</code> for admin, partner, investor and advisor; <code>/due-diligence/requests</code> is the founder’s page and draws no rail.'],
+          ['<code>routes/rail_run.ts</code>', 'Runs <code>studio:layout</code>, <code>sessions:block</code> and <code>form:*</code>; any other option is refused <code>unknown_handler</code>. No diligence option.'],
+          ['<code>routes/dd.ts</code>', '<code>requireDdReader</code>: Admin, or a held partner, investor or advisor licence. <code>caseAllowed</code>: <code>requests</code> and <code>memo_read</code> for Admin, lead or opener; <code>decide</code> for Admin or lead; <code>verdict</code> never for an observer (403 “An observer reads this section and does not record its verdict.”); a reviewer’s verdict needs the signed NDA (412). <code>MEMO_MAX = 8000</code> per part. <code>PATCH /requests/:id/respond</code> takes one <code>file_uid</code> per call.'],
+          ['<code>routes/data_room.ts</code>', '<code>POST /:projectUid/search</code> over the room’s own index; unbound index → <code>available: false</code>, “Data room search is not switched on yet.”'],
+          ['<code>routes/ai_rail_proposals.ts</code>', 'Statuses proposed, accepted, edited, discarded, withdrawn; <code>POST /:uid/decide</code> with accept, edit or discard, one at a time.']])
+        + '<h2>Backend required ◇</h2><p>Five options on <code>POST /api/ai/rail/run</code>, each writing <code>ai_rail_proposals</code> rows only: <code>dd:summary</code> (DDL20), <code>dd:request_drafts</code> (DDL21), <code>dd:memo_draft</code> (DDL22), <code>dd:section_summary</code> (DDL23, summary and verdict note), <code>dd:answer_from_room</code> (DDL24). The rail for non-admin case members on <code>/due-diligence/*</code> (#5130 owns the shell rail). Withdrawing a draft when its item changes (DDL26 stale) is part of each run’s proposal record. The build issue filed from this canvas names them.</p>'
+        + '<h2>Pending the owner ⚑ (drawn as option A)</h2><p>Q1 · Eadwyn reads encrypted flag detail, evidence excerpts and reviewer notes, never the subject’s email or legal name; the memo only for Admin, lead or opener. Q2 · runs spend the member’s own tokens, the cost shown in Settings, not on the rail. Q3 · a reviewer gets “Draft my verdict note” after the NDA, for their own section, never an observer.</p>'
+        + '<h2>Handoffs</h2><p>Summary → the blocking item or flag on its tab, row open · request draft → DDL6b prefilled → back to Requests with the new row · memo draft → Save memo on Sign-off → Record decision · founder’s answer → their list with the request marked Answered.</p>'
+        + '<h2>Frontend only</h2><p>The rail on <code>/due-diligence/*</code> for case members once the runs exist; the summary card, draft cards, memo side-by-side, character counts, the founder’s Help me answer panel (sequential <code>respond</code> calls, one per kept file, then the note); phone sheets and sticky actions; dark tokens.</p>'
+        + '<h2>Preserved</h2><p>The Due Diligence Desk frame: case header, nine tabs, DDL3 Overview, DDL6 and DDL6b requests, DDL10 memo, DDL12b reviewer, DDL15 founder page. Existing boards are not redrawn.</p>'
+        + '<h2>Open questions</h2><p>The brief names a “Diligence sidebar row”; on main the investor sidebar has none (Research › Diligence is a research zone), so the boards reach cases from Deals. Whether a summary kept as a note is visible to other case members is not decided.</p>'
+        + '<h2>Accessibility</h2><p>Every state and severity pairs a word with a glyph; Not recorded, None and Unavailable each have their own shape. Every Eadwyn line names its source as text. Draft cards are articles with labelled actions; sheets trap and return focus; phone targets are 44px; tables have real headers.</p>')
+    };
+
+    let html;
+    if (B === 'EDC20') html = page(overview(), { h: 1180, rail: ovRail() });
+    else if (B === 'EDC21') html = page(requestsPage(), { h: 1180, rail: reqRail() });
+    else if (B === 'EDC21B') html = sheet6b();
+    else if (B === 'EDC22') html = page(signoffPage(), { h: 1720, rail: memoRail(false) });
+    else if (B === 'EDC22B') html = memoRO();
+    else if (B === 'EDC23') html = page(reviewerPage(false), { h: 1080, av: 'BS', rail: revRail(false) });
+    else if (B === 'EDC23B') html = page(reviewerPage(true), { h: 1000, av: 'OB', rail: revRail(true) });
+    else if (B === 'EDC24') html = page(founderPage(), { h: 1080, founder: true, av: 'FN', rail: fRail() });
+    else if (B === 'EDC25') html = page(emptyPage(), { h: 900, rail: emptyRail() });
+    else if (B === 'EDC25B') html = founderEmpty();
+    else if (B === 'EDC26') html = states();
+    else if (B === 'EDC26B') html = refusals();
+    else if (B === 'EDC28') html = page(overview(), { h: 1180, rail: ovRail() });
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(overview(), { h: 1180, rail: ovRail() });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

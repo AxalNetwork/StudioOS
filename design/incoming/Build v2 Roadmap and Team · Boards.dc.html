@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 Roadmap and Team · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · UX V2 addendum · #6034 · continues Build v2 (#4846)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Product roadmap and Founding team — a real layout for BD9 and BD10</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Build v2 canvas: same frame, module header, record sheet and states; new boards start at BD25 (BD24 is the last in Build v2). Product roadmap (/build/product-roadmap) decides what ships now, shows what waits on what, and which items move a feedback theme or a KPI; Founding team (/build/founding-team) agrees the split and vesting, gets the co-founder agreement signed, files each 83(b) and shows the roles being hired in Grow. Both routes exist; nothing new is routed. States follow Platform States (D5129): a failed read says Unavailable, Modelled is the Provisional shape, and Late, Blocked, Unlinked and Awaiting each carry a word and a glyph. One primary action per screen. Eadwyn is the shared rail (#5130). Violet dashed ◇ tags mark what needs backend work; amber ⚑ tags mark the owner’s four questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · venture “Northline”, [Founder A] to [Founder D], every item, figure and date are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="13">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build v2 Roadmap and Team Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BD25', 'Product roadmap · Board', 'The module header with its next action (Move the next planned item into Now) and one primary, Add item. A strip of figures, each saying what it counts and for when: Now 3 · Next 4 · Later 5 · Done 6 (items, all time) · Shipped this month 2 (Nov) · Late 2 · Unlinked 3. Board / Timeline, Column · Theme · KPI filters and a link to /build/roadmap for Dependencies and Scenarios. Cards show owner or No owner, date or No date, theme and KPI chips or Unlinked, the derived state (In flight, Provisional, Blocked · waits on, Done) and Blocks n. Items shipped per month below; From GitHub and From Vercel at the side, each with its own states. B · Eadwyn “Argue the ordering”: one pair, the reason from the record, Keep, Edit wording or Discard; it writes an argument, never an order. C · nothing argues for a change.', [F('BUR25', false, 1300), F('BUR25B', 'B · Eadwyn · Argue the ordering', 1080), C('BUR25C', 'C · Nothing to argue', 380, 300)]],
+      ['BD26', 'Product roadmap · Timeline', 'The same items placed by target date, one lane per column, months Sep 2026 to Mar 2027 and a today line. Red connectors run from the item that blocks to the item that waits. A late item carries an amber hatched span to the today line and the word Late with its date. Five undated items sit in a No date recorded tray, each with Add a date.', [F('BUR26', false, 1180)]],
+      ['BD27', 'Product roadmap · One item', 'The item sheet over the board: fields, Dependencies with Add a dependency, Feedback it answers, GitHub, Activity, and Delete in the foot. Its corner marks what is built today and what is frontend or Worker work. B · the delete confirm names the item and its links.', [F('BUR27', 'A · Item sheet', 1300), F('BUR27B', 'B · Delete, confirmed', 1100)]],
+      ['BD28', 'Product roadmap · Zero, few, many', 'A · Zero: one sentence and Add item; the GitHub part says what to connect. B · Three items, one Unlinked and one Late; filters appear only from 10 items. C · Sixty items: each column shows its first eight with Show N more, paging and the filters. Late and Unlinked show ◇ while the list is paged.', [F('BUR28A', 'A · Zero items', 760), F('BUR28B', 'B · Three items', 780), F('BUR28C', 'C · Sixty items, paged', 1260)]],
+      ['BD29', 'Product roadmap · States', 'Loading, Not recorded on a card, Unavailable for the whole read (the strip says Unavailable, not 0) and for one part only, Refused, an admin viewing, the plan limit on Add item, and saving and a failed move that keeps the card and the edit. B · the Refused page a partner or investor reaches.', [C('BUR29', 'A · States', 1400, 760), F('BUR29B', 'B · Refused', 620)]],
+      ['BD30', 'Product roadmap · Phone 390', 'A · Header and next action, the figures as chips, a Now / Next / Later / Done control, full-width cards with Move to…. B · the Move to… sheet, never drag. C · Timeline as a dated list by month; GitHub and Vercel folded. D · the item at full height. Targets 44px, primaries 48px.', [P('BUR30A', 'A · Board'), P('BUR30B', 'B · Move to…'), P('BUR30C', 'C · Timeline'), P('BUR30D', 'D · Item')]],
+      ['BD31', 'Founding team', 'Header with next action Record founder vesting and its one primary. The split as one bar: three founders, the option pool (Modelled, dotted) and Unallocated 12% hatched, with a text legend. The founders table, one vesting timeline with cliffs and a today line, the agreement card (◇ signatures and Send for signature drawn as not built), 83(b) per founder, the solo or co-founder decision, the contributions log, Roles in Grow and From code as supporting evidence. B · Eadwyn ◇: proposals from the record only. C · an admin in founder preview: the BD22 banner and no logins or commit counts.', [F('BUR31', 'A · Founder', 1420), C('BUR31B', 'B · Eadwyn, not built', 380, 520), F('BUR31C', 'C · Admin preview', 1480)]],
+      ['BD32', 'Founding team · One founder', 'Edit founder over the page: name, email, role; equity with the unallocated share beside it and the Worker’s own refusal; vesting presets and start date with the cliff and fully vested dates; agreement and 83(b) rows; contributions with Log; cap table shares and Edit split. Remove founder ◇ in the foot, with what it would do to the split.', [F('BUR32', false, 1300)]],
+      ['BD33', 'Founding team · Zero, solo, many', 'A · No founders: one sentence and Add founder. B · Solo: decision Solo, and the agreement card says a solo founder has none (Not applicable). C · Four founders and a pool with one equity Not recorded: the bar is not drawn.', [F('BUR33A', 'A · No founders', 640), F('BUR33B', 'B · Solo', 640), F('BUR33C', 'C · Four founders, one not recorded', 760)]],
+      ['BD34', 'Founding team · States', 'Loading, Not recorded, Too little (a sum of zero), Unavailable for the cap table (the decision and contributions still show) and for From code alone, Refused, an admin with the plan gate, saving and a failed save that keeps the form.', [C('BUR34', false, 1400, 640)]],
+      ['BD35', 'Founding team · Phone 390', 'A · Header, primary, the split bar at full width with its legend, and a card per founder (role, equity, vesting bar, agreement, 83(b)). B · Decision, hiring, From code, agreement and contributions as cards. C · Record vesting in a sheet.', [P('BUR35A', 'A · Founders'), P('BUR35B', 'B · More cards'), P('BUR35C', 'C · Record vesting')]],
+      ['BD36', 'Dark', 'BD25 and BD31 on the dark tokens; every state keeps its word and shape.', [F('BUR36A', 'A · Product roadmap', 1300), F('BUR36B', 'B · Founding team', 1420)]],
+      ['BD37', 'Findings and handoff', 'Source findings on main (no live session was run for this canvas), each board split into frontend only, a Worker field on a store that exists, and a new Worker route or store (◇); where /build/roadmap goes; the handoffs; the four owner questions; accessibility.', [W('BUR37')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
