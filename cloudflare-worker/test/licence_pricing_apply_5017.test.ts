@@ -11,6 +11,8 @@
  *   · a contractual change marks the agreement as not matching;
  *   · a multi-country basis is explicit, its weights total 10000 and are frozen;
  *   · the branch push outcome is reported apart from HQ's commit.
+ *   · D5953: the accepted minimum royalty lands in the schedule's minimum guarantee in the same
+ *     guarded batch; null leaves it untouched; changing it alone is contractual.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/licence_pricing_apply_5017.test.ts
@@ -312,7 +314,7 @@ test('the pure rules: no invisible average, unknown stays unknown, review kinds'
   assert.equal(classifyReview({ available: true, recommended: v(6) } as any, { annual_fee_cents: 5, revenue_share_bps: 600 }), 'increase');
   assert.equal(classifyReview({ available: true, recommended: v(4) } as any, { annual_fee_cents: 5, revenue_share_bps: 600 }), 'decrease');
   const snap = { available: true, basis: 'primary_country', recommended: v(5_000_000) } as any;
-  const same = planApply(snap, { annual_fee_cents: 5_000_000, revenue_share_bps: 600 }, {}, null);
+  const same = planApply(snap, { annual_fee_cents: 5_000_000, revenue_share_bps: 600 }, {}, null, { revision: 1, minimum_guarantee_cents: 5_000_000 });
   assert.ok(same.ok && same.plan.decision === 'accepted' && !same.plan.contractual_change);
   const unavailable = planApply({ ...snap, available: false, recommended: v(null) }, { annual_fee_cents: 1, revenue_share_bps: 1 }, {}, 'x');
   assert.ok(!unavailable.ok && unavailable.code === 'accepted_value_required', 'no recommendation is never applied as zero');
@@ -356,4 +358,169 @@ test('a pricing policy change racing the apply must make the snapshot stale at c
   const response=await call(SUPER,'POST',`${P}/apply`,applyBody(snapshot.body.snapshot.uid,before.terms_revision));
   assert.equal(response.status,409,'a snapshot at policy revision zero cannot be applied after revision one lands');
   assert.deepEqual(licence(),before);
+});
+
+// ── D5953 (#5953): the accepted minimum royalty is written into the schedule's minimum guarantee ─────────────────
+
+const scheduleRow = (one: (sql: string, ...a: unknown[]) => any) => one('SELECT revision, minimum_guarantee_cents, cure_days, updated_by_user_id FROM licence_terms WHERE licence_uid = ?', LIC);
+const seedSchedule = (db: DatabaseSync, cents: number | null, revision = 2) =>
+  db.prepare('INSERT INTO licence_terms (licence_uid, minimum_guarantee_cents, cure_days, revision) VALUES (?, ?, 30, ?)').run(LIC, cents, revision);
+
+test('D5953: apply writes the accepted minimum royalty into the minimum guarantee, in the same batch as the terms', async () => {
+  const { call, licence, all, one, db, env } = fixture();
+  seedSchedule(db, 123_400);
+  const invoicesBefore = all('SELECT * FROM licence_fee_invoices');
+  const snap = (await call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  const rec = snap.recommended;
+  assert.ok(Number.isSafeInteger(rec.minimum_royalty_cents) && rec.minimum_royalty_cents > 0, 'the fixture recommends a minimum royalty');
+  const read = await call(SUPER, 'GET', P);
+  assert.equal(read.body.terms.minimum_guarantee_cents, 123_400);
+  assert.equal(read.body.terms.schedule_revision, 2);
+  assert.equal(read.body.drift.fields.minimum_royalty_cents.difference, rec.minimum_royalty_cents - 123_400);
+  const syncBefore = one('SELECT COALESCE(MAX(hq_revision), 0) AS n FROM licence_sync_state WHERE licence_id = 1').n;
+  const rev = licence().terms_revision;
+  const res = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, rev));
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(licence().annual_fee_cents, rec.annual_fee_cents);
+  const s = scheduleRow(one);
+  assert.equal(s.minimum_guarantee_cents, rec.minimum_royalty_cents, 'the minimum guarantee is the accepted minimum royalty');
+  assert.equal(s.revision, 3, 'the schedule moves by exactly one revision, as PUT /terms does');
+  assert.equal(s.cure_days, 30, 'no other term of the schedule is touched');
+  assert.equal(s.updated_by_user_id, SUPER);
+  assert.deepEqual(res.body.changed.minimum_guarantee_cents, { before: 123_400, after: rec.minimum_royalty_cents });
+  assert.equal(res.body.terms.minimum_guarantee_cents, rec.minimum_royalty_cents);
+  const d = one('SELECT * FROM licence_pricing_decisions');
+  assert.equal(d.recommended_minimum_royalty_cents, rec.minimum_royalty_cents, 'the decision keeps the recommended figure');
+  assert.equal(d.accepted_minimum_royalty_cents, rec.minimum_royalty_cents, 'and the accepted one');
+  assert.equal(d.contractual_change, 1);
+  assert.deepEqual(all('SELECT * FROM licence_fee_invoices'), invoicesBefore, 'an issued invoice is frozen');
+  // The branch copy: one more push revision, and the copy it assembles carries the new minimum guarantee.
+  assert.equal(one('SELECT COALESCE(MAX(hq_revision), 0) AS n FROM licence_sync_state WHERE licence_id = 1').n, syncBefore + 1);
+  const { assembleLicenceRecord } = await import('../src/services/licencePush.ts');
+  const row = one('SELECT * FROM territory_licences WHERE id = 1');
+  const copy = await assembleLicenceRecord(env, row, '2026-11-14T00:00:00.000Z', 1);
+  assert.equal(JSON.parse(String(copy.terms_json)).minimum_guarantee_cents, rec.minimum_royalty_cents);
+  // A stale editor: neither the terms nor the schedule move, and no decision is recorded.
+  const before = licence();
+  const stale = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, rev, { accepted: { minimum_royalty_cents: 1 }, override_reason: 'Stale editor typed this' }));
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code ?? stale.body.error, 'terms_conflict');
+  assert.deepEqual(licence(), before);
+  assert.deepEqual(scheduleRow(one), s);
+  assert.equal(all('SELECT * FROM licence_pricing_decisions').length, 1);
+});
+
+test('D5953: a licence with no schedule row gets one, at revision 1, holding only the minimum guarantee', async () => {
+  const { call, licence, one, all } = fixture();
+  assert.equal(all('SELECT * FROM licence_terms').length, 0);
+  const snap = (await call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  const read = await call(SUPER, 'GET', P);
+  assert.equal(read.body.terms.minimum_guarantee_cents, null);
+  assert.equal(read.body.terms.schedule_revision, 0);
+  const res = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, licence().terms_revision));
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const s = scheduleRow(one);
+  assert.equal(s.revision, 1);
+  assert.equal(s.minimum_guarantee_cents, snap.recommended.minimum_royalty_cents);
+  assert.equal(s.cure_days, null, 'every other term stays not recorded');
+  assert.deepEqual(res.body.changed.minimum_guarantee_cents, { before: null, after: snap.recommended.minimum_royalty_cents });
+});
+
+test('D5953: a minimum royalty of null is not recorded, and leaves the schedule untouched, never 0', async () => {
+  const { call, licence, one, all, db } = fixture();
+  seedSchedule(db, 123_400);
+  const snap = (await call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  const res = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, licence().terms_revision, {
+    accepted: { minimum_royalty_cents: null }, override_reason: 'No minimum royalty agreed for this market',
+  }));
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.deepEqual(scheduleRow(one), { revision: 2, minimum_guarantee_cents: 123_400, cure_days: 30, updated_by_user_id: null });
+  assert.equal('minimum_guarantee_cents' in res.body.changed, false);
+  const d = one('SELECT * FROM licence_pricing_decisions');
+  assert.equal(d.accepted_minimum_royalty_cents, null);
+  assert.equal(d.recommended_minimum_royalty_cents, snap.recommended.minimum_royalty_cents);
+  // And with no schedule row at all, no row is created for a figure that is not recorded.
+  const f2 = fixture();
+  const snap2 = (await f2.call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  const r2 = await f2.call(SUPER, 'POST', `${P}/apply`, applyBody(snap2.uid, f2.licence().terms_revision, {
+    accepted: { minimum_royalty_cents: null }, override_reason: 'No minimum royalty agreed for this market',
+  }));
+  assert.equal(r2.status, 200);
+  assert.equal(f2.all('SELECT * FROM licence_terms').length, 0);
+  assert.equal(all('SELECT * FROM licence_terms').length, 1);
+});
+
+test('D5953: a minimum guarantee change alone is contractual: it needs the acknowledgement and marks the agreement', async () => {
+  const { call, licence, one, db } = fixture();
+  const snap = (await call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  // The core terms already hold the recommendation, and so does the schedule: nothing differs yet.
+  db.prepare('UPDATE territory_licences SET annual_fee_cents = ?, revenue_share_bps = ? WHERE id = 1').run(snap.recommended.annual_fee_cents, snap.recommended.royalty_bps);
+  seedSchedule(db, snap.recommended.minimum_royalty_cents);
+  db.prepare(`INSERT INTO licence_contracts (uid, licence_uid, template_slug, template_version, template_title, body_md, body_sha256, unfilled_fields, status, created_by_user_id, created_at, updated_at)
+    VALUES ('ct_1', ?, 'slug', 1, 'Licence agreement', 'Body', 'abc', '[]', 'signed', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`).run(LIC);
+  const same = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, licence().terms_revision));
+  assert.equal(same.status, 200, 'the same three figures change nothing contractual: ' + JSON.stringify(same.body));
+  assert.equal(same.body.agreement.state, 'matches');
+  const changed = snap.recommended.minimum_royalty_cents + 250_000;
+  const body = applyBody(snap.uid, licence().terms_revision, { accepted: { minimum_royalty_cents: changed }, override_reason: 'Higher guarantee agreed' });
+  const noAck = await call(SUPER, 'POST', `${P}/apply`, body);
+  assert.equal(noAck.status, 409);
+  assert.equal(noAck.body.code ?? noAck.body.error, 'agreement_ack_required');
+  assert.deepEqual(Object.keys(noAck.body.changed), ['minimum_guarantee_cents']);
+  assert.equal(scheduleRow(one).minimum_guarantee_cents, snap.recommended.minimum_royalty_cents, 'a refused apply writes nothing');
+  const ok = await call(SUPER, 'POST', `${P}/apply`, { ...body, acknowledge_agreement_mismatch: true });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.agreement.state, 'mismatch');
+  assert.equal(scheduleRow(one).minimum_guarantee_cents, changed);
+  const read = await call(SUPER, 'GET', P);
+  assert.equal(read.body.agreement.state, 'mismatch');
+  assert.equal(read.body.latest_decision.contractual_change, true);
+});
+
+test('D5953: a schedule edit racing the apply makes it lose; nothing is written', async () => {
+  const { call, env, licence, one, all, db } = fixture();
+  seedSchedule(db, 123_400);
+  const snap = (await call(SUPER, 'POST', `${P}/snapshot`, {})).body.snapshot;
+  const before = licence();
+  const original = env.DB.batch.bind(env.DB);
+  let raced = false;
+  env.DB.batch = async (statements: any[]) => {
+    if (!raced) { raced = true; db.prepare('UPDATE licence_terms SET minimum_guarantee_cents = 555, revision = revision + 1 WHERE licence_uid = ?').run(LIC); }
+    return original(statements);
+  };
+  const res = await call(SUPER, 'POST', `${P}/apply`, applyBody(snap.uid, before.terms_revision));
+  assert.equal(res.status, 409, JSON.stringify(res.body));
+  assert.equal(res.body.code ?? res.body.error, 'terms_conflict');
+  assert.equal(res.body.current.minimum_guarantee_cents, 555);
+  assert.deepEqual(licence(), before);
+  assert.equal(scheduleRow(one).minimum_guarantee_cents, 555);
+  assert.equal(all('SELECT * FROM licence_pricing_decisions').length, 0);
+});
+
+test('D5953: a refresh, a snapshot and an annual review write nothing to the schedule', async () => {
+  const { call, one, all, db } = fixture();
+  assert.equal((await call(SUPER, 'POST', `${P}/snapshot`, {})).status, 201);
+  assert.equal(all('SELECT * FROM licence_terms').length, 0, 'no schedule row is created by a recommendation');
+  seedSchedule(db, 123_400);
+  const s = scheduleRow(one);
+  assert.equal((await call(SUPER, 'POST', `${P}/snapshot`, {})).status, 201);
+  const open = await call(SUPER, 'POST', `${P}/reviews`, {});
+  assert.equal(open.status, 201);
+  const kept = await call(SUPER, 'POST', `${P}/reviews/${open.body.review.uid}/resolve`, { action: 'keep', reason: 'Keep the current terms', expected_revision: 1 });
+  assert.equal(kept.status, 200);
+  assert.deepEqual(scheduleRow(one), s);
+});
+
+test('D5953: the pure plan: minimum royalty against the schedule; null writes nothing', () => {
+  const rec = { initial_fee_cents: 1, annual_fee_cents: 5_000_000, royalty_bps: 600, minimum_royalty_cents: 2_000_000, regulatory_surcharge_cents: null };
+  const snap = { available: true, basis: 'primary_country', recommended: rec } as any;
+  const core = { annual_fee_cents: 5_000_000, revenue_share_bps: 600 };
+  const none = planApply(snap, core, {}, null);
+  assert.ok(none.ok && none.plan.contractual_change && none.plan.schedule_write?.minimum_guarantee_cents === 2_000_000, 'no schedule yet: writing one is a change');
+  const same = planApply(snap, core, {}, null, { revision: 4, minimum_guarantee_cents: 2_000_000 });
+  assert.ok(same.ok && !same.plan.contractual_change && same.plan.schedule_write?.minimum_guarantee_cents === 2_000_000);
+  const cleared = planApply(snap, core, { minimum_royalty_cents: null }, 'not agreed', { revision: 4, minimum_guarantee_cents: 9 });
+  assert.ok(cleared.ok && cleared.plan.schedule_write === null && !cleared.plan.contractual_change, 'null is not recorded: nothing written, nothing changed');
+  const noMin = planApply({ ...snap, recommended: { ...rec, minimum_royalty_cents: null } }, core, {}, null, null);
+  assert.ok(noMin.ok, 'a missing minimum royalty never blocks an apply the way a missing fee does');
 });

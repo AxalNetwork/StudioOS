@@ -9,11 +9,16 @@
  * no decision (the decision insert is guarded by the same revision, in the same
  * batch, so the two land together or not at all).
  *
- * WHAT AN APPLY WRITES. The licence's core terms hold two of the five figures:
- * the annual fee (`annual_fee_cents`) and the royalty (`revenue_share_bps`).
- * The initial fee, the minimum royalty and the regulatory surcharge have no
- * core-term column; they are recorded as accepted on the decision and shown,
- * never written anywhere they would be invoiced. Issued invoices
+ * WHAT AN APPLY WRITES. Three of the five figures land on the licence: the
+ * annual fee (`territory_licences.annual_fee_cents`), the royalty
+ * (`territory_licences.revenue_share_bps`) and, since D5953, the minimum
+ * royalty, into the schedule's minimum guarantee (`licence_terms.
+ * minimum_guarantee_cents`, §4.4: whole cents a year, in the licence's
+ * currency, the same unit the engine computes). All three move in the one
+ * revision-guarded batch. An accepted minimum royalty of null is "not
+ * recorded" and leaves the schedule as it is, never 0. The initial fee and
+ * the regulatory surcharge have no term; they are recorded as accepted on the
+ * decision and shown, never written anywhere they would be invoiced. Issued invoices
  * (`licence_fee_invoices`) and executed agreements (`licence_contracts`) are
  * never touched: future invoices read the annual fee under their own rules,
  * and a changed contractual figure marks the agreement as no longer matching,
@@ -38,13 +43,29 @@ export type Basis = (typeof BASES)[number];
 export const VALUE_KEYS = ['initial_fee_cents', 'annual_fee_cents', 'royalty_bps', 'minimum_royalty_cents', 'regulatory_surcharge_cents'] as const;
 export type ValueKey = (typeof VALUE_KEYS)[number];
 export type Values = Record<ValueKey, number | null>;
-/** The figures an apply writes into the licence's core terms, and the column each lands in. */
-export const CONTRACTUAL: ReadonlyArray<{ key: ValueKey; column: 'annual_fee_cents' | 'revenue_share_bps' }> = [
-  { key: 'annual_fee_cents', column: 'annual_fee_cents' },
-  { key: 'royalty_bps', column: 'revenue_share_bps' },
+export type TermColumn = 'annual_fee_cents' | 'revenue_share_bps' | 'minimum_guarantee_cents';
+/**
+ * The figures an apply writes onto the licence, and where each lands: `core` is
+ * `territory_licences` (required: no recommendation is never applied as zero),
+ * `schedule` is `licence_terms` (D5953; null is "not recorded" and writes nothing).
+ */
+export const CONTRACTUAL: ReadonlyArray<{ key: ValueKey; column: TermColumn; store: 'core' | 'schedule' }> = [
+  { key: 'annual_fee_cents', column: 'annual_fee_cents', store: 'core' },
+  { key: 'royalty_bps', column: 'revenue_share_bps', store: 'core' },
+  { key: 'minimum_royalty_cents', column: 'minimum_guarantee_cents', store: 'schedule' },
 ];
+
+/** The licence's schedule row as an apply sees it: absent (null), or its revision and minimum guarantee. */
+export type ScheduleState = { revision: number; minimum_guarantee_cents: number | null } | null;
+
+/** The schedule row's revision and minimum guarantee, or null when HQ has recorded no schedule. Throws when it cannot be read. */
+export async function scheduleOf(env: Env, licenceUid: string): Promise<ScheduleState> {
+  const r = await env.DB.prepare('SELECT revision, minimum_guarantee_cents FROM licence_terms WHERE licence_uid = ?').bind(licenceUid).first<Record<string, any>>();
+  return r ? { revision: Number(r.revision ?? 0), minimum_guarantee_cents: nOrNull(r.minimum_guarantee_cents) } : null;
+}
 export const REVIEW_ACTIONS = ['keep', 'postpone'] as const;
 const MAX_CENTS = 1_000_000_000_000;
+const nOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
 export type Policy = { licence_uid: string; basis: Basis; primary_country: string | null; weights: Record<string, number>; reason: string; revision: number; updated_at: string; updated_by: string };
 export type Effective = { basis: Basis; primary_country: string | null; weights: Record<string, number>; policy_revision: number; implied: boolean };
@@ -180,8 +201,6 @@ export type LicenceSnapshot = {
   created_at: string; created_by: string;
 };
 
-const nOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
-
 function snapshotOf(r: Record<string, any>): LicenceSnapshot {
   const j = (s: unknown, d: unknown) => { try { return JSON.parse(String(s)); } catch { return d; } };
   return {
@@ -316,33 +335,51 @@ export function validateApplyBody(body: Record<string, unknown> | null):
   };
 }
 
-export type ApplyPlan = { decision: 'accepted' | 'overridden'; accepted: Values; differs: ValueKey[]; contractual_change: boolean; changed_terms: Record<string, { before: number | null; after: number | null }> };
+export type ApplyPlan = {
+  decision: 'accepted' | 'overridden'; accepted: Values; differs: ValueKey[]; contractual_change: boolean;
+  changed_terms: Record<string, { before: number | null; after: number | null }>;
+  /** D5953: the minimum guarantee the schedule takes, or null when the accepted minimum royalty is not recorded (nothing is written). */
+  schedule_write: { minimum_guarantee_cents: number } | null;
+};
 
 /**
  * What an apply would do, decided without writing. Pure. An override is any
  * accepted figure that differs from the recommendation, or any apply on an
  * `hq_override` basis or an unavailable recommendation; an override needs its
  * reason. A contractual change is an annual fee or royalty that differs from
- * the licence's current core terms.
+ * the licence's current core terms, or (D5953) a recorded minimum royalty that
+ * differs from the schedule's minimum guarantee.
  */
-export function planApply(snap: LicenceSnapshot, licence: Pick<LicenceRow, 'annual_fee_cents' | 'revenue_share_bps'>, accepted: Partial<Values>, overrideReason: string | null):
+export function planApply(snap: LicenceSnapshot, licence: Pick<LicenceRow, 'annual_fee_cents' | 'revenue_share_bps'>, accepted: Partial<Values>, overrideReason: string | null, schedule: ScheduleState = null):
   { ok: true; plan: ApplyPlan } | { ok: false; code: string; sentence: string } {
   const full = { ...snap.recommended } as Values;
   for (const k of VALUE_KEYS) if (k in accepted) full[k] = accepted[k] as number | null;
-  for (const { key } of CONTRACTUAL) {
-    if (full[key] === null) return { ok: false, code: 'accepted_value_required', sentence: `Give the accepted ${key === 'royalty_bps' ? 'royalty' : 'annual fee'}: there is no recommendation to take it from.` };
+  for (const { key, store } of CONTRACTUAL) {
+    if (store === 'core' && full[key] === null) return { ok: false, code: 'accepted_value_required', sentence: `Give the accepted ${key === 'royalty_bps' ? 'royalty' : 'annual fee'}: there is no recommendation to take it from.` };
   }
   const differs = VALUE_KEYS.filter((k) => full[k] !== snap.recommended[k]);
   const isOverride = differs.length > 0 || !snap.available || snap.basis === 'hq_override';
   if (isOverride && !overrideReason) {
     return { ok: false, code: 'override_reason_required', sentence: !snap.available ? 'There is no recommendation to accept, so these figures are an override: say why.' : snap.basis === 'hq_override' ? 'This licence is priced by HQ-set figures, so every apply is an override: say why.' : `These figures differ from the recommendation (${differs.join(', ')}): say why you are overriding it.` };
   }
-  const current: Record<string, number | null> = { annual_fee_cents: licence.annual_fee_cents ?? null, royalty_bps: licence.revenue_share_bps ?? null };
+  const current: Record<string, number | null> = {
+    annual_fee_cents: licence.annual_fee_cents ?? null, royalty_bps: licence.revenue_share_bps ?? null,
+    minimum_royalty_cents: schedule?.minimum_guarantee_cents ?? null,
+  };
   const changed_terms: ApplyPlan['changed_terms'] = {};
-  for (const { key, column } of CONTRACTUAL) {
+  for (const { key, column, store } of CONTRACTUAL) {
+    // A schedule figure that is not recorded is not written, so it changes nothing.
+    if (store === 'schedule' && full[key] === null) continue;
     if (full[key] !== current[key]) changed_terms[column] = { before: current[key], after: full[key] };
   }
-  return { ok: true, plan: { decision: isOverride ? 'overridden' : 'accepted', accepted: full, differs, contractual_change: Object.keys(changed_terms).length > 0, changed_terms } };
+  const minimum = full.minimum_royalty_cents;
+  return {
+    ok: true,
+    plan: {
+      decision: isOverride ? 'overridden' : 'accepted', accepted: full, differs, contractual_change: Object.keys(changed_terms).length > 0, changed_terms,
+      schedule_write: minimum === null ? null : { minimum_guarantee_cents: minimum },
+    },
+  };
 }
 
 /** The licence's current agreement, as an apply sees it. Throws when the store cannot be read. */
@@ -354,16 +391,19 @@ export async function currentContract(env: Env, licenceUid: string): Promise<{ u
 }
 
 /**
- * One atomic apply: the deciding INSERT checks terms, policy, territory and an
- * optional open review. The immediate decision guard rolls back a loss before
- * dependent terms/review writes, and clearGuard empties its transient row.
+ * One atomic apply: the deciding INSERT checks terms, policy, territory, an
+ * optional open review and, when the minimum guarantee is written (D5953), the
+ * schedule row exactly as the route read it (absent, or at that revision). The
+ * immediate decision guard rolls back a loss before dependent terms/schedule/review
+ * writes, and clearGuard empties its transient row.
  */
 export function applyStatements(env: Env, a: {
-  licence: LicenceRow; snap: LicenceSnapshot; input: ApplyInput; plan: ApplyPlan; actor: string; decisionUid: string; now: string;
-  contractUid: string | null; reviewOn: string;
+  licence: LicenceRow; snap: LicenceSnapshot; input: ApplyInput; plan: ApplyPlan; actor: string; actorUserId: number; decisionUid: string; now: string;
+  contractUid: string | null; reviewOn: string; schedule: ScheduleState;
 }): D1PreparedStatement[] {
   const { licence, snap, input, plan } = a;
   const rev = input.expected_terms_revision;
+  const writesSchedule = plan.schedule_write !== null;
   const stmts: D1PreparedStatement[] = [
     env.DB.prepare(
       `INSERT INTO licence_pricing_decisions (uid, licence_uid, snapshot_uid, currency,
@@ -378,7 +418,8 @@ export function applyStatements(env: Env, a: {
           AND COALESCE((SELECT basis FROM licence_pricing_policies WHERE licence_uid = ?), 'primary_country') = ?
           AND COALESCE((SELECT group_concat(country_code, ',') FROM
             (SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code)), '') = ?
-          AND (? IS NULL OR EXISTS (SELECT 1 FROM licence_pricing_reviews WHERE uid = ? AND licence_uid = ? AND state = 'open'))`,
+          AND (? IS NULL OR EXISTS (SELECT 1 FROM licence_pricing_reviews WHERE uid = ? AND licence_uid = ? AND state = 'open'))
+          AND (? = 0 OR (SELECT revision FROM licence_terms WHERE licence_uid = ?) IS ?)`,
     ).bind(
       a.decisionUid, licence.uid, snap.lead_snapshot_uid, snap.currency,
       snap.recommended.initial_fee_cents, snap.recommended.annual_fee_cents, snap.recommended.royalty_bps, snap.recommended.minimum_royalty_cents, snap.recommended.regulatory_surcharge_cents,
@@ -388,6 +429,7 @@ export function applyStatements(env: Env, a: {
       a.contractUid, input.review_uid,
       licence.id, rev, licence.uid, snap.policy_revision, licence.uid, snap.basis,
       licence.id, snap.territory.join(','), input.review_uid, input.review_uid, licence.uid,
+      writesSchedule ? 1 : 0, licence.uid, a.schedule ? a.schedule.revision : null,
     ),
     decisionGuard(env),
     // D4694's write: one literal UPDATE, guarded by the revision the editor read. Currency is the recommendation's
@@ -398,6 +440,17 @@ export function applyStatements(env: Env, a: {
         WHERE id = ? AND terms_revision = ?`,
     ).bind(plan.accepted.annual_fee_cents, plan.accepted.royalty_bps, snap.currency, a.now, licence.id, rev),
   ];
+  if (plan.schedule_write) {
+    // D5953 — the schedule write `PUT /:uid/terms` makes, for one key: a licence with no schedule row gets one at
+    // revision 1 (every other term not recorded), a row that exists moves by exactly one revision. The decision
+    // insert above already named the row's state, so this lands only for the winner.
+    stmts.push(env.DB.prepare(
+      `INSERT INTO licence_terms (licence_uid, minimum_guarantee_cents, sections_json, updated_by_user_id, updated_at, revision)
+       VALUES (?, ?, '{}', ?, ?, 1)
+       ON CONFLICT(licence_uid) DO UPDATE SET minimum_guarantee_cents = excluded.minimum_guarantee_cents,
+         updated_by_user_id = excluded.updated_by_user_id, updated_at = excluded.updated_at, revision = licence_terms.revision + 1`,
+    ).bind(licence.uid, plan.schedule_write.minimum_guarantee_cents, a.actorUserId, a.now));
+  }
   if (input.review_uid) {
     // Runs after the UPDATE above, so its guard names the revision that UPDATE made.
     stmts.push(env.DB.prepare(
@@ -491,11 +544,11 @@ export function nextReviewOn(latestDecisionReviewOn: string | null, reviews: Rev
   return dates.length ? (dates.sort().pop() as string) : null;
 }
 
-/** The difference between a recommendation and the licence's current terms, for the two figures the terms hold. */
-export function driftOf(snap: LicenceSnapshot | null, licence: Pick<LicenceRow, 'annual_fee_cents' | 'revenue_share_bps' | 'currency'>) {
-  const current = { annual_fee_cents: licence.annual_fee_cents ?? null, royalty_bps: licence.revenue_share_bps ?? null };
+/** The difference between a recommendation and the licence's current terms, for the three figures the licence holds (D5953: the minimum royalty against the schedule's minimum guarantee). */
+export function driftOf(snap: LicenceSnapshot | null, licence: Pick<LicenceRow, 'annual_fee_cents' | 'revenue_share_bps' | 'currency'>, schedule: ScheduleState = null) {
+  const current = { annual_fee_cents: licence.annual_fee_cents ?? null, royalty_bps: licence.revenue_share_bps ?? null, minimum_royalty_cents: schedule?.minimum_guarantee_cents ?? null };
   if (!snap || !snap.available) return { available: false, current, fields: null };
-  const fields = Object.fromEntries((['annual_fee_cents', 'royalty_bps'] as const).map((k) => {
+  const fields = Object.fromEntries((['annual_fee_cents', 'royalty_bps', 'minimum_royalty_cents'] as const).map((k) => {
     const rec = snap.recommended[k];
     const cur = current[k];
     return [k, { recommended: rec, current: cur, difference: rec === null || cur === null ? null : rec - cur }];

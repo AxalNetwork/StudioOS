@@ -14,7 +14,8 @@ export const PRICING_FIGURES = Object.freeze([
   { key: 'initial_fee_cents', label: 'Initial fee', kind: 'cents', term: null },
   { key: 'annual_fee_cents', label: 'Annual fee', kind: 'cents', term: 'annual_fee_cents' },
   { key: 'royalty_bps', label: 'Royalty', kind: 'bps', term: 'revenue_share_bps' },
-  { key: 'minimum_royalty_cents', label: 'Minimum royalty', kind: 'cents', term: null },
+  // D5953: the accepted minimum royalty is written into the schedule's minimum guarantee (§4.4).
+  { key: 'minimum_royalty_cents', label: 'Minimum royalty', kind: 'cents', term: 'minimum_guarantee_cents' },
   { key: 'regulatory_surcharge_cents', label: 'Regulatory surcharge', kind: 'cents', term: null },
 ]);
 
@@ -121,13 +122,19 @@ export function buildApply({ view, form, reviewUid = null }) {
   };
 }
 
-/** Whether applying would change a contractual figure (the annual fee or royalty) — the case that needs the agreement acknowledged. */
+/**
+ * Whether applying would change a contractual figure (the annual fee, royalty or, D5953, the minimum guarantee) — the
+ * case that needs the agreement acknowledged. A minimum royalty that is not recorded writes nothing, so changes nothing.
+ */
 export function changesContract(view, form) {
   const snap = view?.recommendation;
   if (!snap) return false;
   const fee = String(form?.accepted?.annual_fee_cents ?? '').trim() ? centsFrom(form.accepted.annual_fee_cents) : snap.recommended?.annual_fee_cents;
   const roy = String(form?.accepted?.royalty_bps ?? '').trim() ? Number(form.accepted.royalty_bps) : snap.recommended?.royalty_bps;
-  return fee !== view.terms?.annual_fee_cents || roy !== view.terms?.revenue_share_bps;
+  const min = String(form?.accepted?.minimum_royalty_cents ?? '').trim()
+    ? centsFrom(form.accepted.minimum_royalty_cents, view.terms?.currency ?? snap.currency) : snap.recommended?.minimum_royalty_cents;
+  const minChanges = min !== null && min !== undefined && view.terms?.minimum_guarantee_cents !== undefined && min !== view.terms.minimum_guarantee_cents;
+  return fee !== view.terms?.annual_fee_cents || roy !== view.terms?.revenue_share_bps || minChanges;
 }
 
 /** A basket form ({ FR: '6000', BE: '4000' }) to whole basis points, with its total. */

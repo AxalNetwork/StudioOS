@@ -60,6 +60,11 @@ test('the apply body names the snapshot and the terms revision; an override need
   assert.equal(ok.body.review_uid, 'rev-00001');
   assert.equal(changesContract(VIEW, { accepted: {} }), true);
   assert.equal(changesContract({ ...VIEW, terms: { ...VIEW.terms, annual_fee_cents: 4_750_000, revenue_share_bps: 600 } }, { accepted: {} }), false);
+  // D5953: the minimum royalty is written into the schedule's minimum guarantee, so a difference there is contractual too.
+  const coreSame = { ...VIEW.terms, annual_fee_cents: 4_750_000, revenue_share_bps: 600 };
+  assert.equal(changesContract({ ...VIEW, terms: { ...coreSame, minimum_guarantee_cents: 1_900_000 } }, { accepted: {} }), false);
+  assert.equal(changesContract({ ...VIEW, terms: { ...coreSame, minimum_guarantee_cents: 1_000_000 } }, { accepted: {} }), true);
+  assert.equal(changesContract({ ...VIEW, terms: { ...coreSame, minimum_guarantee_cents: null } }, { accepted: {} }), true, 'a guarantee where none is recorded is a change');
 });
 
 async function mount(api, view = VIEW) {
