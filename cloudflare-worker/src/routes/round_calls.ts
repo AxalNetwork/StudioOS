@@ -114,7 +114,10 @@ routes.post('/:uid/terms-draft', async c => {
       uid === 'new' ? `project:${access.project.id}` : `round_call:${uid}`);
     const { result, draft } = await wordRoundTerms(c.env, access.project, access.user, body, rail);
     if (!result.ok) return refuseRun(c, result) || c.json({ code: 'ai_unavailable', message: 'Eadwyn could not draft these words. Try again.' }, 503);
-    if (!draft) return c.json({ code: 'nothing_kept', message: 'Eadwyn’s wording could not be kept. Use the wording from your fields or try again.' }, 422);
+    if (!draft) {
+      console.warn('[round-calls:wording] model output could not be kept', { usageLogId: result.usageLogId ?? null });
+      return c.json({ code: 'nothing_kept', message: 'Eadwyn’s wording could not be kept. This draft used your AI allowance. You can use the wording from your fields.' }, 422);
+    }
     return c.json({ draft });
   } catch (error) { return failure(c, error); }
 });
