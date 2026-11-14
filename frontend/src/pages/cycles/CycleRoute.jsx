@@ -904,6 +904,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
+        // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
+        onExport={cycle === 'grow' && projectId && read?.exportable === true
+          ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
