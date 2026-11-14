@@ -5,10 +5,16 @@
  * exception and a timeout all return T2 with `action_required`. Only a
  * completed classification of T0 or T1 returns `success`. Posting the check
  * is #5990; this module makes no write.
+ *
+ * The compare API carries no file mode, so the head commit's recursive tree
+ * supplies it: each surviving path gets its head mode, as the script's
+ * `git diff --raw` destination mode does, and a symlink or submodule is T2
+ * (owner, 2026-11-14). A truncated or malformed tree, or a changed path
+ * missing from it, is T2.
  */
 import { classify, POLICY_VERSION } from './policy.ts';
 import type { ChangedFile, Tier } from './policy.ts';
-import { comparePath } from './github.ts';
+import { comparePath, treePath } from './github.ts';
 import type { GithubApi } from './types.ts';
 
 /** The compare API returns at most 300 files; a list that long cannot prove it is complete. */
@@ -60,6 +66,44 @@ function changedFile(entry: unknown, problems: string[]): ChangedFile | null {
   return { path: filename, status: code, patch, ...(typeof previousPath === 'string' ? { previousPath } : {}) };
 }
 
+const MODE = /^[0-7]{6}$/;
+
+/** Head modes for every path in the head commit; refuses when GitHub truncated the tree. */
+async function headModes(api: GithubApi, head: string): Promise<Map<string, string>> {
+  let response: unknown;
+  try {
+    response = await api('GET', treePath(head));
+  } catch (error) {
+    const status = (error as { status?: unknown } | null)?.status;
+    throw new Refusal([`T2: GitHub tree unavailable${typeof status === 'number' ? ` (HTTP ${status})` : ''}`]);
+  }
+  const { tree, truncated } = (response ?? {}) as { tree?: unknown; truncated?: unknown };
+  if (truncated !== false) throw new Refusal(['T2: head tree is truncated or does not say it is complete']);
+  if (!Array.isArray(tree)) throw new Refusal(['T2: tree response has no entry list']);
+  const modes = new Map<string, string>();
+  for (const entry of tree) {
+    const { path, mode } = (entry ?? {}) as { path?: unknown; mode?: unknown };
+    if (typeof path !== 'string' || typeof mode !== 'string' || !MODE.test(mode)) {
+      throw new Refusal(['T2: malformed tree entry']);
+    }
+    modes.set(path, mode);
+  }
+  return modes;
+}
+
+/** Give each file its head mode; a deletion has none, like the script's 000000. */
+function withModes(files: ChangedFile[], modes: Map<string, string>): ChangedFile[] {
+  const missing: string[] = [];
+  const out = files.map((file) => {
+    if (file.status === 'D') return { ...file, mode: '000000' };
+    const mode = modes.get(file.path);
+    if (!mode) { missing.push(`T2: changed path not in the head tree: ${file.path}`); return file; }
+    return { ...file, mode };
+  });
+  if (missing.length) throw new Refusal(missing.sort());
+  return out;
+}
+
 async function compareFiles(api: GithubApi, base: string, head: string): Promise<ChangedFile[]> {
   let response: unknown;
   try {
@@ -103,7 +147,11 @@ export async function evaluate(input: { base: string; head: string }, options: E
       return result(input, 'T2', ['T2: invalid evaluation timeout'], false);
     }
     if (typeof options?.api !== 'function') return result(input, 'T2', ['T2: no GitHub client'], false);
-    const files = await withTimeout(compareFiles(options.api, base, head), ms);
+    const api = options.api;
+    const files = await withTimeout(
+      Promise.all([compareFiles(api, base, head), headModes(api, head)]).then(([changed, modes]) => withModes(changed, modes)),
+      ms,
+    );
     const { tier, reasons } = classify(files);
     return result(input, tier, reasons, true);
   } catch (error) {

@@ -6,15 +6,24 @@ import { readFileSync } from 'node:fs';
 import { classify as sharedClassify } from '../src/lib/classify.mjs';
 import { classify, POLICY_VERSION, readPolicyVersion } from '../src/policy.ts';
 import { COMPARE_FILE_CAP, evaluate } from '../src/policyCheck.ts';
-import { comparePath, githubClient } from '../src/github.ts';
+import { comparePath, githubClient, treePath } from '../src/github.ts';
 import type { Env, GithubApi } from '../src/types.ts';
 
 const base = 'a'.repeat(40), head = 'b'.repeat(40);
 const hunk = (...lines: string[]) => ['@@ -1 +1 @@', ...lines].join('\n');
 const entry = (filename: string, status = 'modified', extra: Record<string, unknown> = {}) =>
   ({ filename, status, patch: hunk('-old', '+new'), ...extra });
-const compare = (files: unknown[]): GithubApi => async (method, path) => {
+const treeOf = (files: unknown[], modes: Record<string, string> = {}) => ({
+  sha: head, truncated: false,
+  tree: files.flatMap((file) => {
+    const { filename, status } = (file ?? {}) as { filename?: unknown; status?: unknown };
+    return typeof filename === 'string' && status !== 'removed' ? [{ path: filename, mode: modes[filename] ?? '100644', type: 'blob' }] : [];
+  }),
+});
+/** Answers the compare and the head tree, the two reads evaluate makes. */
+const compare = (files: unknown[], tree: unknown = treeOf(files)): GithubApi => async (method, path) => {
   assert.equal(method, 'GET');
+  if (path === `git/trees/${head}?recursive=1`) return tree;
   assert.equal(path, `compare/${base}...${head}`);
   return { status: 'ahead', files };
 };
@@ -98,8 +107,48 @@ test('a list at the 300-file cap, a missing patch and a malformed response are n
   }
 });
 
+test('a symlink or submodule is T2 by its head mode, and an incomplete tree is never success (owner, 2026-11-14)', async () => {
+  const doc = [entry('documentation/guide.md')];
+  assert.equal((await run(compare(doc))).conclusion, 'success');
+  for (const mode of ['120000', '160000']) {
+    const link = [entry('documentation/link.md', 'added', { patch: hunk('+guide.md') })];
+    const result = await run(compare(link, treeOf(link, { 'documentation/link.md': mode })));
+    never(result, mode);
+    assert.match(result.reasons.join('\n'), /Link or submodule present: documentation\/link\.md/);
+  }
+  const renamed = [entry('documentation/new.md', 'renamed', { previous_filename: 'documentation/old.md' })];
+  never(await run(compare(renamed, treeOf(renamed, { 'documentation/new.md': '120000' }))), 'renamed into a symlink');
+  // A deletion takes no head mode, like the script's 000000 destination.
+  assert.equal((await run(compare([entry('documentation/old.md', 'removed')]))).conclusion, 'success');
+  const trees: [unknown, RegExp][] = [
+    [{ ...treeOf(doc), truncated: true }, /truncated/],
+    [{ tree: treeOf(doc).tree }, /truncated/],
+    [{ truncated: false }, /no entry list/],
+    [{ truncated: false, tree: [{ path: 'documentation/guide.md' }] }, /malformed tree entry/],
+    [{ truncated: false, tree: [{ path: 'documentation/guide.md', mode: '644' }] }, /malformed tree entry/],
+    [{ truncated: false, tree: [] }, /not in the head tree: documentation\/guide\.md/],
+    [null, /truncated/],
+  ];
+  for (const [tree, reason] of trees) {
+    const result = await run(compare(doc, tree));
+    never(result, JSON.stringify(tree));
+    assert.match(result.reasons.join('\n'), reason);
+  }
+  const unavailable = await run(async (_method, path) => {
+    if (path.startsWith('git/trees/')) throw Object.assign(new Error('GitHub HTTP 404'), { status: 404 });
+    return { files: doc };
+  });
+  never(unavailable, 'tree 404');
+  assert.match(unavailable.reasons.join('\n'), /GitHub tree unavailable \(HTTP 404\)/);
+  assert.equal(treePath(head), `git/trees/${head}?recursive=1`);
+  assert.throws(() => treePath('main'), /full commit SHA/);
+});
+
 test('API errors, exceptions, timeouts and bad input never return success', async () => {
-  const notFound = await run(async () => { throw Object.assign(new Error('GitHub HTTP 404'), { status: 404 }); });
+  const notFound = await run(async (_method, path) => {
+    if (path.startsWith('git/trees/')) return treeOf([entry('documentation/guide.md')]);
+    throw Object.assign(new Error('GitHub HTTP 404'), { status: 404 });
+  });
   never(notFound, '404');
   assert.match(notFound.reasons.join('\n'), /GitHub compare unavailable \(HTTP 404\)/);
   never(await run(async () => { throw new TypeError('network'); }), 'network');
@@ -133,12 +182,14 @@ test('the installation client allows only the exact three-dot compare path and b
     if (String(url).endsWith('/access_tokens')) return Response.json({ token: 'test-installation-token' });
     urls.push(String(url));
     assert.ok(init?.signal instanceof AbortSignal);
-    return Response.json({ files: [entry('documentation/guide.md')] });
+    const files = [entry('documentation/guide.md')];
+    return Response.json(String(url).includes('/git/trees/') ? treeOf(files) : { files });
   };
   const api = await githubClient(env, fetcher as typeof fetch);
   const result = await evaluate({ base, head }, { api });
   assert.equal(result.conclusion, 'success');
-  assert.deepEqual(urls, [`https://api.github.com/repos/AxalNetwork/StudioOS/compare/${base}...${head}`]);
+  assert.deepEqual(urls.sort(), [`https://api.github.com/repos/AxalNetwork/StudioOS/compare/${base}...${head}`,
+    `https://api.github.com/repos/AxalNetwork/StudioOS/git/trees/${head}?recursive=1`]);
   for (const path of [`compare/${base}..${head}`, `compare/${base}...${head}/../x`, `compare/main...${head}`, '../x']) {
     await assert.rejects(api('GET', path), /invalid path/, path);
   }

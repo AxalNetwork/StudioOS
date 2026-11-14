@@ -9,6 +9,11 @@ export function comparePath(base: string, head: string): string {
   if (!COMPARE.test(path)) throw new Error('compare needs two full commit SHAs');
   return path;
 }
+/** D5620: the head commit's recursive tree, which carries the file modes the compare API omits. */
+export function treePath(sha: string): string {
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('tree needs a full commit SHA');
+  return `git/trees/${sha}?recursive=1`;
+}
 const base64url = (value: Uint8Array | string) => Buffer.from(value).toString('base64url');
 export async function githubClient(env: Env, fetcher: typeof fetch = fetch): Promise<GithubApi> {
   if (!/^[\w.-]+\/[\w.-]+$/.test(env.REPOSITORY) || !/^\d+$/.test(env.GITHUB_APP_ID ?? '') || !/^\d+$/.test(env.GITHUB_INSTALLATION_ID ?? '') || !env.GITHUB_APP_PRIVATE_KEY) throw new Error('App not configured');
