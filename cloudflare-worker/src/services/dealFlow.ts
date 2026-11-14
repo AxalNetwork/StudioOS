@@ -12,10 +12,14 @@
  *     stays open for every other investor;
  *   · grant a deal read: `can_open` follows the shared deal audience;
  *   · move to Closing without a commitment.
+ *
+ * D6147 (#6147): New for you's `thesis` source lists open rounds whose fit to
+ * the investor's own thesis (D1239's scorer, `computeThesisFit`) is High.
  */
 import type { Env, User } from '../types';
 import { PASS_REASON_KEYS } from './dealPassTaxonomy';
 import { dealAudience, dealAudiences } from './dealAccess';
+import { computeThesisFit, readFitGeographies, readThesis, thesisIsSet } from './thesisFit';
 
 export const STAGES = ['sourcing', 'screening', 'diligence', 'commit', 'closing', 'passed'] as const;
 export type Stage = typeof STAGES[number];
@@ -24,8 +28,20 @@ export type Via = typeof VIA[number];
 export const PASS_REASONS = PASS_REASON_KEYS as readonly string[];
 export const NOTE_MAX = 2000;
 export const DISMISS_MAX = 500;
-/** Thesis matches are part 3's (D1239, migration 619). */
-export const THESIS_REASON = 'Matches to your thesis are not recorded yet: they come with your thesis fit.';
+/**
+ * D6147: a thesis match is a High fit, its fit score (D1239) at or above this
+ * (the owner's call on #6147). D1239's High band starts at 0.70; the fit score
+ * is the percentage of comparable criteria that match.
+ */
+export const THESIS_HIGH_FIT = 70;
+/** At most this many matches are listed, newest round first. The response states it. */
+export const THESIS_MATCH_CAP = 20;
+/** The newest open rounds compared on one read: one bounded statement, never one per deal. */
+export const THESIS_SCAN = 200;
+/** A round is open while the studio raises it: `deals.status = 'active'`. */
+const OPEN_ROUND = 'active';
+export const THESIS_NOT_SET = 'No thesis is set. Set your thesis so matches reach you here.';
+export const THESIS_UNREADABLE = 'Matches to your thesis could not be read. That is not the same as none.';
 
 export class FlowError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
@@ -286,7 +302,9 @@ export async function flowEvents(env: Env, scope: Scope, dealId: number) {
 
 // ---------------------------------------------------------------- New for you
 
-type Item = { key: string; source: string; entered_via: Via; deal_id: number; venture: string | null; sector: string | null; round_status: string; at: string | null; message: string | null; can_open: boolean };
+type Item = { key: string; source: string; entered_via: Via; deal_id: number; venture: string | null; sector: string | null; round_status: string; at: string | null; message: string | null; can_open: boolean;
+  /** A thesis match's matching criteria, in the fit's order: sector, stage, region, ticket. */
+  reasons?: string[] };
 
 /**
  * Each source of a deal not yet in this flow, as one query that answers
@@ -311,19 +329,72 @@ const SOURCES: Record<string, { via: Via; sql: string; binds: (s: Scope) => unkn
       FROM watchlist_items x WHERE x.owner_user_id = ? AND x.status = 'converted' AND x.converted_deal_id IS NOT NULL` },
 };
 export const SOURCE_KEYS = Object.keys(SOURCES);
-const KEY = /^(invitation|room|commitment|introduction|syndicate|watchlist):[0-9]+(?::[0-9]+)?$/;
+const KEY = /^(invitation|room|commitment|introduction|syndicate|watchlist|thesis):[0-9]+(?::[0-9]+)?$/;
+
+/**
+ * D6147 — the open rounds not in this flow, not dismissed and not already
+ * brought by another way in, newest first, whose fit to the caller's own
+ * thesis is High. Four bounded statements whatever the count: the thesis, the
+ * newest THESIS_SCAN rounds, their audiences, and (for the readable ones, when
+ * the thesis names regions) their markets.
+ *
+ * WHAT AN UNINVITED INVESTOR'S MATCH READS. A round the caller may not open
+ * (audience `none`, D4631) is compared only on what the marketplace already
+ * shows them of it: the venture's sector and the round's minimum check and
+ * currency. The venture's stage and its markets go into the fit only where
+ * the caller may open the deal, as `GET /api/deals/fit` reads them. So no
+ * match, and no reason, rests on a field an uninvited investor cannot read.
+ */
+async function thesisMatches(env: Env, scope: Scope, otherDeals: Set<number>) {
+  const thesis = await readThesis(env, scope.user.id);
+  const policy = { threshold: 'high', min_score: THESIS_HIGH_FIT, cap: THESIS_MATCH_CAP, scan: THESIS_SCAN };
+  if (!thesisIsSet(thesis)) return { items: [] as Item[], source: { recorded: false, available: true, thesis_set: false, reason: THESIS_NOT_SET, ...policy } };
+  const scanned = (await env.DB.prepare(`SELECT 'thesis:' || d.id AS item_key, d.id AS deal_id, COALESCE(d.stage_changed_at, d.created_at) AS at,
+      d.status AS round_status, d.minimum_check, d.currency, p.id AS project_id, p.name AS venture, p.sector AS sector, p.stage AS venture_stage, p.founder_id
+    FROM deals d JOIN projects p ON p.id = d.project_id
+    WHERE d.status = ? AND p.deleted_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM deal_flow_entries f WHERE f.scope_key = ? AND f.deal_id = d.id)
+      AND NOT EXISTS (SELECT 1 FROM deal_flow_dismissals x WHERE x.scope_key = ? AND x.item_key = 'thesis:' || d.id)
+    ORDER BY at DESC, d.id DESC LIMIT ?`).bind(OPEN_ROUND, scope.key, scope.key, THESIS_SCAN).all<any>()).results || [];
+  const rows = scanned.filter((r) => !otherDeals.has(Number(r.deal_id)));
+  const audiences = await dealAudiences(env, scope.user, rows.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
+  const opens = (r: any) => (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none';
+  const readable = rows.filter(opens);
+  const geography = thesis!.regions.length && readable.length ? await readFitGeographies(env, readable.map((r) => Number(r.project_id))) : null;
+  const matched: Item[] = [];
+  for (const r of rows) {
+    const open = opens(r);
+    const geo = open ? geography?.get(Number(r.project_id)) : undefined;
+    // A malformed market row leaves that round's fit unreadable, so it is not called a match.
+    if (geo?.unreadable) continue;
+    const fit = computeThesisFit(thesis, {
+      sector: r.sector ?? null, stage: open ? r.venture_stage ?? null : null,
+      minimumCheck: r.minimum_check == null ? null : Number(r.minimum_check), currency: r.currency ?? null,
+      regions: geo?.regions ?? null, geographyIncomplete: geo?.geographyIncomplete ?? false,
+    });
+    if (fit.state !== 'recorded' || fit.score == null || fit.score < THESIS_HIGH_FIT) continue;
+    matched.push({ key: String(r.item_key), source: 'thesis', entered_via: 'thesis', deal_id: Number(r.deal_id), venture: r.venture ?? null, sector: r.sector ?? null,
+      round_status: r.round_status, at: r.at ?? null, message: null, can_open: open,
+      reasons: fit.criteria.filter((c) => c.state === 'match').map((c) => c.key) });
+  }
+  const items = matched.slice(0, THESIS_MATCH_CAP);
+  return { items, source: { recorded: true, available: true, thesis_set: true, ...policy, listed: items.length, more: matched.length > items.length || scanned.length >= THESIS_SCAN } };
+}
 
 export async function inboxItems(env: Env, scope: Scope) {
   const items: Item[] = [];
   const sources: Record<string, unknown> = {};
   const inFlow = new Set(((await env.DB.prepare('SELECT deal_id FROM deal_flow_entries WHERE scope_key = ?').bind(scope.key).all<{ deal_id: number }>()).results || []).map((r) => Number(r.deal_id)));
   const dismissed = new Set(((await env.DB.prepare('SELECT item_key FROM deal_flow_dismissals WHERE scope_key = ?').bind(scope.key).all<{ item_key: string }>()).results || []).map((r) => r.item_key));
+  // Every deal another way in brings (listed or dismissed): a thesis match never repeats it.
+  const otherDeals = new Set<number>();
   for (const [name, spec] of Object.entries(SOURCES)) {
     try {
       const binds = spec.binds(scope);
       const q = `SELECT s.item_key, s.deal_id, s.at, s.message, d.status AS round_status, p.name AS venture, p.sector AS sector, p.founder_id
         FROM (` + spec.sql + `) s JOIN deals d ON d.id = s.deal_id JOIN projects p ON p.id = d.project_id WHERE p.deleted_at IS NULL`;
       const rows = await env.DB.prepare(q).bind(...binds).all<any>();
+      for (const row of rows.results || []) otherDeals.add(Number(row.deal_id));
       const candidates = (rows.results || []).filter((row) => !inFlow.has(Number(row.deal_id)) && !dismissed.has(String(row.item_key)));
       const audiences = await dealAudiences(env, scope.user, candidates.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
       sources[name] = { available: true };
@@ -336,7 +407,15 @@ export async function inboxItems(env: Env, scope: Scope) {
       sources[name] = { available: false, unreadable: true, reason: 'This source could not be read. That is not the same as none.' };
     }
   }
-  sources.thesis = { recorded: false, reason: THESIS_REASON };
+  try {
+    const thesis = await thesisMatches(env, scope, otherDeals);
+    items.push(...thesis.items);
+    sources.thesis = thesis.source;
+  } catch (e) {
+    // D6147: a failed thesis or fit read marks only this source; the others still list.
+    console.error('[deal-flow] inbox source unreadable', 'thesis');
+    sources.thesis = { recorded: false, available: false, unreadable: true, reason: THESIS_UNREADABLE };
+  }
   items.sort((a, b) => (utc(b.at) ?? 0) - (utc(a.at) ?? 0) || a.key.localeCompare(b.key));
   return { items, sources };
 }

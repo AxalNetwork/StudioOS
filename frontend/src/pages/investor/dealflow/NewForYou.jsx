@@ -4,6 +4,8 @@
  * D1238), newest first. Nothing is added until Add to my deal flow; Pass asks
  * for its reason; Not for me hides the row for the firm, with an optional
  * reason. A way in that could not be read says so; the others still list.
+ * D6147: a round that is a High fit to the investor's thesis arrives too, its
+ * chip "Matches your thesis" and its line the matching criteria.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,9 +14,9 @@ import { reportError } from '../../../lib/log';
 import { dealFlowApi } from '../../../lib/api/dealFlow.js';
 import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
-import { STAGE_WORD, scoresOf, shortDayOf, stripScopes } from './flowModel';
+import { STAGE_WORD, THESIS_PATH, scoresOf, shortDayOf, stripScopes } from './flowModel';
 import { roundWord } from './dealFlowModel';
-import { inboxActions, inboxChip, inboxIntro, inboxLine, thesisLine, unreadSources } from './movesModel';
+import { inboxActions, inboxChip, inboxIntro, inboxLine, thesisLine, thesisNeedsSetting, unreadSources } from './movesModel';
 import { AddToFlowDialog } from './FlowControls';
 import { NotForMeDialog, PassDialog } from './StageDialogs';
 
@@ -55,6 +57,7 @@ export default function NewForYou({ onToast }) {
   const drop = (k) => setRead((r) => ({ ...r, items: r.items.filter((i) => i.key !== k) }));
   const unread = unreadSources(read.sources);
   const thesis = thesisLine(read.sources);
+  const setThesis = thesisNeedsSetting(read.sources);
   const asRow = (i) => ({ id: String(i.deal_id), name: i.venture || 'Name not recorded' });
 
   return (
@@ -62,9 +65,9 @@ export default function NewForYou({ onToast }) {
       <h2 className="m-0 text-[15px] font-bold text-axal-ink dark:text-gray-100">New for you</h2>
       {read.items.length
         ? <p className={MUTED} data-testid="dealflow-new-intro">{inboxIntro(read.items.length)}</p>
-        : <p className="m-0 text-[13px]" data-testid="dealflow-new-empty">Nothing new for you. Invitations, introductions, open syndicates and your watchlist bring ventures here.</p>}
+        : <p className="m-0 text-[13px]" data-testid="dealflow-new-empty">Nothing new for you. Invitations, introductions, open syndicates, your watchlist and rounds that match your thesis bring ventures here.</p>}
       {unread.length > 0 && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200" role="status" data-testid="dealflow-new-unread">Unreadable: {unread.join(', ')} could not be read. The rest are listed. <button type="button" className="font-semibold underline" onClick={() => setAgain((n) => n + 1)}>Try again</button></p>}
-      {thesis && <p className={MUTED} data-testid="dealflow-new-thesis">{thesis}</p>}
+      {thesis && <p className={MUTED} data-testid="dealflow-new-thesis">{thesis}{setThesis && <> <Link to={THESIS_PATH} className={LINK} data-testid="dealflow-new-set-thesis">Set your thesis</Link></>}</p>}
       <ul className="m-0 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800">
         {read.items.map((i) => {
           const a = inboxActions(i);

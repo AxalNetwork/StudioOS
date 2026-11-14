@@ -79,6 +79,12 @@ export async function readFitGeography(env: Env, projectId: number): Promise<Fit
   return result;
 }
 
+/** Whether any structured preference is saved: with none, every fit reads Set your thesis. */
+export function thesisIsSet(t: Thesis | null): boolean {
+  return !!t && !!(t.sectors.length || t.stages.length || t.regions.length || t.excludedSectors.length || t.excludedStages.length
+    || t.ticketMin != null || t.ticketMax != null);
+}
+
 export function computeThesisFit(thesis: Thesis | null, facts: FitFacts) {
   const criteria: Criterion[] = [];
   function choice(key: 'sector' | 'stage', wanted: string[], excluded: string[], actual: string | null) {
@@ -91,8 +97,7 @@ export function computeThesisFit(thesis: Thesis | null, facts: FitFacts) {
       ? 'The recorded value matches your thesis.' : 'The recorded value is outside your thesis.' });
   }
   const t = thesis ?? { sectors: [], stages: [], regions: [], excludedSectors: [], excludedStages: [], ticketMin: null, ticketMax: null };
-  const set = !!(t.sectors.length || t.stages.length || t.regions.length || t.excludedSectors.length || t.excludedStages.length
-    || t.ticketMin != null || t.ticketMax != null);
+  const set = thesisIsSet(t);
   choice('sector', t.sectors, t.excludedSectors, facts.sector);
   choice('stage', t.stages, t.excludedStages, facts.stage);
   const regionMatch = facts.regions?.some(r => includes(t.regions, r)) ?? false;

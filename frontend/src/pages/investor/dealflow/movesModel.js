@@ -77,8 +77,18 @@ export function inboxLine(item = {}) {
     case 'introduction': return 'The founder accepted your introduction.';
     case 'syndicate': return 'A syndicate is open on this round.';
     case 'watchlist': return day ? `Converted on ${day}.` : 'A venture on your watchlist opened a round.';
+    case 'thesis': return thesisReasonsLine(item.reasons);
     default: return null;
   }
+}
+
+/** D6147: a thesis match's criteria in words, in the fit's order (D1239's four). */
+const REASON_WORD = Object.freeze({ sector: 'sector', stage: 'stage', region: 'market region', ticket: 'minimum check within your ticket' });
+const listWords = (w) => (w.length < 2 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
+/** "Matches your thesis: sector and minimum check within your ticket." The top reasons are the matching criteria, at most three. */
+export function thesisReasonsLine(reasons) {
+  const words = (Array.isArray(reasons) ? reasons : []).map((r) => REASON_WORD[r]).filter(Boolean).slice(0, 3);
+  return words.length ? `Matches your thesis: ${listWords(words)}.` : 'Matches your thesis.';
 }
 
 /**
@@ -93,7 +103,7 @@ export function inboxActions(item = {}) {
 
 const SOURCE_WORD = Object.freeze({
   invitation: 'invitations', room: 'invitations you asked for', commitment: 'commitments', introduction: 'introductions',
-  syndicate: 'open syndicates', watchlist: 'your watchlist',
+  syndicate: 'open syndicates', watchlist: 'your watchlist', thesis: 'matches to your thesis',
 });
 
 /** The ways in that could not be read, in words; the rest still list. */
@@ -101,6 +111,19 @@ export function unreadSources(sources = {}) {
   return Object.entries(sources || {}).filter(([k, v]) => SOURCE_WORD[k] && v && v.unreadable).map(([k]) => SOURCE_WORD[k]);
 }
 
-/** Matches to the thesis, when the read says none are recorded: the reason, never "no matches". */
-export const thesisLine = (sources = {}) => (sources?.thesis && sources.thesis.recorded === false
-  ? (sources.thesis.reason || 'Matches to your thesis are not recorded yet.') : null);
+/**
+ * D6147 — the thesis source's line, from its one `{ recorded, reason }` shape:
+ *   - not recorded (no thesis set): its reason, with the way to set it;
+ *   - unreadable: nothing here, `unreadSources` names it;
+ *   - recorded: the cap, when there were more High-fit matches than are listed.
+ * Never "no matches" for a source that could not say.
+ */
+export const thesisLine = (sources = {}) => {
+  const t = sources?.thesis;
+  if (!t || t.unreadable) return null;
+  if (t.recorded === false) return t.reason || 'Matches to your thesis are not recorded yet.';
+  if (t.recorded === true && t.more && t.cap) return `Only the newest ${t.cap} matches to your thesis are listed. Each is a High fit.`;
+  return null;
+};
+/** Whether the line offers Set your thesis: the read says no thesis is set. */
+export const thesisNeedsSetting = (sources = {}) => sources?.thesis?.recorded === false && sources.thesis.thesis_set === false;
