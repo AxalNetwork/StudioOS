@@ -185,7 +185,7 @@ export function sniffType(h: Uint8Array): string | null {
   if (h.length >= 8 && h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47 && h[4] === 0x0d && h[5] === 0x0a && h[6] === 0x1a && h[7] === 0x0a) return 'image/png';
   return null;
 }
-const ALLOWED_DECLARED = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']);
+export const ALLOWED_DECLARED = new Set(['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']);
 
 r.post('/company/:uid/documents', async (c) => {
   try {

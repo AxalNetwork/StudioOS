@@ -438,6 +438,12 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
       // #5959 / migration 202611141017: the optional summary, apart from the change note.
       ['version_summary', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN version_summary TEXT'],
+      // #5960 / migration 202611141100: a version's document as a stored file.
+      ['file_key', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_key TEXT'],
+      ['file_name', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_name TEXT'],
+      ['file_type', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_type TEXT'],
+      ['file_size', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_size INTEGER'],
+      ['file_sha256', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_sha256 TEXT'],
     ]);
     // #5959: written once, as the migration's trigger holds it. Only where the
     // column exists: a database without the table gets no trigger on it.

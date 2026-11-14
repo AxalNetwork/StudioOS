@@ -17,6 +17,8 @@ import { pageFacts, pageWindow } from '../services/listPage';
 import {
   PRACTICE_PAGE, requireMyAdvisor, requireOwnEngagement,
 } from '../services/advisorPractice';
+import { ALLOWED_DECLARED, MAX_UPLOAD_BYTES, sniffType } from './company_documents';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -62,6 +64,8 @@ type VersionRow = {
   recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
   // #5316 (D5316): the advisor's "ready to send" mark, cleared by the send.
   ready_at?: string | null; ready_by_user_id?: number | null;
+  // #5960 (D5960): a stored file as the version's document. The key and the hash never leave this file.
+  file_key?: string | null; file_name?: string | null; file_type?: string | null; file_size?: number | null; file_sha256?: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -77,12 +81,25 @@ function isHttpsLink(raw: string): boolean {
   try { const u = new URL(raw); return u.protocol === 'https:' && !u.username && !u.password && !!u.hostname; } catch { return false; }
 }
 
+/** #5960 (D5960): whether a version has a document to send: an https link or a stored file. */
+const hasDocument = (v: Pick<VersionRow, 'link_url' | 'file_key'>) => !!v.file_key || (!!v.link_url && isHttpsLink(v.link_url));
+
+/** #5960 (D5960): a stored file's name, type and size, or null. Never its key or hash. */
+function fileOf(r: VersionRow): { name: string; type: string | null; size: number | null } | null {
+  if (!r.file_key) return null;
+  return { name: r.file_name ?? 'document', type: r.file_type ?? null, size: r.file_size == null ? null : Number(r.file_size) };
+}
+
 function versionDto(r: VersionRow): any {
   return {
     uid: r.uid, version: Number(r.version), label: r.label, summary: r.summary,
     // #5959 (D5959): optional, and null (never '') when the advisor gave none.
     version_summary: r.version_summary ?? null,
     link_url: r.link_url,
+    // #5960 (D5960): which kind of document this version has, and the file's name, type and size. Never the R2 key
+    // or the hash: a key is a capability the routes alone hold.
+    document: r.file_key ? 'file' : r.link_url ? 'link' : null,
+    file: fileOf(r),
     // All three are null until they happen. Never coalesced to a date.
     sent_at: r.sent_at, opened_at: r.opened_at, signed_off_at: r.signed_off_at,
     created_at: r.created_at, updated_at: r.updated_at,
@@ -114,6 +131,91 @@ function sentVersionDto(r: VersionRow & { recipient_name?: string | null; ready_
 export function readyVersion(versions: Pick<VersionRow, 'version' | 'sent_at' | 'ready_at'>[]): number | null {
   const ready = versions.filter((v) => v.ready_at && !v.sent_at).map((v) => Number(v.version));
   return ready.length ? Math.max(...ready) : null;
+}
+
+/**
+ * #5960 (D5960): a version's body, from JSON or from a multipart form, and its file when one came.
+ * A form's text fields read as strings, as JSON's would.
+ */
+type Incoming = { body: Record<string, any>; file: { name: string; type: string; size: number; bytes: () => Promise<Uint8Array> } | null };
+async function readIncoming(c: Context<{ Bindings: Env }>): Promise<Incoming> {
+  if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) {
+    return { body: await c.req.json().catch(() => ({} as any)), file: null };
+  }
+  let form: FormData;
+  try { form = await c.req.formData(); } catch { throw c.json({ detail: 'The form could not be read.', code: 'form_unreadable' }, 400); }
+  const body: Record<string, any> = {};
+  let file: Incoming['file'] = null;
+  for (const [key, value] of form.entries()) {
+    if (key === 'file' && value && typeof value === 'object' && typeof (value as any).arrayBuffer === 'function') {
+      const f = value as unknown as { name?: string; type?: string; size?: number; arrayBuffer: () => Promise<ArrayBuffer> };
+      file = { name: String(f.name || 'document'), type: String(f.type || ''), size: Number(f.size ?? 0), bytes: async () => new Uint8Array(await f.arrayBuffer()) };
+    } else if (typeof value === 'string') body[key] = value;
+  }
+  return { body, file };
+}
+
+type StoredFile = { key: string; name: string; type: string; size: number; sha256: string | null };
+
+/**
+ * #5960 (D5960): checks a version's file, then puts its bytes in R2 `FILES`. The checks are
+ * `company_documents.ts`'s: at most 10 MB, not empty, and a PDF, JPEG or PNG by its first bytes (a declared type
+ * outside those three is refused too). Each refusal is thrown before anything is stored, so a refused file leaves
+ * nothing in R2 or D1. The caller writes the row only after this returns, and removes the object if that write fails.
+ */
+async function storeVersionFile(c: Context<{ Bindings: Env }>, advisorId: number, file: NonNullable<Incoming['file']>): Promise<StoredFile> {
+  const tooLarge = () => c.json({ detail: 'The file is larger than 10 MB.', code: 'file_too_large' }, 413);
+  if (file.size > MAX_UPLOAD_BYTES) throw tooLarge();
+  const bytes = await file.bytes();
+  if (bytes.length === 0) throw c.json({ detail: 'The file is empty.', code: 'file_empty' }, 400);
+  if (bytes.length > MAX_UPLOAD_BYTES) throw tooLarge();
+  const sniffed = sniffType(bytes);
+  const declared = file.type.toLowerCase().split(';')[0].trim();
+  if (!sniffed || (declared && !ALLOWED_DECLARED.has(declared))) {
+    throw c.json({ detail: 'Upload a PDF, JPEG or PNG file.', code: 'file_type_invalid' }, 400);
+  }
+  if (!c.env.FILES) throw c.json({ detail: 'File storage is not configured on this deployment.', code: 'storage_unconfigured' }, 503);
+  const key = `advisor-deliverables/${advisorId}/${crypto.randomUUID()}`;
+  // D1170: the advisor's own upload is weighed against their storage plan before it lands; a full plan
+  // answers 413 `storage_full` (thrown as a Response, like the checks above) and nothing is stored.
+  const room = await assertStorageRoom(c.env, { userId: advisorId }, bytes.length, { id: advisorId });
+  try {
+    await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: sniffed }, customMetadata: { advisorId: String(advisorId) } });
+  } catch {
+    throw c.json({ detail: 'The file could not be stored. Try again.', code: 'storage_failed' }, 502);
+  }
+  await noteStorageLanded(c.env, room);
+  let sha256: string | null = null;
+  try {
+    sha256 = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch { /* the hash is metadata, best effort */ }
+  const name = file.name.replace(/[\\/\u0000-\u001f]+/g, '').trim().slice(0, 200) || 'document';
+  return { key, name, type: sniffed, size: bytes.length, sha256 };
+}
+
+/** The row write failed after the bytes were stored: take them back out (best effort), then fail as the write did. */
+async function dropStored(c: Context<{ Bindings: Env }>, stored: StoredFile | null) {
+  if (stored) { try { await c.env.FILES?.delete(stored.key); } catch { /* orphaned bytes, never a row pointing nowhere */ } }
+}
+
+/**
+ * #5960 (D5960): a version's stored file, as a download. A missing object behind a recorded key is a storage
+ * failure and answers 502, never an empty file.
+ */
+async function fileResponse(c: Context<{ Bindings: Env }>, v: VersionRow): Promise<Response> {
+  if (!v.file_key) return c.json({ detail: 'This version has no file.', code: 'no_file' }, 404);
+  let obj: Awaited<ReturnType<NonNullable<Env['FILES']>['get']>> | null = null;
+  try { obj = c.env.FILES ? await c.env.FILES.get(v.file_key) : null; } catch { obj = null; }
+  if (!obj) return c.json({ detail: 'The file could not be read. Try again.', code: 'file_unreadable' }, 502);
+  const name = (v.file_name || 'document').replace(/[^A-Za-z0-9 ._-]+/g, '').trim().slice(0, 120) || 'document';
+  return new Response(obj.body, {
+    headers: {
+      'Content-Type': v.file_type || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${name}"`,
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'private, no-store',
+    },
+  });
 }
 
 /**
@@ -269,7 +371,8 @@ advisors.post('/me/deliverables', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
-    const body = await c.req.json().catch(() => ({} as any));
+    // #5960 (D5960): JSON, or a form carrying the first version's file.
+    const { body, file } = await readIncoming(c);
     const title = String(body.title || '').trim().slice(0, 200);
     if (!title) return c.json({ detail: 'A work product needs a title' }, 400);
 
@@ -283,9 +386,15 @@ advisors.post('/me/deliverables', async (c) => {
       clientName = eng.client_name;
     }
     if (!clientName) return c.json({ detail: 'A work product needs a client' }, 400);
+    if (file && trimOrNull(body.link_url, 2000)) return c.json({ detail: 'A version\'s document is a link or a file, not both.', code: 'two_documents' }, 422);
 
+    // #5960: the bytes first, the rows only after the put succeeded.
+    const stored = file ? await storeVersionFile(c, m.id, file) : null;
+    // The insert names the file columns, so a store adopted by baseline is healed first.
+    await ensureAdvisorStoresSchema(c.env);
     const now = nowIso();
     const uid = newUid();
+    try {
     const r = await c.env.DB.prepare(
       `INSERT INTO advisor_deliverables
          (uid, advisor_id, engagement_id, client_name, title, created_at, updated_at)
@@ -296,13 +405,15 @@ advisors.post('/me/deliverables', async (c) => {
     // every read here assumes at least one row to be the latest.
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, version_summary, link_url, created_at, updated_at)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?)`
-    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
-           trimOrNull(body.version_summary, 2000), trimOrNull(body.link_url, 2000), now, now).run();
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(newUid(), id, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000), trimOrNull(body.version_summary, 2000),
+           trimOrNull(body.link_url, 2000), stored?.key ?? null, stored?.name ?? null, stored?.type ?? null,
+           stored?.size ?? null, stored?.sha256 ?? null, now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverables WHERE id = ?')
       .bind(id).first<DeliverableRow>();
     return c.json({ ...fresh, state: 'not_started', version_count: 1 }, 201);
+    } catch (e) { await dropStored(c, stored); throw e; }
   } catch (e) { return mapError(c, e); }
 });
 
@@ -361,7 +472,7 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const row = await requireOwnDeliverable(c, m.id, Number(c.req.param('id')));
-    const body = await c.req.json().catch(() => ({} as any));
+    const { body, file } = await readIncoming(c);
     // #4712 (D4712): A REVISION IS NEVER EMPTY. A new version carries a change
     // note (what is different from the last one) and the content, a web link;
     // "Add a version" used to POST `{}` and record a v3 that said nothing and
@@ -370,9 +481,15 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const note = trimOrNull(body.summary, 2000);
     const link = trimOrNull(body.link_url, 2000);
     if (!note) return c.json({ detail: 'Say what changed in this version.', code: 'empty_version' }, 422);
-    if (!link || !isHttpsLink(link)) {
-      return c.json({ detail: 'Add the content as a web link that starts with https://', code: 'empty_version' }, 422);
+    // #5960 (D5960): the content is a web link or a file: one of the two, never neither and never both.
+    if (file && link) return c.json({ detail: 'A version\'s document is a link or a file, not both.', code: 'two_documents' }, 422);
+    if (!file && (!link || !isHttpsLink(link))) {
+      return c.json({ detail: 'Add the content as a file, or as a web link that starts with https://', code: 'empty_version' }, 422);
     }
+    const stored = file ? await storeVersionFile(c, m.id, file) : null;
+    // The insert names the file columns, so a store adopted by baseline is healed first.
+    await ensureAdvisorStoresSchema(c.env);
+    try {
     const top = await c.env.DB.prepare(
       'SELECT MAX(version) AS v FROM advisor_deliverable_versions WHERE deliverable_id = ?'
     ).bind(row.id).first<{ v: number | null }>();
@@ -381,15 +498,17 @@ advisors.post('/me/deliverables/:id/versions', async (c) => {
     const uid = newUid();
     await c.env.DB.prepare(
       `INSERT INTO advisor_deliverable_versions
-         (uid, deliverable_id, version, label, summary, version_summary, link_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000),
-           trimOrNull(body.version_summary, 2000), trimOrNull(body.link_url, 2000), now, now).run();
+         (uid, deliverable_id, version, label, summary, version_summary, link_url, file_key, file_name, file_type, file_size, file_sha256, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(uid, row.id, next, trimOrNull(body.label, 60), trimOrNull(body.summary, 2000), trimOrNull(body.version_summary, 2000),
+           link, stored?.key ?? null, stored?.name ?? null, stored?.type ?? null, stored?.size ?? null, stored?.sha256 ?? null,
+           now, now).run();
     await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?')
       .bind(now, row.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE uid = ?')
       .bind(uid).first<VersionRow>();
     return c.json(versionDto(fresh!), 201);
+    } catch (e) { await dropStored(c, stored); throw e; }
   } catch (e) { return mapError(c, e); }
 });
 
@@ -427,8 +546,9 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     // #4712: nothing is sent that has nothing in it. A version with no link has
     // no content for the client to open (an empty v1 from a title-only work
     // product, or an empty revision recorded before this rule).
-    if (!v.link_url || !isHttpsLink(v.link_url)) {
-      return c.json({ detail: 'This version has no content to send. Add a version with a link, then send that one.', code: 'empty_version' }, 422);
+    // #5960 (D5960): a link or a stored file.
+    if (!hasDocument(v)) {
+      return c.json({ detail: 'This version has no content to send. Add a version with a file or a link, then send that one.', code: 'empty_version' }, 422);
     }
 
     const now = nowIso();
@@ -490,8 +610,8 @@ advisors.post('/me/deliverables/:id/versions/:version/ready', async (c) => {
     const m = await requireMyAdvisor(c, user);
     const { row, v } = await ownVersion(c, m.id);
     if (v.sent_at) return c.json(ALREADY_SENT, 409);
-    if (!v.link_url || !isHttpsLink(v.link_url)) {
-      return c.json({ detail: 'This version has no content to send, so it cannot be ready. Add a version with a link.', code: 'empty_version' }, 422);
+    if (!hasDocument(v)) {
+      return c.json({ detail: 'This version has no content to send, so it cannot be ready. Add a version with a file or a link.', code: 'empty_version' }, 422);
     }
     const now = nowIso();
     const marked: any = await c.env.DB.prepare(
@@ -672,6 +792,38 @@ advisors.post('/received/deliverables/:uid/accept', async (c) => {
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * #5960 (D5960) — GET /me/deliverables/:id/versions/:version/file: the advisor's own version's file. Another
+ * advisor's deliverable is the same 404 `requireOwnDeliverable` gives.
+ */
+advisors.get('/me/deliverables/:id/versions/:version/file', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    await ensureAdvisorStoresSchema(c.env);
+    const { v } = await ownVersion(c, m.id);
+    return await fileResponse(c, v);
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * #5960 (D5960) — GET /received/deliverables/:uid/file: a sent version's file, for the account it was sent to.
+ * Scoped exactly as `/open` and the list are (D4684): the version's recorded recipient, and sent. Anyone else, and
+ * an unsent version, get the same 404 those routes give.
+ */
+advisors.get('/received/deliverables/:uid/file', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const v = await c.env.DB.prepare(
+      `SELECT v.* FROM advisor_deliverable_versions v
+        WHERE v.uid = ? AND v.recipient_user_id = ? AND v.sent_at IS NOT NULL`
+    ).bind(c.req.param('uid'), user.id).first<VersionRow>();
+    if (!v) return c.json({ detail: 'Work product not found' }, 404);
+    return await fileResponse(c, v);
   } catch (e) { return mapError(c, e); }
 });
 
