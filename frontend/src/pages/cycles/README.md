@@ -148,3 +148,5 @@ title (`RecordCrumb`, D696).
 `distribution/` holds Distribution's tab components; its README records each
 component and the shell/wizard handoff. D4492 supplies the prospect pipeline,
 individual contact sheets and recorded marketing-permission summary.
+
+`kpiTargetCells.js` (D6102) formats recorded targets and direction-aware comparisons, retaining unknown values and the venture-specific Focus link.

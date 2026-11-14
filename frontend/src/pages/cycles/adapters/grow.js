@@ -21,6 +21,8 @@
  *   real output through every function.
  */
 
+import { kpiTargetCells } from '../kpiTargetCells.js';
+
 /**
  * The seven modules, as `services/growCycle.ts` lists them (`GROW_MODULES`);
  * `cycle_adapters_d661.test.ts` holds this to the Worker's own list.
@@ -357,13 +359,14 @@ export const RECORDS = {
     sorts: [{ key: '-cac_cents', label: 'Highest CAC' }, { key: 'cac_cents', label: 'Lowest CAC' }, { key: 'name', label: 'Name' }],
   },
   'revenue-and-traction': {
-    keys: ['kpi', 'value', 'change', 'source', 'as_of'],
+    keys: ['kpi', 'value', 'change', 'source', 'as_of', 'target', 'vs_target'],
     row: (r, i) => ({ id: `kpi-${i}-${r.kpi}`, recordId: workerId(r.id), cells: {
       kpi: r.kpi ?? null,
       value: kpiValue(r),
       change: kpiChange(r),
       source: r.source ?? null,
       as_of: r.as_of ?? null,
+      ...kpiTargetCells(r),
     } }),
     filters: [],
     sorts: [],

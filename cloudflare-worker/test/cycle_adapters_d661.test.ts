@@ -538,6 +538,8 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
 
 test('D661: every Grow table has a value source for each column, and its filter and sorts name real fields', async () => {
   const f = await growSeeded();
+  f.db.exec(tableFromBaseline(BASELINE, 'metric_targets'));
+  f.db.prepare("INSERT INTO metric_targets (project_id, metric_key, target_value, direction) VALUES (?, 'mrr', 4000, 'up')").run(GP);
   for (const m of GROW_MODULES) {
     const r = await growCall(f, 'GET', `/modules/${m.slug}?project=${GP}`);
     assert.equal(r.status, 200, `${m.slug}: ${JSON.stringify(r.body)}`);
@@ -571,7 +573,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual(await rowBy('product-improvement', (c) => c.feedback === 'Onboarding is long'),
     { Feedback: 'Onboarding is long', Source: 'Team', Theme: 'Onboarding', 'Roadmap item': 'Short onboarding', Status: { text: 'Shipped', tone: 'ok' } });
   assert.deepEqual(await rowBy('revenue-and-traction', (c) => c.kpi === 'MRR'),
-    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1) });
+    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1), Target: { text: '$4,000.00', href: `/grow/focus?project_id=${GP}`, separateLink: true }, 'Vs target': 'Below target' });
   assert.deepEqual(await rowBy('team-expansion', (c) => c.team === 'Engineering'),
     { Role: { text: 'Engineer', href: '/jobs/5/manage' }, Team: 'Engineering', Applicants: 3, 'In interview': 1, 'Target start': '2027-01' });
   assert.deepEqual(await rowBy('partner-network', (c) => c.partner === 'Northwind'),

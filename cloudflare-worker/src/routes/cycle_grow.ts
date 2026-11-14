@@ -106,6 +106,7 @@ import {
   CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
   readCalendar, readFromGoogle, syncMetricsSheets,
 } from '../services/google/growFeeds';
+import { withKpiTargets } from '../services/growKpiTargets';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -242,8 +243,8 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
       sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
   }
   if (slug === 'revenue-and-traction') {
-    const rows = await kpiRows(env, projectId, x.now);
-    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of'], rows,
+    const rows = await withKpiTargets(env, projectId, await kpiRows(env, projectId, x.now));
+    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of', 'Target', 'Vs target'], rows,
       filters: [{ key: 'source', label: 'Source', options: present(rows, 'source') }, { key: 'period', label: 'Period', options: present(rows, 'period').reverse() }],
       sorts: [{ key: '-period', label: 'Period' }, { key: 'kpi', label: 'KPI' }] };
   }
