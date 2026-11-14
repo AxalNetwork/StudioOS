@@ -67,7 +67,9 @@ the generic route wrapper once a canvas has graduated.
   members, and removes internal roadmap copy from Portfolio screens.
 - `InvestorNetworkWorkspace.jsx` owns `/network` for the investor role,
   parallel to `FounderNetworkDesk` in `../founder/` — same route, role-branched
-  in `App.jsx` ahead of the founder ternary.
+  in `App.jsx` ahead of the founder ternary. D6259 (#6259) reads a tie's
+  touch history and every reminder back on it: the touch panel lists the
+  recorded touches, and the header's "Set reminders" opens a Reminders view.
 - `InvestorResearchWorkspace.jsx` is the investor's `/research` overview.
   `/market-intel` rendered it too until D670 retired that page; the old URL now
   redirects to `/research`.
