@@ -11,5 +11,5 @@ export function kpiTargetCells(row) {
   }
   const vs = row.target_state !== 'recorded' || target?.actual == null || target?.met == null ? null
     : target.met ? 'Target met' : target.actual > target.target_value ? 'Above target' : 'Below target';
-  return { target: { text: word, href: row.target_href || '/grow/focus', separateLink: true }, vs_target: vs };
+  return { target: { text: word, href: row.target_href || '/grow/focus', separateLink: true }, vs_target: vs ?? { blank: true } };
 }

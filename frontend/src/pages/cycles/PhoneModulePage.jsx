@@ -53,9 +53,12 @@ export function phoneRow(cols, row) {
   const title = cells[0] ? cells[0].text : 'Not recorded';
   const second = cells[1];
   const toned = cells.find((v) => !v.nr && v.tone);
+  const target = row?.cells?.target;
+  const comparison = row?.cells?.vs_target;
+  const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: second ? second.text : undefined,
+    description: [second?.text, targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }
