@@ -2508,6 +2508,7 @@
     "import ./durable-objects/meeting-bot-run",
     "import ./durable-objects/onboarding-chat",
     "import ./durable-objects/pipeline-room",
+    "import ./durable-objects/work-graph-lease",
     "import ./integrations/providers/beehiiv",
     "import ./integrations/providers/calendly",
     "import ./integrations/providers/carta",

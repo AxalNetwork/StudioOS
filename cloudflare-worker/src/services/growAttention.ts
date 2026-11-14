@@ -87,7 +87,26 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
       return unreadable();
     }
   };
-  const [targets, kpis, channels, customers, partner_proposals, stalled_customers] = await Promise.all([
+  // D6125: signed partners renewing between today and 30 days from now, soonest first. Paused,
+  // ended and unsigned partners never count; a passed renewal date is not "coming up".
+  let renewing: Array<{ uid: string; name: string; renewal_on: string }> = [];
+  const renewals = async (): Promise<Evidence<number>> => {
+    try {
+      const today = new Date(x.now).toISOString().slice(0, 10);
+      const until = new Date(x.now + 30 * 86400000).toISOString().slice(0, 10);
+      const res = await x.env.DB.prepare(
+        `SELECT uid, name, renewal_on FROM growth_partners
+          WHERE project_id = ? AND stage = 'signed' AND renewal_on BETWEEN ? AND ?
+          ORDER BY renewal_on, id`,
+      ).bind(x.projectId, today, until).all<{ uid: string; name: string; renewal_on: string }>();
+      renewing = (res.results || []).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.renewal_on)));
+      return { state: 'recorded', value: renewing.length };
+    } catch {
+      console.warn('[growAttention] source unreadable', { source: 'partner_renewals' });
+      return unreadable();
+    }
+  };
+  const [targets, kpis, channels, customers, partner_proposals, stalled_customers, partner_renewals] = await Promise.all([
     count('targets', "SELECT COUNT(*) AS n FROM metric_targets WHERE project_id = ? AND metric_key IN ('mrr','arr','cac','ltv','monthly_churn_pct','active_users','new_users','net_burn','cash_balance','headcount','nrr_pct','paying_accounts')"),
     count('kpis', 'SELECT COUNT(*) AS n FROM project_metrics WHERE project_id = ?'),
     count('channels', 'SELECT COUNT(*) AS n FROM growth_channels WHERE project_id = ?'),
@@ -107,8 +126,9 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
         return unreadable();
       }
     })(),
+    renewals(),
   ]);
-  const signals = { targets, kpis, channels, customers, partner_proposals, stalled_customers };
+  const signals = { targets, kpis, channels, customers, partner_proposals, stalled_customers, partner_renewals };
   const primary = baselineAction(x.projectId, focus, measurement, writable);
   const href = (path: string) => `${path}?project_id=${x.projectId}`;
   const items: AttentionAction[] = [];
@@ -126,6 +146,13 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
       if (f.state === 'unreadable' && !items.some((i) => i.key === 'focus_unreadable')) add('focus_unreadable', 40, 'Check the KPI source', 'One or more growth figures could not be read.', '/grow/focus', 'Focus');
     }
     if (partner_proposals.state === 'recorded' && partner_proposals.value > 0) add('partner_proposal', 50, 'Review saved partner proposals', `${partner_proposals.value} pending proposal${partner_proposals.value === 1 ? '' : 's'} from Mercury.`, '/grow/partner-network', 'Partnerships');
+    if (partner_renewals.state === 'recorded' && renewing.length) {
+      const first = renewing[0];
+      const left = Math.round((Date.parse(`${first.renewal_on}T00:00:00Z`) - Date.parse(`${new Date(x.now).toISOString().slice(0, 10)}T00:00:00Z`)) / 86400000);
+      const when = left === 0 ? 'today' : `in ${left} day${left === 1 ? '' : 's'}`;
+      if (renewing.length === 1) add('partner_renewal', 55, `Prepare for ${first.name}'s renewal`, `The partnership renews ${first.renewal_on}, ${when}.`, `/grow/partner-network/${encodeURIComponent(first.uid)}`, 'Partnerships');
+      else add('partner_renewal', 55, 'Review partner renewals', `${renewing.length} signed partners renew within 30 days; ${first.name} first, ${when}.`, '/grow/partner-network', 'Partnerships');
+    }
     const team = options.cards?.find((c) => c.slug === 'team-expansion');
     const series = team?.series as { roles_by_stage?: Array<{ stage: string; count: number }> } | null;
     const offers = Array.isArray(series?.roles_by_stage) ? series.roles_by_stage.find((r) => r.stage === 'offer')?.count : null;
@@ -134,7 +161,7 @@ export async function growAttention(x: Ctx, writable: boolean, options: { user?:
     if (channels.state === 'recorded' && channels.value === 0) add('add_channel', 80, 'Add your first acquisition channel', 'Attribute sign-ups and spend to a recorded channel.', '/grow/distribution', 'Distribution');
     if (customers.state === 'recorded' && customers.value === 0) add('add_customer', 90, 'Add customer or prospect records', 'Bring your recorded discovery contacts into Grow.', '/grow/customers', 'Customers');
   }
-  const actionLabels: Record<string, string> = { set_focus: 'Set focus metric', set_target: 'Set target', record_kpi: 'Enter a KPI', record_metric: 'Enter a KPI', focus_unreadable: 'Open Focus', partner_proposal: 'Review proposal', offers: 'Open roles', stalled_customers: 'Open customers', add_channel: 'Add channel', add_customer: 'Add customer' };
+  const actionLabels: Record<string, string> = { set_focus: 'Set focus metric', set_target: 'Set target', record_kpi: 'Enter a KPI', record_metric: 'Enter a KPI', focus_unreadable: 'Open Focus', partner_proposal: 'Review proposal', partner_renewal: 'Review renewal', offers: 'Open roles', stalled_customers: 'Open customers', add_channel: 'Add channel', add_customer: 'Add customer' };
   for (const item of items) item.actionLabel = actionLabels[item.key];
   const partial = Object.values(signals).some((s) => s.state === 'unreadable');
   return { state: critical ? 'unreadable' : partial ? 'partial' : 'ready', writable, period: new Date(x.now).toISOString().slice(0,7), focus, measurement, signals, primary, items: items.sort((a,b) => (a.priority || 0) - (b.priority || 0)).slice(0,4) };

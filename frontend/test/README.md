@@ -40,6 +40,7 @@ also exercises a `project_id` deep link.
 | `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
 | `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
 | `grow_overview_4862.test.mjs` | #4862: taxonomy, context, primary actions, zero values, failed reads and read-only Grow states. |
+| `landing_gate_classifier_5606.test.mjs` | D5606: coexisting aggregate gates preserve setup fingerprints, leaf inheritance and queue-stall diagnosis while deleted refs and test/fast-check failures remain excluded. |
 
 ## Conventions
 
@@ -200,3 +201,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+| `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
+| `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
+| `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
+| `unused_imports_attributes_6381.test.mjs` | D6381: attributed and side-effect imports preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow delivery regression stays clean. |

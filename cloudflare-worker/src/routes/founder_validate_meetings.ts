@@ -172,7 +172,9 @@ async function providerCapabilities(env: Env, user: User) {
   const google = meetOn ? await meet.googleConnection(env, user.id) : null;
   const meetTranscripts = meet.transcriptAccess(google);
   const teamsOn = teamsCreateAvailable(env);
-  const microsoft = teamsOn && await microsoftConnected(env, user.id);
+  // D5810: the member's own grant, read whether or not this deployment can create
+  // with it; null is unreadable, never "not connected".
+  const microsoft = await microsoftConnected(env, user.id);
   const modes = (botOn: boolean, importOn: boolean): CaptureMode[] =>
     [...(botOn ? ['bot' as const] : []), ...(importOn ? ['post_meeting_import' as const] : [])];
   const zoomReason = !zoomOn ? UNAVAILABLE.zoom
@@ -222,8 +224,10 @@ async function providerCapabilities(env: Env, user: User) {
         label: 'Microsoft Teams',
         available: bot.platforms.teams || teamsOn,
         // D1359: the Microsoft calendar connection creates Teams meetings (work or school accounts).
+        // D5810: `connected` is the grant (null: unreadable); `create_available` is this deployment.
         connected: microsoft,
-        can_create_meeting: microsoft,
+        create_available: teamsOn,
+        can_create_meeting: teamsOn && microsoft === true,
         can_join_as_bot: bot.platforms.teams,
         can_capture_realtime_audio: bot.platforms.teams,
         can_retrieve_transcript: false,
@@ -232,7 +236,7 @@ async function providerCapabilities(env: Env, user: User) {
         reason: bot.platforms.teams ? null
           : teamsOn
             ? 'Eadwyn AI is not available for Teams here, and Axal cannot import a Teams transcript yet. Upload the recording or paste the transcript after the call.'
-            : 'Axal has no Microsoft Teams connection yet, and Eadwyn AI is not available for Teams here. Upload the recording or paste the transcript after the call.',
+            : 'Axal cannot create Teams meetings on this deployment, and Eadwyn AI is not available for Teams here. Upload the recording or paste the transcript after the call.',
         notes: [
           'Creating a Teams meeting uses your Microsoft calendar connection and needs a work or school Microsoft 365 account.',
           'Importing a Teams transcript after the call is not built.',

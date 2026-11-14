@@ -101,3 +101,8 @@ D1081 (#2946): the shared connector body draws optional Works without signing
 in and What Axal VC never does sections. An `auth_type: 'none'` entry is browsed,
 never connected, and excluded from Build's connect-tool picker. Lovable is its
 first use; launch links and app checks remain future parts.
+
+D5810 (#5810): `teamsConnector.js` holds Microsoft Teams' rules on the shared
+Microsoft connection and the tab-only marker that returns Microsoft's sign-in to
+the Teams page; `TeamsSection.jsx` draws its three rows; `ConnectorMark.jsx`
+draws the local Teams mark and `BrandIcon` for everything else.

@@ -124,6 +124,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
   // D1581 (#3828): the phone remote for Present.
   { name: 'DECK_REMOTE', kind: 'Durable Object namespace', hq: 'DeckRemote', branch: () => 'DeckRemote', shared: false },
+  // D5581 part 2 (#5581): WorkGraph leases, one object per tenant, company and asset.
+  { name: 'WORK_GRAPH_LEASE', kind: 'Durable Object namespace', hq: 'WorkGraphLease', branch: () => 'WorkGraphLease', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize.VECTORIZE, shared: false },
   // D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions).
   { name: 'DECK_QUOTES', kind: 'Vectorize index', hq: 'axal-deck-quotes', branch: (c) => branchResourceNames(c).vectorize.DECK_QUOTES, shared: false },

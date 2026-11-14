@@ -8,7 +8,7 @@ import { SignJWT } from 'jose';
 import rec, { EVENT_REC_AI, EVENT_REC_PAGE } from '../src/routes/event_recommendations.ts';
 import events from '../src/routes/events.ts';
 import eventsPublic from '../src/routes/events_public.ts';
-import { RECOMMENDATION_DEPS, cosine } from '../src/services/eventRecommendations.ts';
+import { RECOMMENDATION_DEPS, cosine, readRecPrefs } from '../src/services/eventRecommendations.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA, setFixtureAllowance } from './_ai_budget_fixture.mjs';
@@ -234,4 +234,39 @@ test('Explain retries reuse one paid run; quote expiry and changed member/event/
     assert.equal(calls,2,'a fresh displayed quote can start a new paid run');
     assert.ok(balance()<chargedBalance);
   } finally { Object.assign(EVENT_REC_AI,original);RECOMMENDATION_DEPS.embed=embed;__resetForTest();f.db.close(); }
+});
+
+// D6414: valid JSON scalars/objects in pre-existing rows must remain unreadable.
+test('stored preference arrays retain recorded values and refuse malformed historical shapes without a write', async () => {
+  const f = fixture();
+  try {
+    assert.deepEqual(await readRecPrefs(f.env, 2), {
+      enabled: true, interests: [], goals_90d: null, formats: [], types: [], home_city: null, travel_km: null,
+    });
+    const expected = { enabled: false, interests: ['climate', 'ai'], goals_90d: 'Recorded goal', formats: ['virtual'], types: ['workshop'], home_city: 'Geneva', travel_km: 0 };
+    f.db.prepare('INSERT INTO event_rec_prefs (user_id,enabled,interests_json,goals_90d,formats_json,types_json,home_city,travel_km) VALUES (?,?,?,?,?,?,?,?)')
+      .run(2, 0, JSON.stringify(expected.interests), expected.goals_90d, JSON.stringify(expected.formats), JSON.stringify(expected.types), expected.home_city, 0);
+    assert.deepEqual(await readRecPrefs(f.env, 2), expected);
+    const stored = f.db.prepare('SELECT * FROM event_rec_prefs WHERE user_id=2').get();
+    const columns = ['interests_json', 'formats_json', 'types_json'] as const;
+    for (const column of columns) {
+      // The fixture alone bypasses CHECK(json_valid) to also model legacy invalid syntax.
+      f.db.exec('PRAGMA ignore_check_constraints=ON');
+      for (const raw of ['{}', '{"0":"ai"}', 'null', '"ai"', '0', 'true', '{']) {
+        f.db.prepare(`UPDATE event_rec_prefs SET ${column}=? WHERE user_id=2`).run(raw);
+        await assert.rejects(() => readRecPrefs(f.env, 2), undefined, column + ': ' + raw);
+        for (const path of ['/api/events/recommendation-prefs', '/api/events/recommended']) {
+          const result = await f.call(path);
+          assert.equal(result.status, 503, column + ': ' + raw + ': ' + path);
+          assert.deepEqual(result.body, { error: 'unreadable', detail: 'Recommendations could not be read. That is not the same as having none.' });
+        }
+        assert.equal(f.db.prepare(`SELECT ${column} AS raw FROM event_rec_prefs WHERE user_id=2`).get()!.raw, raw);
+      }
+      f.db.prepare(`UPDATE event_rec_prefs SET ${column}=? WHERE user_id=2`).run(stored![column]);
+      f.db.exec('PRAGMA ignore_check_constraints=OFF');
+      assert.deepEqual(await readRecPrefs(f.env, 2), expected);
+    }
+    assert.deepEqual(f.db.prepare('SELECT * FROM event_rec_prefs WHERE user_id=2').get(), stored);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM event_rec_feedback').get()!.n, 0);
+  } finally { f.db.close(); }
 });

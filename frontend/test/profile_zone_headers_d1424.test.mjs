@@ -235,5 +235,5 @@ test('no new client method: every read and write here is one main already serves
     assert.doesNotMatch(codeOnly(read(f)), /request\(|fetch\(|from '\.\.\/lib\/api'/, `${f} reaches the network`);
   }
   assert.match(codeOnly(read('frontend/src/pages/investor/InvestorThesisBand.jsx')), /api\.getInvestorProfile\(\)/);
-  assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+  assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(days\)/);
 });
