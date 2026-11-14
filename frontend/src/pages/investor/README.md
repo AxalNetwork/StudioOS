@@ -234,3 +234,5 @@ The owner removed the AI side rail from `/spinout-lab/investor-workspace`
 (2026-10-21). Its LP content, refresh control and access gates remain. The
 zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
 other Investor boards retain their existing rails.
+
+`introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.
