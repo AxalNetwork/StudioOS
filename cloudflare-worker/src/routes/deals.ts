@@ -1,3 +1,4 @@
+import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
@@ -1631,22 +1632,8 @@ deals.post('/:id/invitations/respond', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'No invitation found for this deal' }, 404); }
   await sql`UPDATE deal_invitations SET status = ${resp}, responded_at = datetime('now') WHERE deal_id = ${id} AND investor_user_id = ${user.id}`;
 
-  try {
-    const inviter = (rows[0] as any).invited_by_user_id;
-    if (inviter) {
-      const { notify } = await import('../services/notify');
-      await notify(c.env, {
-        userId: inviter,
-        type: 'deal_invitation_response',
-        title: `${user.name} is ${resp} in a deal`,
-        body: `${user.name} responded '${resp}' to your invitation.`,
-        link: `/deals/${id}`,
-        payload: { deal_id: id, response: resp },
-        channels: ['in_app'],
-        category: 'deals',
-      });
-    }
-  } catch (e) { console.warn('[deals] invitation response notify failed', e); }
+  // D6425: the same notice a Deal flow pass that answers the invitation sends.
+  await notifyInvitationAnswer(c.env, { inviterId: (rows[0] as any).invited_by_user_id, investorName: user.name, dealId: id, response: resp });
 
   await sql.end();
   return c.json({ ok: true, status: resp });
