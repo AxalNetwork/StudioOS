@@ -305,7 +305,7 @@ export function timelineRows(company) {
       const late = p.state === 'late' || p.state === 'missing';
       let sub;
       if (p.state === 'sent') sub = `Sent ${dayOf(p.sent_at) || 'on a day not recorded'}`;
-      else if (p.state === 'waived') sub = 'You waived this period';
+      else if (p.state === 'waived') sub = 'Waived: no longer owed to you';
       else sub = [`Due ${dayOf(p.due_on)}`, p.expected_on ? `expected ${dayOf(p.expected_on)}` : null].filter(Boolean).join(' · ') + (p.expected_note ? `: ‘${p.expected_note}’` : '');
       return {
         uid: p.uid,

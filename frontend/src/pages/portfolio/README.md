@@ -91,3 +91,14 @@ source's own activity); `CompanyPanels.jsx` draws Financials, Support and
 Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
+
+D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
+"Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
+rules (the most pressing open period, its obligation facts, who may act from
+the Worker's `can_act`, the Review, the confirm label, the Receipt from the
+Worker's stored record, and each period's asked or waived record);
+`ReportAsk.jsx` draws the obligation card and the Review and Receipt Sheet;
+`reportAsk.css` holds their styles on the frame's tokens. A failed send keeps
+the Review with the Worker's sentence and code, and a period reads as asked or
+waived only from the company read. Decision notes:
+`documentation/architecture/decisions/D4817-p9.md`.
