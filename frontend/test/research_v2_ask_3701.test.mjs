@@ -89,6 +89,17 @@ test('each source shows its passage, or says it was not recorded, and whether it
   } finally { await m.close(); }
 });
 
+test('answered and model-unavailable rows both keep their recorded passage beside Save to project', async () => {
+  const m = await mountAsk([ANSWERED, { ...ANSWERED, uid: 'model-down', reason: 'model_unavailable', answer: null }]);
+  try {
+    for (const uid of ['a', 'model-down']) {
+      assert.equal(textOf(byTid(m, `ask-passage-${uid}-0`)).trim(), 'The C5 criteria catalogue applies to cloud providers', uid);
+    }
+    assert.equal(Boolean(byTid(m, 'button-ask-save-project-a')), true, 'an answered row can be saved');
+    assert.equal(Boolean(byTid(m, 'button-ask-save-project-model-down')), false, 'a model failure cannot be saved as an answer');
+  } finally { await m.close(); }
+});
+
 test('the tabs change the read; Archived is its own read, not a filter over All', async () => {
   const m = await mountAsk([ANSWERED]);
   try {
