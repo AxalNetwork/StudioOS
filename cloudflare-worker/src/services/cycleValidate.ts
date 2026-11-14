@@ -885,9 +885,30 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     const counts: Record<string, number> = { loi: 0, pre_sale: 0, waitlist: 0, need_to_have: 0, would_pay: 0 };
     for (const s of demand.signals) if (s.status !== 'to_confirm' && s.kind in counts) counts[s.kind] += 1;
     counts.pre_sale += demand.paid.length;
+    // Recurring and one-off terms are separate commitments. A Would pay
+    // signal expresses interest and is excluded from committed value.
+    const committed = new Map<string, Map<string, number>>();
+    const addCommitment = (amount: number | null, currency: string | null, period: string | null) => {
+      if (!Number.isSafeInteger(amount) || Number(amount) <= 0 || !currency) return;
+      const code = currency.toUpperCase();
+      const cadence = period ?? 'not_recorded';
+      const buckets = committed.get(code) ?? new Map<string, number>();
+      buckets.set(cadence, (buckets.get(cadence) ?? 0) + Number(amount));
+      committed.set(code, buckets);
+    };
+    for (const signal of demand.signals) {
+      if (signal.status === 'confirmed' && (signal.kind === 'loi' || signal.kind === 'pre_sale')) {
+        addCommitment(signal.amount_cents, signal.currency, signal.period);
+      }
+    }
+    for (const paid of demand.paid) {
+      if (paid.verification === 'verified') addCommitment(paid.amount_cents, paid.currency, 'once');
+    }
+    const commitments = [...committed].sort(([a], [b]) => a.localeCompare(b)).flatMap(([currency, buckets]) =>
+      [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([period, amount_cents]) => ({ currency, period, amount_cents })));
     const toConfirm = demand.signals.filter((s) => s.status === 'to_confirm').length;
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
-      return { state: 'empty', series: null, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
+      return { state: 'empty', series: { signals: counts, committed: [], chart_ready: false }, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
     }
     const next = !bar
       ? { text: 'Set the bar for waitlist sign-ups', href: href(ctx, 'demand-signals') }
@@ -898,12 +919,14 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
     return {
       state: state === 'empty' && (demand.signals.length > 0 || demand.paid.length > 0 || judged.size > 0) ? 'too_little' : state,
       series: {
+        chart_ready: state === 'ok',
         signups: cumulative(weeks, total).map((n, i) => ({ week_start: daysBefore(ctx.today, (13 - i) * 7 - 1), total: n })),
         bar: bar ? Number(bar.target_value) : null,
         bar_reason: bar ? null : 'No bar set',
         need_to_have: judged.size > 0 ? { interviews: need.size, of: judged.size } : null,
         need_to_have_reason: judged.size > 0 ? null : 'No interview has a pain judged yet',
         signals: counts,
+        committed: commitments,
       },
       next,
       reason: state === 'ok' ? null : `${plural(weeks.filter((w) => w > 0).length, 'week', 'weeks')} with a sign-up in the last 13. The line appears at 3.`,

@@ -144,7 +144,10 @@ test('D659: a new venture — every card empty with its one starting action, eve
   for (const c of r.body.cards) {
     assert.equal(c.state, 'empty', c.slug);
     assert.ok(c.next && c.next.text && c.next.href.startsWith('/validate/'), `${c.slug} names its starting action`);
-    assert.equal(c.series, null, `${c.slug} draws nothing`);
+    if (c.slug === 'demand-signals') {
+      assert.deepEqual(c.series.signals, { loi: 0, pre_sale: 0, waitlist: 0, need_to_have: 0, would_pay: 0 });
+      assert.equal(c.series.chart_ready, false);
+    } else assert.equal(c.series, null, `${c.slug} draws nothing`);
   }
   assert.equal(card(r.body, 'problem-discovery').next.text, 'Record your first session');
   assert.equal(card(r.body, 'ideal-customer-profile').next.text, 'Start the profile');
@@ -760,4 +763,27 @@ test('D685 §5.12: the interviews target shares metric_targets but never reaches
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.deepEqual(body.items.map((t: any) => t.metric_key), ['mrr']);
   } finally { [console.warn, console.error] = saved; }
+});
+
+
+test('demand commits keep currency and period separate and exclude interest and unconfirmed terms', async () => {
+  const db = fixture();
+  for (const [kind, amount_cents, currency, period, status] of [
+    ['loi', 12500, 'eur', 'month', 'confirmed'],
+    ['pre_sale', 2500, 'eur', 'month', 'confirmed'],
+    ['loi', 30000, 'eur', 'year', 'confirmed'],
+    ['pre_sale', 10000, 'usd', 'month', 'confirmed'],
+    ['would_pay', 50000, 'eur', 'month', 'confirmed'],
+    ['loi', 60000, 'eur', 'month', 'to_confirm'],
+  ]) {
+    const result = await call(db, FOUNDER, 'POST', `/demand-signals?project=${P}`, { kind, amount_cents, currency, period, status });
+    assert.equal(result.status, 201);
+  }
+  const data = card((await overview(db)).body, 'demand-signals').series;
+  assert.equal(data.signals.would_pay, 1);
+  assert.deepEqual(data.committed, [
+    { currency: 'EUR', period: 'month', amount_cents: 15000 },
+    { currency: 'EUR', period: 'year', amount_cents: 30000 },
+    { currency: 'USD', period: 'month', amount_cents: 10000 },
+  ]);
 });
