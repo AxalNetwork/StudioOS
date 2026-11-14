@@ -12,6 +12,8 @@ import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { FinancialMetric, HealthStatus, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import { CompanyActivity, CompanyFinancials, CompanySupport } from '../portfolio/CompanyPanels';
+import { ReportAsk } from '../portfolio/ReportAsk';
+import { accessOf } from '../portfolio/reportAsk';
 import {
   COMPANY_SHAPES, COMPANY_TABS, OWNERSHIP_ANCHOR, companyDocTitle, companyHealthOf, companyTabHref, companyTabOfPath, evidenceOf,
   holdingRouteOf, identityOf, keyFactsOf, nextActionsOf,
@@ -35,8 +37,10 @@ import '../portfolio/company.css';
  *     marks and distributions (`GET /api/positions/:uid`), then Ownership &
  *     rights — the old Terms and the read-only cap table. The old `…/terms`
  *     address is replaced by `…/financials#ownership-rights`;
- *   - Reports (`…/reports`): the timeline with Read, Ask and Waive, unchanged,
- *     and the updates received;
+ *   - Reports (`…/reports`): the reporting obligation with Ask and Waive
+ *     (D4817 part 9, addendum PFA03–PFA05, PFA10: Review, a confirm naming
+ *     the act, and a Receipt from the Worker's stored record), the timeline
+ *     with Read, and the updates received;
  *   - Support (`…/support`) and Activity (`…/activity`).
  * Each read stands alone (`usePortfolioReads`): a failed one says Unreadable
  * with a Retry for that source, and its neighbours stay. The company's name
@@ -197,6 +201,9 @@ function CompanyWorkspace({ uid, tab }) {
   const name = held ? who.name || 'Company' : null;
   const route = routeOf(company);
   const holding = holdingRouteOf(reads.owed, position);
+  // D4817 part 9: which Ask or Waive is open, and on which period; who may act is the company read's.
+  const [act, setAct] = useState(null);
+  const access = accessOf(reads.owed.state === 'ok' ? reads.owed.value : null);
 
   // The old Terms address: replaced by Financials, at Ownership & rights, keeping the query.
   const terms = tab === 'terms';
@@ -235,7 +242,12 @@ function CompanyWorkspace({ uid, tab }) {
       tabBody = (
         <>
           <p className="pf-co-route" data-testid="company-reports-route">{holding.text}{holding.own ? ` · ${holding.own}` : ''}</p>
-          {ownedBlock((c) => <Timeline company={c} onChanged={() => retry('owed')} />, 'The reports owed to you', 'company-owed-none')}
+          {ownedBlock((c) => (
+            <>
+              <ReportAsk company={c} access={access} act={act} setAct={setAct} onChanged={() => retry('owed')} />
+              <Timeline company={c} onChanged={() => retry('owed')} onAct={(kind, periodUid) => setAct({ kind, uid: periodUid })} canAct={access.can} />
+            </>
+          ), 'The reports owed to you', 'company-owed-none')}
           {position ? <Reports projectId={position.project_id} /> : null}
         </>
       );
