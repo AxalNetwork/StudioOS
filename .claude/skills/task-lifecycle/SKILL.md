@@ -9,10 +9,9 @@ AGENTS.md § Task protocol, § STATUS and § Owner answers, end to end, for a
 building slot. Session 1 (`S01`) writes tasks and does not use this skill; its
 pass is `coordinator-audit`.
 
-Two things go wrong most. On 2026-11-14 alone, six STATUS posts said
-"claim.mjs exit 4; claimed by label", each working out the fallback again; and
-more than fifteen claims expired without being released, so the hourly
-reaper (`.github/workflows/claims-reaper.yml`) commented on each. This skill
+Two things go wrong most: the `claim.mjs` exit 4 fallback gets worked out
+again each time, and claims expire without being released, so the hourly
+reaper (`.github/workflows/claims-reaper.yml`) comments on each. This skill
 makes both routine: exit 4 is a normal path, and every claim is renewed while
 work goes on and released when it stops.
 

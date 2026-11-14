@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   DIGEST_MARKER, parseDigest, openAlerts, newestRun, failedLeafJobs, suitePart, cleanLine, repoPath, parseLog,
   testRunners, reproduceTest, reproduceTypes, guardCommand, resolveTypePath, findings, markShared, nextStep,
-  leafJobs, mainRunBefore, ruling,
+  leafJobs, mainRunBefore, ruling, cancelledRun, noFailureNote,
 } from './redCiTriage.mjs';
 
 const T = '2026-11-13T23:40:37.9838692Z ';
@@ -238,4 +238,41 @@ test('nextStep: an inherited failure never sends the slot to fix or port, even w
   assert.match(nextStep({ verdict: 'pr_failure', rows: [marked[0]] }), /needs its log read/);
   assert.doesNotMatch(nextStep({ verdict: 'infra_failure' }), /D5619|re-run/);
   assert.match(nextStep({ verdict: 'infra_failure', alerts: [{ number: 5719, title: '[alert] the Actions queue is backed up' }] }), /#5719 is open: at most one failed-job re-run/);
+});
+
+test('a run whose suite jobs were cancelled by a newer push is called cancelled, not "no failed job" (#6420)', () => {
+  const jobs = [
+    { id: 1, name: 'suite (worker-1-of-6)', conclusion: 'cancelled' },
+    { id: 2, name: 'suite (frontend-1-of-2)', conclusion: 'cancelled' },
+    { id: 3, name: 'ci / fast', conclusion: 'success' },
+    { id: 4, name: 'test:drift (full suite)', conclusion: 'failure' },
+    { id: 5, name: 'landing gate', conclusion: 'failure' },
+  ];
+  const run = { status: 'completed', conclusion: 'failure', head_sha: 'a'.repeat(40) };
+  assert.deepEqual(cancelledRun(run, jobs), { cancelled: ['suite (worker-1-of-6)', 'suite (frontend-1-of-2)'], gates: ['test:drift (full suite)', 'landing gate'] });
+
+  const old = noFailureNote({ run, jobs, head: 'b'.repeat(40) });
+  assert.equal(old.cancelled, true);
+  assert.equal(old.line, 'this run was cancelled or superseded by a newer push: 2 job(s) were cancelled and none failed');
+  assert.match(old.next, /cancelled or superseded by a newer push/);
+  assert.match(old.next, /test:drift \(full suite\) and landing gate shows failure only because the jobs it waits on were cancelled/);
+  assert.match(old.next, /Read the run on the current head bbbbbbbbbb\./);
+  assert.doesNotMatch(old.next, /No failed job/);
+
+  const same = noFailureNote({ run, jobs, head: 'a'.repeat(40) });
+  assert.match(same.next, /Read the newest run on the current head; if this is still the newest, nothing has replaced it yet\./);
+
+  // The run itself cancelled, with no job list to go on.
+  assert.match(noFailureNote({ run: { status: 'completed', conclusion: 'cancelled' }, jobs: [], head: 'b' }).line, /the run was cancelled and no job failed/);
+});
+
+test('cancelledRun stays out of the way when a job really failed or nothing was cancelled (#6420)', () => {
+  const run = { status: 'completed', conclusion: 'failure', head_sha: 'a' };
+  // A real failure beside cancelled jobs is a failure: the failed job's log is what to read.
+  assert.equal(cancelledRun(run, [{ id: 1, name: 'suite (rest)', conclusion: 'failure' }, { id: 2, name: 'suite (worker-1-of-6)', conclusion: 'cancelled' }]), null);
+  // A cancelled summary gate alone does not make the run a cancelled one.
+  assert.equal(cancelledRun({ status: 'completed', conclusion: 'success' }, [{ id: 1, name: 'landing gate', conclusion: 'cancelled' }, { id: 2, name: 'ci / fast', conclusion: 'success' }]), null);
+  assert.deepEqual(noFailureNote({ run: { status: 'completed', conclusion: 'success' }, jobs: [{ id: 1, name: 'ci / fast', conclusion: 'success' }], head: 'a' }),
+    { cancelled: false, line: 'no failed job on this run', next: 'No failed job on this run (success).' });
+  assert.equal(noFailureNote({ run: { status: 'in_progress', conclusion: null }, jobs: [], head: 'a' }).next, 'No job has failed yet; the run is still going.');
 });
