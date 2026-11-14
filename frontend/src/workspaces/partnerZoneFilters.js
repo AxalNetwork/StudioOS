@@ -102,6 +102,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // and `Expired` read the first and the confusion the note warned about is a
 // distinction the schema now draws.
 
+// D6285: `/research/markets` mounts the market directory, which draws no chip
+// row; only the deleted, never-mounted `MarketZone` body read these keys.
+const MARKETS_DIRECTORY_HAS_NO_CHIPS =
+  'the market directory mounted at this route draws no chip row, so nothing narrows its readings by age; only the unmounted MarketZone body did';
+const MARKETS_DIRECTORY_HOVER = 'The market directory has no age filter yet.';
+
 export const PARTNER_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
   // FOUR OF FOUR, WHERE THIS ROW USED TO RUN ONE. `Unassigned first` and `By
@@ -111,7 +117,8 @@ export const PARTNER_ZONE_FILTERS = {
   //
   // `Going cold` IS SIXTY DAYS, AND THAT NUMBER IS THE ARTBOARD'S. `cold =
   // BOOK.filter(c => c.days !== null && c.days > 60)`, and its `cmpBody` says
-  // "going cold past 60 days" in as many words. `MarketZone`'s ninety is a
+  // "going cold past 60 days" in as many words. A market reading's ninety
+  // (`STALE_AT` in `pages/research/marketReadingRead.js`) is a
   // different question about a different object — how stale a price reading may
   // be before a proposal may not carry it — and transcribing one onto the other
   // is how two numbers become one.
@@ -392,10 +399,16 @@ export const PARTNER_ZONE_FILTERS = {
   // `observed_at`, never from `updated_at`: the ingestion job stamps every row
   // it touches with one run timestamp, so that column cannot tell two signals
   // apart.
+  //
+  // D6285 — NOT LIVE, AND THEY HAD NOT BEEN SINCE D593. The three keys were
+  // implemented only by `MarketZone`, a body nothing mounted once the market
+  // directory replaced it; `ResearchWorkspace` hands `MarketDirectoryZone` no
+  // `zoneFilters`, so no chip was drawn. The test that called them live read
+  // the unmounted file. Prose until the directory narrows its readings by age.
   'research/markets': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Current', key: 'current' },
-    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'All', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Current', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Stale', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
     {
       canvas: 'Attached to proposals',
       unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names', hover: 'No row joins a signal to a proposal.',

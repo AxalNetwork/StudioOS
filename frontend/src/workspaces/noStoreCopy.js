@@ -105,12 +105,14 @@ export const NETWORK_ORG_COPY = {
  */
 export const RESEARCH_STORE_GAPS = {
   // D392 — CORRECTED AND SCOPED. This said the page "reads instead ... the
-  // signals feed". It has not since `/research/markets` became `MarketZone`:
+  // signals feed". It has not since `/research/markets` became `MarketZone`
+  // (replaced by `MarketDirectoryZone` in D593, deleted in D6285):
   // comparable readings a person enters, dated and age-gated (migration 223),
   // with the feed kept at `/signals` (until D670). The missing store it names is still
   // missing and still what the founder and investor canvases narrow — so the
   // entry stays for them. For partner and advisor, whose canvases draw exactly
-  // the readings `MarketZone` holds, it is not shown (`roles`).
+  // the readings `MarketDirectoryZone`'s readings card holds, it is not shown
+  // (`roles`).
   //
   // D593 — `why` said the page holds "comparable readings" instead, and since
   // D533 it is the market directory first: the taxonomy's markets by tracked

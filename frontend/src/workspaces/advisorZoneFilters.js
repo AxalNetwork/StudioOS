@@ -69,6 +69,11 @@ const NO_INTERACTION_DATE =
 // list while implying a remainder that is not yours exists somewhere.
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
+// D6285: `/research/markets` mounts the market directory, which draws no chip
+// row; only the deleted, never-mounted `MarketZone` body read these keys.
+const MARKETS_DIRECTORY_HAS_NO_CHIPS =
+  'the market directory mounted at this route draws no chip row, so nothing narrows its readings by age; only the unmounted MarketZone body did';
+const MARKETS_DIRECTORY_HOVER = 'The market directory has no age filter yet.';
 
 // `/network/introductions`. FOUR LIVE CHIPS, the partner panel's four (D392).
 // `Gated` was relabelled `Awaiting you` and `Made` was prose, both on the
@@ -165,11 +170,17 @@ export const ADVISOR_ZONE_FILTERS = {
   // one timestamp per run and binds it to every row it touches, so an age
   // predicate over it would put the whole feed in one bucket — a filter that
   // always returns everything or nothing, which is D51 in a new costume.
+  //
+  // D6285 — NOT LIVE, AND THEY HAD NOT BEEN SINCE D593. The four keys were
+  // implemented only by `MarketZone`, a body nothing mounted once the market
+  // directory replaced it; `ResearchWorkspace` hands `MarketDirectoryZone` no
+  // `zoneFilters`, so no chip was drawn. The test that called them live read
+  // the unmounted file. Prose until the directory narrows its readings by age.
   'research/markets': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Current', key: 'current' },
-    { canvas: 'Ageing', key: 'ageing' },
-    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'All', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Current', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Ageing', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Stale', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
   ],
   // The same level mismatch founder's row has, from the other end: this canvas
   // wants a company's standing with you, and the page lists analyses that name
