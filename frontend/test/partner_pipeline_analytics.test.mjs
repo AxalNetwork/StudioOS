@@ -65,7 +65,7 @@ test('the zone reads the pipeline endpoint, and re-reads when the chip changes',
     'the chip row selects a window the WORKER applies, so the chip must reach the request — '
     + 'and through the map, because the worker coerces an unknown key to all time rather than '
     + 'refusing, which would put all-time figures under a chip that says This quarter');
-  assert.match(code, /const WINDOWS = \{[\s\S]{0,300}?prev_quarter:[\s\S]{0,200}?ytd:[\s\S]{0,200}?shape:/,
+  assert.match(code, /const WINDOWS = \{[\s\S]{0,300}?prev_quarter:[\s\S]{0,200}?ytd:[\s\S]{0,200}?all:/,
     'the page no longer names the windows its own chip row offers');
   for (const wrong of ['insightsHeatmap', 'insightsTrends', 'insightsFeed']) {
     assert.doesNotMatch(code, new RegExp(`api\\.${wrong}`),
@@ -137,13 +137,13 @@ test('the loss taxonomy is drawn, and the loss nobody explained is its own row',
   const code = codeOnly(ZONE);
   // THE ARTBOARD'S CARD, which this zone refused for as long as the column
   // did not exist.
-  assert.match(code, /title="Loss reasons"/, 'the artboard’s loss card is missing');
-  assert.match(code, /The taxonomy, not a summary sentence/,
+  assert.match(code, /title="Why we lose"/, 'the artboard’s loss card is missing');
+  assert.match(code, /Recorded loss reasons/,
     'the artboard’s subtitle for the loss card is gone');
   assert.match(code, /d\?\.loss_reasons/, 'the chart is not reading the response’s taxonomy');
 
   // THE ROW THAT IS NOT A CATEGORY.
-  assert.match(code, /No reason recorded/,
+  assert.match(code, /Not recorded<\/span>/,
     'a loss nobody explained has been folded into the taxonomy');
   assert.match(code, /losses_unstated/, 'the unexplained losses are not counted');
   assert.doesNotMatch(code, /losses_unstated\s*(\|\||\?\?)\s*0\b[^)]*LOSS_LABEL/,
@@ -172,11 +172,11 @@ test('no win rate is ever displayed as 0% when nothing was decided', () => {
   assert.match(code, /value=\{p\?\.win_rate_pct != null \?/, 'the strip tile is unguarded');
   assert.match(code, /nr=\{p\?\.win_rate_pct == null\}/,
     'a window with nothing decided must read as unrecorded, not as an empty tile');
-  assert.match(code, /s\.win_rate_pct == null\s*\n?\s*\? \{ nr: true \}/,
+  assert.match(code, /s\.win_rate_pct == null \? 'Not recorded'/,
     'a shape with nothing decided is drawing a rate');
   // AND THE BAR IS NOT DRAWN AT ALL where there is no rate: a zero-height
   // column reads as having lost every bid rather than as having made none.
-  assert.match(code, /if \(!point \|\| point\.win_rate_pct == null\) \{/,
+  assert.match(code, /quarters\.filter\(\(q\) => q\.win_rate_pct != null\)/,
     'a shape that decided nothing in a quarter still draws a bar');
 });
 

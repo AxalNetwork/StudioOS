@@ -7,7 +7,7 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 // Through `pages/partner/kit.jsx` rather than reaching into the advisor tree
 // and the operations kit separately — the same primitives, but `moneyUsd`
 // arrives under the name `moneyDollars`, which is the whole point of that file:
@@ -41,8 +41,7 @@ import {
  * describe a pattern over exactly the decisions somebody bothered to explain.
  * That is why every read below states its denominator.
  *
- * THE CHIP ROW NARROWS WHAT WAS DECIDED AND NOTHING ELSE. Three of the four are
- * periods and the fourth is a grouping. An undecided quote has no decision date
+ * THE CHIP ROW NARROWS WHAT WAS DECIDED AND NOTHING ELSE. All four are decision windows. An undecided quote has no decision date
  * to place in any window, so the weighted forecast is over the whole open
  * pipeline regardless of the chip — said on the page, because a forecast that
  * silently changed meaning with a chip would be worse than one that ignored it.
@@ -76,15 +75,12 @@ const WINDOWS = {
   quarter: 'this quarter',
   prev_quarter: 'last quarter',
   ytd: 'so far this year',
-  shape: 'in the whole record',
+  all: 'in the whole record',
 };
 const windowOf = (v) => (Object.prototype.hasOwnProperty.call(WINDOWS, v) ? v : 'quarter');
 
-/** The artboard's three series colours, in its own order. */
-const SERIES = ['#fcd34d', '#d97706', '#92400e'];
-
 /** The strip tile, in the anatomy the artboards share. */
-function AnalyticsTile({ label, value, note, nr = false }) {
+function AnalyticsTile({ label, value, note, calculation, nr = false }) {
   return (
     <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
       <Eyebrow>{label}</Eyebrow>
@@ -94,6 +90,10 @@ function AnalyticsTile({ label, value, note, nr = false }) {
         )}
       </div>
       <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
+      <details className="mt-2 text-xs text-axal-muted">
+        <summary className="cursor-pointer font-semibold">How calculated<span className="sr-only"> · {label}</span></summary>
+        <p className="mt-1">{calculation}</p>
+      </details>
     </div>
   );
 }
@@ -118,7 +118,7 @@ function shapeRead(s) {
       ? 'One bid, one won. Too few to claim a pattern.'
       : 'One bid, one lost. Too few to claim a pattern.';
   }
-  const head = `${decided} decided, ${s.accepted} won`;
+  const head = decided === 2 ? `2 decisions, ${s.accepted} won · too few to infer a reliable pattern` : `${decided} decided, ${s.accepted} won`;
   if (s.rejected === 0) return `${head} — nothing lost in this shape.`;
   if (s.losses_with_reason === 0) {
     return `${head} — no reason is recorded against ${s.rejected === 1 ? 'the loss' : `any of the ${s.rejected} losses`}.`;
@@ -131,6 +131,7 @@ function shapeRead(s) {
 
 export default function PartnerPipelineAnalyticsZone() {
   const [view, setView] = useState('quarter');
+  const [metric, setMetric] = useState('win-rate');
   const { company } = useActiveCompany();
   // THE ANSWER BELONGS TO THE CHIP AND THE COMPANY IT WAS ASKED FOR (#4701).
   // The read used to set state whenever its request settled, so pressing
@@ -160,20 +161,6 @@ export default function PartnerPipelineAnalyticsZone() {
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
   const lostCount = d?.lost_count ?? 0;
 
-  // THE CHART'S LEGEND IS THE SHAPES THAT ACTUALLY DECIDED SOMETHING, in the
-  // by-shape table's own order — so a colour means the same row in both. The
-  // artboard's three-series legend is its fixture's three shapes; this firm's
-  // are whatever it has bid on.
-  const series = useMemo(() => {
-    const seen = [];
-    for (const q of quarters) {
-      for (const s of q.by_shape || []) {
-        if (!seen.some((x) => x.shape === s.shape)) seen.push({ shape: s.shape });
-      }
-    }
-    return seen.map((s, i) => ({ ...s, color: SERIES[i % SERIES.length] }));
-  }, [quarters]);
-
   // The tallest reason sets the bar scale, so the chart is read against its own
   // largest category rather than against a hundred nothing reaches.
   const lossMax = useMemo(
@@ -202,7 +189,7 @@ export default function PartnerPipelineAnalyticsZone() {
         loading={state.loading}
         error={state.error}
         onRetry={load}
-        isEmpty={!p || p.quote_count === 0}
+        isEmpty={!p || (d.rows_read === 0 && p.quote_count === 0)}
         empty={(
           <NothingYet
             title="No quotes to analyse yet"
@@ -232,6 +219,7 @@ export default function PartnerPipelineAnalyticsZone() {
             {/* NULL IS NOT 0%. Nothing decided is not everything lost. */}
             <AnalyticsTile
               label="Win rate"
+              calculation="Wins divided by won and lost quotes. Pending and withdrawn quotes are excluded."
               value={p?.win_rate_pct != null ? `${p.win_rate_pct}%` : ''}
               nr={p?.win_rate_pct == null}
               note={p?.win_rate_pct != null
@@ -240,10 +228,11 @@ export default function PartnerPipelineAnalyticsZone() {
             />
             <AnalyticsTile
               label="Median cycle"
+              calculation="Middle elapsed time from the quote date to the decision date among decided quotes with both dates."
               value={p?.median_cycle_days != null ? `${p.median_cycle_days} d` : ''}
               nr={p?.median_cycle_days == null}
               note={p?.median_cycle_days != null
-                ? `sent to decided · ${p.accepted + p.rejected} decided bids`
+                ? `decided bids with both dates · exact sample count unavailable`
                 : 'no decided bid carries both dates'}
             />
             {/* NOT NARROWED BY THE CHIP, and the note says so rather than
@@ -252,17 +241,19 @@ export default function PartnerPipelineAnalyticsZone() {
                 a firm with nothing open read "$0" over "$0 open". The population is the open quotes it counted. */}
             <AnalyticsTile
               label="Weighted forecast"
+              calculation="Each open quote’s value multiplied by its stage weight, then summed across the open pipeline."
               value={forecastOpen ? moneyDollars(f.weighted_value) : ''}
               nr={!forecastOpen}
               note={forecastOpen
-                ? `${moneyDollars(f.unweighted_value)} open · every window`
+                ? `${forecastOpen} open quotes · ${moneyDollars(f.unweighted_value)} total · every window`
                 : 'nothing open to forecast'}
             />
             {/* THE FOURTH TILE IS THE ARTBOARD'S ARGUMENT. It counts explained
                 losses, and says how many losses were never explained rather
                 than presenting the count as a share of all of them. */}
             <AnalyticsTile
-              label="On-price losses"
+              label="Losses on price"
+              calculation="Lost quotes marked Price, shown out of all lost quotes. Losses without a reason are counted separately."
               value={lostCount ? `${d?.on_price_losses ?? 0} of ${lostCount}` : ''}
               nr={!lostCount}
               note={lostCount
@@ -277,104 +268,75 @@ export default function PartnerPipelineAnalyticsZone() {
             <p className="text-[12px] leading-relaxed text-axal-muted">{p.win_rate_basis}</p>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.25fr_1fr]">
-            {/* ══ BY SHAPE — the artboard's four columns ══════════════════ */}
-            <Instrument
-              testid="by-shape"
-              title="By shape"
-              meta="On-price losses stated per shape"
-              cols="1.1fr .6fr .6fr 1.5fr"
-              head={['Shape', 'Win', 'Cycle', 'Read']}
-              rows={shapes.map((s) => ({
-                key: s.shape == null ? '__unrecorded' : s.shape,
-                cells: [
-                  s.shape == null
-                    ? { nr: true, sub: `${s.quote_count} quote${s.quote_count === 1 ? '' : 's'}` }
-                    : { text: shapeName(s.shape), sub: `${s.quote_count} quote${s.quote_count === 1 ? '' : 's'}` },
-                  // A SHAPE WITH NOTHING DECIDED SHOWS NO RATE. 0% is a claim
-                  // about losses; no decisions is not.
-                  s.win_rate_pct == null
-                    ? { nr: true }
-                    : {
-                      text: `${s.win_rate_pct}%`,
-                      barPct: Math.max(0, Math.min(100, s.win_rate_pct)),
-                      barColor: s.win_rate_pct >= 50 ? '#047857' : '#b45309',
-                    },
-                  s.median_cycle_days == null ? { nr: true } : { text: `${s.median_cycle_days} d` },
-                  { text: shapeRead(s) },
-                ],
-              }))}
-              note={'Shape here is the need’s own category — the only decomposition the record carries. Nothing stores an engagement shape, so a retainer and a one-off project filed under the same category are one row, and the column header is not allowed to imply more. Each shape’s win rate uses the same denominator as the headline: decided quotes only. The read states its sample, because a rate over two decisions is a rate over two decisions however confidently it is printed — and the on-price count is over the losses that carry a recorded reason, never over every loss, which is what the artboard means by stating it per shape rather than asserting it as a universal.'}
-            />
-
-            {/* ══ QUARTER OVER QUARTER — win rate by shape ════════════════ */}
-            <Section title="Quarter over quarter">
-              <p className="-mt-1 mb-2 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-faint">
-                Win rate by shape
-              </p>
-              {quarters.length === 0 ? (
-                <p className="text-[12.5px] text-axal-muted">
-                  No quote has been decided yet, so there is no quarter to compare.
+          <Section title={metric === 'win-rate' ? 'Win rate over time' : 'Cycle time'}>
+            <div role="group" aria-label="Chart metric" className="mb-3 flex flex-wrap gap-2">
+              {[['win-rate', 'Win rate'], ['cycle-time', 'Cycle time']].map(([key, title]) => (
+                <button key={key} type="button" aria-pressed={metric === key} onClick={() => setMetric(key)}
+                  className="min-h-11 rounded-lg border border-axal-hairline px-3 text-sm font-semibold aria-pressed:bg-amber-100 aria-pressed:text-amber-950 focus-visible:outline-2">
+                  {title}
+                </button>
+              ))}
+            </div>
+            {metric === 'cycle-time' ? (
+              <div className="grid gap-2">
+                <p>{p.median_cycle_days == null ? 'No cycle time recorded' : `Median cycle: ${p.median_cycle_days} days`} · {windowLabel}.</p>
+                <p className="text-sm text-axal-muted">Quarterly cycle times are unavailable. The median uses decided quotes with both dates.</p>
+              </div>
+            ) : quarters.length === 0 ? (
+              <p className="text-sm text-axal-muted">No quote has been decided yet.</p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm text-axal-muted" data-testid="analytics-trend-summary">
+                  Win rate across {quarters.length} recorded decision {quarters.length === 1 ? 'quarter' : 'quarters'}. Latest quarter: {quarters.at(-1).accepted} of {quarters.at(-1).decided} decided quotes won.
                 </p>
-              ) : (
-                <>
-                  <div className="flex h-[132px] items-end gap-3">
-                    {quarters.map((q) => (
-                      <div key={q.quarter} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-                        <div className="flex h-full items-end gap-1">
-                          {series.map((s) => {
-                            const point = (q.by_shape || []).find((x) => x.shape === s.shape);
-                            // A SHAPE THAT DECIDED NOTHING IN A QUARTER DRAWS NO
-                            // BAR AT ALL. A zero-height column would read as
-                            // having lost every bid rather than as having made
-                            // none — the same distinction the strip makes.
-                            if (!point || point.win_rate_pct == null) {
-                              return <div key={String(s.shape)} className="min-w-0 flex-1" />;
-                            }
-                            return (
-                              <div
-                                key={String(s.shape)}
-                                className="min-w-0 flex-1 rounded-t-[3px]"
-                                style={{
-                                  height: `${Math.max(2, Math.min(100, point.win_rate_pct))}%`,
-                                  background: s.color,
-                                }}
-                                title={`${shapeName(s.shape)} · ${point.win_rate_pct}% of ${point.decided} decided`}
-                              />
-                            );
-                          })}
-                        </div>
-                        <div className="mt-2 text-center text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                          {q.quarter}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div data-testid="chart-legend" className="mt-3 flex flex-wrap gap-3.5">
-                    {series.map((s) => (
-                      <div key={String(s.shape)} className="flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: s.color }} />
-                        <span className="text-[11px] text-axal-muted">{shapeName(s.shape)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                A quarter is the quarter the DECISION landed in, not the one the quote
-                was sent in — a proposal sent in March and lost in July is a Q3 loss.
-                Open quotes belong to no quarter yet; withdrawn ones are excluded for
-                the same reason they are excluded from the headline rate. This chart
-                spans every quarter whatever the chip row says: a trend narrowed to one
-                quarter is one bar.
-              </p>
-            </Section>
-          </div>
+                <div className="grid gap-2" aria-hidden="true">
+                  {quarters.filter((q) => q.win_rate_pct != null).map((q) => (
+                    <div key={q.quarter} className="grid grid-cols-[5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-xs">
+                      <span>{q.quarter}</span>
+                      <div className="h-2 rounded bg-axal-ground"><div className="h-full rounded bg-amber-600" style={{ width: `${q.win_rate_pct}%` }} /></div>
+                      <span className="text-right">{q.win_rate_pct}%</span>
+                    </div>
+                  ))}
+                </div>
+                <details className="mt-3 text-sm">
+                  <summary className="cursor-pointer font-semibold">View win rate table</summary>
+                  <table className="mt-2 w-full text-left">
+                    <thead><tr><th scope="col">Quarter</th><th scope="col">Won / decided</th><th scope="col">Win rate</th></tr></thead>
+                    <tbody>{quarters.map((q) => <tr key={q.quarter}><th scope="row">{q.quarter}</th><td>{q.accepted} / {q.decided}</td><td>{q.win_rate_pct == null ? 'Not recorded' : `${q.win_rate_pct}%`}</td></tr>)}</tbody>
+                  </table>
+                </details>
+              </>
+            )}
+          </Section>
 
-          {/* ══ LOSS REASONS — the taxonomy, beside the narration ═════════ */}
-          <Section title="Loss reasons">
+          <Section title="By shape">
+            <p className="mb-3 text-sm text-axal-muted">Shape is the need category. Win rate uses decided quotes.</p>
+            <div data-testid="by-shape" className="grid gap-2">
+              <div className="hidden grid-cols-6 gap-2 px-3 text-xs font-semibold lg:grid" aria-hidden="true">
+                {['Shape', 'Quotes', 'Won', 'Win rate', 'Median cycle', 'Won value'].map((label) => <span key={label}>{label}</span>)}
+              </div>
+              {shapes.map((s) => (
+                <dl key={s.shape ?? '__unrecorded'} className="grid min-w-0 grid-cols-2 gap-2 rounded-lg border border-axal-hairline p-3 text-sm lg:grid-cols-6">
+                  {[
+                    ['Shape', shapeName(s.shape)], ['Quotes', s.quote_count], ['Won', s.accepted],
+                    ['Win rate', s.win_rate_pct == null ? 'Not recorded' : `${s.win_rate_pct}%`],
+                    ['Median cycle', s.median_cycle_days == null ? 'Not recorded' : `${s.median_cycle_days} d`],
+                    ['Won value', s.accepted ? moneyDollars(s.won_value) : 'Not recorded'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="min-w-0 [overflow-wrap:anywhere]">
+                      <dt className="text-xs font-semibold text-axal-muted lg:sr-only">{label}</dt><dd>{value}</dd>
+                    </div>
+                  ))}
+                  <div className="col-span-full text-xs text-axal-muted"><dt className="sr-only">Sample</dt><dd>{shapeRead(s)}</dd></div>
+                </dl>
+              ))}
+              {!shapes.length && <p className="text-sm text-axal-muted">No quotes in this period.</p>}
+            </div>
+          </Section>
+
+          <Section title="Why we lose">
             <p className="-mt-1 mb-3 text-[11px] font-semibold uppercase tracking-[.07em] text-axal-faint">
-              The taxonomy, not a summary sentence
+              Recorded loss reasons
             </p>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <div>
@@ -406,7 +368,7 @@ export default function PartnerPipelineAnalyticsZone() {
                         pattern over exactly the decisions somebody wrote up. */}
                     <div className="mt-1 border-t border-axal-hairline pt-2.5">
                       <div className="flex justify-between gap-2.5">
-                        <span className="text-[11.5px] font-semibold text-axal-muted">No reason recorded</span>
+                        <span className="text-[11.5px] font-semibold text-axal-muted">Not recorded</span>
                         <span className="text-[11.5px] font-bold tabular-nums text-axal-muted">
                           {d?.losses_unstated ?? 0}
                         </span>
@@ -442,36 +404,9 @@ export default function PartnerPipelineAnalyticsZone() {
             </div>
           </Section>
 
-          <StatedLimit title="What these figures do and do not claim">
-            <p>
-              <strong>The chips narrow decisions, not the forecast.</strong> This
-              quarter, last quarter and year to date all select on the date a
-              quote was DECIDED. An open quote has no decision date, so it sits
-              in every window — which is why the weighted forecast is over the
-              whole open pipeline whatever the chip row says, and why the
-              quarter-over-quarter chart spans every quarter.
-            </p>
-            <p className="mt-2">
-              <strong>The taxonomy covers the losses somebody explained.</strong>{' '}
-              Recording a reason is optional, so “no reason recorded” is counted
-              as its own row rather than folded into Other. Where it is the
-              largest row, the chart is describing a minority of the losses and
-              the note beside it says so.
-            </p>
-            <p className="mt-2">
-              <strong>Shape is the need&rsquo;s category.</strong> Nothing stores
-              an engagement shape, so a retainer and a one-off project filed under
-              one category are one row here. The recurring economics live on{' '}
-              <Link to="/pipeline/retainers" className="text-amber-700 underline">Retainers</Link>,
-              which reads a store that does distinguish them.
-            </p>
-            <p className="mt-2">
-              <strong>Where demand is, rather than how you did.</strong> The
-              board-wide view of founder demand lives on{' '}
-              <Link to="/partner/insights" className="text-amber-700 underline">Demand Insights</Link>,
-              which this zone used to render. It answers a different question and
-              keeps its own page.
-            </p>
+          <StatedLimit title="What these figures cover">
+            <p>Periods follow decision dates. The forecast includes all open quotes, and the trend includes all recorded quarters.</p>
+            <p className="mt-2">See <Link to="/pipeline/retainers" className="text-amber-700 underline">Retainers</Link> for recurring work and <Link to="/partner/insights" className="text-amber-700 underline">Demand Insights</Link> for board-wide demand.</p>
           </StatedLimit>
         </div>
       </ZoneBody>

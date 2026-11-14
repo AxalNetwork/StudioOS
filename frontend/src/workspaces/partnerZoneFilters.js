@@ -515,15 +515,12 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Over scope', key: 'over' },
   ],
 
-  // THREE PERIODS AND A GROUPING, which is what an analytics chip row is. The
-  // quarters are relative to today rather than the canvas's `Q3 2026` — that
-  // date is when the artboard was drawn, and a page whose first chip named a
-  // fixed quarter would be wrong for every reader after it.
+  // The analytics read applies these windows to the decision date.
   'pipeline/analytics': [
     { canvas: 'Q3 2026', key: 'quarter', label: 'This quarter' },
     { canvas: 'Q2 2026', key: 'prev_quarter', label: 'Last quarter' },
     { canvas: 'Year to date', key: 'ytd' },
-    { canvas: 'By shape', key: 'shape' },
+    { canvas: 'All time', key: 'all' },
   ],
 };
 
