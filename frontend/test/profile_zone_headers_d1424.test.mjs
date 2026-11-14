@@ -12,6 +12,9 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { mountContracts } from './_contracts_dom.mjs';
+import { api } from '../src/lib/api.js';
+import InvestorMyThesisCard from '../src/pages/account/InvestorMyThesisCard.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 import WorkspaceShell from '../src/workspaces/WorkspaceShell.jsx';
 import { PRIMARY_ACCENT, ZonePrimary } from '../src/workspaces/ZoneActions.jsx';
@@ -237,4 +240,32 @@ test('no new client method: every read and write here is one main already serves
   }
   assert.match(codeOnly(read('frontend/src/pages/investor/InvestorThesisBand.jsx')), /api\.getInvestorProfile\(\)/);
   assert.match(codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx')), /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+});
+
+test('the linked thesis card has an anchor and offers a return only after a save for a known source', async () => {
+  const originals = [api.getInvestorProfile, api.saveInvestorProfile];
+  const profile = { completed_at: '2026-11-14', sectors: [], stages: [], geos: [], thesis_text: 'Initial thesis' };
+  api.getInvestorProfile = async () => ({ profile });
+  api.saveInvestorProfile = async (input) => ({ profile: { ...profile, ...input } });
+  try {
+    for (const [source, label, href] of [
+      ['home', 'Back to Investor Home', '/studio'],
+      ['deal-flow', 'Back to Deal flow', '/deals'],
+      ['unknown', null, null],
+    ]) {
+      const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'investor', linked: true }),
+        `/account/security-privacy?from=${source}#my-thesis`);
+      try {
+        assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+        assert.doesNotMatch(view.text(), /Back to (Investor Home|Deal flow)/);
+        await view.click('Save thesis');
+        if (label) {
+          const returnLink = view.nodes().find(node => node.tagName === 'A' && view.props(node)?.children === label);
+          assert.equal(view.props(returnLink)?.href, href);
+          await view.click('AI/ML');
+        }
+        assert.doesNotMatch(view.text(), /Back to (Investor Home|Deal flow)/);
+      } finally { await view.unmount(); }
+    }
+  } finally { [api.getInvestorProfile, api.saveInvestorProfile] = originals; }
 });
