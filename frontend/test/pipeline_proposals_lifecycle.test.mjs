@@ -14,9 +14,10 @@
  * THIS BUILD CANNOT TELL THEM APART AND SAYS SO. `quotes` has no open, no read
  * receipt and no view count, and no founder-side surface records one — the same
  * absence `engagement_deliverables.opened_at` has, for the same reason: an open
- * is the client's act. So two tiles read absent, two chips are prose, and the
- * `Signal` column reports what this side knows. A "never opened" count computed
- * from silence would be a number about our own send.
+ * is the client's act. So the Opened tile reads absent (one tile since PP04,
+ * #5937), two chips are prose, and Last activity reports what this side knows.
+ * A "never opened" count computed from silence would be a number about our own
+ * send.
  *
  * WHAT THE FIRM DOES OWN IS BUILT. Migration 234 adds a VERSION TRAIL —
  * append-only, self-numbering, because a history that can be rewritten is not
@@ -79,22 +80,35 @@ test('the route stopped rendering the shared engagements page', () => {
     'a second file is building the proposals action row');
 });
 
-test('the two tiles that need a read receipt are absent, with the reason', () => {
-  const stats = between(CANVAS, 'pr_stats: [', 'pr_rows:');
-  const labels = [...stats.matchAll(/label: ?'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['Live proposals', 'Opened, unanswered', 'Never opened', 'Won this quarter']);
-  const tiles = [...zone.matchAll(/<ProposalTile\b[\s\S]{0,500}?label="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tiles, ['Live proposals', 'Opened, unanswered', 'Never opened', 'Won'],
-    'the strip is no longer the artboard’s four tiles in its order');
+// D4838 PP04 (#5937) REDREW THE STRIP AND THE LIST. The `p2` artboard's four tiles
+// (two of them read-receipt tiles) and its `Ver`/`Signal` instrument gave way to the
+// Pipeline v2 board: a follow-up list whose only read-receipt tile is `Opened`, Not
+// recorded. These three tests read that board now; the behaviour is driven in
+// `pipeline_proposals_follow_up_5937.test.mjs`.
+const V2 = raw('design/incoming/Pipeline v2 Page.dc.html');
+const PP04 = V2.slice(V2.indexOf('const PROPS = ['), V2.indexOf('/* ---------- P3 negotiations'));
+assert.ok(PP04.includes("hdr('Proposals'"), 'the PP04 board could not be found in the v2 canvas');
+const followUp = read('frontend/src/pages/partner/pipeline/proposalsFollowUp.js');
 
-  const strip = between(zone, '<ProposalTile', '{d?.read_receipts_note');
-  // BOTH ABSENT, UNCONDITIONALLY. Not `nr={x == null}` — there is no `x`.
-  assert.match(strip, /label="Opened, unanswered"\s*\n\s*nr\b/,
-    'Opened, unanswered shows a number where nothing records an open');
-  assert.match(strip, /label="Never opened"\s*\n\s*nr\b/,
-    'Never opened shows a number where nothing records an open');
-  assert.ok(flat(strip).includes('nothing records that a client opened one'));
-  assert.ok(flat(strip).includes('a claim about our silence, not theirs'));
+test('Opened is Not recorded with the reason, and no open count is drawn', () => {
+  const labels = [...between(PP04, "'<div class=\"kpi4\">' + J([", '].map(').matchAll(/\[\s*'([^']+)',/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ['Open proposals', 'Opened', 'No reply > 5 days', 'Win rate']);
+  assert.ok(/\['Opened', NREC,/.test(PP04), 'the board stopped drawing Opened as Not recorded');
+
+  const strip = between(zone, 'data-testid="proposals-strip"', '{d?.read_receipts_note');
+  // ABSENT, UNCONDITIONALLY. Not `nr={x == null}` — there is no `x`.
+  assert.match(strip, /<ProposalTile label=\{strip\.opened\.label\} nr note=/,
+    'Opened shows a figure where nothing records an open');
+  assert.ok(/opened: \{ label: 'Opened', recorded: false,/.test(followUp));
+  // NO OPENED COUNT AND NO UNOPENED COUNT, anywhere in the zone's code.
+  for (const src of [zone, followUp]) {
+    // Case-sensitive: the stated limit's prose may name "never opened" to refuse it.
+    assert.ok(!/Unopened|Never opened|Opened \d|\d\s*×|opened_at|opens_count|view_count/.test(src),
+      'the zone draws an open count');
+  }
+  // THE WORKER'S NOTE IS PRINTED, not paraphrased away.
+  assert.ok(/\{d\?\.read_receipts_note && \(/.test(zone) && /Opens aren’t recorded\.<\/strong> \{d\.read_receipts_note\}/.test(zone),
+    'the Worker’s read-receipt note is no longer printed under the strip');
 
   // AND THE WORKER REFUSES AT SOURCE rather than the page hiding a figure it
   // was handed.
@@ -105,11 +119,13 @@ test('the two tiles that need a read receipt are absent, with the reason', () =>
     'the proposals read is inventing an open');
 });
 
-test('the win rate is null with nothing decided, and Analytics reads the same one', () => {
-  const strip = between(zone, '<ProposalTile', '{d?.read_receipts_note');
-  assert.match(strip, /nr=\{d\?\.win_rate_pct == null\}/,
-    'a win rate is drawn over an empty denominator');
-  assert.ok(flat(strip).includes('nothing decided yet, so there is no rate'));
+test('the win rate is the command centre’s, with its denominator, and Analytics reads the same one', () => {
+  assert.ok(/import \{ NO_REPLY_DAYS, ok, winRateMetric \} from '\.\/commandCentre\.js';/.test(followUp),
+    'the zone computes a second win rate instead of the command centre’s');
+  assert.ok(/const win = winRateMetric\(ok\(d \|\| \{\}\)\);/.test(followUp));
+  const strip = between(zone, 'data-testid="proposals-strip"', '{d?.read_receipts_note');
+  assert.match(strip, /value=\{strip\.win\.value\} note=\{strip\.win\.note\}/,
+    'the win-rate tile no longer carries its basis');
   const read = between(worker, "partnerPipeline.get('/proposals'", 'Append a version');
   // D4693: the same function `/quotes/analytics` uses, over the whole book (#4701).
   assert.ok(/win_rate_pct: winRate\(wonCount, lostCount\)\.pct,/.test(read),
@@ -122,27 +138,22 @@ test('the win rate is null with nothing decided, and Analytics reads the same on
     'the decided test changed shape');
 });
 
-test('the instrument is the artboard’s five columns, at its own grid', () => {
-  const grids = [...P2.matchAll(/grid-template-columns:([^;"]+)/g)].map((m) => m[1].trim());
-  const cols = grids.find((g) => g.includes('.55fr'));
-  assert.ok(cols, 'the artboard’s proposal-table grid is gone');
-  const head = [...P2.matchAll(/class="th"[^>]*>([^<]*)</g)].map((m) => m[1].trim());
-  assert.deepEqual(head, ['Client', 'Shape · value', 'Ver', 'State', 'Signal']);
+test('the list is the board’s five columns, and the version is not one of them', () => {
+  const head = [...between(PP04, '<thead><tr>', '</tr></thead>').matchAll(/<th(?:\s[^>]*)?>([^<]*)</g)].map((m) => m[1].trim());
+  assert.deepEqual(head, ['Client', 'Value', 'State', 'Last activity', 'Next action']);
 
-  const inst = between(zone, 'testid="all-proposals"', '/>');
-  assert.ok(inst.includes(`cols="${cols}"`), `the instrument no longer uses the artboard grid ${cols}`);
+  const table = between(zone, 'data-testid="all-proposals"', '</table>');
   assert.deepEqual(
-    [...between(inst, 'head={[', ']}').matchAll(/'([^']+)'/g)].map((m) => m[1]), head,
-    'the instrument columns drifted from the artboard',
+    [...between(table, '{[', '].map(').matchAll(/'([^']+)'/g)].map((m) => m[1]), head,
+    'the list columns drifted from the board',
   );
-  assert.ok(inst.includes('title="All proposals"'));
+  assert.ok(!/'Ver'|'Version'|`v\$\{r\.version\}`/.test(table), 'the version number is a column again');
+  assert.ok(table.includes('All proposals'));
   // A LOST PROPOSAL WITH NO REASON IS THE ROW THAT STILL NEEDS A PERSON.
-  assert.ok(/rowClass: r\.state === 'Lost' && !r\.loss_reason \?/.test(inst),
+  assert.ok(/r\.state === 'Lost' && !r\.loss_reason \? 'bg-amber-50/.test(table),
     'a lost proposal with no reason is no longer marked');
-  assert.ok(/pill: 'No reason recorded'/.test(inst),
+  assert.ok(/No reason recorded/.test(between(zone, 'function StateMark', 'function activityText')),
     'the missing-reason marker is gone');
-  assert.ok(flat(inst).includes('It is deliberately not a read receipt'),
-    'the instNote stopped saying what the Signal column is not');
 });
 
 test('a version trail is append-only and self-numbering', () => {
