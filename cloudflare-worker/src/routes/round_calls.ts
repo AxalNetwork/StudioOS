@@ -8,7 +8,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
-import { refuseRun } from '../util/railContext';
+import { railFor, refuseRun } from '../util/railContext';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, projectRecord, roundContext, saveDraft, audience, saveAudience, notOnAxal, ventureMember, ventureReadinessRead,
   founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview, wordRoundTerms } from '../services/roundCalls';
@@ -110,10 +110,9 @@ routes.post('/:uid/terms-draft', async c => {
     const existing = uid === 'new' ? null : await callOwner(c, { members: true });
     const access = existing ?? await owner(c, id(body.project_id), { members: true });
     if (existing && existing.call.state !== 'draft') return c.json({ code: 'call_not_draft', message: 'Only a draft call can be worded.' }, 409);
-    const { result, draft } = await wordRoundTerms(c.env, access.project, access.user, body, {
-      page: 'Founder · Raise', option: 'draft:raise/round-calls',
-      record: uid === 'new' ? `project:${access.project.id}` : `round_call:${uid}`,
-    });
+    const rail = railFor(c, { page: 'Founder · Raise', option: 'draft:raise/round-calls' },
+      uid === 'new' ? `project:${access.project.id}` : `round_call:${uid}`);
+    const { result, draft } = await wordRoundTerms(c.env, access.project, access.user, body, rail);
     if (!result.ok) return refuseRun(c, result) || c.json({ code: 'ai_unavailable', message: 'Eadwyn could not draft these words. Try again.' }, 503);
     if (!draft) return c.json({ code: 'nothing_kept', message: 'Eadwyn’s wording could not be kept. Use the wording from your fields or try again.' }, 422);
     return c.json({ draft });

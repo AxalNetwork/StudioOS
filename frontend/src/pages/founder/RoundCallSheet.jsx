@@ -353,7 +353,8 @@ function RoundStep({s,on}) {
       <div className="flex flex-wrap gap-2"><button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted)}>Accept</button>
         <button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted,true)}>Edit</button>
         {on.draftTerms&&!s.wording?.text&&<button type="button" className={callButton} disabled={s.busy||s.wording?.loading} onClick={on.draftTerms}>{s.wording?.loading?'Drafting…':'Ask Eadwyn to draft'}</button>}
-        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div></div>}
+        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div>
+      {on.draftTerms&&!s.wording?.text&&<p className="text-xs text-axal-muted">AI drafting uses your allowance when the model responds.</p>}</div>}
     {s.saved&&<p role="status">Draft saved. <Link className="underline" to={callHref({uid:s.uid,state:'draft'})}>Its address</Link> opens it again.</p>}
   </>;
 }
