@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { roundCallsApi } from '../../lib/api/roundCalls';
@@ -7,13 +7,46 @@ import RoundCallSheet from './RoundCallSheet';
 import { InvestorEvidence } from '../cycles/evidence/InvestorEvidence';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
 
-export function RoundCallIndex() {
-  const [params]=useSearchParams();
-  const projectId=params.get('project_id');
-  const read=useCallRead(()=>roundCallsApi.list(projectId),[projectId]);
-  return <main className="p-5 space-y-4"><h1 className="text-2xl font-bold">Round calls</h1><CallReadState read={read}>{read.data&&(read.data.items.length?<ul>{read.data.items.map(call=><li key={call.uid}><Link className="underline" to={(projectId&&call.state!=='draft'?'/raise/capital-relationships/calls/':'/round-calls/')+call.uid}>{call.name}</Link> · {call.state} · closes {callDate(call.target_close)}</li>)}</ul>:<p>No round calls are recorded for this view.</p>)}</CallReadState></main>;
+const CALL_STATE_WORD = new Map([['sent', 'Open'], ['awaiting_counsel', 'Paused'], ['closed', 'Closed'], ['draft', 'Draft']]);
+
+function useRoundCallTitle(embedded) {
+  useEffect(() => {
+    if (!embedded) return undefined;
+    const previous = document.title;
+    const title = 'Round calls · Deals — axal';
+    document.title = title;
+    return () => { if (document.title === title) document.title = previous; };
+  }, [embedded]);
 }
-export default function RoundCallPage() {
+
+export function RoundCallList({ calls, projectId }) {
+  if (!calls.length) return <p>No round calls are recorded for this view.</p>;
+  return (
+    <ul>{calls.map((call) => (
+      <li key={call.uid}>
+        <Link className="underline" to={(projectId && call.state !== 'draft' ? '/raise/capital-relationships/calls/' : '/round-calls/') + encodeURIComponent(call.uid)}>{call.name}</Link>
+        {' · '}{CALL_STATE_WORD.get(call.state) ?? 'Status not recorded'}{' · closes '}{callDate(call.target_close)}
+      </li>
+    ))}</ul>
+  );
+}
+
+export function RoundCallIndex({ embedded = false }) {
+  useRoundCallTitle(embedded);
+  const [params] = useSearchParams();
+  const projectId = embedded ? null : params.get('project_id');
+  const read = useCallRead(() => roundCallsApi.list(projectId), [projectId]);
+  const Frame = embedded ? 'section' : 'main';
+  const Heading = embedded ? 'h2' : 'h1';
+  return (
+    <Frame className="p-5 space-y-4">
+      <Heading className="text-2xl font-bold">Round calls</Heading>
+      <CallReadState read={read} index>{read.data && <RoundCallList calls={read.data.items} projectId={projectId} />}</CallReadState>
+    </Frame>
+  );
+}
+export default function RoundCallPage({ embedded = false }) {
+  useRoundCallTitle(embedded);
   const {uid}=useParams();
   const read=useCallRead(()=>roundCallsApi.page(uid),[uid]);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
@@ -42,8 +75,9 @@ export default function RoundCallPage() {
   // D686: a founder's call lives in the Raise shell; investors and counsel keep this page.
   // D1224: a founder's call, a draft included, opens under Calls in the Raise shell.
   if(read.data?.viewer==='founder')return <Navigate to={'/raise/capital-relationships/calls/'+encodeURIComponent(uid)} replace/>;
-  return <main className="p-5 space-y-4 text-axal-ink dark:text-gray-100"><CallReadState read={read}>{read.data&&<RoundCallPageView state={{data:read.data,busy,error,message,amount,question,answers,target,reference,recipientPage}} on={on}/>}</CallReadState>
-    {showSheet&&<RoundCallSheet projectId={read.data.call.project_id} initialCall={read.data.call.state==='draft'?read.data.call:null} onClose={()=>{setShowSheet(false);read.retry();}}/>}</main>;
+  const Frame = embedded ? 'section' : 'main';
+  return <Frame className="p-5 space-y-4 text-axal-ink dark:text-gray-100"><CallReadState read={read}>{read.data&&<RoundCallPageView state={{data:read.data,busy,error,message,amount,question,answers,target,reference,recipientPage}} on={on} embedded={embedded}/>}</CallReadState>
+    {showSheet&&<RoundCallSheet projectId={read.data.call.project_id} initialCall={read.data.call.state==='draft'?read.data.call:null} onClose={()=>{setShowSheet(false);read.retry();}}/>}</Frame>;
 }
 function slideLines(value,depth=0) {
   if(depth>5||value==null)return [];
@@ -61,8 +95,8 @@ export function RecordedCallDeck({deck}) {
   return <section className="space-y-3"><h2 className="font-semibold">{deck.title||'Pitch deck'} · v{deck.version}</h2><p className="text-xs text-axal-muted">The linked version’s recorded slide content. Visuals remain in the deck editor; no public share link is created.</p>
     {slides.map((slide,index)=><article key={index} className="rounded-xl border border-axal-hairline p-4"><h3 className="font-semibold">Slide {index+1}</h3>{slideLines(slide).length?slideLines(slide).map((line,i)=><p key={i} className="whitespace-pre-wrap break-words">{line}</p>):<p>Not recorded · this slide has no text content.</p>}</article>)}</section>;
 }
-export function RoundCallPageView({state:s,on}) {
-  if(s.data.viewer==='investor')return <InvestorCallView state={s} on={on}/>;
+export function RoundCallPageView({state:s,on,embedded=false}) {
+  if(s.data.viewer==='investor')return <InvestorCallView state={s} on={on} embedded={embedded}/>;
   const d=s.data,c=d.call,founder=d.viewer==='founder',counsel=d.viewer==='counsel';
   const rows=d.recipients?.slice(s.recipientPage*25,s.recipientPage*25+25)||[];
   return <div className="space-y-4">
@@ -113,12 +147,13 @@ function readOnlyNote(d) {
  * Indicated, never committed (D653). The data room opens only with the NDA and
  * the founder's grant.
  */
-export function InvestorCallView({state:s,on}) {
+export function InvestorCallView({state:s,on,embedded=false}) {
   const d=s.data,c=d.call,company=d.company?.name||null,room=d.data_room||{},mine=d.recipient||{};
   const cents=dollarsToCents(s.amount);
   const outOfRange=cents!=null&&((c.minimum_cheque_cents!=null&&cents<c.minimum_cheque_cents)||(c.amount_cents!=null&&cents>c.amount_cents));
   const status=d.read_only?(c.state==='awaiting_counsel'||d.deck?.unreadable&&c.state==='sent'?'Paused':'Closed'):'Open';
   const plain=plainTerms(c);
+  const Heading=embedded?'h2':'h1';
   const rows=[['Instrument',instrumentName(c.instrument)],['Target',moneyCents(c.amount_cents)],
     ...(c.instrument==='equity'?[['Pre-money valuation',moneyCents(c.pre_money_cents)]]:[['Valuation cap',moneyCents(c.valuation_cap_cents)]]),
     ...(c.instrument==='convertible_note'?[['Discount',c.discount_bps==null?'Not recorded':(c.discount_bps/100)+'%']]:[]),
@@ -126,7 +161,7 @@ export function InvestorCallView({state:s,on}) {
   return <div className="space-y-4" data-testid="investor-call">
     <header className="space-y-1">
       <nav aria-label="Breadcrumb" className="text-xs text-axal-muted"><Link className="underline" to="/deals">Deals</Link> › Round calls › <span>{company||c.name}</span></nav>
-      <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold">{company?`A private round call from ${company}`:'A private round call'}</h1><span data-testid="call-status" className="rounded-full border border-axal-hairline px-2 py-0.5 text-xs font-semibold">{status}</span></div>
+      <div className="flex flex-wrap items-center gap-2"><Heading className="text-2xl font-bold">{company?`A private round call from ${company}`:'A private round call'}</Heading><span data-testid="call-status" className="rounded-full border border-axal-hairline px-2 py-0.5 text-xs font-semibold">{status}</span></div>
       <p className="text-sm text-axal-muted">{c.name} · sent to you on {callDate(c.sent_at)} · closes {callDate(c.target_close)}</p>
     </header>
     {d.read_only&&<section role="status" data-testid="read-only" className={card}>{readOnlyNote(d).map(line=><p key={line}>{line}</p>)}</section>}
