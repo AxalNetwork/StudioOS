@@ -460,3 +460,84 @@ test('UF21 the phone: tiles two across, the sections as a list with a 44px opene
   assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, 'no browser pop-up');
   assert.doesNotMatch(src, /EadwynPanel|aiRouter|railProposals|useRailOption|FillProposals/, 'Eadwyn fills nothing here');
 });
+
+// D6082 (#6082): a milestone can be changed or removed. The scenario's revision goes with both; an emptied
+// cost is sent as null and stays Not costed; a reader or a support session (can_write false) sees no Edit.
+test('D6082 Edit milestone saves name, section, by and cost with the scenario revision, and reloads the plan', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    assert.equal(v.all('uof-ms-edit-open').length, 2, 'one Edit per milestone row');
+    const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    const before = reads();
+    await v.click('uof-ms-edit-open');
+    assert.ok(v.by('uof-edit-milestone'));
+    assert.equal(v.pr(v.by('uof-ms-label')).value, 'SOC 2 Type I');
+    assert.equal(v.pr(v.by('uof-ms-cost')).value, '60000.00', 'the recorded cost is shown in major units');
+    await v.type('uof-ms-label', 'SOC 2 Type II');
+    await v.type('uof-ms-edit-section', 'operations');
+    await v.type('uof-ms-by', '2027-06');
+    await v.type('uof-ms-cost', '75000');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.deepEqual(patch.body, { label: 'SOC 2 Type II', category_key: 'operations', due_on: '2027-06', cost_cents: 7500000, expected_revision: 4 });
+    assert.equal(v.by('uof-edit-milestone'), undefined, 'the dialog closes on save');
+    assert.equal(v.text('uof-notice'), 'The milestone is saved.');
+    assert.ok(reads() > before, 'the plan is read again');
+  } finally { await v.close(); }
+});
+
+test('D6082 an emptied cost is sent as null and stays Not costed', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.type('uof-ms-cost', '');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.equal(patch.body.cost_cents, null, 'never 0');
+    assert.ok(v.text('uof-notice').includes('stays Not costed'));
+  } finally { await v.close(); }
+  const w = await mounted('/raise/use-of-funds/milestones?project_id=3');
+  try {
+    const rows = w.all('uof-ms-edit-open');
+    await act(async () => w.pr(rows[1]).onClick()); await w.flush();
+    assert.equal(w.pr(w.by('uof-ms-cost')).value, '', 'a Not costed milestone opens with an empty cost');
+    await w.type('uof-ms-cost', 'abc');
+    assert.equal(w.pr(w.by('uof-ms-save')).disabled, true, 'an unreadable cost cannot be saved');
+  } finally { await w.close(); }
+});
+
+test('D6082 Remove milestone sends the scenario revision in the query and reloads', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'DELETE /cycles/raise/use-of-funds/milestones/1': () => response({ ok: true, scenario_revision: 5 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.click('uof-ms-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/milestones/1') && s.line.includes('expected_revision=4')));
+    assert.equal(v.text('uof-notice'), 'The milestone is removed.');
+    assert.equal(v.by('uof-edit-milestone'), undefined);
+  } finally { await v.close(); }
+});
+
+test('D6082 a milestone refused because the plan changed keeps the dialog and offers Review latest', async () => {
+  const stale = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This plan was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const raced = () => response({ code: 'scenario_changed', error: 'scenario_changed', detail: 'The scenario changed. Read it again.' }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': stale, 'DELETE /cycles/raise/use-of-funds/milestones/1': raced } });
+  try {
+    for (const press of ['uof-ms-save', 'uof-ms-remove']) {
+      await v.click('uof-ms-edit-open');
+      await v.click(press);
+      assert.ok(v.by('uof-ms-error'), 'the refusal is said');
+      assert.ok(v.by('uof-edit-milestone'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      await v.click('uof-review-latest');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
+  } finally { await v.close(); }
+});
+
+test('D6082 a reader or a support session sees no milestone Edit', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { plan: planFixture({ viewer: { kind: 'founder', can_write: false, mercury: true } }) });
+  try {
+    assert.equal(v.all('uof-ms-row').length, 2);
+    assert.equal(v.all('uof-ms-edit-open').length, 0);
+  } finally { await v.close(); }
+});
