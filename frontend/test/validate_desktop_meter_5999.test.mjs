@@ -219,7 +219,7 @@ test('4 (route): at 1024px /validate draws the meter in the lead row, and Save g
   };
   const m = await mount(h(MemoryRouter, { initialEntries: [`/validate${Q}`] }, h(Routes, null, h(Route, { path: '/validate', element: h(CycleRoute, { cycle: 'validate' }) }))));
   try {
-    await m.act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+    await m.act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); });
     assert.ok(m.by('cycle-overview'), 'the desktop overview');
     assert.ok(m.by('validate-lead') && m.by('validate-meter'), 'the meter in the lead row');
     assert.equal(m.by('phone-meter'), undefined, 'and no phone root');
