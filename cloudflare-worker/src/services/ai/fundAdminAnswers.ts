@@ -1,4 +1,5 @@
 /** D6397 (#6397): recorded Fund Admin answers and navigation; no model or financial act. */
+import { formatMinor } from '../../../../frontend/src/lib/money.js';
 import type { VcFund } from '../../models/funds';
 import type { FundAdminOverview } from '../fundAdminOverview';
 import type { readFundCalls } from '../fundCallLedger';
@@ -19,7 +20,7 @@ export type FundAdminPrompt = keyof typeof FUND_ADMIN_PROMPTS;
 type Access = { acts: Array<{ act: string; allowed: boolean; sentence: string | null }> };
 const BASE = '/admin/fund-admin';
 const money = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value)
-  ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value / 100)
+  ? formatMinor(value, 'USD', { locale: 'en-US' }) ?? '— Not recorded'
   : '— Not recorded';
 export const FUND_ADMIN_ANSWER_NOTE = 'Eadwyn prepares, explains and navigates. It never issues, records or moves money.';
 
