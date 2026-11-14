@@ -66,3 +66,17 @@ Decision notes: `documentation/architecture/decisions/D4817-p4.md`.
 - No issue number, decision id or build-phase name in member copy (#5365 F-09).
 - The rail's structure is #5130's; the Account-menu move is #4473's. The frame
   places the rail and links Portfolio's own routes, and changes neither.
+
+D4817 part 7 (canvas PF-07) takes the two money writes, a valuation mark and
+a distribution recorded by an admin against one company's position, Prepare →
+Review → Confirm → Receipt. The writes stay where they were, in the admin
+position sheet (`../PortfolioPositionsPage.jsx`, Cap Table), on the same
+routes (`POST /api/positions/:projectUid/marks`, `/distributions`), which now
+audit each act. `WriteFlow.jsx` draws the four steps with the company named in
+each; `writeFlowModel.js` holds the pure parts (fields and their errors, the
+payload, what will be written and its effect before → after, the conflict
+check, the receipt from the stored row); `writeFlow.css` holds its tokens,
+redefined under `.dark`, and its phone layout. Before saving, the company is
+read again; if the history the write lands in moved, nothing is sent and the
+draft is kept. Decision notes:
+`documentation/architecture/decisions/D4817-p7.md`.
