@@ -1,5 +1,5 @@
 /**
- * #4707 — HQ licence routes: annual fee invoices. Mounted by `admin_licences.ts` at
+ * #4707 — HQ licence routes: annual fee invoices, and D5954's one-off initial invoice. Mounted by `admin_licences.ts` at
  * `/api/admin/licences`, in the order the routes were declared before the split;
  * moved unchanged, with their original comments.
  */
@@ -30,6 +30,12 @@ export async function feeRefusal(c: any, e: unknown) {
   return c.json({ error: refused.code, message: refused.message, ...refused.extra }, refused.status);
 }
 
+// D5954 (#5954): the same POST with `{ "kind": "initial" }` issues the
+// licence's one-off initial invoice (the latest pricing decision's accepted
+// initial fee plus its regulatory surcharge). HQ presses it, from the
+// licence's start day; nothing raises it on its own. With no body, or
+// `"kind": "annual"`, the POST is the annual invoice, unchanged.
+
 // GET /api/admin/licences/:uid/fee-invoices — the licence's invoices, newest year first.
 r.get('/:uid/fee-invoices', async (c) => {
   try {
@@ -44,12 +50,19 @@ r.get('/:uid/fee-invoices', async (c) => {
 
 // POST /api/admin/licences/:uid/fee-invoices — issue the invoice for the
 // licence year that holds today. 409 while that year is already invoiced.
+// `{ "kind": "initial" }`: the one-off initial invoice instead (D5954), 409
+// while the licence has one, a void one included.
 r.post('/:uid/fee-invoices', async (c) => {
   try {
     const admin = await requireSuperAdminWriteBar(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
-    const { issueFeeInvoice, hqInvoiceView } = await feeInvoices();
+    const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+    const kind = body && typeof body === 'object' && 'kind' in body ? body.kind : 'annual';
+    if (kind !== 'annual' && kind !== 'initial') {
+      return c.json({ error: 'bad_kind', field: 'kind', message: 'Say which invoice to issue: "annual" for the licence year, or "initial" for the one-off initial fee.' }, 400);
+    }
+    const { issueFeeInvoice, issueInitialFeeInvoice, hqInvoiceView } = await feeInvoices();
     // D797's schedule: the platform IP's licensor and the payment terms. No row,
     // or a database before migration 512, leaves the defaults (Holdings, 30
     // days); terms that cannot be read refuse rather than invoice on a guess.
@@ -62,10 +75,30 @@ r.post('/:uid/fee-invoices', async (c) => {
         return c.json({ error: 'terms_unreadable', message: 'This licence\'s terms could not be read, so its licensor and payment terms are unknown. Nothing was issued; try again.' }, 503);
       }
     }
-    const inv = await issueFeeInvoice(c.env, licence, admin.id, nowIso().slice(0, 10), {
+    const termsIn = {
       licensorIpEntity: typeof terms?.licensor_ip_entity === 'string' ? terms.licensor_ip_entity : null,
       paymentTermsDays: typeof terms?.payment_terms_days === 'number' ? terms.payment_terms_days : null,
-    });
+    };
+    const today = nowIso().slice(0, 10);
+    if (kind === 'initial') {
+      // The accepted figures of the latest pricing decision (D5017). A store that cannot be read refuses; it is never
+      // read as "no initial fee".
+      let charges;
+      try {
+        const { latestInitialCharges } = await import('../services/licencePricingApply');
+        charges = await latestInitialCharges(c.env, licence.uid);
+      } catch {
+        return c.json({ error: 'pricing_unreadable', message: 'This licence\'s pricing decisions could not be read, so its initial fee is unknown. Nothing was issued; try again.' }, 503);
+      }
+      const inv = await issueInitialFeeInvoice(c.env, licence, admin.id, today, charges, termsIn);
+      await logAdminAction(c.env, admin.id, admin.email, 'licence_initial_fee_invoice_issued', {
+        licence_uid: licence.uid, licence_ref: licence.licence_ref, invoice_uid: inv.uid, kind: 'initial',
+        amount_cents: inv.amount_cents, initial_fee_cents: inv.initial_fee_cents ?? null, regulatory_surcharge_cents: inv.regulatory_surcharge_cents ?? null,
+        currency: inv.currency, due_at: inv.due_at, pricing_decision_uid: inv.pricing_decision_uid ?? null,
+      });
+      return c.json({ invoice: hqInvoiceView(inv, licence.uid) }, 201);
+    }
+    const inv = await issueFeeInvoice(c.env, licence, admin.id, today, termsIn);
     await logAdminAction(c.env, admin.id, admin.email, 'licence_fee_invoice_issued', {
       licence_uid: licence.uid, licence_ref: licence.licence_ref, invoice_uid: inv.uid, period: inv.period_label,
       amount_cents: inv.amount_cents, currency: inv.currency, due_at: inv.due_at,

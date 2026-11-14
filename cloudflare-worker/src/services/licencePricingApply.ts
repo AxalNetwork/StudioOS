@@ -13,7 +13,9 @@
  * the annual fee (`annual_fee_cents`) and the royalty (`revenue_share_bps`).
  * The initial fee, the minimum royalty and the regulatory surcharge have no
  * core-term column; they are recorded as accepted on the decision and shown,
- * never written anywhere they would be invoiced. Issued invoices
+ * never written anywhere they would be invoiced. D5954 reads the accepted
+ * initial fee and surcharge (`latestInitialCharges`) for the one-off initial
+ * invoice HQ issues at licence start; an apply still writes neither. Issued invoices
  * (`licence_fee_invoices`) and executed agreements (`licence_contracts`) are
  * never touched: future invoices read the annual fee under their own rules,
  * and a changed contractual figure marks the agreement as no longer matching,
@@ -407,6 +409,32 @@ export function applyStatements(env: Env, a: {
   }
   stmts.push(clearGuard(env));
   return stmts;
+}
+
+// ── The one-off charges (D5954) ──────────────────────────────────────────────
+
+export type InitialCharges = {
+  decision_uid: string; decision: string; currency: string; created_at: string;
+  initial_fee_cents: number | null; regulatory_surcharge_cents: number | null;
+};
+
+/**
+ * D5954 (#5954) — the latest decision's accepted initial fee and regulatory
+ * surcharge, which the one-off initial invoice bills. Null when no decision is
+ * recorded. A figure the decision does not record stays null, never 0. Only a
+ * read: what an apply writes is unchanged.
+ */
+export async function latestInitialCharges(env: Env, licenceUid: string): Promise<InitialCharges | null> {
+  const r = await env.DB.prepare(
+    `SELECT uid, decision, currency, created_at, accepted_initial_fee_cents, accepted_regulatory_surcharge_cents
+       FROM licence_pricing_decisions WHERE licence_uid = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+  ).bind(licenceUid).first<Record<string, any>>();
+  if (!r) return null;
+  const int = (v: unknown) => (typeof v === 'number' && Number.isSafeInteger(v) ? v : null);
+  return {
+    decision_uid: String(r.uid), decision: String(r.decision), currency: String(r.currency ?? ''), created_at: String(r.created_at),
+    initial_fee_cents: int(r.accepted_initial_fee_cents), regulatory_surcharge_cents: int(r.accepted_regulatory_surcharge_cents),
+  };
 }
 
 // ── Reviews ──────────────────────────────────────────────────────────────────

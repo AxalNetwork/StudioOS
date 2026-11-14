@@ -21,10 +21,18 @@
  *
  * PAID IS HQ-ENTERED (D.8), as on a statement: a running total, never above
  * the amount, with a note. Nothing reconciles it against a bank.
+ *
+ * D5954 (#5954) — THE ONE-OFF INITIAL INVOICE (`kind = 'initial'`, migration
+ * 202611141106). The latest pricing decision's accepted initial fee plus its
+ * accepted regulatory surcharge, as two lines, in the decision's currency,
+ * frozen at issue like an annual invoice. HQ presses it, from the licence's
+ * `starts_on`; nothing raises it on its own. One per licence, a voided one
+ * included. Paying, voiding, the PDF and the licensee's read are the annual
+ * invoice's own code; the annual path and its one-per-year rule do not change.
  */
 import type { Env } from '../types';
 import type { LicenceRow } from '../routes/admin_licences';
-import { figuresDigest, noticePaperInput, territoryLicenceInvoice, type NoticeFigures } from './fundNotices';
+import { figuresDigest, formatMinorMoney, noticePaperInput, territoryLicenceInvoice, type NoticeFigures } from './fundNotices';
 import { licenceFeeReference, licensorRefusal } from './licenceAccount';
 import { paperModel } from './legalPaper';
 import { renderLegalPdf } from './legalPaperRender';
@@ -94,7 +102,21 @@ export type FeeInvoiceRow = {
   issued_by_user_id: number | null; recorded_by_user_id: number | null; created_at: string; updated_at: string;
   /** Write count (migration 202611071531): a payment or a void names the one it read (D4694). */
   revision: number;
+  /** D5954: 'annual' (one per licence year) or 'initial' (one per licence). Absent on a database before 202611141106: annual. */
+  kind?: 'annual' | 'initial' | null;
+  initial_fee_cents?: number | null;
+  regulatory_surcharge_cents?: number | null;
+  pricing_decision_uid?: string | null;
 };
+
+/** The invoice's kind; a row from before migration 202611141106 is annual. */
+export const kindOf = (r: Pick<FeeInvoiceRow, 'kind'>): 'annual' | 'initial' => (r.kind === 'initial' ? 'initial' : 'annual');
+
+/** An initial invoice's two components. A surcharge that is not recorded is null, never 0. */
+const components = (r: FeeInvoiceRow) => (kindOf(r) === 'initial'
+  ? { initial_fee_cents: r.initial_fee_cents == null ? null : Number(r.initial_fee_cents),
+      regulatory_surcharge_cents: r.regulatory_surcharge_cents == null ? null : Number(r.regulatory_surcharge_cents) }
+  : {});
 
 const money = (r: FeeInvoiceRow) => ({
   amount_cents: Number(r.amount_cents), currency: r.currency, paid_cents: Number(r.paid_cents),
@@ -104,8 +126,8 @@ const money = (r: FeeInvoiceRow) => ({
 /** HQ's view of an invoice: everything but the frozen figures. */
 export function hqInvoiceView(r: FeeInvoiceRow, licenceUid: string) {
   return {
-    uid: r.uid, licence_uid: r.licence_uid, period_label: r.period_label, period_start: r.period_start, period_end: r.period_end,
-    ...money(r), reference: r.reference, issued_at: r.issued_at, due_at: r.due_at, status: r.status,
+    uid: r.uid, licence_uid: r.licence_uid, kind: kindOf(r), period_label: r.period_label, period_start: r.period_start, period_end: r.period_end,
+    ...money(r), ...components(r), pricing_decision_uid: r.pricing_decision_uid ?? null, reference: r.reference, issued_at: r.issued_at, due_at: r.due_at, status: r.status,
     paid_at: r.paid_at, paid_note: r.paid_note, void_note: r.void_note, revision: Number(r.revision ?? 0),
     pdf_url: r.status === 'void' ? null : `/api/admin/licences/${encodeURIComponent(licenceUid)}/fee-invoices/${encodeURIComponent(r.uid)}/pdf`,
   };
@@ -114,8 +136,8 @@ export function hqInvoiceView(r: FeeInvoiceRow, licenceUid: string) {
 /** The Administrator's view: no HQ notes, and a PDF link on their own route. */
 export function licenseeInvoiceView(r: FeeInvoiceRow) {
   return {
-    uid: r.uid, period_label: r.period_label, period_start: r.period_start, period_end: r.period_end,
-    ...money(r), reference: r.reference, issued_at: r.issued_at, due_at: r.due_at, status: r.status, paid_at: r.paid_at,
+    uid: r.uid, kind: kindOf(r), period_label: r.period_label, period_start: r.period_start, period_end: r.period_end,
+    ...money(r), ...components(r), reference: r.reference, issued_at: r.issued_at, due_at: r.due_at, status: r.status, paid_at: r.paid_at,
     pdf_url: r.status === 'void' ? null : `/api/licence/mine/fee-invoices/${encodeURIComponent(r.uid)}/pdf`,
   };
 }
@@ -162,8 +184,11 @@ export async function issueFeeInvoice(
   if (licensor) throw new FeeInvoiceRefusal(409, licensor.refusal_code, licensor.refusal);
 
   const year = licenceYear(licence.starts_on, today);
-  const existing = await env.DB.prepare('SELECT uid, status FROM licence_fee_invoices WHERE licence_uid = ? AND period_start = ?')
-    .bind(licence.uid, year.start).first<{ uid: string; status: string }>();
+  // D5954: an initial invoice shares the first year's start day but holds no licence year, so only annual rows count.
+  // Read with * and filtered here, so a database before migration 202611141106 (no `kind`) reads every row as annual.
+  const sameStart = await env.DB.prepare('SELECT * FROM licence_fee_invoices WHERE licence_uid = ? AND period_start = ?')
+    .bind(licence.uid, year.start).all<FeeInvoiceRow>();
+  const existing = (sameStart.results || []).find((r) => kindOf(r) === 'annual');
   if (existing) {
     throw new FeeInvoiceRefusal(409, 'invoice_exists', `The ${year.label} licence year is already invoiced.`, { invoice_uid: existing.uid, status: existing.status });
   }
@@ -190,6 +215,116 @@ export async function issueFeeInvoice(
   } catch (e) {
     if (!isUniqueConflict(e)) throw e;
     throw new FeeInvoiceRefusal(409, 'invoice_exists', `The ${year.label} licence year is already invoiced.`);
+  }
+  return (await feeInvoiceOf(env, licence.uid, uid))!;
+}
+
+/** The label an initial invoice carries where an annual one names its licence year. */
+export const INITIAL_PERIOD_LABEL = 'Initial fee';
+/** The period part of an initial invoice's payment reference: AXAL-LIC-<ref>-INITIAL. */
+export const INITIAL_REFERENCE_PERIOD = 'INITIAL';
+
+/** What the latest pricing decision accepted, as `licencePricingApply.latestInitialCharges` reads it. */
+export type InitialCharges = {
+  decision_uid: string; currency: string;
+  initial_fee_cents: number | null; regulatory_surcharge_cents: number | null;
+};
+
+/**
+ * The initial invoice's printed figures: the annual invoice's paper, with the
+ * licence start in place of a licence year and one line per component. A
+ * surcharge that is not recorded, or recorded as none, prints no line.
+ */
+async function initialInvoiceFigures(env: Env, i: {
+  licence: LicenceRow; start: string; end: string; fee: number; surcharge: number | null; currency: string; due: string; reference: string;
+}, today: string) {
+  const total = i.fee + (i.surcharge ?? 0);
+  const built = await territoryLicenceInvoice(env, {
+    licence_uid: i.licence.uid, licence_ref: i.licence.licence_ref,
+    licensee_name: (i.licence.legal_entity_name || i.licence.brand_name || '').trim(),
+    period_label: INITIAL_PERIOD_LABEL, period_start: i.start, period_end: i.end,
+    amount_cents: total, currency: i.currency, due_date: i.due, reference: i.reference,
+  }, today);
+  const money = (n: number) => formatMinorMoney(n, i.currency);
+  const f = built.figures;
+  f.title = 'Territory Licence Initial Fee Invoice';
+  f.source_ref = `territory_licence_initial:${i.licence.uid}`;
+  f.key_figures = f.key_figures.map((k) => (k.label === 'Licence year' ? { label: 'Licence start', value: i.start } : k));
+  const rows: string[][] = [[`Initial licence fee, ${i.licence.licence_ref}`, `One-off, at licence start (${i.start})`, money(i.fee)]];
+  if (i.surcharge != null && i.surcharge > 0) rows.push([`Regulatory surcharge, ${i.licence.licence_ref}`, 'One-off, with the initial fee', money(i.surcharge)]);
+  rows.push(['Total', '', money(total)]);
+  f.tables = [{ columns: [{ label: 'Charge' }, { label: 'Basis' }, { label: 'Amount', align: 'right' }], rows, total: true }];
+  return built;
+}
+
+/**
+ * D5954 — issue the licence's one-off initial invoice: the latest pricing
+ * decision's accepted initial fee plus its accepted regulatory surcharge, in
+ * the decision's currency. HQ presses it; it is available from the licence's
+ * `starts_on`. `charges` is null when no decision is recorded.
+ */
+export async function issueInitialFeeInvoice(
+  env: Env, licence: LicenceRow, actorId: number, today: string, charges: InitialCharges | null,
+  terms: { licensorIpEntity?: string | null; paymentTermsDays?: number | null } = {},
+): Promise<FeeInvoiceRow> {
+  if (!(BILLABLE_STATUSES as readonly string[]).includes(licence.status)) {
+    throw new FeeInvoiceRefusal(409, 'licence_not_billable', `A ${licence.status.replace('_', ' ')} licence is not invoiced. Only an active or suspended licence is.`);
+  }
+  if (!licence.starts_on || !DAY.test(licence.starts_on)) {
+    throw new FeeInvoiceRefusal(409, 'no_start_date', 'This licence records no start date, so its initial fee has no day to be invoiced from. Set the start date first.');
+  }
+  if (today < licence.starts_on) {
+    throw new FeeInvoiceRefusal(409, 'licence_not_started', `This licence starts on ${licence.starts_on}. Its initial fee is invoiced from that day.`, { starts_on: licence.starts_on });
+  }
+  if (!charges) {
+    throw new FeeInvoiceRefusal(409, 'no_pricing_decision', 'No pricing decision is recorded for this licence, so it has no accepted initial fee to invoice. Apply or override its pricing first.');
+  }
+  const fee = charges.initial_fee_cents;
+  if (fee == null || !Number.isSafeInteger(fee)) {
+    throw new FeeInvoiceRefusal(409, 'no_initial_fee', 'The latest pricing decision does not record an initial fee, so there is no initial invoice to issue. Record one by applying or overriding the pricing.', { pricing_decision_uid: charges.decision_uid });
+  }
+  if (fee <= 0) {
+    throw new FeeInvoiceRefusal(409, 'no_initial_fee', 'The latest pricing decision records no initial fee to charge (zero), so there is no initial invoice to issue.', { pricing_decision_uid: charges.decision_uid });
+  }
+  const surcharge = charges.regulatory_surcharge_cents;
+  if (surcharge != null && (!Number.isSafeInteger(surcharge) || surcharge < 0)) {
+    throw new FeeInvoiceRefusal(409, 'surcharge_invalid', 'The latest pricing decision\'s regulatory surcharge is not a whole amount of zero or more, so it cannot be billed.', { pricing_decision_uid: charges.decision_uid });
+  }
+  const currency = currencyCode(charges.currency);
+  if (!currency) {
+    throw new FeeInvoiceRefusal(409, 'currency_unknown', `The pricing decision's currency ("${charges.currency ?? ''}") is not one StudioOS can price in, so its initial fee cannot be invoiced.`);
+  }
+  const licensor = licensorRefusal(terms.licensorIpEntity);
+  if (licensor) throw new FeeInvoiceRefusal(409, licensor.refusal_code, licensor.refusal);
+
+  const existing = await env.DB.prepare("SELECT uid, status FROM licence_fee_invoices WHERE licence_uid = ? AND kind = 'initial'")
+    .bind(licence.uid).first<{ uid: string; status: string }>();
+  if (existing) {
+    throw new FeeInvoiceRefusal(409, 'initial_invoice_exists', 'This licence\'s initial fee is already invoiced. There is one initial invoice per licence, a void one included.', { invoice_uid: existing.uid, status: existing.status });
+  }
+  const first = licenceYear(licence.starts_on, licence.starts_on);
+  const reference = licenceFeeReference(licence.licence_ref, INITIAL_REFERENCE_PERIOD);
+  const due = addDays(today, paymentTermsDays(terms));
+  const built = await initialInvoiceFigures(env, {
+    licence, start: first.start, end: first.end, fee, surcharge, currency, due, reference,
+  }, today);
+  if (built.refusal) throw new FeeInvoiceRefusal(409, built.refusal.code, built.refusal.message);
+  const amount = fee + (surcharge ?? 0);
+  const figuresJson = JSON.stringify(built.figures);
+  const digest = await figuresDigest(built.figures);
+  const uid = crypto.randomUUID();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO licence_fee_invoices
+         (uid, licence_uid, kind, period_label, period_start, period_end, amount_cents, currency, reference,
+          issued_at, due_at, status, figures_json, figures_sha256, issued_by_user_id,
+          initial_fee_cents, regulatory_surcharge_cents, pricing_decision_uid)
+       VALUES (?, ?, 'initial', ?, ?, ?, ?, ?, ?, ?, ?, 'issued', ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, licence.uid, INITIAL_PERIOD_LABEL, first.start, first.end, amount, currency, reference,
+      today, due, figuresJson, digest, actorId, fee, surcharge, charges.decision_uid).run();
+  } catch (e) {
+    if (!isUniqueConflict(e)) throw e;
+    throw new FeeInvoiceRefusal(409, 'initial_invoice_exists', 'This licence\'s initial fee is already invoiced.');
   }
   return (await feeInvoiceOf(env, licence.uid, uid))!;
 }
