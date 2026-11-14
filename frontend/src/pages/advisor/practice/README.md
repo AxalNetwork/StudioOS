@@ -115,6 +115,9 @@ A zone with real derivations keeps them in a sibling module that imports nothing
 - `practiceTools.js` — D571's: the deliverable flow, the four price modes and
   the bookable rule, the booking-link slug rule, and the access log's stamps.
   A SQLite `CURRENT_TIMESTAMP` has no zone marker and is read as UTC.
+- `practiceSetup.js` — D4830 (PX-01): the five setup steps, each from a recorded fact, and the progress that decides
+  whether "Set up your practice" takes the board's place. `PracticeSetup.jsx` draws it as the Practice board's `lead`.
+- `opportunityCard.js` — D4830 (PX-02): how long a request has waited and its session length, for the Opportunities card.
 
 Two reasons, and the second is the one that matters. A guard test can import a
 module and not a page — importing a page pulls React and a stylesheet through its
