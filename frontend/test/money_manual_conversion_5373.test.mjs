@@ -200,6 +200,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
     "cloudflare-worker/src/services/growCycle.ts": 1,
     "cloudflare-worker/src/services/growKpis.ts": 3,
+    "cloudflare-worker/src/services/growExport.ts": 1,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,
