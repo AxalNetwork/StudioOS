@@ -566,10 +566,11 @@ export function sheetFailure(err) {
  * licence page still uses. Either way this is the one place the escalation
  * becomes the rail's record.
  */
-export function EscalationDecision({ item, onRecorded, onReload, variant = 'panel', record = null, onResend, onClose, returnFocusTo, branchLabel, readAt, kindHours, offline = false }) {
+export function EscalationDecision({ item, onRecorded, onReload, variant = 'panel', record = null, onResend, onClose, returnFocusTo, branchLabel, readAt, kindHours, offline = false, initialOutcome = '' }) {
   // D775 (#2101): the escalation being answered is the rail's record while its panel is open.
   useRecordCrumb(escalationTitle(item), 'escalation', item.uid);
-  const [outcome, setOutcome] = useState(variant === 'sheet' ? 'answered' : '');
+  // D4819 part 12: a licence's Approve… / Decline… opens the panel on that outcome.
+  const [outcome, setOutcome] = useState(variant === 'sheet' ? 'answered' : initialOutcome);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
