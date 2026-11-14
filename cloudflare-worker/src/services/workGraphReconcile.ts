@@ -110,7 +110,7 @@ export async function reconcileWorkGraph(env: ReconcileEnv, ctx: ValidationConte
             (SELECT group_concat(f.flag) FROM work_graph_revision_flags f WHERE f.revision_uid = r.revision_uid AND f.cleared_at IS NULL) AS flags
        FROM work_graph_revisions r
       WHERE r.tenant_id = ? AND r.company_id = ? AND r.source_store = 'r2_object' AND r.source_locator = 'FILES'
-        AND r.source_id LIKE 'wg/v1/%' AND r.tombstoned_at IS NULL AND r.created_at <= ? AND r.revision_uid > ?
+        AND r.source_id LIKE 'wg/v1/%' AND r.tombstoned_at IS NULL AND datetime(r.created_at) <= datetime(?) AND r.revision_uid > ?
       ORDER BY r.revision_uid LIMIT ?`,
   ).bind(scope.tenantId, scope.companyId, graceCutoff, input.cursors?.revisions ?? '', limit));
   const verified = new Map<string, boolean>();
