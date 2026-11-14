@@ -29,7 +29,7 @@ import {
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const TOKEN = 'eyJrIjoiZGVjazo1OnYxIn0.sig';
+const TOKEN = 'synthetic-share-token-5791-not-a-jwt';
 const CUES = [{ start_ms: 0, end_ms: 2000, text: 'This is the problem we solve.' }, { start_ms: 2500, end_ms: 4000, text: 'Freight teams reconcile by hand.' }];
 // A variant's order: Traction is shown first.
 const SLIDES = [{ uid: 'card-traction', title: 'Traction' }, { uid: 'card-kestrel', title: 'Kestrel' }, { uid: 'card-team', title: 'Team' }];
