@@ -4,7 +4,7 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/use_of_funds_export_6084.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -24,7 +24,9 @@ const migrations = ['442_raise_cycle_stores.sql', '463_raise_record_stores.sql',
 // 1 founder (owns venture 1), 2 founder of another venture, 3 admin, 4 investor.
 const roles = ['founder', 'founder', 'admin', 'investor'];
 const app = new Hono(); app.route('/api/cycles/raise', cycleRaise as any);
-const TODAY = new Date().toISOString().slice(0, 10);
+// The exports stamp today's date; the clock is frozen so the expected names and as-of dates are fixed.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-14T12:00:00Z') });
+const TODAY = '2026-11-14';
 
 function fixture({ files = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
