@@ -237,6 +237,8 @@ const SITES: Array<[string, string, string]> = [
   ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await drawDeckImages(c.env'],
   // D1506: upload and import (an external image copied in) both land through `landImage`.
   ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
+  // D5960 (#5960): a deliverable version's file is the advisor's own upload, weighed before it lands.
+  ['routes/advisors_deliverables.ts', 'async function storeVersionFile', 'await c.env.FILES.put(key, bytes'],
   // D1506: save/export-time copies also check room before storage.
   ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   // D1545 (#3788): a deck's uploaded MP4 is the member's file, weighed before it lands.

@@ -166,6 +166,8 @@ export function flowRows(scope, { flow, deals }) {
     daysInStage: f ? num(f.days_in_stage) : null,
     // D1241: the firm's note on its row, for the peek (DLS7).
     note: f?.note ?? null,
+    // D6148: the firm's pass on a passed row ({ reason, passed_at, revisit, revisit_at }), for when it comes back.
+    pass: f?.pass ?? null,
     // A door only where DEAL's rule holds (D1238 `can_open`); a listed round alone is never one.
     canOpen: !!f?.can_open,
   });
@@ -329,7 +331,7 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy';
+export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
