@@ -6,7 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import rec, { EVENT_REC_AI, EVENT_REC_PAGE } from '../src/routes/event_recommendations.ts';
-import events from '../src/routes/events.ts';
+import events, { canViewEvent, visibleEventIds } from '../src/routes/events.ts';
+import { registrationEligibility, registrationEligibilityBatch } from '../src/services/eventOrganiser.ts';
 import eventsPublic from '../src/routes/events_public.ts';
 import { RECOMMENDATION_DEPS, cosine } from '../src/services/eventRecommendations.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -234,4 +235,108 @@ test('Explain retries reuse one paid run; quote expiry and changed member/event/
     assert.equal(calls,2,'a fresh displayed quote can start a new paid run');
     assert.ok(balance()<chargedBalance);
   } finally { Object.assign(EVENT_REC_AI,original);RECOMMENDATION_DEPS.embed=embed;__resetForTest();f.db.close(); }
+});
+
+// D6413: keep the result contract while bounding both rows and caller reads.
+test('recommendation eligibility shares caller context across 200 candidates and re-reads it on the next request', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(table('account_licences'));
+    f.db.exec(table('licences'));
+    const insert = f.db.prepare("INSERT INTO events (id,slug,host_user_id,title,type,starts_at,status,visibility,admin_published,audience_rules_json) VALUES (?, ?,1,'Synthetic batch event','workshop','2099-01-01','published','public',1,'{}')");
+    for (let id = 17; id <= 220; id++) insert.run(id, 'batch-' + id);
+    f.db.prepare('UPDATE events SET audience_rules_json=?').run(JSON.stringify({ mode: 'selected', roles: ['investor'] }));
+    const DB = f.env.DB; const queries: string[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) { queries.push(sql); return DB.prepare(sql); } };
+    const first = await f.call('/api/events/recommended?limit=50', 3);
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    assert.equal(first.body.events.length, 50);
+    assert.ok(first.body.events.every((event: any) => event.registration_eligible.reason === 'Your role is eligible.'));
+    assert.equal(queries.filter(sql => sql === 'SELECT role FROM users WHERE id = ?').length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT licence FROM account_licences')).length, 2, 'one auth read and one shared eligibility read');
+    assert.ok(queries.length <= 12, 'bounded context/ranking reads: ' + queries.length);
+    queries.length = 0;
+    f.db.exec("UPDATE users SET role='founder' WHERE id=3");
+    const changed = await f.call('/api/events/recommended?limit=50', 3);
+    assert.equal(changed.status, 200);
+    assert.deepEqual(changed.body.events, []);
+    f.db.exec("INSERT INTO account_licences(user_id,licence,source) VALUES (3,'investor','synthetic-test')");
+    assert.equal((await f.call('/api/events/recommended?limit=50', 3)).body.events.length, 50, 'retained licence still qualifies');
+    f.db.exec("UPDATE account_licences SET revoked_at='2026-01-01' WHERE user_id=3");
+    assert.deepEqual((await f.call('/api/events/recommended?limit=50', 3)).body.events, [], 'revoked grant is re-read');
+    assert.equal(queries.filter(sql => sql === 'SELECT role FROM users WHERE id = ?').length, 3);
+  } finally { f.db.close(); }
+});
+
+test('batched audience gates match single-event rules, segment overlap and invitation revocation, with bounded reads', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(readFileSync(new URL('../sql/migrations/559_segment_profiles.sql', import.meta.url), 'utf8'));
+    f.db.exec(table('user_personas'));
+    f.db.exec("INSERT INTO user_personas(user_id,persona_id,is_primary) VALUES (3,'angel_scout',1),(3,'operator_advisor',0)");
+    const records = [
+      { id: 1, audience_rules_json: '{"mode":"everyone"}' },
+      { id: 2, audience_rules_json: '{"mode":"selected","roles":["investor"]}' },
+      { id: 3, audience_rules_json: '{"mode":"selected","roles":["founder"]}' },
+      { id: 4, audience_rules_json: '{"mode":"selected","personas":["angel_scout"]}' },
+      { id: 5, audience_rules_json: '{"mode":"invite_only"}' },
+      { id: 6, audience_rules_json: '{"mode":"invite_only"}' },
+      { id: 7, audience_rules_json: '{"mode":"selected","personas":["operator_advisor"]}' },
+    ];
+    f.db.exec("INSERT INTO event_invitations(event_id, invited_email, token, status) VALUES (5,'INVESTOR@example.test','batch-valid','pending'),(6,'investor@example.test','batch-revoked','revoked')");
+    const single = [];
+    for (const record of records) single.push(await registrationEligibility(f.env, record, 3, 'investor@example.test'));
+    assert.deepEqual(single.map(result => result.eligible), [true, true, false, true, true, false, false]);
+    const DB = f.env.DB; const queries: string[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) { queries.push(sql); return DB.prepare(sql); } };
+    assert.deepEqual(await registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'), single);
+    assert.equal(queries.filter(sql => sql.includes('SELECT key FROM segment_profiles')).length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT persona_id, is_primary')).length, 1);
+    assert.equal(queries.filter(sql => sql.includes('SELECT event_id FROM event_invitations')).length, 1);
+    f.db.exec("UPDATE event_invitations SET status='revoked'");
+    assert.equal((await registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'))[4].eligible, false);
+    const guest = await registrationEligibilityBatch(f.env, records, null, null);
+    assert.deepEqual(guest.map(result => result.eligible), [true, false, false, false, false, false, false]);
+    await assert.rejects(() => registrationEligibilityBatch(f.env, [{ id: 1, audience_rules_json: '{"mode":"selected","personas":["not-a-recorded-segment"]}' }], 3, 'investor@example.test'));
+    f.db.exec('DROP TABLE segment_profiles');
+    await assert.rejects(() => registrationEligibilityBatch(f.env, records, 3, 'investor@example.test'));
+  } finally { f.db.close(); }
+});
+
+test('saved events use bounded ordered windows and the existing private/withdrawn visibility gates', async () => {
+  const f = fixture();
+  try {
+    const insert = f.db.prepare("INSERT INTO events (id,slug,host_user_id,title,type,starts_at,status,visibility,admin_published) VALUES (?, ?,1,'Saved batch fixture','workshop','2099-01-01','published','public',1)");
+    for (let id = 17; id <= 260; id++) insert.run(id, 'saved-' + id);
+    const save = f.db.prepare("INSERT INTO event_rec_feedback(user_id,event_id,verdict,created_at) VALUES (2,?,'saved',?)");
+    for (let id = 260; id >= 1; id--) save.run(id, id <= 130 ? '2026-01-01 00:00:00' : '2026-01-02 00:00:00');
+    f.db.exec("UPDATE events SET visibility='private' WHERE id IN (1,2,3,4,5,6); UPDATE events SET status='draft' WHERE id IN (7,8); UPDATE events SET admin_published=0 WHERE id=9; UPDATE events SET visibility='unlisted' WHERE id=10; UPDATE events SET visibility='private',host_user_id=2 WHERE id=11;");
+    f.db.exec("INSERT INTO event_registrations(event_id,user_id,email,status) VALUES (2,2,'founder@example.test','cancelled'),(7,2,'founder@example.test','confirmed'); INSERT INTO event_invitations(event_id,invited_user_id,invited_email,token,status) VALUES (3,2,NULL,'by-user','pending'),(4,NULL,'FOUNDER@example.test','by-email','pending'),(5,2,NULL,'revoked','revoked'),(6,3,'investor@example.test','foreign','pending');");
+    const all = f.db.prepare('SELECT * FROM events ORDER BY id').all();
+    const user = f.db.prepare('SELECT * FROM users WHERE id=2').get() as any;
+    const expected: number[] = [];
+    for (const event of all) if (await canViewEvent(f.env, event, user)) expected.push(Number(event.id));
+    assert.deepEqual(expected.filter(id => id <= 11), [2,3,4,7,10,11]);
+    const DB = f.env.DB; const queries: string[] = []; const windows: number[] = [];
+    f.env.DB = { ...DB, prepare(sql: string) {
+      queries.push(sql); const stmt = DB.prepare(sql);
+      if (sql.includes('f.created_at AS saved_at')) {
+        const read = stmt.all.bind(stmt);
+        stmt.all = async () => { const rows = await read(); windows.push(rows.results.length); return rows; };
+      }
+      return stmt;
+    } };
+    const result = await f.call('/api/events/recommendation-prefs');
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    assert.deepEqual(result.body.saved, expected);
+    assert.deepEqual(windows, [100,100,60]);
+    assert.ok(queries.length <= 12, 'window reads rather than per-event reads: ' + queries.length);
+    assert.deepEqual(await visibleEventIds(f.env, all.slice(0,11), { ...user, role: 'admin' }), Array.from({ length: 11 }, (_, i) => i + 1));
+    f.db.exec("UPDATE event_invitations SET status='revoked' WHERE event_id IN (3,4); DELETE FROM event_registrations WHERE event_id IN (2,7)");
+    const revoked = await f.call('/api/events/recommendation-prefs');
+    assert.equal(revoked.status, 200);
+    assert.deepEqual(revoked.body.saved.filter((id: number) => id <= 11), [10,11]);
+    f.db.exec('DROP TABLE event_invitations');
+    assert.equal((await f.call('/api/events/recommendation-prefs')).status, 503);
+  } finally { f.db.close(); }
 });
