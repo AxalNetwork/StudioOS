@@ -104,7 +104,9 @@ test('pageKeyFor answers each profile\'s home; Admin · Studio has no rail', () 
     assert.equal(pageKeyFor('/studio', role), `${profile} · Home`, role);
   }
   assert.equal(pageKeyFor('/hq', 'super_admin'), 'Super Admin · Home');
-  for (const route of ['/admin/commissions', '/branch', '/admin/fund-admin']) assert.equal(pageKeyFor(route, 'admin'), 'Admin · Home', route);
+  for (const route of ['/admin/commissions', '/branch']) assert.equal(pageKeyFor(route, 'admin'), 'Admin · Home', route);
+  assert.equal(pageKeyFor('/admin/fund-admin', 'admin'), 'Admin · Fund Admin');
+  assert.equal(pageKeyFor('/admin/fund-admin', 'super_admin'), 'Super Admin · Fund Admin');
   assert.equal(pageKeyFor('/branch', 'branch_admin'), 'Admin · Home');
   for (const role of ['admin', 'super_admin', 'branch_admin']) assert.equal(pageKeyFor('/studio', role), null, role);
   // A profile name works as well as a shell role; anything else is no profile.

@@ -205,3 +205,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
 | `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
 | `unused_imports_attributes_6381.test.mjs` | D6381: attributed and side-effect imports preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow delivery regression stays clean. |
+
+| `fund_admin_prepare_6397.test.mjs` | D6397: consume the scoped call-preparation navigation once, retaining blank amount/date and verified preview permission. |
+
+| `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
