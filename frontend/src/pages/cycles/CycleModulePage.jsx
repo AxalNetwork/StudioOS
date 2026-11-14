@@ -96,7 +96,7 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
  * that has one) and the table has rows. The file is the Worker's, of every row
  * the search, filters and sort select; a refusal shows the Worker's sentence.
  */
-export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300' }) {
+export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (typeof onExport !== 'function') return null;
