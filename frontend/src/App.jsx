@@ -3616,12 +3616,11 @@ function AppInner() {
         holds('investor') ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
-          The zone slugs are InvestorDealsWorkspace's own anchor ids with the
-          prefix stripped — the canvas took them from there. Four deep-linkable
-          URLs replacing five that never said which stage you were on; the
-          workspace still renders all four sections and the route scrolls to
-          one. Splitting it into four pages is a content decision, not a
-          routing one. */}
+          The zone slugs are InvestorDealsWorkspace's old anchor ids with the
+          prefix stripped — the canvas took them from there. Each zone route
+          renders its own page (`ZONES` in InvestorDealsRoutes); nothing
+          scrolls to a section, and the old workspace is not on these routes
+          (#6152). */}
       {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}

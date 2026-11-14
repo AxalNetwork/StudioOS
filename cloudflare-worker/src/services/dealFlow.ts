@@ -14,7 +14,7 @@
  *   · move to Closing without a commitment.
  */
 import type { Env, User } from '../types';
-import { PASS_REASON_KEYS } from './dealPassTaxonomy';
+import { PASS_REASON_KEYS, PASS_TAXONOMY } from './dealPassTaxonomy';
 import { dealAudience, dealAudiences } from './dealAccess';
 
 export const STAGES = ['sourcing', 'screening', 'diligence', 'commit', 'closing', 'passed'] as const;
@@ -26,6 +26,15 @@ export const NOTE_MAX = 2000;
 export const DISMISS_MAX = 500;
 /** Thesis matches are part 3's (D1239, migration 619). */
 export const THESIS_REASON = 'Matches to your thesis are not recorded yet: they come with your thesis fit.';
+/**
+ * D6148: a new round on a passed venture is not detected. A deal row records
+ * no round of its own (no round name or number), and a second deal on the
+ * same venture can be a CRM import or a refiled application, so nothing here
+ * can tell a new round from either.
+ */
+export const NEXT_ROUND_REASON = 'A new round on a venture you passed is not detected: a deal records no round of its own. A pass marked Next round does not come back here by itself.';
+/** Today as YYYY-MM-DD in UTC, the form `revisit_at` is stored in. */
+const todayUtc = () => new Date().toISOString().slice(0, 10);
 
 export class FlowError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
@@ -284,9 +293,41 @@ export async function flowEvents(env: Env, scope: Scope, dealId: number) {
     at: r.created_at, by: { user_id: Number(r.actor_user_id), name: r.actor_name ?? null } })) };
 }
 
+// ---------------------------------------------------------------- Pass reasons (D6148)
+
+/**
+ * The firm's own passes: every row of this flow at Passed, counted per reason,
+ * and listed with when each comes back. It reads `deal_flow_entries` under
+ * this scope only, never `deals.status` (the studio's round-level pass) and
+ * never another firm's rows. The rows are the ones `readFlow` counts as
+ * `by_stage.passed`: a deleted venture is left out of both.
+ */
+export async function readPasses(env: Env, scope: Scope, today = todayUtc()) {
+  const rows = await env.DB.prepare(`SELECT f.deal_id, f.pass_reason, f.passed_at, f.revisit, f.revisit_at, d.status AS round_status,
+      p.name AS project_name, p.sector AS sector, p.founder_id
+    FROM deal_flow_entries f JOIN deals d ON d.id = f.deal_id JOIN projects p ON p.id = d.project_id
+    WHERE f.scope_key = ? AND f.stage = 'passed' AND p.deleted_at IS NULL ORDER BY f.passed_at DESC, f.id DESC`)
+    .bind(scope.key).all<any>();
+  const list = rows.results || [];
+  const audiences = await dealAudiences(env, scope.user, list.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
+  const items = list.map((r) => ({
+    deal_id: Number(r.deal_id), venture: r.project_name ?? null, sector: r.sector ?? null, round_status: r.round_status,
+    reason: r.pass_reason, passed_at: r.passed_at ?? null, revisit: r.revisit ?? null, revisit_at: r.revisit_at ?? null,
+    due: r.revisit === 'date' && typeof r.revisit_at === 'string' && r.revisit_at <= today,
+    can_open: (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none',
+  }));
+  const total = items.length;
+  const buckets = PASS_TAXONOMY.map((t) => {
+    const count = items.filter((i) => i.reason === t.key).length;
+    return { reason: t.key, label: t.label, count, pct: total ? Math.round((count * 100) / total) : null };
+  });
+  return { scope: scope.companyId != null ? 'firm' : 'you', total, buckets, items, next_round: { detected: false, reason: NEXT_ROUND_REASON } };
+}
+
 // ---------------------------------------------------------------- New for you
 
-type Item = { key: string; source: string; entered_via: Via; deal_id: number; venture: string | null; sector: string | null; round_status: string; at: string | null; message: string | null; can_open: boolean };
+type Item = { key: string; source: string; entered_via: Via; deal_id: number; venture: string | null; sector: string | null; round_status: string; at: string | null; message: string | null; can_open: boolean;
+  return?: { reason: string; passed_at: string | null; revisit_at: string } };
 
 /**
  * Each source of a deal not yet in this flow, as one query that answers
@@ -311,9 +352,20 @@ const SOURCES: Record<string, { via: Via; sql: string; binds: (s: Scope) => unkn
       FROM watchlist_items x WHERE x.owner_user_id = ? AND x.status = 'converted' AND x.converted_deal_id IS NOT NULL` },
 };
 export const SOURCE_KEYS = Object.keys(SOURCES);
-const KEY = /^(invitation|room|commitment|introduction|syndicate|watchlist):[0-9]+(?::[0-9]+)?$/;
+const KEY = /^(invitation|room|commitment|introduction|syndicate|watchlist|revisit):[0-9]+(?::[0-9]+)?$/;
 
-export async function inboxItems(env: Env, scope: Scope) {
+/**
+ * D6148: a pass that comes back on its date. Unlike every source above, its
+ * deal IS in this flow (at Passed); it is listed from the day `revisit_at`
+ * names. The key carries the date, so passing again with a later date brings
+ * it back again even after Not for me hid this return.
+ */
+const REVISIT_SQL = `SELECT 'revisit:' || f.id || ':' || replace(f.revisit_at, '-', '') AS item_key, f.deal_id, f.revisit_at || ' 00:00:00' AS at,
+    f.entered_via, f.pass_reason, f.passed_at, f.revisit_at, d.status AS round_status, p.name AS venture, p.sector AS sector, p.founder_id
+  FROM deal_flow_entries f JOIN deals d ON d.id = f.deal_id JOIN projects p ON p.id = d.project_id
+  WHERE f.scope_key = ? AND f.stage = 'passed' AND f.revisit = 'date' AND f.revisit_at IS NOT NULL AND f.revisit_at <= ? AND p.deleted_at IS NULL`;
+
+export async function inboxItems(env: Env, scope: Scope, today = todayUtc()) {
   const items: Item[] = [];
   const sources: Record<string, unknown> = {};
   const inFlow = new Set(((await env.DB.prepare('SELECT deal_id FROM deal_flow_entries WHERE scope_key = ?').bind(scope.key).all<{ deal_id: number }>()).results || []).map((r) => Number(r.deal_id)));
@@ -336,6 +388,21 @@ export async function inboxItems(env: Env, scope: Scope) {
       sources[name] = { available: false, unreadable: true, reason: 'This source could not be read. That is not the same as none.' };
     }
   }
+  try {
+    const rows = await env.DB.prepare(REVISIT_SQL).bind(scope.key, today).all<any>();
+    const candidates = (rows.results || []).filter((row) => !dismissed.has(String(row.item_key)));
+    const audiences = await dealAudiences(env, scope.user, candidates.map((r) => ({ id: Number(r.deal_id), founder_id: r.founder_id })));
+    sources.revisit = { available: true };
+    for (const r of candidates) {
+      items.push({ key: String(r.item_key), source: 'revisit', entered_via: r.entered_via, deal_id: Number(r.deal_id), venture: r.venture ?? null, sector: r.sector ?? null,
+        round_status: r.round_status, at: r.at ?? null, message: null, can_open: (audiences.get(Number(r.deal_id)) ?? 'none') !== 'none',
+        return: { reason: r.pass_reason, passed_at: r.passed_at ?? null, revisit_at: r.revisit_at } });
+    }
+  } catch (e) {
+    console.error('[deal-flow] inbox source unreadable', 'revisit');
+    sources.revisit = { available: false, unreadable: true, reason: 'This source could not be read. That is not the same as none.' };
+  }
+  sources.next_round = { detected: false, reason: NEXT_ROUND_REASON };
   sources.thesis = { recorded: false, reason: THESIS_REASON };
   items.sort((a, b) => (utc(b.at) ?? 0) - (utc(a.at) ?? 0) || a.key.localeCompare(b.key));
   return { items, sources };

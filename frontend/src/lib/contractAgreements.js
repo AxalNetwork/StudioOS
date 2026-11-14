@@ -37,6 +37,26 @@ export const PACKAGE_OPTIONS = [
 
 export const PROGRAM_OPTIONS = [['', 'Any program'], ...PROGRAMS.map((p) => [p.key, p.name])];
 
+/* ── D5050 part 3 (#5050): territory names ─────────────────────────────────────────────────────────────── */
+
+let regionNames;
+try { regionNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }); } catch { regionNames = null; }
+
+/**
+ * A territory as a row, button or chip prints it: the English country name from `Intl.DisplayNames` (D5050 §6,
+ * Q2 = A, source chosen 2026-11-14). The stored ISO-2 code stays the filter's value and is what prints when the
+ * runtime has no name for it, or when it is not a two-letter code at all. Never guessed, never blank.
+ */
+export function territoryName(code) {
+  const raw = String(code ?? '').trim();
+  if (!raw) return null;
+  const iso = raw.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(iso) || !regionNames) return iso;
+  let name;
+  try { name = regionNames.of(iso); } catch { name = undefined; }
+  return name && name !== iso ? name : iso;
+}
+
 /**
  * D5060 part 4 (#5060, board CT-17): the licence family, licence type and holder filters. Each value is one the
  * Worker accepts (`LICENCE_FAMILIES`, `LICENCE_TYPES` and `HOLDER` in services/contractAgreementSources.ts),
@@ -90,7 +110,7 @@ export function holderLabel(value, names = {}) {
  */
 export function agreementContextLine(agreement) {
   if (!agreement) return null;
-  const territory = (agreement.territory || []).join(', ');
+  const territory = (agreement.territory || []).map(territoryName).filter(Boolean).join(', ');
   const pkg = agreement.package_name ? [agreement.package_name, agreement.package_version ? `v${agreement.package_version}` : null].filter(Boolean).join(' ') : null;
   return [
     territory || agreement.holder?.name || null,
@@ -134,7 +154,7 @@ export function filterButtonValue(id, filters = {}, names = {}) {
   const f = filters || {};
   if (id === 'type') { const t = typesOf(f.agreement_type); return t.length > 1 ? String(t.length) : t.length ? labelIn(AGREEMENT_TYPE_OPTIONS, t[0]) : null; }
   if (id === 'state') return f.agreement_status ? labelIn(LEGAL_STATUS_OPTIONS, f.agreement_status) : null;
-  if (id === 'licence') return [f.territory ? String(f.territory).toUpperCase() : null, f.licence || null].filter(Boolean).join(' · ') || null;
+  if (id === 'licence') return [f.territory ? territoryName(f.territory) : null, f.licence || null].filter(Boolean).join(' · ') || null;
   if (id === 'program') return f.program ? labelIn(PROGRAM_OPTIONS, f.program) : null;
   if (id === 'package') return f.package ? labelIn(PACKAGE_OPTIONS, f.package) : null;
   if (id === 'family') return f.licence_family ? labelIn(LICENCE_FAMILY_OPTIONS, f.licence_family) : null;
@@ -154,7 +174,7 @@ export function activeAgreementChips(filters = {}, names = {}) {
   const chips = typesOf(f.agreement_type).map((t) => ({ key: 'agreement_type', value: t, label: `Type: ${labelIn(AGREEMENT_TYPE_OPTIONS, t)}` }));
   if (f.agreement_status) chips.push({ key: 'agreement_status', label: `Legal state: ${labelIn(LEGAL_STATUS_OPTIONS, f.agreement_status)}` });
   if (f.licence) chips.push({ key: 'licence', label: `Licence: ${f.licence}` });
-  if (f.territory) chips.push({ key: 'territory', label: `Territory: ${String(f.territory).toUpperCase()}` });
+  if (f.territory) chips.push({ key: 'territory', label: `Territory: ${territoryName(f.territory)}` });
   if (f.program) chips.push({ key: 'program', label: `Program: ${labelIn(PROGRAM_OPTIONS, f.program)}` });
   if (f.package) chips.push({ key: 'package', label: `Package: ${labelIn(PACKAGE_OPTIONS, f.package)}` });
   if (f.licence_family) chips.push({ key: 'licence_family', label: `Licence family: ${labelIn(LICENCE_FAMILY_OPTIONS, f.licence_family)}` });
