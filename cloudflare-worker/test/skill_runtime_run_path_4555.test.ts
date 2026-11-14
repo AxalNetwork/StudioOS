@@ -324,6 +324,9 @@ test('#5340 parity: the switched-on prompt closes with the same "Not recorded" r
   const sys = w.systems[0];
   // Mutation checked: NO_INVENTED_FIGURE_RULE dropped from the SDK text's join → this fails.
   assert.ok(sys.endsWith(`\n\n${NO_INVENTED_FIGURE_RULE}`), 'the SDK text ends with the rule');
+  // #6420: one model call, so the prompt says the two tools it names cannot be called, in Axal's words after the data.
+  const noTools = sys.indexOf('This run makes no tool call: activate_skill and read_skill_resource are not available here. The skill "synthetic-hq-brief" and its files are already loaded above; no other skill can be loaded.');
+  assert.ok(noTools > sys.lastIndexOf('END_RECORD_TEXT_UNTRUSTED_'), 'after every untrusted block');
   // After every untrusted block, so it is Axal's own instruction and not skill data.
   assert.ok(sys.lastIndexOf(NO_INVENTED_FIGURE_RULE) > sys.lastIndexOf('END_RECORD_TEXT_UNTRUSTED_'));
   // The legacy loader ends with the very same constant.

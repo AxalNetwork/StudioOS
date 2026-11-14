@@ -496,7 +496,7 @@ export const TOOL_SCHEMAS: Array<{ name: ToolName; description: string; paramete
   },
   {
     name: 'openPage',
-    description: 'Deep-link the user to a specific app page. The route MUST be one of the allow-listed paths.',
+    description: `Deep-link the user to an app page. route is one of these paths, or a sub-path of one: ${Object.entries(PAGE_ALLOWLIST).map(([path, label]) => `${path} (${label})`).join(', ')}. Any other route opens the dashboard instead.`,
     parameters: { type: 'object', properties: { route: { type: 'string' } }, required: ['route'] },
   },
   {

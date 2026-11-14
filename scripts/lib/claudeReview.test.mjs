@@ -241,6 +241,8 @@ test('cost is estimated from the usage the API returns, per model when a fallbac
   const one = estimateCost({ input_tokens: 1_000_000, output_tokens: 100_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, 'claude-sonnet-5-5', RATES);
   assert.equal(one.usd.toFixed(4), '3.0000');
   assert.equal(one.known, true);
+  // #6420: Sonnet 5.5 reads a cached token at $0.10 per million, as the Worker's catalogue has it (D851).
+  assert.equal(estimateCost({ input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 0 }, 'claude-sonnet-5-5', RATES).usd.toFixed(4), '0.1000');
   const fb = estimateCost({ iterations: [
     { type: 'message', model: 'claude-opus-5-5', input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
     { type: 'fallback_message', model: 'claude-opus-4-8', input_tokens: 1_000_000, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
