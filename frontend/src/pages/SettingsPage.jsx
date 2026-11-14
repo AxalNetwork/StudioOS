@@ -4020,18 +4020,14 @@ function PrivacyCoreCard({ flash }) {
 // Opting out flips contribute_to_signals=0; the next 6h aggregation cron
 // will exclude this user automatically.
 function InvestorSignalsContributionCard({ flash, role }) {
-  const [profile, setProfile] = useState(undefined);
+  const [profile, setProfile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
-    if (linked) document.getElementById('my-thesis')?.scrollIntoView?.({ block: 'start' });
-  }, [linked]);
-
-  useEffect(() => {
     let cancelled = false;
     api.getInvestorProfile()
-      .then(r => { if (!cancelled) setProfile(r.profile ?? null); })
+      .then(r => { if (!cancelled) setProfile(r.profile); })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
     return () => { cancelled = true; };
   }, []);
@@ -4066,7 +4062,7 @@ function InvestorSignalsContributionCard({ flash, role }) {
   // Hide entirely from non-investor accounts that have never filled out a
   // profile (no value to surface). Investors always see it.
   const isInvestor = String(role || '').toLowerCase() === 'investor';
-  if (!linked && !isInvestor && !profile?.completed_at) return null;
+  if (!isInvestor && !profile?.completed_at) return null;
 
   if (err) return <Card title="Investor Signals"><div className="text-sm text-red-600">{err}</div></Card>;
   if (!profile) return <Card title="Investor Signals"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;

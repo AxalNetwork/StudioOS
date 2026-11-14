@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Loader2, Save } from 'lucide-react';
 import { api } from '../../lib/api.js';
@@ -15,24 +15,29 @@ export default function InvestorMyThesisCard({ flash, role, linked = false }) {
   const from = new URLSearchParams(search).get('from');
   const returnLink = from === 'home' ? { to: '/studio', label: 'Back to Investor Home' }
     : from === 'deal-flow' ? { to: '/deals', label: 'Back to Deal flow' } : null;
+  const cardRef = useRef(null);
   const [saved, setSaved] = useState(false);
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(undefined);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   useEffect(() => {
+    if (linked) cardRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [linked]);
+
+  useEffect(() => {
     let cancelled = false;
     api.getInvestorProfile()
-      .then(r => { if (!cancelled) setProfile(r.profile); })
+      .then(r => { if (!cancelled) setProfile(r.profile ?? null); })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
     return () => { cancelled = true; };
   }, []);
 
   const isInvestor = String(role || '').toLowerCase() === 'investor';
-  if (!isInvestor && !profile?.completed_at) return null;
-  if (err) return <Card id="my-thesis" title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (profile === undefined) return <Card id="my-thesis" title="My thesis"><p role="status">Loading…</p></Card>;
-  if (!profile || (!isInvestor && !profile.completed_at)) return <Card id="my-thesis" title="My thesis"><p>No investor thesis is available for this account.</p></Card>;
+  if (!linked && !isInvestor && !profile?.completed_at) return null;
+  if (err) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
+  if (profile === undefined) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><p role="status">Loading…</p></Card>;
+  if (!profile || (!isInvestor && !profile.completed_at)) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><p>No investor thesis is available for this account.</p></Card>;
 
   const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
   const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
@@ -92,6 +97,7 @@ export default function InvestorMyThesisCard({ flash, role, linked = false }) {
 
   return (
     <Card
+      cardRef={cardRef}
       id="my-thesis"
       title="My thesis"
       description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."

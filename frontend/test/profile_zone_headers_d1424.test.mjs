@@ -269,3 +269,22 @@ test('the linked thesis card has an anchor and offers a return only after a save
     }
   } finally { [api.getInvestorProfile, api.saveInvestorProfile] = originals; }
 });
+
+test('a linked thesis shows its loading and unavailable states with the same anchor', async () => {
+  const restore = api.getInvestorProfile;
+  let finish;
+  api.getInvestorProfile = () => new Promise(resolve => { finish = resolve; });
+  const view = await mountContracts(h(InvestorMyThesisCard, { flash() {}, role: 'partner', linked: true }),
+    '/account/security-privacy?from=deal-flow#my-thesis');
+  try {
+    assert.match(view.text(), /Loading/);
+    assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+    finish({ profile: { completed_at: null } });
+    await view.flush();
+    assert.match(view.text(), /No investor thesis is available/);
+    assert.ok(view.nodes().some(node => view.props(node)?.id === 'my-thesis'));
+  } finally {
+    await view.unmount();
+    api.getInvestorProfile = restore;
+  }
+});
