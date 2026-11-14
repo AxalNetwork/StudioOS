@@ -7,7 +7,9 @@ import { request } from '../api.js';
 //   update(dealId, body)           PATCH /deals/flow/:dealId { stage?, owner_user_id?, note? } → row
 //   pass(dealId, body)             POST  /deals/flow/:dealId/pass { reason, revisit?, revisit_at?, note?, via_key? } → row
 //   events(dealId)                 GET   /deals/flow/:dealId/events → { items }
-//   inbox()                        GET   /deals/flow/inbox → { items, sources }
+//   inbox()                        GET   /deals/flow/inbox → { items, sources }; a `revisit` item is a pass back on its date (D6148)
+// D6148 (#6148): Pass reasons on Screening, the firm's own passes.
+//   passes()                       GET   /deals/flow/passes → { scope, total, buckets, items, next_round }
 //   dismiss(key, reason?)          POST  /deals/flow/inbox/:key/dismiss { reason? } → { ok, key }
 // D1241 (#3254): Compare's Eadwyn note, drafted from SCORING's bands and saved only on press.
 //   compareNotes(ids)              GET   /deals/flow/compare-note?ids= → { items, unreadable }
@@ -23,6 +25,7 @@ export const dealFlowApi = {
   pass: (dealId, body) => request(`/deals/flow/${id(dealId)}/pass`, { method: 'POST', body: JSON.stringify(body) }),
   events: (dealId) => request(`/deals/flow/${id(dealId)}/events`),
   inbox: () => request('/deals/flow/inbox'),
+  passes: () => request('/deals/flow/passes'),
   compareNotes: (ids) => request(`/deals/flow/compare-note?ids=${ids.map(id).join(',')}`),
   draftCompareNote: (ids) => request('/deals/flow/compare-note', { method: 'POST', body: JSON.stringify({ deal_ids: ids }) }),
   keepCompareNote: (receipt) => request('/deals/flow/compare-note/keep', { method: 'POST', body: JSON.stringify({ receipt }) }),

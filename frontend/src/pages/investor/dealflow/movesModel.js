@@ -11,7 +11,7 @@
  *   - Passed is reached only through the pass, with one of the five reasons.
  * The pass is the investor's alone: the round stays open for everyone else.
  */
-import { PASS_TAXONOMY } from '../../../lib/dealFlow.js';
+import { PASS_TAXONOMY, dayWithYear, passReasonLabel } from '../../../lib/dealFlow.js';
 import { BOARD_STAGES, ENTERED_WORD, shortDayOf } from './flowModel';
 
 const order = (s) => BOARD_STAGES.indexOf(s);
@@ -61,11 +61,11 @@ export function passBody({ reason, revisit = 'next_round', revisitAt = '', note 
 /** The intro line, with its count; never "0 new". */
 export function inboxIntro(n) {
   const head = n === 1 ? '1 new, newest first.' : `${n} new, newest first.`;
-  return `${head} Ventures already in Mine are not listed. Nothing is added until you press Add to my deal flow. Not for me hides a row and asks for an optional reason.`;
+  return `${head} Ventures already in Mine are not listed. A pass whose date to come back has arrived is the one exception. Nothing is added until you press Add to my deal flow. Not for me hides a row and asks for an optional reason.`;
 }
 
 /** The chip a row carries: how it would enter the flow. */
-export const inboxChip = (item) => ENTERED_WORD[item?.entered_via] || 'Not recorded';
+export const inboxChip = (item) => (item?.source === 'revisit' ? 'Back from your pass' : ENTERED_WORD[item?.entered_via] || 'Not recorded');
 
 /** The line under the name: what brought it here, in the item's own facts. */
 export function inboxLine(item = {}) {
@@ -77,6 +77,12 @@ export function inboxLine(item = {}) {
     case 'introduction': return 'The founder accepted your introduction.';
     case 'syndicate': return 'A syndicate is open on this round.';
     case 'watchlist': return day ? `Converted on ${day}.` : 'A venture on your watchlist opened a round.';
+    // D6148: the firm's own pass, back on the date it chose.
+    case 'revisit': {
+      const passed = dayWithYear(item.return?.passed_at);
+      const on = dayWithYear(item.return?.revisit_at);
+      return `You passed${passed ? ` on ${passed}` : ''} (${passReasonLabel(item.return?.reason)}) and asked to see it again${on ? ` on ${on}` : ''}.`;
+    }
     default: return null;
   }
 }
@@ -88,18 +94,24 @@ export function inboxLine(item = {}) {
  */
 export function inboxActions(item = {}) {
   if (item.source === 'room') return { add: false, pass: false, dismiss: false, open: !!item.can_open };
+  // D6148: a return is already in the flow, at Passed: it moves back to Screening, or Not for me hides it.
+  if (item.source === 'revisit') return { add: false, pass: false, reopen: true, dismiss: true, open: !!item.can_open };
   return { add: true, pass: true, dismiss: true, open: !!item.can_open };
 }
 
 const SOURCE_WORD = Object.freeze({
   invitation: 'invitations', room: 'invitations you asked for', commitment: 'commitments', introduction: 'introductions',
-  syndicate: 'open syndicates', watchlist: 'your watchlist',
+  syndicate: 'open syndicates', watchlist: 'your watchlist', revisit: 'passes due back',
 });
 
 /** The ways in that could not be read, in words; the rest still list. */
 export function unreadSources(sources = {}) {
   return Object.entries(sources || {}).filter(([k, v]) => SOURCE_WORD[k] && v && v.unreadable).map(([k]) => SOURCE_WORD[k]);
 }
+
+/** D6148: Next round is not detected; the read says so, and so does the page. */
+export const nextRoundLine = (sources = {}) => (sources?.next_round && sources.next_round.detected === false
+  ? (sources.next_round.reason || 'A new round on a venture you passed is not detected.') : null);
 
 /** Matches to the thesis, when the read says none are recorded: the reason, never "no matches". */
 export const thesisLine = (sources = {}) => (sources?.thesis && sources.thesis.recorded === false

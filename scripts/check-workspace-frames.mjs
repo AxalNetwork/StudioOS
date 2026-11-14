@@ -256,6 +256,9 @@ for (const role of ROLES) {
         rubric: { available: true, dimensions: [], editable: false, editable_reason: '' },
         red_flag_rules_available: false, red_flag_rules_reason: '',
       };
+    } else if (p.includes('/deals/flow/passes')) {
+      // D6148: Screening's Pass reasons reads the firm's own passes.
+      body = { scope: 'firm', total: 0, buckets: [], items: [], next_round: { detected: false, reason: '' } };
     } else if (p.includes('/deals/pass-analytics')) {
       body = { total: 0, buckets: [], unrecorded: 0, unrecorded_note: null, reason: null, deals: [] };
     } else if (p.includes('/ic/commit-room')) {
