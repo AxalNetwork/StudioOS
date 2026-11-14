@@ -69,7 +69,27 @@ const KINDS = [
   { value: 'legal', label: 'Legal' },
   { value: 'playbook', label: 'My playbook' },
   { value: 'client', label: 'About a client' },
+  { value: 'diligence', label: 'Diligence' },
 ];
+/**
+ * D6282: the kinds each licence is offered. An investor has no clients and no
+ * playbook to reuse with them, so `My playbook` and `About a client` were two
+ * options that could not describe anything they hold; `Diligence` is theirs.
+ * Every other licence keeps exactly the six it had. A document already filed
+ * under a kind its licence is not offered keeps that kind in the edit list, so
+ * opening the editor never silently reclassifies it.
+ */
+const KINDS_BY_ROLE = {
+  investor: ['document', 'report', 'primary', 'legal', 'diligence'],
+};
+const DEFAULT_KINDS = ['document', 'report', 'primary', 'legal', 'playbook', 'client'];
+export function kindOptionsFor(role, current) {
+  const values = KINDS_BY_ROLE[role] || DEFAULT_KINDS;
+  const withCurrent = current && !values.includes(current) && KINDS.some((k) => k.value === current) ? [...values, current] : values;
+  return withCurrent.map((value) => KINDS.find((k) => k.value === value));
+}
+/** D6282: an investor's library holds no client's files, so its copy never mentions one. */
+export const hasClients = (role) => role !== 'investor';
 // The artboard tints kind as well as state, and the two must not read alike: a
 // kind is what a document IS and can never be wrong, so none of these is a
 // status colour. `seam` and `cite` are the two provenance tones `Pill` carries
@@ -309,7 +329,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // the number here would hide exactly the documents this view is for.
   const visible = items.filter((d) => {
     if (collectionUid && !collectionState.items.find((item) => item.uid === collectionUid)?.document_uids?.includes(d.uid)) return false;
-    if (['client', 'playbook', 'report', 'primary', 'legal'].includes(filter)) return d.kind === filter;
+    if (['client', 'playbook', 'report', 'primary', 'legal', 'diligence'].includes(filter)) return d.kind === filter;
     if (filter === 'unindexed') return d.index_state !== 'indexed';
     return true;
   });
@@ -426,7 +446,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             </Field>
             <Field label="What it is">
               <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
-                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                {kindOptionsFor(role).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </select>
             </Field>
             <Field label="Title" hint="Leave blank to use the filename.">
@@ -500,7 +520,9 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         empty={(
           <NothingYet
             title="Nothing in your library yet"
-            body="Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything and no client has opened a file to you, not that something failed to arrive."
+            body={hasClients(role)
+              ? 'Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything and no client has opened a file to you, not that something failed to arrive.'
+              : 'Add a document above and Ask can answer questions from it, citing the passage it used. Nothing here is inferred — an empty library means you have not added anything, not that something failed to arrive.'}
           />
         )}
       >
@@ -611,7 +633,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         would be a control that cannot act. */}
                     {d.source !== 'client' && d.read_only !== true && (
                       <>
-                        <DocumentMetadata document={d} onSaved={load} />
+                        <DocumentMetadata document={d} onSaved={load} role={role} />
                         {problem?.action === 'retry' ? null : (
                           <button
                             type="button" disabled={busy} onClick={() => reindex(d.uid)}
@@ -648,8 +670,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           What is indexed here is precisely what Ask can answer over. With an empty library
           Ask has no empty-state prose to fall back on — it can only report that nothing is
           indexed, which is why an unindexed document is a working gap rather than
-          housekeeping. A document a client opened to you is read-only: you can read it,
-          and changing it is not yours to do.
+          housekeeping.{hasClients(role) && ' A document a client opened to you is read-only: you can read it, and changing it is not yours to do.'}
         </PairNote>
 
         <ZoneDraft
@@ -672,7 +693,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           through one. What is still worth stating is the half a reader would
           otherwise get wrong: a shared document is listed and unreachable, and
           those are not a contradiction. */}
-      <StatedLimit title="What a shared document does and does not do">
+      {hasClients(role) && <StatedLimit title="What a shared document does and does not do">
         <p>
           A client can open one of their own files to you, through a grant they control and
           can revoke. It is listed here with their name on it, you can read it, and it is
@@ -688,13 +709,13 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           So an empty library means you have uploaded nothing and nobody has opened
           anything to you. It never means something was shared and failed to arrive.
         </p>
-      </StatedLimit>
+      </StatedLimit>}
     </div>
   );
 }
 
 /** D549: editing metadata never changes a shared client's row. */
-export function DocumentMetadata({ document, onSaved }) {
+export function DocumentMetadata({ document, onSaved, role = 'founder' }) {
   const [title, setTitle] = useState(document.title || '');
   const [kind, setKind] = useState(document.kind || 'document');
   const [year, setYear] = useState(document.source_year ?? '');
@@ -713,7 +734,7 @@ export function DocumentMetadata({ document, onSaved }) {
     <summary className="cursor-pointer">Edit title, kind or source year</summary>
     <form className="mt-2 space-y-2" onSubmit={save}>
       <label className="block">Title<input className={inputClass} value={title} maxLength={300} required disabled={busy} onChange={(event) => setTitle(event.target.value)} /></label>
-      <label className="block">Kind<select aria-label="Kind" className={inputClass} value={kind} disabled={busy} onChange={(event) => setKind(event.target.value)}>{KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <label className="block">Kind<select aria-label="Kind" className={inputClass} value={kind} disabled={busy} onChange={(event) => setKind(event.target.value)}>{kindOptionsFor(role, document.kind).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <label className="block">Source year<input className={inputClass} type="number" min={1000} max={new Date().getUTCFullYear() + 1} value={year} disabled={busy} onChange={(event) => setYear(event.target.value)} /></label>
       <span>{document.source_year == null ? 'Not recorded' : document.source_year}</span>
       <button className={buttonClass} type="submit" disabled={busy}>Save metadata</button>
