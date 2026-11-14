@@ -81,3 +81,4 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 
 | `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
 | `futureClockEvidence.mjs` | D5663: complete TAP and producer provenance before health recovery. |
+| `prRisk.mjs` | D5580: hunk-level risk classes per overlapping PR pair, the four per-PR evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the Delivery-cluster fixture. |
