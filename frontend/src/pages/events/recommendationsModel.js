@@ -116,6 +116,7 @@ export function rowState(read) {
   if (!events) return { kind: 'error', line: ERROR_LINE };
   if (!events.length) {
     const sig = v.signals && typeof v.signals === 'object' ? Object.values(v.signals) : [];
+    if (sig.includes('unreadable')) return { kind: 'error', line: ERROR_LINE };
     const few = sig.length > 0 && sig.every((s) => s !== 'read');
     return few ? { kind: 'few', line: FEW_LINE } : { kind: 'empty', line: EMPTY_LINE };
   }
@@ -144,8 +145,10 @@ export function signalWord(state) {
 
 /** The card's register line, from `registration_eligible` (D1131's words). */
 export function registerState(event, explorer = false) {
-  if (event?.registration_eligible === false) return { kind: 'closed', line: explorer ? 'Not open to Explorers' : 'Not open to your profile' };
-  if (typeof event?.registration_eligible !== 'boolean') return { kind: 'unknown', line: 'Eligibility not recorded' };
+  const value = event?.registration_eligible;
+  const eligible = typeof value === 'boolean' ? value : value?.eligible;
+  if (eligible === false) return { kind: 'closed', line: explorer ? 'Not open to Explorers' : 'Not open to your profile' };
+  if (typeof eligible !== 'boolean') return { kind: 'unknown', line: 'Eligibility not recorded' };
   if (event?.full === true || event?.seats_left === 0) return { kind: 'full', line: 'Join the waitlist' };
   return { kind: 'open', line: 'Register' };
 }

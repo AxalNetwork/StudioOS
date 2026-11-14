@@ -21,6 +21,7 @@ import { useOfFundsApi } from '../src/lib/api/useOfFunds.js';
 import {
   afterRaiseView, centsFromTyped, historyRows, homeTiles, money, monthsText, needsRows, planEmpty, planVsActual,
   raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
+  hireBody, sectionSheet, sectionSheetSearch, sheetSectionFrom, tabSearch, // D6083
 } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
 
 const h = React.createElement;
@@ -459,4 +460,163 @@ test('UF21 the phone: tiles two across, the sections as a list with a 44px opene
   assert.match(src, /max-md:min-h-\[44px\]/);
   assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, 'no browser pop-up');
   assert.doesNotMatch(src, /EadwynPanel|aiRouter|railProposals|useRailOption|FillProposals/, 'Eadwyn fills nothing here');
+});
+
+/* ------------------------------------------------------------------ *
+ * D6083 (#6083) — Add a hire (UF6) and the section sheet (UF4, UF21c)
+ * inside the tool, at `?section=<key>` on the tab that opened it.
+ * ------------------------------------------------------------------ */
+
+test('D6083 the sheet\'s address: ?section=<key> beside the venture; a tab link drops it; an unknown key opens nothing', () => {
+  assert.equal(sheetSectionFrom('?project_id=3&section=product'), 'product');
+  assert.equal(sheetSectionFrom('?project_id=3&section=marketing'), null);
+  assert.equal(sheetSectionFrom(''), null);
+  assert.equal(sectionSheetSearch('?project_id=3', 'go-to-market'), '?project_id=3&section=go-to-market');
+  assert.equal(sectionSheetSearch('?project_id=3&section=product', null), '?project_id=3');
+  assert.equal(sectionSheetSearch('?section=product', null), '');
+  assert.equal(tabSearch('?project_id=3&section=product'), '?project_id=3', 'tabs keep the venture only');
+});
+
+test('D6083 hireBody: role and section required, a month like 2027-03, the cost in the chosen currency, an empty cost missing', () => {
+  assert.deepEqual(hireBody({ role: ' Data engineer ', section: 'infrastructure', starts: '2027-04', cost: '140,000', currency: 'USD' }).body,
+    { role: 'Data engineer', category_key: 'infrastructure', start_month: '2027-04', annual_cents: 14000000, currency: 'usd' });
+  assert.equal(hireBody({ role: 'Ops', section: 'operations', starts: '', cost: '' }).body.annual_cents, null, 'never 0');
+  assert.equal(hireBody({ role: 'Ops', section: 'operations', starts: '', cost: '' }).body.start_month, null);
+  assert.equal(hireBody({ role: 'x', section: 'product', cost: '1000', currency: 'jpy' }).body.annual_cents, 1000, 'JPY has no minor unit');
+  assert.match(hireBody({ role: '', section: 'product' }).error, /Name the role/);
+  assert.match(hireBody({ role: 'x', section: 'marketing' }).error, /section/);
+  assert.match(hireBody({ role: 'x', section: 'product', starts: '2027-13' }).error, /2027-03/);
+  assert.match(hireBody({ role: 'x', section: 'product', cost: 'lots' }).error, /cost a year/);
+  assert.match(hireBody({ role: 'x', section: 'product', cost: '-5' }).error, /cost a year/);
+});
+
+test('D6083 sectionSheet: the section\'s milestones, hires, cost against the amount and its actual share', () => {
+  const base = planFixture().base.value;
+  const gtm = sectionSheet(base, 'go-to-market', MERCURY);
+  assert.equal(gtm.label, 'GTM: sales and marketing');
+  assert.equal(gtm.hireItems.length, 1); assert.equal(gtm.hireCostCents, 42000000); assert.equal(gtm.overBudget, true);
+  assert.equal(gtm.actual, 21, 'Mercury\'s measured share of the last 3 months');
+  assert.equal(sectionSheet(base, 'infrastructure', null).actual, null, 'no Mercury, no actual share');
+  assert.equal(sectionSheet(base, 'infrastructure', null).milestoneItems[0].label, 'SOC 2 Type I');
+  assert.equal(sectionSheet(base, 'nope'), null);
+  assert.equal(sectionSheet({ ...base, hires: { state: 'unreadable', items: null } }, 'product').hireItems, null);
+});
+
+test('D6083 the client: Add a hire posts to the mounted route with the venture and no revision', async () => {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = async (u, o = {}) => { sent.push({ url: String(u).replace(/^.*\/api/, ''), o }); return response({ id: 1 }, 201); };
+  try {
+    await useOfFundsApi.createHire(3, { role: 'x', category_key: 'product' });
+    assert.equal(sent[0].url, '/cycles/raise/use-of-funds/hires?project=3');
+    assert.equal(sent[0].o.method, 'POST');
+    assert.deepEqual(JSON.parse(sent[0].o.body), { role: 'x', category_key: 'product' });
+  } finally { globalThis.fetch = previous; restore(); }
+  assert.match(read('cloudflare-worker/src/routes/cycle_use_of_funds.ts'), /r\.post\('\/hires'/);
+});
+
+test('D6083 section names open the sheet from Home, Allocation and Milestones, never the record page', async () => {
+  for (const [url, id, want] of [
+    ['/raise/use-of-funds?project_id=3', 'uof-open-section-product', '/raise/use-of-funds?project_id=3&section=product'],
+    ['/raise/use-of-funds/allocation?project_id=3', 'uof-open-section-go-to-market', '/raise/use-of-funds/allocation?project_id=3&section=go-to-market'],
+  ]) {
+    const v = await mounted(url);
+    try { assert.equal(v.pr(v.by(id)).href, want); } finally { await v.close(); }
+  }
+  const p = await mounted('/raise/use-of-funds/allocation?project_id=3', { phone: true });
+  try { assert.equal(p.pr(p.by('uof-open-section-reserve')).href, '/raise/use-of-funds/allocation?project_id=3&section=reserve', 'the phone list opens the bottom sheet'); } finally { await p.close(); }
+  const m = await mounted('/raise/use-of-funds/milestones?project_id=3');
+  try {
+    const hrefs = m.all('uof-hire-row').map((row) => (row.childNodes || []).flatMap((c) => c.childNodes || []).map((n) => m.pr(n).href).find(Boolean));
+    assert.deepEqual(hrefs, ['/raise/use-of-funds/milestones?project_id=3&section=product', '/raise/use-of-funds/milestones?project_id=3&section=go-to-market']);
+  } finally { await m.close(); }
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsTool.jsx');
+  assert.doesNotMatch(src, /recordHref/, 'the generic section record page is no longer linked from the tool');
+  assert.doesNotMatch(src, /added on its section’s page/);
+});
+
+test('D6083 UF4 the sheet at its own address: share, amount, milestones, hires, the over-budget warning, the actual share and Close', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3&section=go-to-market');
+  try {
+    assert.ok(v.by('uof-section-sheet'));
+    assert.ok(v.text('uof-section-sheet').includes('25% of the raise'));
+    assert.ok(v.text('uof-section-facts').includes('$375,000'));
+    assert.ok(v.text('uof-section-facts').includes('A month over 18 months'));
+    assert.equal(v.all('uof-section-hire').length, 1);
+    assert.ok(v.text('uof-section-hire-cost').includes('Hires cost $420,000 a year of this section’s $375,000.'));
+    assert.ok(v.text('uof-section-over').includes('hires cost $420,000 a year; this section has $375,000'));
+    assert.ok(v.by('uof-over-go-to-market'), 'and the tab\'s own warning still shows');
+    assert.equal(v.text('uof-section-actual-value'), '21%');
+    assert.ok(v.text('uof-section-feeds').includes('Out of sync'));
+    await v.click('uof-section-sheet-close');
+    assert.equal(v.by('uof-section-sheet'), undefined, 'Close drops ?section from the address');
+  } finally { await v.close(); }
+  const home = await mounted('/raise/use-of-funds?project_id=3&section=infrastructure');
+  try { assert.ok(home.text('uof-section-milestones').includes('SOC 2 Type I')); } finally { await home.close(); }
+  const ms = await mounted('/raise/use-of-funds/milestones?project_id=3&section=product');
+  try { assert.ok(ms.text('uof-section-hires').includes('Senior engineer')); } finally { await ms.close(); }
+  const bad = await mounted('/raise/use-of-funds/allocation?project_id=3&section=marketing');
+  try { assert.equal(bad.by('uof-section-sheet'), undefined, 'an unknown section opens nothing'); } finally { await bad.close(); }
+});
+
+test('D6083 D1174: an admin\'s sheet shows no bank figure; the actual share is the founder\'s alone', async () => {
+  const v = await mounted('/raise/use-of-funds/allocation?project_id=3&section=product', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
+  try {
+    assert.equal(v.text('uof-section-actual-value'), 'Founder only');
+    assert.ok(v.text('uof-section-actual').includes('visible to the founder only'));
+    assert.doesNotMatch(v.text('uof-section-actual'), /52%/);
+  } finally { await v.close(); }
+});
+
+test('D6083 UF6 Add a hire beside Add milestone, and from the sheet with its section chosen', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ id: 13, revision: 0 }, 201) } });
+  try {
+    await v.click('uof-add-hire-open');
+    assert.ok(v.by('uof-add-hire'));
+    assert.equal(v.pr(v.by('uof-add-hire-save')).disabled, true, 'nothing to save without a role');
+    await v.type('uof-add-hire-role', 'Data engineer');
+    await v.type('uof-add-hire-section', 'infrastructure');
+    await v.type('uof-add-hire-starts', '2027-13');
+    assert.match(v.text('uof-add-hire-hint'), /2027-03/);
+    assert.equal(v.pr(v.by('uof-add-hire-save')).disabled, true);
+    await v.type('uof-add-hire-starts', '2027-04');
+    await v.type('uof-add-hire-cost', '140,000');
+    const reads = v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    await v.click('uof-add-hire-save');
+    const post = v.sent.find((s) => s.line.startsWith('POST /cycles/raise/use-of-funds/hires'));
+    assert.deepEqual(post.body, { role: 'Data engineer', category_key: 'infrastructure', start_month: '2027-04', annual_cents: 14000000, currency: 'usd' });
+    assert.equal(v.by('uof-add-hire'), undefined, 'the dialog closes');
+    assert.equal(v.text('uof-notice'), 'The hire is added.');
+    assert.ok(v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length > reads, 'the plan is read again, so Hires, the section cost and payroll show it');
+  } finally { await v.close(); }
+  const s = await mounted('/raise/use-of-funds/allocation?project_id=3&section=operations', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ id: 14 }, 201) } });
+  try {
+    await s.click('uof-section-add-hire');
+    await s.type('uof-add-hire-role', 'Counsel');
+    await s.click('uof-add-hire-save');
+    const post = s.sent.find((x) => x.line.startsWith('POST /cycles/raise/use-of-funds/hires'));
+    assert.deepEqual(post.body, { role: 'Counsel', category_key: 'operations', start_month: null, annual_cents: null, currency: 'usd' }, 'the sheet\'s section; an empty cost stays missing');
+    assert.match(s.text('uof-notice'), /Not recorded until you add one/);
+  } finally { await s.close(); }
+  const refused = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'POST /cycles/raise/use-of-funds/hires': () => response({ code: 'invalid_plan', detail: 'Check the plan fields. Nothing was saved.' }, 400) } });
+  try {
+    await refused.click('uof-add-hire-open');
+    await refused.type('uof-add-hire-role', 'X');
+    await refused.click('uof-add-hire-save');
+    assert.ok(refused.by('uof-add-hire'), 'a refusal keeps the dialog open');
+    assert.ok(refused.text('uof-add-hire-error').length > 0);
+  } finally { await refused.close(); }
+  const reader = await mounted('/raise/use-of-funds/milestones?project_id=3&section=product', { plan: planFixture({ viewer: { kind: 'founder', can_write: false, mercury: true } }) });
+  try {
+    assert.equal(reader.by('uof-add-hire-open'), undefined);
+    assert.equal(reader.by('uof-section-add-hire'), undefined, 'a read-only viewer adds nothing');
+  } finally { await reader.close(); }
+});
+
+test('D6083 UF21c: on a phone the sheet is a bottom sheet and Add a hire a bottom sheet too', () => {
+  const src = read('frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx');
+  assert.match(src, /testId="uof-section-sheet"/);
+  assert.match(src, /<Sheet label=\{v\.label\}[^>]*phone="sheet"/);
+  assert.match(src, /<Lightbox label="Add a hire"[^>]*phone="sheet"/);
 });

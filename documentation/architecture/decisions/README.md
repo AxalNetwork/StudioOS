@@ -131,3 +131,4 @@ and citations by number keep working.
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
 
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
+| `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
