@@ -20,7 +20,15 @@ export function FundAdminAskAnswers({ api, fundId, scopeLabel, onNavigate, onClo
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
-  useEffect(() => () => { generation.current++; }, []);
+  const firstPrompt = useRef(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    firstPrompt.current?.focus?.();
+    return () => {
+      generation.current++;
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body)) opener.focus?.();
+    };
+  }, []);
   const read = async prompt => {
     const current = ++generation.current;
     setSelected(prompt); setReply(null); setBusy(true);
@@ -44,7 +52,7 @@ export function FundAdminAskAnswers({ api, fundId, scopeLabel, onNavigate, onClo
     <div className="ead-ask-chips">
       <span className="ead-ask-eyebrow">Suggested for this page</span>
       <div className="ead-ask-chip-row">
-        {FUND_ADMIN_ASK_CHIPS.map(chip => <button key={chip.key} type="button" className="ead-ask-chip" style={{ minHeight: 44, whiteSpace: 'normal', textAlign: 'left' }}
+        {FUND_ADMIN_ASK_CHIPS.map(chip => <button key={chip.key} ref={chip.key === FUND_ADMIN_ASK_CHIPS[0].key ? firstPrompt : null} type="button" className="ead-ask-chip" style={{ minHeight: 44, whiteSpace: 'normal', textAlign: 'left' }}
           disabled={busy} onClick={() => read(chip.key)} data-testid={`ask-chip-${chip.key}`}>{chip.label}</button>)}
       </div>
     </div>
