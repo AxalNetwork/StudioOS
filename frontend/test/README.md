@@ -200,3 +200,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+| `portfolio_mark_today_d6226.test.mjs` | D6226: Positions counts stale marks from the positions read's own `today` with the reporting read failing; the company Latest FMV Stale chip; the reference-date order. |

@@ -26,7 +26,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { mapError, nowIso, newUid, todayIso } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
   periodComplete, periodCounts,
@@ -267,6 +267,8 @@ r.get('/', async (c) => {
       items,
       scope: scope.held == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE,
       fund_scope: gpScopeStatement(scope),
+      /** D6226: the Worker's UTC date, so the page ages a mark without the browser clock. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -367,7 +369,10 @@ r.get('/analytics', async (c) => {
     const user = await requireAuth(c);
     const scope = await positionScope(c, user);
     if (!scope) return c.json({ detail: 'Forbidden' }, 403);
-    const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
+    // D6226: the Worker's own date is returned as `today`; `as_of` below stays
+    // null when no date was asked.
+    const workerToday = todayIso();
+    const today = isoDate(c.req.query('as_of')) || workerToday;
 
     const [positions, distributions, marks] = await Promise.all([
       c.env.DB.prepare(
@@ -428,6 +433,8 @@ r.get('/analytics', async (c) => {
       // The date the figures speak for, echoed so the page states it: with an
       // explicit `as_of`, the flows and the marks are both cut at that date.
       as_of: asOf,
+      /** D6226: the Worker's UTC date, whatever `as_of` was asked. */
+      today: workerToday,
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       /** D4644: positions whose recorded mark could not be used, and why not. */
@@ -618,6 +625,8 @@ r.get('/:projectUid', async (c) => {
         latest_mark_as_of: marks.length > 0 ? marks[0].as_of_date : null,
         latest_mark_basis: marks.length > 0 ? marks[0].basis : null,
       },
+      /** D6226: the Worker's UTC date, so the latest mark's age is measured against it. */
+      today: todayIso(),
     });
   } catch (e) { return mapError(c, e); }
 });

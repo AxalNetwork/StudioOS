@@ -438,7 +438,7 @@ export default function InvestorPortfolioPositions() {
     retry('positions');
   }, [asOf, retry]);
 
-  const reference = useMemo(() => markReference(asOf, reads.compliance), [asOf, reads.compliance]);
+  const reference = useMemo(() => markReference(asOf, reads.compliance, reads.positions), [asOf, reads.compliance, reads.positions]);
   const attention = useMemo(() => {
     const q = attentionOf(reads);
     return new Set(q.state === 'ok' ? q.items.map((i) => i.key) : []);

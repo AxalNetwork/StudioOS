@@ -20,7 +20,8 @@
  */
 
 import {
-  NOT_RECORDED, UNREADABLE, basisLabel, day, markHistoryOf, markOf, money, multiple, percent,
+  NOT_RECORDED, UNREADABLE, ageWords, basisLabel, daysBetween, day, isStale, markHistoryOf, markOf, money, multiple, percent,
+  workerToday,
 } from './portfolioModel';
 import { COMPANY_UID } from '../cycles/reportingModel';
 import { KIND_WORDS, ROUTE_WORDS, companyRows, periodWord, routeOf } from '../investor/portfolioReportsModel';
@@ -179,7 +180,17 @@ export function keyFactsOf({ positions, owed, support }, uid) {
     const mark = markOf(p);
     if (mark.kind === 'unusable') return { state: 'not_recorded', value: 'Mark not usable', reason: `${mark.reason} Carried at cost for NAV.` };
     if (mark.kind === 'none') return { state: 'not_recorded', value: NOT_RECORDED, reason: 'No mark is recorded. Carried at cost for NAV.' };
-    return { state: 'ok', value: money(p.fmv), note: [mark.date ? `As of ${day(mark.date)}` : 'Undated mark', basisLabel(mark.basis)].filter(Boolean).join(' · ') };
+    // D6226: the mark's age is measured at the positions read's own `today`
+    // (the Worker's date). A read without one draws no chip: the date is
+    // shown, the age is not, and the browser clock is never used.
+    const today = workerToday(positions);
+    const stale = mark.date && today ? isStale(mark.date, today) : null;
+    return {
+      state: 'ok',
+      value: money(p.fmv),
+      note: [mark.date ? `As of ${day(mark.date)}` : 'Undated mark', basisLabel(mark.basis)].filter(Boolean).join(' · '),
+      chip: stale ? { text: `Stale · ${ageWords(daysBetween(mark.date, today))}`, tone: 'late' } : null,
+    };
   });
   const moic = posFact('multiple', 'Multiple', (p) => {
     const v = multiple(p.multiple);

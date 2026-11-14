@@ -56,6 +56,7 @@
 .pf-metric b{font:700 17px var(--font-mono);letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:break-word}
 .pf-metric b .pf-unavailable,.pf-metric b .pf-unreadable,.pf-metric b .pf-not-recorded{font-family:var(--font-app);font-size:14px}
 .pf-metric em{font-style:normal;font-size:11px;color:var(--pf-mu);line-height:1.4}
+.pf-metric>.pf-chip{align-self:flex-start}
 .pf-basis{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 14px;font:500 11px var(--font-mono);color:var(--pf-mu);padding:8px 20px;border-top:1px solid var(--pf-hair);background:var(--pf-raised)}
 .pf-basis a{color:var(--pf-vt);font-weight:700}
 /* attention */

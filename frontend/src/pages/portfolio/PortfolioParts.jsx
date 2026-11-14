@@ -102,6 +102,7 @@ export function FinancialMetric({ metric, onRetry }) {
       <small>{metric.label}</small>
       <b><MetricValue metric={metric} onRetry={onRetry} /></b>
       {why ? <em>{why}</em> : null}
+      {metric.chip ? <span className={`pf-chip is-${metric.chip.tone || 'late'}`} data-testid={`metric-${metric.key}-chip`}>{metric.chip.text}</span> : null}
     </div>
   );
 }

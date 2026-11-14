@@ -1,7 +1,8 @@
 /**
  * D4817 part 1 (#5311, PF-01): the pure model the Portfolio v2 frame and its
  * boards share. No React, no fetch, no clock: every date it compares against
- * comes from a Worker answer (`kpi-compliance`'s `as_of`), never from the
+ * comes from a Worker answer (the positions read's `today`, D6226, or
+ * `kpi-compliance`'s `as_of`), never from the
  * browser, so the same reads always draw the same page.
  *
  * A read is one of three things, and the model never folds them together:
@@ -462,15 +463,26 @@ export function basisLabel(basis) {
 
 /**
  * The date a mark's age is measured against: the book's own as-of date when
- * one is chosen, else the Worker's `as_of` on the reporting read. Never the
- * browser clock. Null when neither is known, and the page says so.
+ * one is chosen, else the positions read's own `today` (the Worker's UTC
+ * date, D6226), else the Worker's `as_of` on the reporting read when the
+ * positions read carries no `today`. Never the browser clock. Null when none
+ * is known, and the page says so.
  */
-export function markReference(asOf, compliance) {
+export function markReference(asOf, compliance, positions) {
   if (asOf) return { date: asOf, state: 'ok', source: 'as_of' };
+  const own = workerToday(positions);
+  if (own) return { date: own, state: 'ok', source: 'positions' };
   if (compliance.state === 'loading') return { date: null, state: 'loading' };
   if (compliance.state !== 'ok') return { date: null, state: 'unreadable' };
   const d = compliance.value.as_of || null;
   return d ? { date: d, state: 'ok', source: 'worker' } : { date: null, state: 'not_recorded' };
+}
+
+/** The Worker's own UTC date on a positions read (`today`, D6226), or null when it carries none. */
+export function workerToday(read) {
+  if (!read || read.state !== 'ok' || !read.value || Array.isArray(read.value)) return null;
+  const d = read.value.today;
+  return typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
 /** A mark older than two quarters at `reference`; null when either date is missing. */
