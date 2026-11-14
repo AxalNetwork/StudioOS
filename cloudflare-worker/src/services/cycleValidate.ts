@@ -69,6 +69,12 @@ export type Ctx = { env: Env; projectId: number; today: string; canWrite?: boole
 const href = (ctx: Ctx, slug: string) => `/validate/${slug}?project=${ctx.projectId}`;
 /** D685 §5.4 — the setup modal's own route. */
 const recordHref = (ctx: Ctx) => `/validate/record?project=${ctx.projectId}`;
+/**
+ * D6010 (#6010) — the market sizing tool, opened from Market intelligence for
+ * this venture. Every step the market card names (a figure, a competitor, the
+ * positioning map) is done there; the module page itself has no control for them.
+ */
+const sizingHref = (ctx: Ctx) => `/validate/market-intelligence/sizing?project=${ctx.projectId}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** `YYYY-MM-DD` `n` days before `today`. */
@@ -826,15 +832,15 @@ export async function marketCard(ctx: Ctx): Promise<Card> {
     const [market, tracked, readiness] = await Promise.all([loadMarket(ctx), loadTracked(ctx), loadMarketReadiness(ctx)]);
     const defined = [market.tam, market.sam, market.som].filter((f) => f.value != null).length;
     if (defined === 0 && tracked.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: href(ctx, 'market-intelligence') }, reason: 'No market size yet.' };
+      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: sizingHref(ctx) }, reason: 'No market size yet.' };
     }
     const missing = market.tam.value == null ? 'total' : market.sam.value == null ? 'serviceable' : market.som.value == null ? 'obtainable' : null;
     const next = missing
-      ? { text: `Add the ${missing} market`, href: href(ctx, 'market-intelligence') }
+      ? { text: `Add the ${missing} market`, href: sizingHref(ctx) }
       : tracked.length < 3
-        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: href(ctx, 'market-intelligence') }
+        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: sizingHref(ctx) }
         : !readiness.positioning_map
-          ? { text: 'Complete the positioning map', href: href(ctx, 'market-intelligence') }
+          ? { text: 'Complete the positioning map', href: sizingHref(ctx) }
           : null;
     return {
       state: 'ok',

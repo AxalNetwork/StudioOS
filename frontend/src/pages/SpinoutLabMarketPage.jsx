@@ -24,7 +24,7 @@
 // measured data. The design's fake investor Focus/Stage columns are NOT
 // reproduced (the fit payload doesn't carry them).
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ArrowRight,
   Check,
@@ -238,8 +238,40 @@ function posDot(name) {
 const FILLS_NOTE = 'Proposes two things, each only when Eadwyn can cite it: the sizing inputs this page multiplies — an addressable population, an ACV benchmark, a growth rate — and competitors not yet on your list. It never proposes your TAM: the page derives that from your own assumptions. And it adds to your competitor list rather than starting one. Every item is yours to accept, edit or discard.';
 const FILLS_OFF_NOTE = 'Nothing runs and nothing is spent. Every figure on this page is one you researched or derived.';
 
-export default function SpinoutLabMarketPage() {
+/**
+ * D6010 (#6010): the venture Validate opened this page for — `?project=` (the
+ * card's next step) or `?project_id=` (a module door) — or null. Digits only,
+ * so nothing else in the query picks a venture.
+ */
+export function ventureFromSearch(search) {
+  const params = new URLSearchParams(search || '');
+  const raw = params.get('project') || params.get('project_id') || '';
+  return /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : null;
+}
+
+/**
+ * The venture this page sizes. From Validate it is the one in the query and
+ * only that one: a venture missing from the caller's own list is none, never
+ * the Lab's venture in its place. From the Lab it is the Lab's pick.
+ */
+export function pickMarketProject(projects, user, { fromValidate = false, ventureId = null } = {}) {
+  if (!fromValidate) return pickLabProject(projects, user);
+  if (ventureId == null || !Array.isArray(projects)) return null;
+  return projects.find((p) => Number(p?.id) === ventureId) || null;
+}
+
+/**
+ * `from="validate"` (D6010, #6010) is the page at
+ * `/validate/market-intelligence/sizing`: any founder of the venture in the
+ * query, Lab member or not. It reads no Lab state, draws no Lab week locks or
+ * week copy, and its back control returns to Market intelligence. The Lab's
+ * `/spinout-lab/market` is unchanged.
+ */
+export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const { user } = useAuth();
+  const location = useLocation();
+  const fromValidate = from === 'validate';
+  const ventureId = fromValidate ? ventureFromSearch(location.search) : null;
   const [state, setState] = useState(null);
   const [project, setProject] = useState(null);
   const [compass, setCompass] = useState(null);
@@ -356,11 +388,16 @@ export default function SpinoutLabMarketPage() {
   useEffect(() => {
     let alive = true;
     setStatus('loading');
-    Promise.all([spinoutLab.state(), api.listProjects().catch(() => [])])
+    // From Validate the Lab state is not read (the page draws no week from it),
+    // and a failed project list is an error, never "not your venture".
+    Promise.all([
+      fromValidate ? Promise.resolve({}) : spinoutLab.state(),
+      fromValidate ? api.listProjects() : api.listProjects().catch(() => []),
+    ])
       .then(async ([s, projects]) => {
         if (!alive) return;
         setState(s);
-        const p = pickLabProject(projects, user);
+        const p = pickMarketProject(projects, user, { fromValidate, ventureId });
         setProject(p);
         const [cp, fl, src, cit, ft, comp, saved] = await Promise.all([
           api.miSectorCompass().catch(() => null),
@@ -682,7 +719,7 @@ export default function SpinoutLabMarketPage() {
   }
 
   const isAdmin = user?.role === 'admin';
-  if (!state.active && !state.is_incorporated && !isAdmin) {
+  if (!fromValidate && !state.active && !state.is_incorporated && !isAdmin) {
     return (
       <div className="max-w-lg mx-auto text-center py-24 px-6" data-testid="market-inactive">
         <div className="text-lg font-bold text-gray-900 dark:text-gray-50 mb-2">Spin-Out Lab isn&rsquo;t active on this account</div>
@@ -693,9 +730,11 @@ export default function SpinoutLabMarketPage() {
     );
   }
 
-  const week = state.is_incorporated ? 4 : Math.min(4, Math.max(1, Number(state.week) || 1));
-  const deckUnlocked = state.is_incorporated || week >= 2;
-  const advisorsUnlocked = state.is_incorporated || week >= 3;
+  // From Validate there is no Lab week: nothing is locked by one, and no copy names one.
+  const week = fromValidate ? null : state.is_incorporated ? 4 : Math.min(4, Math.max(1, Number(state.week) || 1));
+  const deckUnlocked = fromValidate || state.is_incorporated || week >= 2;
+  const advisorsUnlocked = fromValidate || state.is_incorporated || week >= 3;
+  const validateBack = `/validate/market-intelligence${ventureId != null ? `?project=${ventureId}` : ''}`;
   const { sectorMatch, picks, srcRows, liveCount, citRows, matches, fitUnavailable } = derived;
   // Cards read the tween values while the recalc animation runs.
   const tamTxt = fmtMoney(anim ? anim.tam : project?.tam);
@@ -714,7 +753,7 @@ export default function SpinoutLabMarketPage() {
     { label: 'Competitive landscape (min 3 competitors)', done: compRows.length >= 3 },
     { label: 'Positioning map completed', done: posDone },
     { label: 'Founder assumptions reviewed', done: assumptionsReviewed },
-    { label: 'Investor signals reviewed (Week 3)', done: advisorsUnlocked && matches.length > 0 },
+    { label: fromValidate ? 'Investor signals reviewed' : 'Investor signals reviewed (Week 3)', done: advisorsUnlocked && matches.length > 0 },
   ];
   const readinessPct = Math.round((100 * checklist.filter((c) => c.done).length) / checklist.length);
   const readinessRemaining = Math.max(0, Math.ceil((0.7 - readinessPct / 100) * checklist.length));
@@ -770,9 +809,12 @@ export default function SpinoutLabMarketPage() {
       <LabPageHeader
         className="mb-5"
         icon={Compass}
-        title="Market Intel"
-        subtitle="TAM / SAM research and sizing — your Week 1 market deliverable."
-        status="Active"
+        title={fromValidate ? 'Market sizing' : 'Market Intel'}
+        subtitle={fromValidate
+          ? 'Total, serviceable and obtainable market, each with its source.'
+          : 'TAM / SAM research and sizing — your Week 1 market deliverable.'}
+        status={fromValidate ? null : 'Active'}
+        {...(fromValidate ? { backTo: validateBack, backLabel: 'Back to Market intelligence' } : {})}
         titleExtra={project ? (
           <span className="relative">
             <button
@@ -892,7 +934,19 @@ export default function SpinoutLabMarketPage() {
         </div>
       )}
 
-      {!project ? (
+      {!project && fromValidate ? (
+        <div className={`${CARD} text-center py-10`} data-testid="market-no-venture">
+          <div className="text-base font-bold text-gray-900 dark:text-gray-50">This venture is not one you can size</div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">
+            {ventureId == null
+              ? 'No venture was named. Open market sizing from Market intelligence.'
+              : 'It is not in your list of ventures. Nothing was read or saved.'}
+          </p>
+          <Link to={validateBack} className="inline-flex h-10 items-center px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold">
+            Back to Market intelligence
+          </Link>
+        </div>
+      ) : !project ? (
         <div className={`${CARD} text-center py-10`} data-testid="market-no-project">
           <div className="text-base font-bold text-gray-900 dark:text-gray-50">Create your startup record first</div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">Market sizing attaches to your company record.</p>

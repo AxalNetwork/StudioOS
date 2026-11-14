@@ -243,7 +243,8 @@ export default function CycleModulePage({
   const interviewLine = verdictInterviewLine(data);
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  // D6010: a cycle's `tool` may be one link or several (Market intelligence draws two).
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
   // D5076: on a Build module with no records, the zero state's first action is
   // the page's one dominant action: the header's and the card's step give way.
