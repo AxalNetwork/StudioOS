@@ -19,6 +19,15 @@
  * branch-origin requests in SQL, counts them, then pages. The heading's count
  * is that total; a page short of it says how many are shown and offers more;
  * a branch the server could not look up is said, not read as none.
+ *
+ * D4819 part 12 (#5923) — board L12. On Operations › Requests and compliance
+ * the same read is drawn as the canvas's "Studio requests" table (`layout`
+ * "section"): each request with who raised it, its age and Decline… /
+ * Approve…, which open the Support queue's panel on that outcome. A request
+ * decided here shows who decided it and when, from the row the decision
+ * returned; the read itself lists open requests only. A failed read says
+ * Unavailable with Try again, never none. Every other tab keeps the side
+ * panel (`layout` "aside").
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
@@ -26,7 +35,9 @@ import { licenceTermsApi } from '../../lib/api/licenceTerms';
 import { reportError } from '../../lib/log';
 import { nonRenewalCheck, requestSummary, termAsItStands, termTarget } from '../../lib/escalationKinds';
 import { LICENCE_TERM_FIELDS } from '../../lib/licenceTermsForm';
-import { EscalationDecision } from '../hq/HqSupportPage';
+import { EscalationDecision, recordOf } from '../hq/HqSupportPage';
+import { FactState, TryAgain } from './licences/LicenceOverview';
+import { decidedLine, requestAge, requestsState } from './licenceOperationsModel';
 
 const SCHEDULE_KEYS = LICENCE_TERM_FIELDS.map((f) => f.key);
 /** The board's response-time band (`listEscalations`): within it, due soon, or past it. */
@@ -107,7 +118,14 @@ export function RequestsPanelView({
   licence, noticeDays, openUid, onToggle, onRecorded, onReload, onOpenTerm, onGrantAdmin,
 }) {
   if (items === undefined) return <p className="text-xs text-gray-500">Loading…</p>;
-  if (items === null) return <p className="text-xs text-red-600">HQ&apos;s escalation board could not be read, so this licence&apos;s requests are unknown — not none.</p>;
+  if (items === null) {
+    return (
+      <p className="text-xs text-red-600" role="alert" data-testid="licence-requests-unreadable">
+        HQ&apos;s escalation board could not be read, so this licence&apos;s requests are unknown — not none.{' '}
+        {onReload && <TryAgain what="the requests" onClick={onReload} />}
+      </p>
+    );
+  }
   const branchNote = branchReadable ? null : <p className="text-xs text-amber-700" data-testid="licence-requests-branch-unread">{BRANCH_UNREAD}</p>;
   if (!items.length) {
     // Empty is only "none" when the server counted none and looked everywhere.
@@ -156,12 +174,13 @@ export function RequestsPanelView({
   );
 }
 
-export default function LicenceRequestsPanel({ licence, onOpenTerm, onGrantAdmin }) {
+/** The requests read, its next page and the notice period, shared by both layouts. */
+function useLicenceRequests(licence) {
   const [read, setRead] = useState(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const [noticeDays, setNoticeDays] = useState(null);
-  const [openUid, setOpenUid] = useState(null);
   const load = useCallback(() => {
+    setRead((cur) => (cur === null ? undefined : cur));
     loadLicenceRequests(licence.uid)
       .then(setRead)
       .catch((e) => { reportError('licence_requests_load_failed', e); setRead(null); });
@@ -181,6 +200,155 @@ export default function LicenceRequestsPanel({ licence, onOpenTerm, onGrantAdmin
       .catch((e) => reportError('licence_requests_more_failed', e))
       .finally(() => setLoadingMore(false));
   }, [licence.uid, read]);
+  return { read, load, more, loadingMore, noticeDays };
+}
+
+const actBtn = 'rounded-md border px-2 py-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600';
+
+/**
+ * Board L12's "Studio requests", given the read. `read` is undefined while it
+ * is on its way, null when it failed, else `{ items, total, nextCursor,
+ * branchReadable }`. `open` is `{ uid, outcome }` for the request whose
+ * decision panel is open; `decided` the requests decided on this page, as
+ * `recordOf` returned them. Separate from the loader so a test can draw it.
+ */
+export function StudioRequestsView({
+  read, decided = [], open = null, onOpen, onRecorded, onReload, onMore, loadingMore = false,
+  licence, noticeDays, onOpenTerm, onGrantAdmin, now = new Date().toISOString(),
+}) {
+  const head = requestsState(read);
+  const items = read && Array.isArray(read.items) ? read.items : [];
+  const shortOf = read && Number.isFinite(read.total) && items.length < read.total;
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900" data-testid="studio-requests" aria-labelledby="studio-requests-title">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id="studio-requests-title" className="text-sm font-semibold text-gray-900 dark:text-gray-100">Studio requests</h3>
+        <span className="text-sm"><FactState state={head.state} testId="studio-requests-state">{head.word}</FactState></span>
+      </div>
+      {read === undefined && <p className="mt-2 text-xs text-gray-500">Reading this licence&apos;s requests…</p>}
+      {read === null && (
+        <p className="mt-2 text-xs text-red-700 dark:text-red-300" role="alert" data-testid="studio-requests-unreadable">
+          HQ&apos;s request board could not be read, so this licence&apos;s requests are unknown — not none.{' '}
+          <TryAgain what="the studio requests" onClick={onReload} />
+        </p>
+      )}
+      {read && read.branchReadable === false && (
+        <p className="mt-2 text-xs text-amber-800 dark:text-amber-300" data-testid="studio-requests-branch-unread">{BRANCH_UNREAD}</p>
+      )}
+      {read && !items.length && read.total === 0 && read.branchReadable !== false && (
+        <p className="mt-2 text-xs text-gray-600 dark:text-gray-400" data-testid="studio-requests-none">No open requests from this licence&apos;s administrator.</p>
+      )}
+      {read && !items.length && read.total !== 0 && (
+        <p className="mt-2 text-xs text-red-700 dark:text-red-300" data-testid="studio-requests-partial">
+          This licence&apos;s requests could not all be read, so they are unknown — not none. <TryAgain what="the studio requests" onClick={onReload} />
+        </p>
+      )}
+      {items.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[32rem] text-left text-[12.5px]" data-testid="studio-requests-table">
+            <thead>
+              <tr className="text-[11px] uppercase text-gray-500 dark:text-gray-400">
+                <th className="py-1 pr-3 font-medium">Request</th>
+                <th className="py-1 pr-3 font-medium">From</th>
+                <th className="py-1 pr-3 font-medium">Age</th>
+                <th className="py-1 font-medium"><span className="sr-only">Decision</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it) => {
+                const band = BAND[it.sla] || BAND.ok;
+                const isOpen = open?.uid === it.uid;
+                return (
+                  <React.Fragment key={it.uid}>
+                    <tr className="border-t border-gray-100 align-top dark:border-gray-800" data-testid={`studio-request-${it.uid}`}>
+                      <td className="py-1.5 pr-3">
+                        <b className="font-semibold text-gray-900 dark:text-gray-100">{requestSummary(it)}</b>
+                        {it.note && <p className="mt-0.5 text-[11px] text-gray-700 dark:text-gray-300">{it.note}</p>}
+                        <RequestDetail item={it} licence={licence} noticeDays={noticeDays} onOpenTerm={onOpenTerm} onGrantAdmin={onGrantAdmin} />
+                      </td>
+                      <td className="py-1.5 pr-3 text-gray-700 dark:text-gray-300">{it.raised_by_name || 'Not recorded'}</td>
+                      <td className="py-1.5 pr-3">
+                        <span className="font-mono text-gray-900 dark:text-gray-100" data-testid="studio-request-age">{requestAge(it.created_at, now)}</span>
+                        <span className={`block text-[11px] ${band[1]}`}>{band[0]}</span>
+                      </td>
+                      <td className="whitespace-nowrap py-1.5 text-right">
+                        <button type="button" aria-expanded={isOpen && open.outcome === 'declined'} data-testid="studio-request-decline"
+                          onClick={() => onOpen?.(isOpen && open.outcome === 'declined' ? null : { uid: it.uid, outcome: 'declined' })}
+                          className={`${actBtn} border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800`}>
+                          Decline…
+                        </button>{' '}
+                        <button type="button" aria-expanded={isOpen && open.outcome === 'answered'} data-testid="studio-request-approve"
+                          onClick={() => onOpen?.(isOpen && open.outcome === 'answered' ? null : { uid: it.uid, outcome: 'answered' })}
+                          className={`${actBtn} border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 dark:border-indigo-500 dark:bg-indigo-600`}>
+                          Approve…
+                        </button>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr><td colSpan={4} className="pb-2">
+                        <EscalationDecision key={`${it.uid}:${open.outcome}`} item={it} initialOutcome={open.outcome} onRecorded={onRecorded} onReload={onReload} />
+                      </td></tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {(shortOf || read?.nextCursor) && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-500" data-testid="studio-requests-more">
+          <span>{Number.isFinite(read.total) ? `Showing ${items.length} of ${read.total} open requests.` : `Showing ${items.length}; more are open.`}</span>
+          {read.nextCursor && onMore && (
+            <button type="button" className={linkCls} onClick={onMore} disabled={loadingMore}>{loadingMore ? 'Loading…' : 'Show more'}</button>
+          )}
+        </div>
+      )}
+      {decided.length > 0 && (
+        <div className="mt-3 border-t border-gray-100 pt-2 dark:border-gray-800" data-testid="studio-requests-decided">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Decided here</h4>
+          <ul className="mt-1 space-y-1 text-[12px] text-gray-700 dark:text-gray-300">
+            {decided.map((d) => (
+              <li key={d.uid} data-testid={`studio-request-decided-${d.uid}`}>
+                <b className="font-semibold">{d.subject || 'Request'}</b> · {decidedLine(d).text}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+        Approve and Decline each need a reason, which is stored with the decision and sent to whoever raised it.
+        This list holds open requests only: one decided before this page was opened is on Support, with who decided it and when.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * The requests beside the licence (`layout` "aside", every tab but one) or
+ * board L12's Studio requests (`layout` "section", on Operations › Requests
+ * and compliance).
+ */
+export default function LicenceRequestsPanel({ licence, onOpenTerm, onGrantAdmin, layout = 'aside' }) {
+  const { read, load, more, loadingMore, noticeDays } = useLicenceRequests(licence);
+  const [openUid, setOpenUid] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [decided, setDecided] = useState([]);
+  if (layout === 'section') {
+    return (
+      <StudioRequestsView
+        read={read} decided={decided} open={open} onOpen={setOpen}
+        onRecorded={(item, outcome, res) => {
+          const rec = { ...recordOf(item, outcome, res), subject: requestSummary(item) };
+          setDecided((cur) => [rec, ...cur.filter((x) => x.uid !== rec.uid)]);
+          setOpen(null);
+          load();
+        }}
+        onReload={load} onMore={more} loadingMore={loadingMore}
+        licence={licence} noticeDays={noticeDays} onOpenTerm={onOpenTerm} onGrantAdmin={onGrantAdmin}
+      />
+    );
+  }
   const items = read === undefined ? undefined : read === null ? null : read.items;
 
   return (

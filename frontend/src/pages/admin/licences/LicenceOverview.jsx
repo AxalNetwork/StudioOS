@@ -138,8 +138,11 @@ export function AttentionStrip({ licence, facts }) {
  * Overview (L03, L04)                                                 *
  * ------------------------------------------------------------------ */
 
-/** Where each fact's detail lives: the tab it opens. Licence and Requests have none: the header and the panel beside hold them. */
-const FACT_TAB = { agreement: 'contract', commercial: 'terms', access: 'admins', branch: 'deploy', billing: 'fee-invoices' };
+/**
+ * Where each fact's detail lives: the tab it opens. Licence has none: the header holds it.
+ * D4819 part 12 (#5923): Requests opens Operations › Requests and compliance (L12), Billing opens Operations › Billing (L13).
+ */
+const FACT_TAB = { agreement: 'contract', commercial: 'terms', access: 'admins', branch: 'deploy', billing: 'fee-invoices', requests: 'notices' };
 // Phone first: identity and status sit in the header; then the agreement and requests, as #4819's responsive notes ask.
 const PHONE_ORDER = { licence: 'order-1', agreement: 'order-2', requests: 'order-3' };
 

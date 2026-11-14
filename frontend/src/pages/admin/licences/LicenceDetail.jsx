@@ -103,6 +103,13 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   if (!d) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const facts = overviewFacts(d, reads);
+  // D801: "Open terms" goes to the term's row or its step; "Grant admin" prefills the appointment.
+  const openTerm = (target) => {
+    const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
+    setHighlight(target.key);
+    setStep(tab);
+  };
+  const grantAdmin = (g) => { setGrant(g); setStep(ADMINS_STEP); };
   const section = sectionOfTab(tabOfStep(step));
   const subTabs = sectionTabs(section, d.kind);
   const sectionLabel = LICENCE_SECTIONS_NAV.find((x) => x.key === section)?.label || 'Overview';
@@ -364,8 +371,9 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           ))}
         </div>
       )}
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0" role="tabpanel" id="licence-tabpanel"
+      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside. */}
+      <div className={`mt-4 grid gap-4 ${step === NOTICES_STEP ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
+      <div className={`min-w-0 ${step === NOTICES_STEP ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
         aria-labelledby={subTabs.length > 1 ? `licence-tab-${tabOfStep(step)}` : `licence-section-${section}`}>
         {step === OVERVIEW_STEP && (
           <LicenceOverview licence={d} reads={reads} retry={retry} readAt={readAt} onOpenTab={(key) => onTab?.(key)} />
@@ -416,6 +424,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
           onSaved={() => { setGrant(null); refresh(); }} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
+        {/* D4819 part 12 (#5923): board L12, studio requests then compliance, each failing on its own. */}
+        {step === NOTICES_STEP && <LicenceRequestsPanel licence={d} layout="section" onOpenTerm={openTerm} onGrantAdmin={grantAdmin} />}
         {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
         {step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence={d} />}
         {/* The kind is re-checked here as well as on the tab: the tab is what an
@@ -426,15 +436,13 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           && <BrandKitEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && <LicenceHistory licence={d} />}
       </div>
-      <LicenceRequestsPanel
-        licence={d}
-        onOpenTerm={(target) => {
-          const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
-          setHighlight(target.key);
-          setStep(tab);
-        }}
-        onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
-      />
+      {step !== NOTICES_STEP && (
+        <LicenceRequestsPanel
+          licence={d}
+          onOpenTerm={openTerm}
+          onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
+        />
+      )}
       </div>
     </div>
   );

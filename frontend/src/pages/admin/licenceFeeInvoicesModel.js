@@ -63,3 +63,20 @@ export function paidLine(inv) {
   if (inv.status === 'void') return 'Void';
   return inv.paid_cents > 0 ? `${money(inv.paid_cents, inv.currency)} of ${money(inv.amount_cents, inv.currency)}` : 'Nothing yet';
 }
+
+/**
+ * D4819 part 12 (#5923) — why a void invoice is void, from its `void_note`.
+ * The Worker requires the note (D802); a row without one says so rather than
+ * showing nothing.
+ */
+export function voidLine(inv) {
+  const note = String(inv?.void_note ?? '').trim();
+  return note ? `Reason: ${note}` : 'Reason not recorded';
+}
+
+/**
+ * The foot of board L13. An invoice freezes the fee it was issued at
+ * (`figures_json`), so a fee amended on Terms reaches the next invoice issued,
+ * never one already issued.
+ */
+export const FEE_CHANGE_NOTE = 'Voiding needs a reason, which is kept with the invoice and in HQ’s audit log (licence History does not list invoices yet). An issued invoice keeps the fee it was issued at; an amended fee applies to the next invoice issued.';

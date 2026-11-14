@@ -231,7 +231,7 @@ test('each request shows its kind, date, band and what it asks; Answer opens the
   const open = renderedText(render(RequestsPanelView, { ...base, openUid: 'r_del' }));
   assert.ok(open.includes('Record as answered') && open.includes('Record as declined'));
   const SRC = codeOnly(read('frontend/src/pages/admin/LicenceRequestsPanel.jsx'));
-  assert.ok(SRC.includes("import { EscalationDecision } from '../hq/HqSupportPage'"), 'Answer is the existing panel and route');
+  assert.match(SRC, /import \{ EscalationDecision(, [\w, ]+)? \} from '\.\.\/hq\/HqSupportPage'/, 'Answer is the existing panel and route');
   assert.ok(codeOnly(read('frontend/src/pages/hq/HqSupportPage.jsx')).includes('api.escalationAnswer(item.uid,'));
   assert.equal(renderedText(render(RequestsPanelView, { ...base, items: null })).includes('unknown'), true);
   assert.equal(renderedText(render(RequestsPanelView, { ...base, items: [], total: 0 })), 'No open requests from this licence\'s Administrator.');
