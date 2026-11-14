@@ -333,7 +333,8 @@ test('5: "Set a target" on the root: a zero is never sent, the refusal in the Wo
   let changed = 0;
   let refuse = null;
   const api2 = { setInterviewsTarget: async (pid, v) => { calls.push([pid, v]); if (refuse) throw new Error(refuse); return { ok: true }; } };
-  const raw = { ...READS.validate, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
+  // #5999: a writer, as the Worker's read now says (`can_write`).
+  const raw = { ...READS.validate, can_write: true, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
   const m = await mount({ cycle: 'validate', raw, projectId: 3, api: api2, onChanged: () => { changed += 1; } });
   try {
     assert.ok(m.text().includes('Set a target'));

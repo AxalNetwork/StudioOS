@@ -7,6 +7,8 @@
  *       (D685 §5.12, D692: the phone's focus, the interviews meter and the
  *       index rows, in the shape all four cycles share (services/cycleFocus.ts);
  *       PUT /interviews-target sets the meter's monthly target)
+ *       `can_write` (#5999): whether this viewer may write (`canWrite`, the gate
+ *       PUT /interviews-target uses), so the page offers "Set a target" only then
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters, sorts, linkable }, parts }
  *       (D690 decisions 10 and 16: the canvas's filters and sorts, and `parts`,
@@ -113,6 +115,9 @@ cycleValidate.get('/overview', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const decisions = canReadDecision(s.project, s.user);
+  // #5999: the viewer's write gate, the very check every writer below passes to `scope`
+  // (PUT /interviews-target among them), so "Set a target" is drawn only where a save is allowed.
+  const writer = canWrite(s.project, s.user);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx, { decisions })]);
   // D685 §5.12, D692 — the phone's focus, meter and index rows. Each fails on
   // its own: an unreadable part is null, never a figure it did not read. The
@@ -120,17 +125,17 @@ cycleValidate.get('/overview', async (c) => {
   const meter = await part('meter', () => meterOf(c.env, s.projectId, figs));
   const [focus, index] = await Promise.all([
     // D4589 (#4589): the shared next-action policy; Plan the build only for the venture's founder (D1069).
-    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs, figs, meter,
+    part('focus', () => focusOf(c.env, s.projectId, writer, cs, figs, meter,
       { canReadDecision: decisions, ownsVenture: ownsVenture(s.project, s.user) })),
     part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
   // D5996 (#5996): V2's evidence, needs attention, hypotheses and recent changes, additive, each failing alone.
-  const v2 = await overviewParts(c.env, s.projectId, canWrite(s.project, s.user));
+  const v2 = await overviewParts(c.env, s.projectId, writer);
   // D693 decision 7: whether this viewer may see decisions, so the page can
   // drop the Verdict tab for a partner instead of drawing a read that fails.
   return c.json({
     cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index,
-    can_read_decisions: decisions, ...v2,
+    can_read_decisions: decisions, can_write: writer, ...v2,
   });
 });
 
