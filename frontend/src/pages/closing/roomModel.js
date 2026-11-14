@@ -53,7 +53,12 @@ export const ROOM_WAITS = Object.freeze({
   sentWord: 'Your word that you sent it is recorded when you accept a match from your Mercury. No route records it without one yet.',
   clause: 'Eadwyn’s summary of a clause and the comments on this paper are not read here yet. Eadwyn summarises and never gives advice; your counsel decides.',
   modelled: 'The fully diluted before and after is not read here yet: no read models a closing line’s change. Accepting records your decision; Raise › Cap table writes the holder (#2432).',
-  investorReporting: 'Your reporting duties from this closing are not read here yet: the investor’s reporting read (D1058) names a company, not a closing line. The founder’s card lists each duty the signed paper names.',
+  // D6199: the investor's own duties now come with their closing read; these are the honest states around them.
+  investorReporting: 'No reporting duty is recorded on your line: the signed paper names no information right, or the daily step has not created the duties yet.',
+  investorReportingUnread: 'This is not a claim that nothing is owed to you.',
+  investorLeft: 'What is left is not in this read of the closing, so it is not shown here.',
+  signedCopy: 'Your signed copy is not stored yet: it appears once your signature is recorded on the paper.',
+  portfolio: 'This company has no Portfolio address in this read, so no link is shown.',
 });
 
 // ───────────────────────────────────────────────────────────── the lines
@@ -329,4 +334,83 @@ export function matchesFor(proposals, lines) {
   return (Array.isArray(proposals) ? proposals : [])
     .filter((p) => p?.state === 'proposed' && p?.target_kind === 'deal_commitment' && ids.has(Number(p.target_id)))
     .map((p) => ({ uid: p.uid, cents: cents(p.amount_cents), postedOn: dayOf(p.posted_on), lastFour: /^\d{2,4}$/.test(String(p.account_last_four ?? '')) ? String(p.account_last_four) : null }));
+}
+
+// ───────────────────────────────────────────────────────────── D6199: the investor's own part
+
+const STEP_WORDS = Object.freeze({ sign: 'Sign the paper', send_payment: 'Send the payment' });
+
+/** True when the Worker could not read the investor's part (the line and the total still came). */
+export const investorPartUnreadable = (closing) => closing?.for_investor?.unreadable === true;
+export const INVESTOR_PART_CLAIM = 'This is not a claim that nothing is left. Your line and the round’s total still show.';
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * What is left, as the investor's read gives it (`for_investor.conditions`):
+ * the steps that wait on them, each tied to one of their own rows, and a count
+ * of the rest. A step for a line not among `rows` is dropped: the room never
+ * draws a line that is not the viewer's. Null when the read carries none.
+ */
+export function investorLeft(closing, rows) {
+  const c = closing?.for_investor?.conditions;
+  if (!c || !Array.isArray(c.waiting_on_you)) return null;
+  const mine = new Map((Array.isArray(rows) ? rows : []).filter((r) => !r.withdrawn).map((r) => [r.uid, r]));
+  const items = c.waiting_on_you
+    .filter((w) => mine.has(w?.line_uid) && STEP_WORDS[w?.step])
+    .map((w) => ({ key: `${w.line_uid}-${w.step}`, step: w.step, text: STEP_WORDS[w.step], row: mine.get(w.line_uid) }));
+  const n = c.rest_count != null && Number.isFinite(Number(c.rest_count)) ? Number(c.rest_count) : null;
+  const r = c.rest || {};
+  const k = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const parts = [
+    k(r.your_lines) ? `${k(r.your_lines)} on your line, waiting on another party or an earlier step` : null,
+    k(r.other_lines) ? `${plural(k(r.other_lines), 'line', 'lines')} of other investors not yet received` : null,
+    k(r.round) ? `${k(r.round)} for the round as a whole` : null,
+  ].filter(Boolean);
+  return {
+    items,
+    restCount: n,
+    restText: n == null ? null : n === 0 ? 'Nothing else is open in this round.' : `${plural(n, 'more step is', 'more steps are')} open in this round.`,
+    restParts: parts,
+  };
+}
+
+/** After Closed: the investor's own lines as the read gives them, each day a day or null (never guessed). */
+export function investorSummary(closing) {
+  const list = closing?.for_investor?.summary;
+  if (!Array.isArray(list)) return null;
+  const currency = closing?.currency || 'USD';
+  return list.map((s) => ({
+    key: s.line_uid,
+    amount: moneyCents(s.amount_cents, s.currency || currency),
+    signed: dayOf(s.signed_at),
+    received: dayOf(s.received_at),
+    copyId: Number.isInteger(Number(s.signed_copy?.envelope_id)) && s.signed_copy?.envelope_id != null ? Number(s.signed_copy.envelope_id) : null,
+  }));
+}
+
+const CADENCE = Object.freeze({ monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Yearly' });
+
+/** After Closed: the duties the paper names on the investor's own line, or the read's state. */
+export function investorDuties(closing) {
+  const r = closing?.for_investor?.reporting;
+  if (!r || !['ok', 'unreadable', 'not_closed'].includes(r.state)) return { state: 'unrecorded', rows: [] };
+  if (r.state !== 'ok') return { state: r.state, rows: [] };
+  return {
+    state: 'ok',
+    rows: (Array.isArray(r.duties) ? r.duties : []).map((d) => ({
+      uid: d.uid,
+      title: d.title || 'Reporting duty',
+      cadence: CADENCE[d.cadence] || null,
+      due: Number.isInteger(d.due_days) ? `${plural(d.due_days, 'day', 'days')} ${d.due_rule === 'before_start' ? 'before the period starts' : 'after the period ends'}` : null,
+      from: d.source?.clause ? `From ${d.source.clause}` : 'Source not recorded',
+      signed: !!d.source?.signed,
+      defaulted: Array.isArray(d.defaulted) && d.defaulted.length > 0,
+    })),
+  };
+}
+
+/** The company in Portfolio (D1056's `/portfolio/companies/:uid`), or null when the read names no company. */
+export function portfolioCompanyHref(closing) {
+  const uid = closing?.for_investor?.project_uid;
+  return typeof uid === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(uid) ? `/portfolio/companies/${encodeURIComponent(uid)}` : null;
 }
