@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import { readAllLeadPages } from '../../../lib/pagedRead';
 import PartialRead from './PartialRead';
 import RankByFit from '../../../ui/RankByFit';
+import Lightbox from '../../../ui/Lightbox';
 import { applyRank } from '../../../lib/rankByFit';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
@@ -11,6 +12,9 @@ import {
   inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { usePipelineZone } from './usePipelineZone';
+import {
+  PASS_REASONS, PASS_REASON_LABEL, emptyViewLine, fitLine, inState, leadReasons, leadStrip, recentFirst, whyThisScore,
+} from './leadsModel';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -53,23 +57,31 @@ import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit'
  * rank a lead the firm has already ruled out above one it merely fits badly.
  */
 
-const REASON_LABEL = {
-  below_floor: 'Below floor',
-  no_capability: 'No capability',
-  scope_mismatch: 'Scope mismatch',
-  timing: 'Timing',
-  price: 'Price',
-  other: 'Other',
-};
-const RECEIPT_TONE = { hit: 'ok', miss: 'danger', gap: 'neutral' };
+const CARD_ACTION = 'min-h-[44px] w-full justify-center sm:w-auto';
 
-/** The strip tile, in the anatomy the artboards share. */
-function LeadTile({ label, value, note, nr = false }) {
+/**
+ * The toolbar's views (PP03), keyed as `partnerZoneFilters('pipeline/leads')`
+ * keys them. Every view keeps the order it was given (Rank by fit's, when one
+ * ran) except Recent, which is newest first.
+ */
+const VIEW_ROWS = {
+  all: (rows) => rows,
+  strong: (rows) => rows.filter(inState('strong')),
+  unscored: (rows) => rows.filter(inState('unscored')),
+  excluded: (rows) => rows.filter(inState('excluded')),
+  recent: recentFirst,
+};
+
+/**
+ * The strip tile, in the anatomy the artboards share. `value: null` is Not
+ * recorded, and the note says why.
+ */
+function LeadTile({ label, value, note }) {
   return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900" data-testid="lead-tile">
       <Eyebrow>{label}</Eyebrow>
       <div className="mt-1.5">
-        {nr ? <NotRecorded /> : (
+        {value == null ? <NotRecorded /> : (
           <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
         )}
       </div>
@@ -79,130 +91,177 @@ function LeadTile({ label, value, note, nr = false }) {
 }
 
 /**
- * One lead, with the receipt behind its score.
+ * The pass dialog (PP03b): a required reason from the Worker's own list and an
+ * optional note. A failed write keeps the dialog, the reason and the note.
+ */
+export function PassDialog({ row, busy, note, onPass, onClose }) {
+  const [draft, setDraft] = useState({ reason: '', note: '' });
+  const name = row.who || row.title;
+  const failed = note?.scope === `lead:${row.need_id}` && note?.ok === false ? note : null;
+  return (
+    <Lightbox
+      label={`Pass on ${name}?`} title={`Pass on ${name}?`}
+      sub="A pass is not a loss. It keeps this lead off your list."
+      onClose={onClose} width={560} phone="sheet" testId="lead-pass-dialog"
+      footer={(
+        <div className="flex flex-col-reverse gap-2 px-5 py-4 sm:flex-row sm:justify-end">
+          <button type="button" className={`${ghostButtonClass} ${CARD_ACTION}`} onClick={onClose} disabled={busy}>Cancel</button>
+          <button
+            type="button" className={`${buttonClass} ${CARD_ACTION}`}
+            disabled={busy || !draft.reason} data-testid="lead-pass-confirm"
+            onClick={async () => { if (await onPass(row, draft)) onClose(); }}
+          >
+            Pass on this lead
+          </button>
+        </div>
+      )}
+    >
+      <div className="flex flex-col gap-4 px-5 py-4">
+        <fieldset className="m-0 border-0 p-0">
+          <legend className="mb-2 text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Reason · required</legend>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Reason">
+            {PASS_REASONS.map(([key, label]) => (
+              <label key={key} className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border border-axal-hairline px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                <input
+                  type="radio" name={`pass-reason-${row.need_id}`} value={key}
+                  checked={draft.reason === key}
+                  onChange={() => setDraft((x) => ({ ...x, reason: key }))}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <Field label="Note · optional" hint="What the next person reading this lead needs to know.">
+          <textarea className={`${inputClass} min-h-[64px]`} value={draft.note} maxLength={600}
+            data-testid="lead-pass-note"
+            onChange={(e) => setDraft((x) => ({ ...x, note: e.target.value }))} />
+        </Field>
+        <SaveNote note={failed} />
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
+ * One lead, in the canvas's order (PP03): name, source provenance, the fit
+ * explanation (reasons first, then the score), budget, need summary, action.
  *
  * THE CARD IS TINTED ONLY ON A STRONG FIT, the way the artboard tints it — and
  * an excluded lead is not tinted red either. It is not a bad lead; it is not a
  * lead, and the row says which rule said so in the firm's own words.
  */
-function LeadCard({ row, busy, onPass, note }) {
-  const [passing, setPassing] = useState(false);
-  const [draft, setDraft] = useState({ reason: '', note: '' });
-  const strong = row.score != null && row.score >= 80;
+function LeadCard({ row, onPass }) {
+  const [why, setWhy] = useState(false);
+  const fit = fitLine(row);
+  const reasons = leadReasons(row);
+  const explain = whyThisScore(row);
+  const strong = fit.state === 'strong';
 
   return (
-    <div className={`rounded-[11px] border p-4 ${
-      row.excluded_by
-        ? 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-900'
-        : (strong
-          ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/15'
-          : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900')
-    }`}
+    <article
+      data-testid="lead-card"
+      className={`grid gap-4 rounded-[11px] border p-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] ${
+        fit.state === 'excluded'
+          ? 'border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-900'
+          : (strong
+            ? 'border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/15'
+            : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900')
+      }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
-              {row.who || row.title}
-            </span>
-            {/* PROVENANCE, and there is one kind of it on this build. */}
-            <Pill tone="seam">{row.source_label}</Pill>
-            {row.days_old != null && (
-              <span className="text-[11px] text-axal-faint">{row.days_old}d ago</span>
-            )}
-          </div>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
-            {row.title}
-            {/* DOLLARS STRAIGHT THROUGH. `founder_needs.budget_*` is the old
-                REAL-dollars pipeline and `moneyDollars` formats dollars, so a
-                `* 100` here — the conversion the SCORE needs, because the fit
-                rule's floor is in cents — would print $3.2M over a $32,000
-                budget. The two comparisons are in different units and only one
-                of them converts. */}
-            {row.budget_max != null && ` · up to ${moneyDollars(row.budget_max)}`}
-            {row.timeline && ` · ${row.timeline}`}
-          </p>
-          {row.need && (
-            <p className="mt-1 text-[12px] leading-relaxed text-axal-faint">{row.need}</p>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="m-0 text-sm font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
+            {row.who || row.title}
+          </h3>
+          {/* PROVENANCE, and there is one kind of it on this build. */}
+          <Pill tone="seam">{row.source_label}</Pill>
+          {row.days_old != null && (
+            <span className="text-[11px] text-axal-faint">{row.days_old}d ago</span>
           )}
         </div>
-        <div className="text-right">
-          {/* NOT A NUMBER WHERE THERE IS NO NUMBER. An exclusion and an
-              unscorable lead are two different absences and read as two. */}
-          {row.excluded_by
-            ? <Pill tone="neutral">Excluded</Pill>
-            : (row.score == null
-              ? <NotRecorded />
-              : (
-                <span className={`font-mono text-[20px] font-extrabold tracking-tight ${
-                  strong ? 'text-emerald-700 dark:text-emerald-400' : 'text-axal-ink dark:text-gray-100'
-                }`}
-                >
-                  {row.score}
+
+        {/* THE REASONS COME FIRST, then the score: a number whose derivation is
+            hidden is a number to argue with. */}
+        {reasons.length > 0 && (
+          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="lead-reasons">
+            {reasons.map((r, i) => (
+              <li key={`${r.label}-${i}`} className="flex items-center gap-1.5">
+                <span aria-hidden="true" className={r.met ? 'font-extrabold text-emerald-700 dark:text-emerald-400' : 'font-extrabold text-red-700 dark:text-red-400'}>
+                  {r.met ? '✓' : '✕'}
                 </span>
-              ))}
-          <div className="text-[10px] font-semibold uppercase tracking-[.07em] text-axal-faint">match</div>
+                <span><span className="sr-only">{r.met ? 'Met: ' : 'Missed: '}</span>{r.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* NOT A NUMBER WHERE THERE IS NO NUMBER. An exclusion and an
+            unscorable lead are two different absences and read as two. */}
+        <div className="text-[12px] font-bold text-axal-muted dark:text-gray-400" data-testid="lead-fit">
+          {fit.state === 'excluded' || fit.state === 'unscored'
+            ? <Pill tone="neutral">{fit.text}</Pill>
+            : <>{fit.text} · <span className="font-mono">{fit.score}</span></>}
         </div>
-      </div>
-
-      {/* THE RECEIPT BEHIND EVERY SCORE — the artboard's phrase for it, and the
-          reason a score is worth showing at all. */}
-      {row.receipts.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {row.receipts.map((r, i) => (
-            <Pill key={`${r.label}-${i}`} tone={RECEIPT_TONE[r.kind] || 'neutral'}>{r.label}</Pill>
-          ))}
-        </div>
-      )}
-      {row.excluded_by && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.excluded_by}</p>
-      )}
-      {row.score_note && (
-        <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">{row.score_note}</p>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {/* #2338 — "Accept · bid on it" linked to `/needs/<uid>`, a route that
-            never existed. The owner removed the needs board and asked for no
-            bidding to be rebuilt here, so the dead link went with it. */}
-        <button type="button" className={ghostButtonClass} onClick={() => setPassing((v) => !v)}>
-          {passing ? 'Cancel' : 'Pass'}
-        </button>
-      </div>
-
-      {passing && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="Reason" hint="A pass without one is a lead you read again next quarter.">
-              <select className={inputClass} value={draft.reason}
-                onChange={(e) => setDraft({ ...draft, reason: e.target.value })}>
-                <option value="">Choose one</option>
-                {Object.entries(REASON_LABEL).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Note" hint="What the next person reading this lead needs to know.">
-              <input className={inputClass} value={draft.note} maxLength={600}
-                onChange={(e) => setDraft({ ...draft, note: e.target.value })} />
-            </Field>
+        {row.excluded_by && (
+          <p className="m-0 text-[12px] leading-relaxed text-axal-muted">{row.excluded_by}</p>
+        )}
+        {fit.state === 'unscored' && (
+          <p className="m-0 text-[12px] leading-relaxed text-axal-muted">
+            {row.score_note || 'No fit rule applies to this need, so it isn’t scored.'}
+          </p>
+        )}
+        {explain && (
+          <div>
+            <button type="button" className="text-[12px] font-bold text-amber-800 underline-offset-2 hover:underline dark:text-amber-300"
+              aria-expanded={why} onClick={() => setWhy((v) => !v)}>
+              Why this score? {why ? '▴' : '▾'}
+            </button>
+            {why && (
+              <div className="mt-1.5 rounded-lg border border-axal-hairline bg-axal-ground p-3 text-[12px] dark:border-gray-700 dark:bg-gray-950" data-testid="lead-why">
+                <ul className="m-0 list-none p-0">
+                  {explain.receipts.map((r, i) => (
+                    <li key={`${r.label}-${i}`}><strong>{r.word}</strong> · {r.label}</li>
+                  ))}
+                </ul>
+                <p className="m-0 mt-1.5 text-axal-muted">{explain.sum}</p>
+              </div>
+            )}
           </div>
-          <button
-            type="button" className={`${buttonClass} mt-3`}
-            disabled={busy || !draft.reason}
-            onClick={async () => {
-              // Closed and cleared only once the server took the pass.
-              if (!(await onPass(row, draft))) return;
-              setPassing(false);
-              setDraft({ reason: '', note: '' });
-            }}
-          >
-            Record the pass
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1 text-[12.5px]">
+        <span className="text-axal-muted">Budget</span>
+        {/* DOLLARS STRAIGHT THROUGH. `founder_needs.budget_*` is the old
+            REAL-dollars pipeline and `moneyDollars` formats dollars, so a
+            `* 100` here — the conversion the SCORE needs, because the fit
+            rule's floor is in cents — would print $3.2M over a $32,000
+            budget. The two comparisons are in different units and only one
+            of them converts. */}
+        <span className="font-mono font-bold text-axal-ink dark:text-gray-100" data-testid="lead-budget">
+          {row.budget_max != null
+            ? (row.budget_min != null && row.budget_min !== row.budget_max
+              ? `${moneyDollars(row.budget_min)}–${moneyDollars(row.budget_max)}`
+              : moneyDollars(row.budget_max))
+            : (row.budget_min != null ? `from ${moneyDollars(row.budget_min)}` : <NotRecorded />)}
+        </span>
+        <span className="mt-1 text-axal-muted">Need</span>
+        <span className="text-axal-ink dark:text-gray-100">
+          {row.title}{row.timeline ? ` · ${row.timeline}` : ''}
+        </span>
+        {row.need && <span className="text-[12px] text-axal-faint">{row.need}</span>}
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          {/* #2338 — "Accept · bid on it" linked to `/needs/<uid>`, a route
+              that never existed, and the owner removed bidding from Leads. The
+              canvas's Draft proposal waits on the owner (D4838), so Pass is the
+              one action. */}
+          <button type="button" className={`${ghostButtonClass} ${CARD_ACTION}`} onClick={() => onPass(row)}>
+            Pass
           </button>
-          <SaveNote note={note?.scope === `lead:${row.need_id}` ? note : null} />
         </div>
-      )}
-    </div>
+      </div>
+    </article>
   );
 }
 
@@ -210,7 +269,8 @@ export default function PartnerLeadsZone() {
   const { state, load, run, busy, note } = usePipelineZone(
     () => readAllLeadPages((cur, pcur) => api.listPartnerLeads(cur, pcur)), 'The lead list did not load.',
   );
-  const [view, setView] = useState('open');
+  const [view, setView] = useState('all');
+  const [passing, setPassing] = useState(null);
   // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
   const [rank, setRank] = useState(null);
 
@@ -228,11 +288,8 @@ export default function PartnerLeadsZone() {
   // intros` is prose — every lead here is a marketplace need, so it would
   // select the whole list and call that a filter.
   const ranked = applyRank(items, (r) => r.need_id, rank);
-  const visible = (() => {
-    if (view === 'strong') return ranked.list.filter((r) => r.score != null && r.score >= 80);
-    if (view === 'passed') return [];
-    return ranked.list;
-  })();
+  const visible = (VIEW_ROWS[view] || VIEW_ROWS.all)(ranked.list);
+  const tiles = leadStrip(d);
 
   const rowActions = partnerZoneActions('pipeline/leads', { view: { header: ['Lead', 'Need', 'Score', 'Source', 'Budget max', 'Timeline'], rows: visible, cells: (r) => [r.who, r.title, r.score, r.source_label, r.budget_max, r.timeline] } });
 
@@ -284,41 +341,16 @@ export default function PartnerLeadsZone() {
           <PartialRead data={state.data} noun="leads" onRetry={load} />
           <ZoneHeading
             title="Leads"
-            blurb={
-              'Every source, scored against what this firm can actually do, with '
-              + 'the provenance that says how it arrived.'
-            }
+            blurb="Every opportunity this firm has not bid on or passed, scored against the firm’s own fit rules."
+
           />
 
-          {/* ══ THE `p1` STRIP ════════════════════════════════════════════════
-              `Open leads · Strong fit · Warm path · Passed this quarter`. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <LeadTile
-              label="Open leads"
-              value={String(d?.open_count ?? 0)}
-              note="none of them already bid"
-            />
-            {/* NULL, NOT ZERO, when nothing can be scored. "No strong fits" and
-                "no rules to judge fit with" are different answers. */}
-            <LeadTile
-              label="Strong fit"
-              value={String(d?.strong_fit_count ?? 0)}
-              nr={d?.strong_fit_count == null}
-              note={d?.strong_fit_count == null ? 'no rule to score against yet' : '80 or above'}
-            />
-            {/* TRUE, AND IT IS THE FINDING. Every lead this product can see
-                arrived through the marketplace; no investor intro or referral is
-                recorded anywhere, so the firm has no warm channel on record. */}
-            <LeadTile
-              label="Warm path"
-              value={String(d?.open_count ?? 0)}
-              note="all via the marketplace — no other source is recorded"
-            />
-            <LeadTile
-              label="Passed"
-              value={String(d?.passed_count ?? 0)}
-              note="all with a reason on record"
-            />
+          {/* ══ THE PP03 STRIP ═══════════════════════════════════════════════
+              `Open leads · Strong fit · Unscored · Passed this period`. A zero
+              prints only beside its population; a count the loaded rows
+              cannot settle is Not recorded with its reason (leadsModel.js). */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="lead-strip">
+            {tiles.map((t) => <LeadTile key={t.label} label={t.label} value={t.value} note={t.note} />)}
           </div>
 
           {d?.population_note && (
@@ -328,33 +360,32 @@ export default function PartnerLeadsZone() {
             <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.scoring_note}</p>
           )}
 
-          {view !== 'passed' && items.length > 1 && (
+          {items.length > 1 && (
             <RankByFit run={(query) => api.rankPartnerLeads(query)} onRanked={setRank} ranked={rank ? ranked.ranked : null} total={items.length}
               label="What work do you want next? (optional)" testid="partner-leads-rank" />
           )}
 
-          {view !== 'passed' && (
-            <div className="space-y-3">
-              {visible.map((row) => (
-                <LeadCard
-                  key={row.need_id}
-                  row={row}
-                  busy={busy}
-                  note={note}
-                  onPass={(r, draftValue) => run(
-                    () => api.passPartnerLead(r.need_id, {
-                      reason: draftValue.reason, note: draftValue.note,
-                    }),
-                    'Pass recorded.', `lead:${r.need_id}`,
-                  )}
-                />
-              ))}
-              {items.length > 0 && visible.length === 0 && (
-                <p className="text-[12px] text-axal-muted">
-                  No lead is in this state. {items.length} open in total.
-                </p>
+          <div className="space-y-3">
+            {visible.map((row) => (
+              <LeadCard key={row.need_id} row={row} onPass={setPassing} />
+            ))}
+            {items.length > 0 && visible.length === 0 && (
+              <p className="text-[12px] text-axal-muted" data-testid="lead-view-empty">
+                {emptyViewLine(view, items.length)}
+              </p>
+            )}
+          </div>
+          {passing && (
+            <PassDialog
+              row={passing} busy={busy} note={note}
+              onClose={() => setPassing(null)}
+              onPass={(r, draftValue) => run(
+                () => api.passPartnerLead(r.need_id, {
+                  reason: draftValue.reason, note: draftValue.note,
+                }),
+                'Pass recorded.', `lead:${r.need_id}`,
               )}
-            </div>
+            />
           )}
 
           <ZoneDraft
@@ -380,7 +411,7 @@ export default function PartnerLeadsZone() {
               key: p.id,
               cells: [
                 p.who ? { text: p.who, sub: p.title } : { text: p.title },
-                { pill: REASON_LABEL[p.reason] || p.reason, pillTone: 'neutral' },
+                { pill: PASS_REASON_LABEL[p.reason] || p.reason, pillTone: 'neutral' },
                 p.note
                   ? {
                     text: p.note,
@@ -434,8 +465,7 @@ export default function PartnerLeadsZone() {
               <strong>Every lead here came from the marketplace.</strong> Nothing
               records a lead arriving through an investor, a referral or a
               conversation, so the provenance chip says the one thing it can say
-              truthfully — and the warm-path count is the whole open list rather
-              than a channel this firm does not have on record.
+              truthfully, and there is no warm-intro view to choose.
             </p>
           </StatedLimit>
         </div>

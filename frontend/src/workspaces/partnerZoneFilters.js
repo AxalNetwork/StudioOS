@@ -455,14 +455,17 @@ export const PARTNER_ZONE_FILTERS = {
   // records a lead arriving through an investor or a referral, so this chip
   // selects the whole open list and says so rather than pretending to narrow.
   'pipeline/leads': [
-    { canvas: 'Open', key: 'open' },
+    // #5935 (D4838): the Pipeline v2 canvas's row (PP03) replaced the p1
+    // artboard's `Open · Strong fit · Warm intros · Passed · All sources`.
+    // Passed left the row because the passes are their own table below the
+    // list on every view; Warm intros left because every lead is a
+    // marketplace need, so it had always been prose. The rules are in
+    // `pages/partner/pipeline/leadsModel.js`.
+    { canvas: 'All', key: 'all' },
     { canvas: 'Strong fit', key: 'strong' },
-    {
-      canvas: 'Warm intros',
-      unbuilt: 'every lead here is a marketplace need — nothing records a lead arriving through an investor or a referral, so there is no second provenance to select', hover: 'Every lead here is a marketplace need; nothing records one arriving by referral or investor.',
-    },
-    { canvas: 'Passed', key: 'passed' },
-    { canvas: 'All sources', key: 'all' },
+    { canvas: 'Unscored', key: 'unscored' },
+    { canvas: 'Excluded', key: 'excluded' },
+    { canvas: 'Recent', key: 'recent' },
   ],
 
   // `Opened, unanswered` AND `Never opened` BOTH READ `quotes` AND BOTH ARE

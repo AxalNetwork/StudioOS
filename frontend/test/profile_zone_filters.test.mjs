@@ -355,6 +355,13 @@ const PROFILES = {
     // absent from `partnerZoneFilters.js`: five zones, five `views([…])` rows on
     // the artboard, and no chip row anywhere in the product.
     canvas: /^Pages · Partner (Delivery|Network|Offers|Pipeline|Research)\.dc\.html$/,
+    // #5935 (D4838): Leads is redrawn to the Pipeline v2 canvas (PP03), whose
+    // row overrides the p1 artboard's. Its section builder draws the chips as
+    // a `class="chips"` radiogroup over `J(['All', …].map(…))`, read by
+    // `row: 'list'`.
+    v2Zones: [
+      ['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads', { row: 'list' }],
+    ],
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
     // are found by the ordinary search once the directory is listed — which
@@ -504,7 +511,8 @@ function canvasFilters(profile) {
   // only with the decision that says so; a name that is not on the canvas
   // fails here rather than quietly dropping nothing.
   for (const [zone, file, section, { omit = [], why, row } = {}] of profile.v2Zones || []) {
-    const chips = row === 'seg' ? v2SectionSeg(read(file), section) : v2SectionChips(read(file), section);
+    const chips = row === 'seg' ? v2SectionSeg(read(file), section)
+      : (row === 'list' ? v2SectionList(read(file), section) : v2SectionChips(read(file), section));
     assert.ok(chips.length, `${file} draws no chips for its ${section} section`);
     for (const name of omit) {
       assert.ok(chips.includes(name), `${zone}: ${name} is omitted but the canvas does not draw it`);
@@ -513,6 +521,22 @@ function canvasFilters(profile) {
     out[zone] = chips.filter((label) => !omit.includes(label));
   }
   return out;
+}
+
+/**
+ * #5935 (D4838): the chips of a `class="chips"` radiogroup in one Pipeline v2
+ * section builder (`'<div class="chips" role="radiogroup" …>' + J(['All', …]`),
+ * in canvas order. Leads draws its view row this way.
+ */
+function v2SectionList(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const row = src.indexOf('class="chips" role="radiogroup"', at);
+  const next = src.indexOf('\n    const ', at + 10);
+  if (row < 0 || (next >= 0 && row > next)) return [];
+  const from = src.indexOf('J([', row);
+  const end = src.indexOf(']', from);
+  return [...src.slice(from, end).matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
 /**
