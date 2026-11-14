@@ -127,3 +127,4 @@ and citations by number keep working.
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
+| `D6025.md` | Prototype / MVP burn-up by month, ISO week or day of completion, so three real points can draw inside one month; one grouped scan kept (#6025). |

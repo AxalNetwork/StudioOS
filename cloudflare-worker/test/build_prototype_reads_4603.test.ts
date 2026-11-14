@@ -135,7 +135,7 @@ test('3. at 1,000 records the page reads 25 must-have rows and the overview none
   assert.equal(o.status, 200);
   assert.equal(listed(o.log), 0, 'the overview lists no must-have');
   const prototypeRows = o.log.filter((s) => /FROM mvp_features WHERE project_id = \? AND is_must_have = 1/.test(s.sql)).reduce((t, s) => t + s.rows, 0);
-  assert.ok(prototypeRows <= 13, `${prototypeRows} rows for the card: one count row and one per month`);
+  assert.ok(prototypeRows <= 13, `${prototypeRows} rows for the card: one per state, hypothesis and day of completion (D6025)`);
   assert.deepEqual(o.body.figures[0].value, [r.body.facts.done, r.body.facts.total]);
   const searched = await page(large, '&q=feature%20999');
   assert.deepEqual(searched.body.records.rows.map((x: any) => x.cells.must_have), ['Synthetic feature 999']);

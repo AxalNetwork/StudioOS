@@ -470,6 +470,12 @@ test('each chart kind draws what it is given, and says Not recorded where a valu
   assert.match(text(draw({ kind: 'rows', items: [{ label: 'Mismatches', value: null }] })), /Mismatches Not recorded/);
   assert.match(text(draw({ kind: 'big', value: '57%', label: 'need-to-have' })), /57% need-to-have/);
   assert.match(draw({ kind: 'line', values: [1, 2, 3], target: 5, mark: 1, mark_label: 'ship' }), /stroke-dasharray="5 4"[\s\S]*ship/);
+  // D6025 (#6025): Prototype / MVP's burn-up by ISO week, as the Worker writes it: the labels are drawn as given,
+  // in order, a dot for each real point and none for the Ship slot, the mark at the Ship slot.
+  const weekly = draw({ kind: 'line', values: [1, 2, null, 3], target: 4, labels: ['W45', 'W46', 'Ship', 'W48'].map((label, at) => ({ at, label })), mark: 2, mark_label: 'Ship 2026-11-20' });
+  assert.match(text(weekly), /Ship 2026-11-20 W45 W46 Ship W48 $/);
+  assert.equal((weekly.match(/<circle/g) || []).length, 3);
+  assert.match(weekly, /<line x1="350" y1="8" x2="350"/, 'the Ship mark at the third of four slots');
   assert.match(draw({ kind: 'stack', rows: [{ label: 'A', parts: [1, 1] }], tones: ['v1', 'v2'], legend: [{ label: 'Strong', tone: 'v1' }] }), /fill-axal-violet[\s\S]*Strong/);
   assert.equal((draw({ kind: 'dots', values: [true, false, true] }).match(/title="Held"/g) || []).length, 2);
   assert.equal((draw({ kind: 'heat', rows: [{ label: 'M1', cells: [1, null, 0.5] }] }).match(/<rect/g) || []).length, 2, 'a missing cell is not drawn');
