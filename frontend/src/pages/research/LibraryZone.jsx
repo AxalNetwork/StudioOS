@@ -473,7 +473,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
             with the kind and title chosen below; a file the Worker would
             refuse is refused here first, with the reason. */}
         <div data-testid="library-drop" aria-label="Drop a file to add it to your library"
-          className={`mb-3 rounded-xl border-[1.5px] border-dashed p-3.5 text-center text-[12.5px] text-axal-muted ${dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-axal-hair'}`}
+          className={`mb-3 rounded-xl border-[1.5px] border-dashed p-3.5 text-center text-[12.5px] text-axal-muted ${dragging ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' : 'border-axal-hairline dark:border-gray-700'}`}
           onDragOver={(e) => { e.preventDefault(); if (!dragging) setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={dropped}>
