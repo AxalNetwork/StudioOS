@@ -1,3 +1,4 @@
+// Builds Grow Overview’s recent changes from project activity, sent updates and metric snapshots.
 import type { Figure } from './cycleCards';
 import { GROW_MODULES, type Ctx } from './growCycle';
 
