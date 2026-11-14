@@ -160,7 +160,6 @@ export async function buildReads(n: number) {
   const env: any = { DB: countingD1(db, () => log), JWT_SECRET, ENVIRONMENT: 'development' };
   const app = new Hono<any>().route('/api/cycles/build', build);
   app.onError((e, c) => c.json({ error: e.message }, 500));
-  const token = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const real = globalThis.fetch;
   globalThis.fetch = (async () => { throw new Error('no network in the Build read harness'); }) as any;
 
@@ -169,7 +168,8 @@ export async function buildReads(n: number) {
     const quiet = [console.log, console.warn, console.error];
     console.log = console.warn = console.error = () => {};
     try {
-      const auth = user === 1 ? token : await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+      // Signed per request, so a test that mocks the clock (#6027) signs at its own now.
+      const auth = await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
       const t0 = performance.now();
       const res = await app.request(path, { headers: { Authorization: `Bearer ${auth}` } }, env);
       const body = await res.json() as any;

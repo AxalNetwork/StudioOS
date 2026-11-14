@@ -18,7 +18,8 @@ import { dismissHealthEvent } from '../services/vercel/health';
 import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
-import { buildPhone } from '../services/cycleFocus';
+import { buildPhone, part } from '../services/cycleFocus';
+import { buildAttention, buildSignals, readPlanPreview, unreadableAttention, unreadablePlan } from '../services/buildAttention';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { posthogKpiTexts } from '../services/posthog/build';
@@ -514,19 +515,26 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > ''
                 AND delivery_status IS NOT 'Done' ORDER BY due_date, sort_order, id LIMIT 1),
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status IS NOT 'Done'
-                ORDER BY sort_order, id LIMIT 1)) AS missing
+                ORDER BY sort_order, id LIMIT 1)) AS missing,
+            (SELECT COUNT(*) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > '' AND due_date < ?
+                AND delivery_status IS NOT 'Done') AS overdue
        FROM (SELECT delivery_status AS status, hypothesis_id,
                     CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
                     COUNT(*) AS n
                FROM mvp_features WHERE project_id = ? AND is_must_have = 1
               GROUP BY delivery_status, hypothesis_id, month) g
        LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
-  ).bind(p.id, p.id, p.id, p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null }>());
+  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null; overdue: number | null }>());
   const total = groups.reduce((t, g) => t + number(g.n), 0);
   const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
   const blockedCount = groups.filter(g => g.status === 'Blocked').reduce((t, g) => t + number(g.n), 0);
   const nextMust = ((raw) => { try { const v = raw ? JSON.parse(raw) : null; return Array.isArray(v) && typeof v[0] === 'string' ? { title: v[0], blocked: v[1] === 'Blocked' } : null; } catch { return null; } })(groups[0]?.missing);
   const nextText = nextMust ? `${nextMust.blocked ? 'Unblock' : 'Complete'} ${nextMust.title}` : null;
+  // #6027 (D6027): overdue must-haves (not Done, a due date before today, UTC) for the overview's Needs attention
+  // and focus: a scalar subquery of this statement, so no statement is added. `due_date < today` equals comparing its
+  // first ten characters with today's ten; the range walks D6031's `idx_mvp_features_must_due`, so only must-haves
+  // dated before today are read.
+  const overdue = number(groups[0]?.overdue);
   // Done must-haves per month of completion.
   const history = new Map<string, number>();
   for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
@@ -578,7 +586,7 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     ...(paged ? { paged } : {}),
     // D6031: `blocked` is the summary line's third figure ("N of M must-haves complete · target <date> · N blocked");
     // `can_set_target` (the module page only) offers its Set control to a writer of `PATCH /project/target`.
-    facts: { done: doneCount, total, blocked: blockedCount, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
+    facts: { done: doneCount, total, blocked: blockedCount, overdue, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
     ...(parts ? { parts } : {}) };
 }
 
@@ -983,7 +991,10 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
-      filings: combined.length, next_filing_due: nextFilingDue },
+      filings: combined.length, next_filing_due: nextFilingDue,
+      // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
+      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1123,6 +1134,10 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   // that says it needs reconnecting.
   const failedSince = failing && stateOf(failing) === 'failing' ? failedSystem?.last_error_at : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
+  // #6027 (D6027): the failing system or tool the card's Reconnect names, as a fact for Needs attention and focus.
+  const reconnectFact = failedSystem
+    ? { name: getDescriptor(failedSystem.provider_key)?.display_name ?? SYSTEM_LABEL[failing!], since: failureDate(failedSince), href: connectHref(failedSystem.provider_key, p.id), failing: stateOf(failing!) === 'failing' }
+    : failingTool ? { name: getDescriptor(failingTool.provider_key)!.display_name, since: failureDate(failingTool.last_error_at), href: connectHref(failingTool.provider_key, p.id), failing: true } : null;
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
@@ -1133,7 +1148,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
       orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
-      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
+      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null, reconnect: p.company_id == null ? null : reconnectFact },
     ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
@@ -1274,9 +1289,17 @@ app.get('/overview', async c => {
       : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
         : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   const cards = results.map(r => r.card);
-  // D692 (#1701): the phone's focus, meter and index, each failing on its own.
-  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards,
-    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected])) });
+  // D6027 (#6027): each figure names the module it comes from (BD1's status strip).
+  const figures = ([[must, 'prototype-mvp'], [mvp, 'prototype-mvp'], [shipped, 'product-roadmap'], [connected, 'operating-systems']] as const)
+    .map(([f, module]) => ({ ...f, module }));
+  // D6027: the Build Plan preview (the founders' and an admin's, as D1065 reads it), then the
+  // signals focus and Needs attention share. Each part fails on its own, as focus, meter and index do.
+  const plan = (await part('build plan', () => readPlanPreview(c.env, project.id, ownsVenture(project, viewer) || viewer.role === 'admin'))) ?? unreadablePlan(project.id);
+  const signals = await part('build signals', async () => buildSignals(project, results, plan));
+  const attention = (signals && await part('build attention', async () => buildAttention(project.id, canWrite(project, viewer), signals))) ?? unreadableAttention();
+  // D692 (#1701): the phone's focus, meter and index, each failing on its own. Desktop and phone read the same focus.
+  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures, cards, attention, plan,
+    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected], signals)) });
 });
 
 app.get('/modules/:slug', async c => {
