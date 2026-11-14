@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
+import { parseStamp } from '../ui/parseStamp.js';
 import { useLeaveGuard } from '../lib/leaveGuard';
 import { fundReportsApi } from '../lib/api/fundReports.js';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
@@ -60,6 +61,7 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
   const [validated, setValidated] = useState(false);
   const allowLeave = useRef(false);
   const [error, setError] = useState(null);
+  const savedAt = parseStamp(form.updated_at);
   const issued = data.period.status === 'issued';
   const editable = data.can_manage && !issued;
   const disabled = !editable || pending;
@@ -148,7 +150,7 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
       })}
       {editable && <button type="button" disabled={disabled || form.narrative[section].length >= (section === 'letter' || section === 'outlook' ? 50 : 100)} onClick={() => add(section, section === 'letter' || section === 'outlook' ? '' : section === 'developments' ? { date: '', title: '', body: '' } : { d: '', e: '' })}>Add {section === 'letter' || section === 'outlook' ? `${section} paragraph` : section === 'developments' ? 'development' : 'subsequent event'}</button>}
     </article>)}
-    {editable && form.updated_at && <p>Saved at <time dateTime={form.updated_at}>{form.updated_at}</time></p>}
+    {editable && savedAt !== null && <p>Saved at <time dateTime={new Date(savedAt).toISOString()}>{new Date(savedAt).toLocaleString()}</time></p>}
     {validated && hasInvalidEntries && <p role="alert">Correct the marked entries before saving.</p>}
     {error && <p role="alert">{error}</p>}
     {admin && form.id && <PackCard data={data} user={user} onChanged={() => onSaved(form.id)} />}

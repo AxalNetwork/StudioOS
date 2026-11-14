@@ -908,6 +908,7 @@ funds.delete('/:id/report-periods/:periodId', async (c) => {
   await assertFundAct(c,gp,'fund_report.draft');
   const body=await c.req.json().catch(()=>null);
   await deleteFundPeriod(c.env,fundId,periodId,gp.user.id,body?.revision);
+  await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:periodId,deleted:true});
   return c.json({ok:true});
  }catch(error){return fundReportError(c,error);}
 });
