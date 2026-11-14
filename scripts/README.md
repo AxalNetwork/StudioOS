@@ -8,7 +8,7 @@
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
-| `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
+| `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. D5973: also writes one classified row per merge-group candidate to `$CI_SCORECARD_ROWS`. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |

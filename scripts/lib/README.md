@@ -8,7 +8,8 @@ can be read to find out what a rule actually is.
 
 | File | What it decides |
 | --- | --- |
-| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. |
+| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. D5973: one row per merge-group head SHA (request, first runner start, last required check's wait and runtime, queue entry and removal, recorded reason) classified as `deadline-expired`, `failed-check`, `cancelled-or-superseded`, `merged` or `missing-evidence`, and the scorecard's request budget. |
+| `requiredChecks.mjs` | #4107, D5973: main's required checks and the workflow that reports each, read by `frontend/test/merge_queue_ci_4107.test.mjs` and `ciScorecard.mjs`. |
 | `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
 | `probeOutcome.mjs` | #4571 R2-09: the one outcome a sign-in probe run is filed under (EDGE_CHALLENGED, APPLICATION_REFUSED, REFUSED_UNATTRIBUTED, APPLICATION_FAILED, ACCEPTED_NOT_VERIFIED, VERIFIED_END_TO_END). A skipped check is never a pass. Read by `../check-magic-link-insert.mjs` and `../check-magic-link-live.mjs`. |
 | `runtimeDdl.mjs` | #4568 R2-04: the inventory of runtime `ADD COLUMN` in the Worker (file, table, column, whether the file asks the table first, whether a migration declares the column) and the no-growth ratchet over it. Owned by `../check-runtime-ddl.mjs` and `cloudflare-worker/test/runtime_ddl_4568.test.ts`. |
