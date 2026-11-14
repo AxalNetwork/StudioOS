@@ -14,7 +14,7 @@ import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, noteError } from './dealFrameModel';
+import { ACTIVITY_FILTERS, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, activityEmpty, activityShown, noteError } from './dealFrameModel';
 import Sheet from '../../ui/Sheet.jsx';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -167,32 +167,32 @@ function Notes({ dealId, userId }) {
 export function DealActivity({ dealId, mineFilter = false }) {
   const [events, setEvents] = useState(null);
   const [failed, setFailed] = useState(false);
-  const [mine, setMine] = useState(false);
+  const [filter, setFilter] = useState('all');
   const load = () => {
     setFailed(false);
     api.dealActivity(dealId).then(setEvents).catch((e) => { reportError('DealActivity', e); setFailed(true); });
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
-  const shown = (events || []).filter((e) => !mine || e.mine);
+  // #6193 (D6193): All · Mine · Deal · Documents · Diligence (DL14). Mine is the Notes tab's only.
+  const chips = ACTIVITY_FILTERS.filter(([key]) => mineFilter || key !== 'mine');
+  const shown = activityShown(events, filter);
   return (
     <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-activity">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className={H3}>Activity on this deal</h3>
-        {mineFilter && (
-          <div className="flex gap-1.5" role="radiogroup" aria-label="Show">
-            {[['All', false], ['Mine', true]].map(([t, v]) => (
-              <button key={t} type="button" role="radio" aria-checked={mine === v} className={TAG(mine === v)} onClick={() => setMine(v)} data-testid={`deal-activity-${t.toLowerCase()}`}>{t}</button>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Show">
+          {chips.map(([key, t]) => (
+            <button key={key} type="button" role="radio" aria-checked={filter === key} className={TAG(filter === key)} onClick={() => setFilter(key)} data-testid={`deal-activity-${key}`}>{t}</button>
+          ))}
+        </div>
       </div>
       {failed && <Unreadable what="The activity" claim="That is not a claim that nothing happened." onRetry={load} />}
       {!failed && events == null && <p className={`m-0 ${SUB}`}>Reading…</p>}
-      {!failed && events != null && !shown.length && <p className={`m-0 ${SUB}`} data-testid="deal-activity-empty">{EMPTY.activity}</p>}
+      {!failed && events != null && !shown.length && <p className={`m-0 ${SUB}`} data-testid="deal-activity-empty">{activityEmpty(filter)}</p>}
       {shown.map((e, i) => (
         <div key={i} className="flex items-baseline justify-between gap-3 border-t border-axal-hairline py-2 dark:border-gray-700">
           <span className="text-[13px] text-axal-ink dark:text-gray-100">{e.label}</span>
-          <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{e.at ? String(e.at).slice(0, 10) : 'Date not recorded'}</span>
+          <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{e.at ? String(e.at).slice(0, 10) : e.type === 'unreadable' ? '' : 'Date not recorded'}</span>
         </div>
       ))}
       {mineFilter && <p className={`m-0 pt-1 ${SUB}`}>Rows about other investors never name them or their amounts.</p>}

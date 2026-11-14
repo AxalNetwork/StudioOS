@@ -1165,6 +1165,12 @@ deals.post('/:id/commitments/:uid/withdraw', async (c) => {
 });
 
 /**
+ * #6193 (D6193, DL14): every activity row carries a `kind`, which the page's Deal, Documents and Diligence
+ * chips filter on. A row this read does not class is `deal`.
+ */
+export const ACTIVITY_KINDS = ['deal', 'documents', 'diligence'] as const;
+
+/**
  * D1152 (#3057, DL14) — WHO IS NAMED IN THE ACTIVITY follows the commitments
  * read above: an admin and the deal's own founder read every investor by
  * name and amount. Anyone else reads their own rows as "You …", another
@@ -1182,14 +1188,14 @@ deals.get('/:id/activity', async (c) => {
   const named = namesInvestors(audience);
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
-  events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
-  if (deal.stage_changed_at) events.push({ type: 'stage', label: `Moved to ${deal.status}`, at: deal.stage_changed_at, mine: false });
+  events.push({ type: 'created', kind: 'deal', label: 'Deal created', at: deal.created_at, mine: false });
+  if (deal.stage_changed_at) events.push({ type: 'stage', kind: 'deal', label: `Moved to ${deal.status}`, at: deal.stage_changed_at, mine: false });
   const commits = await sql`SELECT c.amount, c.created_at, c.investor_user_id, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   for (const r of commits as any[]) {
     const mine = Number(r.investor_user_id) === Number(user.id);
     const label = named ? `${r.investor_name || 'An investor'} committed ${money(r.amount)}`
       : mine ? `You committed ${money(r.amount)}` : 'An investor committed';
-    events.push({ type: 'commitment', label, at: r.created_at, mine });
+    events.push({ type: 'commitment', kind: 'deal', label, at: r.created_at, mine });
   }
   const invites = await sql`SELECT di.status, di.created_at, di.responded_at, di.investor_user_id, u.name AS investor_name FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
   for (const r of invites as any[]) {
@@ -1198,7 +1204,40 @@ deals.get('/:id/activity', async (c) => {
     const label = named
       ? `${r.investor_name || 'An investor'} invited${r.status !== 'invited' ? ` — ${r.status}` : ''}`
       : r.status === 'interested' ? 'You said you’re interested' : r.status === 'passed' ? 'You passed' : 'You were invited';
-    events.push({ type: 'invitation', label, at: r.responded_at || r.created_at, mine });
+    events.push({ type: 'invitation', kind: 'deal', label, at: r.responded_at || r.created_at, mine });
+  }
+  // #6193 (D6193): DOCUMENTS, from the venture's document catalogue, behind the same NDA rule as
+  // GET /:id/documents (D4631). A reader without the NDA reads no document rows; the page says so.
+  // Each source below is read on its own: a failed one adds one row saying so, never silence.
+  if (deal.project_id) {
+    try {
+      if (ndaExempt(user, deal.project_founder_id) || await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id)) {
+        const docs = await sql`SELECT title, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC LIMIT 50`;
+        for (const r of docs as any[]) events.push({ type: 'document', kind: 'documents', label: `Document added: ${r.title || 'Untitled'}`, at: r.created_at, mine: false });
+      }
+    } catch {
+      events.push({ type: 'unreadable', kind: 'documents', label: 'Document activity could not be read', at: null, mine: false });
+    }
+    // #6193 (D6193): DILIGENCE, from the venture's diligence cases and their answered requests. A case is
+    // read by its owner and its reviewers (the stage read's rule) or a platform admin, never by another
+    // investor; nobody is named, and a request's own text is not shown.
+    try {
+      const admin = user.role === 'admin' ? 1 : 0;
+      const cases = await sql`SELECT d.id, d.created_at, d.owner_user_id FROM dd_cases d
+        WHERE d.subject_type = 'project' AND d.subject_id = ${deal.project_id} AND d.status != 'archived'
+          AND (${admin} = 1 OR d.owner_user_id = ${user.id} OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ${user.id}))`;
+      const ids = (cases as any[]).map((r) => Number(r.id));
+      const answers = ids.length
+        ? await sql`SELECT responded_at FROM dd_requests WHERE case_id IN (SELECT value FROM json_each(${JSON.stringify(ids)})) AND responded_at IS NOT NULL ORDER BY responded_at DESC LIMIT 50`
+        : [];
+      for (const r of cases as any[]) {
+        const mine = Number(r.owner_user_id) === Number(user.id);
+        events.push({ type: 'diligence_case', kind: 'diligence', label: mine ? 'You opened a diligence case' : 'Diligence case opened', at: r.created_at, mine });
+      }
+      for (const r of answers as any[]) events.push({ type: 'diligence_answer', kind: 'diligence', label: 'The founder answered a diligence request', at: r.responded_at, mine: false });
+    } catch {
+      events.push({ type: 'unreadable', kind: 'diligence', label: 'Diligence activity could not be read', at: null, mine: false });
+    }
   }
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));

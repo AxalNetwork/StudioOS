@@ -176,6 +176,35 @@ export const EMPTY = {
 };
 
 /**
+ * #6193 (D6193, DL14): the activity's chips, in canvas order. `Mine` is the investor's own rows (the Notes tab
+ * only). The other three narrow on the row's `kind` from the Worker; a row with no kind is Deal, as the Worker
+ * classes it.
+ */
+export const ACTIVITY_FILTERS = [
+  ['all', 'All'], ['mine', 'Mine'], ['deal', 'Deal'], ['documents', 'Documents'], ['diligence', 'Diligence'],
+];
+
+/** The rows one chip shows. */
+export function activityShown(events, filter) {
+  const rows = Array.isArray(events) ? events : [];
+  if (filter === 'mine') return rows.filter((e) => e.mine);
+  if (filter === 'deal' || filter === 'documents' || filter === 'diligence') return rows.filter((e) => (e.kind || 'deal') === filter);
+  return rows;
+}
+
+/**
+ * What an empty chip says. A narrowed list that is empty is what this reader can see, never a claim that
+ * nothing happened: documents sit behind the venture's NDA, and a diligence case is read by its own team.
+ */
+export function activityEmpty(filter) {
+  if (filter === 'mine') return 'None of your own activity on this deal is recorded.';
+  if (filter === 'deal') return 'No deal activity you can read is recorded.';
+  if (filter === 'documents') return 'No document activity you can read is recorded. Documents show once you hold the venture’s NDA.';
+  if (filter === 'diligence') return 'No diligence activity you can read is recorded. A case shows to its own owner and reviewers.';
+  return EMPTY.activity;
+}
+
+/**
  * Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431). #4046: it arrives through Ask on New note, drawn
  * from the deal's company and stage and your firm's notes; a summary of the deal's whole record is not read yet.
  */
