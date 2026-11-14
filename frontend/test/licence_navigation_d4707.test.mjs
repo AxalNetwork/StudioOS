@@ -122,9 +122,11 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
 
 test('no licence write asks with window.prompt or window.confirm any more', () => {
   assert.doesNotMatch(PAGE, /window\.(prompt|confirm)\(/);
-  for (const k of ['demoteAdmin', 'acceptNotice', 'rejectNotice', 'suspendLicence', 'terminateLicence']) {
+  for (const k of ['demoteAdmin', 'acceptNotice', 'rejectNotice']) {
     assert.ok(PAGE.includes(`await ask(LICENCE_REASONS.${k})`), k);
   }
+  // D4819 part 4 (#5927): suspend and terminate ask through the consequence sheet.
+  assert.ok(PAGE.includes('await askConsequence(action, d, reads)'));
 });
 
 test('a reason is checked before it is sent, with the Worker\'s own minimums', () => {

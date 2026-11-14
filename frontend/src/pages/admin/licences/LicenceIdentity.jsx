@@ -6,7 +6,10 @@
  * Unavailable with Try again; none is ever 0 or a guess. The agreement and
  * branch lines are the Overview's own facts (`identityFacts`), so the header
  * and the Overview cannot disagree. The lifecycle actions are passed in as
- * `actions` and drawn where the canvas puts them, top right.
+ * `actions` and drawn where the canvas puts them, top right: since D4819
+ * part 4 (#5927) that is the More menu (board L17), and a terminated licence,
+ * which allows no action, draws none. Record a request is not drawn: it is
+ * the studio's lane (`/licence/mine/requests`), and HQ has no write for it.
  */
 import React from 'react';
 import { identityFacts } from '../licenceOverviewModel';
