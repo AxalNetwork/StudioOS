@@ -181,6 +181,24 @@ export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data
 export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
 
 export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
+export const CLAIMS_UNREADABLE = 'The claims could not be read.';
+
+/**
+ * D6068 (#6068): the Claims backed tile from the part's `claims`, D1264's claim
+ * store for the newest version (`claimTally.ts`): "n of m" once a check stored
+ * claims; a dash with the reason when the read failed, nothing was checked, or
+ * the part carries no tally (CLAIMS_WAIT). Never 0 for unknown.
+ */
+export function claimsTile(claims, newest = null) {
+  const tile = (value, sub, waits) => ({ key: 'claims', label: 'Claims backed', value, sub, waits });
+  const v = claims?.version ?? newest?.version;
+  if (claims?.state === 'unreadable') return tile(DASH, CLAIMS_UNREADABLE, true);
+  const total = claims?.total;
+  const backed = claims?.backed;
+  if (claims?.state !== 'ok' || !Number.isInteger(total) || !Number.isInteger(backed)) return tile(DASH, CLAIMS_WAIT, true);
+  if (total === 0) return tile(DASH, `Nothing checked yet in v${v}`, true);
+  return tile(`${backed} of ${total}`, `Backed by a record, in v${v}`, false);
+}
 export const ANSWERS_UNREADABLE = 'Which section answers each one could not be read.';
 const DASH = '—';
 
@@ -188,7 +206,7 @@ const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
 
 /**
  * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
- * (#2430) a dash with the reason, never 0. Objections answered (D913 option
+ * "n of m" from the claim store (D6068, `claimsTile`), a dash with the reason, never 0. Objections answered (D913 option
  * A) is "n of m": how many of the objections heard a saved section answers; a
  * dash with the reason when either read failed or none was heard.
  */
@@ -198,7 +216,7 @@ export function homeTiles(part) {
   const mismatches = Array.isArray(newest?.mismatches) ? newest.mismatches : [];
   return [
     { key: 'versions', label: 'Versions', value: String(versions.length), sub: versions[0] ? `Newest ${versionName(versions[0])}` : 'No version yet' },
-    { key: 'claims', label: 'Claims backed', value: DASH, sub: CLAIMS_WAIT, waits: true },
+    claimsTile(part?.claims, newest),
     {
       key: 'mismatches', label: 'Open mismatches',
       value: !newest || !newest.compared ? DASH : String(mismatches.length),

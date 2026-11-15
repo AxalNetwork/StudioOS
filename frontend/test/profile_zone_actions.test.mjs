@@ -168,6 +168,12 @@ const PROFILES = {
     buckets: /^(deals|funds|portfolio|network|research)\//,
     // 18 since D1243 (#3256): Deals · Pipeline retired into Deal flow's table.
     zones: 18,
+    // ON THE ARTBOARD, DELIBERATELY NOT CARRIED. D6205 (#6205): `Add follow-on`
+    // records a round, an admin write, so on the investor's book it could only
+    // ever be a disabled button. The investor asks instead (Ask HQ in the
+    // mark-history Sheet). Each label here must still be on its artboard and
+    // must not be in the table.
+    withheld: { 'portfolio/positions': ['Add follow-on'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -231,7 +237,10 @@ const PROFILES = {
     //
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
-    handlers: 16,
+    //
+    // SEVENTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // stores the log and the page draws it; the op scrolls to that card.
+    handlers: 17,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -242,7 +251,9 @@ const PROFILES = {
     // shipped gap rather than deferring one.
     // Reviewed elsewhere-claims, by label — see the assertion below.
     // `New deep-dive` left when Markets became the sector directory.
-    elsewhere: ['Edit rubric', 'Merge duplicates'],
+    // `Merge duplicates` left with D6258: its reason no longer says where
+    // an organisation is stored.
+    elsewhere: ['Edit rubric'],
     // D1243 (#3256): the canvas still draws ID1; its zone is retired and `/deals/pipeline` forwards to Deal flow's table.
     excluded: ['deals/pipeline'],
     embeddedGuards: 1,
@@ -882,6 +893,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         assert.ok(!canvas[zone]?.includes(label), `${zone}: ${label} is on the artboard now; drop it from offCanvas`);
       }
       table[zone] = table[zone].filter((l) => !extra.includes(l));
+    }
+    for (const [zone, gone] of Object.entries(profile.withheld || {})) {
+      for (const label of gone) {
+        assert.ok(canvas[zone]?.includes(label), `${zone}: ${label} is withheld but no longer on the artboard; drop it from withheld`);
+        assert.ok(!table[zone]?.includes(label), `${zone}: ${label} is withheld but the table carries it`);
+      }
+      canvas[zone] = canvas[zone].filter((l) => !gone.includes(l));
     }
     for (const [zone, labels] of Object.entries(table)) {
       assert.ok(canvas[zone], `${zone} has no artboard — where did its labels come from?`);

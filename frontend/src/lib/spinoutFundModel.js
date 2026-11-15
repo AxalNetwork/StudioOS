@@ -438,6 +438,19 @@ export function lpAccessState(portal, application = null) {
   return { state, commitmentK, lpaSigned, holdings, applicationStatus };
 }
 
+/** Shared CTA for the investor landing page. Null preserves visitor copy. */
+export function lpWorkspaceCallToAction(portalResult, applicationResult) {
+  if (portalResult?.status !== 'fulfilled' || applicationResult?.status !== 'fulfilled'
+      || !portalResult.value || !applicationResult.value) {
+    return { label: 'Open the fund workspace', hash: '' };
+  }
+  const { state, applicationStatus } = lpAccessState(portalResult.value, applicationResult.value.application);
+  if (state === 'committed' || state === 'voting') return { label: 'Open my commitment', hash: '#my-commitment' };
+  if (state === 'approved' || applicationStatus === 'approved') return { label: 'Continue your subscription', hash: '' };
+  if (state === 'pending') return { label: 'See your application', hash: '' };
+  return { label: null, hash: '' };
+}
+
 /** Full reporting archive + package unlock. Mirrors the design's `hasReports`. */
 export function lpHasReports(state) {
   return LP_STATE_RANK[state] >= LP_STATE_RANK.approved;

@@ -205,34 +205,55 @@ test('the guard flags a job with no generate step, and passes one with it', () =
 });
 
 
-test('focused contract jobs retain generation and contracts; the required sharded CI owns full-suite coverage', () => {
+// #6461: the two focused jobs no longer repeat the folder, decision and dark-mode guards or the
+// root SPA build. They are ci.yml's on every pull request: test:drift's `rest` part (what
+// scripts/test-drift-parts.mjs leaves unsharded) runs test:guards, which holds check-folder-docs and
+// check-decision-ids, and check-dark-mode; every `suite` part runs `npm run build` first.
+// Mutation checked: a guard dropped from test:guards (fails); check-dark-mode dropped from
+// test:drift (fails); the suite's build step dropped (fails); a guard step back in a job (fails).
+test('focused contract jobs retain generation and contracts; the required sharded CI owns the suite, the guards and the build', async () => {
   const ci = REAL.find(([file]) => file === 'ci.yml')[1];
+  const { partsOf } = await import(new URL('scripts/test-drift-parts.mjs', ROOT));
+  const scripts = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')).scripts;
+  const ciCovers = (ciSource, pkg) => {
+    const rest = partsOf(pkg).find((part) => part.name === 'rest');
+    assert.ok(rest, 'test:drift has an unsharded rest part');
+    const restCommands = rest.commands.join(' && ');
+    assert.match(restCommands, /(^| && )npm run test:guards( && |$)/, 'rest runs test:guards');
+    assert.match(restCommands, /node scripts\/check-dark-mode\.mjs/, 'rest runs check-dark-mode');
+    assert.match(pkg['test:guards'], /node scripts\/check-folder-docs\.mjs/);
+    assert.match(pkg['test:guards'], /node scripts\/check-decision-ids\.mjs/);
+    const suite = jobsOf(ciSource).find(j => j.job === 'suite');
+    assert.ok(suite, 'ci.yml has the suite job');
+    assert.ok(suite.steps.some(st => /^npm\s+run\s+build\b/.test(String(st.run || '').trim())), 'every suite part builds the SPA');
+    assert.match(ciSource, /^    name: .*\|\| 'test:drift \(full suite\)'/m);
+    assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
+  };
+  ciCovers(ci, scripts);
+  assert.throws(() => ciCovers(ci.replace("'test:drift (full suite)'", "'incomplete suite'"), scripts));
+  assert.throws(() => ciCovers(ci, { ...scripts, 'test:guards': scripts['test:guards'].replace('node scripts/check-folder-docs.mjs && ', '') }));
+  assert.throws(() => ciCovers(ci, { ...scripts, 'test:drift': scripts['test:drift'].replace(' && node scripts/check-dark-mode.mjs', '') }));
+  assert.throws(() => ciCovers(ci.replace('name: Build the SPA\n        run: npm run build', 'name: Build the SPA\n        run: true'), scripts));
   for (const [workflow, contracts] of [
     ['form-lightbox-contracts.yml', ['add_lightbox_d695.test.mjs', 'lightbox_d685.test.mjs']],
     ['record-page-contracts.yml', ['record_page_d696.test.mjs', 'persona_pdf_d696.test.mjs']],
   ]) {
     const source = REAL.find(([file]) => file === workflow)[1];
-    const check = (contractSource, ciSource) => {
+    const check = (contractSource) => {
       const job = jobsOf(contractSource).find(j => j.job === 'contracts');
       assert.ok(job, workflow);
       const commands = job.steps.map(s => s.run).join('\n');
       for (const file of contracts) assert.ok(commands.includes(file), `${workflow}: ${file}`);
       assert.deepEqual(ungenerated([[workflow, contractSource]]), []);
-      assert.match(commands, /check-folder-docs\.mjs/);
-      assert.match(commands, /check-decision-ids\.mjs/);
-      assert.match(commands, /check-dark-mode\.mjs/);
-      assert.match(commands, /npm\s+run\s+build\b/);
+      assert.doesNotMatch(commands, /check-folder-docs\.mjs|check-decision-ids\.mjs|check-dark-mode\.mjs/, `${workflow}: the guards are ci.yml's (#6461)`);
+      assert.doesNotMatch(commands, /npm\s+run\s+build\b/, `${workflow}: the SPA build is ci.yml's (#6461)`);
       assert.doesNotMatch(commands, /npm\s+run\s+test:drift\b/, 'the serial duplicate suite times out; required sharded coverage stays in CI');
-      assert.match(ciSource, /^    name: .*\|\| 'test:drift \(full suite\)'/m);
-      assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
     };
-    check(source, ci);
-    assert.throws(() => check(`${source}      - run: npm run test:drift\n`, ci));
-    assert.throws(() => check(source.replace(`frontend/test/${contracts[0]}`, ''), ci));
-    for (const command of ['check-folder-docs', 'check-decision-ids', 'check-dark-mode']) {
-      assert.throws(() => check(source.replace(`node scripts/${command}.mjs`, 'true'), ci));
-    }
-    assert.throws(() => check(source.replace('run: npm run build', 'run: true'), ci));
-    assert.throws(() => check(source, ci.replace("'test:drift (full suite)'", "'incomplete suite'")));
+    check(source);
+    assert.throws(() => check(`${source}      - run: npm run test:drift\n`));
+    assert.throws(() => check(source.replace(`frontend/test/${contracts[0]}`, '')));
+    assert.throws(() => check(`${source}      - run: node scripts/check-dark-mode.mjs\n`));
+    assert.throws(() => check(`${source}      - run: npm run build\n`));
   }
 });
+

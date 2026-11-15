@@ -173,7 +173,8 @@ for (const cycle of Object.keys(READS)) {
     const index = between(out, 'data-testid="phone-index"', 'data-testid="phone-also-in"');
     assert.ok(renderedText(index).startsWith(`Everything else in ${NAMES[cycle]}`));
     const keys = [...index.matchAll(/data-testid="phone-index-([a-z-]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(keys, raw.index.map((r) => r.key));
+    // D4602 (#4602, BD2): Build's index opens with its Build Plan row, then the Worker's rows as sent.
+    assert.deepEqual(keys, [...(cycle === 'build' ? ['build-plan'] : []), ...raw.index.map((r) => r.key)]);
     assert.equal((renderedText(index).match(/Not recorded/g) || []).length, raw.index.filter((r) => r.value == null).length);
     for (const r of raw.index) assert.ok(tag(out, `phone-index-${r.key}`).includes(`href="${r.href}"`), r.key);
     // "Also in <Cycle>", only where the map lists pages.
@@ -333,7 +334,8 @@ test('5: "Set a target" on the root: a zero is never sent, the refusal in the Wo
   let changed = 0;
   let refuse = null;
   const api2 = { setInterviewsTarget: async (pid, v) => { calls.push([pid, v]); if (refuse) throw new Error(refuse); return { ok: true }; } };
-  const raw = { ...READS.validate, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
+  // #5999: a writer, as the Worker's read now says (`can_write`).
+  const raw = { ...READS.validate, can_write: true, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
   const m = await mount({ cycle: 'validate', raw, projectId: 3, api: api2, onChanged: () => { changed += 1; } });
   try {
     assert.ok(m.text().includes('Set a target'));

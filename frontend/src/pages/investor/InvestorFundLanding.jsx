@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CircleAlert, FileText, LockKeyhole, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
 import { WorkerRail } from '../../ui';
@@ -9,9 +9,9 @@ import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
+import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
-const dollarsToCents = (value) => Math.round((Number(value) || 0) * 100);
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
@@ -74,6 +74,9 @@ function FundDetail({ fund }) {
   useEffect(() => { load(); }, [load]);
 
   const unfunded = Math.max(0, Number(fund.committed_cents || 0) - Number(fund.called_cents || 0));
+  // #6232: Called and Collected are two facts; a zone link opens that zone on this fund.
+  const collected = collectedLine(fund);
+  const zone = (path) => fundZoneHref(path, fund.id);
   const lpRows = Array.isArray(detail.lps) ? detail.lps : [];
   return (
     <>
@@ -85,6 +88,7 @@ function FundDetail({ fund }) {
         </div>
         <dl className="i6-summary-stats">
           <div><dt>Called</dt><dd>{fmtCents(fund.called_cents)}</dd></div>
+          <div><dt>Collected</dt><dd data-testid="text-fund-collected">{collected.value ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</dd></div>
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
           <div><dt>RVPI · on NAV</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
@@ -94,34 +98,35 @@ function FundDetail({ fund }) {
 
       <div className="i6-grid">
         <section className="i6-card i6-registry" id="lps">
-          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to="/funds/lps" data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to={zone('/funds/lps')} data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
           {detail.lps === null ? <div className="i6-skeleton" /> : unread(detail.lps) ? <Unreadable what="The LP register" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
-            <table><thead><tr><th>LP</th><th className="right">Committed</th><th>KYC / LPA</th></tr></thead><tbody>
-              {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{fmtCents(dollarsToCents(lp.commitment_amount))}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
+            <table><thead><tr><th>LP</th><th className="right">Committed</th><th>LPA</th></tr></thead><tbody>
+              {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{lpCommitmentText(lp) ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
             </tbody></table>
           )}
           <p className="i6-footnote">Each LP record is the source for its commitment and capital-account movements.</p>
         </section>
 
         <section className="i6-card i6-movements" id="movements">
-          <header><div><h2>Capital calls &amp; distributions</h2><span>Recorded notices and payment status</span></div><Link to="/funds/calls" data-testid="link-fund-calls"><ArrowUpRight size={15} /></Link></header>
-          <div className="i6-manual"><span>Schedule basis</span><p>Each call's lines, receipts and wire trail are in the capital-call ledger, where a call is issued and a receipt recorded. This overview does not draft or send notices.</p><Link to="/funds/calls" data-testid="link-review-call-ledger">Open capital-call ledger</Link></div>
+          <header><div><h2>Capital calls &amp; distributions</h2><span>Recorded notices and payment status</span></div><Link to={zone('/funds/calls')} data-testid="link-fund-calls"><ArrowUpRight size={15} /></Link></header>
+          <div className="i6-manual"><span>Schedule basis</span><p>Each call's lines, receipts and wire trail are in the capital-call ledger, where a call is issued and a receipt recorded. This overview does not draft or send notices.</p><Link to={zone('/funds/calls')} data-testid="link-review-call-ledger">Open capital-call ledger</Link></div>
           {detail.calls === null ? <div className="i6-skeleton" /> : unread(detail.calls) ? <Unreadable what="The capital-call ledger" /> : detail.calls.length === 0 ? <p className="i6-empty">No capital call notices on record for this fund.</p> : <ul className="i6-call-list">
             {detail.calls.slice(0, 5).map((call) => <li key={call.id}><strong>{fmtCents(Math.round(callDollars(call) * 100))}</strong><span>{date(call.due_date || call.created_at)}</span><em className={`i6-${call.status === 'paid' ? 'ok' : 'alert'}`}>{titleCase(call.status || 'pending')}</em></li>)}
           </ul>}
-          <p className="i6-footnote">Distribution execution remains in the detailed fund-administration tool.</p>
+          <p className="i6-footnote" data-testid="text-distributions-today">{DISTRIBUTIONS_TODAY}</p>
         </section>
 
         <section className="i6-card i6-accounting" id="accounting">
-          <header><div><h2>Fund accounting</h2><span>Contracted terms and capital accounts</span></div><Link to="/funds/ledger" data-testid="link-fund-ledger"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>Fund accounting</h2><span>Contracted terms and capital accounts</span></div><Link to={zone('/funds/ledger')} data-testid="link-fund-ledger"><ArrowUpRight size={15} /></Link></header>
           <div className="i6-manual"><span>Ledger basis</span><p>Capital accounts and contracted terms are recorded here. Axal offers no period close, reconciliation or journal export.</p></div>
           <dl className="i6-ledger">
-            <div><dt>Commitments</dt><dd>{fmtCents(fund.committed_cents)}</dd></div><div><dt>Contributed</dt><dd>{fmtCents(fund.called_cents)}</dd></div><div><dt>Unfunded</dt><dd>{fmtCents(unfunded)}</dd></div><div><dt>Distributed</dt><dd>{fmtCents(fund.distributed_cents)}</dd></div><div><dt>Management fee</dt><dd>{fmtRate(fund.management_fee) || <Unrecorded />}</dd></div><div><dt>Accrued expenses</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
+            <div><dt>Commitments</dt><dd>{fmtCents(fund.committed_cents)}</dd></div><div><dt>Called</dt><dd>{fmtCents(fund.called_cents)}</dd></div><div><dt>Collected</dt><dd>{collected.value ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</dd></div><div><dt>Unfunded</dt><dd>{fmtCents(unfunded)}</dd></div><div><dt>Distributed</dt><dd>{fmtCents(fund.distributed_cents)}</dd></div><div><dt>Management fee</dt><dd>{fmtRate(fund.management_fee) || <Unrecorded />}</dd></div><div><dt>Accrued expenses</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
           </dl>
+          {collected.reason && <p className="i6-footnote" data-testid="text-collected-reason">Collected: {NOT_RECORDED}. {collected.reason}</p>}
         </section>
 
         <section className="i6-card i6-reporting" id="reporting">
-          <header><div><h2>LP reporting</h2><span>{detail.periods === null ? 'Checking issued periods' : unread(detail.periods) ? 'Issued periods unavailable' : `${detail.periods.length} period${detail.periods.length === 1 ? '' : 's'} on record`}</span></div><Link to="/funds/reporting" data-testid="link-fund-reporting"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP reporting</h2><span>{detail.periods === null ? 'Checking issued periods' : unread(detail.periods) ? 'Issued periods unavailable' : `${detail.periods.length} period${detail.periods.length === 1 ? '' : 's'} on record`}</span></div><Link to={zone('/funds/reporting')} data-testid="link-fund-reporting"><ArrowUpRight size={15} /></Link></header>
           <div className="i6-manual"><span>Report control</span><p>This landing page never represents a draft as delivered.</p></div>
           {unread(detail.periods) && <Unreadable what="The reporting archive" />}
           {Array.isArray(detail.periods) && detail.periods.length > 0 && <ul className="i6-periods">{detail.periods.slice(0, 3).map((period) => <li key={period.id || period.period}><FileText size={13} />{period.period || period.label || `Period ${period.id}`}<span>{period.issued_at ? `Issued ${date(period.issued_at)}` : 'Draft'}</span></li>)}</ul>}
@@ -145,7 +150,7 @@ function EmptyFundDetail() {
             <div key={label}><dt>{label}</dt><dd><Unrecorded /></dd></div>
           ))}
         </dl>
-        <p>Create a fund record in fund administration to connect commitments, LP records, capital movements, and reporting periods.</p>
+        <p data-testid="text-no-fund-today">{NO_FUND_TODAY}</p>
       </section>
       <div className="i6-grid">
         {[
@@ -169,7 +174,11 @@ function EmptyFundDetail() {
 
 export default function InvestorFundLanding({ fundUnlocked, embedded = false }) {
   const { items, loading, error, reload } = useFundAnalytics();
-  const [fundId, setFundId] = useState('');
+  // #6232: `?fund=` chooses the fund on load, and choosing one writes it back, so a
+  // reload, a shared link and the zone row all keep it.
+  const [params, setParams] = useSearchParams();
+  const fundId = params.get('fund') || '';
+  const setFundId = (id) => { const next = new URLSearchParams(params); next.set('fund', String(id)); setParams(next, { replace: true }); };
   const [detailKey, setDetailKey] = useState(0);
   const bucket = bucketForPath('investor', '/funds');
   const active = useMemo(() => items.find((fund) => String(fund.id) === String(fundId)) || items[0], [fundId, items]);
@@ -219,7 +228,7 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
               /funds/calls, /funds/ledger or /funds/reporting, which were
               therefore reachable from no control in the product. ZoneNav is
               the component that exists so this cannot be hand-rolled again. */}
-          <ZoneNav bucket={bucket} role="investor" activeSlug={null} className="mt-3" />
+          <ZoneNav bucket={bucket} role="investor" activeSlug={null} className="mt-3" carry={active?.id != null ? { fund: active.id } : null} />
         </header>
         {body}
       </div>
