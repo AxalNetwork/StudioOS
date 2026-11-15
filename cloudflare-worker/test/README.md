@@ -53,6 +53,12 @@ withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in the
 admin where the record is a member's, a support session, a disabled party and no credentials are refused, with nothing
 named, no row changed, no reveal recorded and no charge or detach sent; the rightful party then gets each answer.
 
+`authz_venture_scores_d4570.test.ts` (#4570, D4570 part 8) asks the six venture-scorecard routes (the full read,
+sharing, trajectory, the investor's deal read, corrections and recompute) through the mounted router on the full
+schema. Another venture's founder, an advisor with no share or a share switched off, a removed co-founder, a roster
+advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
+the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
