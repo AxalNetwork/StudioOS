@@ -46,7 +46,7 @@ test('fast runs the guards before installing dependencies on a single full-histo
   for (const id of ['audit-frontend', 'audit-worker', 'audit-python', 'routing-docs', 'lfs-gate']) {
     assert.ok(!workflow.split('\n').includes(`  ${id}:`), `${id} was folded into fast`);
   }
-  assert.match(job('gate'), /^    name: ['"]?test:drift \(full suite\)['"]?$/m);
+  assert.ok(job('gate').includes("&& 'test:drift (draft fast tier)' || 'test:drift (full suite)'"));
 });
 
 const verdict = shell(fast, 'Report required and advisory results');
