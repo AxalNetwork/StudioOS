@@ -18,7 +18,7 @@ name: CHANGELOG gate
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
 
 permissions:
   contents: read
@@ -30,6 +30,8 @@ concurrency:
 jobs:
   gate:
     name: CHANGELOG.md untouched
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     # Full history (fetch-depth: 0 below) so the gate can find the merge base.
     # That checkout has exceeded this job's old 5-minute limit before the gate
