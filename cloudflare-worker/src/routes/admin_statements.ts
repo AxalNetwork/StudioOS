@@ -30,6 +30,7 @@
  * and re-drawing it under a re-termed revenue share would silently restate
  * what a subsidiary was told it owed. So a re-draw refuses past `draft`.
  */
+import { promoIssuedState, type LatestReport } from '../services/promoIssuedReport';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
@@ -621,20 +622,38 @@ r.get('/promo-ceilings', async (c) => {
     try {
       const q = await c.env.DB.prepare(
         `SELECT p.licence_uid, p.period, p.ceiling_cents, p.currency, p.issued_cents,
-                p.issued_reported_at, p.pushed_at, p.updated_at,
+                p.spent_cents, p.issued_currency, p.issued_reported_at, p.pushed_at, p.updated_at,
                 l.licence_ref, l.brand_name
            FROM licence_promo_ceilings p
            LEFT JOIN territory_licences l ON l.uid = p.licence_uid
           ORDER BY p.period DESC, p.licence_uid`,
       ).all<any>();
-      rows = (q.results || []).map((x) => ({
-        ...x,
+      // D5949: the branch's latest report per licence, read alone. If it fails,
+      // a row with a figure keeps it; a row without one says "unreadable".
+      let latest: Map<string, LatestReport> | 'unreadable';
+      try {
+        const reps = await c.env.DB.prepare(
+          'SELECT licence_uid, period, currency, reported_at, outcome FROM licence_promo_issued_reports',
+        ).all<LatestReport & { licence_uid: string }>();
+        latest = new Map((reps.results || []).map((r) => [r.licence_uid, r]));
+      } catch { latest = 'unreadable'; }
+      const now = new Date();
+      rows = (q.results || []).map((x) => {
+        const facts = latest === 'unreadable' ? 'unreadable' as const : latest.get(x.licence_uid);
+        const { state, reason } = promoIssuedState(x, facts, now);
         // `issued_cents` NULL means the branch has not told us, which is not
         // the same as zero issued — a null remaining would otherwise render
-        // as the whole ceiling being available.
-        remaining_cents: x.issued_cents === null ? null : Math.max(0, x.ceiling_cents - x.issued_cents),
-        issued_available: x.issued_cents !== null,
-      }));
+        // as the whole ceiling being available. D5949: a figure in another
+        // currency is not subtracted from this ceiling either.
+        const usable = state === 'reported' || state === 'stale';
+        return {
+          ...x,
+          remaining_cents: usable ? Math.max(0, x.ceiling_cents - x.issued_cents) : null,
+          issued_available: usable,
+          issued_state: state,
+          issued_state_reason: reason,
+        };
+      });
     } catch { available = false; }
 
     return c.json({
