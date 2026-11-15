@@ -57,7 +57,8 @@ test('the page reads licence, tab and kind from the URL, and writes them back', 
   assert.match(PAGE, /const wanted = params\.get\('licence'\);/);
   assert.match(PAGE, /tabFromParam\(params\.get\('tab'\), open\?\.kind\)\.key/);
   assert.match(PAGE, /tab=\{tab\} onTab=\{\(t\) => setParam\(\{ tab: t === DEFAULT_TAB \? null : t \}\)\}/);
-  assert.match(PAGE, /const step = stepOfTab\(tab\);/);
+  // D4819 part 20: a phone reads a terms editor's tab as the read-only Terms (`phoneStep`); the tab is still the URL's.
+  assert.match(PAGE, /const step = phone \? phoneStep\(stepOfTab\(tab\)\) : stepOfTab\(tab\);/);
   assert.doesNotMatch(PAGE, /const \[step, setStep\] = useState\(1\);/, 'the tab is not local state any more');
 });
 
@@ -101,7 +102,9 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
   assert.match(PAGE, /role="tablist" aria-label="Licence sections"/);
   assert.match(PAGE, /role="tab"\s+aria-selected=\{step === t\.step\} aria-controls="licence-tabpanel" tabIndex=\{step === t\.step \? 0 : -1\}/);
   assert.match(PAGE, /role="tabpanel" id="licence-tabpanel"/);
-  assert.match(PAGE, /overflow-x-auto whitespace-nowrap/, 'a narrow screen scrolls the tab row rather than wrapping it');
+  assert.match(PAGE, /md:overflow-x-auto md:whitespace-nowrap/, 'from md up, a narrow window scrolls the tab row rather than wrapping it');
+  // D4819 part 20 (L20): below md the six sections are a 3 × 2 grid, so the row never scrolls the page sideways.
+  assert.match(PAGE, /data-testid="licence-tabs"\s+className="mt-6 grid grid-cols-3 /, 'a phone draws the sections as a grid');
   assert.match(PAGE, /aria-pressed=\{kindFilter === id\}/);
   assert.match(PAGE, /aria-pressed=\{form\.kind === id\}/);
   // D4819: the ledger and the open licence are two views now, so the licence
