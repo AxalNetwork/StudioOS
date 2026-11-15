@@ -7,8 +7,8 @@
  * part may run its failed files once more.
  *
  * A test is flaky here when it failed in merge-queue runs on PRs that did not
- * touch its file, intermittently: the same commit later passed it, or a run
- * succeeded between two of its failures. A red main is not a flake. A retry never hides a failure: the runner writes every
+ * touch its file, intermittently: the same commit later passed it, or it failed
+ * on two days with a green run between. A one-day burst is not a flake. A retry never hides a failure: the runner writes every
  * retried test to the job summary, and a test that is not on the list, or
  * whose file the entry itself changed, is never retried.
  */
@@ -76,11 +76,14 @@ export function queuePr(branch) {
  * A failure counts only when its file is not one the PR changed and main
  * passed within MAIN_WINDOW_MS after it, or the same commit later passed. A
  * test is flaky only when it is intermittent: the same commit failed and then
- * passed it, or a run succeeded BETWEEN two of its failures. A test that fails
- * in every run until a fix lands (a red main, D5398) has no green run between
- * its failures, so it is not flaky, however often it failed.
+ * passed it, or it failed on two different days with a run succeeding between
+ * them. A red main (D5398), or an entry ahead in the queue that broke the test
+ * for the entries behind it, leaves a one-day burst that the same code repeats
+ * every time: not a flake, however often it failed.
  * Returns [{ file, test, runs: [id], firstSeen, lastSeen }].
  */
+const day = (iso) => String(iso).slice(0, 10);
+
 export function classify(runs, greens) {
   const byKey = new Map();
   for (const run of runs) {
@@ -100,13 +103,15 @@ export function classify(runs, greens) {
       byKey.set(key, row);
     }
   }
+  // Without a same-commit pass, the failures must span two days with a green run between them. A one-day burst
+  // is a queue episode: an entry ahead in the group broke the test for the entries behind it (or main was red),
+  // and the same code fails the same way every time, so a retry could never turn it green.
   const intermittent = (row) => row.rerunPassed
-    || greens.some((g) => Date.parse(g.at) > Date.parse(row.firstSeen) && Date.parse(g.at) < Date.parse(row.lastSeen));
+    || (day(row.firstSeen) !== day(row.lastSeen)
+      && greens.some((g) => Date.parse(g.at) > Date.parse(row.firstSeen) && Date.parse(g.at) < Date.parse(row.lastSeen)));
   return [...byKey.values()].filter(intermittent).map(({ rerunPassed, ...row }) => row)
     .sort((a, b) => b.runs.length - a.runs.length || a.file.localeCompare(b.file) || a.test.localeCompare(b.test));
 }
-
-const day = (iso) => String(iso).slice(0, 10);
 
 /**
  * The next list: existing entries updated with what was found, new tests that

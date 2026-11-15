@@ -95,18 +95,26 @@ async function collect(days) {
   return { runs, greens, failedCount: failed.length };
 }
 
-/** Each failed test across the runs: in how many, how many were its PR's own file, and how many had no later pass. */
+/**
+ * Each failed test across the runs, before the rules: in how many runs, how
+ * many were its PR's own file, how many had a same-commit pass or a main pass
+ * within a day, the days it failed on, and whether it was listed (`counted`).
+ */
 function explain(runs, greens, found) {
   const rows = new Map();
-  const listedRuns = new Map(found.map((f) => [`${f.file}\u0000${f.test}`, f.runs.length]));
+  const listed = new Map(found.map((f) => [`${f.file}\u0000${f.test}`, f.runs.length]));
   for (const run of runs) {
-    const passed = classify([{ ...run, failures: [{ file: '_', test: '_' }], changedFiles: [] }], greens).length > 0;
+    const at = Date.parse(run.at);
+    const sameCommit = greens.some((g) => g.sha === run.sha && Date.parse(g.at) >= at);
+    const mainSoon = greens.some((g) => g.event === 'push' && Date.parse(g.at) >= at && Date.parse(g.at) - at <= 86400_000);
     for (const f of run.failures) {
       const key = `${f.file}\u0000${f.test}`;
-      const row = rows.get(key) || { file: f.file, test: f.test, runs: 0, ownFile: 0, noLaterPass: 0, counted: listedRuns.get(key) || 0 };
+      const row = rows.get(key) || { file: f.file, test: f.test, runs: 0, ownFile: 0, sameCommitPassed: 0, mainPassedWithinDay: 0, days: [], counted: listed.get(key) || 0 };
       row.runs += 1;
       if ((run.changedFiles || []).includes(f.file)) row.ownFile += 1;
-      else if (!passed) row.noLaterPass += 1;
+      if (sameCommit) row.sameCommitPassed += 1;
+      if (mainSoon) row.mainPassedWithinDay += 1;
+      if (!row.days.includes(run.at.slice(0, 10))) row.days.push(run.at.slice(0, 10));
       rows.set(key, row);
     }
   }

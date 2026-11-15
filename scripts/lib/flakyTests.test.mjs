@@ -44,9 +44,9 @@ test('D6464: a job log yields each failed test with its file, once', () => {
 });
 
 test('D6464: a test failing on its own PR\'s changed file is never classed flaky', () => {
-  const greens = [{ sha: 'g1', at: '2026-11-14T10:15:00Z', event: 'merge_group' }, { sha: 'm1', at: '2026-11-14T11:00:00Z', event: 'push' }];
+  const greens = [{ sha: 'g1', at: '2026-11-13T20:00:00Z', event: 'push' }, { sha: 'm1', at: '2026-11-14T11:00:00Z', event: 'push' }];
   const runs = [
-    { id: 1, sha: 's1', at: '2026-11-14T10:00:00Z', failures: [A, B], changedFiles: [B.file] },
+    { id: 1, sha: 's1', at: '2026-11-13T10:00:00Z', failures: [A, B], changedFiles: [B.file] },
     { id: 2, sha: 's2', at: '2026-11-14T10:30:00Z', failures: [A], changedFiles: [] },
   ];
   assert.deepEqual(classify(runs, greens).map((r) => [r.file, r.test, r.runs]), [[A.file, A.test, [1, 2]]]);
@@ -57,9 +57,12 @@ test('D6464: flaky means intermittent: the same commit passed it later, or a run
   const main = (at) => ({ sha: `m-${at}`, at, event: 'push' });
   // The same commit failed, then passed on a later attempt.
   assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z')], [{ sha: 's1', at: '2026-11-14T10:20:00Z', event: 'merge_group' }]).length, 1);
-  // Two failures with a green run between them, and main green after.
+  // Failures on two days with a green run between them, and main green after.
+  assert.equal(classify([run(1, 's1', '2026-11-13T10:00:00Z'), run(2, 's2', '2026-11-14T12:00:00Z')],
+    [main('2026-11-13T20:00:00Z'), main('2026-11-14T13:00:00Z')]).length, 1);
+  // The same green between two failures on ONE day is a queue episode: an entry ahead broke it for those behind.
   assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z'), run(2, 's2', '2026-11-14T12:00:00Z')],
-    [{ sha: 'g', at: '2026-11-14T11:00:00Z', event: 'merge_group' }, main('2026-11-14T13:00:00Z')]).length, 1);
+    [{ sha: 'g', at: '2026-11-14T11:00:00Z', event: 'merge_group' }, main('2026-11-14T13:00:00Z')]).length, 0);
   // A red main (D5398): every entry fails until the repair, then main passes. Nothing passed between the failures.
   const red = [1, 2, 3, 4, 5].map((i) => run(i, `s${i}`, `2026-11-14T1${i}:00:00Z`));
   assert.equal(classify(red, [main('2026-11-14T16:30:00Z'), { sha: 'g', at: '2026-11-14T16:40:00Z', event: 'merge_group' }]).length, 0);
