@@ -341,3 +341,5 @@ catalogue version only in the fixture.
 | `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
 `investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+
+| `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |

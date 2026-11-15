@@ -333,3 +333,7 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
+
+| `file-recovery.py` | D6428: approved-class-only, lock-verified R2 snapshots and suppression-required restore primitive; live activation waits for counsel/#6650/#6654. |
+| `file-recovery-drill.py` | D6428: synthetic-only archive/source-loss/restore/suppression drill, with no provider access. |
+| `file_recovery_6428_test.py` | D6428: synthetic registry, lock duration, archive immutability, corruption, copy failure and suppression regressions. |
