@@ -173,7 +173,8 @@ for (const cycle of Object.keys(READS)) {
     const index = between(out, 'data-testid="phone-index"', 'data-testid="phone-also-in"');
     assert.ok(renderedText(index).startsWith(`Everything else in ${NAMES[cycle]}`));
     const keys = [...index.matchAll(/data-testid="phone-index-([a-z-]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(keys, raw.index.map((r) => r.key));
+    // D4602 (#4602, BD2): Build's index opens with its Build Plan row, then the Worker's rows as sent.
+    assert.deepEqual(keys, [...(cycle === 'build' ? ['build-plan'] : []), ...raw.index.map((r) => r.key)]);
     assert.equal((renderedText(index).match(/Not recorded/g) || []).length, raw.index.filter((r) => r.value == null).length);
     for (const r of raw.index) assert.ok(tag(out, `phone-index-${r.key}`).includes(`href="${r.href}"`), r.key);
     // "Also in <Cycle>", only where the map lists pages.

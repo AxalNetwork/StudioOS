@@ -192,7 +192,7 @@ export default function DealRoomPage() {
       {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
       {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
-      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}
+      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} role={role} />}
       {tab === 'team' && <DealTeam deal={deal} />}
       {tab === 'market' && <DealMarket deal={deal} />}
       {tab === 'traction' && <DealTraction deal={deal} />}

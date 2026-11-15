@@ -189,6 +189,13 @@ async function roadmapItems(env: Env, projectId: number): Promise<Array<{ value:
   return (res.results || []).map((r) => ({ value: String(r.id), label: String(r.objective).slice(0, 200) }));
 }
 
+/**
+ * D6097 (#6097): Build's Add item with Answers feedback theme chosen (`forms.js` `buildItem.fromQuery`).
+ * Saving it links the theme's open rows that have no roadmap item yet (`buildCreates.ts` `feedbackLink`).
+ */
+export const addToRoadmapHref = (projectId: number, theme: string) =>
+  `/build/product-roadmap/new?project_id=${projectId}&feedback_theme=${encodeURIComponent(theme)}`;
+
 const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship'] as const;
 
 const productImprovement = spec('product_feedback', 'product-improvement', GROW_OLD_ROWS['product-improvement'], async (rc, id) => {
@@ -218,11 +225,12 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
 }, [
   section('theme', 'Theme', async (_rc, _id, record) => {
     const { f, byStatus } = loadedOf(record);
-    if (!f?.theme) return { rows: [], empty: 'No theme yet.', action: 'change-theme' };
+    // D6097: Add to roadmap answers a theme, so a row with none has no Add to roadmap; the sentence says why.
+    if (!f?.theme) return { rows: [], empty: 'No theme yet. Add to roadmap needs a theme.', action: 'change-theme' };
     const n = [...(byStatus as Map<string, number>).values()].reduce((a, b) => a + b, 0);
     const status = themeStatus(byStatus);
-    // No impact store, so the row never says "High impact" (decision 10).
-    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status] }], action: 'change-theme' };
+    // No impact store, so the row never says "High impact" (decision 10). The route strips the row's action for a reader.
+    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status], action: 'add-to-roadmap' }], action: 'change-theme' };
   }),
   section('closing-the-loop', 'Closing the loop', async (_rc, _id, record) => {
     const { f } = loadedOf(record);
@@ -265,6 +273,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       return { ok: true, record: await setFeedbackTheme(c.env, c.projectId, uid, next, Number(c.user.id)) };
     }),
   }];
+  // D6097: the theme's Add item in Build. Actions reach writers only (`cycle_records.ts`), so a reader never sees it.
+  if (f.theme) actions.push({ key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: addToRoadmapHref(rc.projectId, String(f.theme)) });
   if (Number(f.notify_on_ship) === 1 && f.status === 'shipped' && !f.told_at) {
     actions.push({
       key: 'mark-told', label: 'Mark told', kind: 'form',

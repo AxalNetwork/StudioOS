@@ -109,11 +109,10 @@ written in one minute: wait a minute and re-stamp the file that is not yet on
 
 **Stacked PRs carry their base's file.** The advisory overlap bot
 (`.github/workflows/pr-overlap.yml`, hourly, comment marker
-`<!-- studioos-pr-overlap:v1 -->`) reported "shared new migration stamp:
-202611140007" between #5855 and #5822 because #5855 is stacked on #5822 and
-carries the same file, `202611140007_5581_work_graph_revisions.sql`. Same
-path, same bytes: expected. A different file with your stamp and issue is a
-collision: re-stamp yours.
+`<!-- studioos-pr-overlap:v1 -->`) reports "shared new migration stamp:
+<stamp>" between a PR and the PR it is stacked on, because both carry the
+same file. Same path, same bytes: expected. A different file with your
+stamp and issue is a collision: re-stamp yours.
 
 **Applied migrations are immutable (D269).** A file on `main` is never
 edited, deleted or renamed. `scripts/migration-immutability-gate.mjs` fails

@@ -5,11 +5,11 @@ description: Add a Worker API route and its frontend client method to StudioOS b
 
 # Add a Worker endpoint
 
-Most recent red CI on endpoint PRs came from house rules, not logic:
+Most red CI on endpoint PRs comes from house rules, not logic. Three failures to recognise:
 
-- **#5770** added four handlers to `routes/advisors.ts`. `frontend/test/hub_freeze_5615.test.mjs` failed: `"GET /me/profile-draft" is a new entry in a frozen hub (D5615)`.
-- **#5802** added a refusal code to the skills routes. `frontend/test/hq_ai_agents_4739.test.mjs` failed: `skill refusal code source_missing has no sentence`. That page keeps one sentence per code the Worker sends.
-- **#5792** changed expiry gates. `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts` failed: `expected 19 normalised comparisons across the gated files, found 24`.
+- A handler added to a frozen hub such as `routes/advisors.ts`: `frontend/test/hub_freeze_5615.test.mjs` fails with `"<METHOD> <path>" is a new entry in a frozen hub (D5615)`.
+- A new refusal code on a page that keeps one sentence per code the Worker sends: for the skills routes, `frontend/test/hq_ai_agents_4739.test.mjs` fails with `skill refusal code <code> has no sentence`.
+- A changed expiry gate: `cloudflare-worker/test/expiry_gate_datetime_d124.test.ts` fails with `expected <n> normalised comparisons across the gated files, found <m>`.
 
 This skill is the order of work that avoids those. `CLAUDE.md` § Rules for
 new work and `AGENTS.md` § House rules state the rules; they win where this
