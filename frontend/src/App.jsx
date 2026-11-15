@@ -2562,6 +2562,13 @@ function AppInner() {
       ? investorWorkspace('deals', <Component embedded />)
       : <Component />
   );
+  // D6160 (#6160): an investor's round calls list is a page of Deals, drawn in
+  // InvestorDealsRoutes' shell; a founder's `?project_id` list keeps RoundCallIndex.
+  const investorRoundCallList = () => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? <InvestorDealsRoutes />
+      : <RoundCallIndex />
+  );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
     : <TrustCenter />;
@@ -3671,7 +3678,7 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCall(RoundCallIndex))} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCallList())} />
       <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,

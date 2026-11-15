@@ -11,7 +11,7 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, projectRecord, roundContext, saveDraft, audience, saveAudience, notOnAxal, ventureMember, ventureReadinessRead,
-  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview, wordRoundTerms } from '../services/roundCalls';
+  founderPage, sendCall, investorPage, investorList, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview, wordRoundTerms } from '../services/roundCalls';
 
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
@@ -91,8 +91,8 @@ routes.get('/',async c=>{
     const user=await requireAuth(c);
     if(user.role==='investor') {
       if(!verifiedInvestor(user)) throw new RoundCallError('verified_investor_required',403);
-      const rows=await c.env.DB.prepare("SELECT rc.uid,rc.name,rc.instrument,rc.target_close,rc.state,rc.sent_at FROM round_calls rc JOIN round_call_recipients rr ON rr.call_id=rc.id WHERE rr.investor_user_id=? AND rc.state<>'draft' ORDER BY rc.sent_at DESC,rc.id DESC").bind(user.id).all();
-      return c.json({items:rows.results||[]});
+      // D6160 (#6160): company, terms, the state it reads as, and this investor's own response only.
+      return c.json(await investorList(c.env,user));
     }
     const {project}=await owner(c,id(c.req.query('project_id')),{members:true});
     const rows=await c.env.DB.prepare('SELECT uid,name,instrument,target_close,state,sent_at,created_at FROM round_calls WHERE project_id=? ORDER BY created_at DESC,id DESC').bind(project.id).all();
