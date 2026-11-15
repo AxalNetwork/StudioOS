@@ -146,7 +146,7 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   // A program has only the tabs it has today; one tab is no strip.
   assert.deepEqual(Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)])), {
     // D962 (#2795) adds Activity to these four; no page has a Terms tab.
-    'mentor-cohorts': ['Overview', 'How it runs', 'People', 'Activity'],
+    'mentor-cohorts': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Cohorts', 'History', 'Settings'],
     'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings', 'Activity'],
     // D5313 (#5313): Perks runs in the generic shell (PG03a): its six core sections and the Perk queue module.
     perks: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Perk queue', 'History', 'Settings'],

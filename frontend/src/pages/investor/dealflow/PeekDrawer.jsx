@@ -16,6 +16,7 @@ import VentureScorecard from '../../../components/scoring/scorecard/Scorecard';
 import { SCOPE_KEYS, SCOPE_LABEL, STAGE_WORD, enteredWord, moveTargets, stageWord } from './flowModel';
 import { AskCell, DaysCell, FitCell, ScopeCell } from './FlowCells';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
+import { passReasonLabel, passReturnWord } from '../../../lib/dealFlow.js';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -85,6 +86,9 @@ export default function PeekDrawer({ row, picked = [], onClose, onMove, onPass, 
             <dt className={MUTED}>Owner</dt><dd className="m-0">{row.owner?.name || (row.inFlow ? 'Unassigned' : 'Not on your deals')}</dd>
             <dt className={MUTED}>Entered via</dt><dd className="m-0">{row.inFlow ? enteredWord(row.enteredVia) : 'Not on your deals'}</dd>
             <dt className={MUTED}>Days in stage</dt><dd className="m-0"><DaysCell row={row} /></dd>
+            {/* D6148: a passed deal says why, and when it comes back. */}
+            {row.stage === 'passed' && <><dt className={MUTED}>Passed for</dt><dd className="m-0">{passReasonLabel(row.pass?.reason)}</dd></>}
+            {row.stage === 'passed' && <><dt className={MUTED}>Comes back</dt><dd className="m-0" data-testid="dealflow-peek-return">{passReturnWord(row.pass) || 'Not recorded'}</dd></>}
           </dl>
           <p className={MUTED}>Valuation cap, minimum check, closing deadline and what is committed so far are on the deal page.</p>
         </section>

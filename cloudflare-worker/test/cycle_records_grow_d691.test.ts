@@ -33,6 +33,7 @@ import { GROW_OLD_ROWS } from '../src/services/records/grow.ts';
 import type { Store } from '../src/services/records/types.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleGrow from '../src/routes/cycle_grow.ts';
+import cycleBuild from '../src/routes/cycle_build.ts';
 import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -128,6 +129,7 @@ const envOf = (db: DatabaseSync, extra: Record<string, unknown> = {}) =>
 
 const app = new Hono<any>();
 app.route('/api/cycles/grow', cycleGrow);
+app.route('/api/cycles/build', cycleBuild);
 app.route('/api/cycles', createCycleRecords());
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
@@ -185,7 +187,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const fb = await rec(db, 'product-improvement', 'fba1');
   assert.equal(fb.body.title, '"Exports are slow"');
   assert.equal(fb.body.sub, 'Customer · Rui Tomas · 1 Sep');
-  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio' });
+  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio', action: 'add-to-roadmap' });
   assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Plan', 'Paid']]);
   assert.equal(sectionOf(fb, 'closing-the-loop').rows[0].c, 'Due');
   const partner = await rec(db, 'partner-network', 'pta1');
@@ -631,4 +633,61 @@ test('9: its apply writes the row PATCH /feedback/:uid writes, and refuses anoth
   // A theme that no longer exists, or a row themed meanwhile, is refused on accept.
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Gone', body: '' }, 'x'), /no longer exists/);
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Speed', body: '' }, 'x'), /already has a theme/);
+});
+
+// ---------------------------------------------------------------------------
+// D6097 (#6097): Add to roadmap, from a feedback record to Build's Add item
+// ---------------------------------------------------------------------------
+
+test('D6097: Add to roadmap links Build\'s Add item with the theme, for writers of a themed row only', async () => {
+  const db = fixture();
+  db.exec("UPDATE product_feedback SET theme = 'Speed & scale' WHERE uid IN ('fba1', 'fba2')");
+  const fb = await rec(db, 'product-improvement', 'fba1');
+  const add = fb.body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  assert.deepEqual({ key: add.key, label: add.label, kind: add.kind, href: add.href }, { key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: `/build/product-roadmap/new?project_id=${A}&feedback_theme=Speed%20%26%20scale` });
+  assert.equal(new URL(add.href, 'https://axal.test').searchParams.get('feedback_theme'), 'Speed & scale');
+  assert.equal(sectionOf(fb, 'theme').rows[0].action, 'add-to-roadmap', 'the Theme row draws it');
+  // An Open or Planned theme row is the record's next (`nextFor`); it now carries the step it names.
+  assert.deepEqual(fb.body.next, { text: 'Speed & scale · 2 items', action: 'add-to-roadmap' });
+  // The action answers with the address, as every link action does.
+  const run = await act(db, 'product-improvement', 'fba1', 'add-to-roadmap');
+  assert.equal(run.status, 200);
+  assert.deepEqual(run.body, { ok: true, open: { url: add.href } });
+  // A co-founder and an admin write, so they see it.
+  for (const who of [COFOUNDER, ADMIN]) assert.ok(actionKeys(await rec(db, 'product-improvement', 'fba1', { who })).includes('add-to-roadmap'), `user ${who}`);
+  // A reader (an advisor) sees neither the action nor the row's control, and cannot run it.
+  const adv = await rec(db, 'product-improvement', 'fba1', { who: ADVISOR });
+  assert.equal(actionKeys(adv).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(adv, 'theme').rows[0].action, undefined);
+  assert.deepEqual(adv.body.next, { text: 'Speed & scale · 2 items', action: null });
+  assert.equal((await act(db, 'product-improvement', 'fba1', 'add-to-roadmap', {}, { who: ADVISOR })).status, 403);
+  // A row with no theme has none, and the Theme section says why.
+  const none = await rec(db, 'product-improvement', 'fba3');
+  assert.equal(actionKeys(none).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(none, 'theme').empty, 'No theme yet. Add to roadmap needs a theme.');
+  assert.equal(sectionOf(none, 'theme').action, 'change-theme');
+  assert.equal((await act(db, 'product-improvement', 'fba3', 'add-to-roadmap')).status, 404);
+});
+
+test('D6097: saving the Add item it opens shows the item on the theme\'s open, unlinked rows', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme, status, roadmap_item_ref, roadmap_item_label, created_by) VALUES
+    ('fba4', ${A}, 'Bulk export', 'customer', 'Speed', 'open', '77', 'Earlier item', ${FOUNDER}),
+    ('fba5', ${A}, 'Cheaper plan', 'customer', 'Pricing', 'open', NULL, NULL, ${FOUNDER})`);
+  const add = (await rec(db, 'product-improvement', 'fba2')).body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  const target = new URL(add.href, 'https://axal.test');
+  assert.equal(target.pathname, '/build/product-roadmap/new');
+  // What Build's Add item sends with that theme chosen (`buildItem.toBody`).
+  const saved = await call(db, 'POST', `/api/cycles/build/roadmap?project=${target.searchParams.get('project_id')}`,
+    { body: { title: 'Faster exports', column: 'next', feedback_theme: target.searchParams.get('feedback_theme') } });
+  assert.equal(saved.status, 201, JSON.stringify(saved.body));
+  const item = (uid: string) => db.prepare('SELECT roadmap_item_ref AS ref, roadmap_item_label AS label FROM product_feedback WHERE uid = ?').get(uid) as any;
+  // fba2 is open and unlinked: linked. fba1 is shipped, fba4 already has an item, fba5 is another theme: unchanged.
+  assert.deepEqual({ ...item('fba2') }, { ref: String(saved.body.id), label: 'Faster exports' });
+  assert.deepEqual({ ...item('fba1') }, { ref: null, label: null });
+  assert.deepEqual({ ...item('fba4') }, { ref: '77', label: 'Earlier item' });
+  assert.deepEqual({ ...item('fba5') }, { ref: null, label: null });
+  const fact = (r: any) => r.body.facts.find((f: any) => f.label === 'Roadmap item');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba2')).value, 'Faster exports');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba1')).value, null);
 });

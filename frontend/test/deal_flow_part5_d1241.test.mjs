@@ -513,7 +513,8 @@ test('D4635: Studio scorecards are the scoring strip with its states; every thes
   const lens = readFileSync(new URL('../src/pages/investor/dealflow/StudioLens.jsx', import.meta.url), 'utf8');
   assert.match(lens, /ventureScoresApi\.batch\(lensIds\)/, 'the Studio lens reads the supported batch');
   assert.doesNotMatch(lens, /\{NOT_YET\}/, 'no longer a fixed "not yet" in every row');
+  assert.equal(THESIS_PATH, '/account/security-privacy?from=deal-flow#my-thesis');
   assert.equal(THESIS_PRIMARY.to, THESIS_PATH);
   const fit = renderToStaticMarkup(h(MemoryRouter, null, h(FitCell, { fit: { state: 'not_set' }, testId: 'f' })));
-  assert.match(fit, new RegExp(`href="${THESIS_PATH}"`), 'a Fit cell with no thesis opens the same thesis card');
+  assert.ok(fit.includes(`href="${THESIS_PATH}"`), 'a Fit cell with no thesis opens the same thesis card');
 });
