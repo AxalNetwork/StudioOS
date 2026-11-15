@@ -226,10 +226,11 @@ test('focused contract jobs retain generation and contracts; the required sharde
     const suite = jobsOf(ciSource).find(j => j.job === 'suite');
     assert.ok(suite, 'ci.yml has the suite job');
     assert.ok(suite.steps.some(st => /^npm\s+run\s+build\b/.test(String(st.run || '').trim())), 'every suite part builds the SPA');
-    assert.match(ciSource, /name: test:drift \(full suite\)/);
+    assert.match(ciSource, /^    name: .*\|\| 'test:drift \(full suite\)'/m);
     assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
   };
   ciCovers(ci, scripts);
+  assert.throws(() => ciCovers(ci.replace("'test:drift (full suite)'", "'incomplete suite'"), scripts));
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:guards': scripts['test:guards'].replace('node scripts/check-folder-docs.mjs && ', '') }));
   assert.throws(() => ciCovers(ci, { ...scripts, 'test:drift': scripts['test:drift'].replace(' && node scripts/check-dark-mode.mjs', '') }));
   assert.throws(() => ciCovers(ci.replace('name: Build the SPA\n        run: npm run build', 'name: Build the SPA\n        run: true'), scripts));
