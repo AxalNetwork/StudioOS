@@ -15,7 +15,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/tiktok_grow_5863.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { Hono } from 'hono';
@@ -36,7 +36,10 @@ const COMPANY = 70;
 const OPEN_ID = 'open-id-fixture-1';
 const M = 'cloudflare-worker/sql/migrations';
 const MIGRATION = readdirSync(M).find((f) => /^\d{12}_5863_tiktok_grow_facts\.sql$/.test(f))!;
-const TODAY = new Date().toISOString().slice(0, 10);
+// D5614: a fixed clock. The sync stamps today's snapshot from Date, so Date is mocked to one instant.
+const NOW = Date.UTC(2026, 10, 15, 10, 0, 0);
+const TODAY = '2026-11-15';
+mock.timers.enable({ apis: ['Date'], now: NOW });
 const ALL_SCOPES = ['user.info.basic', 'user.info.stats', 'video.list'];
 
 /** TikTok's Display API, as the client reads it. */
