@@ -138,5 +138,3 @@ and citations by number keep working.
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
-
-| [D5940](D5940.md) | Pipeline analytics periods and calculation basis |

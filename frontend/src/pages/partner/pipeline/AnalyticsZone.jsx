@@ -155,6 +155,7 @@ export default function PartnerPipelineAnalyticsZone() {
   const d = state.data;
   const windowLabel = WINDOWS[windowOf(view)];
   const p = d?.pipeline ? { ...d.pipeline, win_rate_pct: recordedRate(d.pipeline.win_rate_pct) } : null;
+  const medianCycleDays = p?.median_cycle_days;
   const f = d?.forecast || null;
   // How many open quotes the forecast is over (D4838): none is "nothing open to forecast", never $0.
   const forecastOpen = Array.isArray(f?.by_stage) ? f.by_stage.reduce((n, s) => n + (Number(s?.count) || 0), 0) : 0;
@@ -232,9 +233,9 @@ export default function PartnerPipelineAnalyticsZone() {
             <AnalyticsTile
               label="Median cycle"
               calculation="Middle elapsed time from the quote date to the decision date among decided quotes with both dates."
-              value={p?.median_cycle_days != null ? `${p.median_cycle_days} d` : ''}
-              nr={p?.median_cycle_days == null}
-              note={p?.median_cycle_days != null
+              value={medianCycleDays != null ? `${medianCycleDays} d` : ''}
+              nr={medianCycleDays == null}
+              note={medianCycleDays != null
                 ? `decided bids with both dates · exact sample count unavailable`
                 : 'no decided bid carries both dates'}
             />
@@ -282,7 +283,7 @@ export default function PartnerPipelineAnalyticsZone() {
             </div>
             {metric === 'cycle-time' ? (
               <div className="grid gap-2">
-                <p>{p.median_cycle_days == null ? 'No cycle time recorded' : `Median cycle: ${p.median_cycle_days} days`} · {windowLabel}.</p>
+                <p>{medianCycleDays == null ? 'No cycle time recorded' : `Median cycle: ${medianCycleDays} days`} · {windowLabel}.</p>
                 <p className="text-sm text-axal-muted">Quarterly cycle times are unavailable. The median uses decided quotes with both dates.</p>
               </div>
             ) : quarters.length === 0 ? (

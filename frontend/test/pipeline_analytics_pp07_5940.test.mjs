@@ -45,6 +45,12 @@ test('PP07 keeps the selected period when an older response arrives', async () =
     assert.match(words(host), /Won value.*\$1\.2K/);
     await act(async () => props(button('Cycle time')).onClick());
     assert.match(words(host), /Quarterly cycle times are unavailable/);
+    assert.match(words(host), /Median cycle: 8 days/);
+    await act(async () => props(button('Last quarter')).onClick());
+    assert.equal(props(button('Last quarter'))['aria-pressed'], true);
+    assert.doesNotMatch(words(host), /Median cycle: 8 days/);
+    await act(async () => pending.get('prev_quarter')({}));
+    assert.match(words(host), /No quotes to analyse yet/);
   } finally {
     await act(async () => root.unmount());
     api.quotesAnalytics = original;
