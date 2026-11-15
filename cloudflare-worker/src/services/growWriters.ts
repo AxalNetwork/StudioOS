@@ -23,8 +23,10 @@ import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 
 export class Refused extends Error {
-  status: number; sentence: string; field: string | null;
-  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.sentence = sentence; this.field = field; }
+  status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
+  constructor(status: number, sentence: string, field: string | null = null, extra: Record<string, unknown> | null = null) {
+    super(sentence); this.status = status; this.sentence = sentence; this.field = field; this.extra = extra;
+  }
 }
 
 type Body = Record<string, unknown>;
@@ -100,7 +102,7 @@ async function owned<T>(env: Env, sql: string, key: unknown, pid: number): Promi
   return row;
 }
 
-type Log = { module: GrowSlug | 'kpis'; entityId: string | number; action: string; summary: string };
+type Log = { module: GrowSlug | 'kpis'; entityId: string | number | null; action: string; summary: string };
 const MODULE_OF: Record<Log['module'], GrowSlug> = {
   'product-improvement': 'product-improvement', distribution: 'distribution', 'revenue-and-traction': 'revenue-and-traction',
   'team-expansion': 'team-expansion', 'partner-network': 'partner-network', 'market-expansion': 'market-expansion',
@@ -192,6 +194,69 @@ export async function setFeedbackTheme(
   ).bind(t, sourceProposalId, userId, nowIso(), row.id).run();
   await logGrowWrite(env, projectId, userId, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_theme_set', summary: t ? 'Theme set' : 'Theme cleared' });
   return { uid, theme: t };
+}
+
+/**
+ * D6098 (#6098): one theme's rows in one venture, by the theme's exact stored
+ * text (the writers store it trimmed and at most 80 characters, and every
+ * reader groups by that text). `roadmap_items` counts the roadmap items that
+ * answer the theme (`roadmap_okrs.feedback_theme`, written by buildCreates).
+ */
+export async function feedbackThemes(env: Env, pid: number): Promise<{ theme: string; feedback: number; roadmap_items: number }[]> {
+  const q = await env.DB.prepare(
+    `SELECT t.theme AS theme,
+            (SELECT COUNT(*) FROM product_feedback f WHERE f.project_id = ? AND f.theme = t.theme) AS feedback,
+            (SELECT COUNT(*) FROM roadmap_okrs o WHERE o.project_id = ? AND o.feedback_theme = t.theme) AS roadmap_items
+       FROM (SELECT DISTINCT theme FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND theme <> '') t
+      ORDER BY t.theme`,
+  ).bind(pid, pid, pid).all<{ theme: string; feedback: number; roadmap_items: number }>();
+  return (q.results || []).map((t) => ({ theme: String(t.theme), feedback: Number(t.feedback), roadmap_items: Number(t.roadmap_items) }));
+}
+
+const countOf = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * D6098 (#6098): rename one feedback theme, or merge it into another, in one
+ * venture. `from` is the theme as stored; `to` is the new name. When `to` is
+ * already a theme of the venture's feedback the write is a merge, and it
+ * needs `merge: true`; without it the answer is a 409 carrying the counts that
+ * would move, so the page can ask first. Every feedback row of `from` and
+ * every roadmap item that answers it change in one batch, with one activity
+ * row whose summary holds the counts and never the theme's words.
+ */
+export async function renameFeedbackTheme(
+  env: Env, pid: number, user: User, b: Body,
+): Promise<{ from: string; to: string; merged: boolean; feedback: number; roadmap_items: number }> {
+  const from = str(b.from, 80);
+  if (!from) throw new Refused(400, 'Name the theme to rename', 'from');
+  const to = str(b.to, 80);
+  if (!to) throw new Refused(400, 'A theme needs a name', 'to');
+  if (to === from) throw new Refused(400, 'The new name is the same as the old one', 'to');
+  const counts = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM product_feedback WHERE project_id = ? AND theme = ?) AS feedback,
+            (SELECT COUNT(*) FROM roadmap_okrs WHERE project_id = ? AND feedback_theme = ?) AS roadmap_items,
+            (SELECT COUNT(*) FROM product_feedback WHERE project_id = ? AND theme = ?) AS target`,
+  ).bind(pid, from, pid, from, pid, to).first<{ feedback: number; roadmap_items: number; target: number }>();
+  const feedback = Number(counts?.feedback ?? 0); const roadmapItems = Number(counts?.roadmap_items ?? 0);
+  if (feedback === 0) throw new Refused(404, 'No feedback has that theme', 'from');
+  const merged = Number(counts?.target ?? 0) > 0;
+  if (merged && b.merge !== true) {
+    throw new Refused(409,
+      `That theme already exists. Merging moves ${countOf(feedback, 'feedback row', 'feedback rows')} and ${countOf(roadmapItems, 'roadmap item', 'roadmap items')} into it`,
+      'to', { merge_needed: true, feedback, roadmap_items: roadmapItems });
+  }
+  const moved = `${countOf(feedback, 'feedback row', 'feedback rows')} and ${countOf(roadmapItems, 'roadmap item', 'roadmap items')}`;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE product_feedback SET theme = ?, updated_by = ?, updated_at = ? WHERE project_id = ? AND theme = ?')
+      .bind(to, user.id, nowIso(), pid, from),
+    env.DB.prepare('UPDATE roadmap_okrs SET feedback_theme = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ? AND feedback_theme = ?')
+      .bind(to, pid, from),
+    logCycleWriteStatement(env, entry(pid, user.id, {
+      module: 'product-improvement', entityId: null, action: merged ? 'grow_feedback_theme_merged' : 'grow_feedback_theme_renamed',
+      summary: merged ? `Theme merged: ${moved} moved` : `Theme renamed on ${moved}`,
+    })),
+  ]);
+  return { from, to, merged, feedback, roadmap_items: roadmapItems };
 }
 
 // ── Distribution ────────────────────────────────────────────────────────────
