@@ -496,7 +496,7 @@ test('test 2: an obligation- row declares Upload proof and no Mark filed; a lab-
   assert.equal(obligation.status, 200, JSON.stringify(obligation.body));
   assert.deepEqual(keysOf(obligation), ['upload-proof']);
   const step = await rec(db, 'company-creation', 'step-9');
-  assert.deepEqual(keysOf(step), ['mark-filed', 'step-check', 'edit', 'upload-proof']);
+  assert.deepEqual(keysOf(step), ['mark-filed', 'step-check', 'edit', 'delete', 'upload-proof']); // #6041: the venture's own step may be deleted
   const lab = await rec(db, 'company-creation', 'lab-8-0');
   assert.equal(lab.status, 200);
   assert.deepEqual(lab.body.actions, []);
@@ -1037,4 +1037,83 @@ test('D1168: a proof pointer edit clears unmeasurable, and an unchanged pointer 
   assert.equal((await call(db,'PATCH','/obligations/12/proof',{proof_file_key:null})).status,200);
   assert.equal(db.prepare('SELECT size_unmeasurable_at FROM entity_obligations WHERE id=12').get()!.size_unmeasurable_at,null);
  }finally{db.close();}
+});
+
+// ---------------------------------------------------------------------------
+// #6041: remove a roadmap item or a filing added by mistake. The PATCH routes' gate and ownership check, the
+// record's Delete action (danger, confirmed), the dependents removed in the same batch, and an activity row.
+// ---------------------------------------------------------------------------
+
+const edgeCount = (db: DatabaseSync, id: number) => count(db, `SELECT COUNT(*) AS n FROM okr_dependencies WHERE okr_id = ${id} OR blocks_okr_id = ${id}`);
+
+test('#6041: deleting a roadmap item removes it and its dependency edges both ways, logs it, and leaves its neighbours', async () => {
+  // Mutation checked: dropping the okr_dependencies DELETE from deleteRoadmapItem leaves the two edges here.
+  const db = recordsA(seeded());
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status) VALUES (60, ${P}, 'Rollout', 'later')`);
+  db.exec(`INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id) VALUES (${P}, 6, 7), (${P}, 60, 6), (${P}, 60, 7)`);
+  const r = await call(db, 'DELETE', '/roadmap/6');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE id = 6'), 0);
+  assert.equal(edgeCount(db, 6), 0, 'every edge naming the item is gone');
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM okr_dependencies WHERE okr_id = 60 AND blocks_okr_id = 7`), 1, 'an edge between two other items stays');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE id IN (7, 60)'), 2);
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'roadmap_deleted'"), 1);
+  assert.equal((await call(db, 'DELETE', '/roadmap/6')).status, 404, 'a second delete finds nothing');
+  db.close();
+});
+
+test('#6041: deleting a filing removes it, its checklist and its proof file, and logs it; a Lab step or an obligation cannot be named', async () => {
+  // Mutation checked: dropping the formation_step_checks DELETE leaves the checklist row here.
+  const db = recordsA(seeded());
+  const key = `build-proof/${P}/0123456789abcdef0123456789abcdef.pdf`;
+  db.exec(`UPDATE formation_steps SET proof_file_key = '${key}' WHERE id = 9`);
+  db.exec(`INSERT INTO formation_step_checks (step_id, key, done_at) VALUES (9, 'signed', datetime('now'))`);
+  await bucket(db).binding.put(key, PDF(), { httpMetadata: { contentType: 'application/pdf' } });
+  const r = await call(db, 'DELETE', '/formation-steps/9');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps WHERE id = 9'), 0);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_step_checks WHERE step_id = 9'), 0);
+  assert.equal(bucket(db).store.has(key), false, 'the proof file left storage');
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'build_formation_step_deleted' AND entity_id = 'step-9'"), 1);
+  // An obligation's id is never a formation step's: the route reads only formation_steps for this venture.
+  assert.equal((await call(db, 'DELETE', '/formation-steps/12')).status, 404);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM entity_obligations WHERE id = 12'), 1, 'the obligation is untouched');
+  db.close();
+});
+
+test('#6041: another venture\'s id is a 404 and deletes nothing; a reader and another founder are refused', async () => {
+  const db = recordsB(recordsA(seeded()));
+  const before = { okrs: count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), steps: count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), logs: logCount(db) };
+  assert.equal((await call(db, 'DELETE', '/roadmap/41')).status, 404, "venture B's item under venture A");
+  assert.equal((await call(db, 'DELETE', '/formation-steps/43')).status, 404, "venture B's filing under venture A");
+  assert.equal((await callAs(db, PARTNER, 'DELETE', '/roadmap/6')).status, 403, 'a partner reads, never writes');
+  assert.equal((await callAs(db, PARTNER, 'DELETE', '/formation-steps/9')).status, 403);
+  assert.equal((await callAs(db, OUTSIDER, 'DELETE', '/roadmap/6')).status, 403, 'another venture\'s founder');
+  assert.equal((await callAs(db, OUTSIDER, 'DELETE', '/roadmap/6', undefined, P_OTHER)).status, 404, 'venture A\'s id under their own venture');
+  assert.deepEqual({ okrs: count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), steps: count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), logs: logCount(db) }, before);
+  assert.equal(bucket(db).store.size, 0);
+  db.close();
+});
+
+test('#6041: the records offer Delete, in the danger tone and behind a confirmation; a Lab step and an obligation do not', async () => {
+  const db = recordsA(seeded());
+  const item = await rec(db, 'product-roadmap', '6');
+  const del = actionOf(item, 'delete');
+  assert.ok(del, 'the roadmap item offers Delete');
+  assert.equal(del.tone, 'danger');
+  assert.equal(del.confirm.cta, 'Delete');
+  assert.match(del.confirm.title, /^Delete Ship reconciliation\?$/);
+  const step = actionOf(await rec(db, 'company-creation', 'step-9'), 'delete');
+  assert.equal(step.tone, 'danger');
+  assert.match(step.confirm.body, /checklist and its proof file/);
+  assert.ok(!keysOf(await rec(db, 'company-creation', 'obligation-12')).includes('delete'));
+  assert.deepEqual((await rec(db, 'company-creation', 'lab-8-0')).body.actions, []);
+  assert.equal((await rec(db, 'product-roadmap', '6', PARTNER)).body.actions.length, 0, 'a reader is offered no Delete');
+  // Through the record route: the action removes the item, and the record then reads as gone.
+  const r = await act(db, 'product-roadmap', '6', 'delete');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal((await rec(db, 'product-roadmap', '6')).status, 404, 'the page re-reads a 404 and goes back to the module');
+  assert.equal((await act(db, 'company-creation', 'step-9', 'delete')).status, 200);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps WHERE id = 9'), 0);
+  db.close();
 });

@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, patchFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, patchFormationStep, deleteFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -959,6 +959,10 @@ const productRoadmap: ModuleSpec = {
       ] },
       references: body => references(body, [['feature_id', 'mvp_features']]),
       execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id'], ITEM_CLEARABLE)) });
+    // #6041: undo an item added by mistake. Its dependency edges go with it; the activity row stays.
+    actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+      confirm: { title: `Delete ${o.objective}?`, body: 'It leaves the roadmap with its dependencies. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+      execute: c => viaRoute(c, deleteRoadmap, item, {}) });
     return actions;
   },
   async formOptions(ctx) {
@@ -1285,6 +1289,11 @@ const companyCreation: ModuleSpec = {
         references: body => references(body, [['for_holder_id', 'cap_table_founders']]),
         execute: (c, _id, body) => viaRoute(c, patchFormationStep, step,
           formBody(jsonOf(body), ['title', 'kind', 'jurisdiction', 'for_holder_id', 'due_date', 'state'], ['kind', 'jurisdiction', 'for_holder_id', 'due_date'])) });
+      // #6041: undo a filing the venture added by mistake. Only the venture's own step: a Lab step and an
+      // obligation offer no Delete.
+      actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+        confirm: { title: `Delete ${f.title}?`, body: 'It leaves the filings with its checklist and its proof file. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+        execute: c => viaRoute(c, deleteFormationStep, step, {}) });
     }
     actions.push({ key: 'upload-proof', label: 'Upload proof', kind: 'form', multipart: true,
       form: { title: 'Upload proof', cta: 'Upload', fields: [{ key: 'file', label: 'Proof', kind: 'T', input: 'file', required: true, note: 'PDF, JPEG or PNG, at most 10 MB.' }] },

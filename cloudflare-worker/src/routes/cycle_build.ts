@@ -25,7 +25,7 @@ import { posthogKpiTexts } from '../services/posthog/build';
 import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
-import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
+import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
@@ -1986,6 +1986,46 @@ async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response>
   return c.json({ id: Number(row.id), ...(created ? {} : { replayed: true }) }, created ? 201 : 200);
 }
 
+// #6041: remove a roadmap item added by mistake. The PATCH's gate (`writeContext`) and its ownership check (the
+// item must be this venture's); the delete itself, with the item's dependency edges, is progress.ts' one.
+app.delete('/roadmap/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteRoadmap(c, ctx);
+});
+async function deleteRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(c.req.param('id'));
+  const existing = id && await c.env.DB.prepare('SELECT objective FROM roadmap_okrs WHERE id = ? AND project_id = ?')
+    .bind(id, ctx.project.id).first<{ objective: string }>();
+  if (!existing) return c.json({ detail: 'Roadmap item not found' }, 404);
+  await deleteRoadmapItem(c.env, { projectId: ctx.project.id, id: id!, objective: existing.objective, userId: ctx.user.id });
+  return c.json({ ok: true, deleted: id });
+}
+
+// #6041: remove a filing the venture added by mistake. Only the venture's own steps (formation_steps): a Lab
+// order's step and an entity obligation are never in that table, so they cannot be named here. The step's
+// checklist rows go in the same batch; its proof file is removed from storage after the row is gone, best effort,
+// as a replaced proof is (records/build.ts).
+app.delete('/formation-steps/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteFormationStep(c, ctx);
+});
+async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(c.req.param('id'));
+  const existing = id && await c.env.DB.prepare('SELECT title, proof_file_key FROM formation_steps WHERE id = ? AND project_id = ?')
+    .bind(id, ctx.project.id).first<{ title: string; proof_file_key: string | null }>();
+  if (!existing) return c.json({ detail: 'Formation step not found' }, 404);
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM formation_step_checks WHERE step_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM formation_steps WHERE id = ? AND project_id = ?').bind(id, ctx.project.id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_deleted', `Filing deleted: ${existing.title}`),
+  ]);
+  if (existing.proof_file_key && c.env.FILES) {
+    try { await c.env.FILES.delete(existing.proof_file_key); }
+    catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
+  }
+  return c.json({ ok: true, deleted: id });
+}
+
 app.patch('/formation-steps/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   return patchFormationStep(c, ctx);
@@ -2201,7 +2241,7 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
-export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
+export { patchFeature, postRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
 
 // D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
 // "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.
