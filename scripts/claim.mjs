@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { capBlockers, formatWip, localWipLabels, parseWipCap, readWip } from './lib/claimWip.mjs';
 import { claimRef, claimMessage, parseClaim, isExpired } from './lib/claims.mjs';
 
 export function githubApi(repo) {
@@ -15,6 +16,11 @@ export function githubApi(repo) {
     }
   };
 }
+export function githubGraphql(query, variables) {
+  return JSON.parse(execFileSync('gh', ['api', 'graphql', '--input', '-'], {
+    input: JSON.stringify({ query, variables }), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 16 * 1024 * 1024,
+  }));
+}
 async function pages(api, path) {
   const all = [];
   for (let page = 1; page <= 100; page++) {
@@ -24,7 +30,7 @@ async function pages(api, path) {
   }
   throw new Error('pagination cap reached');
 }
-async function runClaimInternal({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log }) {
+async function runClaimInternal({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log, wipReport, wipCap }) {
   const read = async number => {
     try {
       const ref = await api('GET', `git/ref/heads/claim/${number}`);
@@ -58,6 +64,24 @@ async function runClaimInternal({ command, issue, slot, agent, session, ttlHours
     }
     if (command === 'release') { await api('DELETE', `git/refs/heads/claim/${issue}`); return 0; }
     if (isExpired(current.claim, now)) { log({ error: 'expired; release and acquire again' }); return 3; }
+  }
+  if (command === 'claim' && wipReport) {
+    const normalizedSlot = slot?.toUpperCase();
+    const cap = parseWipCap(wipCap);
+    let report;
+    try { report = await wipReport(); }
+    catch (error) {
+      if (cap !== null) throw new Error(`Cannot enforce LANDING_WIP_CAP: ${error.message}`, { cause: error });
+      log(`WIP report unavailable: ${error.message}. LANDING_WIP_CAP is unset; continuing.`);
+    }
+    if (report) {
+      log(formatWip(report, normalizedSlot));
+      const blockers = capBlockers(report.get(normalizedSlot), cap);
+      if (blockers.length) {
+        log(`LANDING_WIP_CAP=${cap}: finish ${blockers.map(pull => `#${pull.number}`).join(', ')} before claiming.`);
+        return 5;
+      }
+    }
   }
   const message = claimMessage({ issue, slot, agent, session, at: now, ttlHours });
   try {
@@ -93,8 +117,16 @@ export async function main(argv = process.argv.slice(2)) {
     if (!/^--(slot|agent|session|ttl-hours|repo)$/.test(rest[i]) || !rest[i + 1]) throw new Error('invalid option');
     options[rest[i].slice(2)] = rest[i + 1];
   }
+  const repo = options.repo ?? process.env.GH_REPO ?? 'AxalNetwork/StudioOS';
+  const api = githubApi(repo);
+  const wipReport = () => readWip({ api, pages, graphql: githubGraphql, repo, now: new Date(), labelsFile: localWipLabels() });
+  if (command === '--wip') {
+    if (issue) throw new Error('--wip takes no issue number');
+    console.log(formatWip(await wipReport()));
+    return 0;
+  }
   return runClaim({ command, issue, slot: options.slot ?? process.env.AGENT_SLOT, agent: options.agent ?? process.env.AGENT_NAME,
     session: options.session ?? process.env.AGENT_SESSION, ttlHours: Number(options['ttl-hours'] ?? 24),
-    api: githubApi(options.repo ?? process.env.GH_REPO ?? 'AxalNetwork/StudioOS') });
+    api, wipReport, wipCap: process.env.LANDING_WIP_CAP });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().then(code => { process.exitCode = code; }).catch(e => { console.error(e.message); process.exitCode = 1; });

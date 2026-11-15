@@ -14,12 +14,15 @@
  * changes, and for a gate, an end date, a move or a folder's NDA, which
  * investors gain or lose the file. Nothing is changed by a browser pop-up.
  *
- * NOTHING HERE IS A ZERO FOR A MISSING VALUE. Storage left, a Trash and the
- * last ninety days have no store yet; each says so.
+ * NOTHING HERE IS A ZERO FOR A MISSING VALUE. A Trash and the last ninety
+ * days have no store yet; each says so. Storage left is Usage › Storage's own
+ * read (D6074): a figure it could not read is Unreadable, one it does not
+ * hold is Not recorded, never 0.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { accessNow, grantIsActive, noAccessReason, tierOf } from '../dataRoomRead.js';
 import { day } from './dataRoomModel.js';
+import { COMPARE_HREF, COMPARE_PLANS, OPEN_STORAGE, READ_FAILED, STAFF_FOOT, STORAGE_HREF, allowanceView, storageSize } from '../../account/storagePageModel.js';
 
 export const MAX_UPLOAD_MB = 20;
 export const ENDING_SOON_DAYS = 14;
@@ -287,7 +290,7 @@ export function deleteFolderCopy(room, folder, now = Date.now()) {
 /** A picked file's place in the queue: waiting, or refused before sending. */
 export function queueEntry(file, i) {
   const big = file.size > MAX_UPLOAD_MB * 1024 * 1024;
-  return { key: `${i}-${file.name}`, name: file.name, size: sizeText(file.size), state: big ? 'refused' : 'waiting', why: big ? `Refused: larger than ${MAX_UPLOAD_MB} MB` : '' };
+  return { key: `${i}-${file.name}`, name: file.name, size: sizeText(file.size), bytes: Number(file.size), state: big ? 'refused' : 'waiting', why: big ? `Refused: larger than ${MAX_UPLOAD_MB} MB` : '' };
 }
 export const QUEUE_WORDS = { waiting: '○ Waiting', sending: '⇪ Sending', done: '✓ In the room', refused: '✕ Refused' };
 
@@ -314,15 +317,85 @@ export function sizeText(bytes) {
 }
 
 /**
- * DR4s, storage: no store totals a plan's limit or the earlier versions, so
- * the page says what it can count (the current files) and what it cannot.
+ * The room's own count: what its current files hold. Earlier versions are not
+ * in the room read, so they are not totalled here; the plan's total, which
+ * counts them, is `uploadStorage` below.
  */
 export function storageLine(room) {
   const sizes = (room?.files || []).map((f) => f.size_bytes);
   const known = sizes.filter((s) => s != null && Number.isFinite(Number(s)));
   const total = known.reduce((t, s) => t + Number(s), 0);
   const counted = known.length === sizes.length ? sizeText(total) : `${sizeText(total)} over the ${known.length} of ${sizes.length} files whose size is recorded`;
-  return `Current files: ${counted}. Earlier versions are not totalled here. What your plan holds, and what is left, is on Usage › Storage. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
+  return `This room’s current files: ${counted}. Earlier versions are not totalled here. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
+}
+
+/**
+ * D6074 (#6074) — DR4s and DR23 on Upload: storage used and left on the plan
+ * these files count to, from the same read as Usage › Storage
+ * (`usageApi.storage`, D642 as D1169 grew it), through that page's own
+ * `allowanceView`, so the two never disagree. `read` is `{ status: 'loading' }`,
+ * `{ status: 'ready', data }` or `{ status: 'error' }`.
+ *
+ * A data room file counts to the venture's owner (D1170 §2). The read is the
+ * caller's own plan, and its `companies[].ventures` lists the ventures whose
+ * files count to the caller, so a room not in that list counts to someone
+ * else's plan and no figure of the caller's is drawn for it.
+ *
+ * Only a `meter` view, a figure measured against an allowance, can refuse a
+ * queue (`queueStorage`). Unreadable, Not recorded, staff and another
+ * member's plan never block: the Worker's own refusal at upload (D1170/D1171)
+ * still answers for those.
+ *
+ * Near the limit is the Worker's own `state` (`near_80`, `near_95`: 80% and
+ * 95% of the allowance, `storageState` in `services/storageUsage.ts`), the
+ * same that draws Usage › Storage's "Near your limit" pill and notice.
+ */
+const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
+export const STORAGE_UNREADABLE = `Storage left: Unreadable. ${READ_FAILED} You can still add files.`;
+export function uploadStorage(read, projectUid) {
+  if (!read || read.status === 'loading') return { mode: 'loading', line: 'Reading your storage…' };
+  const s = read.status === 'ready' && read.data && typeof read.data === 'object' ? read.data : null;
+  const unreadable = { mode: 'unreadable', line: STORAGE_UNREADABLE };
+  const v = s ? allowanceView(s, null) : null;
+  if (!v) return unreadable;
+  // Staff pass the Worker's guard whoever's room it is (D1170 §1).
+  if (v.mode === 'staff') return { mode: 'none', line: `Storage left: Not recorded. ${STAFF_FOOT}` };
+  if (!Array.isArray(s.companies)) return unreadable; // whose plan this is could not be read
+  const ours = s.companies.some((c) => (Array.isArray(c?.ventures) ? c.ventures : []).some((x) => x?.uid && x.uid === projectUid));
+  if (!ours) return { mode: 'elsewhere', line: 'Files added here count to the company owner’s storage, which is not shown to you. If it is full, the room refuses a file when it is sent.' };
+  if (v.mode === 'unread' || s.plan_recorded === false) return unreadable;
+  if (v.mode !== 'meter') return { mode: 'none', line: `Storage left: Not recorded. ${v.reason}` };
+  const used = s.measured_bytes;
+  const allowance = s.allowance_bytes;
+  const near = v.state === 'near_80' || v.state === 'near_95';
+  const full = used >= allowance;
+  return {
+    mode: 'meter', used, allowance, left: Math.max(0, allowance - used),
+    line: `Storage: ${v.used} of ${v.allowance} used · ${v.side}.${v.pending ? ` ${v.pending}` : ''}`,
+    tone: full ? 'red' : near ? 'amber' : 'muted',
+    // DR23: the amber line, in the canvas's words, with its one door.
+    near: near ? { text: `Your files use ${v.used} of ${v.allowance}. Versions count too.`, link: { label: OPEN_STORAGE, to: STORAGE_HREF } } : null,
+  };
+}
+
+/**
+ * DR4s, before anything is sent: the waiting files' total against what is
+ * left, by the Worker's own rule (`assertStorageRoom`: used plus the file
+ * passes the allowance, or nothing is left for an empty file). Null when the
+ * queue fits, or when the figure is not a meter. The refusal has the shape
+ * `StorageRefusal` draws, with the doors to Usage › Storage and the plans.
+ */
+export function queueStorage(view, queue) {
+  if (view?.mode !== 'meter') return null;
+  const waiting = (queue || []).filter((x) => x?.state === 'waiting');
+  if (!waiting.length) return null;
+  const need = waiting.reduce((t, x) => t + (isCount(x.bytes) ? x.bytes : 0), 0);
+  if (view.used + need <= view.allowance && !(need === 0 && view.used >= view.allowance)) return null;
+  const n = waiting.length;
+  const text = view.left === 0
+    ? 'Storage full. Nothing new can be stored until you free up space or change plan. Everything you stored stays.'
+    : `${n === 1 ? 'This file needs' : `These ${n} files need`} ${storageSize(need)}. You have ${storageSize(view.left)} left on your plan. Nothing was sent; remove ${n === 1 ? 'it' : 'some'} or make room first.`;
+  return { text, yours: true, full: view.left === 0, need, links: [{ label: OPEN_STORAGE, to: STORAGE_HREF }, { label: COMPARE_PLANS, to: COMPARE_HREF }] };
 }
 
 /* ------------------------------------------------------------------ *
