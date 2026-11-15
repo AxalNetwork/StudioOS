@@ -347,7 +347,7 @@ test('the licence\'s Pricing & Market section: no decision recorded, the standin
   document.body.appendChild(container);
   const root = createRoot(container);
   try {
-    await act(async () => { root.render(h(CountryPricing, { licence: { uid: 'lic_a' }, api: { get: ok(view) } })); await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0)); });
+    await act(async () => { root.render(h(CountryPricing, { licence: { uid: 'lic_a' }, api: { get: ok(view) } })); await new Promise((r) => setImmediate(r)); await new Promise((r) => setImmediate(r)); });
     const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
     const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
     const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '');
