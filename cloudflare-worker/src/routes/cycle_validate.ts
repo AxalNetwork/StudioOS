@@ -388,7 +388,7 @@ cycleValidate.put('/waitlist-target', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    await setWaitlistTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    await setWaitlistTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
     return c.json({ ok: true });
   } catch (e) { return writeFailed(c, e); }
 });
@@ -399,7 +399,7 @@ cycleValidate.put('/interviews-target', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    await setInterviewsTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    await setInterviewsTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
     return c.json({ ok: true });
   } catch (e) { return writeFailed(c, e); }
 });
@@ -410,7 +410,7 @@ cycleValidate.put('/objective', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    const out = await setValidationObjective(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    const out = await setValidationObjective(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
     return c.json({ ok: true, ...out });
   } catch (e) { return writeFailed(c, e); }
 });
