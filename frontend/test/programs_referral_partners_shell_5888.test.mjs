@@ -105,10 +105,10 @@ async function mounted(url, handle, user) {
   const at = { path: url };
   function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}${l.hash}`; return null; }
   await act(async () => rootNode.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(Table), h(Probe)))));
-  const flush = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 5)); });
-  for (let waited = 0; !container.childNodes?.length && waited < 5000; waited += 25) {
-    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
-  }
+  // No real clock (D5614): every stubbed read answers from a promise, so draining the event loop's turns settles them.
+  const turn = () => new Promise((r) => setImmediate(r));
+  const flush = () => act(async () => { for (let i = 0; i < 60; i += 1) await turn(); });
+  for (let turns = 0; !container.childNodes?.length && turns < 2000; turns += 1) await act(async () => { await turn(); });
   await flush();
   // The dialogs portal to the body, so the walk starts there.
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(document.body); };
