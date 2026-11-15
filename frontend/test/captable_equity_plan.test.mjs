@@ -63,9 +63,13 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // shares with its own vesting, and writes nothing there — pinned below.
   // D1325 (#3486): the never-fill registry names the cap-table stores so no
   // fill may target them; it holds no SQL and reads nothing — pinned below.
+  // D6042 (#6042): Eadwyn's Founding team draft reads each founder holder's
+  // vesting through the requested venture's holders and their own users, to
+  // say what is and is not recorded; it names no pool and writes nothing —
+  // pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/buildRecordDrafts.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const claims = read('cloudflare-worker/src/services/raiseClaims.ts');
@@ -102,6 +106,12 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   assert.match(buildRecord, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'the Build founder record can read vesting only through a holder of the requested project and owner');
   assert.doesNotMatch(buildRecord, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_(vesting|option_pools)/, 'the Build founder record cannot write personal vesting');
+  // D6042 (#6042): the Founding team draft reads vesting the same scoped way.
+  const buildDrafts = read('cloudflare-worker/src/services/buildRecordDrafts.ts');
+  assert.match(buildDrafts, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
+    'the Founding team draft reads vesting only through a holder of the requested project and owner');
+  assert.doesNotMatch(buildDrafts, /cap_table_option_pools/, 'the Founding team draft reads vesting rows, not pools');
+  assert.doesNotMatch(buildDrafts, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'the Founding team draft reads, never writes');
   // D691 decision 4 (#1700): `addHolder()` and `updateHolder()` write a founder's
   // vesting, only ever for a holder of the requested venture, on that holder's
   // own user_id. It names no pool.

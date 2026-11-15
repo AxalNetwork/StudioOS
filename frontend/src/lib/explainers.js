@@ -94,7 +94,7 @@ export const EXPLAINERS = {
   },
   waterfall: {
     title: 'Exit waterfall simulator',
-    body: 'Model a sale or IPO across preference stacks, participation and option pools — and see exactly who gets what at each clearing price.',
+    body: 'Model how one fund splits exit proceeds between its limited partners and general partner.',
     docPath: 'capital/funds',
   },
   metrics: {
