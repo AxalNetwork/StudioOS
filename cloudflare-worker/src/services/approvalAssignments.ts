@@ -11,7 +11,7 @@
  */
 import type { Env } from '../types';
 import {
-  APPROVAL_SOURCES, NOT_LANED, SLA_DUE_SOON_HOURS, SLA_PAST_HOURS, approvalBoard, laneCounts,
+  APPROVAL_SOURCES, NOT_LANED, SLA_DUE_SOON_HOURS, SLA_PAST_HOURS, approvalBoard, approvalItem, laneCounts,
   type ApprovalItem, type ApprovalLaneKey, type ApprovalSource,
 } from './approvalSources';
 import { logAdminAction } from './adminAudit';
@@ -20,6 +20,10 @@ import { LANE_GROUP, NO_FILTER, filterInbox, isFiltered, laneBands, type InboxQu
 
 export const ASSIGNMENTS_UNREADABLE =
   'The assignment record could not be read on this database. That is not a claim that nobody is assigned.';
+
+/** D5874: a target's lane could not be read, so nothing was assigned. */
+export const LANE_UNREADABLE = (label: string) =>
+  `${label} could not be read, so it cannot be checked that the item is still waiting. Nothing was assigned.`;
 
 export const REVIEWERS_UNREADABLE =
   'The admin accounts on this territory could not be read, so there is nobody to offer. That is not a claim that this territory has no admins.';
@@ -31,8 +35,8 @@ const HISTORY_CAP = 100;
 /**
  * A lane `APPROVAL_SOURCES` or HQ's lanes declare (D1041), read from the lists
  * each time. Naming an HQ lane is not enough to assign on it: the item must be
- * open on the board read with the caller's own sources, which on a branch or
- * for a plain admin never include an HQ lane.
+ * waiting on a lane among the caller's own sources (D5874: read by lane and
+ * id), which on a branch or for a plain admin never include an HQ lane.
  */
 export function isAssignmentLane(lane: string): lane is ApprovalLaneKey {
   return APPROVAL_SOURCES.some((s) => s.key === lane) || HQ_APPROVAL_SOURCES.some((s) => s.key === lane);
@@ -164,7 +168,7 @@ export async function assignReviewers(
   actorUserId: number,
   assigneeUserId: number,
   items: AssignItem[],
-  opts: { sources?: readonly ApprovalSource[]; boardLimit?: number } = {},
+  opts: { sources?: readonly ApprovalSource[] } = {},
 ): Promise<AssignResult> {
   if (!Number.isInteger(assigneeUserId) || assigneeUserId <= 0) {
     return { ok: false, status: 400, code: 'not_a_reviewer', message: 'A reviewer is an active admin on this territory.' };
@@ -205,16 +209,23 @@ export async function assignReviewers(
       message: 'A reviewer is an active admin on this territory. That account is not one.',
     };
   }
-  let open: Awaited<ReturnType<typeof approvalBoard>>;
-  try {
-    open = await approvalBoard(env, opts.boardLimit ?? 100, Date.now(), opts.sources ?? APPROVAL_SOURCES);
-  } catch (e) {
-    console.error('[approval-assignments] could not read the board', (e as Error).message);
-    return { ok: false, status: 503, code: 'assignments_unreadable', message: ASSIGNMENTS_UNREADABLE };
-  }
-  const openKeys = new Set(open.items.map((it) => `${it.lane}:${it.id}`));
+  // D5874: each target is read by its lane and id (`approvalItem`), not looked
+  // for in a board read to a cap, so an item past the cap can be assigned like
+  // any other. A lane this caller does not see is not a target; a lane whose
+  // read fails refuses the whole write as unreadable, never as "not waiting".
+  const sources = opts.sources ?? APPROVAL_SOURCES;
   for (const it of items) {
-    if (!openKeys.has(`${it.lane}:${it.item_id}`)) {
+    const source = sources.find((s) => s.key === it.lane);
+    let open: ApprovalItem | null = null;
+    if (source) {
+      try {
+        open = await approvalItem(env, source, it.item_id);
+      } catch (e) {
+        console.error('[approval-assignments] could not read the item', it.lane, (e as Error).message);
+        return { ok: false, status: 503, code: 'lane_unreadable', message: LANE_UNREADABLE(source.label) };
+      }
+    }
+    if (!open) {
       return {
         ok: false,
         status: 400,
@@ -333,14 +344,14 @@ export function readHistoryQuery(lane: string, rawItemId: unknown, sources: read
 /**
  * The assignment write both boards take (D470 on a branch, D1040 on HQ):
  * `{ assignee_user_id, items: [{ lane, item_id }] }`, each item on a lane the
- * caller sees and among the open rows `boardLimit` reads, then one admin-audit
- * row per item assigned.
+ * caller sees and still waiting there (read by lane and id, D5874), then one
+ * admin-audit row per item assigned.
  */
 export async function assignFromBody(
   env: Env,
   admin: { id: number; email?: string | null },
   body: Record<string, unknown> | null,
-  opts: { sources: readonly ApprovalSource[]; boardLimit: number },
+  opts: { sources: readonly ApprovalSource[] },
 ): Promise<AssignResult> {
   const assignee = positiveInt(body?.assignee_user_id);
   const raw = Array.isArray(body?.items) ? body.items : [];
@@ -391,16 +402,21 @@ const TOTAL_CAPPED_FILTERED = (labels: string[]) =>
 /**
  * D1132 (#3012) — one waiting item, for `/admin/approvals/[id]`: the row as
  * the inbox shows it, its assignee, its lane (group, who a decision tells,
- * the page that decides it) and its assignment history. Read from the lane's
- * own rows to the inbox's cap, so an item the inbox shows is an item this
- * finds; one no longer waiting answers `null`.
+ * the page that decides it) and its assignment history. D5874: read by lane
+ * and id (`approvalItem`), so an item past the inbox's 1,000-row cap is found
+ * like any other; one no longer waiting answers `null`, a lane whose read
+ * failed `'unreadable'`.
  */
 export async function inboxItem(env: Env, a: { lane: ApprovalLaneKey; itemId: number; sources: readonly ApprovalSource[]; now?: number }) {
   const source = a.sources.find((s) => s.key === a.lane);
   if (!source) return null;
-  const board = await approvalBoard(env, INBOX_LANE_CAP, a.now ?? Date.now(), [source]);
-  if (board.unreadable.length) return 'unreadable' as const;
-  const item = board.items.find((it) => it.id === a.itemId);
+  let item: ApprovalItem | null;
+  try {
+    item = await approvalItem(env, source, a.itemId, a.now ?? Date.now());
+  } catch (e) {
+    console.error('[approval-assignments] could not read the item', a.lane, (e as Error).message);
+    return 'unreadable' as const;
+  }
   if (!item) return null;
   const assignments = await readAssignmentState(env);
   return {

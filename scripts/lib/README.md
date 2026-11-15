@@ -98,4 +98,7 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `workflowFailureHints.mjs` | D6387: match verified failures to existing repairs and release supersession. |
 | `workflowFailureHints.test.mjs` | D6387: verify source constraints for known repair issues. |
 | `workflowFailureReconcile.test.mjs` | D6387: exact attempt dispatch, paginated reconciliation, checkpoints and the trusted Actions job. |
+| `flakyTests.mjs` | D6464: classify flaky tests from queue logs, merge and expire the list, and decide a merge_group retry. |
+| `failedTestsReporter.mjs` | D6464: a node:test reporter writing one JSON line per failed test, read by the suite runner. |
+| `flakyTests.test.mjs` | D6464: classification, expiry, the one-retry rule and the runner's reporter wiring. |
 | `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |

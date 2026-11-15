@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
+import { userFacingRaiseError } from '../../../lib/raiseErrors';
 import { Unreadable, usePhoneWidth } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
@@ -12,7 +13,7 @@ import {
   planViewer, runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
-  AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditSplitDialog,
+  AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditMilestoneDialog, EditSplitDialog,
   FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, SectionSheet, Skeleton, Source, StackBar, WhereUsedDialog,
   useRead, usePlan,
 } from './UseOfFundsParts';
@@ -270,6 +271,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="violet">Base · {base?.name || 'Base'}</Pill>
                 {planViewer(plan)?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
+                {!phone ? <ExportMenu projectId={projectId} capabilities={plan.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
               <Tiles plan={plan} />
@@ -296,6 +298,43 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
           );
         }}
       </PlanFrame>
+    </div>
+  );
+}
+
+/**
+ * D6084 (#6084): UF1's `Export ▾` (CSV or PDF), beside Edit split on the
+ * desktop as the canvas draws it; the phone toolbar has no Export. It is drawn
+ * only when the plan read says `capabilities.export` (#5074's names), which is
+ * false while the plan is Unreadable. "Add to the data room" files a dated PDF
+ * and says where; it needs `capabilities.add_to_data_room` (a support session
+ * reads, and cannot file).
+ */
+export function ExportMenu({ projectId, capabilities, api = useOfFundsApi }) {
+  const [busy, setBusy] = useState(null);
+  const [said, setSaid] = useState('');
+  if (!capabilities?.export) return null;
+  const run = async (key, fn, done) => {
+    setBusy(key); setSaid('');
+    try { setSaid(done(await fn())); }
+    catch (e) { setSaid(userFacingRaiseError(e, { fallback: 'The plan could not be exported. Nothing was downloaded.' })); }
+    finally { setBusy(null); }
+  };
+  const item = 'block w-full rounded-md px-3 py-2 text-left text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:text-gray-100 dark:hover:bg-gray-800';
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="uof-export">
+      <details className="relative">
+        <summary className={`${BTN_GHOST} cursor-pointer list-none`} aria-label="Export as CSV or PDF" data-testid="uof-export-open">{busy ? 'Exporting…' : 'Export ▾'}</summary>
+        <div className="absolute left-0 z-20 mt-1 w-64 rounded-lg border border-axal-hairline bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" role="menu">
+          <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-csv"
+            onClick={() => run('csv', () => api.exportCsv(projectId), () => 'Downloaded the plan as CSV.')}>CSV · the base scenario</button>
+          <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-pdf"
+            onClick={() => run('pdf', () => api.exportPdf(projectId), () => 'Downloaded the plan as PDF.')}>PDF · the base scenario</button>
+          {capabilities.add_to_data_room ? <button type="button" role="menuitem" className={item} disabled={busy != null} data-testid="uof-export-room"
+            onClick={() => run('room', () => api.snapshot(projectId), (out) => `Added to the data room as “${out?.file?.name || 'the plan'}”, under NDA and seen by nobody until you share it.`)}>Add to the data room</button> : null}
+        </div>
+      </details>
+      {said ? <span role="status" className={`text-[12px] ${MUTED}`} data-testid="uof-export-said">{said}</span> : null}
     </div>
   );
 }
@@ -407,6 +446,7 @@ function Milestones({ projectId, search, api }) {
   const [adding, setAdding] = useState(false);
   const [addingHire, setAddingHire] = useState(false);
   const [editingHire, setEditingHire] = useState(null);
+  const [editingMs, setEditingMs] = useState(null);
   const sheet = useSectionSheet();
   const [notice, setNotice] = useState('');
   return (
@@ -453,7 +493,7 @@ function Milestones({ projectId, search, api }) {
               <Card title="Milestones" testId="uof-ms-table">
                 {ms.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-ms-none">{(base?.milestones || []).length ? 'No milestone matches.' : 'No milestones yet.'}</p> : (
                   <div className="overflow-x-auto"><table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
-                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source'].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source', ...(planViewer(plan)?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                     <tbody>{ms.map((m) => {
                       const st = states.get(String(m.id)) || (m.cost_cents == null ? 'Not costed' : NOT_RECORDED);
                       return (
@@ -464,6 +504,7 @@ function Milestones({ projectId, search, api }) {
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{m.cost_cents == null ? <Pill tone="dashed">○ Not costed</Pill> : money(m.cost_cents, base.currency)}</td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Pill tone={st === 'Funded' ? 'green' : st === 'At risk' ? 'amber' : 'dashed'}>{st === 'Funded' ? '✓ Funded' : st === 'At risk' ? '! At risk' : st === 'Not costed' ? '○ Not costed' : st}</Pill></td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Source source={m.source} /></td>
+                          {planViewer(plan)?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingMs(m)} aria-label={`Edit ${m.label}`} data-testid="uof-ms-edit-open">Edit</button></td> : null}
                         </tr>
                       );
                     })}</tbody>
@@ -490,6 +531,7 @@ function Milestones({ projectId, search, api }) {
               </Card>
             </div>
             {editingHire ? <EditHireDialog key={editingHire.id} projectId={projectId} hire={editingHire} api={api} onClose={() => setEditingHire(null)} onSaved={(t) => { setEditingHire(null); setNotice(t); read.reload(); }} /> : null}
+            {editingMs ? <EditMilestoneDialog key={editingMs.id} projectId={projectId} milestone={editingMs} revision={base?.revision} currency={base?.currency} api={api} onClose={() => setEditingMs(null)} onSaved={(t) => { setEditingMs(null); setNotice(t); read.reload(); }} /> : null}
             {adding ? <AddMilestoneDialog projectId={projectId} revision={base?.revision} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
             {addingHire ? <AddHireDialog projectId={projectId} section={section || 'product'} currency={base?.currency} api={api} onClose={() => setAddingHire(false)} onSaved={(t) => { setAddingHire(false); setNotice(t); read.reload(); }} /> : null}
             <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={(t) => { setNotice(t); read.reload(); }} />

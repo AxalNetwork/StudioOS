@@ -107,7 +107,9 @@ for(const [label,who,map] of [['the founder',FOUNDER,FOUNDER_MAP],['an admin',AD
     const f=fixture();
     const r=await call(f,'GET','/plan',undefined,who);
     assert.equal(r.status,200,JSON.stringify(r.body));
-    assert.deepEqual(r.body.capabilities,map);
+    // The standing's map, with D6084's two plan-data keys beside it.
+    assert.deepEqual(r.body.capabilities,{...map,...r.body.viewer.capabilities});
+    assert.deepEqual(Object.keys(r.body.capabilities).sort(),[...Object.keys(map),'add_to_data_room','export'].sort());
     assert.equal(r.body.viewer.can_write,map.edit,'the old viewer field agrees with the map');
     const w=await call(f,'POST','/scenarios',input(`${label} plan`),who);
     assert.equal(w.status,201,JSON.stringify(w.body));
@@ -149,6 +151,6 @@ test('the writes refuse from the map, in the route source',()=>{
   assert.match(src,/if \(c\.req\.method!=='GET'&&!uofCan\(caps,'edit'\)\) return c\.json\(\{code:'support_read_only'/);
   assert.match(src,/c\.set\('mercury',uofCan\(caps,'mercury'\)\);/);
   assert.match(src,/readOnly:!uofCan\(caps,'edit'\)/);
-  assert.match(src,/capabilities:c\.get\('caps'\)/);
+  assert.match(src,/capabilities:\{\.\.\.c\.get\('caps'\),\.\.\.plan\.viewer\.capabilities\}/);
   assert.ok(!/support&&c\.req\.method!=='GET'/.test(src),'no write refusal of its own beside the map');
 });
