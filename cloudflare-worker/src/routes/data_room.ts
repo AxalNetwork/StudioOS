@@ -1589,6 +1589,14 @@ r.post('/:projectUid/grants', async (c) => {
     if (!investor) return c.json({ ok: true }, 201);
     if (investor.id === user.id) return c.json({ ok: true }, 201);
 
+    // D6072 (#6072): whether the investor could already open this room. Only a grant that becomes open now
+    // (new, revoked or expired before) tells them; re-sharing an open room, or changing its folders, does not.
+    const before = await c.env.DB.prepare(
+      `SELECT 1 AS open FROM data_room_grants
+        WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
+          AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
+    ).bind(project.id, investor.id).first<{ open: number }>();
+
     const uid = newUid();
     // Re-granting a revoked investor reactivates the existing row rather than
     // failing on the UNIQUE(project_id, investor_user_id) constraint. A
@@ -1604,9 +1612,35 @@ r.post('/:projectUid/grants', async (c) => {
       ).bind(uid, project.id, investor.id, user.id, fields.values.expires_at ?? null, nowIso(), nowIso()),
       ...(fields.values.folders !== undefined ? scopeStatements(c.env, 'investor', [project.id, investor.id], fields.values.folders) : []),
     ]);
+    if (!before) await tellRoomShared(c.env, project, investor.id);
+    // The same answer whether or not the address has an account, and whether or not a notice went out.
     return c.json({ ok: true }, 201);
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * D6072 (#6072) — the member investor's one notice that a room was shared with
+ * them, linking to the room in Research › Diligence. Best effort: the grant is
+ * written whether or not the notice lands. An address with no account gets
+ * nothing (D1101 §5 answer 6, kept by the owner on 2026-11-15).
+ */
+async function tellRoomShared(env: Env, project: { id: number; name?: string | null }, investorId: number) {
+  try {
+    const grant = await env.DB.prepare('SELECT uid FROM data_room_grants WHERE project_id = ? AND investor_user_id = ?')
+      .bind(project.id, investorId).first<{ uid: string }>();
+    if (!grant) return;
+    const { notify } = await import('../services/notify');
+    await notify(env, {
+      userId: investorId, type: 'data_room_shared', category: 'deals',
+      title: 'A data room was shared with you',
+      body: `${project.name || 'A venture'} shared its data room with you. Open it in Research › Diligence.`,
+      link: `/research/diligence/${encodeURIComponent(grant.uid)}`,
+      payload: { project_id: project.id, grant_uid: grant.uid },
+    });
+  } catch (e) {
+    console.warn('[data_room] share notice not sent:', (e as Error)?.message);
+  }
+}
 
 /**
  * D1107 (DR7) — whom Share offers: this venture's prospects in Capital
