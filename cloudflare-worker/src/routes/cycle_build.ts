@@ -220,7 +220,8 @@ const FEATURE_FROM = `FROM mvp_features f
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ?`;
 const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
-            pg.title AS pain_theme, h.claim AS hypothesis`;
+            pg.title AS pain_theme, h.claim AS hypothesis,
+            EXISTS (SELECT 1 FROM roadmap_okrs ro WHERE ro.project_id = f.project_id AND ro.feature_id = f.id) AS on_roadmap`;
 /**
  * #4603 part 2 (D4603): a module list's keys as SQL. Each key is the exact
  * stored-value mapping its row's `keys` use; `orders` are its ordinal sorts
@@ -273,6 +274,9 @@ async function sqlPage(env: Env, cols: string, from: string, sql: PageSql, proje
   return { found, paged: { total, page: sql.page, page_size: PAGE_SIZE } };
 }
 
+/** #6030: the evidence kind, as `featureRow`'s `keys.evidence` reads it. */
+const EVIDENCE_SQL = "(CASE WHEN pg.title IS NOT NULL THEN 'pain' WHEN h.claim IS NOT NULL THEN 'hypothesis' ELSE 'none' END)";
+export const EVIDENCE_KINDS = [['pain', 'Pain linked'], ['hypothesis', 'Hypothesis linked'], ['none', 'No evidence link']] as const;
 const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
 /** Solution design's list keys, the mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`). */
 const FEATURE_LIST: ListSql = {
@@ -280,21 +284,38 @@ const FEATURE_LIST: ListSql = {
     // #5067: a hypothesis is a link too (the row already read it that way;
     // the filter and the chart had not).
     linked: "(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 'yes' ELSE 'no' END)",
+    // #6030 (BD7): the evidence filter names its link kind. A pain theme comes
+    // first, so a feature linked to both is Pain linked; Hypothesis linked is
+    // a feature whose only evidence is a hypothesis; No evidence link is neither.
+    evidence: EVIDENCE_SQL,
     impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
     effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
   },
   orders: FEATURE_ORDERS, defaultSort: 'impact', readOrder: 'f.sort_order, f.id',
 };
 
-function featureRow(f: any): RecordRow {
+function featureRow(f: any, projectId?: number): RecordRow {
   const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
-  // A feature with neither a pain theme nor a hypothesis links to nothing.
-  // #5067: keys.linked agrees with that — the chart's and the filter's linked
-  // count is a stored pain theme OR a stored hypothesis, never pain theme alone.
+  // #6030 (BD7): one evidence cell, linking each record the feature cites. A
+  // feature with neither a pain theme nor a hypothesis says so; its row offers
+  // Link evidence. #5067: keys.linked still reads a pain theme OR a hypothesis.
+  const pid = projectId ?? f.project_id;
+  const q = pid != null ? `?project=${pid}` : '';
+  const links: Array<{ text: string; href?: string }> = [];
+  if (f.pain_theme != null) links.push({ text: `Pain · ${f.pain_theme}`, ...(f.pain_group_id != null ? { href: `/validate/problem-discovery/${f.pain_group_id}${q}` } : {}) });
+  if (f.hypothesis != null) links.push({ text: `Hypothesis · ${f.hypothesis}`, ...(f.hypothesis_id != null ? { href: `/validate/experiments/${f.hypothesis_id}${q}` } : {}) });
+  const evidence: Cell = links.length
+    ? { text: links.map((l) => l.text).join(' · '), links }
+    : { text: 'No evidence link', tone: 'warn' };
+  const kind = f.pain_theme != null ? 'pain' : f.hypothesis != null ? 'hypothesis' : 'none';
   return record(f.id, {
-    feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
+    feature: f.title, evidence,
     impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
-  }, { linked: (f.pain_theme != null || f.hypothesis != null) ? 'yes' : 'no', impact, effort },
+  }, {
+    linked: (f.pain_theme != null || f.hypothesis != null) ? 'yes' : 'no', evidence: kind, impact, effort,
+    // #6030: the row's plan marks. Scope `core` is an MVP must-have; on_roadmap is an OKR naming it.
+    scope: f.scope ?? null, must_have: f.scope === 'core' ? 'yes' : 'no', on_roadmap: Number(f.on_roadmap) > 0 ? 'yes' : 'no',
+  },
   { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
     added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
 }
@@ -304,26 +325,30 @@ export async function solutionFeatureRows(env: Env, projectId: number): Promise<
   // A literal, so the schema guard reads its columns (the paged reads below are built and are not read by it).
   return rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
-            pg.title AS pain_theme, h.claim AS hypothesis
+            pg.title AS pain_theme, h.claim AS hypothesis,
+            EXISTS (SELECT 1 FROM roadmap_okrs ro WHERE ro.project_id = f.project_id AND ro.feature_id = f.id) AS on_roadmap
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
-  ).bind(projectId).all<any>()).map(featureRow);
+  ).bind(projectId).all<any>()).map((f) => featureRow(f, projectId));
 }
 
 async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2: the card's counts are aggregates; neither the overview nor the card reads a feature row.
   // #5067: linked agrees with the row and the list filter — a pain theme OR a hypothesis.
   const counts = await env.DB.prepare(
-    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked,
+            COALESCE(SUM(CASE WHEN pg.title IS NOT NULL THEN 1 ELSE 0 END), 0) AS pain,
+            COALESCE(SUM(CASE WHEN pg.title IS NULL AND h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS hypothesis
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ?`,
-  ).bind(p.id).first<{ n: number; linked: number }>();
+  ).bind(p.id).first<{ n: number; linked: number; pain: number; hypothesis: number }>();
   const featureCount = number(counts?.n), linked = number(counts?.linked);
   const unlinked = featureCount - linked;
+  const evidenceCount: Record<string, number> = { pain: number(counts?.pain), hypothesis: number(counts?.hypothesis), none: unlinked };
   // Risks are counted, never listed: the owner dropped the module page's `facts.risks` list (#4603 part 2, 2026-11-07).
   const bySeverity = new Map(rows(await env.DB.prepare(
     'SELECT severity, COUNT(*) AS n FROM venture_risks WHERE project_id = ? GROUP BY severity',
@@ -339,15 +364,16 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     const sql = opts.query ? listPageSql(FEATURE_LIST, opts.query) : null;
     if (sql) {
       const read = await sqlPage(env, FEATURE_COLS, FEATURE_FROM, sql, p.id, featureCount);
-      featureRows = read.found.map(featureRow);
+      featureRows = read.found.map((f) => featureRow(f, p.id));
       paged = read.paged;
     } else featureRows = await solutionFeatureRows(env, p.id);
   }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
   const any = featureCount || riskCount;
   return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme or hypothesis` : null) : next(p, 'solution-design', 'Add feature', true)),
-    cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
-    list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
+    cols: [['feature', 'Feature'], ['evidence', 'Evidence link'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
+    // #6030 (BD7): the evidence filter, each option with its count from the aggregate above.
+    list: { filters: [{ key: 'evidence', label: 'Evidence link', options: EVIDENCE_KINDS.map(([value, label]) => ({ value, label, count: evidenceCount[value] })) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
     ...(paged ? { paged } : {}),
     facts: { features: featureCount, linked }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
