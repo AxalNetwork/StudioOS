@@ -59,14 +59,14 @@ test('D6320: a Sheets switch discards the previous rows, mapping target, sync no
     assert.match(v.text('grow-sync-note'), /2 days of figures/);
     assert.equal(readsA, 2, 'the previous venture has a reread in flight');
     await v.render(forProject(B));
-    assert.equal(v.by('from-google-delete-701'), undefined);
-    assert.equal(v.by('grow-map-open'), undefined);
-    assert.equal(v.by('grow-sync-note'), undefined);
+    assert.equal(Boolean(v.by('from-google-delete-701')), false);
+    assert.equal(Boolean(v.by('grow-map-open')), false);
+    assert.equal(Boolean(v.by('grow-sync-note')), false);
     await act(async () => { pendingB.resolve(sheet(B)); });
-    assert.equal(v.by('grow-map-open'), undefined, 'venture B has not read its own file yet');
+    assert.equal(Boolean(v.by('grow-map-open')), false, 'venture B has not read its own file yet');
     await act(async () => { filesB.resolve({ items: [file(B)] }); lateA.resolve(sheet(A)); });
     assert.ok(v.by('from-google-delete-702'));
-    assert.equal(v.by('from-google-delete-701'), undefined);
+    assert.equal(Boolean(v.by('from-google-delete-701')), false);
     assert.match(v.text(), /Metrics 702/);
   } finally { await v.close(); }
 });
@@ -82,9 +82,9 @@ test('D6320: Calendar proposals and their open dialog disappear while the next v
     await v.click('grow-calendar-accept');
     assert.ok(v.by('grow-calendar-decide'));
     await v.render(forProject(B));
-    assert.equal(v.by('grow-calendar-decide'), undefined);
-    assert.equal(v.by('grow-calendar-accept'), undefined);
-    assert.equal(v.by('grow-calendar-dismiss'), undefined);
+    assert.equal(Boolean(v.by('grow-calendar-decide')), false);
+    assert.equal(Boolean(v.by('grow-calendar-accept')), false);
+    assert.equal(Boolean(v.by('grow-calendar-dismiss')), false);
     assert.doesNotMatch(v.text(), /Board A/);
     await act(async () => { pending.resolve(calendar(2, 'Board B')); });
     assert.match(v.text('grow-calendar-proposal'), /Board B/);
@@ -111,7 +111,7 @@ test('D6320: Mercury drops an error and pending state on switch and ignores the 
     await v.click('mercury-sync');
     assert.match(v.text('mercury-error'), /refused for A/);
     await v.render(forProject(B));
-    assert.equal(v.by('mercury-error'), undefined);
+    assert.equal(Boolean(v.by('mercury-error')), false);
     await v.render(forProject(A));
     await v.click('mercury-sync');
     assert.equal(v.disabled('mercury-sync'), true);
@@ -119,6 +119,6 @@ test('D6320: Mercury drops an error and pending state on switch and ignores the 
     assert.equal(v.disabled('mercury-sync'), false);
     await act(async () => { pending.resolve({ ok: true }); });
     assert.deepEqual(reloaded, []);
-    assert.equal(v.by('mercury-error'), undefined);
+    assert.equal(Boolean(v.by('mercury-error')), false);
   } finally { await v.close(); }
 });
