@@ -40,7 +40,8 @@ import {
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
-import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
+import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
+import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -683,6 +684,23 @@ export function termsText(g: Any): string | null {
   return amount ? `${label(g.terms_kind)} · ${amount}` : label(g.terms_kind);
 }
 
+/** "Oct 2026" for a stored YYYY-MM. */
+function monthYear(raw: unknown): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(raw ?? ''));
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${month} ${m[1]}` : String(raw ?? '');
+}
+
+/**
+ * D6112: Enter revenue's amount, in US dollars as typed ("1,200", "$40.50"), to cents through the money
+ * layer (D5373); partner revenue carries no currency, and every reader shows it in dollars.
+ */
+function typedRevenueCents(v: unknown): number {
+  const parsed = parseMinor(String(v ?? '').trim().replace(/^\$/, ''), 'USD');
+  if (!parsed.ok) throw new Refused(400, 'Type an amount in US dollars, 0 or more', 'amount');
+  return parsed.minor;
+}
+
 const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
@@ -713,6 +731,14 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     return { rows: (res.results || []).map((d) => ({ a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' })),
       empty: 'No deal recorded.', action: 'add-deal' };
   }),
+  // D6112 (#6112): each month's partner-sourced revenue with where it came from; a month no one entered has no row.
+  section('revenue', 'Revenue by month', async (rc, _id, record) => {
+    const { g } = loadedOf(record);
+    const res = await rc.env.DB.prepare('SELECT month, amount_cents, source FROM partner_revenue WHERE partner_id = ? ORDER BY month DESC LIMIT 24')
+      .bind(g.id).all<Any>();
+    return { rows: (res.results || []).map((r) => ({ a: monthYear(r.month), b: partnerRevenueSource(r.source), c: money(r.amount_cents) ?? '' })),
+      empty: 'No month entered.', action: 'enter-revenue' };
+  }),
   section('terms', 'Terms', async (_rc, _id, record) => {
     const { g } = loadedOf(record);
     const terms = termsText(g);
@@ -735,6 +761,16 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
   }
+  actions.push({
+    key: 'enter-revenue', label: 'Enter revenue', kind: 'form',
+    form: { title: 'Enter revenue', sub: 'Revenue this partner sourced in one month.', cta: 'Save',
+      foot: 'A month already typed is replaced. A month that came from another source keeps its figure.', fields: [
+        { key: 'month', label: 'Month', kind: 'T', placeholder: 'YYYY-MM', value: new Date().toISOString().slice(0, 7), required: true },
+        { key: 'amount', label: 'Amount', kind: 'T', input: 'money', required: true, note: 'US dollars.' },
+      ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setPartnerRevenue(c.env, c.projectId, userOf(c), id,
+      String(field(body, 'month') ?? '').trim(), { amount_cents: typedRevenueCents(field(body, 'amount')) }) })),
+  });
   actions.push({
     key: 'add-deal', label: 'Add deal', kind: 'form',
     form: { title: 'Add deal', cta: 'Add', fields: [

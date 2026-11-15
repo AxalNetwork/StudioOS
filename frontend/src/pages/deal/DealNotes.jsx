@@ -9,7 +9,7 @@
  * from the form; an edit and a delete each open an in-page dialog that says
  * what changes. Nothing is ever a browser pop-up.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
@@ -19,6 +19,7 @@ import { ACTIVITY_FILTERS, EADWYN_DRAFT, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NO
 import { fillsApi } from '../../lib/api/fills.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { refusalView } from '../../lib/fillSheet.js';
+import { NOTES_PAGE, NOTE_FILTER_ALL, noteByline, notesHaveMore } from './dealNotesModel';
 import Sheet from '../../ui/Sheet.jsx';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -205,10 +206,34 @@ function Notes({ dealId, userId }) {
     scope: SCOPED_FORMS.dealNote, parent: Number(dealId) > 0 ? Number(dealId) : null, enabled: Number(dealId) > 0,
     values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
   });
-  const load = () => {
-    dealContextApi.notes(dealId).then((data) => setRead({ status: 'ready', data }))
-      .catch((e) => { reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
+  // #6192: the list pages in NOTES_PAGE steps until the total is reached, and a tag chip narrows it
+  // (the Worker's `?tag=`, so the count is the filtered one). A later page that fails says Unreadable
+  // beside the rows already shown; a stale answer (an older tag, an older load) is dropped.
+  const [filter, setFilter] = useState(NOTE_FILTER_ALL);
+  const [more, setMore] = useState({ busy: false, failed: false });
+  const gen = useRef(0);
+  const load = (tagNow = filter) => {
+    const mine = ++gen.current;
+    setMore({ busy: false, failed: false });
+    dealContextApi.notes(dealId, { limit: NOTES_PAGE, offset: 0, tag: tagNow })
+      .then((data) => { if (mine === gen.current) setRead({ status: 'ready', data: { items: data?.items || [], total: data?.total } }); })
+      .catch((e) => { if (mine !== gen.current) return; reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
   };
+  const loadMore = () => {
+    if (read.status !== 'ready' || more.busy) return;
+    const mine = gen.current;
+    const have = read.data.items;
+    setMore({ busy: true, failed: false });
+    dealContextApi.notes(dealId, { limit: NOTES_PAGE, offset: have.length, tag: filter })
+      .then((data) => {
+        if (mine !== gen.current) return;
+        const seen = new Set(have.map((n) => n.uid));
+        setRead({ status: 'ready', data: { items: [...have, ...(data?.items || []).filter((n) => !seen.has(n.uid))], total: data?.total ?? read.data.total } });
+        setMore({ busy: false, failed: false });
+      })
+      .catch((e) => { if (mine !== gen.current) return; reportError('DealNotes:more', e); setMore({ busy: false, failed: true }); });
+  };
+  const pick = (t) => { setFilter(t); setRead({ status: 'loading' }); load(t); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
   const save = async () => {
     const bad = noteError(body);
@@ -242,10 +267,21 @@ function Notes({ dealId, userId }) {
       </section>
       <EadwynDraft dealId={dealId} fill={fill} onSaved={load} />
       <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-notes">
-        <h3 className={H3}>Notes</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className={H3}>Notes</h3>
+          {read.status === 'ready' && <span className={SUB} data-testid="deal-notes-count">{filter ? `${read.data.total ?? items.length} tagged ${filter}` : `${read.data.total ?? items.length}`}</span>}
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter by tag" data-testid="deal-notes-filter">
+          {[NOTE_FILTER_ALL, ...NOTE_TAGS].map((t) => (
+            <button key={t || 'all'} type="button" role="radio" aria-checked={filter === t} className={TAG(filter === t)} onClick={() => pick(t)} data-testid={`deal-notes-filter-${t || 'all'}`}>{t || 'All'}</button>
+          ))}
+        </div>
         {read.status === 'loading' && <p className={`m-0 ${SUB}`}>Reading…</p>}
         {read.status === 'unreadable' && <Unreadable what="Your firm’s notes" claim="That is not a claim that there are none." onRetry={load} />}
-        {read.status === 'ready' && !items.length && (
+        {read.status === 'ready' && !items.length && filter && (
+          <p className={`m-0 py-2 ${SUB}`} data-testid="deal-notes-empty">No note is tagged {filter}.</p>
+        )}
+        {read.status === 'ready' && !items.length && !filter && (
           <div className="flex flex-col gap-1 py-2" data-testid="deal-notes-empty">
             <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{EMPTY.notes.title}</p>
             <p className={`m-0 ${SUB}`}>{EMPTY.notes.line}</p>
@@ -255,7 +291,7 @@ function Notes({ dealId, userId }) {
           const own = Number(n.author_user_id) === Number(userId);
           return (
             <article key={n.uid} className="flex flex-col gap-1 border-t border-axal-hairline py-2.5 dark:border-gray-700" data-testid={`deal-note-${n.uid}`}>
-              <span className={EYE}>{String(n.created_at || '').slice(0, 10) || 'Date not recorded'} · {own ? 'You' : 'Your firm'}{n.tag ? ` · ${n.tag}` : ''}</span>
+              <span className={EYE} data-testid={`deal-note-byline-${n.uid}`}>{noteByline(n, userId)}</span>
               <p className="m-0 whitespace-pre-line text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{n.body}</p>
               {own && (
                 <div className="flex gap-3">
@@ -266,6 +302,12 @@ function Notes({ dealId, userId }) {
             </article>
           );
         })}
+        {more.failed && <Unreadable what="The older notes" claim="The notes above are still shown; that is not a claim that there are no more." onRetry={loadMore} />}
+        {read.status === 'ready' && notesHaveMore(items, read.data.total) && !more.failed && (
+          <button type="button" className={`${actionGhost} self-start`} disabled={more.busy} onClick={loadMore} data-testid="deal-notes-more">
+            {more.busy ? 'Reading…' : `Show more (${items.length} of ${read.data.total})`}
+          </button>
+        )}
       </section>
       {dialog && <NoteDialog {...dialog} dealId={dealId} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
     </>

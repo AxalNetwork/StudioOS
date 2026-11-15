@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
+import { validateExportsApi } from '../../../lib/api/founderValidateExports';
 import { useRailOption } from '../../../ui/railCrumbs';
 import Lightbox from '../../../ui/Lightbox';
 import RecordLightbox from '../../founder/RecordLightbox';
@@ -29,30 +30,48 @@ const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage
 const VerdictRecordWithPlan = lazyStep(() => import('../BuildPlan'), 'VerdictRecordWithPlan');
 
 /**
- * D693 decision 13: Export summary, the verdict zone's CSV (`founder_validate.ts`,
- * gated by `canReadDecision` as the module is). A quiet button; a failure shows
- * the Worker's sentence.
+ * A quiet Export button: the CSV downloads, or the Worker's sentence shows
+ * (a 403, or D4585's 503 when a source could not be read). D693 decision 13's
+ * Export summary is the first; D6019 (#6019) gives Market intelligence, Demand
+ * and urgency signals and Experiments and evidence the same button.
  */
-function ExportSummary({ projectId }) {
+function ExportCsv({ projectId, run: exportCsv, label, failure, testId }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const run = () => {
     if (!projectId || busy) return;
     setBusy(true); setError('');
-    Promise.resolve(api.exportValidateSummary(projectId))
-      .catch((e) => setError(e?.message || 'The summary could not be exported.'))
+    Promise.resolve().then(() => exportCsv(projectId))
+      .catch((e) => setError(e?.message || failure))
       .finally(() => setBusy(false));
   };
   return (
-    <div className="flex flex-wrap items-center gap-3" data-testid="verdict-export-summary">
+    <div className="flex flex-wrap items-center gap-3" data-testid={testId}>
       <button type="button" onClick={run} disabled={busy}
         className="rounded-lg border border-axal-hairline px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">
-        {busy ? 'Exporting…' : 'Export summary'}
+        {busy ? 'Exporting…' : label}
       </button>
       {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-400">{error}</span>}
     </div>
   );
 }
+
+/**
+ * D693 decision 13: Export summary, the verdict zone's CSV (`founder_validate.ts`,
+ * gated by `canReadDecision` as the module is).
+ */
+function ExportSummary({ projectId }) {
+  return <ExportCsv projectId={projectId} run={() => api.exportValidateSummary(projectId)} label="Export summary"
+    failure="The summary could not be exported." testId="verdict-export-summary" />;
+}
+
+/** D6019 (#6019): the three module exports, each in its module's part. */
+export const MODULE_EXPORTS = {
+  'market-intelligence': { run: (id) => validateExportsApi.competitors(id), label: 'Export competitors', failure: 'The competitor list could not be exported.', testId: 'validate-export-competitors' },
+  'demand-signals': { run: (id) => validateExportsApi.signals(id), label: 'Export signals', failure: 'The signals could not be exported.', testId: 'validate-export-signals' },
+  experiments: { run: (id) => validateExportsApi.evidence(id), label: 'Export evidence', failure: 'The evidence could not be exported.', testId: 'validate-export-evidence' },
+};
+const ModuleExport = ({ slug, projectId }) => <ExportCsv projectId={projectId} {...MODULE_EXPORTS[slug]} />;
 
 /**
  * The lightbox, with the interview it was opened on (`?interview=<id>`, from a
@@ -154,9 +173,16 @@ const validate = {
       </>
     ),
     // D1087 (#2952): research pages from Notion, as sources (title and link).
-    'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
+    // D6019 (#6019): each of the next three modules' parts opens with its Export.
+    'market-intelligence': (_data, ctx) => (
+      <>
+        <ModuleExport slug="market-intelligence" projectId={ctx.projectId} />
+        <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
+      </>
+    ),
     'demand-signals': (data, ctx) => (
       <>
+        <ModuleExport slug="demand-signals" projectId={ctx.projectId} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}
         <ValidateDemandPosthog projectId={ctx.projectId} />
@@ -169,6 +195,8 @@ const validate = {
       newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
     experiments: (data, ctx) => (
       <>
+        {/* The evidence CSV names Verdict decisions, so it is offered only to a reader of decisions. */}
+        {data?.can_read_decisions !== false && <ModuleExport slug="experiments" projectId={ctx.projectId} />}
         <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
           // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
           onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
