@@ -22,6 +22,8 @@ import { lazyStep } from '../lazyStep.jsx';
 export { useUseOfFundsHome } from '../../raise/useoffunds/useOfFundsRead.js';
 // D5081 part 2 (#5081, RA-22): Capital relationships' Overview reads, which CycleRoute holds for the header's action and Overview.
 export { useCapRelHome } from '../../raise/caprel/capRelHomeRead.js';
+// D5081 part 3 (#5081, RA-20): the Cap table record read, which CycleRoute holds for the header's action and Overview.
+export { useCapTableHome } from '../../raise/captable/capTableHomeRead.js';
 
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
 const NarrativeHome = lazyStep(() => import('../../raise/narrative/NarrativeTool'), 'NarrativeHome');
