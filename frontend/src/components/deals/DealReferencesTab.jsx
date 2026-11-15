@@ -8,6 +8,7 @@ import {
   REFERENCE_PILLS, REFERENCE_STATUS, STATES, whenLine,
 } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded } from './DealRoomKit';
+import { DEFAULT_REFERENCE_CONSENT } from '../../lib/referenceConsent.js';
 
 /**
  * D630 (#1388) — canvas `sp-references`: the deal room's References tab, for
@@ -188,6 +189,11 @@ export function ReferenceConfirm({ kind, row, onClose }) {
           </button>
         </div>
       )}>
+      {kind === 'consent' && (
+        <blockquote className="mx-5 my-4 text-sm text-axal-ink dark:text-gray-100">
+          {DEFAULT_REFERENCE_CONSENT}
+        </blockquote>
+      )}
       {err && <p role="alert" className="mx-5 my-4 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid={`dr-reference-${kind}-refusal`}>{err}</p>}
     </Lightbox>
   );
