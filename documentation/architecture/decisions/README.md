@@ -140,3 +140,4 @@ and citations by number keep working.
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D6637.md` | Offers between accepted ties; implements the owner’s D6263 decision. |

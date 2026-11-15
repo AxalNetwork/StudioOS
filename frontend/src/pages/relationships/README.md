@@ -16,3 +16,4 @@ Who on the member's teams knows an investor, a founder or a company, the ask for
 - **A teammate who did not share is absent.** No count, no gap, no locked or blurred row hints at them.
 - **Axal never contacts the person.** An introduction is asked of the teammate; the intro email is sent from the teammate's own mailbox, and that send records it as made.
 - **Eadwyn drafts only once asked (D4330).** Every "Ask Eadwyn to draft…" button quotes the run first (`estimate: true`, runs nothing) and the member confirms before it runs — never "Fill", always "Ask".
+| `NetworkIntroOffer.jsx` | D6637: names-only consent picker using the existing Sheet. |

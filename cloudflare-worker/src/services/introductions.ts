@@ -62,7 +62,8 @@ export async function ensureIntroNetworkSchema(env: Env): Promise<void> {
        created_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_props_pair
-       ON intro_propositions(user_id, target_user_id)`,
+       ON intro_propositions(user_id, target_user_id) WHERE source<>'offered'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_intro_offers_open ON intro_propositions(user_id,target_user_id) WHERE source='offered' AND status='pending'`,
     `CREATE INDEX IF NOT EXISTS idx_intro_props_user_status
        ON intro_propositions(user_id, status, created_at)`,
     `CREATE TABLE IF NOT EXISTS intro_credit_ledger (
@@ -758,7 +759,7 @@ export async function loadIntroProfileFacts(
 // consent-gated pool, keep the best candidates the user hasn't seen yet,
 // write the rows + reciprocal mirrors, and notify the counterpart.
 // ---------------------------------------------------------------------------
-const PROPOSITION_TTL_DAYS = 14;
+export const PROPOSITION_TTL_DAYS = 14;
 const MIN_PROPOSITION_SCORE = 20;
 
 export async function generateIntroPropositions(
