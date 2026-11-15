@@ -36,3 +36,21 @@ runs that folder, and adding a glob here would mean editing `package.json`, whic
 - **A limit is defined here and nowhere else.** A workflow that needs one imports it; it never restates a number.
 - **A new bot workflow goes in `dispatchable`** and its test calls `assertWorkflow()`.
 - **This folder is T2:** the owner lands every change to it.
+
+## Automatic queue entry
+
+The first-entry feeder (#6481) runs from `main` every ten minutes or by dispatch with one PR number. It uses #6469's ordered landing list and the shared `landPr.decide()` checks. A successful full-suite job must come from the PR's CI workflow on the same commit. The feeder holds PRs with prior queue history, model repairs or uncertain bot attribution for the owner. Issues and PR labels alone do not establish eligibility.
+
+Configure the GitHub Actions environment `landing-bot` to accept deployments from `main` only. Store the dedicated App's ID and key there as `LANDING_BOT_APP_ID` and `LANDING_BOT_APP_PRIVATE_KEY`. The workflow requests an installation token scoped to this repository with contents and pull requests write access. Its runtime credential for API reads has read-only permissions.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_AUTO` | The existing landing-policy switch. Queue admission also requires the live PR settings and #5500 closed as completed. |
+| `LANDING_BOT_ENABLED` | Unset disables the feeder. Use `dispatch` for the first named T0 rehearsal. Use `true` for scheduled sweeps after #6480 and the rehearsal. |
+| `LANDING_BOT_FEED_PER_SWEEP` | Maximum queue requests per run, also bounded by available queue build slots. |
+| `LANDING_BOT_DAILY_FEEDS` | Maximum reserved first-entry requests per UTC day. Skipped or ambiguous writes after reservation still consume their reserved slots. |
+| `LANDING_BOT_QUEUE_FAIL_BREAKER` | Maximum unsuccessful share of the last 20 completed CI merge-group runs. A value of `0.20` stops admission at four unsuccessful runs. |
+
+Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
+
+The workflow uploads the exact selected PR numbers and SHAs before requesting the write token, rechecks each candidate, and requests normal queue entry with GitHub's expected-head guard. An uncertain response stops the sweep. Check the PR timeline before taking any action on that entry.
