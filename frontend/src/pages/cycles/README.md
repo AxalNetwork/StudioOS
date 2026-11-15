@@ -90,6 +90,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `GrowOverview.jsx` | #4862: GR-01/02/13/16 focus-first overview, ranked attention, setup facts and compact domains on desktop and phone. |
 | `growOverviewModel.js` | #4862: canonical Grow labels over existing routes, action gating and focus-value formatting. |
 | `buildEadwyn.js` | D5077 (#5077, BD21 B): each Build module's own Eadwyn asks (`BUILD_ASKS`, `moduleAsks`), which fill Ask's composer and never run on their own, and the rail's sentence per module (`BUILD_RAIL_NOTES`, `moduleRailNote`); `defs/build.jsx` hands both to `CycleRoute`. |
+| `BuildOverview.jsx` | D6028 (#6028, BD1, BD2): Build's overview, mounted as `def.Overview`: the Next card as the one primary, the status strip, Needs attention, the Build Plan preview and compact module cards; below 1024px the phone root with Needs attention under the next action. `BuildState` holds the page's state words until #5129's component lands. |
+| `buildOverviewModel.js` | D6028: pure. The Build overview's parts from D6027's read: read only, the viewer's focus, the strip, attention rows, the plan preview and module sentences. |
 
 ## Rules
 

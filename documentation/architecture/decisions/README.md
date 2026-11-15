@@ -138,3 +138,4 @@ and citations by number keep working.
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D6028.md` | Build Overview V2 page: `/build` drawn to BD1 and BD2 from D6027's read, one primary action, the header's Connect a tool removed on `/build` only (#6028). |

@@ -16,6 +16,7 @@ of `.github/workflows/deck-visual.yml`.
 | `deck_editor.visual.spec.js` | The screenshots (17 structures × themes × 2 aspects, and the one-click deck) and the axe checks (light, dark, the keyboard path, the Ask dialog, phone and tablet). |
 | `__screenshots__/` | The baselines. CI writes them in the pinned container and commits them; never add one made on a laptop. |
 | `grow_overview_4862.spec.mjs` | #4862: sparse/active overview, Share lightbox, failed-read retry and read-only states at desktop and phone widths. |
+| `build_overview_6028.spec.mjs` | D6028 (#6028): Build Overview V2 at 1440, 768 and 390 in light and dark: one primary, no header Connect a tool, no horizontal scroll, and a failed part retrying alone. |
 
 | `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
 | `revenue_completion_5039.spec.mjs` | #5039: Stream filtering, native invoice figures, governed dispute/due-date receipts, lazy history and checkout read-back at desktop, 834, 390 and dark; unknown replay and stale-period responses. |

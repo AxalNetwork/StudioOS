@@ -858,6 +858,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
     body = def?.Overview ? <>
       <def.Overview raw={rawOverview} data={overview} status={overviewState} search={q} action={action} message={overviewMessage} readOnly={Boolean(narrativeAdmin || supportOpen)} onRetry={() => setReload((n) => n + 1)}
+        // D6028 (#6028): Build's overview also draws the phone root, retries one card and opens Connect a tool over itself.
+        phone={phone} projectId={projectId} openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetryCard={retryCard}
         more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null} />
       {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
     </> : phone ? (
