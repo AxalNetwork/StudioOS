@@ -76,3 +76,5 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 | `migrations/202611100929_financial_events.sql` | D5299 (#5299, revenue ledger 1/6 of #5038): `financial_events`, one append-only row per Stripe or HQ financial event, idempotent on (source, source event id) and on a refund's charge and cumulative total; rows immutable but for reconciliation (triggers); `financial_event_coverage` records each source's coverage start. New tables, re-runnable, no backfill. |
 | `migrations/202611112356_4662_mail_conversation.sql` | D4662 (#4662): independent sent conversation association, known same-user draft backfill and stable-order index. |
 | `migrations/202611122121_4557_compute_host.sql` | D4557 part 2: request/run snapshots, execution fences and private object metadata. |
+
+| `migrations/202611151450_6424_flow_attention.sql` | D6424: a per-firm optional stale threshold and its recorded writer; no default. |
