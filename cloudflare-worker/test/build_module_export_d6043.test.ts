@@ -82,14 +82,13 @@ test('columns and rows: the page\'s columns, only this venture\'s rows, its defa
   const db = seeded();
   const r = await exportOf(db, 'solution-design');
   const [head, ...body] = parse(r.text);
-  assert.deepEqual(head, ['Feature', 'Pain theme', 'Hypothesis', 'Impact', 'Effort']);
+  assert.deepEqual(head, ['Feature', 'Evidence link', 'Impact', 'Effort']);
   assert.equal(r.rows, '3');
   // Impact first (High, Medium, Low), as the page's default sort; the other venture's feature never appears.
   assert.deepEqual(body.map((row) => row[0]), ['Bank feed, "nightly"\nimport', 'Exceptions queue', "'=HYPERLINK(\"x\")"]);
-  // The page's own words where it has them (Links to nothing), Not recorded where the cell is empty.
-  assert.deepEqual(body[1], ['Exceptions queue', 'Links to nothing', 'Not recorded', 'Medium', 'Not recorded']);
-  assert.equal(body[0][2], 'Not recorded');
-  assert.equal(body[0][1], 'Manual reconciliation');
+  // The page's own words where it has them (No evidence link, D6030's one evidence cell), Not recorded where the cell is empty.
+  assert.deepEqual(body[1], ['Exceptions queue', 'No evidence link', 'Medium', 'Not recorded']);
+  assert.equal(body[0][1], 'Pain · Manual reconciliation');
   assert.ok(!r.text.includes('Their feature'));
   db.close();
 });
@@ -99,24 +98,24 @@ test('escaping: comma, quote and line break are quoted; a formula is defused; re
   const r = await exportOf(db, 'solution-design');
   assert.ok(r.text.includes('"Bank feed, ""nightly""\nimport"'));
   assert.ok(r.text.includes(`"'=HYPERLINK(""x"")"`));
-  assert.equal(r.text.split('\r\n')[0], 'Feature,Pain theme,Hypothesis,Impact,Effort');
+  assert.equal(r.text.split('\r\n')[0], 'Feature,Evidence link,Impact,Effort');
   db.close();
 });
 
 test('filters, search and sort: the export honours the page\'s query and never pages', async () => {
   const db = seeded();
   const high = parse((await exportOf(db, 'solution-design', '&filter=impact:high')).text).slice(1);
-  assert.deepEqual(high.map((row) => row[3]), ['High']);
-  const unlinked = parse((await exportOf(db, 'solution-design', '&filter=linked:no')).text).slice(1);
+  assert.deepEqual(high.map((row) => row[2]), ['High']);
+  const unlinked = parse((await exportOf(db, 'solution-design', '&filter=evidence:none')).text).slice(1);
   assert.deepEqual(unlinked.map((row) => row[0]).sort(), ["'=HYPERLINK(\"x\")", 'Exceptions queue']);
   const searched = parse((await exportOf(db, 'solution-design', '&q=exceptions')).text).slice(1);
   assert.deepEqual(searched.map((row) => row[0]), ['Exceptions queue']);
   const reversed = parse((await exportOf(db, 'solution-design', '&sort=-impact')).text).slice(1);
-  assert.deepEqual(reversed.map((row) => row[3]), ['Low', 'Medium', 'High']);
+  assert.deepEqual(reversed.map((row) => row[2]), ['Low', 'Medium', 'High']);
   // `page` is not the export's: page 2 of a 3-row list still writes all three.
   assert.equal(parse((await exportOf(db, 'solution-design', '&page=2')).text).length, 4);
   const none = await exportOf(db, 'solution-design', '&q=nothing-matches');
-  assert.equal(none.text, 'Feature,Pain theme,Hypothesis,Impact,Effort');
+  assert.equal(none.text, 'Feature,Evidence link,Impact,Effort');
   db.close();
 });
 
