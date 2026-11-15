@@ -95,6 +95,7 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 | `D5565.md` | Strict portable WorkspaceSpec/ExecutorAdapter and injected-clock atomic lease/fencing protocol; unmounted and no new task/usage ledger. |
 | `D5567.md` | Unmounted workspace security gate: live scoped grants, provider/image eligibility, one-use callbacks and encrypted tenant-bound object access. |
+| `D5568.md` | Tenant/repo-scoped Git cache, private per-attempt worktrees from an exact SHA, encrypted checkpoints committed by a generation-fenced pointer after verified upload, portable restore; unmounted. |
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 

@@ -477,3 +477,27 @@ export const pickToggle = (picked, id) => (picked.includes(id) ? picked.filter((
  * studio is told. A row entered via an invitation that was a colleague's, or one already answered 'passed', is not.
  */
 export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' || row?.myInvitation === 'interested';
+
+// ---------------------------------------------------------------- Needs your attention (D4815 part 3, DX1)
+
+/**
+ * The strip's items, from reads the page already has a route for. DE01 draws
+ * three: "stale", "new" and "waiting on diligence". Only "new" has a field
+ * behind it, the inbox (`GET /api/deals/flow/inbox`, which DE17 names for this
+ * strip): every deal that reached the investor and is not yet in the flow.
+ * No read records a stale threshold (the flow carries `days_in_stage` and no
+ * rule for when it is stale) or what a deal in Diligence waits on, so those
+ * two are left out (D4815-p3), never guessed.
+ *
+ * `read` is `{ kind: 'loading' | 'unreadable' | 'ok', data }`. A failed read is
+ * `unreadable`, never a count of 0; a way in that could not be read is named,
+ * so a count from the rest reads as "at least".
+ */
+export function attentionOf(read, unreadWords = () => []) {
+  if (!read || read.kind === 'loading') return { kind: 'loading', items: [], unread: [] };
+  if (read.kind !== 'ok') return { kind: 'unreadable', items: [], unread: [] };
+  const deals = new Set((read.data?.items || []).map((i) => String(i.deal_id)));
+  const unread = unreadWords(read.data?.sources || {});
+  const items = deals.size ? [{ key: 'new', count: deals.size, word: `${deals.size} new`, label: `${deals.size} ${deals.size === 1 ? 'deal' : 'deals'} new for you` }] : [];
+  return { kind: 'ok', items, unread };
+}
