@@ -89,9 +89,9 @@ async function mounted(url, handle, user) {
   const at = { path: url };
   function Probe() { const l = useLocation(); at.path = `${l.pathname}${l.search}${l.hash}`; return null; }
   await act(async () => rootNode.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(Table), h(Probe)))));
-  const flush = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setTimeout(r, 5)); });
-  for (let waited = 0; !container.childNodes?.length && waited < 5000; waited += 25) {
-    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
+  const flush = () => act(async () => { for (let i = 0; i < 40; i += 1) await new Promise((r) => setImmediate(r)); });
+  for (let waited = 0; !container.childNodes?.length && waited < 2000; waited += 1) {
+    await act(async () => { await new Promise((r) => setImmediate(r)); });
   }
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
