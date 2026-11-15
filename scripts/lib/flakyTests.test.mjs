@@ -44,21 +44,28 @@ test('D6464: a job log yields each failed test with its file, once', () => {
 });
 
 test('D6464: a test failing on its own PR\'s changed file is never classed flaky', () => {
-  const green = [{ sha: 'm1', at: '2026-11-14T11:00:00Z', event: 'push' }];
+  const greens = [{ sha: 'g1', at: '2026-11-14T10:15:00Z', event: 'merge_group' }, { sha: 'm1', at: '2026-11-14T11:00:00Z', event: 'push' }];
   const runs = [
     { id: 1, sha: 's1', at: '2026-11-14T10:00:00Z', failures: [A, B], changedFiles: [B.file] },
     { id: 2, sha: 's2', at: '2026-11-14T10:30:00Z', failures: [A], changedFiles: [] },
   ];
-  assert.deepEqual(classify(runs, green).map((r) => [r.file, r.test, r.runs]), [[A.file, A.test, [1, 2]]]);
+  assert.deepEqual(classify(runs, greens).map((r) => [r.file, r.test, r.runs]), [[A.file, A.test, [1, 2]]]);
 });
 
-test('D6464: a failure counts only when the same code passed: the same commit later, or main within a day', () => {
-  const run = (sha, at) => ({ id: at, sha, at, failures: [A], changedFiles: [] });
-  assert.equal(classify([run('s1', '2026-11-14T10:00:00Z')], [{ sha: 's1', at: '2026-11-14T10:20:00Z', event: 'merge_group' }]).length, 1);
-  assert.equal(classify([run('s1', '2026-11-14T10:00:00Z')], [{ sha: 'm', at: '2026-11-15T09:59:00Z', event: 'push' }]).length, 1);
-  assert.equal(classify([run('s1', '2026-11-14T10:00:00Z')], [{ sha: 'm', at: '2026-11-15T10:01:00Z', event: 'push' }]).length, 0, 'main passed too late');
-  assert.equal(classify([run('s1', '2026-11-14T10:00:00Z')], [{ sha: 'm', at: '2026-11-14T09:00:00Z', event: 'push' }]).length, 0, 'main passed before, not after');
-  assert.equal(classify([run('s1', '2026-11-14T10:00:00Z')], [{ sha: 'other', at: '2026-11-14T10:20:00Z', event: 'merge_group' }]).length, 0, 'another queue entry is not the same code');
+test('D6464: flaky means intermittent: the same commit passed it later, or a run passed between its failures', () => {
+  const run = (id, sha, at) => ({ id, sha, at, failures: [A], changedFiles: [] });
+  const main = (at) => ({ sha: `m-${at}`, at, event: 'push' });
+  // The same commit failed, then passed on a later attempt.
+  assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z')], [{ sha: 's1', at: '2026-11-14T10:20:00Z', event: 'merge_group' }]).length, 1);
+  // Two failures with a green run between them, and main green after.
+  assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z'), run(2, 's2', '2026-11-14T12:00:00Z')],
+    [{ sha: 'g', at: '2026-11-14T11:00:00Z', event: 'merge_group' }, main('2026-11-14T13:00:00Z')]).length, 1);
+  // A red main (D5398): every entry fails until the repair, then main passes. Nothing passed between the failures.
+  const red = [1, 2, 3, 4, 5].map((i) => run(i, `s${i}`, `2026-11-14T1${i}:00:00Z`));
+  assert.equal(classify(red, [main('2026-11-14T16:30:00Z'), { sha: 'g', at: '2026-11-14T16:40:00Z', event: 'merge_group' }]).length, 0);
+  // No later pass of any kind, or only a main pass too late or before: nothing counts.
+  assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z'), run(2, 's2', '2026-11-14T12:00:00Z')], [main('2026-11-14T09:00:00Z')]).length, 0);
+  assert.equal(classify([run(1, 's1', '2026-11-14T10:00:00Z')], [{ sha: 'other', at: '2026-11-14T10:20:00Z', event: 'merge_group' }]).length, 0, 'another queue entry is not the same code');
 });
 
 test('D6464: the list adds a test seen in two runs, updates known ones, and expiry removes a clean entry', () => {

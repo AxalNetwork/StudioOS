@@ -6,9 +6,9 @@
  * (`scripts/test-drift-parts.mjs`) asks `retryDecision` whether a failed
  * part may run its failed files once more.
  *
- * A test is flaky here when it failed in a merge-queue run on a PR that did
- * not touch its file, and the same code passed it: the same commit later, or
- * main within a day. A retry never hides a failure: the runner writes every
+ * A test is flaky here when it failed in merge-queue runs on PRs that did not
+ * touch its file, intermittently: the same commit later passed it, or a run
+ * succeeded between two of its failures. A red main is not a flake. A retry never hides a failure: the runner writes every
  * retried test to the job summary, and a test that is not on the list, or
  * whose file the entry itself changed, is never retried.
  */
@@ -71,9 +71,14 @@ export function queuePr(branch) {
 /**
  * Classify failures. `runs` are failed merge-queue runs:
  * { id, sha, at, failures: [{ file, test }], changedFiles: string[] }.
- * `greens` are successful runs: { sha, at, event }. A failure counts only
- * when its file is not one the PR changed and the same commit later passed,
- * or main passed within MAIN_WINDOW_MS after it.
+ * `greens` are successful runs: { sha, at, event }.
+ *
+ * A failure counts only when its file is not one the PR changed and main
+ * passed within MAIN_WINDOW_MS after it, or the same commit later passed. A
+ * test is flaky only when it is intermittent: the same commit failed and then
+ * passed it, or a run succeeded BETWEEN two of its failures. A test that fails
+ * in every run until a fix lands (a red main, D5398) has no green run between
+ * its failures, so it is not flaky, however often it failed.
  * Returns [{ file, test, runs: [id], firstSeen, lastSeen }].
  */
 export function classify(runs, greens) {
@@ -81,20 +86,24 @@ export function classify(runs, greens) {
   for (const run of runs) {
     const changed = new Set(run.changedFiles || []);
     const at = Date.parse(run.at);
-    const passedLater = greens.some((g) => (g.sha === run.sha && Date.parse(g.at) >= at)
-      || (g.event === 'push' && Date.parse(g.at) >= at && Date.parse(g.at) - at <= MAIN_WINDOW_MS));
-    if (!passedLater) continue;
+    const sameCodePassed = greens.some((g) => g.sha === run.sha && Date.parse(g.at) >= at);
+    const mainPassed = greens.some((g) => g.event === 'push' && Date.parse(g.at) >= at && Date.parse(g.at) - at <= MAIN_WINDOW_MS);
+    if (!sameCodePassed && !mainPassed) continue;
     for (const f of run.failures) {
       if (changed.has(f.file)) continue;
       const key = `${f.file}\u0000${f.test}`;
-      const row = byKey.get(key) || { file: f.file, test: f.test, runs: [], firstSeen: run.at, lastSeen: run.at };
+      const row = byKey.get(key) || { file: f.file, test: f.test, runs: [], firstSeen: run.at, lastSeen: run.at, rerunPassed: false };
       if (!row.runs.includes(run.id)) row.runs.push(run.id);
       if (run.at < row.firstSeen) row.firstSeen = run.at;
       if (run.at > row.lastSeen) row.lastSeen = run.at;
+      row.rerunPassed ||= sameCodePassed;
       byKey.set(key, row);
     }
   }
-  return [...byKey.values()].sort((a, b) => b.runs.length - a.runs.length || a.file.localeCompare(b.file) || a.test.localeCompare(b.test));
+  const intermittent = (row) => row.rerunPassed
+    || greens.some((g) => Date.parse(g.at) > Date.parse(row.firstSeen) && Date.parse(g.at) < Date.parse(row.lastSeen));
+  return [...byKey.values()].filter(intermittent).map(({ rerunPassed, ...row }) => row)
+    .sort((a, b) => b.runs.length - a.runs.length || a.file.localeCompare(b.file) || a.test.localeCompare(b.test));
 }
 
 const day = (iso) => String(iso).slice(0, 10);
