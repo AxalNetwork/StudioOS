@@ -55,7 +55,7 @@ export function sendCapacityNotice(env: Bindings, transition: { stage: 'firing' 
     '[axalvc][superadmin][platform][capacity][recovery] HQ database size returned within its configured threshold. Open HQ Platform at /admin/platform.', transition.root);
 }
 
-async function sendVerifiedSection(env: Bindings, slug: string, text: string, thread?: ThreadReceipt): Promise<Result> {
+export async function sendVerifiedSection(env: Bindings, slug: string, text: string, thread?: ThreadReceipt): Promise<Result> {
   const { SLACK_BOT_TOKEN: token, AXAL_SECTION_SLACK_TEAM_ID: team, AXAL_SECTION_SLACK_CHANNELS: raw } = env;
   if (!token || !team || !raw) return { ok: false, reason: 'unconfigured' };
   if (!teamIdPattern.test(team)) return { ok: false, reason: 'invalid_configuration' };

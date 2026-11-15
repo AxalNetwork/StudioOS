@@ -237,7 +237,10 @@ const PROFILES = {
     //
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
-    handlers: 16,
+    //
+    // SEVENTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // stores the log and the page draws it; the op scrolls to that card.
+    handlers: 17,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -248,7 +251,9 @@ const PROFILES = {
     // shipped gap rather than deferring one.
     // Reviewed elsewhere-claims, by label — see the assertion below.
     // `New deep-dive` left when Markets became the sector directory.
-    elsewhere: ['Edit rubric', 'Merge duplicates'],
+    // `Merge duplicates` left with D6258: its reason no longer says where
+    // an organisation is stored.
+    elsewhere: ['Edit rubric'],
     // D1243 (#3256): the canvas still draws ID1; its zone is retired and `/deals/pipeline` forwards to Deal flow's table.
     excluded: ['deals/pipeline'],
     embeddedGuards: 1,

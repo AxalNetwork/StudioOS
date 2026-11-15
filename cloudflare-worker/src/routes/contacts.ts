@@ -869,7 +869,23 @@ r.get('/raise-prospects', async (c) => {
     const rows = await c.env.DB.prepare(
       `SELECT * FROM raise_prospects WHERE ${where} ORDER BY updated_at DESC LIMIT 500`,
     ).bind(...params).all<any>();
-    return c.json({ items: rows.results || [], stages: RAISE_STAGES });
+    const items: any[] = rows.results || [];
+    // D6077 (#6077): a one-venture read also carries each investor's Fit, Source
+    // (`via_call`) and last contact, derived as the Cycle table derives them, so
+    // Pipeline can filter and sort on them. The venture is the one the scoped
+    // rows came from; a read across ventures is not enriched ('not_read'). A
+    // failure leaves the prospects readable and says so ('unreadable').
+    const { prospectSignals } = await import('../services/raiseCycle');
+    const { roundCallsEnabled } = await import('../services/roundCallPolicy');
+    let signals: 'ok' | 'not_read' | 'unreadable' = 'not_read';
+    if (pid && items.length) {
+      try {
+        const by = await prospectSignals(c.env, Number(items[0].project_id));
+        for (const it of items) Object.assign(it, by.get(Number(it.id)) ?? { fit: 'not_recorded', via_call: false, last_contact: null });
+        signals = 'ok';
+      } catch { signals = 'unreadable'; }
+    } else if (pid) signals = 'ok';
+    return c.json({ items, stages: RAISE_STAGES, signals, round_calls: roundCallsEnabled(c.env) });
   } catch (e) { return mapError(c, e); }
 });
 

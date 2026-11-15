@@ -40,7 +40,8 @@ import {
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
-import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
+import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
+import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -189,6 +190,13 @@ async function roadmapItems(env: Env, projectId: number): Promise<Array<{ value:
   return (res.results || []).map((r) => ({ value: String(r.id), label: String(r.objective).slice(0, 200) }));
 }
 
+/**
+ * D6097 (#6097): Build's Add item with Answers feedback theme chosen (`forms.js` `buildItem.fromQuery`).
+ * Saving it links the theme's open rows that have no roadmap item yet (`buildCreates.ts` `feedbackLink`).
+ */
+export const addToRoadmapHref = (projectId: number, theme: string) =>
+  `/build/product-roadmap/new?project_id=${projectId}&feedback_theme=${encodeURIComponent(theme)}`;
+
 const FEEDBACK_EDIT = ['body', 'source', 'from_name', 'from_email', 'from_company', 'theme', 'roadmap_item_ref', 'status', 'notify_on_ship'] as const;
 
 const productImprovement = spec('product_feedback', 'product-improvement', GROW_OLD_ROWS['product-improvement'], async (rc, id) => {
@@ -218,11 +226,12 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
 }, [
   section('theme', 'Theme', async (_rc, _id, record) => {
     const { f, byStatus } = loadedOf(record);
-    if (!f?.theme) return { rows: [], empty: 'No theme yet.', action: 'change-theme' };
+    // D6097: Add to roadmap answers a theme, so a row with none has no Add to roadmap; the sentence says why.
+    if (!f?.theme) return { rows: [], empty: 'No theme yet. Add to roadmap needs a theme.', action: 'change-theme' };
     const n = [...(byStatus as Map<string, number>).values()].reduce((a, b) => a + b, 0);
     const status = themeStatus(byStatus);
-    // No impact store, so the row never says "High impact" (decision 10).
-    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status] }], action: 'change-theme' };
+    // No impact store, so the row never says "High impact" (decision 10). The route strips the row's action for a reader.
+    return { rows: [{ a: String(f.theme), b: plural(n, 'item', 'items'), c: label(status), tone: TONE[status], action: 'add-to-roadmap' }], action: 'change-theme' };
   }),
   section('closing-the-loop', 'Closing the loop', async (_rc, _id, record) => {
     const { f } = loadedOf(record);
@@ -265,6 +274,8 @@ const productImprovement = spec('product_feedback', 'product-improvement', GROW_
       return { ok: true, record: await setFeedbackTheme(c.env, c.projectId, uid, next, Number(c.user.id)) };
     }),
   }];
+  // D6097: the theme's Add item in Build. Actions reach writers only (`cycle_records.ts`), so a reader never sees it.
+  if (f.theme) actions.push({ key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: addToRoadmapHref(rc.projectId, String(f.theme)) });
   if (Number(f.notify_on_ship) === 1 && f.status === 'shipped' && !f.told_at) {
     actions.push({
       key: 'mark-told', label: 'Mark told', kind: 'form',
@@ -673,6 +684,23 @@ export function termsText(g: Any): string | null {
   return amount ? `${label(g.terms_kind)} · ${amount}` : label(g.terms_kind);
 }
 
+/** "Oct 2026" for a stored YYYY-MM. */
+function monthYear(raw: unknown): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(raw ?? ''));
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${month} ${m[1]}` : String(raw ?? '');
+}
+
+/**
+ * D6112: Enter revenue's amount, in US dollars as typed ("1,200", "$40.50"), to cents through the money
+ * layer (D5373); partner revenue carries no currency, and every reader shows it in dollars.
+ */
+function typedRevenueCents(v: unknown): number {
+  const parsed = parseMinor(String(v ?? '').trim().replace(/^\$/, ''), 'USD');
+  if (!parsed.ok) throw new Refused(400, 'Type an amount in US dollars, 0 or more', 'amount');
+  return parsed.minor;
+}
+
 const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
@@ -703,6 +731,14 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     return { rows: (res.results || []).map((d) => ({ a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' })),
       empty: 'No deal recorded.', action: 'add-deal' };
   }),
+  // D6112 (#6112): each month's partner-sourced revenue with where it came from; a month no one entered has no row.
+  section('revenue', 'Revenue by month', async (rc, _id, record) => {
+    const { g } = loadedOf(record);
+    const res = await rc.env.DB.prepare('SELECT month, amount_cents, source FROM partner_revenue WHERE partner_id = ? ORDER BY month DESC LIMIT 24')
+      .bind(g.id).all<Any>();
+    return { rows: (res.results || []).map((r) => ({ a: monthYear(r.month), b: partnerRevenueSource(r.source), c: money(r.amount_cents) ?? '' })),
+      empty: 'No month entered.', action: 'enter-revenue' };
+  }),
   section('terms', 'Terms', async (_rc, _id, record) => {
     const { g } = loadedOf(record);
     const terms = termsText(g);
@@ -725,6 +761,16 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
   }
+  actions.push({
+    key: 'enter-revenue', label: 'Enter revenue', kind: 'form',
+    form: { title: 'Enter revenue', sub: 'Revenue this partner sourced in one month.', cta: 'Save',
+      foot: 'A month already typed is replaced. A month that came from another source keeps its figure.', fields: [
+        { key: 'month', label: 'Month', kind: 'T', placeholder: 'YYYY-MM', value: new Date().toISOString().slice(0, 7), required: true },
+        { key: 'amount', label: 'Amount', kind: 'T', input: 'money', required: true, note: 'US dollars.' },
+      ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setPartnerRevenue(c.env, c.projectId, userOf(c), id,
+      String(field(body, 'month') ?? '').trim(), { amount_cents: typedRevenueCents(field(body, 'amount')) }) })),
+  });
   actions.push({
     key: 'add-deal', label: 'Add deal', kind: 'form',
     form: { title: 'Add deal', cta: 'Add', fields: [
