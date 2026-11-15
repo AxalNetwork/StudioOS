@@ -245,7 +245,7 @@ test('the shared limits equal merge-control/src/lib/repairPolicy.ts', () => {
 
 test('the labels exist in .github/labels.yml', () => {
   const yml = readFileSync(new URL('../../.github/labels.yml', import.meta.url), 'utf8');
-  for (const name of Object.values(LABELS)) assert.match(yml, new RegExp(`- name: "${name.replace(/[:]/g, '\\$&')}"`), name);
+  for (const name of Object.values(LABELS)) assert.ok(yml.includes(`- name: "${name}"\n`), name);
 });
 
 // ---- the workflow test helper ----
