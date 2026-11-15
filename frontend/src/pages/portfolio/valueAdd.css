@@ -1,0 +1,64 @@
+/* D4817 part 5 (#5311, PF-05): Value-add — the figure row, the commitments and
+   introductions tables, the in-place confirmation and the Log support form.
+   Every colour is a frame token from portfolio.css, which `.dark` redefines. */
+.va-figures-card{gap:10px}
+.va-figures{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--pf-hair);border-radius:10px;overflow:hidden}
+.va-figures>.pf-metric{border-bottom:0}
+.va-figures>.pf-metric:last-child{border-right:0}
+.va-figures .pf-metric[data-state="not_recorded"] b,.va-figures .pf-metric[data-state="unavailable"] b{font-size:14px}
+.va-pad{padding:0 14px 14px}
+.pf-table-card>.va-pad-note{margin:0 14px 14px}
+.pf-table-card>.va-boundary{margin:0;padding:10px 14px;border-top:1px solid var(--pf-hair);background:var(--pf-raised)}
+.va-table tbody th{min-width:120px}
+.va-table td{vertical-align:top}
+.va-table tbody th{vertical-align:top}
+.va-table td.va-date{min-width:84px;font-family:var(--font-mono);font-size:11.5px}
+.va-table thead th{white-space:normal}
+.va-act small{min-width:96px}
+.va-table td.va-date small{font-family:var(--font-app)}
+.va-table tr.is-contested>th,.va-table tr.is-contested>td{background:var(--pf-amBg)}
+.va-state.is-promised{color:var(--pf-vt);background:var(--pf-lav);border-color:var(--pf-lavE)}
+.va-state.is-delivered{color:var(--pf-pos);border-color:var(--pf-posE);background:transparent}
+.va-state.is-withdrawn{background:transparent;border-color:var(--pf-hair2);border-style:dotted}
+.va-act{text-align:right;width:1%}
+.va-act small{display:block;color:var(--pf-mu);font-size:11px;white-space:normal}
+.va-moves{display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.va-act .pf-btn{justify-content:center}
+.va-act .pf-btn:disabled{opacity:.55;cursor:not-allowed}
+.va-table tr.va-sub>td{background:var(--pf-raised)}
+.va-confirm{display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.5}
+.va-confirm p{margin:0}
+.va-error{margin:0;color:var(--pf-neg);font-size:12.5px;font-weight:600}
+.va-history ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.va-history li{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:baseline}
+.va-history small{color:var(--pf-mu);font-family:var(--font-mono);font-size:11px}
+.va-pages{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;font-size:12.5px;color:var(--pf-mu)}
+.va-pages .pf-btn:disabled{opacity:.5;cursor:not-allowed}
+.va-notice{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.va-form .va-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px;grid-auto-flow:column;grid-template-rows:auto auto}
+.va-form label{font-size:12px;font-weight:700;color:var(--pf-ink)}
+.va-form label em{font-weight:500;color:var(--pf-mu)}
+.va-form select,.va-form input,.va-form textarea{min-height:34px;border:1px solid var(--pf-hair2);border-radius:8px;background:var(--pf-card);color:var(--pf-ink);font:inherit;font-size:12.5px;padding:6px 8px;width:100%;box-sizing:border-box;color-scheme:light}
+.dark .va-form select,.dark .va-form input,.dark .va-form textarea{color-scheme:dark}
+.va-form [aria-invalid="true"]{border-color:var(--pf-neg);outline:1px solid var(--pf-neg)}
+.va-form select:focus-visible,.va-form input:focus-visible,.va-form textarea:focus-visible{outline:2px solid var(--pf-vi);outline-offset:1px}
+.va-wide{display:flex;flex-direction:column;gap:4px}
+@media(max-width:1300px){.va-figures{grid-template-columns:repeat(3,minmax(0,1fr))}.va-figures>.pf-metric:nth-child(3n){border-right:0}.va-figures>.pf-metric:nth-child(-n+3){border-bottom:1px solid var(--pf-hair)}}
+@media(max-width:850px){.va-form .va-fields{grid-template-columns:1fr 1fr;grid-auto-flow:row;grid-template-rows:none}}
+@media(max-width:600px){
+  .va-figures{grid-template-columns:1fr 1fr}
+  .va-figures>.pf-metric:nth-child(3n){border-right:1px solid var(--pf-hair)}
+  .va-figures>.pf-metric:nth-child(2n){border-right:0}
+  .va-figures>.pf-metric:nth-child(-n+4){border-bottom:1px solid var(--pf-hair)}
+  .va-table td.va-date{white-space:normal}
+  .va-act{text-align:left}
+  .va-moves{flex-direction:row;width:100%}
+  .va-moves .pf-btn,.va-act>.pf-btn{flex:1 1 auto;justify-content:center}
+  .va-act small{flex-basis:auto;padding-left:0}
+  .va-table tr.va-sub>td::before{content:none}
+  .va-table tr.va-sub>td{display:block}
+  .va-confirm .pf-btn{flex:1 1 100%;justify-content:center}
+  .va-form .va-fields{grid-template-columns:1fr}
+  .va-form select,.va-form input,.va-form textarea{min-height:44px}
+  .va-pages .pf-btn{flex:1 1 auto;justify-content:center}
+}

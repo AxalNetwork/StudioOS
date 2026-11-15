@@ -1,3 +1,5 @@
+import Card from './account/AccountCard.jsx';
+import InvestorMyThesisCard from './account/InvestorMyThesisCard.jsx';
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { categorySwitches, notificationSaver, privacySaver, publicProfileSaver } from '../lib/settingsSavers';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
@@ -340,18 +342,18 @@ export default function SettingsPage() {
     const r = (data.role || '').toLowerCase();
     const allowed = new Set(SECTIONS.filter(s => !s.roles || s.roles.includes(r)).map(s => s.id));
     if (!allowed.has(active)) navigate({ pathname: '/account', search: location.search }, { replace: true });
-  }, [data, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, active, location.hash]);
 
   // D568 — an anchor in the address names a card that only exists once the
   // page has read the account and drawn the pane, which is after the browser
   // has given up looking for it. Scroll to it then.
   useEffect(() => {
-    if (!data || !location.hash || typeof document === 'undefined') return;
+    if (!data || !location.hash || location.hash === '#my-thesis' || typeof document === 'undefined') return;
     let id = location.hash.slice(1);
     try { id = decodeURIComponent(id); } catch { /* a malformed escape is looked up as written */ }
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ block: 'start' });
-  }, [data, active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, active, location.hash]);
 
   // D568 — a failed root read is retried in place instead of leaving a red box
   // and a reload as the only way back.
@@ -432,7 +434,7 @@ export default function SettingsPage() {
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage, builderView };
+  const paneProps = { location, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage, builderView };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -485,7 +487,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null, builderView = null }) {
+function AccountPanes({ safeActive, location, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null, builderView = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -507,6 +509,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       )}
       {safeActive === 'security-privacy' && (
         <>
+          {location.hash === '#my-thesis' && <InvestorMyThesisCard key={location.key} flash={flash} role={data?.role} linked />}
           <AuthSection data={data} flash={flash} reload={reloadAccount} />
           {/* The canvas draws no privacy section. These cards stay on this
               pane, under their own label: the worker's cohort-access
@@ -515,7 +518,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <PrivacyCoreCard flash={flash} />
           <CohortAdvisorAccessCard flash={flash} />
           <InvestorSignalsContributionCard flash={flash} role={data?.role} />
-          <InvestorMyThesisCard flash={flash} role={data?.role} />
+          {location.hash !== '#my-thesis' && <InvestorMyThesisCard flash={flash} role={data?.role} />}
           <InvestorThesisEditorCard flash={flash} role={data?.role} />
           <MarketIntelContributionCard flash={flash} />
           <PrivacySection data={data} patch={patch} flash={flash} />
@@ -555,19 +558,6 @@ function AccountPhoneIndexReads({ role }) {
 }
 
 // ---------- Sections --------------------------------------------------------
-
-function Card({ title, description, children, footer }) {
-  return (
-    <div data-card className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
-      <div data-card-header className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-        {description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</p>}
-      </div>
-      <div data-card-body className="p-5">{children}</div>
-      {footer && <div data-card-footer className="px-5 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl">{footer}</div>}
-    </div>
-  );
-}
 
 function Field({ label, hint, children }) {
   return (
@@ -4105,128 +4095,6 @@ function InvestorSignalsContributionCard({ flash, role }) {
 
 // Investor "My thesis" editor — the positive thesis (sectors, stages,
 // geographies, free-text) that powers deal sourcing and founder matching.
-// The investor-profile PUT is full-replace on these JSON columns, so we resend
-// the fields this card doesn't edit (investor_type, ticket_band, contribute,
-// anti-thesis, value_weights). Onboarding-only fields (firm/accreditation/
-// LP intent/notes) are preserved server-side by the PUT's preserve-if-absent
-// path since we omit them here. Only investors (or anyone with a completed
-// profile) see it.
-function InvestorMyThesisCard({ flash, role }) {
-  const [profile, setProfile] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getInvestorProfile()
-      .then(r => { if (!cancelled) setProfile(r.profile); })
-      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const isInvestor = String(role || '').toLowerCase() === 'investor';
-  if (!isInvestor && !profile?.completed_at) return null;
-  if (err) return <Card title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!profile) return <Card title="My thesis"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
-
-  const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
-  const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
-  const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
-
-  const sectors = profile.sectors || [];
-  const stages = profile.stages || [];
-  const geos = profile.geos || [];
-  const antiSectors = profile.anti_thesis_sectors || [];
-  const antiStages = profile.anti_thesis_stages || [];
-
-  const toggle = (key, val) => {
-    const arr = (profile[key] || []).includes(val)
-      ? (profile[key] || []).filter(x => x !== val)
-      : [...(profile[key] || []), val];
-    setProfile({ ...profile, [key]: arr });
-  };
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      const r = await api.saveInvestorProfile({
-        investor_type: profile.investor_type,
-        sectors: profile.sectors || [],
-        stages: profile.stages || [],
-        geos: profile.geos || [],
-        ticket_band: profile.ticket_band,
-        thesis_text: profile.thesis_text,
-        contribute_to_signals: profile.contribute_to_signals !== false,
-        anti_thesis_sectors: profile.anti_thesis_sectors || [],
-        anti_thesis_stages: profile.anti_thesis_stages || [],
-        value_weights: profile.value_weights || {},
-      });
-      setProfile(r.profile);
-      flash('Thesis saved');
-    } catch (e) {
-      flash(e.message || 'Failed to save', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const chipRow = (key, options, selected) => (
-    <div className="flex flex-wrap gap-2">
-      {options.map(s => (
-        <button key={s} onClick={() => toggle(key, s)}
-          className={`text-xs px-2.5 py-1 rounded-full border ${selected.includes(s)
-            ? 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700'
-            : 'bg-white text-gray-700 border-gray-300 hover:border-violet-300 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700'}`}>
-          {s}
-        </button>
-      ))}
-    </div>
-  );
-
-  return (
-    <Card
-      title="My thesis"
-      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
-    >
-      <div className="space-y-5">
-        <div>
-          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Sectors</span>
-          {chipRow('sectors', SECTOR_OPTIONS, sectors)}
-        </div>
-        <div>
-          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Stages</span>
-          {chipRow('stages', STAGE_OPTIONS, stages)}
-        </div>
-        <div>
-          <span className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Geographies</span>
-          {chipRow('geos', GEO_OPTIONS, geos)}
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Thesis (free text)</label>
-          <textarea rows={3} value={profile.thesis_text || ''}
-            onChange={e => setProfile({ ...profile, thesis_text: e.target.value })}
-            placeholder="What do you look for? What's your edge?"
-            className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
-        </div>
-        {(antiSectors.length > 0 || antiStages.length > 0) && (
-          <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3">
-            <span className="font-medium text-gray-700 dark:text-gray-300">Anti-thesis:</span>{' '}
-            {[...antiSectors, ...antiStages].join(', ')}
-            <span className="text-gray-400"> — edit in “Investor Thesis &amp; Matching” below.</span>
-          </div>
-        )}
-        <div className="flex items-center justify-end gap-2">
-          <button onClick={save} disabled={busy}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
-            {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-            {busy ? 'Saving…' : 'Save thesis'}
-          </button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 // Task #16 — Investor thesis editor (anti-thesis + value weights). Lives
 // in Privacy alongside the Investor Signals toggle. Only investors see it.
 function InvestorThesisEditorCard({ flash, role }) {

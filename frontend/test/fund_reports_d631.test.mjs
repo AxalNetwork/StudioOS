@@ -4,7 +4,10 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import FundPage, { fundMoney } from '../src/pages/FundPage.jsx';
-import FundReportPeriodPage from '../src/pages/FundReportPeriodPage.jsx';
+import { mountForm } from './_form_d695.mjs';
+import { api } from '../src/lib/api.js';
+import { mountContracts } from './_contracts_dom.mjs';
+import FundReportPeriodPage, { PeriodEditor } from '../src/pages/FundReportPeriodPage.jsx';
 import { readableFund, readablePeriod } from '../src/hooks/useFundReport.js';
 import { fundReportsApi } from '../src/lib/api/fundReports.js';
 import { ReportContents } from '../src/pages/investor/InvestorFundReporting.jsx';
@@ -50,6 +53,18 @@ test('real F2 draft renders all narrative sections and editable controls', () =>
   assert.match(html, /aria-label="Period label"[^>]*readOnly/);
   assert.doesNotMatch(html, /Issued · read-only|Issue a correcting period|role="dialog"/);
 });
+test('the report validation summary clears when the marked entry is corrected', async () => {
+  const data = { ...page, period: { ...period, narrative: { ...period.narrative, letter: [''] } } };
+  const view = await mountContracts(React.createElement(FundReportPeriodPage, { reading: ready(data) }), '/funds/10/reporting/1');
+  try {
+    await view.click('Issue');
+    assert.match(view.text(), /Correct the marked entries before saving/);
+    assert.match(view.text(), /Enter a paragraph/);
+    await view.fill('letter paragraph 1', 'Corrected paragraph.');
+    assert.doesNotMatch(view.text(), /Correct the marked entries before saving|Enter a paragraph/);
+  } finally { await view.unmount(); }
+});
+
 test('real F2 issued report is read-only, identifies issue and links its separate correction', () => {
   const issued = { ...period, status: 'issued', issued_at: '2026-07-15T10:00:00Z', issued_by: 2 };
   const html = render(FundReportPeriodPage, ready({ ...page, period: issued }));
@@ -93,4 +108,55 @@ test('legacy report dates can be unrecorded and the existing archive renders str
   assert.equal(contents({ narrative: 'Existing narrative.' }), 'Existing narrative.');
   assert.equal(contents({ note: 'Existing note.' }), 'Existing note.');
   assert.equal(contents({}), 'Source contents not recorded');
+});
+
+test('reports identify the individual empty or undated entry', async () => {
+  const { reportEntryError } = await import('../src/pages/FundReportPeriodPage.jsx');
+  assert.match(reportEntryError('letter', '   '), /paragraph/);
+  assert.match(reportEntryError('developments', { date: '2026-02-30', title: 'Recorded', body: 'Text' }), /date/);
+  assert.match(reportEntryError('developments', { date: '2026-02-28', title: '', body: 'Text' }), /title/);
+  assert.match(reportEntryError('subsequent', { d: '2026-02-28', e: '' }), /text/);
+  assert.equal(reportEntryError('subsequent', { d: '2026-02-28', e: 'Recorded' }), null);
+});
+
+test('the report editor saves the displayed order and requires confirmation before deleting', async () => {
+  const saveDraft = api.fundsSaveReportPeriod;
+  const deleteDraft = fundReportsApi.deleteDraft;
+  const calls = [];
+  api.fundsSaveReportPeriod = async (_fund, input) => {
+    calls.push(input.narrative.letter);
+    return { period };
+  };
+  fundReportsApi.deleteDraft = async (...args) => {
+    calls.push(args);
+    if (calls.length === 2) throw Object.assign(new Error('The period changed. Read it again.'), { status: 409 });
+    return { ok: true };
+  };
+  const data = { ...page, period: { ...period, narrative: { ...period.narrative, letter: ['First', 'Second'] } } };
+  let deleted = false;
+  const view = await mountForm(React.createElement(PeriodEditor, {
+    data, onSaved() {}, onDeleted() { deleted = true; },
+  }), { modal: true });
+  try {
+    const move = view.nodes().find(node => view.props(node)['aria-label'] === 'Move letter 2 up');
+    await React.act(async () => view.props(move).onClick());
+    await view.click('Save draft');
+    assert.deepEqual(calls, [['Second', 'First']]);
+    await view.click('Delete draft');
+    assert.match(view.text(), /Delete this draft/);
+    await view.click('Keep draft');
+    assert.equal(calls.length, 1);
+    await view.click('Delete draft');
+    await view.click('Confirm deletion');
+    assert.match(view.text(), /The period changed/);
+    assert.equal(deleted, false);
+    await view.click('Delete draft');
+    await view.click('Confirm deletion');
+    assert.equal(deleted, true);
+    assert.deepEqual(calls.slice(1), [[data.fund.id, period.id, period.revision], [data.fund.id, period.id, period.revision]]);
+  } finally {
+    await view.unmount();
+    api.fundsSaveReportPeriod = saveDraft;
+    fundReportsApi.deleteDraft = deleteDraft;
+  }
 });

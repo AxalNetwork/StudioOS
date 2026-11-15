@@ -6,13 +6,21 @@
  * <part> --plan-file <path> validates exact-once coverage before executing
  * the current package command with explicit files. No node count sharding.
  * --list prints names only; local npm run test:drift remains unchanged.
+ *
+ * D6464 (#6464): under merge_group only, a node:test command also writes its
+ * failed tests (lib/failedTestsReporter.mjs). When it fails and every failed
+ * test is on scripts/flaky-tests.json, in a file the queue entry did not
+ * change, those files run once more; a pass is written to the job summary as
+ * "flaky, retried". Nothing else is ever retried, and never on PRs or pushes.
  */
-import { readFileSync, writeFileSync, globSync } from 'node:fs';
+import { readFileSync, writeFileSync, globSync, appendFileSync, existsSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
 import { buildGenerated } from './build-generated.mjs';
+import { retryDecision } from './lib/flakyTests.mjs';
 
 // D5612 (#5612): a part runs `node --test` and `tsc` directly, so no npm
 // `pretest:*` hook builds the generated modules first; this does, once.
@@ -57,6 +65,65 @@ export function plannedCommand(cmd, files) {
   if (!files.length) throw new Error('empty planned part');
   for (const file of files) if (!/^[\w./-]+\.test\.(?:mjs|ts)$/.test(file) || file.split('/').includes('..')) throw new Error(`unsafe test path: ${file}`);
   return testCommand(cmd).prefix + files.map(quote).join(' ');
+}
+
+/** Whether a part command is one node:test run this file can re-run by file. */
+export function isNodeTest(cmd) {
+  try { testCommand(cmd); return true; } catch { return false; }
+}
+
+/** D6464: the same command, with TAP kept on stdout and failed tests written to `out`. */
+export function withFailureReporter(cmd, out, reporter) {
+  const { prefix } = testCommand(cmd);
+  const at = prefix.length - ' --test '.length;
+  return `${cmd.slice(0, at)} --test-reporter=tap --test-reporter-destination=stdout --test-reporter=${quote(reporter)} --test-reporter-destination=${quote(out)}${cmd.slice(at)}`;
+}
+
+/** D6464: the reporter's file as [{ file, test }]; unreadable or malformed means none. */
+export function readFailures(path) {
+  try {
+    return readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line))
+      .filter((f) => typeof f?.file === 'string' && typeof f?.test === 'string');
+  } catch { return []; }
+}
+
+/** D6464: the tracked list; a missing or malformed file is an empty list, so nothing retries. */
+export function readFlakyList(root) {
+  try {
+    const data = JSON.parse(readFileSync(resolve(root, 'scripts/flaky-tests.json'), 'utf8'));
+    return Array.isArray(data?.tests) ? data.tests : [];
+  } catch { return []; }
+}
+
+/** D6464: files the merge-queue entry changed against its base, or null when they cannot be read. */
+export function queueChangedFiles(root, env = process.env, run = spawnSync) {
+  let base; let head;
+  try { ({ base_sha: base, head_sha: head } = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')).merge_group || {}); }
+  catch { return null; }
+  if (!/^[0-9a-f]{40}$/.test(base || '') || !/^[0-9a-f]{40}$/.test(head || '')) return null;
+  const diff = () => run('git', ['diff', '--name-only', base, head], { cwd: root, encoding: 'utf8' });
+  let r = diff();
+  if (r.status !== 0) {
+    run('git', ['fetch', '--no-tags', '--depth=1', 'origin', base], { cwd: root, encoding: 'utf8' });
+    r = diff();
+  }
+  return r.status === 0 ? r.stdout.split('\n').filter(Boolean) : null;
+}
+
+/**
+ * D6464: after `cmd` failed under merge_group, re-run its failed files once
+ * when retryDecision allows it. Returns { status, lines }: status 0 only when
+ * the retry ran and passed; `lines` go to the log and the job summary.
+ */
+export function retryFailed({ cmd, failures, list, changedFiles, event, exec }) {
+  const decision = retryDecision({ event, failures, list, changedFiles });
+  if (!decision.retry) return { status: 1, lines: [`No retry: ${decision.reason}.`] };
+  const again = plannedCommand(cmd, decision.files);
+  const status = exec(again);
+  const named = failures.map((f) => `- \`${f.file}\` › ${f.test}`);
+  return status === 0
+    ? { status: 0, lines: ['### Flaky, retried', `These listed flaky tests failed, and their files passed on one retry (\`scripts/flaky-tests.json\`):`, ...named] }
+    : { status: status || 1, lines: ['### Flaky retry failed', 'These listed flaky tests failed, and failed again on their one retry:', ...named] };
 }
 
 /**
@@ -159,13 +226,23 @@ function main(argv) {
     env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${tracer}`].filter(Boolean).join(' ');
     env.TEST_TRACE_ROOT = root;
   }
-  for (const cmd of part.commands) {
-    console.log(`\n> ${cmd}\n`);
-    const r = spawnSync('sh', ['-c', cmd], { cwd: root, stdio: 'inherit', env });
-    if (r.status !== 0) {
-      console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
-      return r.status || 1;
-    }
+  const event = env.GITHUB_EVENT_NAME;
+  const sh = (command) => spawnSync('sh', ['-c', command], { cwd: root, stdio: 'inherit', env });
+  for (const [i, cmd] of part.commands.entries()) {
+    const watch = event === 'merge_group' && isNodeTest(cmd);
+    const out = resolve(tmpdir(), `failed-tests-${process.pid}-${i}.jsonl`);
+    if (watch && existsSync(out)) rmSync(out);
+    const run = watch ? withFailureReporter(cmd, out, resolve(root, 'scripts/lib/failedTestsReporter.mjs')) : cmd;
+    console.log(`\n> ${run}\n`);
+    const r = sh(run);
+    if (r.status === 0) continue;
+    console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
+    if (!watch) return r.status || 1;
+    const retried = retryFailed({ cmd, failures: readFailures(out), list: readFlakyList(root),
+      changedFiles: queueChangedFiles(root, env), event, exec: (command) => { console.log(`\n> ${command}\n`); return sh(command).status; } });
+    for (const line of retried.lines) console.log(`test-drift-parts: ${line}`);
+    if (env.GITHUB_STEP_SUMMARY && retried.lines[0].startsWith('###')) appendFileSync(env.GITHUB_STEP_SUMMARY, `${retried.lines.join('\n')}\n\n`);
+    if (retried.status !== 0) return r.status || 1;
   }
   return 0;
 }

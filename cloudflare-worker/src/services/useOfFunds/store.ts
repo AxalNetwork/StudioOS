@@ -371,6 +371,33 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
   const saved=await env.DB.prepare('SELECT * FROM uof_milestones WHERE uid=? AND scenario_id=?').bind(r.uid,sc.id).first<any>();
   return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded',scenario_revision:revision};
 }
+/**
+ * D6083 (#6083): add a planned hire from the tool (UF6). It goes through the same store, field rules
+ * and audit as an edit (D5375), not `addSectionHire`'s record-page path: role, section, start month,
+ * annual cost in whole cents and currency, each validated by the readers `saveHire` uses. A new hire
+ * starts at revision 0 and needs no `expected_revision`, because nobody can have read it yet; the
+ * hire row and its `uof_hire_created` audit row are one batch, keyed on the row's own uid.
+ */
+export async function createHire(env:Env,s:Scope,b:Record<string,unknown>) {
+  fields(b,['category_key','role','start_month','annual_cents','currency']);
+  const r={
+    category_key:key(b.category_key??null),
+    role:text(b.role),
+    start_month:has(b,'start_month')?month(b.start_month):null,
+    annual_cents:has(b,'annual_cents')?number(b.annual_cents):null,
+    currency:has(b,'currency')?currency(b.currency):'usd',
+  };
+  if (!r.category_key) throw bad();
+  const uid=crypto.randomUUID().replace(/-/g,'');
+  const written=await env.DB.batch([
+    env.DB.prepare('INSERT INTO use_of_funds_hires(uid,project_id,category_key,role,start_month,annual_cents,currency,created_by) VALUES(?,?,?,?,?,?,?,?)')
+      .bind(uid,s.projectId,r.category_key,r.role,r.start_month,r.annual_cents,r.currency,s.user.id),
+    env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
+      SELECT ?,?,'raise.use-of-funds',uid,'uof_hire_created',?,? FROM use_of_funds_hires WHERE uid=? AND project_id=?`)
+      .bind(s.projectId,s.user.id,`${s.user.role==='admin'?'Studio admin: ':''}uof hire added.`,`user:${s.user.id}`,uid,s.projectId),
+  ]);
+  return {id:Number(written[0]?.meta?.last_row_id),...r,revision:0,source:'Typed'};
+}
 export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown>,remove=false) {
   fields(b,['category_key','role','start_month','annual_cents','currency','expected_revision']);
   const old=await env.DB.prepare('SELECT * FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId).first<any>();

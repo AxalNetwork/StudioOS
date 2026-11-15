@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Founder Asks · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Portfolio · Reports and Value-add · #6215 · addendum to Portfolio v2 · Addendum (PFA18–PFA25D)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">A founder’s asks in Report detail, and one ask turned into a recorded promise in Value-add</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">An investor who holds the Investor licence and received a founder’s sent update opens Reports › a company › Report detail (/portfolio/updates) and sees “Asks in this update” below Update as written: each ask’s kind in words, its text exactly as written, the round call or its reason for a capital ask, and two actions, Promise support and Open the update (/updates/:uid). Promise support opens today’s Log support on /portfolio/value-add with the company fixed and the kind and text carried over; nothing is recorded until Record entry, and the receipt returns to the same Report detail. The founder sees the promise on their sent update. No new route. Continues Portfolio v2 · Addendum: board keys PAK18–PAK25D are PFA18–PFA25D, in its PortfolioFrame, Sheet and dark tokens. States follow Platform States (D5129), Unavailable on screen as “could not be read”. Eadwyn is the shared rail (#5130) and only proposes from the ask. Violet dashed ◇ tags mark backend work for #6215 (the ask link on support entries, the founder’s read of a promise, an investor’s answered/by-whom read, the per-company read); amber ⚑ tags mark the owner’s picks, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Sample Co], [Company B–E], [Investor], [Investor B–D], [Investor firm], [Founder name], [Partner firm] and every bracketed date and amount are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Founder Asks Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PFA18', 'Report detail with the founder’s asks', 'The Reports inbox behind the 560 Report detail sheet for [Sample Co], every existing section kept. A new section, “Asks in this update”, under Update as written: 3 asks in the update of [2 Nov 2026] covering [1 Jul 2026]–[30 Sep 2026], each with its kind chip, its text as written, ◇ answered by whom or no answer recorded, a capital ask’s round call, Promise support and Open the update. Eadwyn (the Reports rail) proposes Promise support for the customer introduction; Accept, Edit or Discard, nothing saved.', [F('PAK18', false, 1240)]],
+      ['PFA19', 'Promise support: Log support carried over from an ask', 'Today’s inline Log support card on Value-add, opened from the ask: company fixed, kind Customer from the ask (editable), state Promised, What happened pre-filled from the ask text, hours and outcome blank, a ◇ “Answers” chip linking back. Ask Eadwyn drafts one line from the ask only. Then the confirmation that names the company and the ask, and the receipt with Back to the report and View in Value-add.', [F('PAK19', false, 1480), C('PAK19b', 'Confirm', 720, 504), C('PAK19c', 'Receipt', 720, 323)]],
+      ['PFA20', 'The entry that answers an ask', 'The ledger with the new row on top: [Sample Co], Customer, Promised, hours Not recorded, What happened and ◇ Answers an ask. Totals move from 1 to 2 outstanding and from 2 to 1 company with no support. Later the same row Delivered [3 Dec 2026], or Withdrawn [10 Dec 2026]; the ask link stays on both.', [F('PAK20', false, 1000), C('PAK20b', 'Later states of the same row', 1340, 361)]],
+      ['PFA21', 'The founder sees the promise', '/updates/:uid as the author, today’s Replies to asks: under the customer introduction, beside [Investor B]’s reply and its module, ◇ “[Investor] promised support · Customer · [14 Nov 2026]”, later ◇ Delivered [3 Dec 2026]. Hours and outcome are never shown. Ask again stays as it is after 14 days with no reply. Drawn under question 2, option A.', [F('PAK21', 'Promised', 1000), F('PAK21b', 'Later · Delivered', 1000)]],
+      ['PFA22', 'Empty and edge states', 'No asks (a measured zero); a report, not a sent update; asks only on an earlier update (◇ per-company read, question 3 option B); already answered by someone else, with Promise support still available; already promised by you, with View the entry; a capital ask with no open call and the Worker’s reason.', [C('PAK22', false, 1480, 709)]],
+      ['PFA23', 'States', 'Loading with the other sections drawn; Not recorded period, hours and outcome; the asks read Unavailable (“not a claim the founder asked for nothing”) with Try again; Refused as a non-recipient (Open the update hidden); Value-add refused without the Investor licence; Recording; record failed with every value kept; a field error; a company not in your book.', [C('PAK23', false, 1480, 794)]],
+      ['PFA24', 'Phone 390', 'Report detail full height with the asks first as labelled cards and two full-width 44px buttons; Log support as a bottom sheet with the ask chip on top and a full-width Record entry; the ledger as cards; the founder’s update with the promise and Delivered lines and a full-width Ask again.', [P('PAK24', 'Report detail'), P('PAK24b', 'Log support sheet'), P('PAK24c', 'Ledger cards'), P('PAK24d', 'Founder · sent update')]],
+      ['PFA25D', 'Dark', 'PFA18 and PFA19 on the dark tokens; chips, ◇ marks and every state keep their words and shapes.', [F('PAK25D', 'Report detail · dark', 1240), F('PAK25Db', 'Log support · dark', 1480)]],
+      ['PFA-H', 'Handoff', 'What was checked on main, what is preserved, the backend each ◇ needs, the owner’s picks, frontend-only work, the kind mapping, open questions and accessibility.', [W('PAK26')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
