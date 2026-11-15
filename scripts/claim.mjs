@@ -33,7 +33,9 @@ async function runClaimInternal({ command, issue, slot, agent, session, ttlHours
     } catch (e) { if (e.status === 404) return null; throw e; }
   };
   if (command === 'reap') {
-    const refs = await pages(api, 'git/matching-refs/heads/claim/');
+    // Matching refs is not paginated: GitHub returns the full matching list,
+    // ignoring page/per_page. Paging it repeats that list until the safety cap.
+    const refs = await api('GET', 'git/matching-refs/heads/claim/');
     for (const ref of refs) {
       const match = /^refs\/heads\/claim\/([1-9]\d*)$/.exec(ref.ref);
       if (!match) continue;
