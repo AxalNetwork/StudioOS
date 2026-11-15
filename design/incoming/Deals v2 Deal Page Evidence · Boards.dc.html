@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Deal Page Evidence · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals v2 addendum · #6163 (under #4815)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Deal page: where Evidence, Team, Market, Traction and Notes live</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Deals v2 (D4815): boards DE19 to DE31 in sections DX17 to DX21, with DE04’s deal header, figures strip and eight tabs, its three status families and five absence states, the #3704 Investor shell and the shared Eadwyn rail (DX-R, #5130). An invited investor reads what the founder shared before and after the NDA: evidence as counts before it, items, figures and claims after it. Team, Market and Traction sit under their scopes on the Scorecard tab (option B); firm notes are a filter in Activity (option A); a Share or download menu offers only Copy link (option A). All three are the brief’s picks, drawn pending the owner (amber ⚑). Old addresses /evidence, /team, /market, /traction and /notes open where their content now sits. Zero, Not recorded, Not reported, None, Unreadable, Refused and Masked never look alike, and every state carries a word or glyph. Violet dashed ◇ tags mark backend work; neither tag is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Acme Robotics, Northwind Ventures, Founder A, Founder B, Member C, Name B, Name C, the competitors and every figure are fictional; amounts in USD</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Deal Page Evidence Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DX17', 'Evidence · before the NDA', 'DE19. The deal header and strip (as DE04) with Evidence selected. Coverage only: ten groups by area, kind and source with a count and the newest date (26 items), the before-NDA line, and the masked company card. One primary action, Sign the NDA, which opens DE10 B/C. No Eadwyn.', [F('DPE19', false, 1040)]],
+      ['DX17b', 'Evidence · after the NDA', 'DE20. “5 of 8 shared claims are backed” with the count per claim state; filters by area, source and claim state, sorted by checked date; items grouped by area with kind, source, strength, observed date, Stale, summary, the figure or its reason in words, and how it is shared. A partial read banner with Try again. The Eadwyn rail proposes “Summarise what is backed” (proposed for DX-R): Accept into Notes, Edit or Discard.', [F('DPE20', false, 1740)]],
+      ['DX17c', 'One evidence item open', 'DE21. A side sheet over DE20: the item’s facts, the claim it backs, and four hand-offs: Data room (◇ jumping to the item’s own file), a request to the founder through Diligence, a prefilled firm note, and the Traction scope.', [F('DPE21', false, 1100)]],
+      ['DX17d', 'Evidence states', 'DE22. A empty, B unreadable (header and tabs keep working), C partial, D staff view Refused with ◇ audited staff read, E loading.', [C('DPE22', false, 1400, 580)]],
+      ['DX18', 'Team, Market and Traction · inside Scorecard (option B)', 'DE23 Team: the DX5 row, people as published, coverage bands with words, values band, full-time since and founder–market fit as Not recorded, ◇ advisors. DE24 Market: four score rows, TAM/SAM/SOM typed by the founder with no source and ◇ source/date/method, sources, Who pays, company markets with four readings, competitors with search and sort, geography Not recorded. DE25 Traction: Traction and Financial rows, 12 months with 8 reported and 4 Not reported gaps, a recorded 0%, ARR and NRR Not recorded.', [F('DPE23', 'DE23 · Team', 1740), F('DPE24', 'DE24 · Market', 2080), F('DPE25', 'DE25 · Traction', 1810)]],
+      ['DX18b', 'Team, Market, Traction · masked and empty', 'DE26. A · Before the NDA: “This opens once you sign the NDA”, the masked card, and Sign the NDA on Data room. B · Open, every block without data, each with its own reason: None (∅), Not recorded (—) and Not reported stay distinct, and no block shows 0.', [F('DPE26A', 'A · Masked before the NDA', 1260), F('DPE26B', 'B · Open, nothing recorded', 960)]],
+      ['DX19', 'Notes · inside Activity (option A)', 'DE27. Activity with All, Mine and Firm notes; notes newest first with tag, text, written and edited dates and “Only Northwind Ventures sees these”; an inline composer with the four tags and 10,000 characters; Edit and Delete on your own notes only. Variants: empty, choose a firm, no firm (yours alone) and the staff view with no Firm notes filter.', [F('DPE27', false, 1160), C('DPE27B', 'Variants', 1400, 300)]],
+      ['DX20', 'Export and share (option A)', 'DE28. A Share or download menu in the deal header: Deal summary, Scorecard and Evidence list each ◇ Not offered yet; Copy link works today and grants nothing.', [C('DPE28', false, 1400, 430)]],
+      ['DX21', 'States, phone and dark', 'DE29 states across DX17 to DX19. DE30 phone 390: A evidence, B team, C market, D traction and notes, with 44px targets and sideways tabs. DE31 dark: A evidence after the NDA, B market.', [C('DPE29', 'DE29 · States', 1400, 880), P('DPE30A', 'DE30a · Evidence'), P('DPE30B', 'DE30b · Team'), P('DPE30C', 'DE30c · Market'), P('DPE30D', 'DE30d · Traction and notes'), F('DPE31A', 'DE31a · Evidence, dark', 1740), F('DPE31B', 'DE31b · Market, dark', 2080)]],
+      ['DX22', 'Handoff', 'What main has behind each board, backend required, the owner’s pending placements, the two tasks proposed for DX-R, and accessibility.', [W('DPE32')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

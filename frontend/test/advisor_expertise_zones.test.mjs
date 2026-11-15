@@ -123,7 +123,9 @@ test('Visibility states what is not recorded on the zone itself, in the Worker\'
   // the zone draws it under "Profile views", "Not recorded", never a 0. The
   // card itself is gone: requests per link and opens are recorded.
   const zone = codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx'));
-  assert.match(zone, /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+  // D4827: the window the advisor picks (7, 30 or 90 days, 30 by default) is what is read.
+  assert.match(zone, /api\.getMyAdvisorVisibility\(days\)/);
+  assert.match(zone, /readVisibilityPage = \(days = VISIBILITY_DAYS\) =>/);
   assert.match(zone, /Profile views<\/div>\s*<div className="mt-1\.5"><Unrecorded \/><\/div>\s*<div[^>]*>\{data\?\.views_note\}/,
     'profile views must be Not recorded with the Worker\'s sentence');
   assert.doesNotMatch(read('frontend/src/workspaces/noStoreCopy.js'), /no impression or profile-view counter anywhere in the product/,

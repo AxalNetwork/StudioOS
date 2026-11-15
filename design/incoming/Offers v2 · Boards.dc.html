@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offers v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Partner · Offers · UX V2 · #4872</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Offers — a commercial operating system</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The root page becomes an Offer Readiness dashboard: five readiness figures, at most three recommended actions each tied to a recorded state, then compact Sell, Prove, Target and Test previews. The six zones keep their URLs, grouped on one bar under Sell, Prove, Target and Test. Each screen has one amber primary action. Proof leads with the outcome and puts client consent — Client approved, Approval requested, Self-stated, Withdrawn, Superseded — in icon plus words. Audience fit is a conversational form, and says plainly that rules rank leads but never reject them. Visibility answers “Where does our work come from?” and turns unattributed engagements into an action. Product testing shows a five-step lifecycle with the next action for each programme. “Not measured” sits behind an ⓘ instead of a paragraph.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · Partner licence · firm, services, clients, proof and figures are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Offers v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['OF-01', 'Offers overview · Offer Readiness', 'A · Populated: the heading from the brief, five readiness figures (Services live, Perks, Client-approved proof, Audience-fit coverage, Testing programmes), three recommended actions each traced to a recorded state, and grouped Sell, Prove, Target and Test previews. B · A new firm: one clear first step, zeros as measured zeros, and no invented recommendations.', [F('OF01', 'A · Populated', 1060), F('OF01b', 'B · New firm', 720)]],
+      ['OF-02', 'Catalog', 'A · A professional service catalogue: title and category, engagement model, price basis, listing state (Draft = no price yet, Live, Unlisted), requests where recorded, one row action, and Export as a secondary action. B · The edit slide-over reads as a commercial offer, with a field-level error and a failed save that keeps every entry; the destructive action sits away from Save.', [F('OF02', 'A · Catalog', 820), F('OF02b', 'B · Service slide-over', 900)]],
+      ['OF-03', 'Proof', 'A · Proof cards lead with the outcome, then client and engagement, consent (icon + word + who and when), and where it is shown; client-approved cards are outlined solid, self-stated ones dashed. B · The empty state from the brief. C · The five consent states; Superseded needs backend support.', [F('OF03', 'A · Proof', 1000), F('OF03b', 'B · Empty', 620), C('OF03c', 'C · Consent states', 1400, 200)]],
+      ['OF-04', 'Audience fit', 'A · Rules in business language: who, strength, what we say, where we point them. A missing reply is the one primary action. The note says Pipeline ranks with these rules and never rejects. B · The conversational create sheet: who is a great fit, then what to say when someone isn’t, with advanced rule types disclosed.', [F('OF04', 'A · Rules', 720), F('OF04b', 'B · Create sheet', 900)]],
+      ['OF-05', 'Visibility', '“Where does our work come from?” Engagements and won value per surface; the 4 unattributed engagements are an action, not a footnote. Views and trend read Not measured / Not recorded with an ⓘ.', [F('OF05', false, 760)]],
+      ['OF-06', 'Product testing', 'A · Each programme shows its lifecycle (Draft → HQ review → Recruiting → Testing → Complete), places, dates and the next action for its state. B · Empty states for Testing and Audience fit, written around the commercial outcome.', [F('OF06', 'A · Programmes', 1020), C('OF06b', 'B · Empty states', 760, 420)]],
+      ['OF-07', 'Perk deals', 'Draft, In review, Live, Paused and Rejected, with HQ’s note on a rejection and Edit and resubmit as its action.', [F('OF07', false, 720)]],
+      ['OF-08', 'Loading, error and save states', 'Loading, couldn’t load, saving / saved / not saved with entries kept, and Not measured with its explanation behind ⓘ.', [C('OF08', false, 1400, 260)]],
+      ['OF-09', 'Mobile', 'A · Overview with a zone switcher and one full-width primary action. B · Proof cards stacked. C · Testing with the next action. D · A slide-over becomes a near-full-screen sheet with 44–48px targets.', [P('OF09a', 'A · Overview'), P('OF09b', 'B · Proof'), P('OF09c', 'C · Testing'), P('OF09d', 'D · Fit sheet')]],
+      ['OF-10', 'Components, states and backend fit', 'Status, consent, Not measured, recommendation, sheet and form rules; what each zone’s Worker route supports today and what needs the backend (Superseded consent, a Visibility trend series).', [W('OF10')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

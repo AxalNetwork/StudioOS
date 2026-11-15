@@ -8,19 +8,23 @@ import { pathToFileURL } from 'node:url';
 import { advanceScan, findingSnapshot, readScanAlert, ruleCounts, SCAN_ALERT_TITLE, SCANNERS, scanScope } from './lib/scanScope.mjs';
 
 const MAX_JSON = 8 * 1024 * 1024;
-function jsonFile(file) {
+// D6514: CodeQL SARIF contains query metadata and data-flow traces, unlike the
+// compact event/state JSON. Keep that larger input bounded independently.
+const MAX_SARIF = 64 * 1024 * 1024;
+class ScanInputLimitError extends Error {}
+function jsonFile(file, limit = MAX_JSON) {
   const fd = openSync(file, 'r');
   try {
     // Read at most one byte past the limit from the same opened file. A path
     // replacement or growth after a separate stat cannot bypass this bound.
-    const bytes = Buffer.alloc(MAX_JSON + 1);
+    const bytes = Buffer.alloc(limit + 1);
     let length = 0;
     while (length < bytes.length) {
       const count = readSync(fd, bytes, length, bytes.length - length, null);
       if (!count) break;
       length += count;
     }
-    if (length > MAX_JSON) throw new Error('Scan artifact exceeds its size bound');
+    if (length > limit) throw new ScanInputLimitError('Scan artifact exceeds its size bound');
     return JSON.parse(bytes.subarray(0, length).toString('utf8'));
   } finally { closeSync(fd); }
 }
@@ -132,7 +136,7 @@ async function main() {
   if (!SCANNERS.includes(scanner)) throw new Error('Unknown scanner');
   const ctx = context(process.env);
   if (command === 'snapshot') {
-    const current = findingSnapshot(sarifFiles(input).map(jsonFile));
+    const current = findingSnapshot(sarifFiles(input).map(file => jsonFile(file, MAX_SARIF)));
     mkdirSync(resolve(output, '..'), { recursive: true });
     writeFileSync(output, JSON.stringify({ version: 1, scanner, repository: ctx.repo, run_id: ctx.runId, current }));
     return;
@@ -163,5 +167,11 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main().catch(() => { console.error('Scan policy/inventory unavailable; refusing to report a clean scan.'); process.exitCode = 1; });
+  main().catch(error => {
+    // Never print parser messages, paths or excerpts from a scanner payload.
+    console.error(error instanceof ScanInputLimitError
+      ? 'Scan input exceeds its byte limit; refusing to report a clean scan.'
+      : 'Scan policy/inventory unavailable; refusing to report a clean scan.');
+    process.exitCode = 1;
+  });
 }
