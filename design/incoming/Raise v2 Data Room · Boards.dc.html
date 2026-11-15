@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 Data Room · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Raise · Prepare diligence · Data room addendum DR25 to DR34 · #6071</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Data room addendum — share and notice, Trash, storage on Upload, Drive, Checklist counts</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Data room canvas (DR1 to DR24, D1101) in the Raise v2 frame (RA-19, phone RA-26): the Raise module header and rail, the tool’s bar, the seven tabs and centred lightboxes. The founder shares the room with an investor picked from Capital relationships and is never told whether that address has a StudioOS account; the investor is told and lands on Research › Diligence; a removed file goes to Trash for 30 days; Upload says how much storage is left on the plan that pays for the room; Drive files come in through the From Google section; Checklist shows its own counts. Owner questions 1 to 4 are drawn as option A, with B beside where the brief asks (amber ⚑). Violet dashed ◇ tags mark backend work (#6072, #6073). States follow D5129: Not recorded and Unavailable are never drawn as 0. Nothing shares, deletes or sends by itself.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Harbourlight Labs, Juniper Ridge Partners, Fernhill Capital, Orbit Ventures, Cobalt Angels, Kestrel Robotics, Lattice Fund and every person, address, file and size are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise v2 Data Room Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DR25', 'Share with someone not on Axal', 'The DR7 Share lightbox with [Juniper Ridge Partners] picked from Capital relationships (email on file), folders, end date and NDA. The confirmation for option A and option B of owner question 1, a candidate with no email (disabled, and the Worker’s no_email refusal), and the empty state. Eadwyn proposes nothing: sharing is the owner’s act.', [F('RAD25', 'Share · owner question 1, option A', 900), C('RAD25B', 'After Share · option A beside option B', 1300, 230), C('RAD25C', 'No email in Capital relationships', 1220, 450), C('RAD25D', 'Empty', 660, 280)]],
+      ['DR26', 'Access with a share not yet taken up', 'Option A: every grant not yet opened reads “Shared · not opened yet ◇” with Cancel share, member or not (question 2). Option B: Access as on main, with the line under Share. Empty: Nobody has access yet.', [F('RAD26', 'Option A · draft', 760), F('RAD26B', 'Option B · as today', 640), C('RAD26C', 'Empty', 760, 190)]],
+      ['DR27', 'What the investor receives', 'The bell with one unread notice ◇ linking to /research/diligence/[grant]; the shared rooms list with since, until, files open of files admitted, files waiting for the NDA and last opened; the room opened with the NDA line; empty, and a room that is not open (the same words as one that never existed).', [C('RAD27A', 'Frame 1 ◇ · notice', 520, 290), F('RAD27', 'Research › Diligence', 640), F('RAD27C', 'The room opened', 760), C('RAD27D', 'Empty · not open to you', 1100, 260)]],
+      ['DR28', 'Trash ◇', 'Trash in the Files tree and its list: name, folder, removed on and by, days left of 30, Restore, and Delete now for the owner. Eadwyn’s one proposal: restore the file that answered “Customer contracts”. DR5’s Remove dialog updated; Delete now as Scope → Review → Result; a Drive copy in Trash; empty.', [F('RAD28', 'Trash · owner', 820), C('RAD28B', 'Remove, updated', 620, 330), C('RAD28C', 'Delete now and a Drive copy', 1200, 420), C('RAD28D', 'Empty', 620, 150)]],
+      ['DR29', 'Upload with storage left', 'The storage line from the real read, for the plan’s holder: across your companies, now, with this room’s current files and the 20 MB cap. A queue refused before sending; the 80% and 95% amber lines under the chips; no allowance (staff, negotiated, not recorded) with no bar or percentage; a co-founder whose own figure is not used, and the shared StorageRefusal; the empty queue.', [F('RAD29', 'Upload · plan below 80%', 720), C('RAD29B', 'Queue over the allowance', 1100, 450), C('RAD29C', 'Near your limit and almost full', 1400, 200), C('RAD29D', 'No allowance', 1300, 210), C('RAD29E', 'Co-founder', 1300, 290), C('RAD29F', 'Empty queue', 700, 140)]],
+      ['DR30', 'Add from Google Drive', 'Only for a connected account: the From Google section on Upload, copies “From Google Drive, as of [date]”, NDA, private to you (Nobody) until opened, 20 MB per copy, counted in the storage line. GW7’s states: Loading, Empty, Unreadable, Partly synced and a deleted copy that stays deleted.', [F('RAD30', false, 980), C('RAD30B', 'GW7 states', 1400, 240)]],
+      ['DR31', 'Checklist: the readiness line', 'Option A (picked): the checklist’s own counts, [9] of [12] answered and [7] an investor can open now, with a link to Fundraising readiness. Option B ◇: the Fundraising readiness score carried here. Empty: 0 of 12 with every item Missing. Eadwyn’s DR14 matches stay.', [F('RAD31', 'Option A', 1030), C('RAD31B', 'Option B ◇', 1000, 220), C('RAD31C', 'Nothing answered', 1000, 520)]],
+      ['DR32', 'States', 'Loading with skeletons where lists go; Not recorded (no end date, size not recorded, total withheld); Unreadable for candidates, Trash, storage, the investor list and Checklist counts; Refused for a co-founder, an investor, an advisor and an explorer; Saving and save failed with the dialog’s choices kept.', [C('RAD32A', 'Loading', 1400, 220), C('RAD32B', 'Not recorded', 1300, 220), C('RAD32C', 'Unreadable', 1400, 260), C('RAD32D', 'Refused', 1300, 260), C('RAD32E', 'Saving and save failed', 1300, 230)]],
+      ['DR33', 'Phone 390', 'Share as a bottom sheet; Access cards with Cancel share; Trash cards with Restore; Upload with the storage line above the queue; From Google; Checklist counts; the investor’s notice and shared rooms as cards. Module select and sideways tabs as DR22 and RA-26; 44px targets.', [P('RAD33A', 'Share sheet'), P('RAD33B', 'Access'), P('RAD33C', 'Trash'), P('RAD33D', 'Upload'), P('RAD33E', 'From Google'), P('RAD33F', 'Checklist'), P('RAD33G', 'Investor · notice'), P('RAD33H', 'Investor · shared rooms')]],
+      ['DR34', 'Dark', 'Trash and Share on the dark tokens (violet #a78bfa); the amber storage line and every state keep their words and glyphs.', [F('RAD34', 'Trash · dark', 870), F('RAD34B', 'Share · dark', 900)]],
+      ['DR35', 'Handoff', 'What was checked on main, backend required (#6072, #6073), frontend only (#6074, #6075), the four owner questions, what is preserved and accessibility.', [W('RAD35')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

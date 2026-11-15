@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 Investor Narrative · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Raise · Investor narrative · #6067 · addendum to Raise v2 (RA17) and the Investor narrative canvas, from NAR22</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor narrative — take a saved version out: copy, export, send, build a deck, see what changed</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">/raise/investor-narrative, Story and Versions tabs; no new route. The venture’s founder takes one saved version of the narrative out of the tool: copies it as text, exports it (PDF and DOCX need backend), reuses it as an email intro or an investor update, hands it to Pitch deck studio (/raise/pitch/new) or reads the last change of each section. Boards RAN22 to RAN29 continue NAR1 to NAR21 as NAR22 to NAR29, in the Raise v2 look (RA17 header, Version picker, the shared Eadwyn rail). States follow Platform States (D5129): Not recorded, Unavailable and a measured value never look alike. Violet dashed ◇ tags say “Needs backend”; amber ⚑ tags mark the owner’s picks (option A drawn). Nothing sends, publishes or charges by itself; the deck build is confirmed and priced in the studio.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Northwind Labs], [Founder name], [Co-founder name], [Investor name] and every figure ([$18,400] MRR, [$1.5m] seed, [$0.84] quote) are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise v2 Investor Narrative Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RAN-22', 'Export and copy · lightbox over Story', 'Take v4 out: the version line (audience, saved date, author, revision), three formats (Copy text now; PDF and DOCX ◇), what is included (Closing line Not recorded, left out; audience notes and sources off; one-liner on), page 1 with the ◇ watermark, and Eadwyn’s ◇ proposal to leave Competition out. One primary: Copy text · 9 sections.', [F('RAN22', false, 880), C('RAN22b', 'Copied, and the proposal accepted', 1040, 532)]],
+      ['RAN-23', 'Send or reuse · sheet from the Story header', 'Email intro built from One-liner, Problem, Traction and The ask, with placeholders, Copy and Open in mail app; Send from Axal ◇. A link from Pitch deck share because deck v6 reads v4. Eadwyn’s ◇ shorter intro copies v4’s figures only. Start an investor update opens /grow/update; v4’s sentences as highlights ◇.', [F('RAN23', false, 1000)]],
+      ['RAN-24', 'Build a deck from this version', 'The entry in the Share menu and on each Versions row beside Read by. Older versions read “◇ Builds from v5, the newest…” with Open v5; no saved version reads Save a version first. The confirm shows what the build reads (words, figure-free), that it saves Pitch deck v7 not current, and the outline’s price, then hands off to the studio. The reverse stays NAR11.', [C('RAN24a', 'Entry · Share menu and Versions', 1340, 773), C('RAN24b', 'Confirm before the hand-off', 800, 493)]],
+      ['RAN-25', 'Change history · right panel on Story', 'v4 · revision 7: each section’s last change and source chip (Typed, Eadwyn, Connector [Stripe], Module record); positioning also names who. Sections with no change of their own say so. Below a ◇ divider: earlier wordings, who wrote them, Undo the last fill.', [F('RAN25', false, 1000)]],
+      ['RAN-26', 'Empty', 'No saved version, a version with every section Not recorded, and a version with no change yet.', [C('RAN26a', false, 740, 211), C('RAN26b', false, 740, 230), C('RAN26c', false, 740, 230)]],
+      ['RAN-27', 'States', 'Loading with the tab bar drawn at once; Not recorded; three unreadable reads that fail on their own; refused for investors and read-only Copy for an admin with a reason; the clipboard blocked; the build refused (price changed, nothing to run).', [C('RAN27a', 'Loading', 800, 430), C('RAN27b', 'Not recorded', 940, 250), C('RAN27c', 'Unreadable', 940, 309), C('RAN27d', 'Refused and admin read', 1040, 252), C('RAN27e', 'Copy failed', 800, 378), C('RAN27f', 'Build refused', 800, 234)]],
+      ['RAN-28', 'Phone 390', 'One Share button opens a sheet (Copy text, Email intro, Investor update, Build a deck, History); the export checklist with the primary pinned; the email intro full width; History as stacked cards. 44px targets; the Version picker stays on top.', [P('RAN28a', false), P('RAN28b', false), P('RAN28c', false), P('RAN28d', false)]],
+      ['RAN-29', 'Dark', 'RAN22 on the dark tokens after Copy: watermark preview, source and state chips keep their words and shapes.', [F('RAN29', false, 880)]],
+      ['RAN-30', 'Handoff', 'Checked on main, frontend only, preserved, backend required (◇), the owner’s picks (⚑), open questions and accessibility.', [W('RAN30')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
