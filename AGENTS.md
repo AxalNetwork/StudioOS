@@ -49,7 +49,7 @@ because only Session 1 makes a task ready.
    from `main` for each task. Open one draft PR whose body contains
    `Closes #<issue>` and fills in `.github/pull_request_template.md`. Then set
    `state:review` and post a STATUS comment with the PR link. Drafts run the
-   fast CI tier. When the work is finished, mark the PR ready to start the
+   fast CI tier. When the work is finished, run `gh pr ready` to start the
    full suite on that head. Honor any explicit request to keep a PR draft.
 4. **Blocked.** Set `state:blocked`, plus `needs-decision` when the call is
    the owner's. Put the question in a STATUS comment, then take another task.
