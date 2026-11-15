@@ -330,7 +330,11 @@ test('every live history path is a static route in App.jsx or a module of its cy
 test('the zone links keep the venture from the address', () => {
   // D704: the Validate tools' own venture reads went with FounderValidateWorkspace;
   // its pages redirect with the query kept (validate_pages_removed_d704 test 1).
-  assert.match(read('frontend/src/workspaces/ZoneNav.jsx'), /to=\{`\$\{zonePath\(bucket, zone\)\}\$\{projectSearch\(location\.search\)\}`\}/);
+  // #6232: the pills read one `search`, which starts from the venture and adds only what a page carries.
+  const nav = read('frontend/src/workspaces/ZoneNav.jsx');
+  assert.match(nav, /const base = projectSearch\(search\);/);
+  assert.match(nav, /const search = zoneSearch\(location\.search, carry\);/);
+  assert.match(nav, /to=\{`\$\{zonePath\(bucket, zone\)\}\$\{search\}`\}/);
 });
 
 // ── The re-read after a change, however the lightbox closes ──────────────────

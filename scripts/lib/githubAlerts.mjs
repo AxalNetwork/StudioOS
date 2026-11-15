@@ -84,6 +84,57 @@ export function reviewState(outcome) {
 }
 
 /**
+ * #6463: `QUEUE_ALERT_IGNORE_BEFORE`, an ISO date. Unset (or blank) is `null`: nothing is ignored, today's behaviour.
+ * Anything that is not a real ISO date throws `queue_cutoff_invalid`; the CLI reports that loudly and ignores nothing.
+ */
+export function parseQueueCutoff(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  const ms = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/.test(value) ? Date.parse(value) : NaN;
+  // Date.parse rolls 2026-11-31 over to 1 December; the calendar date written must be the one read back.
+  const [y, m, d] = value.slice(0, 10).split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  if (!Number.isFinite(ms) || day.getUTCFullYear() !== y || day.getUTCMonth() !== m - 1 || day.getUTCDate() !== d) throw new Error('queue_cutoff_invalid');
+  return { iso: new Date(ms).toISOString(), ms };
+}
+
+/**
+ * #6463: leave out of the queue the runs created before the cutoff (2026-11-11's ~207 runs that GitHub will neither
+ * start nor cancel, #5719), from both the count and the oldest age. `runs` are the queued runs actually read;
+ * `total` is the API's count. A run is ignored only when it was SEEN and its `created_at` is before the cutoff, so a
+ * run created at or after the cutoff, a run with an unreadable date, and a run the reader never reached all count.
+ * Unread runs are older than every run read (the API lists newest first), so while any remain unread the oldest
+ * age is the oldest run read, whatever its date: never younger than the truth.
+ */
+export function queueAfterCutoff({ total, runs = [], cutoff = null }) {
+  const count = Math.max(0, Number(total) || 0);
+  const seen = Array.isArray(runs) ? runs : [];
+  const at = r => Date.parse(r?.created_at || '');
+  const oldestOf = list => list.reduce((o, r) => (Number.isFinite(at(r)) && (o === null || at(r) < at(o)) ? r : o), null)?.created_at || null;
+  if (!cutoff) return { queued: count, oldestCreatedAt: oldestOf(seen), ignored: 0, cutoff: null };
+  const ignoredRuns = seen.filter(r => Number.isFinite(at(r)) && at(r) < cutoff.ms);
+  const fresh = seen.filter(r => !ignoredRuns.includes(r));
+  const ignored = Math.min(ignoredRuns.length, count);
+  const unread = count > seen.length;
+  return { queued: count - ignored, oldestCreatedAt: unread ? oldestOf(seen) : oldestOf(fresh), ignored, cutoff: cutoff.iso };
+}
+
+/** #6463: the one line an alert issue carries while the cutoff is set, so the exclusion is visible on GitHub. */
+export function queueCutoffLine({ ignored, cutoff }) {
+  return cutoff ? `Ignored: ${ignored} queued run(s) created before ${cutoff} (\`QUEUE_ALERT_IGNORE_BEFORE\`, #6463).` : '';
+}
+
+/** #6463: the issue body with that line written (replacing an earlier one), before the health marker. */
+export function withQueueCutoffLine(body, facts) {
+  const text = String(body || '');
+  const kept = text.split('\n').filter(l => !/^Ignored: \d+ queued run\(s\) created before /.test(l)).join('\n');
+  const line = queueCutoffLine(facts);
+  if (!line) return kept;
+  const at = kept.indexOf('<!-- studioos-health:v1');
+  return at < 0 ? `${kept.trimEnd()}\n\n${line}` : `${kept.slice(0, at).trimEnd()}\n\n${line}\n\n${kept.slice(at)}`;
+}
+
+/**
  * The queue from the Actions API's queued runs: how many, and how long the
  * oldest has waited. Backed up when either is over its threshold.
  */
@@ -123,7 +174,8 @@ export function message(kind, action, facts = {}) {
     return `:warning: *The PR reviewer called no model* (\`${facts.outcome}\`)${facts.pr ? ` on #${facts.pr}` : ''}.${run}${issue}\nIts check still passes, so PRs are going unreviewed. The step summary says why (often the monthly budget: \`CLAUDE_REVIEW_MONTHLY_BUDGET_USD\`).`;
   }
   if (kind === 'queue') {
-    return `:hourglass: *The Actions queue is backed up:* ${facts.queued} runs queued, the oldest waiting ${facts.waitedMin} min.${issue}\nCI results will be slow. Until it drains: no branch updates, no bulk re-runs, no ports of a main fix (AGENTS.md, D5398).`;
+    const cut = facts.cutoff ? ` (${facts.ignored ?? 0} queued before ${facts.cutoff} ignored)` : '';
+    return `:hourglass: *The Actions queue is backed up:* ${facts.queued} runs queued, the oldest waiting ${facts.waitedMin} min${cut}.${issue}\nCI results will be slow. Until it drains: no branch updates, no bulk re-runs, no ports of a main fix (AGENTS.md, D5398).`;
   }
   if (kind === 'queue-stalled') {
     return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;

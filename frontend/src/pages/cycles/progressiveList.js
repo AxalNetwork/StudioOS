@@ -12,7 +12,8 @@
  *
  * A total the read does not carry is never taken for zero: with no rows and
  * no total the page keeps the full table, which says "Not recorded".
- * Only the modules listed in PROGRESSIVE are affected; the other cycles keep
+ * Only the modules listed in PROGRESSIVE are affected (Build's six, D5076,
+ * Validate's first three, D6004, and Grow's two, D6100); the others keep
  * D661's table as it was.
  *
  * D6100 (#6100): Grow's Product improvement and Revenue and traction take the
@@ -64,6 +65,27 @@ export const PROGRESSIVE = Object.freeze({
       heading: 'Connect what the company runs on',
       outcome: 'Connect the systems your company already uses, so the week’s work reads from one place.',
       action: 'Connect your first system', one: 'system', many: 'systems',
+    },
+  }),
+  // D6004 (#6004): Validate's first three modules, the same three stages. The
+  // dominant action is each module's existing Add: Create theme and Create
+  // segment (`FORMS.validate`), and Customer research's Record a session, which
+  // opens the record lightbox over the page through `onOpen`.
+  validate: Object.freeze({
+    'problem-discovery': {
+      heading: 'Name the problem you are solving',
+      outcome: 'Group what customers tell you into pain themes, so every interview and experiment points at one problem.',
+      action: 'Create your first pain theme', one: 'pain theme', many: 'pain themes',
+    },
+    'customer-research': {
+      heading: 'Hear it from customers first',
+      outcome: 'Talk with people who have the problem and keep what they say, so the pains you name come from their words.',
+      action: 'Record your first session', one: 'interview', many: 'interviews',
+    },
+    'ideal-customer-profile': {
+      heading: 'Decide who you are building for',
+      outcome: 'Describe the segment that feels the pain most, so research, pricing and outreach aim at the same people.',
+      action: 'Create your first segment', one: 'segment', many: 'segments',
     },
   }),
   // D6100 (#6100): Grow's two modules that open on a founder's own entry. The
