@@ -177,6 +177,7 @@ const landedId = (v) => (/^[1-9]\d{0,17}$/.test(String(v ?? '').trim()) ? String
  * the venture, so Open keeps it either way.
  */
 export function landedHref(item, module, search = '') {
+  if (item?.landed_state === 'removed' || item?.landed_state === 'not_must_have') return null;
   const where = LANDED_RECORD[String(item?.landed_table ?? '')];
   const id = landedId(item?.landed_id);
   if (where && id && where.modules.includes(module)) return `/build/${module}/${where.id(id)}${search}`;
@@ -184,7 +185,14 @@ export function landedHref(item, module, search = '') {
 }
 
 /** Whether Open reaches the row itself, which is what its label then says. */
-export const opensRecord = (item, module) => landedHref(item, module) !== `/build/${module}`;
+export const opensRecord = (item, module) => {
+  const href = landedHref(item, module);
+  return href != null && href !== `/build/${module}`;
+};
+
+/** #6024: the original acceptance stays recorded after its target leaves the list. */
+export const landedAbsence = (item) => item?.landed_state === 'removed' ? 'Feature removed'
+  : item?.landed_state === 'not_must_have' ? 'No longer a must-have' : null;
 
 const EVIDENCE_KIND = {
   pain_group: 'Problem discovery', hypothesis: 'Hypothesis', experiment: 'Experiment', signal: 'Demand',
