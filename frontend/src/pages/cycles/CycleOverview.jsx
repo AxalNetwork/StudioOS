@@ -200,6 +200,7 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
     );
   }
   if (view.state === 'too_little') {
+    if (!sparseSummary.length) return <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="card-too-little">{view.reason}</p>;
     return <div data-testid="card-too-little">
       <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</p>
       {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}

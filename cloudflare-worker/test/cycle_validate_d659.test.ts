@@ -144,10 +144,7 @@ test('D659: a new venture — every card empty with its one starting action, eve
   for (const c of r.body.cards) {
     assert.equal(c.state, 'empty', c.slug);
     assert.ok(c.next && c.next.text && c.next.href.startsWith('/validate/'), `${c.slug} names its starting action`);
-    if (c.slug === 'demand-signals') {
-      assert.deepEqual(c.series.signals, { loi: 0, pre_sale: 0, waitlist: 0, need_to_have: 0, would_pay: 0 });
-      assert.equal(c.series.chart_ready, false);
-    } else assert.equal(c.series, null, `${c.slug} draws nothing`);
+    assert.equal(c.series, null, `${c.slug} draws nothing`);
   }
   assert.equal(card(r.body, 'problem-discovery').next.text, 'Record your first session');
   assert.equal(card(r.body, 'ideal-customer-profile').next.text, 'Start the profile');

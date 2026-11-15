@@ -908,7 +908,7 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
       [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([period, amount_cents]) => ({ currency, period, amount_cents })));
     const toConfirm = demand.signals.filter((s) => s.status === 'to_confirm').length;
     if (total === 0 && demand.signals.length === 0 && demand.paid.length === 0 && judged.size === 0) {
-      return { state: 'empty', series: { signals: counts, committed: [], chart_ready: false }, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
+      return { state: 'empty', series: null, next: { text: 'Connect a landing page', href: href(ctx, 'demand-signals') }, reason: 'No waitlist connected.' };
     }
     const next = !bar
       ? { text: 'Set the bar for waitlist sign-ups', href: href(ctx, 'demand-signals') }
