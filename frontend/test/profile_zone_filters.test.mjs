@@ -760,6 +760,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
     // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
     if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
+    // #6276 adds No read yet after Metrics.
+    if (name === 'investor') canvas['research/benchmarking'].splice(2, 0, 'No read yet');
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {
