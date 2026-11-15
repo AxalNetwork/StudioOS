@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import {
-  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
+  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -12,7 +12,8 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
  * cards, tiles and pills, three small charts that each have a table view, and
- * the dialogs (Edit split UF3, Add milestone UF6, Choose the round size UF13d).
+ * the dialogs (Edit split UF3, Add milestone and Add a hire UF6, Choose the round size UF13d),
+ * and D6083's section sheet (UF4, UF21c).
  * Every change opens one of these; never a browser pop-up. Eadwyn fills
  * nothing here: no amount, share, runway, burn, hire cost or driver.
  */
@@ -378,6 +379,134 @@ export function EditHireDialog({ projectId, hire, onClose, onSaved, api = useOfF
         {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Lightbox>
+  );
+}
+
+/**
+ * D6083 (#6083) — Add a hire (UF6): role, section, the month it starts, its cost a year and the
+ * currency, in a centred dialog (a bottom sheet on a phone, as Add milestone). It saves through
+ * `POST /hires`, the store's own rules and audit, at revision 0. An empty cost stays Not recorded.
+ */
+export function AddHireDialog({ projectId, section: first = 'product', currency: planCurrency = 'usd', onClose, onSaved, api = useOfFundsApi }) {
+  const [role, setRole] = useState('');
+  const [section, setSection] = useState(sectionOf(first) ? first : 'product');
+  const [starts, setStarts] = useState('');
+  const [cost, setCost] = useState('');
+  const [currency, setCurrency] = useState(String(planCurrency || 'usd').toLowerCase());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const currencies = [...new Set([String(planCurrency || 'usd').toLowerCase(), 'usd', 'eur', 'gbp'])];
+  const draft = hireBody({ role, section, starts, cost, currency });
+  // Say what to fix once the person has typed something; an empty role just keeps the button off.
+  const hint = role.trim() || starts || cost ? draft.error : null;
+  const save = async () => {
+    if (!draft.body) return;
+    setBusy(true); setError('');
+    try {
+      await api.createHire(projectId, draft.body);
+      onSaved(draft.body.annual_cents == null ? 'The hire is added. Its cost stays Not recorded until you add one.' : 'The hire is added.');
+    } catch (e) { setError(refusal(e)); }
+    setBusy(false);
+  };
+  return (
+    <Lightbox label="Add a hire" title="Add a hire" sub="A hire is paid from its section from the month it starts." onClose={onClose} width={520} phone="sheet" testId="uof-add-hire"
+      footer={<DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Add hire" disabled={!draft.body} testId="uof-add-hire-save" />}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Role</span><input className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Data engineer" data-testid="uof-add-hire-role" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-add-hire-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Starts</span><input className={`${FIELD} ${MONO}`} placeholder="2027-04" value={starts} onChange={(e) => setStarts(e.target.value)} data-testid="uof-add-hire-starts" /></label>
+        <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2">
+          <label className="flex flex-col gap-1"><span className={EYEBROW}>Cost a year</span>
+            <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="140,000" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-add-hire-cost" /></label>
+          <label className="flex flex-col gap-1"><span className={EYEBROW}>Currency</span>
+            <select className={FIELD} value={currency} onChange={(e) => setCurrency(e.target.value)} data-testid="uof-add-hire-currency">
+              {currencies.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+            </select></label>
+        </div>
+        <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not recorded, never 0.</span>
+        {hint ? <span className="text-[12px] text-red-700 dark:text-red-300" data-testid="uof-add-hire-hint">{hint}</span> : null}
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-add-hire-error">{error}</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
+ * D6083 (#6083) — the section sheet (UF4; a bottom sheet on a phone, UF21c): the section's share and
+ * amount, its milestones, its hires with what they cost against the amount (and the warning when they
+ * cost more), its planned share against the actual one, and what it feeds. The actual share is
+ * Mercury's and the founder's alone (D1174): anyone else is told so and is shown no bank figure.
+ */
+export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready', onClose, onAddHire }) {
+  const base = plan?.base?.value || null;
+  const v = sectionSheet(base, sectionKey, mercury);
+  if (!v) return null;
+  const cur = base?.currency;
+  const founderOnly = plan?.viewer?.mercury === false;
+  const deck = tiesRows(plan).find((r) => r.key === 'deck');
+  const heading = (t) => <h4 className={`m-0 ${EYEBROW}`}>{t}</h4>;
+  const block = 'flex flex-col gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800';
+  return (
+    <Sheet label={v.label} eyebrow="Allocation · Section" title={v.label} onClose={onClose} width={560} phone="sheet" testId="uof-section-sheet"
+      footer={<div className="flex justify-end max-md:hidden"><button type="button" className={BTN_GHOST} onClick={onClose} data-testid="uof-section-sheet-close">Close</button></div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone="violet">{v.share != null ? `${v.share}% of the raise` : 'Share Not recorded'}</Pill>
+          {v.source ? <Source source={v.source} /> : null}
+        </div>
+        <dl className="m-0 grid grid-cols-2 gap-2" data-testid="uof-section-facts">
+          <div><dt className={EYEBROW}>Amount</dt><dd className={`m-0 ${MONO} text-[15px] font-bold`}>{money(v.amountCents, cur) || <NotRecorded />}</dd></div>
+          <div><dt className={EYEBROW}>{base?.target_runway_months ? `A month over ${base.target_runway_months} months` : 'A month'}</dt><dd className={`m-0 ${MONO} text-[15px] font-bold`}>{money(v.monthlyCents, cur) || <NotRecorded />}</dd></div>
+        </dl>
+        <section className={block} data-testid="uof-section-milestones">
+          {heading('Milestones in this section')}
+          {v.milestoneItems.length ? <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{v.milestoneItems.map((m) => (
+            <li key={m.id}><span className="block text-[13.5px] font-bold">{m.label}</span>
+              <span className={`${MONO} text-[12px] ${MUTED}`}>By {m.due_on || NOT_RECORDED} · {m.cost_cents == null ? 'Not costed' : money(m.cost_cents, cur)}</span></li>
+          ))}</ul> : <p className={`m-0 text-[12.5px] ${MUTED}`}>No milestones in this section yet.</p>}
+        </section>
+        <section className={block} data-testid="uof-section-hires">
+          <div className="flex items-center justify-between gap-2">{heading('Hires')}
+            {plan?.viewer?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
+          {v.hireItems == null ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} />
+            : v.hireItems.length ? (
+              <>
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">{v.hireItems.map((h) => (
+                  <li key={h.id} className="flex items-start justify-between gap-2" data-testid="uof-section-hire">
+                    <span><span className="block text-[13.5px] font-bold">{h.role || NOT_RECORDED}</span>
+                      <span className={`${MONO} text-[12px] ${MUTED}`}>From {h.start_month || NOT_RECORDED} · {money(h.annual_cents, h.currency) ? `${money(h.annual_cents, h.currency)} a year` : 'cost Not recorded'}</span></span>
+                    <span className={`${MONO} text-[12.5px]`}>{typeof h.annual_cents === 'number' ? `${money(Math.round(h.annual_cents / 12), h.currency)} a month` : ''}</span>
+                  </li>
+                ))}</ul>
+                <p className={`m-0 text-[12px] ${MUTED}`} data-testid="uof-section-hire-cost">{`Hires cost ${money(v.hireCostCents, cur) || NOT_RECORDED} a year of this section’s ${money(v.amountCents, cur) || NOT_RECORDED}.`}</p>
+                {v.overBudget ? <BlockError tone="amber" testId="uof-section-over" text={`${v.label}: hires cost ${money(v.hireCostCents, cur)} a year; this section has ${money(v.amountCents, cur)}. The split still saves; the warning stays until the hires fit.`} /> : null}
+              </>
+            ) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No hires planned in this section.</p>}
+        </section>
+        <section className={block} data-testid="uof-section-actual">
+          {heading('Plan vs actual')}
+          <div className="flex justify-between text-[12.5px]"><span>Planned share</span><span className={MONO}>{v.share != null ? `${v.share}%` : NOT_RECORDED}</span></div>
+          <div className="flex justify-between text-[12.5px]"><span>Actual · last {v.months} months</span>
+            <span className={MONO} data-testid="uof-section-actual-value">{founderOnly ? <span className={MUTED}>Founder only</span>
+              : mercuryState === 'unreadable' ? <span className={MUTED}>Unreadable</span>
+                : v.actual != null ? `${v.actual}%` : <span className={MUTED}>{NOT_RECORDED}</span>}</span></div>
+          <p className={`m-0 text-[11.5px] ${MUTED}`}>{founderOnly ? 'Mercury figures are visible to the founder only.'
+            : v.actual != null ? `Connector · Mercury${v.asOf ? `, as of ${dayText(v.asOf) || v.asOf}` : ''}.` : 'The actual share reads Mercury, from the categories you mapped.'}</p>
+        </section>
+        <section className={block} data-testid="uof-section-feeds">
+          {heading('Feeds')}
+          {deck ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[13px] font-bold">Pitch deck{deck.text ? ` · ${deck.text}` : ''}</span>
+              <span className="flex items-center gap-2">{deck.pill ? <Pill tone={deck.tone}>{deck.pill}</Pill> : null}{deck.href ? <Link className={LINK} to={deck.href}>Open ›</Link> : null}</span>
+            </div>
+          ) : <p className={`m-0 text-[12.5px] ${MUTED}`}>The pitch deck’s Ask slide reads this split. No deck is recorded.</p>}
+        </section>
+      </div>
+    </Sheet>
   );
 }
 

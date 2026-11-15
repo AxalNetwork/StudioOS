@@ -1723,6 +1723,25 @@ export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>
   return out;
 }
 
+/** D6077: what Capital relationships' Pipeline filters and sorts on, besides the prospect row itself. */
+export type ProspectSignals = { fit: Fit | 'not_recorded'; via_call: boolean; last_contact: string | null };
+
+/**
+ * D6077 (#6077): each prospect's Fit, whether it came through a round call,
+ * and its last contact, by prospect id, for `GET
+ * /api/contacts/raise-prospects`. The same derivation the Cycle table's
+ * capital records use (`loadProspects`, `prospectFunds`): Fit is "not
+ * recorded" without a served fund, `via_call` is false with round calls off,
+ * and last contact is the stored contact's activity or null. The caller has
+ * already scoped `projectId` to the user.
+ */
+export async function prospectSignals(env: Env, projectId: number): Promise<Map<number, ProspectSignals>> {
+  const [rows, funds] = await Promise.all([loadProspects(env, projectId), prospectFunds({ env, projectId, today: '' })]);
+  return new Map(rows.map((p) => [Number(p.id), {
+    fit: funds.get(Number(p.id))?.fit ?? 'not_recorded', via_call: p.via_call, last_contact: p.last_contact ?? null,
+  }]));
+}
+
 /** D752: each prospect's confirmed raise receipt, by its posted date. Stored matches only. */
 export async function receivedDates(env: Env, projectId: number): Promise<Map<number, string>> {
   const rows = (await env.DB.prepare(

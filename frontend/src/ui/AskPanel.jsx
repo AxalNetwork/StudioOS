@@ -39,7 +39,7 @@ export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
 export default function AskPanel({ page, label, crumb, options = [], prompts = null, aiOn = true, layout = 'dock', onClose, onNavigate }) {
-  const intent = useAskPanel().intent;
+  const { intent, draft } = useAskPanel();
   const exclusive = !!intent?.exclusive;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -58,6 +58,8 @@ export default function AskPanel({ page, label, crumb, options = [], prompts = n
   useEscapeClose(() => onClose?.('escape'), { active: true });
   useEffect(() => { inputRef.current?.focus?.(); }, []);
   useEffect(() => { setState(aiOn ? 'ok' : 'off'); }, [aiOn]);
+  // D5077 (#5077): a page's suggested ask opened the panel: its words go in the composer, and nothing is sent.
+  useEffect(() => { if (draft?.text) { setText(draft.text); inputRef.current?.focus?.(); } }, [draft]);
 
   // The page's own thread: its conversation (keyed by the rail's page key) and
   // the open proposals of its run chips.

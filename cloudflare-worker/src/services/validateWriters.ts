@@ -1527,6 +1527,50 @@ export async function unlinkEvidence(
   ]);
 }
 
+/**
+ * D6020 (#6020): change the strength of one of this claim's links, as the
+ * hypothesis record's Change strength names it. A pain link (`pain-<id>`) goes
+ * through `setEvidenceStrength`, which logs on the claim and on its theme; an
+ * evidence link (`evidence-<id>`) is updated here and logs on the claim. The
+ * link must be this claim's, on this venture: anything else answers 404 and
+ * writes nothing. The summary names the claim's code and the strength only.
+ */
+export async function setLinkStrength(
+  env: Env,
+  input: { projectId: number; userId: number | null; hypothesisId: number; link: unknown; strength: unknown },
+): Promise<void> {
+  const m = /^(pain|evidence)-([1-9][0-9]{0,9})$/.exec(String(input.link ?? ''));
+  if (!m) throw new WriterError(400, 'link must be pain-<id> or evidence-<id>');
+  const strength = String(input.strength ?? '');
+  if (!(EVIDENCE_STRENGTHS as readonly string[]).includes(strength)) {
+    throw new WriterError(400, `strength must be one of ${EVIDENCE_STRENGTHS.join(', ')}`);
+  }
+  const h = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE id = ? AND project_id = ?')
+    .bind(input.hypothesisId, input.projectId).first<{ id: number; code: string }>();
+  if (!h) throw new WriterError(404, 'Hypothesis not found on this project');
+  const id = Number(m[2]);
+  if (m[1] === 'pain') {
+    const row = await env.DB.prepare('SELECT 1 AS ok FROM hypothesis_pain_links WHERE id = ? AND hypothesis_id = ?')
+      .bind(id, input.hypothesisId).first();
+    if (!row) throw new WriterError(404, 'Link not found on this hypothesis');
+    await setEvidenceStrength(env, { projectId: input.projectId, userId: input.userId, linkId: id, strength });
+    return;
+  }
+  const row = await env.DB.prepare('SELECT 1 AS ok FROM hypothesis_evidence_links WHERE id = ? AND hypothesis_id = ? AND project_id = ?')
+    .bind(id, input.hypothesisId, input.projectId).first();
+  if (!row) throw new WriterError(404, 'Link not found on this hypothesis');
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE hypothesis_evidence_links SET strength = ?, updated_at = datetime('now')
+        WHERE id = ? AND hypothesis_id = ? AND project_id = ?`,
+    ).bind(strength, id, input.hypothesisId, input.projectId),
+    logCycleWriteStatement(env, {
+      projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'experiments',
+      entityId: input.hypothesisId, action: 'evidence_strength_set', summary: `Evidence strength ${strength}`,
+    }),
+  ]);
+}
+
 export const EXPERIMENT_STATUSES = ['planned', 'running', 'done'] as const;
 
 /**
