@@ -39,8 +39,16 @@ jobs:
           fi
       - name: Generate the exact-once plan
         id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          full_parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          parts=$(node --input-type=module -e '
+            import { tierFor } from "./scripts/lib/prTier.mjs";
+            const tier = tierFor({ event: process.env.EVENT, draft: process.env.DRAFT === "true" });
+            console.log(tier.parts === null ? process.argv[1] : JSON.stringify(tier.parts));
+          ' "$full_parts")
           echo "parts=$parts" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -98,7 +106,7 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci
       # D5398: D4558's independent-recovery tests require the real age CLI.
       # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
       # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.

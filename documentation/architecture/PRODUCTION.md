@@ -223,6 +223,8 @@ A grant older than a raised session floor is also refused on every tool call (`g
     - Rotation: put the new `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then Register webhook at once (updates answer 401 in between, and Telegram retries). For the token, `/revoke` in @BotFather, put the new `TELEGRAM_CHANNEL_BOT_TOKEN`, then Register webhook.
     - Off without a deploy: delete `TELEGRAM_CHANNEL_WEBHOOK_SECRET`; the webhook then answers 503 and Telegram retries for a while. To stop the retries too, `/revoke` the token in @BotFather.
 
+- [ ] `CF_BOT_DELIVERY_URL`, `CF_BOT_DELIVERY_SECRET` – the meeting-bot stage bridge's delivery port (D5674, #5988). Neither is in `wrangler.toml`; both are optional and read only by `services/cloudflareBotBridge.ts`. The URL is the #5671 receiver's https endpoint (no credentials, query or fragment); the secret is the same 32+ character value that receiver holds as `CF_WEBHOOK_SECRET`, sent in `cf-webhook-auth`. Unset, malformed or short, the five-minute bridge still stores its redacted receipts in D1 but sends nothing and they stay pending. Only a 202 with `accepted: true` marks one forwarded. The receiver must first accept StudioOS source receipts (today it refuses anything but registered native Cloudflare policies, and the receipts stay pending). Set them with `npx wrangler secret put CF_BOT_DELIVERY_URL --config wrangler.toml --env production` and the same for the secret. Rollback: delete either secret. Never logged.
+
 ### Independent Cloudflare notification Worker (D5671; disabled)
 
 These belong only to the separate receiver configured in

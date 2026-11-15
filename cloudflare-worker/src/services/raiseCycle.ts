@@ -39,6 +39,7 @@ import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 import { deckReaders, readBySentence } from './narrative/readers';
 import { readObjections } from './narrative/objections';
+import { claimTally, type SectionOf } from './narrative/claimTally';
 import { inputsFrom, readCapTable } from './capTableToday';
 import { simulate } from './captable';
 import { deckShareMetrics } from './deckShareUse';
@@ -932,9 +933,12 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
  *   - `spinout`: whether New version offers the Spin-Out deck wording;
  *   - `objections` (D913): the objections investors raised, project-wide,
  *     `{ state: 'unreadable' }` on its own when the feedback cannot be read.
- * Claims backed (#2430) has no store, so the part carries none; the page says why.
+ *   - `claims` (D6068): the newest version's claim store tally, backed of
+ *     total and the sections with a Mismatch (`narrative/claimTally.ts`, by
+ *     the caller's `sectionOf`, the route's `sectionOfField`),
+ *     `{ state: 'unreadable' }` on its own; null with no version.
  */
-export async function narrativeHome(ctx: Ctx) {
+export async function narrativeHome(ctx: Ctx, sectionOf: SectionOf) {
   const [versions, readers, objections] = await Promise.all([
     loadVersions(ctx), deckReaders(ctx.env, ctx.projectId),
     readObjections(ctx.env, ctx.projectId).catch((e) => {
@@ -945,6 +949,7 @@ export async function narrativeHome(ctx: Ctx) {
   const newest = versions[0] ?? null;
   const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
   const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  const claims = newest ? await claimTally(ctx.env, ctx.projectId, Number(newest.version), sectionOf) : null;
   return {
     state: 'ok' as const,
     versions: versions.map((v) => {
@@ -962,6 +967,7 @@ export async function narrativeHome(ctx: Ctx) {
     deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
     spinout: readers.spinout,
     objections,
+    claims,
   };
 }
 
@@ -1721,6 +1727,25 @@ export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>
     if (f) out.set(Number(r.id), { fit: fundFit(f.sector_focus, p?.sector), focus: f.sector_focus, fundSizeCents: num(f.fund_size_cents), sector: p?.sector ?? null });
   }
   return out;
+}
+
+/** D6077: what Capital relationships' Pipeline filters and sorts on, besides the prospect row itself. */
+export type ProspectSignals = { fit: Fit | 'not_recorded'; via_call: boolean; last_contact: string | null };
+
+/**
+ * D6077 (#6077): each prospect's Fit, whether it came through a round call,
+ * and its last contact, by prospect id, for `GET
+ * /api/contacts/raise-prospects`. The same derivation the Cycle table's
+ * capital records use (`loadProspects`, `prospectFunds`): Fit is "not
+ * recorded" without a served fund, `via_call` is false with round calls off,
+ * and last contact is the stored contact's activity or null. The caller has
+ * already scoped `projectId` to the user.
+ */
+export async function prospectSignals(env: Env, projectId: number): Promise<Map<number, ProspectSignals>> {
+  const [rows, funds] = await Promise.all([loadProspects(env, projectId), prospectFunds({ env, projectId, today: '' })]);
+  return new Map(rows.map((p) => [Number(p.id), {
+    fit: funds.get(Number(p.id))?.fit ?? 'not_recorded', via_call: p.via_call, last_contact: p.last_contact ?? null,
+  }]));
 }
 
 /** D752: each prospect's confirmed raise receipt, by its posted date. Stored matches only. */

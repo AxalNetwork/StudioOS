@@ -21,10 +21,11 @@ import { Unreadable } from '../../../ui';
 import { ventureScoresApi } from '../../../lib/api/ventureScores';
 import { reportError } from '../../../lib/log';
 import {
-  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS,
+  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS, WEIGHTING_LINE,
   barText, bandWord, batches, coverageText, gradeMix, panelOf, reviewText, stampText, stripBar, stripOf, unreadScopes,
 } from './scorecardModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import WeightingControl from './Weighting';
 
 const CARD = 'flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const SUB = 'text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -453,11 +454,22 @@ function Loading() {
 }
 
 /**
+ * #6169: the investor's own weighting (D1258, D4635), read from `GET
+ * /api/venture-scores/weights` and edited in the same dialog as Deal flow's.
+ * A failed read says so with Try again; it never reads as Equal.
+ */
+function Weighting() {
+  return <div className={CARD} data-testid="scorecard-weighting"><WeightingControl note={WEIGHTING_LINE} /></div>;
+}
+
+/**
  * SC1's panel. With a `dealId` it reads the deal's scorecard by the
  * visibility rule (D1256 §2) and draws one of SC1 and SC15–SC18. The
  * founder's audience keeps D1253's waits: their page is part 5's.
+ * `weighting={false}` leaves the weighting out where the page already draws
+ * it (Deal flow's toolbar, whose sort it must re-read on save).
  */
-export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null }) {
+export default function VentureScorecard({ audience = 'investor', dealId = null, ndaHref = null, weighting = true }) {
   const [read, retry] = useDealScorecard(audience === 'founder' ? null : dealId);
   const [open, setOpen] = useState(null);
 
@@ -473,7 +485,7 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
             </li>
           ))}
         </ul>
-        {audience === 'founder' ? <><ScorecardWait id="founder" /><ScorecardWait id="sharing" /><ScorecardWait id="trajectory" /></> : <ScorecardWait id="weighting" />}
+        {audience === 'founder' ? <><ScorecardWait id="founder" /><ScorecardWait id="sharing" /><ScorecardWait id="trajectory" /></> : weighting && <WeightingControl note={WEIGHTING_LINE} />}
       </section>
     );
   }
@@ -524,7 +536,7 @@ export default function VentureScorecard({ audience = 'investor', dealId = null,
                 <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[12.5px] text-axal-ink dark:text-gray-300">{STATE_WORDS.after_nda.map((x) => <li key={x}>{x}</li>)}</ul>
               </section>
             ) : <RestsOn mix={panel.rests} />}
-            {panel.viewer === 'investor' && <ScorecardWait id="weighting" />}
+            {panel.viewer === 'investor' && weighting && <Weighting />}
           </div>
         </div>
         {shown && <ScopeDrawer s={shown} model={panel.model} computedAt={panel.computed_at} onClose={() => setOpen(null)} />}

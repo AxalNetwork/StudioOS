@@ -11,7 +11,7 @@
  *     (`places` with an `outcome`, and an exact `total`);
  *   - `GET /api/events/invitations` → the caller's pending invitations;
  *   - `GET /api/public/events` → Discover, with `type`, `format`, `price`,
- *     `from`, `to` and an exact `total`;
+ *     `topic`, `from`, `to` and an exact `total`;
  *   - `GET /api/events/:id/eligibility` → may register, free for me, full;
  *   - `GET /api/calendar/my-events/feed` → whether Subscribe is set up.
  *
@@ -24,6 +24,7 @@ import { eventTime } from './eventTime';
 import { isPast, statusOf } from './myEventsModel';
 import { EVENT_TYPES } from '../../lib/eventTypes';
 import { money } from './eventDrawersModel';
+import { TOPICS } from './recommendationsModel';
 
 const time = eventTime;
 const n = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -364,6 +365,47 @@ export function typeChips(events) {
   return EVENT_TYPES.filter((t) => counts.has(t.id)).map((t) => ({ key: t.id, label: t.label, count: counts.get(t.id) }));
 }
 export const typeLabel = (id) => EVENT_TYPES.find((t) => t.id === id)?.label || 'Other';
+
+/*
+ * Topics (D3724 gap 5, #5868): the Worker's ten slugs (`EVENT_TOPICS`, D1487),
+ * listed once in recommendationsModel.js as `TOPICS`. Discover's chips (ME5)
+ * filter by one; the editor's picker (NE1) sets up to five on an event.
+ */
+export { TOPICS };
+export const EVENT_TOPICS_MAX = 5;
+export const TOPICS_FULL = 'An event takes at most five topics. Remove one to add another.';
+export const TOPICS_UNREAD = 'This event’s topics could not be read, so they cannot be changed here. Saving leaves them as they are.';
+export const topicLabel = (key) => TOPICS.find((t) => t.key === key)?.label || null;
+
+/** The picker's next list: a picked topic comes off; a new one goes on only below the cap, in the Worker's order. */
+export function toggleTopic(list, key, max = EVENT_TOPICS_MAX) {
+  const now = Array.isArray(list) ? list.filter((k) => TOPICS.some((t) => t.key === k)) : [];
+  if (now.includes(key)) return now.filter((k) => k !== key);
+  if (!TOPICS.some((t) => t.key === key) || now.length >= max) return now;
+  return TOPICS.map((t) => t.key).filter((k) => k === key || now.includes(k));
+}
+
+/** The picker's chips: each topic, whether it is picked, and whether it can be picked now (a sixth cannot). */
+export function topicPicker(list, max = EVENT_TOPICS_MAX) {
+  const now = Array.isArray(list) ? list : [];
+  const full = now.length >= max;
+  return {
+    chips: TOPICS.map((t) => ({ ...t, on: now.includes(t.key), disabled: full && !now.includes(t.key) })),
+    count: `${now.length} of ${max}`,
+    full,
+    note: full ? TOPICS_FULL : null,
+  };
+}
+
+/** The public read's parameters for Discover: the window and every filter set, a blank one left out. */
+export function discoverParams({ limit, from, to, q, format, price, topic } = {}) {
+  const p = { limit, offset: 0, from, to };
+  if (q) p.q = q;
+  if (format) p.format = format;
+  if (price) p.price = price;
+  if (topic) p.topic = topic;
+  return p;
+}
 
 export const FORMATS = [{ key: '', label: 'Any format' }, { key: 'virtual', label: 'Online' }, { key: 'in_person', label: 'In person' }, { key: 'hybrid', label: 'Hybrid' }];
 export const PRICES = [{ key: '', label: 'Any price' }, { key: 'free', label: 'Free' }, { key: 'paid', label: 'Paid' }];

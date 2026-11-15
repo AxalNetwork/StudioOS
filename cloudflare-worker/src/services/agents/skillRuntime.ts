@@ -126,7 +126,14 @@ async function sdkText(rt: SkillRuntime, m: RunSkillManifest, s: AuthorizedSkill
     used += got.text.length;
     files.push(got.text);
   }
-  return [rt.cataloguePrompt(), activation, ...files, NO_INVENTED_FIGURE_RULE].filter(Boolean).join('\n\n');
+  // One model call, no tool loop: say that the tools the catalogue and the activation name cannot be called here.
+  // A file over the cap or gone from the store is listed by id in the activation but not shown: say so, never that it is loaded.
+  const all = files.length === s.resources.length;
+  const have = all
+    ? `The skill "${s.name}" and its files are already loaded above`
+    : `The skill "${s.name}" is loaded above with ${files.length} of its ${s.resources.length} files; a file listed by id but not shown above is not available in this run, so do not state what it says`;
+  const loaded = `This run makes no tool call: activate_skill and read_skill_resource are not available here. ${have}; no other skill can be loaded.`;
+  return [rt.cataloguePrompt(), activation, ...files, loaded, NO_INVENTED_FIGURE_RULE].filter(Boolean).join('\n\n');
 }
 
 /** A pinned version with its skill's identity, as the D4121 estimate reads it. */

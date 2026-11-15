@@ -109,6 +109,8 @@ export function makeCycleWrites(request) {
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       contentDelete: (projectId, uid) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
       // Edits: a PATCH changes only the fields it is sent.
+      // D6098 (#6098): rename one feedback theme, or merge it (`merge: true`); the roadmap items that answer it follow.
+      feedbackTheme: (projectId, body) => request('/cycles/grow/feedback/themes', { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -133,6 +135,8 @@ export function makeCycleWrites(request) {
       // D695 (#1656, PR 3b): Build's canvas Adds and Edits, through #1695's routes (#1792).
       addFeature: (projectId, body) => request(`/cycles/build/features?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       addMustHave: (projectId, body) => request(`/cycles/build/must-haves?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      // D6031 (#6031): the MVP target date, from Prototype / MVP's summary line (null clears it).
+      mvpTarget: (projectId, date) => request(`/cycles/build/project/target?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify({ mvp_target_date: date }) }),
       roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).

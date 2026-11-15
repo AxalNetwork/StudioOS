@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Research v2 Rooms · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Investor · IRV-01 to IRV-07 · #6268</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investor Research v2 — the overview cards, the rooms founders opened to you, one room and one file</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A new canvas for the investor’s Research (/research, /research/diligence, /research/diligence/:grantUid and /research/diligence/:grantUid/files/:fileUid). It takes its frame, header, question field and cards from Research v2 (RS-01 to RS-12) and the investor shell from Deals v2: the union sidebar with a company switcher, Portfolio, Companies and Licences in the Account menu, and Eadwyn as the one right rail. Primary actions wear the investor indigo (ACCENT.investor, #4f46e5); Eadwyn’s memo, the Ask button and the rail stay violet. Rooms and benchmarks are cards on the overview and links from a deal, never a new top-level tab (#3701). The room shares its access states with DE10 in Deals v2; opened from Research it shows A, B, D and E. Counts behind an NDA are numbers, never names. Files open to you and files in the room are always two numbers, never a percentage. Zero, Not recorded and Unreadable never look alike. Violet dashed ◇ tags mark what needs backend work; amber ⚑ tags mark the owner’s three questions, drawn to pick A. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Kelp Bio], [Northwind Labs], [Harbor AI], [Fjord Grid], [Aster Cloud], [Northwind Ventures] and every figure are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Investor Research v2 Rooms Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['IRV-01', 'Research overview (investor) · desktop 1440', 'The house header with New research (indigo) and Ask Eadwyn (violet); a question field whose three examples fill the field and never run; then Continue where you left off, Rooms granted to you (“[3] rooms granted, live now · [1] expires within 14 days”, with ◇ “[1] with new files” as a disabled future line), Requests waiting on a founder (◇ list; until then it points to each deal’s Data room tab), Deals in diligence (“[2] deals · longest [18] days in Diligence”), My benchmarks, Recently added evidence and Source coverage on one line. The rail’s ◇ memo proposal waits on a new-files count. The crop shows the rooms list unreadable while every other card still reads.', [F('RSO01', false, 1320), C('RSO01B', 'Rooms list unreadable · the other cards still read', 1220, 810)]],
+      ['IRV-02', 'Rooms · desktop 1440', 'Tiles Granted [3], Partly staged [1] and Requests open ◇. One row per live grant: company, “[6] open of [11]”, the count behind an NDA, the NDA chip, ◇ deal and stage, granted, you last opened (or Never opened) and access expires (or No end date). A Partly staged only filter, and the Requests block drawn entirely ◇. Nothing on the page opens or widens a room.', [F('RSO02', false, 1040)]],
+      ['IRV-03', 'Room · desktop 1440', 'The access band (granted, expires in 12 days, the visit before this one, and that opening is logged and seen by the founder); the NDA block with ◇ Review and sign and ◇ Out for signature; tiles for open, in the room and behind an NDA; search and folders; the files table with New pills and Download on each row; your own activity; founder-shared evidence; the Eadwyn memo (Accept, Edit first, Discard) and ◇ Ask for more. Also with the Eadwyn rail open, the access states shared with DE10, and the memo states.', [F('RSO03', false, 1690), F('RSO03R', 'Eadwyn rail open · the memo proposal from inside the room', 1690), C('RSO03B', 'Access states A to E · the DE10 component', 1440, 260), C('RSO03C', 'Memo states · proposal, accepted (Copy, ◇ Export), saving, save failed, nothing to draft, out of tokens', 1340, 758)]],
+      ['IRV-04', 'File · desktop 1440', 'Breadcrumb back to the room, the facts (type, size, staged on, visibility), Download (a single-use link valid for two minutes) and your downloads as “Link issued” lines. Folder and previous / next come from the room; on a direct link they are absent. ◇ Preview and ◇ Earlier versions are disabled, labelled rows. Also the NDA-gated file (no name, size or type) and a file no longer in the room.', [F('RSO04', false, 780), F('RSO04B', 'Direct link · no folder, no previous / next', 780), F('RSO04C', 'Behind an NDA you have not signed', 520), F('RSO04D', 'File not in the room', 460)]],
+      ['IRV-05', 'Empty and states · desktop 1440', 'No rooms granted, no requests, loading per card, Not recorded, the rooms list unreadable, one room unreadable (never “no access”), Refused, the admin preview, NDA required, Deals in diligence refused below the Professional plan, the memo’s nothing-to-draft, out-of-tokens, saving and save-failed states, search off and offline. The admin preview frame shows the shell bar and “Use an audited support read to open this room.”', [C('RSO05', false, 1440, 813), F('RSO05P', 'Admin previewing as Investor', 480)]],
+      ['IRV-06', 'Phone 390', 'The overview cards stacked in IRV-01’s order; rooms as cards (company, two counts, NDA chip, expires); a room whose files are a list with 44px Download buttons; search and folders in a sheet; a file; and the NDA-gated file with the memo below. Ask is the header icon with an amber dot while a proposal waits. No table wider than the screen.', [P('RSO06A', 'Overview'), P('RSO06B', 'Rooms'), P('RSO06C', 'Room'), P('RSO06D', 'Search and folders sheet'), P('RSO06E', 'File'), P('RSO06F', 'NDA-gated file · memo below')]],
+      ['IRV-07', 'Dark · desktop 1440', 'IRV-03 on the dark ground (#0b1220 / #111827 / #e5e7eb), with indigo-400 for the investor’s actions and violet for Eadwyn. NDA chips, New pills and Unreadable keep their words and shapes.', [F('RSO07', false, 1690)]],
+      ['IRV-A', 'Existing vs proposed', 'What each value reads from on main today, and what is ◇: one list of every request, the room-to-deal join, out for signature on a room, new files across rooms, memo export, preview, investor versions, bulk download, Ask over a room, Copy to my library and signing from inside the room.', [W('RSOA')]],
+      ['IRV-B', 'Handoff', 'Checked on main, preserved, frontend only, backend required, the owner’s questions and accessibility.', [W('RSOB')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

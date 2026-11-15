@@ -33,6 +33,8 @@ import { withQuery } from './lpsModel';
 import { FundsTab } from './FundsTab';
 import { FundPage } from './FundPage';
 import { fundIdFrom } from './fundsModel';
+import FundAdminAsk from './FundAdminAsk.jsx';
+import AdminBoardFrame from '../AdminBoardFrame.jsx';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -160,13 +162,15 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   return (
     <LightboxPhoneProvider phone="sheet">
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
+      <FundAdminAsk user={user} api={apis.fundAdmin} fundId={oneFund ?? scopeId ?? (PER_FUND_VIEWS.includes(tab) ? fund?.id ?? null : null)}
+        scopeLabel={oneFund ? 'Fund setup' : scopeId != null || PER_FUND_VIEWS.includes(tab) ? fund?.name || 'Chosen fund' : 'All administered funds'} />
       <div className="px-4 pt-5 sm:px-6">
         <AdminPageHeader
           crumb={view === 'funds' ? { label: TITLE, to: `/admin/fund-admin${keep}`, current: oneFund ? 'Fund' : 'Funds' } : null}
           title={TITLE}
           pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
           line={LINE}
-          actions={primary ? <Link className={`${actionPrimary} max-sm:w-full max-sm:justify-center`} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
+          actions={primary ? <Link className={`${actionPrimary} max-sm:min-h-[44px] max-sm:w-full max-sm:justify-center`} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
           more={moreItems(acts).map((m) => (m.to
             ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
             : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
@@ -249,8 +253,15 @@ function FundScope({ filter, pathname, search }) {
   const ref = useRef(null);
   const on = filter.pills.find((p) => p.on);
   const close = () => { if (ref.current) ref.current.open = false; };
+  // D4812 part 8: Escape closes the open list and gives focus back to the control, as ⋯ does.
+  const onKeyDown = (e) => {
+    if (e.key !== 'Escape' || !ref.current?.open) return;
+    e.preventDefault();
+    close();
+    ref.current.querySelector('summary')?.focus();
+  };
   return (
-    <details ref={ref} className="relative" data-testid="fund-admin-filter">
+    <details ref={ref} className="relative" onKeyDown={onKeyDown} data-testid="fund-admin-filter">
       <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink sm:min-h-[34px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="fund-admin-scope">
         <span className="text-axal-muted dark:text-gray-400">Fund scope:</span>
         <span className="font-bold">{on?.label || 'Choose a fund'}</span>
@@ -282,5 +293,6 @@ function downloadCsv(text) {
 
 export default function FundAdminConsole() {
   const { user } = useAuth() || {};
-  return <FundAdminConsoleView user={user} />;
+  const content = <FundAdminConsoleView user={user} />;
+  return branchOfUser(user) ? content : <AdminBoardFrame workspace="Fund Admin" note="Eadwyn prepares, explains and navigates. It never issues, records or moves money." operations>{content}</AdminBoardFrame>;
 }

@@ -62,6 +62,7 @@ function freshDb(opts: { invoices?: boolean } = {}) {
   if (opts.invoices !== false) {
     db.exec(migration('513_licence_fee_invoices.sql'));
     db.exec(migration('202611071531_licence_revisions.sql').split('\n').filter((l) => /licence_fee_invoices/.test(l) && /^ALTER/.test(l)).join('\n'));
+    db.exec(migration('202611141106_5954_licence_initial_fee_invoice.sql'));
   }
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(SUPER, 'admin', 'Holder', 'h@example.test');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
