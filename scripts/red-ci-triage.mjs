@@ -24,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gh } from './coordinator.mjs';
 import { classify, infraFingerprint } from './lib/ciClassify.mjs';
 import {
-  parseDigest, openAlerts, newestRun, failedLeafJobs, leafJobs, mainRunBefore, ruling, suitePart, parseLog, findings, markShared, nextStep,
+  parseDigest, openAlerts, newestRun, failedLeafJobs, leafJobs, mainRunBefore, ruling, suitePart, parseLog, findings, markShared, nextStep, noFailureNote,
 } from './lib/redCiTriage.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -125,6 +125,8 @@ function triage(pr, { runId, logs, withMain }) {
     }
   }
   rows = markShared(rows, mainSeen);
+  // No failed leaf job: either nothing failed, or a newer push cancelled the jobs and only a summary gate is red.
+  const quiet = failed.length ? null : noFailureNote({ run, jobs, head });
   return {
     pr: Number(pr), head, state: pull.state, draft: pull.draft,
     digest: digest && { ...digest, current: digest.headSha === head },
@@ -136,7 +138,8 @@ function triage(pr, { runId, logs, withMain }) {
     scriptVerdict: failed.length ? live.verdict : 'no_failure', own: live.own, shared: live.shared,
     failedJobs: failed, rows, logs,
     next: failed.length ? nextStep({ verdict: rule.verdict, rows, alerts, mainNow: mainNow?.conclusion || null })
-      : run.status === 'completed' ? `No failed job on this run (${run.conclusion}).` : 'No job has failed yet; the run is still going.',
+      : quiet.next,
+    cancelled: Boolean(quiet?.cancelled), noFailure: quiet?.line || null,
   };
 }
 
@@ -161,7 +164,7 @@ function print(r) {
   else if (!r.alerts.length) L.push('  none open');
   for (const a of r.alerts) L.push(`  #${a.number} ${a.title}${a.rule ? `\n      ${a.rule}` : ''}`);
   L.push('', `failing (${r.rows.length}):`);
-  if (!r.failedJobs.length) L.push('  no failed job on this run');
+  if (!r.failedJobs.length) L.push(`  ${r.noFailure || 'no failed job on this run'}`);
   for (const x of r.rows) {
     const where = x.file ? `${x.file}${x.line ? `:${x.line}` : ''}` : '';
     const main = x.onMain === true ? '  [also red on main]' : x.onMain === false ? "  [not in main's log]" : '';

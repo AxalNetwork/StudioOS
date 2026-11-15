@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
-import { Lightbox, Unreadable, usePhoneWidth } from '../../ui';
+import { Unreadable, usePhoneWidth } from '../../ui';
+import { recordOf } from '../portfolio/reportAsk';
 import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
   FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
@@ -11,7 +12,9 @@ import Sheet from '../../ui/Sheet.jsx';
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
  * five small multiples from the frozen figures of the reports received, the
  * Reports timeline with Read, Ask and Waive, Terms read only, the reader, and
- * the holding notes. Every change opens an in-page dialog that says what it
+ * the holding notes. D4817 part 9 (#5311): Ask and Waive are no longer
+ * dialogs here; the timeline hands the press to `onAct`, and the company
+ * Reports draws the Review, confirm and Receipt (`../portfolio/ReportAsk.jsx`). Every change opens an in-page dialog that says what it
  * changes; nothing here is a browser pop-up, and nothing names another
  * investor.
  *
@@ -147,46 +150,6 @@ export function FiguresTab({ uid, periods }) {
   );
 }
 
-// ───────────────────────────────────────────────────────────── RPT11: Ask and Waive
-
-/** "Ask for this report": once per period, while it is late or missing. The company is told; nobody else sees it. */
-export function AskDialog({ company, row, onClose, onDone }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const go = async () => {
-    setBusy(true); setError('');
-    try { await reportingApi.ask(row.uid); onDone(); } catch (e) { setError(refusal(e, 'The request could not be sent. Try again.')); } finally { setBusy(false); }
-  };
-  return (
-    <Lightbox label="Ask for this report" title={`Ask ${company} for the ${row.title}?`} onClose={onClose} width={460} phone="sheet" testId="company-ask-dialog"
-      footer={<Foot><button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button><button type="button" className={PRIMARY} onClick={go} disabled={busy} data-testid="company-ask-confirm">Ask for this report</button></Foot>}>
-      <div className="flex flex-col gap-2 px-5 py-4">
-        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">The company is told that you asked. Nobody else sees your request.</p>
-        <p className={MUTED}>You can ask once per period.</p>
-        {error ? <p role="alert" className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-ask-error">{error}</p> : null}
-      </div>
-    </Lightbox>
-  );
-}
-
-/** "Waive this period": once. The record shows it waived by the investor. */
-export function WaiveDialog({ company, row, onClose, onDone }) {
-  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  const go = async () => {
-    setBusy(true); setError('');
-    try { await reportingApi.waive(row.uid); onDone(); } catch (e) { setError(refusal(e, 'The period could not be waived. Try again.')); } finally { setBusy(false); }
-  };
-  return (
-    <Lightbox label="Waive this period" title={`Waive ${row.period} for ${company}?`} onClose={onClose} width={460} phone="sheet" testId="company-waive-dialog"
-      footer={<Foot><button type="button" className={BTN} onClick={onClose} disabled={busy}>Back</button><button type="button" className={PRIMARY} onClick={go} disabled={busy} data-testid="company-waive-confirm">Waive</button></Foot>}>
-      <div className="flex flex-col gap-2 px-5 py-4">
-        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">The record shows it waived by you, and the company sees that on its desk. The period is no longer owed to you.</p>
-        <p className={MUTED}>It cannot be undone here.</p>
-        {error ? <p role="alert" className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="company-waive-error">{error}</p> : null}
-      </div>
-    </Lightbox>
-  );
-}
-
 // ───────────────────────────────────────────────────────────── RPT11: the reader
 
 async function saveDocument(doc) {
@@ -280,7 +243,7 @@ export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
       <div className="flex flex-col gap-3 px-5 py-4">
         <SheetHead title={`${row.period} update`} pill={row.pill} line={`${row.kind} from ${company}`} onBack={onClose} />
         <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="company-sheet-due">{row.sub}</p>
-        {row.asked ? <p className={MUTED} data-testid="company-sheet-asked">You asked for this report. The company was told; nobody else sees it.</p> : null}
+        {row.record ? <p className={MUTED} data-testid="company-sheet-asked">{row.record}.{row.asked ? ' The company was told; nobody else sees it.' : ''}</p> : null}
         <p className={MUTED}>{row.canAsk ? 'You can ask once per period. The company sees your request; nobody else does.' : 'You can ask for a report once it is late.'}</p>
       </div>
     </Sheet>
@@ -289,8 +252,18 @@ export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
 
 // ───────────────────────────────────────────────────────────── RPT10r: the timeline
 
-export function Timeline({ company, onChanged }) {
-  const rows = timelineRows(company);
+/**
+ * The periods owed to you. `onAct(kind, uid)` opens Ask or Waive for a period
+ * (D4817 part 9); with no `onAct`, or `canAct` false, no action is drawn.
+ * Each row's record line (asked or waived, who and when) is the company read's.
+ */
+export function Timeline({ company, onChanged, onAct = null, canAct = true }) {
+  const raw = new Map((company?.periods || []).map((p) => [p.uid, p]));
+  const acting = Boolean(onAct) && canAct;
+  const rows = timelineRows(company).map((r) => ({
+    // canWaive also needs the holding's leave (`can_waive`: through an SPV, only its lead may; owner answer 2026-11-14).
+    ...r, record: recordOf(raw.get(r.uid))?.text || null, canAsk: acting && r.canAsk, canWaive: acting && r.canWaive && raw.get(r.uid)?.can_waive !== false,
+  }));
   const [open, setOpen] = useState(null);
   const narrow = usePhoneWidth(SHEET_QUERY);
   const name = company?.name || 'This company';
@@ -308,6 +281,7 @@ export function Timeline({ company, onChanged }) {
                 <span className="flex min-w-0 flex-col">
                   <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
                   <span className="text-[12px] text-axal-muted dark:text-gray-400">{r.sub}</span>
+                  {r.record ? <span className="text-[12px] text-axal-ink dark:text-gray-100" data-testid={`company-period-record-${r.uid}`}>{r.record}</span> : null}
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1"><Pill pill={r.pill} />{r.asked ? <Pill pill={{ tone: 'neutral', text: 'Asked' }} /> : null}</span>
               </button>
@@ -321,22 +295,21 @@ export function Timeline({ company, onChanged }) {
               <div className="min-w-0">
                 <div className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</div>
                 <div className="text-[12px] text-axal-muted dark:text-gray-400">{r.sub}</div>
+                {r.record ? <div className="text-[12px] font-semibold text-axal-ink dark:text-gray-100" data-testid={`company-period-record-${r.uid}`}>{r.record}</div> : null}
                 <div className="mt-1 flex flex-wrap gap-1.5"><Pill pill={r.pill} />{r.asked ? <Pill pill={{ tone: 'neutral', text: 'Asked' }} /> : null}</div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {r.reportUid ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'read', row: r })} data-testid={`company-period-read-${r.uid}`}>Read</button> : null}
-                {r.canAsk ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'ask', row: r })} data-testid={`company-period-ask-${r.uid}`}>Ask for this report</button> : null}
-                {r.canWaive ? <button type="button" className={BTN} onClick={() => setOpen({ kind: 'waive', row: r })} data-testid={`company-period-waive-${r.uid}`}>Waive this period</button> : null}
+                {r.canAsk ? <button type="button" className={BTN} aria-haspopup="dialog" onClick={() => onAct('ask', r.uid)} data-testid={`company-period-ask-${r.uid}`}>Ask for this report</button> : null}
+                {r.canWaive ? <button type="button" className={BTN} aria-haspopup="dialog" onClick={() => onAct('waive', r.uid)} data-testid={`company-period-waive-${r.uid}`}>Waive this period</button> : null}
               </div>
             </li>
           ))}
         </ul>
       )}
-      <p className={MUTED}>You can ask once per period, once it is late. The company sees your request; nobody else does.</p>
+      <p className={MUTED}>{acting ? 'You can ask once per period, once it is late. The company sees your request; nobody else does.' : 'Asking and waiving are not available in this session.'}</p>
       {open?.kind === 'read' ? <ReportReader uid={open.row.reportUid} company={name} row={open.row} onClose={() => { setOpen(null); onChanged(); }} /> : null}
-      {open?.kind === 'period' ? <PeriodSheet company={name} row={open.row} onClose={() => setOpen(null)} onAsk={() => setOpen({ kind: 'ask', row: open.row })} onWaive={() => setOpen({ kind: 'waive', row: open.row })} /> : null}
-      {open?.kind === 'ask' ? <AskDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
-      {open?.kind === 'waive' ? <WaiveDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
+      {open?.kind === 'period' ? <PeriodSheet company={name} row={open.row} onClose={() => setOpen(null)} onAsk={() => { setOpen(null); onAct('ask', open.row.uid); }} onWaive={() => { setOpen(null); onAct('waive', open.row.uid); }} /> : null}
     </section>
   );
 }
