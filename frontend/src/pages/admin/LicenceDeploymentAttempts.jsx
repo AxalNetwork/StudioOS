@@ -10,7 +10,12 @@ import { outcomeFromError, outcomeOfError } from '../../lib/mutationOutcome';
 import { reportError } from '../../lib/log';
 import { utcDay } from '../../lib/utcStamp';
 import OutcomeNotice from '../../components/OutcomeNotice';
-import { DEPLOY_POLL_MS, attemptLine, deployActions, noticeForCheck, noticeForRetry } from './licenceDeploymentModel';
+import { Unreadable } from '../../ui/Honesty';
+import { AlertTriangle, CheckCircle2, CircleHelp, Loader2, RefreshCw } from 'lucide-react';
+import {
+  DEPLOY_POLL_MS, attemptLine, canReconcile, deployActions, noticeForCheck, noticeForRetry, noticeForSettled, provisioningLine,
+} from './licenceDeploymentModel';
+import { clockText } from './licenceOverviewModel';
 
 const DO_CHOICES = [
   { v: 'none', label: 'No jurisdiction' },
@@ -24,6 +29,50 @@ function RunLink({ attempt }) {
     <a href={attempt.run_url} target="_blank" rel="noreferrer" className="text-indigo-700 underline dark:text-indigo-300">
       run log
     </a>
+  );
+}
+
+const LINE_SHAPE = { failed: AlertTriangle, committed: CheckCircle2, pending: Loader2, partial: CircleHelp, unknown: CircleHelp };
+const LINE_TONE = {
+  failed: 'text-red-700 dark:text-red-300',
+  committed: 'text-green-700 dark:text-green-300',
+};
+
+/**
+ * D5924 (#5924): L15's Provisioning row. A failed provisioning shows the
+ * failed attempt's time and code and offers Reconcile deployment beside it,
+ * so the record is never a dead end. While an attempt is open, Check status
+ * below is the same reconcile, so it is not drawn twice.
+ */
+export function ProvisioningLine({ view, busy, onReconcile }) {
+  const line = provisioningLine(view);
+  if (!line) return null;
+  const Shape = LINE_SHAPE[line.state] || CircleHelp;
+  const offer = canReconcile(view) && view.reconcilable !== true;
+  return (
+    <div data-testid="deploy-provisioning" data-state={line.state}
+      className="flex flex-col gap-2 rounded-md border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+      <div className="min-w-0">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Provisioning</div>
+        <div className={`mt-0.5 flex flex-wrap items-center gap-1.5 text-sm font-semibold ${LINE_TONE[line.state] || 'text-gray-800 dark:text-gray-200'}`}>
+          <Shape size={14} aria-hidden="true" />
+          <span data-testid="deploy-provisioning-word">{line.word}</span>
+          {line.state === 'failed' && (
+            <span data-testid="deploy-provisioning-failure" className="font-normal text-gray-700 dark:text-gray-300">
+              {line.at ? clockText(line.at) : 'at a time not recorded'} · code <span className="font-mono">{line.code || 'not recorded'}</span>
+            </span>
+          )}
+        </div>
+      </div>
+      {offer && (
+        <button
+          type="button" data-testid="deploy-reconcile" disabled={busy} onClick={onReconcile}
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50 sm:min-h-0 sm:w-auto sm:py-1.5 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          <RefreshCw size={13} aria-hidden="true" /> Reconcile deployment
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -83,7 +132,9 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
     try {
       const r = await adminDeploymentAttemptsApi.reconcile(licence.uid);
       setView(r.deployment);
-      const n = noticeForCheck(r.checked, r.deployment);
+      // D5924: Reconcile on a settled failure answers 'settled'; say what the record holds.
+      const n = noticeForCheck(r.checked, r.deployment)
+        || (!quiet && r.checked === 'settled' ? noticeForSettled(r.deployment) : null);
       if (n && (!quiet || r.checked === 'succeeded' || r.checked === 'failed' || r.checked === 'no_run')) setNotice(n);
       if (r.checked !== 'running' && r.checked !== 'no_run_yet') onChanged?.();
     } catch (e) {
@@ -123,7 +174,14 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
     } finally { setBusy(false); }
   }
 
-  if (readErr) return <p role="alert" className="text-sm text-red-600">{readErr}</p>;
+  // D5924: a failed read is Unreadable with Try again, never an empty record.
+  if (readErr) {
+    return (
+      <div data-testid="deploy-attempts-unreadable">
+        <Unreadable what="This deployment's attempts" claim="This is not a sign that there are none." onRetry={() => load()} />
+      </div>
+    );
+  }
   if (!view) return <OutcomeNotice notice={notice} testId="deploy-outcome" />;
 
   return (
@@ -132,6 +190,12 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
       {view.phase === 'partial' && (
         <p data-testid="deploy-partial" className="text-sm text-amber-800 dark:text-amber-200">
           The branch answers, but HQ is not linked to it yet: HQ reaches it once the linking pull request merges and HQ redeploys.
+        </p>
+      )}
+      <ProvisioningLine view={view} busy={busy} onReconcile={() => check()} />
+      {canReconcile(view) && !actions.canCheck && (
+        <p data-testid="deploy-reconcile-note" className="text-xs text-gray-500 dark:text-gray-400">
+          Reconcile reads this deployment&apos;s record again and sends nothing.{actions.canRetry ? ' Retry below starts a new attempt.' : ''}
         </p>
       )}
       <AttemptSummary view={view} />

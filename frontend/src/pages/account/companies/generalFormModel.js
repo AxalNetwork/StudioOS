@@ -473,7 +473,7 @@ export function savedAtText(row) {
   const at = new Date(String(raw).includes('T') ? raw : String(raw).replace(' ', 'T') + 'Z');
   if (Number.isNaN(at.getTime())) return null;
   try {
-    return at.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }).replace(',', ',');
+    return at.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
   } catch { return at.toISOString().slice(0, 16).replace('T', ' '); }
 }
 

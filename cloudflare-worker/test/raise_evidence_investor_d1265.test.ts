@@ -186,13 +186,48 @@ test('the routes: the room, the deal page and the round call each read the same,
     seed(w, 'deals', { id: 9, project_id: 1, status: 'active' }); seed(w, 'deal_invitations', { deal_id: 9, investor_user_id: 5, status: 'invited' });
     const deal = await get(5, '/deals/9/evidence');
     assert.equal(deal.status, 200); assert.deepEqual(deal.body.items.rows.map((i: any) => i.uid).sort(), room.body.items.rows.map((i: any) => i.uid).sort());
-    assert.equal((await get(4, '/deals/9/evidence')).body.code, 'investor_only');
+    // D6167: an Operating Partner is deal staff (D4631) and reads the investor projection; see the staff test below.
+    assert.equal((await get(1, '/deals/9/evidence')).body.code, 'investor_only', 'only the founder is pointed to Raise › Evidence');
     assert.equal((await get(7, '/deals/9/evidence')).status, 403);
     seed(w, 'round_call_recipients', { id: 1, origin: 'chosen', call_id: 1, investor_user_id: 5 });
     const call = w.db.prepare('SELECT * FROM round_calls WHERE id=1').get() as any;
     const page: any = await investorPage(w.env, call, w.db.prepare('SELECT * FROM users WHERE id=5').get() as any);
     assert.equal(page.evidence.nda_signed, true);
     assert.equal(opens(w), 3, 'room, deal and call; the refusals log nothing');
+  } finally { w.db.close(); }
+});
+
+test('D6167: staff read the investor projection on the deal page, logged apart; only the founder is told to open Raise › Evidence', async () => {
+  const w = world(); try {
+    const p = await fullPack(w); grant(w); nda(w);
+    const tokenFor = async (id: number) => 'Bearer ' + await new SignJWT({ user_id: id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
+    const get = async (who: number, path: string) => { const r = await w.app.request('/api' + path, { headers: { Authorization: await tokenFor(who) } }, w.env).catch((e: any) => e); return { status: r.status, body: await r.json().catch(() => ({})) as any }; };
+    seed(w, 'deals', { id: 9, project_id: 1, status: 'active' }); seed(w, 'deal_invitations', { deal_id: 9, investor_user_id: 5, status: 'invited' });
+    const investor = await get(5, '/deals/9/evidence');
+    assert.equal(investor.status, 200); assert.equal(investor.body.reader, undefined, 'an investor read is unchanged');
+    // The admin: deal staff and NDA-exempt (D4631), so the after-NDA projection, never the founder's own pack.
+    // Mutation checked: the route back to `holdsLicence(user, 'investor')` first → 403 investor_only here.
+    const admin = await get(3, '/deals/9/evidence');
+    assert.equal(admin.status, 200); assert.equal(admin.body.reader, 'staff'); assert.equal(admin.body.nda_signed, true);
+    assert.equal(admin.body.items.rows.some((i: any) => i.uid === p.kept.uid), false, 'a Private item never leaves to staff');
+    assert.ok(admin.body.items.rows.some((i: any) => i.uid === p.icp.uid));
+    assert.doesNotMatch(shown(admin.body), NEVER);
+    for (const r of admin.body.items.rows) if (r.kind === 'typed-commitment') assert.equal(r.value_num, null, 'one investor’s money stays withheld');
+    // An Operating Partner: deal staff, but the venture's NDA binds them (D4631) — coverage only until it is signed.
+    const before = await get(4, '/deals/9/evidence');
+    assert.equal(before.status, 200); assert.equal(before.body.reader, 'staff'); assert.equal(before.body.nda_signed, false); assert.equal(before.body.items, null);
+    nda(w, 4);
+    const after = await get(4, '/deals/9/evidence');
+    assert.equal(after.body.nda_signed, true); assert.ok(after.body.items.rows.length > 0);
+    // The founder keeps the pointer; an outsider is refused without the founder's sentence.
+    const founder = await get(1, '/deals/9/evidence');
+    assert.equal(founder.status, 403); assert.equal(founder.body.code, 'investor_only');
+    const outsider = await get(7, '/deals/9/evidence');
+    assert.equal(outsider.status, 403); assert.notEqual(outsider.body.code, 'investor_only');
+    // Each staff open is logged with its own action, so the founder's "who opened" never counts the studio as an investor.
+    const staffOpens = w.db.prepare("SELECT user_id FROM data_room_access_log WHERE action='open_evidence_staff' ORDER BY id").all().map((r: any) => Number(r.user_id));
+    assert.deepEqual(staffOpens, [3, 4, 4]);
+    assert.equal(opens(w), 1, 'only the investor’s open is an investor open');
   } finally { w.db.close(); }
 });
 

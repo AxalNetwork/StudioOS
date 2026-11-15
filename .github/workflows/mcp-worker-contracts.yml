@@ -2,6 +2,7 @@ name: MCP Worker contracts
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'wrangler.toml'
@@ -26,6 +27,8 @@ concurrency:
 jobs:
   contracts:
     name: MCP OAuth and deployment contracts
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -22,6 +22,9 @@
  * not hold Founder and whose primary is partner, investor or advisor never hits it.
  * Mirrors the `requireMiPro` pattern in middleware/miAccess.ts: throws a
  * 402 Response (the global error handler returns it as-is).
+ *
+ * D4636 part 5 (#4636): one exemption from the Studio gate, `STUDIO_GP_READS`:
+ * a founder who is GP of record of a fund passes it on the five position reads.
  */
 import { founderPlanTier, founderTierCovers, holds } from '../services/licencePlans';
 import type { Context } from 'hono';
@@ -29,6 +32,7 @@ import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
+import { managedFundIds } from '../services/fundGpAccess';
 
 export type Tier = 'free' | 'growth' | 'studio';
 
@@ -116,8 +120,43 @@ export function requireTier(required: Exclude<Tier, 'free'>) {
   return async (c: Context<{ Bindings: Env }>, next: () => Promise<void>) => {
     const user = await requireAuth(c);
     if (userMeetsTier(user, required)) return next();
+    if (required === 'studio' && await studioGpReadExempt(c, user)) return next();
     return c.json(tierUpsell(required), 402);
   };
+}
+
+/**
+ * D4636 part 5 (#4636, owner 2026-11-14): the five position reads a founder who
+ * is GP of record reaches without the Raise + Grow plan. `GET /api/positions`,
+ * and `GET /api/positions/<one segment>`: `/marks`, `/analytics`,
+ * `/kpi-compliance` and the detail `/:projectUid`, the only GET routes under
+ * the prefix. No write, no other method, no other paywalled path.
+ */
+export const STUDIO_GP_READS: ReadonlyArray<{ method: string; path: RegExp }> = [
+  { method: 'GET', path: /^\/api\/positions$/ },
+  { method: 'GET', path: /^\/api\/positions\/[^/]+$/ },
+];
+
+/** One answer per request: `index.ts` mounts the gate on `p` and `p/*`, and both match the list. */
+const GP_EXEMPT = new WeakMap<Request, Promise<boolean>>();
+
+/**
+ * True when a caller the Studio gate refused may pass it anyway: the request is
+ * one of `STUDIO_GP_READS`, the caller holds Founder, and `managedFundIds` names
+ * at least one fund they run. The fund lookup runs only on those five reads, and
+ * only after the plan check failed. What they see is the handlers' own scope
+ * (`positionScope`: their funds' companies only). Any failure of the lookup
+ * keeps the paywall.
+ */
+async function studioGpReadExempt(c: Context<{ Bindings: Env }>, user: User): Promise<boolean> {
+  if (!STUDIO_GP_READS.some((e) => e.method === c.req.method && e.path.test(c.req.path))) return false;
+  if (!holds(user, 'founder')) return false;
+  let answer = GP_EXEMPT.get(c.req.raw);
+  if (!answer) {
+    answer = managedFundIds(c, user).then((ids) => ids.length > 0, () => false);
+    GP_EXEMPT.set(c.req.raw, answer);
+  }
+  return answer;
 }
 
 /**

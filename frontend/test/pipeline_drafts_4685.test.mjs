@@ -445,11 +445,16 @@ const lead = (id, who) => ({
   timeline: null, need: null, score: 70, excluded_by: null, receipts: [], score_note: null,
 });
 const leadsBody = (items) => ({ items, passed: [], open_count: items.length, strong_fit_count: 0 });
-const passSelects = (m) => m.nodes().filter((n) => n.tagName === 'SELECT' && [...n.childNodes].some((o) => o.textContent === 'Choose one'));
-const passNotes = (m) => m.nodes().filter((n) => n.tagName === 'INPUT' && m.props(n).maxLength === 600);
-const pickReason = async (m, i, value) => { await act(async () => { m.props(passSelects(m)[i]).onChange({ target: { value } }); }); };
+// #5935 (D4838, PP03b): the pass is a dialog now, with the reason as a radio
+// group from the Worker's PASS_REASONS and an optional note.
+const passNotes = (m) => m.nodes().filter((n) => n.tagName === 'TEXTAREA' && m.props(n).maxLength === 600);
+const pickReason = async (m, value) => {
+  const radio = m.nodes().find((n) => n.tagName === 'INPUT' && m.props(n).type === 'radio' && m.props(n).value === value);
+  assert.ok(radio, `no ${value} reason`);
+  await act(async () => { m.props(radio).onChange({ target: { value } }); });
+};
 
-test('Leads: recording one pass refreshes in the background and the other open pass editor keeps its text', async () => {
+test('Leads: recording a pass refreshes in the background, the list stays, and the dialog closes only once it saved', async () => {
   const reload = deferred();
   let reads = 0;
   const items = [lead(1, 'Acme'), lead(2, 'Birch')];
@@ -462,24 +467,22 @@ test('Leads: recording one pass refreshes in the background and the other open p
   const u = ui(m);
   try {
     await m.flush();
-    await u.press('Pass', 0);
-    await u.press('Pass', 0); // card 1 now reads "Cancel", so this is card 2's
-    await u.type(passNotes(m)[0], 'Acme: budget too low');
-    await pickReason(m, 1, 'timing');
-    await u.press('Record the pass', 1);
+    await u.press('Pass', 1);
+    assert.match(m.text(), /Pass on Birch\?/);
+    await pickReason(m, 'timing');
+    await u.type(passNotes(m)[0], 'Not before Q3');
+    await u.press('Pass on this lead');
     await m.flush();
     assert.equal(reads, 2, 'the refresh is in flight');
-    assert.equal(passNotes(m).length, 2, 'both editors are still mounted mid-refresh');
-    assert.equal(u.value(passNotes(m)[0]), 'Acme: budget too low');
+    assert.match(m.text(), /Acme/, 'the list stayed on screen during the refresh');
     await act(async () => { reload.resolve(leadsBody(items)); });
     await m.flush();
-    assert.deepEqual(calls.map((c) => c[0]), [2]);
-    assert.equal(u.value(passNotes(m)[0]), 'Acme: budget too low', 'card 1 kept its text after the refresh landed');
-    assert.equal(passNotes(m).length, 1, 'card 2’s editor closed because its pass saved');
+    assert.deepEqual(calls, [[2, { reason: 'timing', note: 'Not before Q3' }]]);
+    assert.equal(passNotes(m).length, 0, 'the dialog closed because the pass saved');
   } finally { await m.unmount(); restore(); }
 });
 
-test('Leads: a failed pass keeps the editor open with the reason and note, says so, and retry closes it', async () => {
+test('Leads: a failed pass keeps the dialog open with the reason and note, says so, and retry closes it', async () => {
   let fail = true;
   const restore = stub({
     listPartnerLeads: async () => leadsBody([lead(1, 'Acme')]),
@@ -490,16 +493,17 @@ test('Leads: a failed pass keeps the editor open with the reason and note, says 
   try {
     await m.flush();
     await u.press('Pass');
-    await pickReason(m, 0, 'price');
+    await pickReason(m, 'price');
     await u.type(passNotes(m)[0], 'Too low');
-    await u.press('Record the pass');
+    await u.press('Pass on this lead');
     await m.flush();
     assert.equal(u.value(passNotes(m)[0]), 'Too low');
-    assert.equal(m.props(passSelects(m)[0]).value, 'price');
+    const price = m.nodes().find((n) => n.tagName === 'INPUT' && m.props(n).value === 'price');
+    assert.equal(m.props(price).checked, true);
     assert.match(m.text(), /That did not save\. What you typed is still here/);
     assert.doesNotMatch(m.text(), new RegExp(RAW));
     fail = false;
-    await u.press('Record the pass');
+    await u.press('Pass on this lead');
     await m.flush();
     assert.equal(passNotes(m).length, 0, 'closed only now');
   } finally { await m.unmount(); restore(); }
