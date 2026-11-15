@@ -1,7 +1,8 @@
 /**
  * D497 (#1023, the Network PR): the investor Network family built up to the
- * owner's line. IN1 Add person (question 7) and IN2 Offer one each wait on an
- * owner decision, and each control says so; neither can be pressed. IN3
+ * owner's line. IN1 Add person (question 7) and IN2 Offer one were answered
+ * with A on #6263 (D6263); each is held until its build issue lands, says
+ * what was decided, and cites no issue number. IN3
  * Organizations (question 8) was answered by D572 part 3 and is read since
  * D6258: its chips are pinned in `investor_network_organizations_6258.test.mjs`.
  */
@@ -11,14 +12,21 @@ import { investorZoneActions } from '../src/workspaces/investorZoneActions.js';
 
 const op = (zone, label) => investorZoneActions(zone).find((a) => a.label === label);
 
-test('IN1 Add person and IN2 Offer one are held, and say their decision is open', () => {
+test('IN1 Add person and IN2 Offer one are held, and name the decision rather than a closed issue (D6263)', () => {
   const add = op('network/relationships', 'Add person');
   assert.equal(add.disabled, true);
-  assert.match(add.title, /not decided yet/);
-  assert.match(add.title, /without a user directory/);
+  assert.match(add.title, /share a deal or data room with/);
   const offer = op('network/introductions', 'Offer one');
   assert.equal(offer.disabled, true);
-  assert.match(offer.title, /not decided yet/);
+  assert.match(offer.title, /two of your accepted ties/);
+  for (const a of [add, offer]) {
+    assert.doesNotMatch(a.title, /#\d+|not decided/, `${a.label} still says its decision is open`);
+  }
+  for (const zone of ['network/relationships', 'network/introductions', 'network/organizations']) {
+    for (const a of investorZoneActions(zone)) {
+      if (a.disabled) assert.doesNotMatch(a.title || '', /#1023/, `${zone} ${a.label} cites the closed #1023`);
+    }
+  }
 });
 
 test('IN3 Organizations: the two ops stay held, and say why the counterpart’s company is not theirs to edit (D6258)', () => {

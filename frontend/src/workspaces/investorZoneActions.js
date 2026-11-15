@@ -219,10 +219,12 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    // D497 (#1023): built up to the owner's line. A tie is a request the other
-    // person accepts (D493), and finding that person without opening a user
-    // directory is question 7 on #1023.
-    { label: 'Add person', unbuilt: 'a tie is a request the other person accepts, and who you may find to send one to, without opening a directory of every account, is the owner’s decision, asked on #1023', hover: 'Adding a person is not decided yet: it needs a way to find someone without a user directory.' },
+    // D6263: the owner answered #1023's question 7 with A. Add person reaches
+    // only people you already share a deal or data room with, sends them a tie
+    // request they accept (D493), and never opens a directory of every
+    // account. Built on #6636; held until then. The reason names the decision,
+    // never an issue number.
+    { label: 'Add person', unbuilt: 'decided (D6263): Add person will send a tie request only to someone you already share a deal or data room with; the picker is not built yet', hover: 'Coming next: you will be able to add people you already share a deal or data room with.' },
     // LIVE WITH D465 (migration 338): `partner_reminders` is the store, and a
     // reminder surfaces on the desk when it is due — no notification fan-out.
     { label: 'Set reminders', kind: 'handler', handler: 'setReminders' },
@@ -233,9 +235,10 @@ export const INVESTOR_ZONE_ACTIONS = {
     // called `introductionsRequest`. The AI Matching Engine was removed, the
     // button with it, and nothing else asks for an intro.
     { label: 'Request an intro', unbuilt: 'no screen requests an introduction since the AI Matches page was removed' },
-    // D497 (#1023): question 8 on #1023 asks whether this reuses the
-    // `intro_propositions` flow between two of your accepted ties.
-    { label: 'Offer one', unbuilt: 'offering an introduction between two of your accepted ties is not built, and whether it reuses the existing introduction-proposal flow is the owner’s decision, asked on #1023', hover: 'Offering an introduction is not decided yet.' },
+    // D6263: the owner answered #1023's question 8 with A. Offer one reuses
+    // the `intro_propositions` flow between two of your accepted ties. Built
+    // on #6637; held until then.
+    { label: 'Offer one', unbuilt: 'decided (D6263): Offer one will propose an introduction between two of your accepted ties through the existing introduction-proposal flow; it is not built yet', hover: 'Coming next: you will be able to introduce two of your accepted ties to each other.' },
     { label: 'Export', kind: 'export' },
   ],
   // D6258: the list is derived from the relationship book, and since D572
