@@ -214,8 +214,13 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
               // three rows at once. Every row that declares `match` already
               // lists its own subtree there when it wants it, so no other row
               // loses coverage.
+              // D6029 (#6029, BD23): a row may carry `children`, its own pages, drawn under it while one of
+              // them (or the row) is open. A child's page lights the row too. Build is the one such row.
+              const kids = Array.isArray(item.children) ? item.children : null;
+              // The row's own page among them (Overview, `to`) matches only exactly, so `/build/team` (Grow's) never opens Build's.
+              const onKid = kids ? kids.some((k) => { const p = k.to?.split('#')[0]; return p && p !== to && (navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`)); }) : false;
               const manualActive = Array.isArray(match)
-                ? navLocation.pathname === to
+                ? navLocation.pathname === to || onKid
                   || match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
                 : null;
               // Task #6 / #7 — items the user can't afford render as a
@@ -254,7 +259,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                   </button>
                 );
               }
-              return (
+              const subnav = kids && !collapsed && !q && (navLocation.pathname === to || onKid)
+                ? <SidebarChildren key={`${to}-children`} label={label} root={to} items={kids} onNavigate={onNavigate} /> : null;
+              return [
                 <NavLink
                   key={to}
                   to={to}
@@ -304,8 +311,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                       )}
                     </>
                   )}
-                </NavLink>
-              );
+                </NavLink>,
+                subnav,
+              ];
             })}
           </div>
         );
@@ -386,4 +394,30 @@ function abbreviateLabel(label) {
     return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
   });
   return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
+}
+
+/**
+ * D6029 (#6029, Build v2 BD23 / BU23): a row's own pages, under it while one is open. A child with
+ * `heading` is a label, not a link ("Modules"). A child's address may carry a hash (Tools,
+ * `/build/operating-systems#tools`, until #5078); it is lit by its path, and the first child whose path
+ * holds the address wins: the hash first, then the page, then the longest path that holds a record, so
+ * Operating systems and Tools are never lit together and Overview (`/build`) is lit only on itself.
+ */
+export function SidebarChildren({ label, root = null, items, onNavigate }) {
+  const { pathname, hash } = useLocation();
+  const links = items.filter((k) => !k.heading);
+  // The address with its hash first (Tools), then the page itself, then the longest page that holds it (a record).
+  const prefix = links.filter((k) => k.to !== root && !k.to.includes('#') && pathname.startsWith(`${k.to}/`)).sort((a, b) => b.to.length - a.to.length)[0];
+  const current = links.find((k) => hash && k.to === `${pathname}${hash}`) || links.find((k) => k.to === pathname) || prefix;
+  return (
+    <nav aria-label={label} className="mb-1 flex flex-col border-l border-gray-200 py-0.5 pl-2 ml-7 dark:border-gray-700" data-testid={`sidebar-children-${label.toLowerCase()}`}>
+      {items.map((k) => k.heading
+        ? <span key={`h-${k.heading}`} className="mt-2 px-3 pb-0.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-gray-400 dark:text-gray-500">{k.heading}</span>
+        : <Link key={k.to} to={k.to} onClick={onNavigate} aria-current={k === current ? 'page' : undefined}
+            className={`flex min-h-[32px] items-center rounded-md px-3 text-[13px] transition-colors ${k === current
+              ? 'font-bold text-violet-700 bg-violet-50 dark:text-violet-300 dark:bg-violet-900/30'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100'}`}
+            data-testid={`sidebar-child-${k.key}`}>{k.label}</Link>)}
+    </nav>
+  );
 }

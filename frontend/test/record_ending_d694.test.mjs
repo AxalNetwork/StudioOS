@@ -44,7 +44,8 @@ test('Validate has only module tabs and its six phone index rows', () => {
   assert.deepEqual(phoneIndex({ index: six.map((key) => ({ key, title: key, detail: '', value: null, href: `/validate/${key}` })), cards: [] }).map((row) => row.key), six);
   assert.deepEqual(phoneIndex({ figures: [], cards: [] }), []);
   // D1261 (#2430): Raise's own Evidence tab leads; its history follows.
-  for (const [cycle, title, at] of [['build', 'Tools', 1], ['raise', 'Calls', 2], ['grow', 'Reporting', 1]]) {
+  // D6029 (BD23): Build's Plan and Progress lead, so its Tools is fourth.
+  for (const [cycle, title, at] of [['build', 'Tools', 3], ['raise', 'Calls', 2], ['grow', 'Reporting', 1]]) {
     assert.equal(cycleTabs(cycle, cards)[at].name, title);
   }
   assert.equal(cycleTabs('raise', cards)[1].name, 'Evidence');

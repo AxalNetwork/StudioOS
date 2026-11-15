@@ -43,6 +43,22 @@ const SPINOUT_LAB_PAGES = ['/spinout-lab/83b'];
 // `subscription_tier` column. Mirrors the worker's `userMeetsTier` helper.
 const TIER_RANK = { free: 0, growth: 1, studio: 2 };
 const BYPASS_ROLES = new Set(['admin', 'partner', 'investor', 'advisor']);
+
+/** D6029 (BD23 / BU23): Build › Overview · Plan · Progress · Tools, then the six modules. */
+export const BUILD_SIDEBAR_CHILDREN = Object.freeze([
+  { key: 'overview', to: '/build', label: 'Overview' },
+  { key: 'plan', to: '/build/plan', label: 'Plan' },
+  { key: 'progress', to: '/build/plan/progress', label: 'Progress' },
+  { key: 'tools', to: '/build/operating-systems#tools', label: 'Tools' },
+  { heading: 'Modules' },
+  { key: 'solution-design', to: '/build/solution-design', label: 'Solution design' },
+  { key: 'prototype-mvp', to: '/build/prototype-mvp', label: 'Prototype / MVP' },
+  { key: 'product-roadmap', to: '/build/product-roadmap', label: 'Product roadmap' },
+  { key: 'founding-team', to: '/build/founding-team', label: 'Founding team' },
+  { key: 'company-creation', to: '/build/company-creation', label: 'Company creation' },
+  { key: 'operating-systems', to: '/build/operating-systems', label: 'Operating systems' },
+]);
+
 export function hasTier(user, requiredTier) {
   if (!requiredTier || requiredTier === 'free') return true;
   if (!user) return false;
@@ -365,8 +381,11 @@ export const SIDEBAR_GROUPS = {
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: ShieldCheck, label: 'Validate',
         match: ['/validate', '/build/marketplace'] },
+      // D6029 (#6029, Build v2 BD23): Build's own pages under its row, the one module switcher on a desktop.
+      // Tools keeps Operating systems' Tools section until #5078 makes it one page.
       { to: '/build', icon: Cog, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'],
+        children: BUILD_SIDEBAR_CHILDREN },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       // D1384: /compliance is retired into Calendar, so it lights nothing here.

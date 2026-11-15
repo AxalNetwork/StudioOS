@@ -23,10 +23,14 @@
 
 /** The four cycles, in the sidebar's order. `question` and `outcome` are the canvas's words. */
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
+import { BUILD_DESTINATIONS } from './buildNav.js';
 
 export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
+    // D6029 (BD23): Plan and Progress are Build-level pages, after Overview and before Tools.
+    lead: BUILD_DESTINATIONS,
+    // Tools keeps this address until #5078 makes it one page.
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
   raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Build your deck',
     // D1221 (#2458): Raise's history is Calls for Capital, Capital relationships' Calls tab.
@@ -293,8 +297,9 @@ export function cycleTabs(cycle, cards, active = null, search = '', { back = nul
   const history = hist?.live && cardTabs.length && !cardTabs.some((t) => t.name === hist.name)
     ? [{ key: hist.key, name: hist.name, href: `${hist.path}${s}${hist.hash}`, active: active === hist.key }]
     : [];
-  const lead = CYCLES[cycle]?.lead;
-  const leading = lead && cardTabs.length ? [{ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key }] : [];
+  // A cycle's lead pages come after Overview: Raise's Evidence (D1261), Build's Plan and Progress (D6029).
+  const leads = [].concat(CYCLES[cycle]?.lead || []);
+  const leading = cardTabs.length ? leads.map((lead) => ({ key: lead.key, name: lead.name, href: `${lead.path}${s}`, active: active === lead.key })) : [];
   return [{ key: '', name: 'Overview', href: `${base}${s}`, active: !active }].concat(leading, history, cardTabs);
 }
 
