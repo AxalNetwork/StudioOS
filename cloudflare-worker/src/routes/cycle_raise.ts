@@ -105,6 +105,7 @@
  *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
  *   POST /capital-relationships/proposals/accept-batch { uids }    D5073: up to 50, one result per proposal
  *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
+ *   POST /capital-relationships/feedback-pattern     CRL11 (#6080): one run over recorded feedback → up to three cited themes; writes nothing
  *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
  *
  * The reads are `services/raiseCycle.ts`; the writes are
@@ -189,7 +190,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PATTERN_OPTION, PROPOSAL_PAGE, acceptProposal, feedbackPattern, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -613,6 +614,26 @@ cycleRaise.post('/capital-relationships/drafts', async (c) => {
     if (!draft) return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not draft that just now. Try again.' });
     return c.json({ draft }, 201);
   } catch (e) { return capRelTabFailed(c, e, 'draft run'); }
+});
+
+// CRL11 (#6080): a pattern across investor feedback. One metered run over the venture's recorded feedback, under
+// `scope` (the owner or a co-founder; staff and readers are refused before it). It writes nothing. With fewer than
+// two investors' feedback it runs nothing and says so; AI off, out of tokens and a refused run answer as every
+// Eadwyn run here does (`refuseRun`).
+cycleRaise.post('/capital-relationships/feedback-pattern', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: PATTERN_OPTION }, null);
+    const out = await feedbackPattern(c.env, s.projectId, Number(s.user.id), rail);
+    if (out.state === 'too_few') {
+      return c.json({ state: 'too_few', feedback: out.feedback, investors: out.investors, themes: [],
+        detail: 'A pattern needs feedback from at least two investors. Record what each one said on their record first. Nothing was run.' });
+    }
+    if (out.state === 'run_failed') return refuseRun(c, out.result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read the feedback just now. Nothing was charged. Try again.' });
+    return c.json({ state: 'ok', feedback: out.feedback, investors: out.investors, themes: out.themes, dropped: out.dropped,
+      basis: 'Read from the feedback recorded on each investor. Nothing here is saved.' });
+  } catch (e) { return capRelTabFailed(c, e, 'feedback pattern'); }
 });
 
 cycleRaise.get('/pmf/history', async (c) => {
