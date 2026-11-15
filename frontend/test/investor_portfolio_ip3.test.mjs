@@ -184,8 +184,10 @@ test('migration 237 builds a ledger, not another frozen-status table', () => {
   assert.match(patch, /const moving = asked !== null && asked !== existing\.state;/,
     'the transition flag that gates date stamping is gone');
   assert.match(patch, /its state cannot change/, 'a delivered entry can be re-opened');
-  assert.match(patch, /asked !== existing\.state && existing\.state !== 'promised'/,
+  // D6202: open is promised or in progress (OPEN_STATES); anything else is terminal.
+  assert.match(patch, /asked !== existing\.state && !OPEN_STATES\.has\(existing\.state\)/,
     'the terminal-state check changed shape');
+  assert.match(ROUTE, /export const OPEN_STATES = new Set\(\['promised', 'in_progress'\]\);/, 'the open states changed');
 });
 
 test('the read and the write narrow on the same accessible set, and neither reaches a query with an empty one', () => {
