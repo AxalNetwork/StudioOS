@@ -132,7 +132,8 @@ export function checkWorkflow(text, { dispatchable = DISPATCHABLE, environments 
         if (t === null) problems.push(`job ${job.id}: a dispatch whose workflow cannot be read`);
         else if (!allowed.has(t)) problems.push(`job ${job.id}: dispatches ${t}, which is not in dispatchable`);
       }
-      const usesApp = new RegExp(String.raw`\bsecrets\.LANDING_BOT_APP_|\bsteps\.(?:${appTokenSteps.map((id) => id.replace(/[-]/g, '\\-')).join('|') || '(?!)'})\.outputs\.token\b`).test(step);
+      // Plain string checks, no RegExp built from the file: a step id is [\w-]+, and a near-miss only adds a problem.
+      const usesApp = /\bsecrets\.LANDING_BOT_APP_/.test(step) || appTokenSteps.some((id) => step.includes(`steps.${id}.outputs.token`));
       if (usesApp) problems.push(`job ${job.id}: passes the App token to a dispatch call`);
     }
   }
