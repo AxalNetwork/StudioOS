@@ -1,6 +1,9 @@
 /**
  * D4588 (#4588) — the qualification scenarios for the first ten skills
  * (`services/agents/skills/scenarios/<slug>.json`), checked deterministically.
+ * D5962 (#5962) adds a named second set, `STARTUP_ASSESSMENT_SET`: the
+ * Startup Assessment node skills (D4535 §8) that are not among the first ten.
+ * Both sets are held to the same rules below; neither joins the other.
  *
  * Every scenario is run through the production validator and evaluator
  * (`skillLifecycle.checkCase` and `judge`, judge version 3): its case must be
@@ -22,6 +25,7 @@ import { join } from 'node:path';
 import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillLifecycle.ts';
 import { READ_KEYS } from '../src/services/agents/catalogue.ts';
 import { FIRST_TEN_SLUGS } from '../src/services/agents/skillInputs.ts';
+import { STARTUP_ASSESSMENT_SKILLS } from '../src/services/agents/skillWorkflow.ts';
 import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { assertionItems, incorrectText, type Pack } from '../src/services/agents/skillScenarios.ts';
 
@@ -29,7 +33,9 @@ const DIR = join(process.cwd(), 'cloudflare-worker/src/services/agents/skills');
 const SCEN = join(DIR, 'scenarios');
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 const CASE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
+/** D5962: the second set, by name. Not part of `FIRST_TEN_SLUGS`, and held to the same rules. */
+const STARTUP_ASSESSMENT_SET = Object.freeze(['market-entry-brief', 'unit-economics-summary', 'roadmap-review-brief']);
+const PACK_SLUGS = [...FIRST_TEN_SLUGS, ...STARTUP_ASSESSMENT_SET];
 
 const packs: Pack[] = readdirSync(SCEN).filter((f) => f.endsWith('.json')).sort()
   .map((f) => JSON.parse(readFileSync(join(SCEN, f), 'utf8')) as Pack);
@@ -42,8 +48,15 @@ function toolsOf(slug: string): string[] {
 
 // `incorrectText` and `assertionItems` are the CI gate's own since D5336 (`skillScenarios.ts`), so the two cannot differ.
 
-test('the pack covers exactly the ten skills of #4588, each with 5 to 10 scenarios', () => {
-  assert.deepEqual(packs.map((p) => p.skill).sort(), [...FIRST_TEN_SLUGS].sort());
+test('the second set is the Startup Assessment node skills outside the first ten (D5962)', () => {
+  const nodeSlugs: string[] = Object.values(STARTUP_ASSESSMENT_SKILLS).map((s) => s.slug);
+  assert.deepEqual([...STARTUP_ASSESSMENT_SET].sort(), nodeSlugs.filter((s) => !(FIRST_TEN_SLUGS as readonly string[]).includes(s)).sort());
+  assert.ok(STARTUP_ASSESSMENT_SET.every((s) => !(FIRST_TEN_SLUGS as readonly string[]).includes(s)), 'the second set does not join the first ten');
+  assert.ok(nodeSlugs.every((s) => PACK_SLUGS.includes(s)), 'every Startup Assessment node skill has a pack');
+});
+
+test('the packs cover exactly the ten skills of #4588 and the second set of #5962, each with 5 to 10 scenarios', () => {
+  assert.deepEqual(packs.map((p) => p.skill).sort(), [...PACK_SLUGS].sort());
   for (const p of packs) {
     assert.ok(p.scenarios.length >= 5 && p.scenarios.length <= 10, `${p.skill}: ${p.scenarios.length} scenarios`);
     assert.ok(Number.isInteger(p.pack_revision) && p.pack_revision >= 1);
@@ -80,7 +93,7 @@ test('each case feeds only reads its skill declares, and holds no email address'
 });
 
 test('the existing one-file golden cases are untouched and still valid v1 cases', () => {
-  for (const slug of FIRST_TEN_SLUGS) {
+  for (const slug of PACK_SLUGS) {
     const k = JSON.parse(readFileSync(join(DIR, 'cases', `${slug}.json`), 'utf8'));
     const c = checkCase({ name: `${slug}: golden case`, input: k.input, expect: k.expect });
     assert.ok(c.ok, `${slug}: the golden case stays valid`);
