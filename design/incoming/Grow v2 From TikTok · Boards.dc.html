@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 From TikTok · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · From TikTok · #5865 · continues Grow v2 (#4861) from GR-21</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Grow · From TikTok — the venture’s public TikTok reach and audience, beside revenue and never inside it</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A “From TikTok” section (id from-tiktok) on /grow/distribution and /grow/revenue-and-traction, placed after “From Mercury” and copying its header, source line, secondary Sync button, “From …, as of &lt;date&gt;” line and Delete on each figure; plus one line in the Overview’s Distribution card. Distribution shows reach this month (views of videos posted this calendar month, and posts), the top three videos by views and the “Add TikTok as a channel” proposal; Revenue and traction shows “Audience on TikTok” (followers, total likes, videos, one snapshot a day) in its own card, never in MRR, the ledger or a KPI. Sync: founder or co-founder; Delete: a team member; Accept and Dismiss: the founder; an advisor reads only. States follow Platform States (D5129): 0, Not recorded (a scope not granted) and Unreadable (a failed read) never look alike. The TikTok mark is the monochrome icon only. Violet dashed ◇ tags mark backend work in #5863, #5864 and #5867; nothing TikTok-fed is built on main.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Northwind Labs, the bracketed display name and video titles, and every figure are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 From TikTok Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-21', 'Distribution · From TikTok · desktop 1440', 'The Distribution module page in the Grow v2 frame. Below From Mercury: the From TikTok header with the monochrome mark, the source line and a secondary Sync from TikTok; the proposal card “Add TikTok as a channel” with Accept (the one primary; Add channel steps down while it is pending) and Dismiss; reach 48,200 views · 6 posts, videos posted in Nov 2026; the top three videos by views with Delete each and Show all 6 videos. The Eadwyn rail keeps its Distribution content and one muted line: “Eadwyn does not read TikTok.”', [F('GTK21', false, 1480)]],
+      ['GR-22', 'Revenue and traction · Audience on TikTok · desktop 1440', 'Revenue and MRR unchanged. Beside them, in its own card: followers 1,610, total likes 23,400, videos 42, snapshot of 14 Nov 2026, Delete on each, and Sync from TikTok. “Audience, not revenue. These figures never count toward MRR or a KPI.” From Mercury stays below.', [F('GTK22', false, 900)]],
+      ['GR-23', 'Overview · Distribution card', 'a. With TikTok data: one added line “TikTok reach this month: 48,200 views across 6 posts”, From TikTok as of 14 Nov 2026, linking to /grow/distribution#from-tiktok. b. No TikTok data: no line at all, no 0 and no placeholder.', [C('GTK23A', 'a · with TikTok data', 1220, 333), C('GTK23B', 'b · no TikTok data', 1220, 259)]],
+      ['GR-24', 'Empty, not connected, not available', 'a. Connected, never synced: “Connected as [Northwind Labs]. Nothing synced yet.” with Sync from TikTok as the primary; without a stored display name it reads “Connected.” b. Not connected: a Connect TikTok link to /account/connectors/tiktok, nothing else. c. The TikTok app is not approved: “TikTok is not available yet.” and no button.', [C('GTK24A', 'a · empty, display name stored', 1220, 272), C('GTK24A2', 'a · empty, no display name', 1220, 272), C('GTK24B', 'b · not connected', 1220, 258), C('GTK24C', 'c · not available yet', 1220, 212)]],
+      ['GR-25', 'States', 'Read states: loading, Not recorded per scope (user.info.stats, video.list; muted, never 0, never red, with Reconnect to share them), Unreadable with Try again while From Mercury still shows, and the platform Refused state for a viewer outside the team. Action states: Syncing, Partly synced (20 videos read so far), Sync failed, Delete in progress and failed, Accept and Dismiss saving and failed. Accepted: the TikTok channel row opens in Distribution. Reader (advisor): the same figures, no actions.', [C('GTK25', 'Read states', 1440, 673), C('GTK25B', 'Sync, delete, accept and dismiss', 1440, 1201), C('GTK25C', 'Accepted', 1220, 565), C('GTK25D', 'Reader · advisor', 1220, 839)]],
+      ['GR-26', 'Phone 390', 'Distribution: the header, the proposal card, reach, then each video as a card with a 2×2 grid of views, likes, comments and shares and a 44px Delete; Sync from TikTok full width at the section foot. Revenue and traction: Audience on TikTok as three stacked figures. No table, no horizontal scroll.', [P('GTK26A', 'Distribution · top'), P('GTK26B', 'Distribution · videos and Sync'), P('GTK26C', 'Revenue and traction')]],
+      ['GR-27', 'Dark', 'GR-21 on the dark tokens, the Not recorded and Unreadable crops, and the Distribution phone. The TikTok mark turns white; states keep their words and shapes.', [F('GTK27', false, 1480), C('GTK27B', 'Not recorded and Unreadable · dark', 1340, 268), P('GTK27P', 'Phone · dark')]],
+      ['GR-28', 'Handoff', 'What main shows today, the backend work per issue (#5863, #5864, #5867), what is frontend only, the rules kept, accessibility and the open points.', [W('GTK28')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

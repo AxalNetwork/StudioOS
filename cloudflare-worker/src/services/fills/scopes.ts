@@ -80,6 +80,8 @@ export interface ScopeContext {
   activeCompany(): Promise<number | null>;
   /** #4046: whether the request named a company (`X-Company-Id`); a claim that does not verify never falls back. */
   claimed?(): boolean;
+  /** #6194: what the run is for, when it is not the form's own fill: a deal note's deal summary. */
+  purpose?: 'deal_summary';
 }
 
 export interface RecordScope {

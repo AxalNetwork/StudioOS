@@ -10,12 +10,19 @@
  *     D691 (#1697): every row carries `id`, its record id (a uid, a posting
  *     or obligation id, or a KPI key); `filter` is `key:value` pairs joined
  *     with commas, all applied; `sorts[0]` is the default sort.
+ *   GET  /modules/:slug/export?project=&q=&filter=&sort=
+ *                                               D6124: a writer's CSV of the table's filtered rows, on four
+ *                                               modules (services/growExport.ts); `records.exportable` says so
  *
  * WRITES (whoever `canAccessProject` lets write: the owner, a co-founder, a
  * partner, an admin; an advisor reads only). The writers are
  * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
+ *   PATCH /feedback/themes         { project, from, to, merge? }  D6098 (#6098): rename one theme, or merge it
+ *                                  into another (`merge: true`; without it a merge is a 409 with the counts),
+ *                                  with the roadmap items that answer it; the read's `parts.themes` (writers only)
+ *                                  carries each theme's counts
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
  *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
  *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
@@ -78,7 +85,7 @@ import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
-  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
+  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme,
   updatePartner, updateRole,
 } from '../services/growWriters';
 import { distributionOverview } from '../services/distribution/overview';
@@ -88,6 +95,8 @@ import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { growAttention, unreadableGrowAttention } from '../services/growAttention';
 import { hasRecords } from '../services/records';
+import { growExportCsv, isGrowExportSlug } from '../services/growExport';
+import { csvResponse } from '../services/csv';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { publishPart } from '../services/publishSources';
 import {
@@ -128,7 +137,7 @@ async function writes(c: C, user: User, pid: number): Promise<boolean> {
 }
 
 function fail(c: C, e: unknown) {
-  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}), ...(e.extra ?? {}) }, e.status as 400);
   if (e instanceof KpiRefused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
   throw e;
 }
@@ -232,7 +241,13 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
       filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },
         { key: 'status', label: 'Status', options: fixed(FEEDBACK_STATUS) }],
-      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }] };
+      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }],
+      // D6098 (#6098): each theme's counts, for Rename or merge; a writer's only. A failed
+      // read draws no Rename and never blanks the feedback.
+      ...(writer ? { parts: { themes: await feedbackThemes(env, projectId).catch((e) => {
+        console.error('[cycle_grow] feedback themes unreadable:', (e as Error).name);
+        return null;
+      }) } } : {}) };
   }
   if (slug === 'distribution') {
     const extra = new Map(((await env.DB.prepare('SELECT uid, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE project_id = ?')
@@ -437,7 +452,8 @@ r.get('/modules/:slug', async (c) => {
     const x = ctxFor(c.env, pid);
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
-    try { recs = await recordsFor(x, meta.slug, user, await writes(c, user, pid)); } catch (e) {
+    const writer = await writes(c, user, pid);
+    try { recs = await recordsFor(x, meta.slug, user, writer); } catch (e) {
       console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
       return c.json({ module: mod, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
     }
@@ -447,7 +463,33 @@ r.get('/modules/:slug', async (c) => {
     // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
     const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
-    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(Object.keys(parts).length ? { parts } : {}) });
+    // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
+    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow'),
+      ...(writer && isGrowExportSlug(meta.slug) ? { exportable: true } : {}) }, ...(Object.keys(parts).length ? { parts } : {}) });
+  } catch (e) { return fail(c, e); }
+});
+
+// GET /modules/:slug/export?project=&q=&filter=&sort= — D6124 (#6124).
+// The table's rows as a CSV, every row its search, filters and sort select
+// (no page). A writer on the venture only: a reader is refused before anything
+// is read. A failed read is a refusal, never a file with a header and no rows.
+r.get('/modules/:slug/export', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    const slug = c.req.param('slug');
+    const meta = GROW_MODULES.find((m) => m.slug === slug);
+    if (!meta || !isGrowExportSlug(meta.slug)) return c.json({ detail: 'This Grow module has no export' }, 404);
+    const x = ctxFor(c.env, pid);
+    let recs: RecordSet;
+    try { recs = await recordsFor(x, meta.slug, user, true); } catch (e) {
+      console.error('[cycle_grow] export unreadable:', meta.slug, (e as Error).message);
+      return c.json({ detail: `Unreadable: ${meta.source} could not be read, so nothing was exported` }, 503);
+    }
+    const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
+    const rows = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
+    const asOf = today(x);
+    return csvResponse(growExportCsv(meta.slug, rows, meta.source, asOf), `${meta.slug}-${pid}-${asOf}.csv`, { 'X-Export-Rows': String(rows.length) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -530,6 +572,8 @@ r.delete('/campaigns/:uid/items/:kind/:itemUid', write((c, u, pid) => campaignIt
 r.delete('/campaigns/:uid', write((c, u, pid) => archiveCampaign(c.env, pid, u, param(c, 'uid'))));
 
 r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
+// D6098 (#6098): before `/feedback/:uid`, so `themes` is never read as a uid.
+r.patch('/feedback/themes', write((c, u, pid, b) => renameFeedbackTheme(c.env, pid, u, b)));
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
 r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
 r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));

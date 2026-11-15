@@ -5,14 +5,14 @@
  *
  *   node scripts/github-alerts.mjs main-red        (reads the latest finished CI run on a push to main)
  *   node scripts/github-alerts.mjs review-blocked  OUTCOME, PR, RUN_URL
- *   node scripts/github-alerts.mjs queue           QUEUE_ALERT_QUEUED, QUEUE_ALERT_OLDEST_MIN (optional)
+ *   node scripts/github-alerts.mjs queue           QUEUE_ALERT_QUEUED, QUEUE_ALERT_OLDEST_MIN, QUEUE_ALERT_IGNORE_BEFORE (optional)
  *   node scripts/github-alerts.mjs future-clock    FUTURE_CLOCK_DAYS, FUTURE_CLOCK_DIR (attempt-bound artifacts), RUN_URL
  *
  * Always: GITHUB_TOKEN (issues: write for the three alert kinds; actions: read
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
  * webhook, the issue is still opened or closed and the job warns; the trusted reporter fails visibly on unreadable evidence without changing the watched result.
  */
-import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, queueStallState, queueState, reviewState } from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, parseQueueCutoff, queueAfterCutoff, queueStallState, queueState, reviewState, withQueueCutoffLine } from './lib/githubAlerts.mjs';
 import { safeGithubUrl } from './lib/ciClassify.mjs';
 import { readFileSync } from 'node:fs';
 import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
@@ -102,20 +102,36 @@ async function main() {
       queued: Number(env.QUEUE_ALERT_QUEUED) || QUEUE_DEFAULTS.queued,
       oldestMinutes: Number(env.QUEUE_ALERT_OLDEST_MIN) || QUEUE_DEFAULTS.oldestMinutes,
     };
-    // Oldest first: the API lists newest first, so read the last page's last run.
+    // #6463: runs created before QUEUE_ALERT_IGNORE_BEFORE are left out. An invalid date fails the job loudly and
+    // ignores nothing; unset reads only what today's alert read.
+    let cutoff = null;
+    try { cutoff = parseQueueCutoff(env.QUEUE_ALERT_IGNORE_BEFORE); } catch {
+      console.error('::error::QUEUE_ALERT_IGNORE_BEFORE is not an ISO date; no queued run is ignored');
+      process.exitCode = 1;
+    }
+    // The API lists newest first. Without a cutoff, the oldest run is the last page's last run. With one, every page
+    // up to the API's 10-page window is read, so each run left out was seen to predate the cutoff.
     const first = await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100`);
     if (!Number.isSafeInteger(first?.total_count) || first.total_count < 0 || !Array.isArray(first.workflow_runs)) throw new Error('queue_evidence_unreadable');
     const total = first.total_count;
-    let oldest = null;
-    if (total) {
-      const lastPage = Math.min(10, Math.ceil(total / 100));
-      const page = lastPage === 1 ? first : await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100&page=${lastPage}`);
-      const runs = page?.workflow_runs || [];
-      oldest = runs.length ? runs[runs.length - 1].created_at : null;
-      if (!Number.isFinite(Date.parse(oldest || ''))) throw new Error('queue_age_unreadable');
+    const lastPage = Math.min(10, Math.ceil(total / 100));
+    const pages = [first];
+    for (let n = 2; n <= lastPage; n++) {
+      if (!cutoff && n < lastPage) continue;
+      const page = await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100&page=${n}`);
+      if (!Array.isArray(page?.workflow_runs)) throw new Error('queue_evidence_unreadable');
+      pages[n - 1] = page;
     }
-    const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds, issueOpen: Boolean(await openIssue('queue')) });
-    return apply('queue', q.active, q);
+    const last = pages[lastPage - 1]?.workflow_runs || [];
+    const read = queueAfterCutoff({ total, runs: cutoff ? pages.flatMap(p => p.workflow_runs) : last.slice(-1), cutoff });
+    if (read.queued && !Number.isFinite(Date.parse(read.oldestCreatedAt || ''))) throw new Error('queue_age_unreadable');
+    const open = await openIssue('queue');
+    if (open && cutoff) {
+      const body = withQueueCutoffLine(open.body, read);
+      if (body !== open.body) await gh(`/repos/${repo}/issues/${open.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    }
+    const q = queueState({ queued: read.queued, oldestCreatedAt: read.oldestCreatedAt, thresholds, issueOpen: Boolean(open) });
+    return apply('queue', q.active, { ...q, ignored: read.ignored, cutoff: read.cutoff });
   }
   if (mode === 'future-clock') {
     const evidence = await futureClockReport({ env, api: gh });

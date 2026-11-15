@@ -6,7 +6,7 @@ import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import CallsTab from '../calls/CallsTab';
 import { FounderClosing } from '../../closing/ClosingRoom';
-import { CLOSING, HOME_PATH, LINE, SLUG, TABS, TITLE, tabHref, tabSearch } from './capRelModel';
+import { CLOSING, HOME_PATH, LINE, SLUG, TABS, TITLE, capRelStanding, tabHref, tabSearch } from './capRelModel';
 import CapRelPipeline from './CapRelPipeline';
 import CapRelMatch from './CapRelMatch';
 import CapRelOutreach from './CapRelOutreach';
@@ -88,32 +88,56 @@ function Calls({ projectId }) {
   return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} status={read.status} projectId={projectId} onRetry={read.retry} /></div>;
 }
 
-/** D1464 (#4021, RR09): the founder's Activity carries who read the pipeline with a reason. */
-function ActivityWithReads({ projectId }) {
+/** D1464 (#4021, RR09): the founder's Activity carries who read the pipeline with a reason, when the map says so. */
+function ActivityWithReads({ projectId, supportReads = true }) {
   const load = useCallback((page) => capitalRelationshipsApi.supportReads(projectId, page), [projectId]);
   return (
     <div className="flex flex-col gap-4">
       <CapRelActivity projectId={projectId} />
-      <SupportReadsCard record="capital-relationships" load={load} testId="caprel-support-reads" />
+      {supportReads ? <SupportReadsCard record="capital-relationships" load={load} testId="caprel-support-reads" /> : null}
     </div>
   );
 }
 
-export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, admin = false, venture = null, viewer = 'admin', onSupportRead }) {
+/**
+ * D5074 slice 4: the module read's capability map, read once for the page. A refused or failed read carries no map;
+ * the tabs then draw their own refusals, as before.
+ */
+function useCapabilities(projectId) {
+  const [read, setRead] = useState({ status: 'loading', capabilities: null });
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let alive = true;
+    setRead({ status: 'loading', capabilities: null });
+    Promise.resolve().then(() => cyclesApi.module('raise', projectId, SLUG, {}))
+      .then((data) => { if (alive) setRead({ status: 'ready', capabilities: data?.capabilities ?? null }); })
+      .catch(() => { if (alive) setRead({ status: 'refused', capabilities: null }); });
+    return () => { alive = false; };
+  }, [projectId]);
+  return read;
+}
+
+export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, admin: adminAccount = false, venture = null, viewer = 'admin', onSupportRead }) {
   const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
+  // D5074 slice 4: staff's support view and the founder's tabs are the module read's capability map
+  // (`capRelStanding`). `adminAccount` (the account, from CycleRoute) only opens the reasoned support door when the
+  // read was refused and so carries no map; that door grants nothing by itself (the Worker gates the support read).
+  const caps = useCapabilities(projectId);
+  const standing = capRelStanding(caps.capabilities);
+  const support = standing.support || (caps.status === 'refused' && adminAccount);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
-  else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
+  else if (!projectId || caps.status === 'loading') body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
   // D1464 (#4021, RR12): staff get one private response per reason, on every tab, never the founder's reads.
-  else if (admin) body = <CapRelSupport key={projectId} projectId={projectId} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
+  else if (support) body = <CapRelSupport key={projectId} projectId={projectId} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
   else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
   // D1193 (#3127): Match, Outreach, Commitments and Activity, each from its own read.
   else if (tab === 'commitments') body = <CapRelCommitments projectId={projectId} search={search} />;
   else if (tab === 'match') body = <CapRelMatch projectId={projectId} search={search} />;
   else if (tab === 'outreach') body = <CapRelOutreach projectId={projectId} search={search} />;
-  else if (tab === 'activity') body = <ActivityWithReads projectId={projectId} />;
+  else if (tab === 'activity') body = <ActivityWithReads projectId={projectId} supportReads={standing.supportReads} />;
   else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
