@@ -147,12 +147,9 @@ export const REFERENCE_ARTEFACTS = ['Recording', 'Transcript', 'Summary'];
 export const NOT_AVAILABLE_YET = 'Not available yet';
 
 /** D6182: the references card's line under its title. */
-export const REFERENCE_INTRO = 'Reference checks on the founders. Recording, transcript and summary are not available yet.';
+export const REFERENCE_INTRO = 'Reference checks on the founders. Only your firm sees these. Platform admins can also access them. Recording, transcript and summary are not available yet.';
 
-/**
- * D6182: the canvas's pills under a check. "Only your firm sees these." is not
- * drawn: the Worker scopes the read to the deal (D609), not to a firm.
- */
+/** D6182: the canvas's pills under a check. */
 export const REFERENCE_PILLS = { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' };
 
 /** D6182: the dialog before a check is deleted. */

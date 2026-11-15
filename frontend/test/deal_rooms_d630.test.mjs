@@ -20,7 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { act, createElement as h } from 'react';
+import { act, createElement as h, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -31,12 +31,13 @@ import { QuotaLine, JoinLeaveButton } from '../src/components/deals/DealRoomJoin
 import { DealRoomsList } from '../src/components/deals/DealRoomsPanel.jsx';
 import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx';
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
-import { ReferencesView, editableStatuses, referencePills } from '../src/components/deals/DealReferencesTab.jsx';
+import DealReferencesTab, { ReferencesView, editableStatuses, referencePills } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { dealTabsFor } from '../src/pages/dealPageModel.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { api } from '../src/lib/api.js';
+import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), 'utf8');
@@ -211,7 +212,7 @@ test('sp-references: each check, and its recording, transcript and summary read 
   assert.equal(REFERENCE_STATUS.summarized, 'Summarised');
 });
 
-test('sp-references (D6182): the canvas pills, and no "Only your firm" line on a deal-scoped read', () => {
+test('sp-references (D6182): the canvas pills and the D6735 firm visibility line', () => {
   assert.deepEqual(referencePills(REFS[0]).map((p) => p.text), ['Consent given', 'Notes kept']);
   assert.deepEqual(referencePills(REFS[1]).map((p) => p.text), ['Consent asked'], 'no notes, no Notes kept');
   assert.deepEqual(referencePills({ ...REFS[1], notes: '   ' }).map((p) => p.text), ['Consent asked'], 'blank notes are not notes');
@@ -220,8 +221,36 @@ test('sp-references (D6182): the canvas pills, and no "Only your firm" line on a
   assert.equal((markup.match(/data-testid="dr-reference-pill-consent"/g) || []).length, 2);
   assert.equal((markup.match(/data-testid="dr-reference-pill-notes"/g) || []).length, 1);
   assert.match(renderedText(markup), /^Reference calls\s*Schedule a reference\s*Reference checks on the founders\./);
-  assert.doesNotMatch(markup, /Only your firm/);
-  assert.doesNotMatch(read('components/deals/dealRoomCopy.js'), /'Only your firm sees these\.'/);
+  assert.match(renderedText(markup), /Only your firm sees these\. Platform admins can also access them\./);
+});
+
+test('D6735: switching firms removes the previous firm’s references and reads the new context', async () => {
+  const original = api.listReferences;
+  let reads = 0;
+  let switchFirm;
+  let finishSecondRead;
+  api.listReferences = async () => {
+    reads += 1;
+    if (reads === 1) return REFS;
+    return new Promise((resolve) => { finishSecondRead = resolve; });
+  };
+  function TestFirm() {
+    const [id, setId] = useState(10);
+    switchFirm = setId;
+    return h(ActiveCompanyContext.Provider, { value: { company: { id } } }, h(DealReferencesTab, { dealId: 1 }));
+  }
+  const view = await mountContracts(h(TestFirm));
+  try {
+    assert.match(view.text(), /Rita Reference/);
+    await act(async () => { switchFirm(20); });
+    assert.equal(reads, 2);
+    assert.doesNotMatch(view.text(), /Rita Reference/);
+    await act(async () => { finishSecondRead([{ ...REFS[0], reference_name: 'New firm reference' }]); });
+    assert.match(view.text(), /New firm reference/);
+  } finally {
+    await view.unmount();
+    api.listReferences = original;
+  }
 });
 
 test('sp-references (D6182): the deal page\'s card, axal tokens, 44 px targets at phone width, no hex colours', () => {
