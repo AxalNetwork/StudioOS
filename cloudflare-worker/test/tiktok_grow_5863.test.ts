@@ -287,7 +287,9 @@ test('7. disconnect and the deauthorization webhook remove the connection\'s fac
   const src = readFileSync('cloudflare-worker/src/routes/tiktok_webhook.ts', 'utf8');
   assert.match(src, /\.\.\.purgeByOpenIdStatements\(c\.env, event\.user_openid, cutoff\)/);
   const { purgeByOpenIdStatements } = await import('../src/services/tiktok/grow.ts');
-  await f.env.DB.batch(purgeByOpenIdStatements(f.env, OPEN_ID, Math.floor(Date.now() / 1000) + 60));
+  // The webhook's cutoff is TikTok's event time; take it from the row's own stamp, so no clock is read.
+  const cutoff = Number(f.db.prepare('SELECT unixepoch(updated_at) AS t FROM integrations WHERE id = ?').get(TT).t);
+  await f.env.DB.batch(purgeByOpenIdStatements(f.env, OPEN_ID, cutoff));
   assert.deepEqual([snapshots(f.db).length, videos(f.db).length, ledger(f.db).length], [0, 0, 0]);
 });
 
