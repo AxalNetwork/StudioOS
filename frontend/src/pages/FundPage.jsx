@@ -4,6 +4,8 @@ import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
 import { api } from '../lib/api';
 import { readableFund, useFundReport } from '../hooks/useFundReport';
+import { fundDraftsApi } from '../lib/api/fundDrafts.js';
+import FundDraftBand from './FundDraftBand';
 import './fundPage.css';
 
 export function fundMoney(cents) {
@@ -53,6 +55,11 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
       </section>
       <article className="fd-card"><h2>Service providers</h2><dl>{[['fund_admin', 'Fund administrator'], ['auditor', 'Auditor'], ['legal_counsel', 'Legal counsel'], ['custodian', 'Custodian'], ['valuation_policy', 'Valuation policy']].map(([key, label]) => <div key={key}><dt>{label}</dt><dd><Recorded value={page.fund.providers[key]} reason={`${label} has not been recorded for this fund.`} /></dd></div>)}</dl></article>
       <article className="fd-card"><h2>Reporting periods</h2>{page.periods.length ? <ul>{page.periods.map(period => <li key={period.id}><Link to={`/funds/${page.fund.id}/reporting/${period.id}`}>{period.period}</Link> · {period.status}</li>)}</ul> : <p>{page.can_manage ? 'No reporting period has been recorded.' : 'No issued reporting period is recorded.'}</p>}</article>
+      {page.can_manage && <FundDraftBand testId="fund-brief-band" title="Fund brief" run="Draft the brief"
+        body="Draft a one-paragraph description of this fund from its recorded facts."
+        writes="Accept writes a note. It changes no fund record."
+        onRun={() => fundDraftsApi.brief(page.fund.id)}
+        acceptBlocked="Keeping the brief as a note is not built yet: where fund notes are stored is waiting on a decision (#6252). Nothing has been written." />}
       {page.can_manage && <div className="fd-actions"><Link to={`/funds/${page.fund.id}/reporting/new`}>New reporting period</Link><Link to={`/funds/reporting?fund=${page.fund.id}`}>Reporting archive</Link><Link to={`/funds/lps?fund=${page.fund.id}`}>Open LPs</Link></div>}
     </>}
   </WorkspaceShell></div>;

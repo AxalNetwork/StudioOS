@@ -5,6 +5,7 @@
  * bands, the three bottom sections (D697) and its record pages.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { validateExportsApi } from '../../../lib/api/founderValidateExports';
@@ -25,6 +26,8 @@ import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+import WaitlistBar from '../ValidateWaitlistBar.jsx';
+import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
@@ -151,6 +154,7 @@ const validate = {
   action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
   tools: toFnMap({
     'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
+    'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
   }),
   add: toFnMap({
     'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
@@ -185,6 +189,11 @@ const validate = {
     ),
     'demand-signals': (data, ctx) => (
       <>
+        <WaitlistBar key={ctx.projectId} projectId={ctx.projectId}
+          value={data?.parts?.waitlist_bar ?? null} unreadable={data?.parts?.waitlist_bar_unreadable === true}
+          canWrite={data?.parts?.can_write === true} reload={ctx.reload} />
+        {data?.parts?.lovable_connected && <Link className={`${MODULE_LINK_CLASS} min-h-11 content-center`}
+          to={'/validate/experiments' + projectSearch(ctx.search)}>Open Lovable sign-ups</Link>}
         <ModuleExport slug="demand-signals" projectId={ctx.projectId} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}

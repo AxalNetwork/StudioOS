@@ -11,7 +11,7 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
 import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue, shortDate, touchHistory, touchRecorder, openReminderFor, reminderLists } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
-import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
+import { introTarget, askKey, createIntroRequests, quotaFrom, askTargetName, askDate } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
 import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
 import { counterpartAnswer, introCreditView } from './introCreditModel.js';
@@ -68,12 +68,9 @@ function propositionScopes({ pending, shown, filtered, total, filteredView }) {
   if (filteredView && filtered !== total) parts.push(`${total} recorded in all`);
   return parts.join(' · ');
 }
-// An ask names its target by id only — `GET /api/introductions` joins no
-// names — so the row says which record it points at rather than inventing one.
-const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_id}`
-  : ask?.project_id ? `Project #${ask.project_id}`
-    : ask?.founder_id ? `Founder record #${ask.founder_id}`
-      : 'Target not recorded');
+// D6260: `GET /api/introductions` names an ask's target only where the reader
+// may still see that founder or project (D702's rules); otherwise the row
+// reads "Not available" (`askTargetName`, lib/investorIntroRequest.js).
 // The last touch is the interaction log's MAX (migration 338), never a field
 // someone edits and never a metadata fallback.
 const lastTouchAt = (relationship) => relationship?.last_interaction_at || null;
@@ -171,10 +168,30 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
+  const [askNamesUnreadable, setAskNamesUnreadable] = useState(false);
   const [introRequestStates, setIntroRequestStates] = useState({});
-  const requestIntro = useMemo(() => createIntroRequests(body => api.introductionsRequest(body), setIntroRequestStates), []);
+  // D6260: the quota is read before an ask can be sent; `unreadable` disables sending.
+  const [introQuota, setIntroQuota] = useState({ status: 'loading', value: null });
+  const takeAsks = useCallback((value) => {
+    setAsks(Array.isArray(value?.introductions) ? value.introductions : []);
+    setAskNamesUnreadable(value?.targets_unreadable === true);
+  }, []);
+  const readIntroQuota = useCallback(() => api.introductionsQuota().then(
+    (value) => { const q = quotaFrom(value); setIntroQuota(q ? { status: 'ready', value: q } : { status: 'unreadable', value: null }); },
+    () => setIntroQuota({ status: 'unreadable', value: null }),
+  ), []);
+  const requestIntro = useMemo(() => createIntroRequests(body => api.introductionsRequest(body), setIntroRequestStates, {
+    // The answer carries the new count; the recorded asks are read again so the Asked view shows the new row.
+    onSpent: (result) => {
+      setIntroQuota((current) => { const q = quotaFrom(result, current.value); return q ? { status: 'ready', value: q } : current; });
+      api.listIntroductions().then(takeAsks, () => {});
+    },
+    onRefused: (data) => {
+      setIntroQuota((current) => { const q = quotaFrom(data, current.value); return q ? { status: 'ready', value: q } : current; });
+    },
+  }), [takeAsks]);
   const pendingAskTargets = new Set((asks || []).filter(ask => ask.status === 'pending').map(askKey));
-  const introAction = (targets) => role === 'investor' ? <InvestorIntroRequest targets={targets} states={introRequestStates} request={requestIntro} ready={asks !== null && !errors.asks} asked={pendingAskTargets} /> : null;
+  const introAction = (targets) => role === 'investor' ? <InvestorIntroRequest targets={targets} states={introRequestStates} request={requestIntro} ready={asks !== null && !errors.asks} asked={pendingAskTargets} quota={introQuota} /> : null;
   // The reminders (migration 338) and which row a form is open on.
   const [reminders, setReminders] = useState(null);
   const [reminderFor, setReminderFor] = useState(null);
@@ -210,7 +227,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
     }
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
-    if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
+    if (askResult.status === 'fulfilled') takeAsks(askResult.value);
     if (reminderResult.status === 'fulfilled') setReminders(Array.isArray(reminderResult.value?.items) ? reminderResult.value.items : []);
     setErrors({
       relationships: relationshipResult.status === 'rejected' ? 'Relationship book is unavailable right now.' : '',
@@ -221,9 +238,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       organizations: relationshipResult.status === 'rejected' ? 'Relationship-backed organization context is unavailable right now.' : '',
     });
     setRefreshing(false);
-  }, []);
+  }, [takeAsks]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (role === 'investor') readIntroQuota(); }, [role, readIntroQuota]);
   useEffect(() => {
     if (remindersOpen) document.getElementById('network-reminders')?.scrollIntoView?.({ block: 'start' });
   }, [remindersOpen]);
@@ -671,7 +689,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
                 <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
                 <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
@@ -681,9 +699,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                 errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
                   <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
                     <div className="inw-prop-top"><span className="inw-prop-label">Asked · {ask.quarter || 'quarter not recorded'}</span><span className="inw-state" data-testid={`status-ask-${ask.uid}`}>{typeLabel(ask.status)}</span></div>
-                    <strong>{askTarget(ask)}</strong>
-                    {ask.message ? <p>{ask.message}</p> : null}
-                    <div className="inw-prop-actions"><span className="inw-state">Asked {age(ask.created_at)}</span></div>
+                    <strong data-testid={`target-ask-${ask.uid}`}>{askTargetName(ask, askNamesUnreadable)}</strong>
+                    <p data-testid={`message-ask-${ask.uid}`}>{ask.message ? ask.message : 'No message was sent with this ask.'}</p>
+                    <div className="inw-prop-actions"><span className="inw-state" data-testid={`date-ask-${ask.uid}`}>Asked {askDate(ask.created_at)} · {age(ask.created_at)}</span></div>
                   </article>)}</div>
                   <p className="inw-footnote">An ask’s status is written when you make it and nothing moves it yet — a reply is a conversation, not a row here.</p>
                 </>

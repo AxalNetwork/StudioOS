@@ -20,22 +20,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createElement as h } from 'react';
+import { act, createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
   JOIN_NOTE, quotaLine, quotaFullLine, transferRefusal, amountToCents, centsMoney,
-  REFERENCE_STATUS, NOT_AVAILABLE_YET, SYNDICATE_CLOSE_CONFIRM,
+  REFERENCE_STATUS, NOT_AVAILABLE_YET, SYNDICATE_CLOSE_CONFIRM, REFERENCE_PILLS,
 } from '../src/components/deals/dealRoomCopy.js';
 import { QuotaLine, JoinLeaveButton } from '../src/components/deals/DealRoomJoin.jsx';
 import { DealRoomsList } from '../src/components/deals/DealRoomsPanel.jsx';
 import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx';
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
-import { ReferencesView, editableStatuses } from '../src/components/deals/DealReferencesTab.jsx';
+import { ReferencesView, editableStatuses, referencePills } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { dealTabsFor } from '../src/pages/dealPageModel.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { api } from '../src/lib/api.js';
+import { mountContracts } from './_contracts_dom.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(`../src/${rel}`, import.meta.url)), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -196,8 +198,8 @@ const REFS = [
 test('sp-references: each check, and its recording, transcript and summary read "Not available yet"', () => {
   const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
   const t = renderedText(markup);
-  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\s*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Recording\s*Not available yet\s*Transcript\s*Not available yet\s*Summary\s*Not available yet/);
-  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\./);
+  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\s*✓ Consent given\s*▤ Notes kept\s*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Recording\s*Not available yet\s*Transcript\s*Not available yet\s*Summary\s*Not available yet/);
+  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*◷ Consent asked\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\./);
   assert.equal((markup.match(new RegExp(`>${NOT_AVAILABLE_YET}<`, 'g')) || []).length, 6, 'three per check');
   assert.match(t, /Schedule a reference/);
   assert.match(t, /Record consent/, 'consent can be recorded where it is missing');
@@ -207,6 +209,93 @@ test('sp-references: each check, and its recording, transcript and summary read 
   const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
   assert.doesNotMatch(code, /uploadReferenceRecording|transcribeReference|summarizeReference|getReferenceRecordingUrl/);
   assert.equal(REFERENCE_STATUS.summarized, 'Summarised');
+});
+
+test('sp-references (D6182): the canvas pills, and no "Only your firm" line on a deal-scoped read', () => {
+  assert.deepEqual(referencePills(REFS[0]).map((p) => p.text), ['Consent given', 'Notes kept']);
+  assert.deepEqual(referencePills(REFS[1]).map((p) => p.text), ['Consent asked'], 'no notes, no Notes kept');
+  assert.deepEqual(referencePills({ ...REFS[1], notes: '   ' }).map((p) => p.text), ['Consent asked'], 'blank notes are not notes');
+  assert.deepEqual(REFERENCE_PILLS, { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' });
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+  assert.equal((markup.match(/data-testid="dr-reference-pill-consent"/g) || []).length, 2);
+  assert.equal((markup.match(/data-testid="dr-reference-pill-notes"/g) || []).length, 1);
+  assert.match(renderedText(markup), /^Reference calls\s*Schedule a reference\s*Reference checks on the founders\./);
+  assert.doesNotMatch(markup, /Only your firm/);
+  assert.doesNotMatch(read('components/deals/dealRoomCopy.js'), /'Only your firm sees these\.'/);
+});
+
+test('sp-references (D6182): the deal page\'s card, axal tokens, 44 px targets at phone width, no hex colours', () => {
+  const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
+  assert.match(code, /import \{ CARD, SUB, H3 \} from '\.\.\/\.\.\/pages\/deal\/DealFrame';/);
+  assert.match(code, /<section className=\{`\$\{CARD\} flex flex-col gap-2\.5 p-4`\} data-testid="dr-references-card">/);
+  assert.doesNotMatch(code, /#[0-9a-fA-F]{3,8}\b/, 'no hex colour');
+  const grays = code.match(/[\w:/[\]-]*\bgray-\d+[\w/]*/g) || [];
+  assert.ok(grays.length > 0);
+  assert.deepEqual(grays.filter((c) => !c.startsWith('dark:')), [], 'a gray class only as a dark: pair');
+  assert.doesNotMatch(code, /BTN\.|INPUT\b|StatusPill/, 'not the D630 gray kit buttons, inputs or pills');
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+  for (const id of ['dr-reference-cta', 'dr-reference-edit', 'dr-reference-consent-open', 'dr-reference-delete-open']) {
+    const tag = markup.match(new RegExp(`<button[^>]*data-testid="${id}"`));
+    assert.ok(tag, id);
+    assert.match(tag[0], /min-h-\[44px\]/, `${id} is 44 px to touch`);
+  }
+});
+
+const by = (v, id) => v.nodes().find((n) => v.props(n)?.['data-testid'] === id);
+const press = async (v, id) => {
+  const n = by(v, id); assert.ok(n, `missing ${id}`);
+  assert.equal(Boolean(v.props(n).disabled), false, `${id} is enabled`);
+  await act(async () => { await v.props(n).onClick({ stopPropagation() {}, preventDefault() {} }); });
+};
+const settle = () => act(async () => { await new Promise((r) => setImmediate(r)); });
+
+for (const [kind, method, open, row, line] of [
+  ['delete', 'deleteReference', 'dr-reference-delete-open', REFS[0], /Delete the reference from Rita Reference\?\s*The check, its consent and its notes are removed from this deal for everyone who reads it\. This cannot be undone\./],
+  ['consent', 'captureReferenceConsent', 'dr-reference-consent-open', REFS[1], /Record Rob Recorded’s consent\?\s*This records that Rob Recorded agreed to the reference call, now, with you as the person who recorded it\./],
+]) {
+  test(`sp-references (D6182): ${kind} opens a dialog first; Back writes nothing; a refusal stays in it; confirm writes once`, async () => {
+    const original = api[method]; const calls = []; let changed = 0; let refuse = true;
+    api[method] = async (...args) => { calls.push(args); if (refuse) throw new Error('Synthetic refusal'); return { ok: true }; };
+    const v = await mountContracts(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS }, onChanged: () => { changed += 1; } }));
+    try {
+      const dialog = `dr-reference-${kind}-dialog`;
+      assert.equal(by(v, dialog), undefined);
+      await press(v, open);
+      assert.deepEqual(calls, [], 'opening the dialog writes nothing');
+      assert.ok(by(v, dialog));
+      assert.match(v.text(), line);
+      // Cancel.
+      await press(v, `dr-reference-${kind}-back`);
+      assert.deepEqual(calls, []); assert.equal(changed, 0); assert.equal(by(v, dialog), undefined);
+      // Refusal: the dialog stays, with the refusal inside it.
+      await press(v, open); await press(v, `dr-reference-${kind}-confirm`); await settle();
+      assert.equal(calls.length, 1); assert.equal(changed, 0);
+      assert.ok(by(v, dialog), 'a refusal keeps the dialog open');
+      const refusal = by(v, `dr-reference-${kind}-refusal`);
+      assert.ok(refusal, 'the refusal is drawn inside the dialog');
+      assert.match(v.text(), /Synthetic refusal/);
+      // Confirm.
+      refuse = false;
+      await press(v, `dr-reference-${kind}-confirm`); await settle();
+      assert.equal(calls.length, 2); assert.equal(changed, 1);
+      assert.equal(by(v, dialog), undefined, 'a confirmed change closes the dialog');
+      assert.deepEqual(calls[1], kind === 'delete' ? [row.id] : [row.id, { consent_given: true }]);
+    } finally { await v.unmount(); api[method] = original; }
+  });
+}
+
+test('sp-references (D6182): no one-click destructive action, the writes are made only from the dialog', () => {
+  const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
+  assert.equal((code.match(/api\.deleteReference\(/g) || []).length, 1);
+  assert.equal((code.match(/api\.captureReferenceConsent\(/g) || []).length, 1);
+  const dialog = code.slice(code.indexOf('export function ReferenceConfirm'), code.indexOf('export function editableStatuses'));
+  assert.match(dialog, /api\.deleteReference\(row\.id\)/);
+  assert.match(dialog, /api\.captureReferenceConsent\(row\.id, \{ consent_given: true \}\)/);
+  assert.match(dialog, /<Lightbox /, 'the shared Lightbox');
+  assert.match(code, /onClick=\{\(\) => setConfirm\(\{ kind: 'delete', row: r \}\)\}/);
+  assert.match(code, /onClick=\{\(\) => setConfirm\(\{ kind: 'consent', row: r \}\)\}/);
+  const asking = renderedText(html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS }, initialConfirm: { kind: 'delete', row: REFS[0] } })));
+  assert.match(asking, /Delete the reference from Rita Reference\?[\s\S]*Keep it\s*Delete/);
 });
 
 test('sp-references: an edit cannot claim a recording that cannot exist', () => {
