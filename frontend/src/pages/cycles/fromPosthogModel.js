@@ -6,7 +6,7 @@
 
 export const ROLE_CHIPS = Object.freeze([
   ['active_users', 'Active users'], ['new_users', 'New users'], ['activation', 'Activation'],
-  ['retention', 'Retention'], ['conversion', 'Conversion'], ['sessions', 'Sessions'], ['other', 'Other'],
+  ['retention', 'Retention'], ['conversion', 'Conversion'], ['sessions', 'Sessions'], ['visits', 'Visits'], ['other', 'Other'],
 ]);
 export const TRACK_LINE = 'You decide what this insight measures. Axal VC never guesses it from event names.';
 export const NOT_LINKED = 'Choose a PostHog project for this venture to see figures here.';

@@ -142,8 +142,9 @@ function fail(c: C, e: unknown) {
   throw e;
 }
 
-const ctxFor = (env: Env, projectId: number): Ctx => ({
-  env, projectId, now: Date.now(),
+/** `team` (D6107, #6107 Q3 = A): only the venture's team sees Distribution's PostHog visits; a card read passes `isTeamViewer`. */
+const ctxFor = (env: Env, projectId: number, team = false): Ctx => ({
+  env, projectId, now: Date.now(), team,
   href: (slug) => `/grow/${slug}?project=${projectId}`,
 });
 
@@ -157,7 +158,7 @@ r.get('/overview', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
-    const x = ctxFor(c.env, pid);
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
     // D1333 (#3481): Publish to… from Overview, and what was published from here.
     const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
@@ -449,7 +450,7 @@ r.get('/modules/:slug', async (c) => {
     const meta = GROW_MODULES.find((m) => m.slug === c.req.param('slug'));
     if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
     const mod = { slug: meta.slug, name: meta.name, records_title: RECORDS_TITLE[meta.slug] };
-    const x = ctxFor(c.env, pid);
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
     const writer = await writes(c, user, pid);

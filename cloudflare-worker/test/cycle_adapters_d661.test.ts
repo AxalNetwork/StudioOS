@@ -367,6 +367,8 @@ import { GROW_MODULES } from '../src/services/growCycle.ts';
 import { recomputeRevenueMovements } from '../src/services/revenueMovements.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARDS as GROW_CARDS, RECORDS as GROW_RECORDS } from '../../frontend/src/pages/cycles/adapters/grow.js';
+import { ROLES } from '../src/services/posthog/metrics.ts';
+import { ROLE_CHIPS } from '../../frontend/src/pages/cycles/fromPosthogModel.js';
 
 const MIG = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const migFile = (p: string) => readFileSync(resolve(MIG, readdirSync(MIG).find((f) => f.startsWith(`${p}_`))!), 'utf8');
@@ -395,6 +397,9 @@ async function growFixture() {
   db.exec(migFile('462'));
   db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
+  // D6107: PostHog's link and tracked metrics, so the Visit stage reads its real store (no link here: not connected).
+  db.exec(tableFromBaseline(BASELINE, 'integrations'));
+  db.exec(migFile('657')); db.exec(migFile('755')); db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;
@@ -519,7 +524,7 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
   const cac = card('distribution').series[0];
   assert.equal(cac.unit, 'usd');
   assert.deepEqual(cac.items.map((i: any) => [i.label, i.value]), [['LinkedIn', 600], ['Search ads', 300]], 'CAC = spend / customers, in dollars');
-  assert.deepEqual(card('distribution').series[2].items, [{ label: 'Visit', value: 'Not recorded: no page-visit store yet' }], 'visits are not recorded, and say why');
+  assert.deepEqual(card('distribution').series[2].items, [{ label: 'Visit', value: 'Not recorded: PostHog is not connected for this venture' }], 'visits are not recorded, and say why (D6107)');
   assert.deepEqual(card('distribution').series[1].steps.map((s: any) => s.label), ['Sign-up', 'Paying']);
   const mrr = card('revenue-and-traction').series[0];
   assert.equal(mrr.rows.length, 3, 'three movement months');
@@ -536,6 +541,94 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
     if (fig.state === 'ok') assert.notEqual(figureValue(fig), null, `${fig.key} has a value the page cannot write`);
   }
   assert.equal(figureValue(o.figures.find((x: any) => x.key === 'mrr')), '$3,840', 'MRR is in dollars on the snapshot, written as such');
+});
+
+// ── D6107 (#6107): Distribution's Visit stage from a tracked PostHog `visits` metric, team only ──
+
+async function growCallAs(f: { env: any }, who: number, role: string, path: string) {
+  const token = await new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await growApp.fetch(new Request(`http://t/api/cycles/grow${path}`, { headers: { Authorization: `Bearer ${token}` } }),
+      f.env, { waitUntil() {}, passThroughOnException() {} } as any);
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
+
+/** The Visit stage as the Worker sends it, and the Distribution card as the page draws it. */
+async function visitOf(f: { env: any }, who = FOUNDER, role = 'founder') {
+  const r = await growCallAs(f, who, role, `/modules/distribution?project=${GP}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const card = adaptModule('grow', 'distribution', r.body).card;
+  return { raw: r.body.card.series.funnel[0], card, view: cardView(card) };
+}
+
+test('D6107: the Visit stage says which PostHog connection to make, reads a tracked visits metric with its source and date, and is Unreadable when the read fails', async () => {
+  const f = await growSeeded();
+  const PH = 40;
+  // 1. No PostHog connection.
+  let v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog is not connected for this venture' });
+  // 2. Connected and linked, no metric tracked as Visits (a Sessions one is not visits).
+  f.db.prepare("INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (?, 'int-ph', ?, 'posthog', 'active', 'oauth_mcp')").run(PH, FOUNDER);
+  f.db.prepare("INSERT INTO posthog_project_links (uid, integration_id, project_id, posthog_project_id, linked_by) VALUES ('l1', ?, ?, '9', ?)").run(PH, GP, FOUNDER);
+  const track = f.db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, insight_name, role, module, unit, created_by)
+                              VALUES (?, ${PH}, ${GP}, ?, ?, ?, 'revenue_and_traction', 'count', ${FOUNDER})`);
+  track.run('a'.repeat(32), 'Ins1', 'Weekly sessions', 'sessions');
+  f.db.prepare("INSERT INTO posthog_metric_facts (integration_id, project_id, module, kind, fact_key, period, value, as_of) VALUES (?, ?, 'revenue_and_traction', 'metric', ?, ?, 900, ?)")
+    .run(PH, GP, `metric:${'a'.repeat(32)}`, dayFrom(-1), dayFrom(-1));
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: no PostHog metric is tracked as Visits' });
+  // 3. Tracked as Visits, nothing synced yet.
+  const VUID = 'b'.repeat(32);
+  track.run(VUID, 'Ins2', 'Site visits', 'visits');
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, reason: 'Not recorded: the Visits metric has no PostHog figure yet' });
+  assert.deepEqual(v.card.series.at(-1).items, [{ label: 'Visit', value: 'Not recorded: the Visits metric has no PostHog figure yet' }]);
+  // 4. Synced: the latest figure, its source and date; listed apart, never a bar the sign-ups are a share of.
+  const fact = f.db.prepare("INSERT INTO posthog_metric_facts (integration_id, project_id, module, kind, fact_key, period, value, as_of) VALUES (?, ?, 'revenue_and_traction', 'metric', ?, ?, ?, ?)");
+  fact.run(PH, GP, `metric:${VUID}`, dayFrom(-9), 1100, dayFrom(-9));
+  fact.run(PH, GP, `metric:${VUID}`, dayFrom(-2), 1240, dayFrom(-2));
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: 1240, apart: true, source: 'From PostHog · Site visits', as_of: dayFrom(-2) });
+  assert.equal(v.view.state, 'ok');
+  assert.deepEqual(v.card.series.map((s: any) => s.kind), ['hbar', 'funnel', 'rows']);
+  assert.deepEqual(v.card.series[1].steps.map((s: any) => [s.label, s.value]), [['Sign-up', 3], ['Paying', 26]], 'the funnel starts at sign-ups: visits are never its first bar');
+  assert.deepEqual(v.card.series[2].items, [{ label: 'Visit', value: `1,240 · From PostHog · Site visits, as of ${dayFrom(-2)}` }]);
+  // The connection gone: the stored figure is not shown.
+  f.db.prepare("UPDATE integrations SET status = 'revoked' WHERE id = ?").run(PH);
+  assert.deepEqual((await visitOf(f)).raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog is not connected for this venture' });
+  f.db.prepare("UPDATE integrations SET status = 'active' WHERE id = ?").run(PH);
+  // 5. Team only (Q3 = A): an admin who may read the venture sees no PostHog figure.
+  f.db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(OTHER, 'admin', null, 'Ada', 'ada@example.test');
+  const admin = await visitOf(f, OTHER, 'admin');
+  assert.deepEqual(admin.raw, { stage: 'Visit', value: null, reason: 'Not recorded: PostHog figures are for the venture\'s team only' });
+  assert.ok(!JSON.stringify(admin.card).includes('1,240') && !JSON.stringify(admin.card).includes('Site visits'), 'no visits figure reaches a non-team viewer');
+  // 6. A failed read is Unreadable, never Not recorded, and the rest of the card still loads.
+  f.db.exec('DROP TABLE posthog_metric_facts');
+  v = await visitOf(f);
+  assert.deepEqual(v.raw, { stage: 'Visit', value: null, state: 'unreadable', reason: 'Unreadable: PostHog figures could not be read' });
+  assert.equal(v.view.state, 'ok', 'the channels and funnel still draw');
+  assert.deepEqual(v.card.series.at(-1).items, [{ label: 'Visit', value: 'Unreadable: PostHog figures could not be read' }]);
+});
+
+test('D6107: the migration widens the role CHECK to visits and keeps every tracked metric', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec(migFile('755'));
+  db.prepare("INSERT INTO posthog_tracked_metrics (id, uid, integration_id, project_id, insight_short_id, insight_name, role, module, unit, created_by, created_at) VALUES (7, 'u7', 1, 2, 'Ins', 'Weekly sessions', 'sessions', 'revenue_and_traction', 'count', 3, '2026-11-01 10:00:00')").run();
+  const insert = (uid: string, role: string) => db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, role, module, created_by) VALUES (?, 1, 2, ?, ?, 'revenue_and_traction', 3)`).run(uid, uid, role);
+  assert.throws(() => insert('v0', 'visits'), /CHECK constraint failed/, '755 alone refuses visits');
+  db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
+  assert.deepEqual({ ...(db.prepare('SELECT * FROM posthog_tracked_metrics WHERE id = 7').get() as any) },
+    { id: 7, uid: 'u7', integration_id: 1, project_id: 2, insight_short_id: 'Ins', insight_name: 'Weekly sessions', role: 'sessions', module: 'revenue_and_traction', unit: 'count', created_by: 3, created_at: '2026-11-01 10:00:00' });
+  insert('v1', 'visits');
+  assert.throws(() => insert('v2', 'pageviews'), /CHECK constraint failed/, 'only the listed roles');
+  assert.throws(() => insert('v1', 'visits'), /UNIQUE constraint failed/, 'the uid stays unique');
+  assert.ok((db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_posthog_tracked_project'").get()), 'the index is recreated');
+  assert.ok(!db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'posthog_tracked_metrics_new'").get());
+  assert.deepEqual([...ROLES], ['active_users', 'new_users', 'activation', 'retention', 'conversion', 'sessions', 'visits', 'other'], 'the Worker\'s list is the CHECK\'s');
+  assert.deepEqual(ROLE_CHIPS.map(([k]: [string, string]) => k), [...ROLES], 'the page offers every role, Visits among them');
 });
 
 test('D661: every Grow table has a value source for each column, and its filter and sorts name real fields', async () => {

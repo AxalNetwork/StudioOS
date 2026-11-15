@@ -91,6 +91,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
   ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
+  ['cloudflare-worker/src/services/posthog', 'PostHog, read-only (D1385): the MCP reads, the tracked metrics and each section\'s sync (D1605–D1609), and Distribution\'s visits (D6107)'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
