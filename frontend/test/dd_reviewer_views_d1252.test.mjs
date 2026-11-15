@@ -30,6 +30,7 @@ import { resetDiligenceInvolvement, useDiligenceInvolvement } from '../src/pages
 import DdMyReviews from '../src/pages/duediligence/DdMyReviews.jsx';
 import DdReviewerPanel from '../src/pages/duediligence/DdReviewer.jsx';
 import DueDiligenceRequestsPage from '../src/pages/DueDiligenceRequestsPage.jsx';
+import { DiligenceRequestsLink } from '../src/pages/raise/dataroom/DataRoomRequests.jsx';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -54,8 +55,8 @@ const SCOPED = (over = {}) => ({
 });
 
 const REQUESTS = () => ({ items: [
-  { id: 61, title: 'Board minutes 2025', details: 'All meetings.', state: 'requested', due_date: '2026-10-20', created_at: '2026-10-01 09:00:00', responded_at: null, response_note: null, response_url: null, subject_type: 'project', subject_label: 'Roomco', project_uid: 'p-room', file_names: [] },
-  { id: 62, title: 'IP assignment', details: null, state: 'received', due_date: '2026-10-01', created_at: '2026-09-20 09:00:00', responded_at: '2026-09-25 09:00:00', response_note: 'Attached', response_url: null, subject_type: 'project', subject_label: 'Roomco', project_uid: 'p-room', file_names: ['Assignment.pdf'] },
+  { id: 61, title: 'Board minutes 2025', details: 'All meetings.', state: 'requested', due_date: '2026-10-20', created_at: '2026-10-01 09:00:00', responded_at: null, response_note: null, response_url: null, subject_type: 'project', subject_label: 'Old room name', project_id: 7, project_name: 'Roomco', project_uid: 'p-room', asking_team_name: 'Cedar Ventures', file_names: [] },
+  { id: 62, title: 'IP assignment', details: null, state: 'received', due_date: '2026-10-01', created_at: '2026-09-20 09:00:00', responded_at: '2026-09-25 09:00:00', response_note: 'Attached', response_url: null, subject_type: 'project', subject_label: 'Otherco', project_id: 8, project_name: 'Otherco', project_uid: 'p-other', file_names: ['Assignment.pdf'] },
   { id: 63, title: 'Your references', details: null, state: 'requested', due_date: null, created_at: '2026-10-02 09:00:00', subject_type: 'founder', subject_label: 'Ada', project_uid: null, file_names: [] },
 ] });
 
@@ -265,6 +266,10 @@ test('the subject\'s requests mounted: due and late, the chips, an answer by a f
     today: '2026-10-24',
   }), { url: '/due-diligence/requests' });
   try {
+    assert.match(m.text('dd-request-61'), /Board minutes 2025.*Roomco.*Requested by Cedar Ventures/);
+    assert.match(m.text('dd-request-62'), /IP assignment.*Otherco/);
+    assert.doesNotMatch(m.text('dd-request-62'), /Requested by/);
+    assert.doesNotMatch(m.text('dd-request-61'), /Old room name/);
     assert.equal(m.text('dd-request-due-61'), 'Due 20 Oct 2026 · 4 days late');
     assert.equal(m.text('dd-request-due-62'), 'Due 1 Oct 2026');
     assert.equal(m.text('dd-request-due-63'), 'No due date');
@@ -274,6 +279,7 @@ test('the subject\'s requests mounted: due and late, the chips, an answer by a f
     await m.click('dd-requests-chip-received');
     assert.ok(m.has('dd-request-61'), 'pressed again, every request');
     await m.click('dd-request-open-61');
+    assert.equal(m.props('dd-request-room-link-61').href, '/raise/data-room/files?project_id=7');
     await m.submit('dd-request-form-61');
     assert.equal(m.text('dd-request-error-61'), 'Write an answer, paste a link or pick a file.');
     assert.deepEqual(sent, []);
@@ -303,7 +309,23 @@ test('a request not made of a startup has no room to pick from, and a failed rea
     await m.click('dd-request-open-61');
     await m.click('dd-request-pick-61');
     assert.ok(m.has('dd-request-files-empty'), 'an empty room says so');
+    assert.match(m.text('dd-request-files-empty'), /Open your data room/);
+    assert.equal(m.props('dd-request-empty-room-link').href, '/raise/data-room/files?project_id=7');
   } finally { await m.unmount(); }
   const bad = await mount(h(DueDiligenceRequestsPage, { load: async () => { throw new Error('down'); } }), { url: '/due-diligence/requests' });
   try { assert.match(bad.text('dd-requests-unreadable'), /This is not a claim that you have none\./); } finally { await bad.unmount(); }
+});
+
+
+test('the data room links to the subject queue only after a successful read returns requests', async () => {
+  for (const [load, expected] of [
+    [async () => REQUESTS(), /Diligence requests.*2 waiting/],
+    [async () => ({ items: [{ state: 'reviewed' }] }), /^Diligence requests$/],
+    [async () => ({ items: [] }), /^$/],
+    [async () => { throw new Error('unreadable'); }, /^$/],
+  ]) {
+    const view = await mount(h(DiligenceRequestsLink, { load }));
+    try { assert.match(view.text(), expected); }
+    finally { await view.unmount(); }
+  }
 });

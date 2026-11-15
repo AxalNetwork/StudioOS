@@ -6,13 +6,15 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { pairs, render, summary, MARKER } from './lib/prOverlap.mjs';
 import { annotate, baseAge, dedupe, isStale, mergeStatus, queueDelay, requiredChecks, requiredFromRules, snapshot, UNMEASURED } from './lib/prRisk.mjs';
+import { canonicalSlot } from './lib/notificationRouting.mjs';
+import { dependenciesOf, deriveIntents, recommend, unreadableWork, walkClaim, workInFlightText } from './lib/workIntent.mjs';
 
 export function mergeTree(a, b, { cwd = process.cwd(), spawn = spawnSync } = {}) {
   if (![a, b].every(s => /^[a-f0-9]{40}$/.test(s))) return 'not checked';
   const r = spawn('git', ['merge-tree', '--write-tree', a, b], { cwd, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 60000 });
   return !r.error && r.status === 0 ? 'no' : !r.error && r.status === 1 ? 'yes' : 'not checked';
 }
-export function makeApi(repo, { maxRequests = 600, minRemaining = 100, exec = execFileSync } = {}) {
+export function makeApi(repo, { maxRequests = 750, minRemaining = 100, exec = execFileSync } = {}) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('invalid repository');
   let count = 0, remaining = Infinity;
   const api = async (method, path, body) => {
@@ -83,8 +85,80 @@ export async function evidence(api, pr, { required, now = Date.now() } = {}) {
   } catch (error) { if (error.partial) throw error; e.baseAge = baseAge(null, now); }
   return e;
 }
+/**
+ * D5580 part 2: the claim refs (D5617), the open issues labelled as claimed, their trusted STATUS comments, the slot
+ * labels and the dependency issues' states, inside its own request budget so the PR comments keep theirs. Only
+ * the claim-ref listing is required: if it fails the caller reports the work section Unreadable.
+ */
+export async function readWork(api, { maxRequests = 150, maxIssues = 40, maxDeps = 20 } = {}) {
+  let used = 0, partial = false;
+  const notes = [], records = [], depStates = new Map();
+  const get = async path => {
+    if (used >= maxRequests) throw Object.assign(new Error('work read budget reached'), { partial: true });
+    used++;
+    return api('GET', path);
+  };
+  const refs = await get('git/matching-refs/heads/claim/');
+  if (!Array.isArray(refs)) throw new Error('claim refs unreadable');
+  const refByIssue = new Map();
+  for (const r of refs) {
+    const m = /^refs\/heads\/claim\/([1-9]\d{0,6})$/.exec(r?.ref ?? '');
+    if (m && SHA.test(r?.object?.sha ?? '')) refByIssue.set(Number(m[1]), r.object.sha);
+  }
+  const issueRows = new Map();
+  let knownSlots = null;
+  try {
+    for (const label of ['state:in-progress', 'state:blocked', 'state:review']) {
+      let rows;
+      try { rows = await get(`issues?labels=${encodeURIComponent(label)}&state=open&per_page=100`); } catch (error) { if (error.partial) throw error; rows = null; }
+      if (!Array.isArray(rows)) { partial = true; notes.push(`issues labelled ${label} unreadable`); continue; }
+      if (rows.length >= 100) { partial = true; notes.push(`100 or more issues labelled ${label}; the first 100 read`); }
+      for (const row of rows) if (Number.isSafeInteger(row?.number) && !row.pull_request) issueRows.set(row.number, row);
+    }
+    try {
+      const slots = new Set();
+      for (let page = 1; page <= 3; page++) {
+        const rows = await get(`labels?per_page=100&page=${page}`);
+        if (!Array.isArray(rows)) throw new Error('labels unreadable');
+        for (const l of rows) { const m = /^slot:(.+)$/i.exec(l?.name ?? ''); const slot = m && canonicalSlot(m[1]); if (slot) slots.add(slot); }
+        if (rows.length < 100) { knownSlots = slots; break; }
+      }
+    } catch (error) { if (error.partial) throw error; }
+    const issues = [...new Set([...refByIssue.keys(), ...issueRows.keys()])].sort((a, b) => a - b);
+    if (issues.length > maxIssues) { partial = true; notes.push(`${issues.length} claimed issues; the first ${maxIssues} read`); }
+    for (const issue of issues.slice(0, maxIssues)) {
+      const rec = { issue };
+      try {
+        if (refByIssue.has(issue)) rec.ref = await walkClaim(issue, refByIssue.get(issue), sha => get(`git/commits/${sha}`));
+        rec.issueRow = issueRows.get(issue) ?? await get(`issues/${issue}`);
+        rec.comments = [];
+        for (let page = 1; page <= 3; page++) {
+          const rows = await get(`issues/${issue}/comments?per_page=100&page=${page}`);
+          if (!Array.isArray(rows)) throw new Error('comments unreadable');
+          rec.comments.push(...rows);
+          if (rows.length < 100) break;
+          if (page === 3) { partial = true; notes.push(`#${issue}: more than 300 comments; the first 300 read`); }
+        }
+        if (rec.issueRow?.state) depStates.set(issue, rec.issueRow.state);
+        records.push(rec);
+      } catch (error) {
+        if (error.partial) throw error;
+        records.push({ issue, unreadable: gone(error) ? 'issue or claim gone' : 'issue, claim or comments unreadable' });
+      }
+    }
+    const wanted = [...new Set(records.flatMap(r => dependenciesOf(r.issueRow?.body)))].filter(n => !depStates.has(n)).sort((a, b) => a - b);
+    for (const n of wanted.slice(0, maxDeps)) {
+      try { const row = await get(`issues/${n}`); if (['open', 'closed'].includes(row?.state)) depStates.set(n, row.state); }
+      catch (error) { if (error.partial) throw error; }
+    }
+  } catch (error) {
+    if (!error.partial) throw error;
+    partial = true; notes.push(error.message === 'work read budget reached' ? 'work read budget reached; later claims not read' : 'request cap reached; later claims not read');
+  }
+  return { records, knownSlots, depStates, partial, notes };
+}
 const writeSnapshot = (path, body) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, body); };
-export async function report({ api, dryRun = true, checkPair, maxPairs = 30, author = 'github-actions[bot]', log = console.log, blobAt, now = Date.now(), snapshotPath, repo = 'AxalNetwork/StudioOS', write = writeSnapshot } = {}) {
+export async function report({ api, dryRun = true, checkPair, maxPairs = 30, author = 'github-actions[bot]', log = console.log, blobAt, now = Date.now(), snapshotPath, repo = 'AxalNetwork/StudioOS', write = writeSnapshot, readClaims = true, isAncestor = () => null } = {}) {
   let prs = []; let partial = false; const notes = [];
   try {
     for (let page = 1; page <= 10; page++) {
@@ -138,10 +212,19 @@ export async function report({ api, dryRun = true, checkPair, maxPairs = 30, aut
     try { pair.verdict = await checkPair(pair.a, pair.b); } catch { pair.verdict = 'not checked'; }
     if (pair.verdict === 'not checked') partial = true;
   }
-  const body = summary(overlaps, { partial, notes }); log(body);
+  let work = null;
+  if (readClaims) {
+    try {
+      const raw = await readWork(api);
+      const derived = deriveIntents({ ...raw, prs, isAncestor, now, scanPartial: partial });
+      recommend(derived.intents, { prs, overlaps });
+      work = { status: 'read', partial: raw.partial, intents: derived.intents, refused: derived.refused, notes: [...raw.notes, ...derived.notes] };
+    } catch (error) { work = unreadableWork(error?.partial ? 'request cap reached before the claim refs were read' : 'claim refs unreadable'); }
+  }
+  const body = summary(overlaps, { partial, notes, sections: work ? [workInFlightText(work)] : [] }); log(body);
   if (snapshotPath) {
     try {
-      write(snapshotPath, JSON.stringify(snapshot({ generatedAt: new Date(now).toISOString(), repo, prs, overlaps, notes, partial }), null, 2) + '\n');
+      write(snapshotPath, JSON.stringify(snapshot({ generatedAt: new Date(now).toISOString(), repo, prs, overlaps, notes, partial, work }), null, 2) + '\n');
     } catch { log('Snapshot not written.'); }
   }
   let writes = 0;
@@ -154,7 +237,7 @@ export async function report({ api, dryRun = true, checkPair, maxPairs = 30, aut
       writes += await upsert(api, 5600, body, { author });
     } catch { partial = true; log('Partial publication: GitHub refused or capped a write.'); }
   }
-  return { overlaps, partial, writes, prs, notes };
+  return { overlaps, partial, writes, prs, notes, work };
 }
 export async function main(argv = process.argv.slice(2)) {
   if (argv.some(a => a !== '--dry-run' && !/^--snapshot=[\w./-]+\.json$/.test(a))) throw new Error('usage: pr-overlap.mjs [--dry-run] [--snapshot=<path>.json]');
@@ -182,6 +265,12 @@ export async function main(argv = process.argv.slice(2)) {
     const c = spawnSync('git', ['cat-file', '-e', `${sha}^{commit}`], { timeout: 30000 });
     return c.status === 0 ? 'absent' : null;
   };
-  return report({ api: makeApi(repo), dryRun: argv.includes('--dry-run'), checkPair, author, blobAt, snapshotPath, repo });
+  // D5580 part 2: whether a claim's base is on main, from the checked-out main history; null when not checkable.
+  const isAncestor = sha => {
+    if (!/^[a-f0-9]{40}$/.test(sha ?? '')) return null;
+    const r = spawnSync('git', ['merge-base', '--is-ancestor', sha, 'HEAD'], { timeout: 30000 });
+    return r.status === 0 ? true : r.status === 1 ? false : null;
+  };
+  return report({ api: makeApi(repo), dryRun: argv.includes('--dry-run'), checkPair, author, blobAt, snapshotPath, repo, isAncestor });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(() => { console.log('Partial overlap report: GitHub or git unavailable.'); process.exitCode = 0; });

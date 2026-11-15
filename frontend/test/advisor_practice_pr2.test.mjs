@@ -222,7 +222,10 @@ test('ONE engagement record feeds every instrument, and the second read feeds no
   const reads = calls.filter((n) => n.startsWith('list') || n.startsWith('get'));
   // #4715 (D4715): one more, named rather than allowed by count: a card's own history, read when its
   // History button is pressed. It feeds that card's history list and no instrument.
-  assert.deepEqual(reads.slice().sort(), ['listMyAdvisorBookings', 'listMyAdvisorEngagementEvents', 'listMyAdvisorEngagements']);
+  // #4831 (D4831): and one more, named: the deliverables, for the card's activity line, the sheet's Delivery
+  // tab and the #4684 warning. Tolerated like the bookings; the totals and the lanes never read it.
+  assert.deepEqual(reads.slice().sort(), ['listMyAdvisorBookings', 'listMyAdvisorDeliverables', 'listMyAdvisorEngagementEvents', 'listMyAdvisorEngagements']);
+  assert.match(P, /readEveryPage\(\(page\) => api\.listMyAdvisorDeliverables\(page\)\)\.catch\(\(\) => null\)/);
 
   // AND THE SECOND ONE IS TOLERATED, so an advisor whose bookings will not load
   // still has a contract board: no `.catch` there and one failing feed takes the
@@ -268,16 +271,13 @@ test('an exclusion nobody wrote reads as not recorded, never as an em-dash', () 
   assert.match(scopeBlock, /text-amber-700/);
 });
 
-test('the by-client chip reorders and does not narrow', () => {
-  // Every other chip in these tables filters. A chip called "By client" that
-  // dropped rows would be lying about what it did — and an empty result from a
-  // filter reads as an answer, which is the failure `zoneFilterBuilder`'s own
-  // docblock is about.
-  assert.match(P, /const byClient = filter === 'by_client';/);
-  assert.match(P, /localeCompare/);
-  const narrowing = P.slice(P.indexOf('const visible = useMemo'), P.indexOf('const totals ='));
-  assert.ok(!narrowing.includes('by_client'),
-    'by_client must not appear in the narrowing memo — it is a sort');
+test('the chips narrow, each carries its count, and By client left with the PR2 row', () => {
+  // #4831 (D4831): Practice v2 (PX-03) replaced PR2's row. `By client` was a sort, and the v2 board
+  // draws none; every chip now narrows through `chipRows` and is counted by `chipCounts`.
+  assert.ok(!P.includes('by_client'), 'the PR2 sort chip is gone');
+  assert.match(P, /case 'active': case 'renewal_due': case 'proposed': case 'ended': return chipRows\(ordered, filter\);/);
+  assert.match(P, /case 'all': default: return ordered;/);
+  assert.match(P, /advisorZoneFilters\('practice\/engagements', \{ value: filter, onChange: setFilter, counts \}\)/);
 });
 
 // ---------------------------------------------------------------------------
