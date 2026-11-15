@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // D6387: report exact GitHub attempts from trusted events and reconcile missed completions on a schedule.
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { reconcileWindow } from '../engineering-notifications/reconcile.mjs';
@@ -42,17 +42,69 @@ async function attemptJobs(api, run) {
 }
 
 // Only numeric IDs from dispatch are used. Conclusions, branch, repository and jobs come from the Actions API.
-export async function reportAttempt({ api, reporter, hints = workflowFailureHints }, id, attempt, knownRun) {
+export async function reportAttempt({ api, reporter, hints = workflowFailureHints, observe }, id, attempt, knownRun) {
   if (!positive(id) || !positive(attempt)) throw new Error('invalid_attempt_selector');
   const run = checkRun(knownRun ?? await api(base + '/' + id + '/attempts/' + attempt), id, attempt);
   if (run.status !== 'completed') {
     if (!knownRun) throw new Error('attempt_not_terminal');
     return { action: 'ignored' };
   }
-  if (!failure.has(run.conclusion)) return { action: 'ignored' };
+  if (!failure.has(run.conclusion)) {
+    observe?.(run, {}, []);
+    return { action: 'ignored' };
+  }
   const jobs = await attemptJobs(api, run);
   const evidence = await hints({ api, repository, run, jobs });
-  return reporter.report({ run, jobs, ...evidence });
+  const result = await reporter.report({ run, jobs, ...evidence });
+  observe?.(run, evidence, jobs);
+  return result;
+}
+
+export function workflowOutcomeSummary() {
+  const queue = new Map();
+  const releases = new Map();
+  const lines = () => {
+    const entries = [...queue.values()];
+    const invalidated = entries.filter(row => row.category === 'invalidated');
+    const producer = entries.filter(row => row.category === 'producer failure');
+    const ambiguous = entries.filter(row => row.category === 'other failure');
+    const rate = rows => entries.length ? (100 * rows.length / entries.length).toFixed(1) + '%' : 'n/a';
+    return [
+      '### Workflow attempt outcomes',
+      '',
+      'Denominator is distinct terminal CI merge-group attempts observed in this reporting pass.',
+      '',
+      '- Observed queue attempts: ' + entries.length,
+      '- Verified queue invalidation rate: ' + invalidated.length + '/' + entries.length + ' (' + rate(invalidated) + ')',
+      '- Build or test producer failure rate: ' + producer.length + '/' + entries.length + ' (' + rate(producer) + ')',
+      '- Other failed queue attempts: ' + ambiguous.length,
+      '- Verified release supersessions: ' + releases.size,
+      ...invalidated.map(row => '  - Queue ref lost: ' + row.link),
+      ...[...releases.values()].map(row => '  - Release superseded (' + row.stage + '): ' + row.link),
+    ];
+  };
+  return {
+    observe(run, evidence, jobs) {
+      const key = run.id + ':' + run.run_attempt;
+      const link = '[' + key + '](https://github.com/' + repository + '/actions/runs/' + run.id + '/attempts/' + run.run_attempt + ')';
+      if (run.path === '.github/workflows/ci.yml' && run.event === 'merge_group' &&
+          run.head_repository?.full_name === repository && /^gh-readonly-queue\/main\//.test(run.head_branch ?? '')) {
+        const producer = jobs.some(job => failure.has(job.conclusion) && (job.steps || []).some(step =>
+          failure.has(step.conclusion) && /^(?:Build the SPA|Run node scripts\/test-drift-parts\.mjs\s)/.test(step.name ?? '')));
+        const category = evidence.queueInvalidated ? 'invalidated'
+          : producer ? 'producer failure' : failure.has(run.conclusion) ? 'other failure' : 'other outcome';
+        queue.set(key, { category, link });
+      }
+      if (evidence.superseded) releases.set(key, { stage: evidence.supersededStage, link });
+    },
+    lines,
+  };
+}
+
+async function writeOutcomeSummary(outcomes, path) {
+  const report = outcomes.lines().join('\n') + '\n';
+  console.log(report);
+  if (path) await appendFile(path, report);
 }
 
 function validateCheckpoint(state, until) {
@@ -199,7 +251,8 @@ async function main(env) {
   const reporter = createWorkflowFailureReporter({ api, repository, catalog,
     ensureMainRedIssue: (run, labels) => ensureMainRedIssue({ api, repository, run, labels }),
   });
-  const options = { api, reporter };
+  const outcomes = workflowOutcomeSummary();
+  const options = { api, reporter, observe: outcomes.observe };
   const attempts = requestedAttempts(env);
   if (attempts.length) {
     let errors = 0;
@@ -212,6 +265,7 @@ async function main(env) {
         errors++;
       }
     }
+    await writeOutcomeSummary(outcomes, env.GITHUB_STEP_SUMMARY);
     if (errors) throw new Error('incomplete_dispatched_batch');
     return;
   }
@@ -220,6 +274,7 @@ async function main(env) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!state) console.warn('::warning::No saved workflow-failure checkpoint. Reconciling the most recent hour of created runs.');
   const next = await reconcileFailures(options, state, Date.now());
+  await writeOutcomeSummary(outcomes, env.GITHUB_STEP_SUMMARY);
   await writeFile(env.CURSOR_FILE + '.tmp', JSON.stringify(next), { mode: 0o600 });
   await rename(env.CURSOR_FILE + '.tmp', env.CURSOR_FILE);
   console.log('Reconciled through ' + new Date(next.until).toISOString() + ', tracking ' + next.tracked.filter(row => row.pending).length + ' unfinished runs.');
