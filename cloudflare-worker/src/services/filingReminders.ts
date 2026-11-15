@@ -6,8 +6,9 @@ import { notify } from './notify';
 import { founderTeam } from './reportingDuties';
 
 type DueFiling = { source: 'step' | 'obligation'; id: number; project_id: number; title: string; due_date: string };
+export const FILING_REMINDER_LEAD_DAYS = 14;
 
-export function filingReminderDates(dueDate: string | null, leadDays: number): string[] {
+export function filingReminderDates(dueDate: string | null, leadDays = FILING_REMINDER_LEAD_DAYS): string[] {
   return isIsoDay(dueDate) ? [remindOn(dueDate, leadDays), dueDate] : [];
 }
 
@@ -48,7 +49,7 @@ export async function filingReminderCandidates(env: Env, today: string, leadDays
 }
 
 /** The scheduler supplies the approved lead time. Claim each recipient before invoking notify. */
-export async function sendFilingReminders(env: Env, today: string, leadDays: number, deliver = notify): Promise<number> {
+export async function sendFilingReminders(env: Env, today: string, leadDays = FILING_REMINDER_LEAD_DAYS, deliver = notify): Promise<number> {
   let sent = 0;
   for (const filing of await filingReminderCandidates(env, today, leadDays)) {
     const identity = [filing.source, filing.id, filing.userId, filing.due_date, filing.reminderDate] as const;
@@ -74,4 +75,14 @@ export async function sendFilingReminders(env: Env, today: string, leadDays: num
     sent += 1;
   }
   return sent;
+}
+
+export async function filingReminderHistory(env: Env, projectId: number, source: DueFiling['source'], id: number) {
+  const { results } = await env.DB.prepare(
+    `SELECT due_date, reminder_date, MAX(sent_at) AS sent_at
+       FROM filing_reminder_deliveries
+      WHERE project_id = ? AND source = ? AND filing_id = ? AND sent_at IS NOT NULL
+      GROUP BY due_date, reminder_date ORDER BY sent_at`,
+  ).bind(projectId, source, id).all<{ due_date: string; reminder_date: string; sent_at: string }>();
+  return results ?? [];
 }
