@@ -6,6 +6,8 @@
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
  *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
+ *                                    D4536-p2: `published_evaluation`, each published skill's current version's
+ *                                    results from the published history only (`agent_skill_version_evals`)
  *                                    D5325: each row's `readiness` (SK-13, `services/agents/skillReadiness.ts`) and
  *                                    `run_cost: null` (Not recorded until #4536 records cost by executed version)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
@@ -84,14 +86,17 @@ import {
   type Evidence,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
-import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, startCampaign } from '../services/agents/skillEval';
+import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, goldenCasesFrom, startCampaign, type LiveCaseRow } from '../services/agents/skillEval';
 import { compareResults, type ResultRow } from '../services/agents/skillEvalCompare';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY_SLUGS } from '../services/agents/skillLibrary.generated';
 import { LIBRARY_UNREADABLE, loadSkillLibrary } from '../services/agents/skillLibraryAsset';
-import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+import {
+  catalogueCoverage, publishedEvaluation,
+  type AdoptionRow, type CampaignCoverageRow, type CoverageRow, type PublishedVersionRow, type VersionEvalRow,
+} from '../services/agents/skillCoverage';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
 import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
 
@@ -243,10 +248,77 @@ adminHqSkills.get('/', async (c) => {
       run_cost: null,
     };
   });
-  // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
-  const coverage = await libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null);
-  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null, coverage });
+  // D4536: the catalogue's coverage, in two more fixed reads whatever the page; D4536-p2: the published versions'
+  // evaluation, in three more.
+  const [coverage, published_evaluation] = await Promise.all([
+    libraryCoverage(env, tax.category, page == null ? draftsUnevaluated : null),
+    libraryPublishedEvaluation(env),
+  ]);
+  return c.json({ skills, pass_bar: PASS_BAR, next_page: page != null && rows.length === 10 ? page + 1 : null, coverage, published_evaluation });
 });
+
+// D4536-p2 (#5969): each published HQ skill at its current version, its live cases (to name the cases a run takes, as
+// `casesOf` does) and the models its release manifest names. One read for the whole catalogue.
+const PUBLISHED_VERSIONS_SQL = `SELECT s.uid, s.slug, s.current_version, s.required_models_json,
+    json_extract(v.evidence_json, '$.models.required') AS version_models_json,
+    (SELECT json_group_array(json_object('uid', k.uid, 'name', k.name, 'input_json', k.input_json, 'expect_json', k.expect_json))
+      FROM (SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL ORDER BY id) k) AS cases_json
+  FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+  WHERE s.scope = 'hq' AND s.status = 'published' AND s.current_version >= 1 ORDER BY s.id`;
+// The published history only: per version, case key and model, the latest row (current and previous version), and
+// on the current version the newest earlier row that ran (skillEval's regression baseline). Older rows never leave SQL.
+const PUBLISHED_EVALS_SQL = `WITH ranked AS (
+    SELECT e.id, s.uid AS skill_uid, e.version, e.case_key, e.model_id, e.result, e.run_at, e.evaluator_version, e.case_sha256,
+      CASE WHEN e.version = s.current_version THEN 1 ELSE 0 END AS on_current,
+      ROW_NUMBER() OVER (PARTITION BY e.skill_id, e.version, e.case_key, e.model_id ORDER BY e.run_at DESC, e.id DESC) AS rn
+    FROM agent_skill_version_evals e JOIN agent_skills s ON s.id = e.skill_id
+    WHERE s.scope = 'hq' AND s.status = 'published' AND s.current_version >= 1
+      AND e.version IN (s.current_version, s.current_version - 1)
+  ), prior AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY skill_uid, version, case_key, model_id ORDER BY run_at DESC, id DESC) AS pn
+    FROM ranked WHERE on_current = 1 AND rn > 1 AND result <> 'not_run'
+  )
+  SELECT 'latest' AS kind, skill_uid, version, case_key, model_id, result, run_at, evaluator_version, case_sha256 FROM ranked WHERE rn = 1
+  UNION ALL
+  SELECT 'prior' AS kind, skill_uid, version, case_key, model_id, result, run_at, evaluator_version, case_sha256 FROM prior WHERE pn = 1`;
+// #4668: the latest campaign's manifest, and how many published skills' current versions it has not finished.
+const LATEST_CAMPAIGN_SQL = `SELECT c.uid, c.status, c.started_at, c.finished_at, COUNT(m.skill_id) AS total,
+    COALESCE(SUM(CASE WHEN m.state = 'done' THEN 1 ELSE 0 END), 0) AS done,
+    COALESCE(SUM(CASE WHEN m.state = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
+    COALESCE(SUM(CASE WHEN m.state = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
+    (SELECT COUNT(*) FROM agent_skills p WHERE p.scope = 'hq' AND p.status = 'published' AND p.current_version >= 1 AND NOT EXISTS (
+      SELECT 1 FROM agent_skill_eval_campaign_skills d
+      WHERE d.campaign_id = c.id AND d.skill_id = p.id AND d.version = p.current_version AND d.state = 'done'
+    )) AS published_not_done
+  FROM agent_skill_eval_campaigns c LEFT JOIN agent_skill_eval_campaign_skills m ON m.campaign_id = c.id
+  WHERE c.id = (SELECT MAX(id) FROM agent_skill_eval_campaigns) GROUP BY c.id`;
+
+type PublishedSkillRead = { uid: string; slug: string | null; current_version: number; required_models_json: string | null; version_models_json: string | null; cases_json: string | null };
+
+/** D4536-p2: three reads, whatever the catalogue's size or the page. Unreadable history is said, never served as zeros. */
+async function libraryPublishedEvaluation(env: Env) {
+  const attempt = async <T>(f: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false }> => {
+    try { return { ok: true, value: await f() }; } catch { return { ok: false }; }
+  };
+  const [skillsRead, evalsRead, campaignRead] = await Promise.all([
+    attempt(() => env.DB.prepare(PUBLISHED_VERSIONS_SQL).all<PublishedSkillRead>()),
+    attempt(() => env.DB.prepare(PUBLISHED_EVALS_SQL).all<VersionEvalRow>()),
+    attempt(() => env.DB.prepare(LATEST_CAMPAIGN_SQL).first<CampaignCoverageRow>()),
+  ]);
+  if (!skillsRead.ok || !evalsRead.ok) return { available: false, reason: 'The published evaluation history could not be read.' } as const;
+  const versions: PublishedVersionRow[] = await Promise.all((skillsRead.value.results ?? []).map(async (s) => {
+    const manifest = parse<unknown>(s.version_models_json, null);
+    const fromManifest = Array.isArray(manifest) && manifest.length && manifest.every((m) => typeof m === 'string' && m)
+      ? [...new Set(manifest as string[])].sort() : null;
+    const models = fromManifest ? { required: fromManifest, source: 'version_evidence' as const } : requiredModels(env, s.required_models_json);
+    const cases = await goldenCasesFrom(s.slug, parse<LiveCaseRow[]>(s.cases_json, []));
+    return { skill_uid: s.uid, version: Number(s.current_version), case_keys: cases.map((k) => k.key), required_models: models.required, models_source: models.source };
+  }));
+  return publishedEvaluation(versions, (evalsRead.value.results ?? []).map((r) => ({ ...r, version: Number(r.version) })), {
+    currentEvaluatorVersion: EVALUATOR.version, now: new Date(),
+    campaign: campaignRead.ok ? campaignRead.value ?? null : 'unreadable',
+  });
+}
 
 /** D4536: every skill's scope, status and current published roles and tags, and HQ's pins, as two aggregate reads. */
 async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, draftsWithoutCurrentEvaluation: number | null) {

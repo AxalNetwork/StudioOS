@@ -6,6 +6,7 @@ import { reportError } from '../../../lib/log';
 import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { refusalLine } from './approvalsModel';
 import { assignItems, refusalToast } from './inboxModel';
+import { startApprovalRead } from './approvalReads';
 import { BOARD_LANE, CHANGED_LEAD, CHANGED_REST, isChanged, ownersOf, pickState, readLaneOwners, rowOwner } from './boardGrammar';
 
 /**
@@ -87,13 +88,14 @@ export function useLoad(fn, key, { enabled = true, what = 'approvals:board' } = 
   call.current = fn;
   useEffect(() => {
     if (!enabled) return undefined;
-    let live = true;
     setState({ status: 'loading', reply: null, error: null });
-    Promise.resolve().then(() => call.current()).then(
-      (reply) => { if (live) setState({ status: 'ready', reply, error: null }); },
-      (error) => { reportError(`${what}`, error); if (live) setState({ status: 'error', reply: null, error }); },
+    return startApprovalRead(call.current,
+      (reply) => setState({ status: 'ready', reply, error: null }),
+      (error) => {
+        reportError(`${what}`, error);
+        setState({ status: 'error', reply: null, error });
+      },
     );
-    return () => { live = false; };
   }, [key, tick, enabled, what]);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { ...state, reload };

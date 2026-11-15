@@ -7,7 +7,7 @@ import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, s
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
-import { Sources } from './CycleModulePage.jsx';
+import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
 
@@ -102,7 +102,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
   // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
@@ -246,6 +246,8 @@ export default function PhoneModulePage({
         {rStatus === 'unreadable' && <div className="px-[22px]"><Unreadable what={`The ${String(title || 'records').toLowerCase()}`} claim={recordsMessage || 'This is not a claim that there are none.'} onRetry={onRetryRecords || onRetry} /></div>}
         {rStatus === 'loading' && <div className="flex flex-col gap-2 px-[22px]" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-[56px] rounded bg-gray-100 dark:bg-gray-800" />)}</div>}
         {rStatus === 'ready' && <PhoneRows groups={[group]} />}
+        {/* D6124: the table's Export, under its rows as the desktop draws it beside Add. */}
+        {rStatus === 'ready' && rows.length > 0 && typeof onExport === 'function' && <div className="mt-2 flex flex-wrap items-center gap-2 px-[22px]"><ExportButton onExport={onExport} className={CONTROL} /></div>}
         {rStatus === 'ready' && rows.length === 0 && (
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}

@@ -85,7 +85,10 @@ test('the selected and home keys follow the shell state, so the strip shows only
   assert.equal(homePreviewKey(true), 'hq');
   assert.equal(homePreviewKey(false), 'admin');
   assert.match(SWITCHER, /const previewing = selected && home && selected\.key !== home\.key;/);
-  assert.match(SWITCHER, /\{!isImpersonating && previewing && \(/, 'the strip is not confined to a preview');
+  // D4817 part 8 (#5311, PF-08): on a Portfolio board previewed as Investor the page draws the one
+  // preview banner (read-only, the same way back), so the strip stands down there and only there.
+  assert.match(SWITCHER, /\{!isImpersonating && previewing && !pageBanner && \(/, 'the strip is not confined to a preview');
+  assert.match(SWITCHER, /const pageBanner = pageOwnsPreviewBanner\(pathname, selectedKey\);/, 'the strip stands down only where the page draws its own banner');
   assert.match(SWITCHER, /Back to \{home\.label\}/, 'the way back is not the viewer\'s own shell (Back to HQ for the holder)');
   assert.match(SWITCHER, /onClick=\{\(\) => choose\(home\.key\)\}/);
 });
