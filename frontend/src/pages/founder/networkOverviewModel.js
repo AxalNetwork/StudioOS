@@ -10,7 +10,9 @@
  * follow-ups only.
  */
 
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../lib/absence';
+
+export { NOT_RECORDED };
 export const UNREADABLE = 'Could not be read';
 
 export const READ_LOADING = { status: 'loading', data: null, readAt: null };
