@@ -17,8 +17,8 @@ export function entitlementFacts(entry: CatalogueEntry) {
       negotiated: entry.key === 'investor:institutional',
     } : null,
     research_search_export_limits: entry.family === 'investor' ? 'not_published_in_catalogue' : null,
-    human_sessions_and_third_party_fees: 'not_published_in_catalogue',
-    support_commitment: 'not_published_in_catalogue',
+    human_sessions_and_third_party_fees: 'separately_quoted',
+    support_commitment: 'no_sla_or_included_onboarding',
   };
 }
 

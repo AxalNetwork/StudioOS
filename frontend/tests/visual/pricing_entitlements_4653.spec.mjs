@@ -41,6 +41,17 @@ for (const width of [1440, 390]) {
       await expect(row('Active deal rooms (default)').getByRole('cell').nth(3)).toHaveText('Agreed with Axal VC');
       await expect(row('Colleague seats (default)').getByRole('cell').nth(3)).toHaveText(String(institutional.colleague_seats));
     }
+    for (const [name, policy] of [
+      ['Who pays for a licence?', /No additional Institutional colleague seats are offered for purchase/],
+      ['Does the plan include human services and other charges?', /require a separate agreed quote/],
+      ['What support and onboarding are included?', /no guaranteed response-time SLA or onboarding bundle/],
+      ['Which capabilities are available during alpha?', /planned or unverified capabilities are not guaranteed/],
+    ]) {
+      const disclosure = page.getByRole('button', { name, exact: true });
+      await disclosure.click();
+      await expect(page.locator('.axp-faq-item').filter({ has: disclosure })).toContainText(policy);
+      await disclosure.click();
+    }
     const question = page.getByRole('button', { name: 'What capacity differs between Investor plans?', exact: true });
     await question.click();
     await expect(question).toHaveAttribute('aria-expanded', 'true');

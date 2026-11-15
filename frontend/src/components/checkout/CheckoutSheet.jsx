@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 
 import { Link } from 'react-router-dom';
 import { Check, Lock, X } from 'lucide-react';
 import { checkoutApi } from '../../lib/api/billingCheckout';
-import { LICENCE_CHARGE, LICENCE_SCOPE, SERVICE_SCOPE, STAFF_SCOPE, planCapacityLine } from '../../lib/pricingEntitlements';
+import { LICENCE_CHARGE, LICENCE_SCOPE, SERVICE_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE, STAFF_SCOPE, planCapacityLine } from '../../lib/pricingEntitlements';
 import {
   FREE_FIRST, NOT_YET, POLL_MS, RENEWS, SECURE_LINE, SELLER_LINE, SLOW_MS, TITLE,
   cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, notSoldView, payTotal, planKeyOf, promoState, quoteView,
@@ -212,6 +212,8 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
       </div>
       {price ? <Totals view={view} read={read} fallback={price.subtotal} /> : null}
       <p className={`m-0 ${SUB}`} data-testid="checkout-service-scope">{SERVICE_SCOPE}</p>
+      <p className={`m-0 ${SUB}`} data-testid="checkout-support-scope">{SUPPORT_SCOPE}</p>
+      <p className={`m-0 ${SUB}`} data-testid="checkout-availability-scope">{AVAILABILITY_SCOPE}</p>
     </div>
   );
 }

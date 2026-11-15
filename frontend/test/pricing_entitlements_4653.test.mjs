@@ -10,7 +10,7 @@ import { publicEntitlementCatalogue } from '../../cloudflare-worker/src/services
 import { PLAN_CARDS } from '../src/lib/sitePricing.js';
 import { planCards } from '../src/lib/pricingModel.js';
 import { entitlementQuestions, investorCapacityLine, investorCapacityGroup, planCapacityLine, LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE,
-  USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, MATCHING_SCOPE, RESEARCH_SCOPE } from '../src/lib/pricingEntitlements.js';
+  USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, MATCHING_SCOPE, RESEARCH_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE } from '../src/lib/pricingEntitlements.js';
 import account from '../src/pages/docs/sections/account.js';
 import CheckoutSheet from '../src/components/checkout/CheckoutSheet.jsx';
 
@@ -31,6 +31,8 @@ test('the actual public plans read publishes quota defaults even without a sella
   assert.equal(plus.entitlements.investor_defaults.colleague_seats, INVESTOR_QUOTAS.plus.seats);
   assert.deepEqual(body.plans.find(row => row.licence_key === 'investor:plus').catalogue.entitlements, plus.entitlements);
   assert.equal(plus.entitlements.research_search_export_limits, 'not_published_in_catalogue');
+  assert.equal(plus.entitlements.human_sessions_and_third_party_fees, 'separately_quoted');
+  assert.equal(plus.entitlements.support_commitment, 'no_sla_or_included_onboarding');
   assert.equal(body.catalogue.find(row => row.key === 'founder:free').entitlements.charging_unit, null);
   assert.equal(body.catalogue.find(row => row.key === 'founder:growth').entitlements.investor_defaults, null);
   assert.equal(body.catalogue.find(row => row.key === 'investor:institutional').entitlements.investor_defaults.negotiated, true);
@@ -89,11 +91,11 @@ test('comparison and Checkout retain recorded zero, negotiated capacity and unkn
 
 test('Pricing and Help use the same licence, shared-usage and service explanations', () => {
   const questions = entitlementQuestions('investor', publicEntitlementCatalogue()).map(([, answer]) => answer).join('\n');
-  for (const term of [LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, MATCHING_SCOPE, RESEARCH_SCOPE]) {
+  for (const term of [LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, MATCHING_SCOPE, RESEARCH_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE]) {
     assert.ok(questions.includes(term), term);
   }
   const help = JSON.stringify(account);
-  for (const term of [LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, RESEARCH_SCOPE]) assert.ok(help.includes(term), term);
+  for (const term of [LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, RESEARCH_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE]) assert.ok(help.includes(term), term);
   assert.doesNotMatch(questions, /Standard research usage limits|Higher AI research usage limits|Inbound demand on tap/);
   assert.match(LICENCE_SCOPE, /without a paid plan stays on its free tier/);
   assert.match(LICENCE_SCOPE, /Institutional colleague seat uses the primary account/);
@@ -113,6 +115,8 @@ test('Checkout shows licence scope and service boundaries before a payment can s
   assert.ok(html.includes(LICENCE_CHARGE));
   assert.ok(html.includes('checkout-service-scope'));
   assert.ok(html.includes(SERVICE_SCOPE));
+  assert.ok(html.includes(SUPPORT_SCOPE));
+  assert.ok(html.includes(AVAILABILITY_SCOPE));
   assert.ok(html.includes('checkout-plan-capacity'));
   assert.ok(html.includes(planCapacityLine(plan.catalogue)));
 });

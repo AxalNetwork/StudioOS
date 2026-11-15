@@ -1,4 +1,4 @@
-import { LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, RESEARCH_SCOPE, MATCHING_SCOPE } from '../../../lib/pricingEntitlements.js';
+import { LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, RESEARCH_SCOPE, MATCHING_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE } from '../../../lib/pricingEntitlements.js';
 
 export default {
   id: 'account',
@@ -46,6 +46,8 @@ export default {
         `${LICENCE_CHARGE} ${LICENCE_SCOPE}`,
         ADDITIONAL_LICENCE,
         SERVICE_SCOPE,
+        SUPPORT_SCOPE,
+        AVAILABILITY_SCOPE,
         RESEARCH_SCOPE,
         MATCHING_SCOPE,
         'For Investor room, quarterly request and colleague-seat defaults, open /pricing?for=investor. The comparison and Checkout read the same catalogue defaults; they are not research search/export allowances.',
