@@ -8,18 +8,22 @@
  * the fund is answered 404, as the fund's other operations answer them. The letter's period must be a draft of
  * this fund; an issued period is refused, since nothing may be written into it.
  *
- * NOTHING IS WRITTEN. Each answers the draft and the sources its [n] numbers cite, and stores nothing: the letter's
+ * Drafting returns the draft and the sources its [n] numbers cite. Accepting a brief appends a note. The letter's
  * Accept inserts the paragraph into the page's unsaved editor, and the GP saves or issues it with the page's own
  * buttons. The run is metered through `run()` like every Eadwyn draft (the member's budget, usage row and rail
  * context), and refused before the model is called when there is nothing recorded to draft from.
  */
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { Env } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
 import { run as runAI } from '../services/aiRouter';
 import { requireFundGp } from '../services/fundGpAccess';
 import { readFundPage } from '../services/fundReports';
-import { BRIEF_INSTRUCTION, LETTER_INSTRUCTION, briefMaterial, letterMaterial } from '../services/fundDrafts';
+import {
+  BRIEF_INSTRUCTION, BRIEF_RECEIPT_MAX, LETTER_INSTRUCTION, briefMaterial, briefReceipt, latestFundBrief,
+  letterMaterial, readBriefReceipt, saveFundBrief,
+} from '../services/fundDrafts';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
@@ -35,6 +39,9 @@ export const FUND_DRAFT_SENTENCES = {
   letter_issued: 'This period is issued. Its letter cannot change; issue a correcting period instead.',
   not_found: 'Fund or reporting period not found.',
   unavailable: 'Eadwyn could not draft this just now. Nothing was written. Try again.',
+  invalid_brief: 'Draft a brief for this fund before accepting it.',
+  note_unreadable: 'The saved brief could not be read. Try again.',
+  accept_failed: 'Accept could not be confirmed. Try again with this draft.',
 } as const;
 
 const id = (v: string | undefined) => (typeof v === 'string' && /^[1-9][0-9]{0,15}$/.test(v) && Number.isSafeInteger(Number(v)) ? Number(v) : null);
@@ -93,7 +100,39 @@ r.post('/:id/drafts/brief', async (c) => {
   if (!material) return refuse(c, 409, { code: 'nothing_to_draft', message: FUND_DRAFT_SENTENCES.brief_nothing });
   const d = await draft(c, ctx.user.id, { instruction: BRIEF_INSTRUCTION, lines: material.lines, option: 'draft:fund-brief', page: 'Investor · Fund', record: `fund:${ctx.fund.id}` });
   if (d.response) return d.response;
-  return c.json({ draft: { kind: 'fund_brief', body: d.text, sources: material.sources, model: d.model, cost_usd: d.cost_usd, stored: false } });
+  try {
+    const receipt = await briefReceipt(c.env, Number(ctx.fund.id), Number(ctx.user.id), d.text, material.sources);
+    if (!receipt) return refuse(c, 503, { code: 'draft_unavailable', message: FUND_DRAFT_SENTENCES.unavailable });
+    return c.json({ draft: { kind: 'fund_brief', body: d.text, sources: material.sources, model: d.model, cost_usd: d.cost_usd, stored: false, receipt } });
+  } catch (error) {
+    return refuse(c, 503, { code: 'draft_unavailable', message: FUND_DRAFT_SENTENCES.unavailable, raw: error });
+  }
+});
+
+r.get('/:id/drafts/brief/latest', async (c) => {
+  const g = await gate(c);
+  if (g.refusal) return g.refusal;
+  try {
+    return c.json({ note: await latestFundBrief(c.env, g.ctx.fund.id) }, 200, { 'Cache-Control': 'private, no-store' });
+  } catch (error) {
+    return refuse(c, 503, { code: 'note_unreadable', message: FUND_DRAFT_SENTENCES.note_unreadable, raw: error });
+  }
+});
+
+r.post('/:id/drafts/brief/accept', bodyLimit({
+  maxSize: BRIEF_RECEIPT_MAX,
+  onError: (c) => refuse(c, 413, { code: 'payload_too_large', message: FUND_DRAFT_SENTENCES.invalid_brief }),
+}), async (c) => {
+  const g = await gate(c);
+  if (g.refusal) return g.refusal;
+  try {
+    const body = await c.req.json().catch(() => null);
+    const brief = await readBriefReceipt(c.env, body?.receipt, Number(g.ctx.fund.id), Number(g.ctx.user.id));
+    if (!brief) return refuse(c, 400, { code: 'invalid_brief', message: FUND_DRAFT_SENTENCES.invalid_brief });
+    return c.json({ note: await saveFundBrief(c.env, brief) }, 200, { 'Cache-Control': 'private, no-store' });
+  } catch (error) {
+    return refuse(c, 503, { code: 'accept_failed', message: FUND_DRAFT_SENTENCES.accept_failed, raw: error });
+  }
 });
 
 r.post('/:id/report-periods/:periodId/drafts/letter', async (c) => {

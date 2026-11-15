@@ -10,12 +10,13 @@ import funds from '../src/routes/funds.ts';
 import { BRIEF_INSTRUCTION, LETTER_INSTRUCTION, briefMaterial, letterMaterial } from '../src/services/fundDrafts.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
+const fundNotes = readFileSync(new URL('../sql/migrations/202611151259_6252_fund_notes.sql', import.meta.url), 'utf8');
 const tables = ['users', 'vc_funds', 'limited_partners', 'portfolio_positions', 'legal_documents', 'fund_report_periods', 'activity_logs', 'user_company_links', 'fund_distributions'];
 const schema = tables.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + `CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
      CREATE TABLE IF NOT EXISTS fund_capital_calls (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, fund_id INTEGER NOT NULL, call_number INTEGER NOT NULL,
        amount_cents INTEGER NOT NULL, purpose TEXT, due_date TEXT, residual_cents INTEGER NOT NULL DEFAULT 0, line_count INTEGER NOT NULL DEFAULT 1,
-       issued_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));`;
+       issued_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));` + fundNotes;
 const secret = 'd6252-local-fixture-signing-secret';
 
 async function fixture() {
@@ -40,13 +41,13 @@ async function fixture() {
   const env = { DB, JWT_SECRET: secret, ENVIRONMENT: 'development' } as any;
   const calls: any[] = [];
   FUND_DRAFT_DEPS.run = (async (_env: any, opts: any) => { calls.push(opts); return { ok: true, output: 'Fund A is investing [1].', usage: { model: 'test-model', est_cost_usd: 0.002 } }; }) as any;
-  async function request(path: string, user = 2, body: any = { page: '/funds/10' }) {
+  async function request(path: string, user = 2, body: any = { page: '/funds/10' }, method = 'POST') {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (user) headers.Authorization = `Bearer ${await new SignJWT({ user_id: user }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret))}`;
-    const response = await router.request(path, { method: 'POST', headers, body: JSON.stringify(body) }, env);
+    const response = await router.request(path, { method, headers, body: method === 'GET' ? undefined : JSON.stringify(body) }, env);
     return { status: response.status, body: await response.json() as any };
   }
-  const writes = () => db.prepare('SELECT (SELECT COUNT(*) FROM activity_logs) AS logs, (SELECT group_concat(notes) FROM fund_report_periods) AS notes').get();
+  const writes = () => db.prepare('SELECT (SELECT COUNT(*) FROM activity_logs) AS logs, (SELECT group_concat(notes) FROM fund_report_periods) AS notes, (SELECT COUNT(*) FROM fund_notes) AS briefs').get();
   return { db, env, calls, request, writes };
 }
 
@@ -87,6 +88,38 @@ test('D6252 the GP gate: an LP (below the tier, so 402 first), another GP and th
   assert.equal((await f.request('/10/drafts/brief', 3)).status, 404, 'an LP at the tier is still not the GP');
   assert.equal(f.calls.length, 0);
   assert.equal((await f.request('/10/drafts/brief', 1)).status, 200, 'an admin operates every fund');
+});
+
+test('Accept freezes the brief and sources, replay is safe, and all managers can read the newest note', async () => {
+  const f = await fixture();
+  const latest = '/10/drafts/brief/latest';
+  const accept = '/10/drafts/brief/accept';
+  try {
+    assert.deepEqual((await f.request(latest, 2, null, 'GET')).body, { note: null });
+    const { draft } = (await f.request('/10/drafts/brief')).body;
+    assert.equal(f.writes()?.briefs, 0);
+    f.db.exec("UPDATE vc_funds SET fund_admin='New administrator' WHERE id=10");
+    const fundBefore = f.db.prepare('SELECT * FROM vc_funds WHERE id=10').get();
+    assert.equal((await f.request(accept, 2, { receipt: { ...draft.receipt, payload: draft.receipt.payload + ' ' } })).status, 400);
+    assert.equal((await f.request(accept, 1, { receipt: draft.receipt })).status, 400, 'another manager cannot accept this draft');
+    assert.equal((await f.request('/20/drafts/brief/accept', 1, { receipt: (await f.request('/10/drafts/brief', 1)).body.draft.receipt })).status, 400);
+    assert.equal((await f.request(accept, 4, { receipt: draft.receipt })).status, 404);
+    assert.deepEqual((await f.request(latest, 3, null, 'GET')).status, 402);
+    assert.deepEqual((await f.request(latest, 4, null, 'GET')).status, 404);
+    const responses = await Promise.all([f.request(accept, 2, { receipt: draft.receipt }), f.request(accept, 2, { receipt: draft.receipt })]);
+    assert.ok(responses.every((r) => r.status === 200));
+    assert.equal(f.writes()?.briefs, 1);
+    const saved = (await f.request(latest, 1, null, 'GET')).body.note;
+    assert.equal(saved.body, draft.body);
+    assert.deepEqual(saved.sources, draft.sources);
+    assert.equal(f.db.prepare('SELECT author_user_id FROM fund_notes').get()?.author_user_id, 2);
+    assert.deepEqual(f.db.prepare('SELECT * FROM vc_funds WHERE id=10').get(), fundBefore);
+    const newer = (await f.request('/10/drafts/brief')).body.draft;
+    assert.equal((await f.request(accept, 2, { receipt: newer.receipt })).status, 200);
+    assert.equal(f.writes()?.briefs, 2);
+    assert.ok((await f.request(latest, 2, null, 'GET')).body.note.sources.some((s: any) => s.label.includes('New administrator')));
+    assert.equal(f.calls.length, 3, 'only drafting calls the model');
+  } finally { f.db.close(); }
 });
 
 test('D6252 a fund with nothing recorded beyond its name is refused before the model', async () => {
