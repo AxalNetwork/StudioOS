@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { Lightbox, Sheet } from '../../../ui';
 import { Field, Pill, Unrecorded, buttonClass, ghostButtonClass, inputClass } from '../expertise/kit';
 import {
-  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, receiptLine, recipientNote, sendConfirmation,
+  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, readyAction, readyMark, receiptLine, recipientNote, sendConfirmation,
   versionStatus, versionTag,
 } from './deliveryTrail';
 import { attachmentBody, sendPreview } from './practiceTools';
@@ -65,11 +65,66 @@ function RecipientNote({ item, version, testid }) {
 }
 
 /**
+ * #4833 part 2 (D4833-p2) — who marked a version ready to send, and when.
+ * A name that no longer reads back is "Not recorded", never left blank.
+ */
+function ReadyMark({ version, testid }) {
+  const mark = readyMark(version);
+  if (!mark) return null;
+  return (
+    <p data-testid={testid} className="text-[11px] leading-relaxed text-axal-violet-deep dark:text-violet-300">
+      Marked ready to send {mark.day || <Unrecorded>day unreadable</Unrecorded>}
+      {' by '}{mark.by || <Unrecorded>Not recorded</Unrecorded>}
+    </p>
+  );
+}
+
+/**
+ * #4833 part 2 (D4833-p2) — Mark ready / Clear Ready on the latest unsent
+ * version, with what it does said beside it before it is pressed. No pop-up:
+ * the mark is reversible and sends nothing, so it needs no confirmation, and
+ * its answer (or the Worker's refusal) is said here, where it was asked.
+ */
+function ReadyControl({ item, busy, onToggleReady }) {
+  const action = readyAction(item);
+  const [answer, setAnswer] = useState(null);
+  // The answer outlives the control: a 409 `already_sent` reloads the version
+  // as sent, which takes the control away, and the reason must still be said.
+  if (!onToggleReady || (!action && !answer)) return null;
+  const press = async () => {
+    setAnswer(null);
+    const res = await onToggleReady(action);
+    if (res) setAnswer(res);
+  };
+  return (
+    <div className="grid gap-1" data-testid={`ready-control-${item.id}`}>
+      {action && <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={ghostButtonClass} disabled={busy || !action.enabled}
+          onClick={press} data-testid={`ready-toggle-${item.id}`} data-kind={action.kind}>
+          {busy ? 'Saving…' : action.label}
+        </button>
+        <span className={`min-w-0 flex-1 text-[10.5px] leading-relaxed ${action.enabled ? 'text-axal-faint dark:text-gray-400' : 'text-amber-700 dark:text-amber-300'}`}
+          data-testid={`ready-consequence-${item.id}`}>
+          {action.consequence}
+        </span>
+      </div>}
+      {answer && (
+        <p role={answer.ok ? 'status' : 'alert'} data-testid={`ready-answer-${item.id}`}
+          className={`text-[12px] font-semibold ${answer.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+          {answer.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * PX-06 B — the deliverable's detail. `children` is where the page puts the
  * details editor when it is open.
  */
 export function DeliverableSheet({
-  item, engagementName = null, busy = '', onClose, onAddVersion, onSend, onEdit, editing = false, children = null,
+  item, engagementName = null, busy = '', onClose, onAddVersion, onSend, onEdit, onToggleReady = null,
+  editing = false, children = null,
 }) {
   const latest = item.latest_version;
   const versions = Array.isArray(item.versions) ? item.versions : (latest ? [latest] : []);
@@ -92,6 +147,7 @@ export function DeliverableSheet({
             </p>
             <DocumentPreview link={latest.link_url} />
             <span className="text-[11px] tabular-nums text-axal-faint dark:text-gray-400">{receiptLine(latest)}</span>
+            <ReadyMark version={latest} testid={`latest-ready-${item.id}`} />
             <RecipientNote item={item} version={latest} testid={`latest-recipient-note-${item.id}`} />
           </section>
         ) : (
@@ -123,6 +179,7 @@ export function DeliverableSheet({
             </span>
           )}
         </div>
+        <ReadyControl item={item} busy={busy === `r-${item.id}`} onToggleReady={onToggleReady} />
         {children}
 
         <section aria-labelledby={`history-${item.id}`}>
@@ -144,6 +201,7 @@ export function DeliverableSheet({
                     <p className="pl-16 text-[11.5px] text-axal-faint dark:text-gray-400">
                       {v.summary || <Unrecorded>No change note recorded</Unrecorded>}
                     </p>
+                    <div className="pl-16"><ReadyMark version={v} testid={`history-ready-${item.id}-v${v.version}`} /></div>
                     <div className="pl-16"><RecipientNote item={item} version={v} testid={`recipient-note-${item.id}-v${v.version}`} /></div>
                   </li>
                 ))}

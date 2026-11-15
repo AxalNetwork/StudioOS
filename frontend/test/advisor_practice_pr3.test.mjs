@@ -268,14 +268,14 @@ test('the four tiles and five chips are the artboard\'s, in its order', () => {
   assert.ok(chips, 'the artboard must declare its chip row');
   const labels = [...chips[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['All', 'Unopened', 'Opened', 'Draft', 'By client']);
-  // #4833 (D4833): THE CHIP ROW IS THE PRACTICE V2 CANVAS'S NOW, without its
-  // unrecorded `Ready`. `practice_delivery_4833.test.mjs` reads that canvas
+  // #4833 (D4833): THE CHIP ROW IS THE PRACTICE V2 CANVAS'S NOW, with its
+  // `Ready` since part 2 (D4833-p2, D5316). `practice_delivery_4833.test.mjs` reads that canvas
   // and `profile_zone_filters.test.mjs` compares the table with it; here the
   // PR3 row is only proved gone, so the two canvases cannot both be claimed.
   const row = FILTERS.slice(FILTERS.indexOf("'practice/delivery': ["));
   const declared = [...row.slice(0, row.indexOf('],')).matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]);
   assert.notDeepEqual(declared, labels, 'the PR3 chip row was replaced by the v2 canvas\'s');
-  assert.deepEqual(declared, ['Draft', 'Sent', 'Opened', 'Accepted', 'All']);
+  assert.deepEqual(declared, ['Draft', 'Ready', 'Sent', 'Opened', 'Accepted', 'All']);
 });
 
 test('the canvas\'s Draft chip is resolved to a state the store can answer', () => {
