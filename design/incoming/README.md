@@ -2727,6 +2727,6 @@ Forty-nine board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`Skill Library v2 Extension Compare Page.dc.html`**, **`Skill Library v2 Extension Compare · Boards.dc.html`**: Skill Library v2 Addendum · Extension Compare (#5963, D5963).
 - **`HQ Advisory Refunds Page.dc.html`**, **`HQ Advisory Refunds · Boards.dc.html`**: HQ Advisory Refunds (#5305, D5305).
 - **`Help Center v2 Page.dc.html`**, **`Help Center v2 · Boards.dc.html`**: Help Center v2 (#4957, D4957).
-- **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580).
+- **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580-p3).
 
 None is built yet. Ventures, investors, funds, people and amounts are sample content. Owner questions in the briefs are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
