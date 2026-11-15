@@ -21,7 +21,8 @@ import { Readings, readingForm } from '../src/pages/research/MarketDirectoryZone
 import { OWN_RECORD_LINE, attachesNowhere, readingFields } from '../src/pages/research/marketReadingRead.js';
 
 const h = React.createElement;
-const ago = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+// The page ages a reading against today, so run dates are counted back from it.
+const ago = (n) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10); // clock-ok: relative
 const reading = (o = {}) => ({
   uid: 'rm_4k2',
   metric: 'Design system build',
