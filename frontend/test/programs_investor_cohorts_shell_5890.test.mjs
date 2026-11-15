@@ -56,7 +56,7 @@ async function check(suffix, registryFails, verify) {
   document.body.appendChild(div);
   const root = createRoot(div);
   const nodes = (n) => [n, ...Array.from(n.childNodes || []).flatMap(nodes)];
-  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const props = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => nodes(div).find((n) => props(n)['data-testid'] === id);
   const text = (n) => n?.childNodes?.length ? Array.from(n.childNodes).map(text).join('') : n?.textContent || '';
   try {
@@ -66,6 +66,8 @@ async function check(suffix, registryFails, verify) {
         h(Route, { path: base, element: h(ProgramPage) }),
         h(Route, { path: `${base}/activity`, element: h(ProgramPage) }),
         investorRoutes({ guard })))))));
+    // Match the other mounted Programs fixtures: settle the lazy route before inspecting tabs.
+    await act(async () => {});
     verify(byId, text, props);
   } finally {
     await act(async () => root.unmount());

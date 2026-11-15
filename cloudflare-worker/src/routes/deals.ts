@@ -1,3 +1,4 @@
+import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
@@ -16,7 +17,7 @@ import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
 import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
-import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import { investorEvidence, RaiseEvidenceError, staffEvidence } from '../services/raiseEvidence';
 import {
   DEAL_MOVED, DEAL_STATUSES, DB_NOW, MOVE_COLUMNS, PASS_THROUGH_ROUTE, PASSED_STATUS, PIPELINE as DEAL_PIPELINE,
   createDeal, initialStatus, runMove, writeFields, type MoveColumn,
@@ -1042,14 +1043,30 @@ deals.get('/:id/documents', async (c) => {
 // D1265 (#3288): the deal page's Evidence block. An investor the deal admits (invited or committed)
 // reads the venture's shared evidence through `investorEvidence`, which applies the NDA and each
 // item's sharing; the founder reads the whole pack at /raise/evidence. Each open logs `open_evidence`.
+// D6167 (#6167): by D4631's audience. Staff (the admin, a partner-licence holder) read the same investor
+// projection through `staffEvidence`, logged as `open_evidence_staff`; the NDA exempts the admin and binds a
+// partner. Only the venture's own founder is pointed to Raise › Evidence (`investor_only`); anyone else the
+// read admits without the investor licence is told the evidence is not open to them (`evidence_closed`).
 deals.get('/:id/evidence', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user } = ctx;
+  const { sql, deal, user, audience } = ctx;
   await sql.end();
-  if (!holdsLicence(user, 'investor')) {
+  if (audience === 'staff') {
+    if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
+    try {
+      const nda = ndaExempt(user, deal.project_founder_id) || await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id);
+      return c.json(await staffEvidence(c.env, Number(deal.project_id), Number(user.id), nda));
+    } catch {
+      return c.json({ code: 'unreadable', detail: 'The evidence could not be read. Try again.' }, 503);
+    }
+  }
+  if (audience === 'owner') {
     return c.json({ code: 'investor_only', detail: 'This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.' }, 403);
+  }
+  if (!holdsLicence(user, 'investor')) {
+    return c.json({ code: 'evidence_closed', detail: 'The founder’s evidence is not open to you on this deal.' }, 403);
   }
   if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
   try {
@@ -1165,6 +1182,12 @@ deals.post('/:id/commitments/:uid/withdraw', async (c) => {
 });
 
 /**
+ * #6193 (D6193, DL14): every activity row carries a `kind`, which the page's Deal, Documents and Diligence
+ * chips filter on. A row this read does not class is `deal`.
+ */
+export const ACTIVITY_KINDS = ['deal', 'documents', 'diligence'] as const;
+
+/**
  * D1152 (#3057, DL14) — WHO IS NAMED IN THE ACTIVITY follows the commitments
  * read above: an admin and the deal's own founder read every investor by
  * name and amount. Anyone else reads their own rows as "You …", another
@@ -1182,14 +1205,14 @@ deals.get('/:id/activity', async (c) => {
   const named = namesInvestors(audience);
   const money = (amount: unknown) => (amount == null ? 'Not recorded' : `${Math.round(Number(amount)).toLocaleString()} ${deal.currency ?? 'USD'}`);
   const events: any[] = [];
-  events.push({ type: 'created', label: 'Deal created', at: deal.created_at, mine: false });
-  if (deal.stage_changed_at) events.push({ type: 'stage', label: `Moved to ${deal.status}`, at: deal.stage_changed_at, mine: false });
+  events.push({ type: 'created', kind: 'deal', label: 'Deal created', at: deal.created_at, mine: false });
+  if (deal.stage_changed_at) events.push({ type: 'stage', kind: 'deal', label: `Moved to ${deal.status}`, at: deal.stage_changed_at, mine: false });
   const commits = await sql`SELECT c.amount, c.created_at, c.investor_user_id, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   for (const r of commits as any[]) {
     const mine = Number(r.investor_user_id) === Number(user.id);
     const label = named ? `${r.investor_name || 'An investor'} committed ${money(r.amount)}`
       : mine ? `You committed ${money(r.amount)}` : 'An investor committed';
-    events.push({ type: 'commitment', label, at: r.created_at, mine });
+    events.push({ type: 'commitment', kind: 'deal', label, at: r.created_at, mine });
   }
   const invites = await sql`SELECT di.status, di.created_at, di.responded_at, di.investor_user_id, u.name AS investor_name FROM deal_invitations di LEFT JOIN users u ON u.id = di.investor_user_id WHERE di.deal_id = ${id} ORDER BY di.created_at DESC`;
   for (const r of invites as any[]) {
@@ -1198,7 +1221,40 @@ deals.get('/:id/activity', async (c) => {
     const label = named
       ? `${r.investor_name || 'An investor'} invited${r.status !== 'invited' ? ` — ${r.status}` : ''}`
       : r.status === 'interested' ? 'You said you’re interested' : r.status === 'passed' ? 'You passed' : 'You were invited';
-    events.push({ type: 'invitation', label, at: r.responded_at || r.created_at, mine });
+    events.push({ type: 'invitation', kind: 'deal', label, at: r.responded_at || r.created_at, mine });
+  }
+  // #6193 (D6193): DOCUMENTS, from the venture's document catalogue, behind the same NDA rule as
+  // GET /:id/documents (D4631). A reader without the NDA reads no document rows; the page says so.
+  // Each source below is read on its own: a failed one adds one row saying so, never silence.
+  if (deal.project_id) {
+    try {
+      if (ndaExempt(user, deal.project_founder_id) || await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id)) {
+        const docs = await sql`SELECT title, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC LIMIT 50`;
+        for (const r of docs as any[]) events.push({ type: 'document', kind: 'documents', label: `Document added: ${r.title || 'Untitled'}`, at: r.created_at, mine: false });
+      }
+    } catch {
+      events.push({ type: 'unreadable', kind: 'documents', label: 'Document activity could not be read', at: null, mine: false });
+    }
+    // #6193 (D6193): DILIGENCE, from the venture's diligence cases and their answered requests. A case is
+    // read by its owner and its reviewers (the stage read's rule) or a platform admin, never by another
+    // investor; nobody is named, and a request's own text is not shown.
+    try {
+      const admin = user.role === 'admin' ? 1 : 0;
+      const cases = await sql`SELECT d.id, d.created_at, d.owner_user_id FROM dd_cases d
+        WHERE d.subject_type = 'project' AND d.subject_id = ${deal.project_id} AND d.status != 'archived'
+          AND (${admin} = 1 OR d.owner_user_id = ${user.id} OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ${user.id}))`;
+      const ids = (cases as any[]).map((r) => Number(r.id));
+      const answers = ids.length
+        ? await sql`SELECT responded_at FROM dd_requests WHERE case_id IN (SELECT value FROM json_each(${JSON.stringify(ids)})) AND responded_at IS NOT NULL ORDER BY responded_at DESC LIMIT 50`
+        : [];
+      for (const r of cases as any[]) {
+        const mine = Number(r.owner_user_id) === Number(user.id);
+        events.push({ type: 'diligence_case', kind: 'diligence', label: mine ? 'You opened a diligence case' : 'Diligence case opened', at: r.created_at, mine });
+      }
+      for (const r of answers as any[]) events.push({ type: 'diligence_answer', kind: 'diligence', label: 'The founder answered a diligence request', at: r.responded_at, mine: false });
+    } catch {
+      events.push({ type: 'unreadable', kind: 'diligence', label: 'Diligence activity could not be read', at: null, mine: false });
+    }
   }
   await sql.end();
   events.sort((a, b) => (normTs(b.at) || 0) - (normTs(a.at) || 0));
@@ -1417,8 +1473,10 @@ async function closingChecklistForDeal(env: any, dealId: number): Promise<any> {
   ).bind(dealId).first();
   if (!list) return null;
   const items = await env.DB.prepare(
-    `SELECT i.uid, i.label, i.state, i.note, i.sort, i.done_at, i.done_by, u.name AS done_by_name
+    `SELECT i.uid, i.label, i.state, i.note, i.sort, i.done_at, i.done_by, u.name AS done_by_name,
+            i.owner_user_id, ou.name AS owner_name, i.owner_label, i.due_date
        FROM deal_closing_checklist_items i LEFT JOIN users u ON u.id = i.done_by
+       LEFT JOIN users ou ON ou.id = i.owner_user_id
       WHERE i.checklist_id = ? ORDER BY i.sort ASC, i.id ASC`
   ).bind(list.id).all();
   return { ...list, items: items.results || [] };
@@ -1486,6 +1544,49 @@ deals.post('/:id/closing-checklist/apply', async (c) => {
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
 });
 
+// D6156 (#6156) — a checklist item's owner and due date, and the history of
+// every write to it. Each field is absent (leave it), null (clear it) or a
+// value; rows written before migration 202611140938 read null, never a default.
+const CHECKLIST_STATES = ['pending', 'done', 'blocked', 'skipped'];
+type OwnerDue = { owner_user_id?: number | null; owner_label?: string | null; due_date?: string | null };
+
+function isCalendarDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
+/** The owner and due fields a checklist write carries, validated, or the refusal. */
+async function checklistOwnerDue(env: any, data: any): Promise<{ fields: OwnerDue } | { refuse: { error: string; message: string } }> {
+  const fields: OwnerDue = {};
+  if (data?.owner_user_id !== undefined) {
+    if (data.owner_user_id === null || data.owner_user_id === '') fields.owner_user_id = null;
+    else {
+      const n = Number(data.owner_user_id);
+      const found = Number.isInteger(n) && n > 0
+        ? await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(n).first()
+        : null;
+      if (!found) return { refuse: { error: 'checklist_owner_unknown', message: 'The owner is a platform user. Name a user who exists, or write the owner as a label.' } };
+      fields.owner_user_id = n;
+    }
+  }
+  if (data?.owner_label !== undefined) {
+    fields.owner_label = data.owner_label == null ? null : String(data.owner_label).trim().slice(0, 120) || null;
+  }
+  if (data?.due_date !== undefined) {
+    if (data.due_date === null || data.due_date === '') fields.due_date = null;
+    else if (typeof data.due_date === 'string' && isCalendarDate(data.due_date)) fields.due_date = data.due_date;
+    else return { refuse: { error: 'checklist_due_date_invalid', message: 'A due date is a calendar date, written YYYY-MM-DD.' } };
+  }
+  return { fields };
+}
+
+/** The note a checklist write carries: absent, cleared, or text. */
+function checklistNote(data: any): string | null | undefined {
+  if (data?.note === undefined) return undefined;
+  return data.note == null ? null : String(data.note).slice(0, 2000);
+}
+
 deals.post('/:id/closing-checklist/items', async (c) => {
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
@@ -1499,6 +1600,10 @@ deals.post('/:id/closing-checklist/items', async (c) => {
       message: 'A checklist item is the thing counsel checks — name it.',
     }, 400);
   }
+  const ownerDue = await checklistOwnerDue(c.env, data);
+  if ('refuse' in ownerDue) return c.json(ownerDue.refuse, 400);
+  const f = ownerDue.fields;
+  const note = checklistNote(data) ?? null;
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
@@ -1513,51 +1618,139 @@ deals.post('/:id/closing-checklist/items', async (c) => {
   const sort = await c.env.DB.prepare(
     'SELECT COALESCE(MAX(sort), 0) + 1 AS next FROM deal_closing_checklist_items WHERE checklist_id = ?'
   ).bind(list.id).first<{ next: number }>();
-  await c.env.DB.prepare(
-    'INSERT INTO deal_closing_checklist_items (uid, checklist_id, label, state, sort, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(newUid(), list.id, label, 'pending', sort?.next || 1, nowIso()).run();
+  const itemUid = newUid();
+  const at = nowIso();
+  // The item and its first event land in one batch, or neither does.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_items
+         (uid, checklist_id, label, state, note, sort, owner_user_id, owner_label, due_date, created_at)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+    ).bind(itemUid, list.id, label, note, sort?.next || 1, f.owner_user_id ?? null, f.owner_label ?? null, f.due_date ?? null, at),
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_events
+         (uid, item_id, actor_user_id, from_state, to_state, note, at, owner_user_id, owner_label, due_date)
+       SELECT ?, id, ?, NULL, 'pending', ?, ?, owner_user_id, owner_label, due_date
+         FROM deal_closing_checklist_items WHERE uid = ?`
+    ).bind(newUid(), user.id, note, at, itemUid),
+  ]);
   await sql.end();
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) }, 201);
 });
 
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
+  // D4631, kept by D6156: role partner plus canMoveRound sets state, owner, due date and note alike.
   const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
   const data = await c.req.json().catch(() => ({} as any));
-  const state = String(data?.state || '');
-  if (!['pending', 'done', 'blocked', 'skipped'].includes(state)) {
+  const stateGiven = data?.state !== undefined;
+  const state = stateGiven ? String(data.state ?? '') : '';
+  if (stateGiven && !CHECKLIST_STATES.includes(state)) {
     return c.json({
       error: 'checklist_item_state_invalid',
       message: 'A checklist item is pending, done, blocked or skipped.',
+    }, 400);
+  }
+  const ownerDue = await checklistOwnerDue(c.env, data);
+  if ('refuse' in ownerDue) return c.json(ownerDue.refuse, 400);
+  const f = ownerDue.fields;
+  const note = checklistNote(data);
+  if (!stateGiven && note === undefined && Object.keys(f).length === 0) {
+    return c.json({
+      error: 'checklist_item_change_required',
+      message: 'Send a state, an owner, a due date or a note to change.',
     }, 400);
   }
   const sql = getSQL(c.env);
   const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
   const item = await c.env.DB.prepare(
-    `SELECT i.id, i.checklist_id FROM deal_closing_checklist_items i
+    `SELECT i.id, i.checklist_id, i.state FROM deal_closing_checklist_items i
        JOIN deal_closing_checklists l ON l.id = i.checklist_id
       WHERE i.uid = ? AND l.deal_id = ?`
   ).bind(itemUid, id).first<any>();
   if (!item) { await sql.end(); return c.json({ error: 'Item not found' }, 404); }
-  const note = data?.note !== undefined ? (data.note != null ? String(data.note).slice(0, 2000) : null) : undefined;
-  const done = state === 'done';
-  // Two static statements rather than a conditional fragment: every value is
-  // bound, and the query text never carries an interpolation.
-  if (note !== undefined) {
-    await c.env.DB.prepare(
-      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ?, note = ? WHERE id = ?'
-    ).bind(state, done ? user.id : null, done ? nowIso() : null, note, item.id).run();
-  } else {
-    await c.env.DB.prepare(
-      'UPDATE deal_closing_checklist_items SET state = ?, done_by = ?, done_at = ? WHERE id = ?'
-    ).bind(state, done ? user.id : null, done ? nowIso() : null, item.id).run();
-  }
+  const fromState = String(item.state);
+  const toState = stateGiven ? state : fromState;
+  const done = toState === 'done';
+  const at = nowIso();
+  // One static statement: each optional field is a bound "was it sent" flag
+  // and its value, so the query text never carries an interpolation. The
+  // event is written first and both statements are guarded on the state read
+  // above, so a write that raced another lands neither row.
+  // The event carries the owner and due date as they stand AFTER this write:
+  // the sent value where one was sent, the stored one otherwise.
+  const has = (v: unknown) => (v === undefined ? 0 : 1);
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO deal_closing_checklist_events
+         (uid, item_id, actor_user_id, from_state, to_state, note, at, owner_user_id, owner_label, due_date)
+       SELECT ?, id, ?, ?, ?, ?, ?,
+              CASE WHEN ? = 1 THEN ? ELSE owner_user_id END,
+              CASE WHEN ? = 1 THEN ? ELSE owner_label END,
+              CASE WHEN ? = 1 THEN ? ELSE due_date END
+         FROM deal_closing_checklist_items WHERE id = ? AND state = ?`
+    ).bind(
+      newUid(), user.id, fromState, toState, note ?? null, at,
+      has(f.owner_user_id), f.owner_user_id ?? null,
+      has(f.owner_label), f.owner_label ?? null,
+      has(f.due_date), f.due_date ?? null,
+      item.id, fromState,
+    ),
+    c.env.DB.prepare(
+      `UPDATE deal_closing_checklist_items SET
+         state = ?,
+         done_by = CASE WHEN ? = 1 THEN ? ELSE done_by END,
+         done_at = CASE WHEN ? = 1 THEN ? ELSE done_at END,
+         note = CASE WHEN ? = 1 THEN ? ELSE note END,
+         owner_user_id = CASE WHEN ? = 1 THEN ? ELSE owner_user_id END,
+         owner_label = CASE WHEN ? = 1 THEN ? ELSE owner_label END,
+         due_date = CASE WHEN ? = 1 THEN ? ELSE due_date END
+       WHERE id = ? AND state = ?`
+    ).bind(
+      toState,
+      stateGiven ? 1 : 0, done ? user.id : null,
+      stateGiven ? 1 : 0, done ? at : null,
+      has(note), note ?? null,
+      has(f.owner_user_id), f.owner_user_id ?? null,
+      has(f.owner_label), f.owner_label ?? null,
+      has(f.due_date), f.due_date ?? null,
+      item.id, fromState,
+    ),
+  ]);
   await sql.end();
+  if (!(results as any[])[1]?.meta?.changes) {
+    return c.json({
+      error: 'checklist_item_changed',
+      message: 'The item changed while you were editing it. Refresh and try again.',
+    }, 409);
+  }
   return c.json({ checklist: await closingChecklistForDeal(c.env, id) });
+});
+
+// D6156 — the Audit tab: every write to this deal's checklist items, oldest
+// first, under the checklist's own read rule.
+deals.get('/:id/closing-checklist/events', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const ctx = await loadDealForRead(c, id);
+  if (ctx.error) return ctx.error;
+  const { sql } = ctx;
+  const rows = await c.env.DB.prepare(
+    `SELECT e.uid, i.uid AS item_uid, i.label AS item_label, e.actor_user_id, u.name AS actor_name,
+            e.from_state, e.to_state, e.note, e.at,
+            e.owner_user_id, ou.name AS owner_name, e.owner_label, e.due_date
+       FROM deal_closing_checklist_events e
+       JOIN deal_closing_checklist_items i ON i.id = e.item_id
+       JOIN deal_closing_checklists l ON l.id = i.checklist_id
+       LEFT JOIN users u ON u.id = e.actor_user_id
+       LEFT JOIN users ou ON ou.id = e.owner_user_id
+      WHERE l.deal_id = ? ORDER BY e.id ASC LIMIT 2000`
+  ).bind(id).all<any>();
+  await sql.end();
+  return c.json({ events: rows.results || [] });
 });
 
 // ---------------------------------------------------------------------------
@@ -1631,22 +1824,8 @@ deals.post('/:id/invitations/respond', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'No invitation found for this deal' }, 404); }
   await sql`UPDATE deal_invitations SET status = ${resp}, responded_at = datetime('now') WHERE deal_id = ${id} AND investor_user_id = ${user.id}`;
 
-  try {
-    const inviter = (rows[0] as any).invited_by_user_id;
-    if (inviter) {
-      const { notify } = await import('../services/notify');
-      await notify(c.env, {
-        userId: inviter,
-        type: 'deal_invitation_response',
-        title: `${user.name} is ${resp} in a deal`,
-        body: `${user.name} responded '${resp}' to your invitation.`,
-        link: `/deals/${id}`,
-        payload: { deal_id: id, response: resp },
-        channels: ['in_app'],
-        category: 'deals',
-      });
-    }
-  } catch (e) { console.warn('[deals] invitation response notify failed', e); }
+  // D6425: the same notice a Deal flow pass that answers the invitation sends.
+  await notifyInvitationAnswer(c.env, { inviterId: (rows[0] as any).invited_by_user_id, investorName: user.name, dealId: id, response: resp });
 
   await sql.end();
   return c.json({ ok: true, status: resp });

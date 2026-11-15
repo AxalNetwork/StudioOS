@@ -18,7 +18,8 @@ import { dismissHealthEvent } from '../services/vercel/health';
 import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
-import { buildPhone } from '../services/cycleFocus';
+import { buildPhone, part } from '../services/cycleFocus';
+import { buildAttention, buildSignals, readPlanPreview, unreadableAttention, unreadablePlan } from '../services/buildAttention';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { posthogKpiTexts } from '../services/posthog/build';
@@ -220,7 +221,8 @@ const FEATURE_FROM = `FROM mvp_features f
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ?`;
 const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
-            pg.title AS pain_theme, h.claim AS hypothesis`;
+            pg.title AS pain_theme, h.claim AS hypothesis,
+            EXISTS (SELECT 1 FROM roadmap_okrs ro WHERE ro.project_id = f.project_id AND ro.feature_id = f.id) AS on_roadmap`;
 /**
  * #4603 part 2 (D4603): a module list's keys as SQL. Each key is the exact
  * stored-value mapping its row's `keys` use; `orders` are its ordinal sorts
@@ -273,6 +275,9 @@ async function sqlPage(env: Env, cols: string, from: string, sql: PageSql, proje
   return { found, paged: { total, page: sql.page, page_size: PAGE_SIZE } };
 }
 
+/** #6030: the evidence kind, as `featureRow`'s `keys.evidence` reads it. */
+const EVIDENCE_SQL = "(CASE WHEN pg.title IS NOT NULL THEN 'pain' WHEN h.claim IS NOT NULL THEN 'hypothesis' ELSE 'none' END)";
+export const EVIDENCE_KINDS = [['pain', 'Pain linked'], ['hypothesis', 'Hypothesis linked'], ['none', 'No evidence link']] as const;
 const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
 /** Solution design's list keys, the mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`). */
 const FEATURE_LIST: ListSql = {
@@ -280,21 +285,38 @@ const FEATURE_LIST: ListSql = {
     // #5067: a hypothesis is a link too (the row already read it that way;
     // the filter and the chart had not).
     linked: "(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 'yes' ELSE 'no' END)",
+    // #6030 (BD7): the evidence filter names its link kind. A pain theme comes
+    // first, so a feature linked to both is Pain linked; Hypothesis linked is
+    // a feature whose only evidence is a hypothesis; No evidence link is neither.
+    evidence: EVIDENCE_SQL,
     impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
     effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
   },
   orders: FEATURE_ORDERS, defaultSort: 'impact', readOrder: 'f.sort_order, f.id',
 };
 
-function featureRow(f: any): RecordRow {
+function featureRow(f: any, projectId?: number): RecordRow {
   const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
-  // A feature with neither a pain theme nor a hypothesis links to nothing.
-  // #5067: keys.linked agrees with that — the chart's and the filter's linked
-  // count is a stored pain theme OR a stored hypothesis, never pain theme alone.
+  // #6030 (BD7): one evidence cell, linking each record the feature cites. A
+  // feature with neither a pain theme nor a hypothesis says so; its row offers
+  // Link evidence. #5067: keys.linked still reads a pain theme OR a hypothesis.
+  const pid = projectId ?? f.project_id;
+  const q = pid != null ? `?project=${pid}` : '';
+  const links: Array<{ text: string; href?: string }> = [];
+  if (f.pain_theme != null) links.push({ text: `Pain · ${f.pain_theme}`, ...(f.pain_group_id != null ? { href: `/validate/problem-discovery/${f.pain_group_id}${q}` } : {}) });
+  if (f.hypothesis != null) links.push({ text: `Hypothesis · ${f.hypothesis}`, ...(f.hypothesis_id != null ? { href: `/validate/experiments/${f.hypothesis_id}${q}` } : {}) });
+  const evidence: Cell = links.length
+    ? { text: links.map((l) => l.text).join(' · '), links }
+    : { text: 'No evidence link', tone: 'warn' };
+  const kind = f.pain_theme != null ? 'pain' : f.hypothesis != null ? 'hypothesis' : 'none';
   return record(f.id, {
-    feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
+    feature: f.title, evidence,
     impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
-  }, { linked: (f.pain_theme != null || f.hypothesis != null) ? 'yes' : 'no', impact, effort },
+  }, {
+    linked: (f.pain_theme != null || f.hypothesis != null) ? 'yes' : 'no', evidence: kind, impact, effort,
+    // #6030: the row's plan marks. Scope `core` is an MVP must-have; on_roadmap is an OKR naming it.
+    scope: f.scope ?? null, must_have: f.scope === 'core' ? 'yes' : 'no', on_roadmap: Number(f.on_roadmap) > 0 ? 'yes' : 'no',
+  },
   { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
     added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
 }
@@ -304,26 +326,30 @@ export async function solutionFeatureRows(env: Env, projectId: number): Promise<
   // A literal, so the schema guard reads its columns (the paged reads below are built and are not read by it).
   return rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
-            pg.title AS pain_theme, h.claim AS hypothesis
+            pg.title AS pain_theme, h.claim AS hypothesis,
+            EXISTS (SELECT 1 FROM roadmap_okrs ro WHERE ro.project_id = f.project_id AND ro.feature_id = f.id) AS on_roadmap
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
-  ).bind(projectId).all<any>()).map(featureRow);
+  ).bind(projectId).all<any>()).map((f) => featureRow(f, projectId));
 }
 
 async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2: the card's counts are aggregates; neither the overview nor the card reads a feature row.
   // #5067: linked agrees with the row and the list filter — a pain theme OR a hypothesis.
   const counts = await env.DB.prepare(
-    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN pg.title IS NOT NULL OR h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS linked,
+            COALESCE(SUM(CASE WHEN pg.title IS NOT NULL THEN 1 ELSE 0 END), 0) AS pain,
+            COALESCE(SUM(CASE WHEN pg.title IS NULL AND h.claim IS NOT NULL THEN 1 ELSE 0 END), 0) AS hypothesis
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
        LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
       WHERE f.project_id = ?`,
-  ).bind(p.id).first<{ n: number; linked: number }>();
+  ).bind(p.id).first<{ n: number; linked: number; pain: number; hypothesis: number }>();
   const featureCount = number(counts?.n), linked = number(counts?.linked);
   const unlinked = featureCount - linked;
+  const evidenceCount: Record<string, number> = { pain: number(counts?.pain), hypothesis: number(counts?.hypothesis), none: unlinked };
   // Risks are counted, never listed: the owner dropped the module page's `facts.risks` list (#4603 part 2, 2026-11-07).
   const bySeverity = new Map(rows(await env.DB.prepare(
     'SELECT severity, COUNT(*) AS n FROM venture_risks WHERE project_id = ? GROUP BY severity',
@@ -339,15 +365,16 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     const sql = opts.query ? listPageSql(FEATURE_LIST, opts.query) : null;
     if (sql) {
       const read = await sqlPage(env, FEATURE_COLS, FEATURE_FROM, sql, p.id, featureCount);
-      featureRows = read.found.map(featureRow);
+      featureRows = read.found.map((f) => featureRow(f, p.id));
       paged = read.paged;
     } else featureRows = await solutionFeatureRows(env, p.id);
   }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
   const any = featureCount || riskCount;
   return { card: card('solution-design', any ? 'ok' : 'empty', series, 'Now', any ? null : 'No features yet. Linked and unlinked features appear here.', any ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme or hypothesis` : null) : next(p, 'solution-design', 'Add feature', true)),
-    cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
-    list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
+    cols: [['feature', 'Feature'], ['evidence', 'Evidence link'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
+    // #6030 (BD7): the evidence filter, each option with its count from the aggregate above.
+    list: { filters: [{ key: 'evidence', label: 'Evidence link', options: EVIDENCE_KINDS.map(([value, label]) => ({ value, label, count: evidenceCount[value] })) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: [...FEATURE_ORDERS.impact], effort: [...FEATURE_ORDERS.effort] } },
     ...(paged ? { paged } : {}),
     facts: { features: featureCount, linked }, ...(opts.parts ? { parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } } : {}) };
@@ -514,19 +541,26 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > ''
                 AND delivery_status IS NOT 'Done' ORDER BY due_date, sort_order, id LIMIT 1),
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status IS NOT 'Done'
-                ORDER BY sort_order, id LIMIT 1)) AS missing
+                ORDER BY sort_order, id LIMIT 1)) AS missing,
+            (SELECT COUNT(*) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > '' AND due_date < ?
+                AND delivery_status IS NOT 'Done') AS overdue
        FROM (SELECT delivery_status AS status, hypothesis_id,
                     CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
                     COUNT(*) AS n
                FROM mvp_features WHERE project_id = ? AND is_must_have = 1
               GROUP BY delivery_status, hypothesis_id, month) g
        LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
-  ).bind(p.id, p.id, p.id, p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null }>());
+  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null; overdue: number | null }>());
   const total = groups.reduce((t, g) => t + number(g.n), 0);
   const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
   const blockedCount = groups.filter(g => g.status === 'Blocked').reduce((t, g) => t + number(g.n), 0);
   const nextMust = ((raw) => { try { const v = raw ? JSON.parse(raw) : null; return Array.isArray(v) && typeof v[0] === 'string' ? { title: v[0], blocked: v[1] === 'Blocked' } : null; } catch { return null; } })(groups[0]?.missing);
   const nextText = nextMust ? `${nextMust.blocked ? 'Unblock' : 'Complete'} ${nextMust.title}` : null;
+  // #6027 (D6027): overdue must-haves (not Done, a due date before today, UTC) for the overview's Needs attention
+  // and focus: a scalar subquery of this statement, so no statement is added. `due_date < today` equals comparing its
+  // first ten characters with today's ten; the range walks D6031's `idx_mvp_features_must_due`, so only must-haves
+  // dated before today are read.
+  const overdue = number(groups[0]?.overdue);
   // Done must-haves per month of completion.
   const history = new Map<string, number>();
   for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
@@ -578,7 +612,7 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     ...(paged ? { paged } : {}),
     // D6031: `blocked` is the summary line's third figure ("N of M must-haves complete · target <date> · N blocked");
     // `can_set_target` (the module page only) offers its Set control to a writer of `PATCH /project/target`.
-    facts: { done: doneCount, total, blocked: blockedCount, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
+    facts: { done: doneCount, total, blocked: blockedCount, overdue, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
     ...(parts ? { parts } : {}) };
 }
 
@@ -983,7 +1017,10 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
-      filings: combined.length, next_filing_due: nextFilingDue },
+      filings: combined.length, next_filing_due: nextFilingDue,
+      // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
+      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1123,6 +1160,10 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   // that says it needs reconnecting.
   const failedSince = failing && stateOf(failing) === 'failing' ? failedSystem?.last_error_at : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
+  // #6027 (D6027): the failing system or tool the card's Reconnect names, as a fact for Needs attention and focus.
+  const reconnectFact = failedSystem
+    ? { name: getDescriptor(failedSystem.provider_key)?.display_name ?? SYSTEM_LABEL[failing!], since: failureDate(failedSince), href: connectHref(failedSystem.provider_key, p.id), failing: stateOf(failing!) === 'failing' }
+    : failingTool ? { name: getDescriptor(failingTool.provider_key)!.display_name, since: failureDate(failingTool.last_error_at), href: connectHref(failingTool.provider_key, p.id), failing: true } : null;
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
@@ -1133,7 +1174,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
       orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
-      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
+      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null, reconnect: p.company_id == null ? null : reconnectFact },
     ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
@@ -1274,9 +1315,17 @@ app.get('/overview', async c => {
       : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
         : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   const cards = results.map(r => r.card);
-  // D692 (#1701): the phone's focus, meter and index, each failing on its own.
-  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards,
-    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected])) });
+  // D6027 (#6027): each figure names the module it comes from (BD1's status strip).
+  const figures = ([[must, 'prototype-mvp'], [mvp, 'prototype-mvp'], [shipped, 'product-roadmap'], [connected, 'operating-systems']] as const)
+    .map(([f, module]) => ({ ...f, module }));
+  // D6027: the Build Plan preview (the founders' and an admin's, as D1065 reads it), then the
+  // signals focus and Needs attention share. Each part fails on its own, as focus, meter and index do.
+  const plan = (await part('build plan', () => readPlanPreview(c.env, project.id, ownsVenture(project, viewer) || viewer.role === 'admin'))) ?? unreadablePlan(project.id);
+  const signals = await part('build signals', async () => buildSignals(project, results, plan));
+  const attention = (signals && await part('build attention', async () => buildAttention(project.id, canWrite(project, viewer), signals))) ?? unreadableAttention();
+  // D692 (#1701): the phone's focus, meter and index, each failing on its own. Desktop and phone read the same focus.
+  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures, cards, attention, plan,
+    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected], signals)) });
 });
 
 app.get('/modules/:slug', async c => {

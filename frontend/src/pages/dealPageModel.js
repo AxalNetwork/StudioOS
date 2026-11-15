@@ -12,6 +12,10 @@
  * investor's tabs without Notes, with the tabs only they keep: Invitations
  * (admin) and Transfers (admin, Operating Partner), as D630 placed them (DL17).
  *
+ * THE EIGHT TABS (D4815 part 4, #5903, board DE04). The views above are what
+ * a role holds; the page draws them under `DEAL_TABS`, eight tabs in the
+ * canvas's order, each view at its own address as before.
+ *
  * WHAT IS READ TODAY. Overview, Documents, Commitment, Activity, Invitations
  * and Transfers draw today's reads. Team, Market and Traction read D1151's
  * per-deal reads since D1154 (`deal/DealInsightTabs.jsx`). Notes reads part 2's store since D1152 (`deal/DealNotes.jsx`), and
@@ -59,13 +63,69 @@ export const SUB_PAGES = {
   closing: { label: 'Closing', path: 'closing', roles: ['investor', 'founder', 'admin', 'partner'] },
 };
 
-/** The tab an address names for this role: a word the role does not draw is Overview. */
+/**
+ * D4815 part 4 (#5903, board DE04): the eight tabs the page draws, in the
+ * canvas's order. Each holds one or more of the views above, so no view is
+ * removed: a tab with two or more views the role holds draws them as a
+ * second row of links (`dealViewsIn`). A view keeps its own address, so every
+ * address that opened a tab before D4815 still opens it, now under its tab;
+ * `data-room` and `investment` are the two new addresses, and each opens its
+ * tab's first view the role holds. The closing room (a sub-page) sits under
+ * Investment. The mapping is listed in `decisions/D4815-p4.md`.
+ */
+export const DEAL_TABS = [
+  { id: 'overview', label: 'Overview', path: '', views: ['overview'] },
+  { id: 'scorecard', label: 'Scorecard', path: 'scorecard', views: ['scorecard'] },
+  { id: 'evidence', label: 'Evidence', path: 'evidence', views: ['evidence', 'team', 'market', 'traction'] },
+  { id: 'diligence', label: 'Diligence', path: 'diligence', views: ['diligence'] },
+  { id: 'dataroom', label: 'Data room', path: 'data-room', views: ['documents'] },
+  { id: 'terms', label: 'Terms', path: 'terms', views: ['terms'] },
+  { id: 'investment', label: 'Investment', path: 'investment', views: ['commitment', 'invitations', 'transfers'], subPages: ['closing'] },
+  { id: 'activity', label: 'Activity', path: 'activity', views: ['notes', 'activity'] },
+];
+
+/** A view's label in its tab's second row, where the tab's own word would repeat. */
+const VIEW_LABEL = { evidence: 'Shared evidence' };
+
+/** The tabs a role draws: each of the eight that holds a view the role holds, with those views. */
+export function dealGroupsFor(role) {
+  const held = dealTabsFor(role);
+  return DEAL_TABS.map((g) => ({ ...g, views: g.views.filter((v) => held.includes(v)) })).filter((g) => g.views.length);
+}
+
+/** The tab a view (or the closing room) sits under. */
+export function groupOf(view) {
+  return DEAL_TABS.find((g) => g.views.includes(view) || g.subPages?.includes(view))?.id || 'overview';
+}
+
+/** The second row of a tab for this role: its views, when it holds two or more; none otherwise. */
+export function dealViewsIn(groupId, role) {
+  const g = dealGroupsFor(role).find((x) => x.id === groupId);
+  if (!g || g.views.length < 2) return [];
+  return g.views.map((v) => ({ id: v, label: VIEW_LABEL[v] || TAB_DEFS[v].label }));
+}
+
+/** A tab's address, the deal id digits only. */
+export function groupHref(dealId, groupId) {
+  const id = /^[1-9]\d*$/.test(String(dealId)) ? String(dealId) : '';
+  const path = DEAL_TABS.find((g) => g.id === groupId)?.path || '';
+  return `/deals/${id}${path ? `/${path}` : ''}`;
+}
+
+/**
+ * The view an address names for this role: a view's own word, else one of
+ * the eight tabs' words (its first view the role holds); a word the role does
+ * not draw is Overview.
+ */
 export function tabOf(param, role) {
   const word = String(param ?? '');
   const sub = Object.keys(SUB_PAGES).find((k) => SUB_PAGES[k].path === word);
   if (sub) return SUB_PAGES[sub].roles.includes(role) ? sub : 'overview';
+  const held = dealTabsFor(role);
   const id = Object.keys(TAB_DEFS).find((k) => TAB_DEFS[k].path === word);
-  return id && dealTabsFor(role).includes(id) ? id : 'overview';
+  if (id && held.includes(id)) return id;
+  const group = word ? DEAL_TABS.find((g) => g.path === word) : null;
+  return group?.views.find((v) => held.includes(v)) || 'overview';
 }
 
 /** A tab's address; the deal id is digits only. */

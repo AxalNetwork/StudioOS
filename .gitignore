@@ -148,3 +148,5 @@ agent-compute/worker-configuration.d.ts
 agent-compute/__pycache__/
 # D4594 part 3: hosted Stage A's throwaway Worker config, written and deleted by scripts/agent-stage-a.mjs.
 wrangler.s4594.*.toml
+# D4870 part 2: the gateway live check's throwaway Worker config, written and deleted by scripts/gateway-live-check.mjs.
+wrangler.s4870.*.toml

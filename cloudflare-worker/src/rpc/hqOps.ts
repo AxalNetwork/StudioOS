@@ -30,6 +30,7 @@
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
+import type { PromoIssuedOutcome, PromoIssuedReport } from '../services/promoIssuedReport';
 import { verifySecret } from './secret';
 import { allocateRevision, assembleLicenceRecord } from '../services/licencePush';
 import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../services/slaWindow';
@@ -683,6 +684,65 @@ export async function reportUsage(
     ).run();
   }
   return { ok: true, period: p, streams: rows.length };
+}
+
+/**
+ * D5949 (#5949): a branch reports what it has issued and spent against its
+ * promo ceiling. Authenticated like `reportUsage`, before any read or write.
+ *
+ * The report is always RECORDED (`licence_promo_issued_reports`, one row per
+ * licence, the newest by the branch's own time). It is WRITTEN into HQ's
+ * ceiling row only when HQ has a ceiling for that licence and period in that
+ * currency. Otherwise it is filed as `no_ceiling` or `currency_mismatch`: a
+ * figure is never written into another period's or another currency's row.
+ * An older report than the one already held changes nothing.
+ */
+export async function reportPromoIssued(
+  env: Env, callerCode: string, secret: string, report: PromoIssuedReport, now: Date = new Date(),
+): Promise<{ ok: true; outcome: PromoIssuedOutcome; written: boolean }> {
+  const who = await authenticateBranch(env, callerCode, secret);
+  const r = (report && typeof report === 'object' ? report : {}) as Record<string, unknown>;
+  const keys = ['period', 'currency', 'issued_cents', 'spent_cents', 'reported_at'];
+  const period = String(r.period ?? '');
+  const currency = String(r.currency ?? '');
+  const issued = r.issued_cents;
+  const spent = r.spent_cents;
+  const at = String(r.reported_at ?? '');
+  const atMs = Date.parse(at);
+  if (Object.keys(r).length !== keys.length || !keys.every((k) => Object.hasOwn(r, k))
+    || !PERIOD_RE.test(period) || !/^[A-Z]{3}$/.test(currency)
+    || typeof issued !== 'number' || !Number.isSafeInteger(issued) || issued < 0
+    || typeof spent !== 'number' || !Number.isSafeInteger(spent) || spent < 0 || spent > issued
+    || !Number.isFinite(atMs) || new Date(atMs).toISOString() !== at || atMs > now.getTime() + 300_000) {
+    throw new Error('rpc: promo issued report is not one HQ reads');
+  }
+  const ceiling = await env.DB.prepare(
+    'SELECT upper(currency) AS currency FROM licence_promo_ceilings WHERE licence_uid = ? AND period = ?',
+  ).bind(who.licence_uid, period).first<{ currency: string }>();
+  const outcome: PromoIssuedOutcome = !ceiling ? 'no_ceiling' : ceiling.currency !== currency ? 'currency_mismatch' : 'written';
+  const received = now.toISOString();
+  const statements = [
+    env.DB.prepare(
+      `INSERT INTO licence_promo_issued_reports
+         (licence_uid, branch_code, period, currency, issued_cents, spent_cents, reported_at, received_at, outcome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(licence_uid) DO UPDATE SET branch_code = excluded.branch_code, period = excluded.period,
+         currency = excluded.currency, issued_cents = excluded.issued_cents, spent_cents = excluded.spent_cents,
+         reported_at = excluded.reported_at, received_at = excluded.received_at, outcome = excluded.outcome
+       WHERE excluded.reported_at > licence_promo_issued_reports.reported_at`,
+    ).bind(who.licence_uid, who.code, period, currency, issued, spent, at, received, outcome),
+  ];
+  if (outcome === 'written') {
+    statements.push(env.DB.prepare(
+      `UPDATE licence_promo_ceilings
+          SET issued_cents = ?, spent_cents = ?, issued_currency = ?, issued_reported_at = ?, updated_at = ?
+        WHERE licence_uid = ? AND period = ? AND upper(currency) = ?
+          AND (issued_reported_at IS NULL OR issued_reported_at < ?)`,
+    ).bind(issued, spent, currency, at, received, who.licence_uid, period, currency, at));
+  }
+  const results = await env.DB.batch(statements);
+  const written = outcome === 'written' && Number(results[1]?.meta?.changes ?? 0) > 0;
+  return { ok: true, outcome, written };
 }
 
 /* ------------------------------------------------------------------ *

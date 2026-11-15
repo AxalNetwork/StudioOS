@@ -10,11 +10,13 @@ import { githubApi } from './claim.mjs';
 const repo = 'AxalNetwork/StudioOS';
 const orchestrationOwner = 'guillaumelauzier';
 const exampleEpisode = '00000000-0000-4000-8000-000000000000';
-const cases = new Map([
-  ['learning-discovery', { section: 'all-learning', name: 'Learning discovery list rendering',
-    file: 'frontend/src/pages/learning/LearningHome.jsx', test: 'frontend/test/learning_discovery_4648.test.mjs' }],
-  ['help-guide-placement', { section: 'all-help-center', name: 'Help Center guide placement',
-    file: 'frontend/src/pages/docs/guidePlacement.js', test: 'frontend/test/help_placement_d626.test.mjs' }],
+// The fixed cases: one source file and one regression test each. Also the
+// allowlist of scripts/lib/sectionDraftGate.mjs (D5985), which imports it.
+export const cases = new Map([
+  ['learning-discovery', Object.freeze({ section: 'all-learning', name: 'Learning discovery list rendering',
+    file: 'frontend/src/pages/learning/LearningHome.jsx', test: 'frontend/test/learning_discovery_4648.test.mjs' })],
+  ['help-guide-placement', Object.freeze({ section: 'all-help-center', name: 'Help Center guide placement',
+    file: 'frontend/src/pages/docs/guidePlacement.js', test: 'frontend/test/help_placement_d626.test.mjs' })],
 ]);
 
 export function prepare(input) {
