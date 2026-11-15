@@ -266,6 +266,109 @@ test('D6181: only an archived case on this company is no live case, and the tab 
   } finally { await v.close(); }
 });
 
+const DD_REQUESTS = [
+  { id: 1, title: 'Burn plan', state: 'requested', created_at: '2026-10-21 08:00:00' },
+  { id: 2, title: 'Bank statements', state: 'received', response_note: 'Attached the latest statements.',
+    response_url: 'https://example.com/statements', files: [{ id: 44, name: 'Statement.pdf' }] },
+  { id: 3, title: 'Insurance terms', state: 'reviewed', response_note: 'Policy renewed.', files: null },
+];
+
+function founderRequestHandler({
+  owner = INVESTOR.id, lead = owner, requests = DD_REQUESTS.map((r) => ({ ...r })),
+} = {}) {
+  const live = { ...LIVE_CASE, owner_user_id: owner, lead_user_id: lead };
+  let withdrawals = 0;
+  return handlerWith({
+    ...casesBySubject([live]),
+    'dd/cases/dd-live': (url, method, init) => {
+      const path = new URL(url, 'https://x.test').pathname;
+      if (method === 'GET') return response({ case: live, sections: [], reviewers: [], requests: structuredClone(requests) });
+      if (path.endsWith('/requests')) {
+        const recorded = { ...JSON.parse(init.body), id: 4, state: 'requested', created_at: new Date().toISOString() };
+        requests.unshift(recorded);
+        return response({ request: recorded }, 201);
+      }
+      if (path.endsWith('/remind')) return response({ error: 'A reminder was sent in the last day', code: 'reminded_recently' }, 429);
+      if (path.endsWith('/withdraw')) {
+        withdrawals += 1;
+        if (withdrawals === 1) return response({ error: 'This request is already withdrawn', code: 'withdrawn' }, 409);
+        requests.find((r) => r.id === 1).withdrawn_at = new Date().toISOString();
+        return response({ ok: true });
+      }
+      if (path.endsWith('/documents/download')) return response({ error: 'Storage not configured' }, 503);
+      return null;
+    },
+  });
+}
+
+test('D6179: the owner sends a founder request from a dialog and sees Waiting 0 days', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, founderRequestHandler({ requests: [] }));
+  try {
+    await v.click('deal-dd-request-new');
+    assert.match(v.textOf('deal-dd-new-request-dialog'), /The founder will see this/);
+    await v.click('deal-dd-new-request-dialog-confirm');
+    assert.match(v.textOf('deal-dd-new-request-dialog'), /Say what you need/);
+    assert.equal(v.posts(/\/requests$/).length, 0);
+    const due = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    await v.type('deal-dd-request-title', '  Current cash balance  ');
+    await v.type('deal-dd-request-details', 'Month-end balance and currency.');
+    await v.type('deal-dd-request-due', due);
+    await v.click('deal-dd-new-request-dialog-confirm');
+    assert.deepEqual(v.posts(/\/requests$/).map((r) => r.body), [{
+      title: 'Current cash balance', details: 'Month-end balance and currency.', due_date: due,
+    }]);
+    assert.equal(v.has('deal-dd-new-request-dialog'), false);
+    assert.match(v.textOf('deal-dd-requests'), /Current cash balanceWaiting 0 days/);
+  } finally { await v.close(); }
+});
+
+test('D6179: waiting requests require confirmation, keep refusals in their dialog and refresh after withdrawal', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, founderRequestHandler());
+  try {
+    await v.click('deal-dd-request-1-remind');
+    assert.equal(v.posts(/\/remind$/).length, 0);
+    await v.click('deal-dd-remind-dialog-confirm');
+    assert.match(v.textOf('deal-dd-remind-dialog'), /A reminder was sent in the last day/);
+    await v.click('deal-dd-remind-dialog-close');
+
+    await v.click('deal-dd-request-1-withdraw');
+    assert.equal(v.posts(/\/withdraw$/).length, 0);
+    await v.click('deal-dd-withdraw-dialog-confirm');
+    assert.match(v.textOf('deal-dd-withdraw-dialog'), /This request is already withdrawn/);
+    await v.type('deal-dd-request-withdraw-reason', '  Already provided.  ');
+    await v.click('deal-dd-withdraw-dialog-confirm');
+    assert.deepEqual(v.posts(/\/withdraw$/).at(-1).body, { reason: 'Already provided.' });
+    assert.match(v.textOf('deal-dd-requests'), /Burn planWithdrawn/);
+    assert.equal(v.has('deal-dd-request-1-remind'), false);
+    assert.equal(v.has('deal-dd-request-1-withdraw'), false);
+  } finally { await v.close(); }
+});
+
+test('D6179: the lead can open the answer and its files, while only the owner can remind or withdraw', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, founderRequestHandler({ owner: 24, lead: INVESTOR.id }));
+  try {
+    assert.ok(v.has('deal-dd-request-new'));
+    assert.equal(v.has('deal-dd-request-1-remind'), false);
+    assert.equal(v.has('deal-dd-request-1-withdraw'), false);
+    await v.click('deal-dd-request-2-answer');
+    assert.match(v.textOf('deal-dd-answer-dialog'), /Attached the latest statements\.[\s\S]*Statement\.pdf/);
+    await v.click('deal-dd-answer-file-44');
+    assert.deepEqual(v.posts(/\/documents\/download$/).map((r) => r.body), [{ kind: 'request_file', id: 44 }]);
+    assert.match(v.textOf('deal-dd-answer-dialog'), /Storage not configured/);
+    await v.click('deal-dd-answer-dialog-close');
+    await v.click('deal-dd-request-3-answer');
+    assert.match(v.textOf('deal-dd-answer-dialog'), /Policy renewed\.[\s\S]*Unreadable/);
+  } finally { await v.close(); }
+});
+
+test('D6179: a section reviewer sees no request controls or private answer, even if a case payload includes it', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, founderRequestHandler({ owner: 24, lead: 25 }));
+  try {
+    for (const id of ['new', '1-remind', '1-withdraw', '2-answer']) assert.equal(v.has(`deal-dd-request-${id}`), false);
+    assert.doesNotMatch(v.textOf('deal-dd-requests'), /Burn plan|Bank statements|waiting/);
+  } finally { await v.close(); }
+});
+
 test('Terms: proposed terms with their source, the slots, and How you invest says no preference is recorded', async () => {
   const v = await mounted('/deals/4/terms', INVESTOR);
   try {

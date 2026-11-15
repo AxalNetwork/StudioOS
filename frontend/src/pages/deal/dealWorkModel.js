@@ -92,7 +92,15 @@ export function requestRows(detail, nowMs = Date.now()) {
       return { id: r.id, title: r.title, tone: 'wait', state: `${days == null ? 'Waiting · asked on a date not recorded' : `Waiting ${days} day${days === 1 ? '' : 's'}`}${due}` };
     }
     const answered = dayOf(r.responded_at);
-    return { id: r.id, title: r.title, tone: 'done', state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}` };
+    return {
+      id: r.id, title: r.title, tone: 'done',
+      state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}`,
+      answer: {
+        note: r.response_note || null,
+        url: r.response_url || null,
+        files: Array.isArray(r.files) ? r.files : null,
+      },
+    };
   });
 }
 
