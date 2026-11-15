@@ -7,7 +7,19 @@ export const PRICES = Object.freeze({
   ephemeral: { usdPerMinute: 0.008, url: 'https://www.warpbuild.com/docs/ci/cloud-runners', asOf: '2026-11-12' },
 });
 
-export function benchmarkLanes({ spendingCapVerified, github8Ready, ephemeralReady } = {}) {
+export const codebuildRunnerLabel = (runId, attempt) => `codebuild-studioos-queue-suite-${runId}-${attempt}`;
+
+export function benchmarkLanes({ spendingCapVerified, github8Ready, ephemeralReady, codebuildReady,
+  repository, event, ref, runId, attempt } = {}) {
+  // Use an isolated trial so the common planner/gate span belongs to one lane.
+  if (/^refs\/heads\/bench\/runners-codebuild-[123]$/.test(ref || '')) {
+    if (repository !== 'AxalNetwork/StudioOS' || event !== 'push' ||
+        spendingCapVerified !== 'true' || codebuildReady !== 'true' ||
+        !/^[1-9]\d*$/.test(runId) || !/^[1-9]\d*$/.test(attempt)) {
+      throw new Error('CodeBuild trial requires a StudioOS benchmark push, verified spending cap, lane readiness and a run/attempt ID');
+    }
+    return [{ lane: 'codebuild', runner: codebuildRunnerLabel(runId, attempt) }];
+  }
   const lanes = [{ lane: 'free', runner: 'ubuntu-latest' }];
   if (spendingCapVerified !== 'true') return lanes;
   if (github8Ready === 'true') lanes.push({ lane: 'github8', runner: 'studioos-bench-linux-8' });
@@ -18,6 +30,24 @@ const duration = (a, b) => {
   const value = (Date.parse(b) - Date.parse(a)) / 60_000;
   return Number.isFinite(value) && value >= 0 ? value : null;
 };
+
+/** A run may predate the final benchmark gate. Preserve available stage evidence. */
+export function benchmarkStages(jobs) {
+  function stage(name) {
+    const matches = jobs.filter(job => job.name === name);
+    if (matches.length !== 1) return null;
+    const [job] = matches;
+    return {
+      createdAt: job.created_at || null, startedAt: job.started_at || null, completedAt: job.completed_at || null,
+      conclusion: job.conclusion || null, waitMin: duration(job.created_at, job.started_at),
+      runtimeMin: duration(job.started_at, job.completed_at),
+    };
+  }
+  const planner = stage('plan'), gate = stage('benchmark gate');
+  const stagesTimed = planner?.waitMin != null && planner.runtimeMin != null &&
+    gate?.waitMin != null && gate.runtimeMin != null && duration(planner.completedAt, gate.startedAt) !== null;
+  return { planner, gate, plannerToGateMin: stagesTimed ? duration(planner.createdAt, gate.completedAt) : null };
+}
 
 /** Jobs are flat Actions job records with an explicit lane. Missing evidence stays null. */
 export function summarise(jobs, prices = PRICES) {
@@ -30,8 +60,10 @@ export function summarise(jobs, prices = PRICES) {
   return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([lane, rows]) => {
     const timed = rows.filter(j => j.conclusion !== 'skipped' && duration(j.created_at, j.started_at) !== null && duration(j.started_at, j.completed_at) !== null);
     const complete = timed.length === rows.length;
-    const billedMinutes = complete ? timed.reduce((n, j) => n + Math.ceil(duration(j.started_at, j.completed_at)), 0) : null;
-    const price = prices[lane];
+    // AWS meters CodeBuild builds independently of GitHub's job timestamps.
+    const billedMinutes = complete && lane !== 'codebuild'
+      ? timed.reduce((n, j) => n + Math.ceil(duration(j.started_at, j.completed_at)), 0) : null;
+    const price = lane === 'codebuild' ? null : prices[lane];
     if (price && (!Number.isFinite(price.usdPerMinute) || price.usdPerMinute < 0 || !/^https:\/\//.test(price.url || '') || !/^\d{4}-\d{2}-\d{2}$/.test(price.asOf || ''))) throw new Error('invalid price provenance');
     return {
       lane, jobs: rows.length, timedJobs: timed.length, complete,
