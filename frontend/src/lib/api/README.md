@@ -133,7 +133,9 @@ D699: `companySheet.js` records the signed-in member's last opened company cycle
 D659 (#1472): `cycleValidate.js` calls `/api/cycles/validate`: the overview,
 one module's card and records, the Lab market page's three stored checks, and
 the manual writes for migration 440's records. Every call names the project
-with `?project=`.
+with `?project=`. D6020 (#6020) removed the six writes no page called
+(`addSegment`, `setInterviewSegment`, `addDemandSignal`, `setDemandSignalStatus`,
+`addCompetitorMention`, `setHypothesisPlan`): the record actions and forms make them.
 
 D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
 and `/modules/:slug`). `cycleWrites.js` also exposes D1144’s venture-scoped `raise.pmfHistory` read and passes the explicit `pmf: true` Re-score flag. It is the write table behind their Add and Edit forms,
@@ -146,7 +148,7 @@ only a known cycle and a module slug's charset.
 Its `validate` group (D695, #1656 PR 2b) holds Validate's five Adds and their
 PATCHes, `/api/cycles/validate/{themes,segments,competitors,demand-signals,hypotheses}`
 with `?project=N`. The forms write through it, not through `cycleValidate.js`,
-whose segment, demand-signal and competitor-mention adds now have no caller.
+whose segment, demand-signal and competitor-mention adds D6020 removed.
 Its `build` group (PR 3b) adds Build's canvas Adds and Edits over #1792's routes
 (`features`, `must-haves`, `roadmap`, `founders`, each with `?project=N`;
 `founder` and `founderUpdate` pass `inlinePaywall`, so the dialog shows the
