@@ -19,6 +19,8 @@ throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.
 
+`adminSecurity/` (D4708, #4708) builds HQ › Security's two reads (`/overview` and the `/governance` ledger) for `../routes/admin_security.ts`, and is the Worker's door to the desk's shared contract (`frontend/src/lib/securityContract.js`). See its README.
+
 `eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
 
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
