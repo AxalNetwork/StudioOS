@@ -12,7 +12,7 @@ import {
   runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
-  AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditSplitDialog,
+  AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditMilestoneDialog, EditSplitDialog,
   FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, SectionSheet, Skeleton, Source, StackBar, WhereUsedDialog,
   useRead, usePlan,
 } from './UseOfFundsParts';
@@ -407,6 +407,7 @@ function Milestones({ projectId, search, api }) {
   const [adding, setAdding] = useState(false);
   const [addingHire, setAddingHire] = useState(false);
   const [editingHire, setEditingHire] = useState(null);
+  const [editingMs, setEditingMs] = useState(null);
   const sheet = useSectionSheet();
   const [notice, setNotice] = useState('');
   return (
@@ -453,7 +454,7 @@ function Milestones({ projectId, search, api }) {
               <Card title="Milestones" testId="uof-ms-table">
                 {ms.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-ms-none">{(base?.milestones || []).length ? 'No milestone matches.' : 'No milestones yet.'}</p> : (
                   <div className="overflow-x-auto"><table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
-                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source'].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source', ...(plan.viewer?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                     <tbody>{ms.map((m) => {
                       const st = states.get(String(m.id)) || (m.cost_cents == null ? 'Not costed' : NOT_RECORDED);
                       return (
@@ -464,6 +465,7 @@ function Milestones({ projectId, search, api }) {
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{m.cost_cents == null ? <Pill tone="dashed">○ Not costed</Pill> : money(m.cost_cents, base.currency)}</td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Pill tone={st === 'Funded' ? 'green' : st === 'At risk' ? 'amber' : 'dashed'}>{st === 'Funded' ? '✓ Funded' : st === 'At risk' ? '! At risk' : st === 'Not costed' ? '○ Not costed' : st}</Pill></td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Source source={m.source} /></td>
+                          {plan.viewer?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingMs(m)} aria-label={`Edit ${m.label}`} data-testid="uof-ms-edit-open">Edit</button></td> : null}
                         </tr>
                       );
                     })}</tbody>
@@ -490,6 +492,7 @@ function Milestones({ projectId, search, api }) {
               </Card>
             </div>
             {editingHire ? <EditHireDialog key={editingHire.id} projectId={projectId} hire={editingHire} api={api} onClose={() => setEditingHire(null)} onSaved={(t) => { setEditingHire(null); setNotice(t); read.reload(); }} /> : null}
+            {editingMs ? <EditMilestoneDialog key={editingMs.id} projectId={projectId} milestone={editingMs} revision={base?.revision} currency={base?.currency} api={api} onClose={() => setEditingMs(null)} onSaved={(t) => { setEditingMs(null); setNotice(t); read.reload(); }} /> : null}
             {adding ? <AddMilestoneDialog projectId={projectId} revision={base?.revision} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
             {addingHire ? <AddHireDialog projectId={projectId} section={section || 'product'} currency={base?.currency} api={api} onClose={() => setAddingHire(false)} onSaved={(t) => { setAddingHire(false); setNotice(t); read.reload(); }} /> : null}
             <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={(t) => { setNotice(t); read.reload(); }} />
