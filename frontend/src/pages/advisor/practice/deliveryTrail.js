@@ -195,26 +195,30 @@ export function reviewCoverage(sessions, reviews) {
  *
  * `draft` is a version with no `sent_at`: recorded, never sent. `sent`,
  * `opened` and `accepted` are the recipient's receipts (`opened_at`,
- * `signed_off_at`), which only the client's routes write (D4684). There is no
- * `ready`: the store records no such state (D4874), so none is offered.
+ * `signed_off_at`), which only the client's routes write (D4684). `ready` is
+ * an unsent version the advisor marked ready to send (`ready_at`, #5316,
+ * D5316): still a draft to the client, who sees nothing until it is sent, and
+ * the send clears the mark (#4833 part 2).
  */
 export const VERSION_STATUS_LABEL = {
   draft: 'Draft',
+  ready: 'Ready',
   sent: 'Sent',
   opened: 'Opened',
   accepted: 'Accepted',
 };
 export const VERSION_STATUS_TONE = {
   draft: 'warn',
+  ready: 'info',
   sent: 'neutral',
   opened: 'ok',
   accepted: 'ok',
 };
 
-/** One version's status: draft, sent, opened or accepted. Null for no version. */
+/** One version's status: draft, ready, sent, opened or accepted. Null for no version. */
 export function versionStatus(version) {
   if (!version) return null;
-  if (!version.sent_at) return 'draft';
+  if (!version.sent_at) return version.ready_at ? 'ready' : 'draft';
   if (version.signed_off_at) return 'accepted';
   if (version.opened_at) return 'opened';
   return 'sent';
@@ -233,17 +237,107 @@ export function cardStatus(item) {
   return versionStatus(item?.latest_version) || 'draft';
 }
 
-/** The filter keys, in the canvas's order. `Ready` is left out (D4874). */
-export const DELIVERY_FILTERS = ['draft', 'sent', 'opened', 'accepted', 'all'];
+/** The filter keys, in the canvas's order: Draft · Ready · Sent · Opened · Accepted · All. */
+export const DELIVERY_FILTERS = ['draft', 'ready', 'sent', 'opened', 'accepted', 'all'];
 
-/** How many cards each filter would show, for the chip counts. */
-export function statusCounts(items) {
-  const counts = { draft: 0, sent: 0, opened: 0, accepted: 0, all: 0 };
+/**
+ * Whether a work product is waiting to be sent with a version marked ready:
+ * the Worker's own `ready_version` (the highest UNSENT version marked ready,
+ * D5316), which is what `totals.ready` counts. The Ready chip narrows on this,
+ * so the chip's count and the cards under it are the same set.
+ *
+ * It is beside the card's status, not folded into it, as it is in the Worker:
+ * the mark is set on the latest version from this page, so a Ready card is a
+ * Ready pill, but a mark left on an older unsent version (set through the API
+ * before a newer draft was added) keeps the card a Draft and still lists it
+ * under Ready, where it says which version is marked.
+ */
+export function isReadyItem(item) {
+  return item?.ready_version != null;
+}
+
+/**
+ * How many cards each filter would show, for the chip counts.
+ *
+ * Ready's count is the Worker's `totals.ready`, over every work product, and
+ * null when the read did not carry it: a missing count is drawn as a chip with
+ * no number, never as 0 (D56/D68). The other counts are the cards' own.
+ */
+export function statusCounts(items, totals = null) {
+  const counts = { draft: 0, ready: 0, sent: 0, opened: 0, accepted: 0, all: 0 };
   for (const item of items || []) {
     counts[cardStatus(item)] += 1;
     counts.all += 1;
   }
+  const ready = totals?.ready;
+  counts.ready = typeof ready === 'number' && Number.isFinite(ready) ? ready : null;
   return counts;
+}
+
+/**
+ * Who marked a version ready to send, and when: `{ day, by }`, or null for a
+ * version that is not marked. `by` is null when the account that marked it no
+ * longer reads back, and the page says "Not recorded" for it rather than a
+ * name; `day` is null for a stamp that cannot be read.
+ */
+export function readyMark(version) {
+  if (!version?.ready_at || version.sent_at) return null;
+  const by = String(version.ready_by_name || '').trim() || null;
+  return { day: shortMoment(version.ready_at), by };
+}
+
+/** "Marked ready to send Nov 9 by Ada" — the day and the name when they read back. */
+export function readyLine(version) {
+  const mark = readyMark(version);
+  if (!mark) return null;
+  return `Marked ready to send ${mark.day || '(day unreadable)'}${mark.by ? ` by ${mark.by}` : ''}`;
+}
+
+/**
+ * The Ready control on a work product's latest version, said with its
+ * consequence before it is pressed. Null when there is nothing to mark: no
+ * version, or a latest version already sent (the Worker refuses both a mark
+ * and a clear on a sent version, 409 `already_sent`).
+ *
+ * A version with no document cannot be marked: ready means it could be sent
+ * as it stands, and the Worker refuses it 422 `empty_version`. The control is
+ * then disabled with the reason, rather than pressed into the refusal.
+ */
+export function readyAction(item) {
+  const v = item?.latest_version;
+  if (!v || v.sent_at) return null;
+  const tag = `v${v.version}`;
+  if (v.ready_at) {
+    return {
+      kind: 'clear', version: v.version, tag, label: 'Clear Ready', enabled: true,
+      consequence: `${tag} goes back to Draft. Nothing is sent or deleted.`,
+    };
+  }
+  const link = typeof v.link_url === 'string' ? v.link_url.trim() : '';
+  let https = false;
+  try { https = new URL(link).protocol === 'https:'; } catch { https = false; }
+  const content = v.document === 'file' || https;
+  return {
+    kind: 'mark', version: v.version, tag, label: `Mark ${tag} ready`, enabled: content,
+    consequence: content
+      ? `Marks ${tag} ready to send. Nothing is sent: the client sees nothing until you send it, and sending clears the mark.`
+      : `${tag} has no document, so it cannot be marked ready. Add a version with a link first.`,
+  };
+}
+
+/**
+ * The sentence for a refused mark or clear. A 409 `already_sent` means the
+ * version went out in the meantime (from another tab, or the by-client group),
+ * so it is no longer waiting to be sent and the page reloads to show the send.
+ */
+export function readyRefusal(error, tag = 'This version') {
+  if (error?.code === 'already_sent' || (error?.status === 409 && !error?.code)) {
+    return `${tag} has already been sent, so it can’t be marked ready or cleared. The list below has been read again.`;
+  }
+  if (error?.code === 'empty_version') {
+    return `${tag} has no document, so it cannot be marked ready. Add a version with a link first.`;
+  }
+  return error?.message || 'The Ready mark could not be changed. Nothing was changed.';
 }
 
 /**

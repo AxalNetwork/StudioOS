@@ -268,14 +268,15 @@ const PROFILES = {
     // #4833 (D4833): a zone the Practice v2 canvas has REPLACED, read from that
     // canvas by its section builder (`const delivery = () => … chips([…])`).
     // Its row overrides the PR3 artboard's. `omit` names a chip the canvas
-    // draws over no stored state, with the decision that says so: `Ready`
-    // (D4874, "isn't recorded today").
+    // draws over no stored state, with the decision that says so. Delivery's
+    // `Ready` was omitted that way (D4874) until #5316 stored the mark
+    // (D5316); it is live since #4833 part 2 (D4833-p2), so nothing is omitted.
     // #4834 (D4834): Earnings' row is the canvas's period selector, a
     // `seg` radiogroup rather than `chips([…])`, so it is read by `row: 'seg'`.
     v2Zones: [
       // #4831 (D4831): Engagements' row (PX-03), read from `const engagements = () => … chips([…])`.
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
-      ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery', { omit: ['Ready'], why: 'D4874' }],
+      ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
     ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
