@@ -138,7 +138,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.deepEqual(routeFor('/admin/programs/investor-cohorts'), { program: 'investor-cohorts', tab: 'overview' });
   assert.deepEqual(routeFor('/admin/programs/investor-cohorts/activity'), { program: 'investor-cohorts', tab: 'activity' });
   assert.deepEqual(routeFor('/admin/programs/referral-partners/queue'), { program: 'referral-partners', tab: 'queue' });
-  assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'page' });
+  // D5895 (#5895): AI-native Venture runs in the generic shell, so its own address is Overview.
+  assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'overview' });
   // D4298 (#4298): Influencers' seven tabs; the bare address is its overview, which opens Applications.
   assert.deepEqual(routeFor('/admin/programs/influencer'), { program: 'influencer', tab: 'overview' });
   assert.deepEqual(routeFor('/admin/programs/influencer/applications'), { program: 'influencer', tab: 'applications' });
@@ -156,7 +157,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     // D4298 (#4298): Influencers (IN11).
     influencer: ['How it runs', 'Applications', 'Influencers', 'Offers', 'Payouts', 'Activity', 'Settings'],
     'investor-cohorts': ['Overview', 'Activity'],
-    'ai-native-venture': [],
+    // D5895 (#5895): AI-native Venture runs in the generic shell (PG03a): its six core sections, no module tab.
+    'ai-native-venture': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');
   assert.equal(movedNotice('/admin/programs/mentor-cohorts/people', '?moved=advisor-cohorts'), 'Advisor cohort access is now Mentor cohort access, under Programs.');
@@ -573,7 +575,7 @@ test('Referral partners links D923\'s tabs, with Commissions for a Super Admin o
   const ai = await mounted('/admin/programs/ai-native-venture', ProgramPage, worker());
   try {
     assert.equal(ai.textOf('programs-header-line'), 'Founders build an AI-native company with Eadwyn and the studio’s tools.', 'OD-AIN A');
-    assert.ok(!ai.has('programs-tabs'));
+    assert.ok(ai.has('programs-tabs'), 'D5895: the shell strip');
     assert.ok(!/\[A venture program/.test(ai.text()), 'the bracketed sample never ships');
   } finally { await ai.close(); }
 });

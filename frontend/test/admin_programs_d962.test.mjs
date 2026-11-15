@@ -112,9 +112,10 @@ test('the tabs: Activity on the four pages only where part 1 fills it, and no pa
   assert.equal(PAGES['mentor-cohorts'].tabs.find((t) => t.key === 'activity').label, 'History');
   // D5313 (#5313): Perks runs in the generic shell, where the same /activity address is History, before Settings.
   assert.equal(PAGES.perks.tabs.find((t) => t.path === '/admin/programs/perks/activity').label, 'History');
-  // D963 (#2796): part 10 adds Activity to Referral partners and Investor cohort access; AI-native Venture is one page.
+  // D963 (#2796): part 10 adds Activity to Referral partners and Investor cohort access.
   for (const k of ['referral-partners', 'investor-cohorts']) assert.equal(labels[k].at(-1), 'Activity', k);
-  assert.deepEqual(labels['ai-native-venture'], []);
+  // D5895 (#5895): AI-native Venture runs in the generic shell, where /activity is History, before Settings.
+  assert.equal(PAGES['ai-native-venture'].tabs.find((t) => t.path === '/admin/programs/ai-native-venture/activity').label, 'History');
   assert.ok(Object.values(labels).every((l) => !l.includes('Terms')), 'part 1’s store holds no program’s terms');
   for (const [k, p] of [['mentor-cohorts', '/admin/programs/mentor-cohorts/activity'], ['refer-and-earn', '/admin/programs/refer-and-earn/activity'],
     ['perks', '/admin/programs/perks/activity'], ['learning', '/admin/programs/learning/activity']]) {
