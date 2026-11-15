@@ -122,9 +122,12 @@ test('tabs are a tablist with selection, roving focus and arrow keys; filters an
 
 test('no licence write asks with window.prompt or window.confirm any more', () => {
   assert.doesNotMatch(PAGE, /window\.(prompt|confirm)\(/);
-  for (const k of ['demoteAdmin', 'acceptNotice', 'rejectNotice', 'suspendLicence', 'terminateLicence']) {
+  for (const k of ['acceptNotice', 'rejectNotice', 'suspendLicence', 'terminateLicence']) {
     assert.ok(PAGE.includes(`await ask(LICENCE_REASONS.${k})`), k);
   }
+  // D4819 part 11 (#5922): Remove… (the demote) asks through the Access model, which states its
+  // consequence first and keeps demoteAdmin's own minimum; licence_access_d5922 checks the words.
+  assert.ok(PAGE.includes('await ask(removeAdminAsk(licence, a))'), 'demoteAdmin');
 });
 
 test('a reason is checked before it is sent, with the Worker\'s own minimums', () => {
