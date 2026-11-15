@@ -12,8 +12,9 @@ import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { ddFlagsApi } from '../../lib/api/ddFlags.js';
 import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
-  FLAG_STATES, FLAG_STATE_WORD, NOT_RECORDED, WHO, bulkPatch, canWorkFlag, caseRefusal, composeBody, decisionBody,
-  decisionChoices, depthWord, flagChange, flagSourceWord, historyLines, peopleOf, personName, raiseBody, widenChoices,
+  FLAG_STATES, FLAG_STATE_WORD, ITEM_SEVERITIES, NOTE_MAX, NOT_RECORDED, NO_REMOVE_LINE, SEVERITY_STATUSES, WHO, bulkPatch, canWorkFlag,
+  caseRefusal, composeBody, decisionBody, decisionChoices, depthWord, evidenceBody, flagChange, flagSourceWord, historyLines,
+  itemEditPatch, peopleOf, personName, raiseBody, widenChoices,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
 import { priorReviewWords } from './ddDealContextModel.js';
@@ -444,6 +445,94 @@ export function BulkDialog({ uid, data, kind, itemIds, onClose, onDone }) {
       {kind === 'due' && <input type="date" min={today()} className={`${inputCls} font-mono`} value={value} onChange={(e) => setValue(e.target.value)} data-testid="dd-bulk-due" />}
       <p className={`m-0 text-[12.5px] ${muted}`}>{kind === 'n_a' ? 'The items count as worked and leave the score.' : 'Each change is recorded in the case’s activity.'}</p>
       <Refusal text={error} testId="dd-bulk-error" />
+    </Dialog>
+  );
+}
+
+/** DDL4 (#6290): add a file or a link to one item. It shows on the row and on Documents once added. */
+export function EvidenceDialog({ uid, item, onClose, onDone }) {
+  const [f, setF] = useState({ mode: 'link', url: '', label: '', file: null });
+  const { busy, error, setError, send } = useCaseSend();
+  const submit = () => {
+    const r = evidenceBody(f);
+    if (r.error) { setError(r.error); return; }
+    send(async () => {
+      if (r.kind === 'file') await dd.addEvidenceFile(uid, item.id, r.file);
+      else await dd.addEvidenceLink(uid, item.id, r.url, r.label);
+      onDone(`Evidence is added to “${item.title}”.`);
+    }, 'The evidence could not be added.');
+  };
+  const mode = (m) => () => { setF((x) => ({ ...x, mode: m })); setError(null); };
+  return (
+    <Dialog title={`Add evidence · ${item.title}`} sub="It is kept on the item, listed on Documents, and recorded in the case’s activity." testId="dd-evidence" onClose={onClose} onSubmit={submit} action="Add evidence" busy={busy}>
+      <fieldset className="m-0 flex flex-wrap gap-4 border-0 p-0">
+        <legend className={fieldCls}>Evidence</legend>
+        <label className="flex items-center gap-1.5 text-[13px]"><input type="radio" name="dd-evidence-mode" checked={f.mode === 'link'} onChange={mode('link')} data-testid="dd-evidence-mode-link" />A link</label>
+        <label className="flex items-center gap-1.5 text-[13px]"><input type="radio" name="dd-evidence-mode" checked={f.mode === 'file'} onChange={mode('file')} data-testid="dd-evidence-mode-file" />A file</label>
+      </fieldset>
+      {f.mode === 'link' ? (
+        <>
+          <label className="block"><span className={fieldCls}>Link</span>
+            <input className={inputCls} value={f.url} onChange={(e) => setF((x) => ({ ...x, url: e.target.value }))} placeholder="https://" maxLength={2048} data-testid="dd-evidence-url" />
+          </label>
+          <label className="block"><span className={fieldCls}>Label (optional)</span>
+            <input className={inputCls} value={f.label} onChange={(e) => setF((x) => ({ ...x, label: e.target.value }))} maxLength={200} data-testid="dd-evidence-label" />
+          </label>
+        </>
+      ) : (
+        <label className="block"><span className={fieldCls}>File (up to 10 MB)</span>
+          <input type="file" className={inputCls} onChange={(e) => setF((x) => ({ ...x, file: e.target.files?.[0] || null }))} data-testid="dd-evidence-file" />
+          <span className={`text-[12px] ${muted}`}>It is stored on the item’s section and opens through a link issued to whoever asks, for two minutes.</span>
+        </label>
+      )}
+      <Note>{NO_REMOVE_LINE}</Note>
+      <Refusal text={error} testId="dd-evidence-error" />
+    </Dialog>
+  );
+}
+
+/** DDL4 (#6290): one item's note, severity, owner and due date. Only what changed is sent. */
+export function EditItemDialog({ uid, data, item, onClose, onDone }) {
+  const people = peopleOf(data);
+  const [f, setF] = useState({
+    note: item.note || '', severity: item.severity || '', due: item.due_date || '',
+    ownerId: item.owner_user_id == null ? '' : String(item.owner_user_id),
+  });
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const { busy, error, setError, send } = useCaseSend();
+  const severe = SEVERITY_STATUSES.includes(item.status);
+  const submit = () => {
+    const r = itemEditPatch(item, f, today());
+    if (r.error) { setError(r.error); return; }
+    send(async () => { await dd.updateItem(uid, item.id, r.patch); onDone(`“${item.title}” is updated.`); }, 'The item could not be changed.');
+  };
+  return (
+    <Dialog title={`Edit item · ${item.title}`} sub="The section’s progress and the case’s score are worked out again. The change is recorded in the case’s activity." testId="dd-item-edit" onClose={onClose} onSubmit={submit} action="Save item" busy={busy}>
+      <label className="block"><span className={fieldCls}>Note</span>
+        <textarea rows={4} className={inputCls} value={f.note} onChange={set('note')} maxLength={NOTE_MAX} data-testid="dd-item-edit-note" />
+        <span className={`text-[12px] ${muted}`}>Kept encrypted. Whoever reads the section reads it.</span>
+      </label>
+      {severe ? (
+        <label className="block"><span className={fieldCls}>Severity</span>
+          <select className={inputCls} value={f.severity} onChange={set('severity')} data-testid="dd-item-edit-severity">
+            <option value="">Not recorded</option>
+            {ITEM_SEVERITIES.map((s) => <option key={s} value={s}>{SEVERITY_WORD[s]}</option>)}
+          </select>
+        </label>
+      ) : <Note testId="dd-item-edit-no-severity">A severity is kept only on an item marked Flag or Fail.</Note>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block"><span className={fieldCls}>Owner</span>
+          <select className={inputCls} value={f.ownerId} onChange={set('ownerId')} data-testid="dd-item-edit-owner">
+            <option value="">No owner</option>
+            {[...people.entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            {item.owner_user_id != null && !people.has(Number(item.owner_user_id)) ? <option value={item.owner_user_id}>{personName(people, item.owner_user_id)}</option> : null}
+          </select>
+        </label>
+        <label className="block"><span className={fieldCls}>Due</span>
+          <input type="date" className={`${inputCls} font-mono`} value={f.due} onChange={set('due')} data-testid="dd-item-edit-due" />
+        </label>
+      </div>
+      <Refusal text={error} testId="dd-item-edit-error" />
     </Dialog>
   );
 }

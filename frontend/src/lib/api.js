@@ -609,6 +609,7 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
       // public profile reads) must never trigger an auth-redirect — a 401
@@ -4059,7 +4060,9 @@ export const api = {
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
-  listIntroductions: () => request('/introductions/'),
+  // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
+  // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
+  listIntroductions: () => request('/introductions'),
   // Task #82 — request a warm intro to a founder/project. Consumes the intro
   // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
   // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
@@ -5155,9 +5158,6 @@ export const api = {
   fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
   fundSimScenarioDelete: (uid) =>
     request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
-  // Reuse the existing /api/capital/funds endpoint for the fund picker —
-  // it returns the canonical VCFund list with id/uid/name/total_commitment.
-  capitalFundsList: () => request('/capital/funds'),
 
   // Task #8 (IH) — Data import + migration tools.
   importsList: () => request('/imports/'),
