@@ -103,7 +103,7 @@ test('mounted: the table opened from Add a venture has the earlier picks ticked 
   }
   try {
     await act(async () => root.render(h(MemoryRouter, { initialEntries: [addVentureHref(['3', '1'])] }, h(Routes, null, h(Route, { path: '*', element: h(Root) })))));
-    for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setImmediate(r)); });
     assert.equal(props(byId('dealflow-tick-1')).checked, true);
     assert.equal(props(byId('dealflow-tick-3')).checked, true);
     assert.equal(props(byId('dealflow-tick-2')).checked, false);
