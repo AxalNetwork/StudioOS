@@ -285,7 +285,7 @@ const mutation = (cfg) => ({
   'the draft is dropped when a save fails': {
     visibility: { zone: [["() => api.createPartnerSurface(newSurface), 'Surface added.'", "() => { const d = newSurface; setNewSurface({ name: '', kind: 'directory' }); return api.createPartnerSurface(d); }, 'Surface added.'"]] },
     proof: { zone: [["() => api.createPartnerProof(newItem), 'Added.'", "() => { const d = newItem; setNewItem({ title: '', kind: 'case_study', detail: '', outcome_note: '' }); return api.createPartnerProof(d); }, 'Added.'"]] },
-    fit: { zone: [["key={sheet.rule?.id ?? 'new'}", 'key={note ? "n" : "x"}']] },
+    fit: { zone: [["key={sheet?.rule?.id ?? 'new'}", 'key={note ? "n" : "x"}']] },
   }[cfg.name],
   ...Object.fromEntries(Object.entries(HOOK_MUTATIONS).map(([k, v]) => [k, { hook: v }])),
 });

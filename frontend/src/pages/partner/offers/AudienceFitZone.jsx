@@ -427,17 +427,17 @@ export default function PartnerAudienceFitZone() {
           survives a refresh and an unreadable list. */}
       {sheet && (
         <FitRuleSheet
-          key={sheet.rule?.id ?? 'new'}
-          initial={sheet.rule || null}
+          key={sheet?.rule?.id ?? 'new'}
+          initial={sheet?.rule || null}
           busy={busy}
           note={note}
-          scope={sheet.rule ? `rule:${sheet.rule.id}` : 'new'}
+          scope={sheet?.rule ? `rule:${sheet?.rule.id}` : 'new'}
           onClose={() => setSheet(null)}
-          onSubmit={(data) => (sheet.rule
-            ? run(() => api.updatePartnerFitRule(sheet.rule.id, data), 'Saved.', `rule:${sheet.rule.id}`, () => setSheet(null))
+          onSubmit={(data) => (sheet?.rule
+            ? run(() => api.updatePartnerFitRule(sheet?.rule.id, data), 'Saved.', `rule:${sheet?.rule.id}`, () => setSheet(null))
             : run(() => api.createPartnerFitRule(data), 'Rule added.', 'new', () => setSheet(null)))}
-          onDelete={sheet.rule
-            ? () => run(() => api.deletePartnerFitRule(sheet.rule.id), 'Rule deleted.', `rule:${sheet.rule.id}`, () => setSheet(null))
+          onDelete={sheet?.rule
+            ? () => run(() => api.deletePartnerFitRule(sheet?.rule.id), 'Rule deleted.', `rule:${sheet?.rule.id}`, () => setSheet(null))
             : null}
         />
       )}
