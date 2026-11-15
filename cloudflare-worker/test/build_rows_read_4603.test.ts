@@ -68,7 +68,8 @@ const BUDGET: Array<[string, number]> = [
   // LIMIT 1 on an index), and +1 on the page for the test sessions of its 25 must-haves (none seeded here).
   // #6027 (D6027): +1 on each Prototype read for the overdue count's probe of D6031's `idx_mvp_features_must_due`
   // (no must-have is dated here); the overview's plan preview reads 0 rows (no plan here).
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1312],
+  // Combined merge: the connector read plus D6027 overdue probe measure 1313 rows on local D1.
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1313],
   [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 311],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
   [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 311],
