@@ -99,7 +99,7 @@ export function canManage(event: any, user: User): boolean {
 // (§1.3) — or the caller must hold a non-revoked invitation. Gate EVERY read
 // surface (detail, agenda, ics, eligibility) with this so a guessed event id
 // can't leak a private/draft/pending event.
-export async function canViewEvent(env: Env, event: any, user: User): Promise<boolean> {
+export async function canViewEvent(env: Env, event: any, user: User, access?: { registered: boolean; invited: boolean }): Promise<boolean> {
   if (canManage(event, user)) return true;
   const published = event.status === 'published' && (
     event.visibility === 'unlisted' ||
@@ -109,6 +109,7 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
   // D1031 (#2872): a member who holds a registration may read the event their
   // notices point at, also once it is cancelled or back to draft. They get no
   // private fields, and the join link still needs a confirmed seat.
+  if (access) return access.registered || access.invited;
   const reg = await env.DB.prepare(
     `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
   ).bind(event.id, user.id).first();
@@ -119,6 +120,31 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
          AND status != 'revoked' LIMIT 1`,
   ).bind(event.id, user.id, user.email).first();
   return !!inv;
+}
+
+/** D6413: batch the same visibility grants for one bounded saved-event window. */
+export async function visibleEventIds(env: Env, events: any[], user: User): Promise<number[]> {
+  // The pure fast path shares the ordinary read gate, including host/admin access.
+  const visible = new Set<number>();
+  const restricted = [];
+  for (const event of events) {
+    if (await canViewEvent(env, event, user, { registered: false, invited: false })) visible.add(event.id);
+    else restricted.push(event.id);
+  }
+  if (restricted.length) {
+    const regs = await env.DB.prepare(`SELECT event_id FROM event_registrations WHERE user_id = ? AND event_id IN (SELECT value FROM json_each(?))`).bind(user.id, JSON.stringify(restricted)).all<{ event_id: number }>();
+    if (!Array.isArray(regs.results)) throw new Error('event registrations unreadable');
+    const registered = new Set(regs.results.map(row => row.event_id));
+    const remaining = restricted.filter(id => !registered.has(id));
+    const invited = new Set<number>();
+    if (remaining.length) {
+      const invitations = await env.DB.prepare(`SELECT event_id FROM event_invitations WHERE event_id IN (SELECT value FROM json_each(?)) AND (invited_user_id = ? OR lower(invited_email) = lower(?)) AND status != 'revoked'`).bind(JSON.stringify(remaining), user.id, user.email).all<{ event_id: number }>();
+      if (!Array.isArray(invitations.results)) throw new Error('event invitations unreadable');
+      for (const row of invitations.results) invited.add(row.event_id);
+    }
+    for (const event of events) if (!visible.has(event.id) && await canViewEvent(env, event, user, { registered: registered.has(event.id), invited: invited.has(event.id) })) visible.add(event.id);
+  }
+  return events.filter(event => visible.has(event.id)).map(event => event.id);
 }
 
 // This lookup is always for the authenticated member, never an email supplied

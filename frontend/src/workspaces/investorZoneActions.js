@@ -130,7 +130,10 @@ export const INVESTOR_ZONE_ACTIONS = {
     // rather than posting into a 404.
     { label: 'Add LP', kind: 'handler', handler: 'addLp', primary: true },
     { label: 'Export register', kind: 'export' },
-    { label: 'Comms log', unbuilt: 'no LP correspondence is stored' },
+    // #6232: was unbuilt, 'no LP correspondence is stored', false since D553
+    // (migration 387): the log is stored, and drawn on this page. The op takes
+    // the reader to it.
+    { label: 'Comms log', kind: 'handler', handler: 'commsLog' },
   ],
   'funds/calls': [
     // THE GAP MOVED THREE TIMES, AND THE LAST MOVE CLOSED IT (D371).
