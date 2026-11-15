@@ -77,6 +77,27 @@ async function manifestOf(request) {
 const returnOf = (url) => new URL(url).searchParams.get('next');
 const kept = (page) => page.evaluate(() => { try { return JSON.parse(localStorage.getItem('gvpn:next') || 'null')?.path ?? null; } catch { return null; } });
 
+/** Focus stays inside clipped tab strips and contrasts with the selected fill. */
+async function expectVisibleTabFocus(tab) {
+  await expect(tab).toBeFocused();
+  const indicator = await tab.evaluate(element => {
+    const style = getComputedStyle(element);
+    const luminance = color => {
+      const rgb = color.match(/\d+(?:\.\d+)?/g).slice(0, 3).map(value => {
+        const channel = Number(value) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    };
+    const outline = luminance(style.outlineColor), background = luminance(style.backgroundColor);
+    return { width: parseFloat(style.outlineWidth), offset: parseFloat(style.outlineOffset),
+      contrast: (Math.max(outline, background) + 0.05) / (Math.min(outline, background) + 0.05) };
+  });
+  expect(indicator.width).toBeGreaterThanOrEqual(2);
+  expect(indicator.offset).toBeLessThan(0);
+  expect(indicator.contrast).toBeGreaterThanOrEqual(3);
+}
+
 for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
   test.describe(`${label} (${width}px)`, () => {
     test.use({ viewport: { width, height } });
@@ -105,7 +126,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
       await expect(models).toBeFocused();
       await expect(models).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByRole('tabpanel', { name: 'Models', exact: true })).toBeVisible();
-      expect(await models.evaluate(el => getComputedStyle(el).outlineWidth)).not.toBe('0px');
+      await expectVisibleTabFocus(models);
       await page.screenshot({ path: testInfo.outputPath('pricing-audience-focus.png') });
       await page.keyboard.press('ArrowRight');
       await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toBeFocused();
@@ -125,6 +146,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
         await plans.getByRole('tab', { name: 'Validate + Build', exact: true }).focus();
         await page.keyboard.press('End');
         await expect(plans.getByRole('tab', { name: 'Raise + Grow', exact: true })).toBeFocused();
+        await expectVisibleTabFocus(plans.getByRole('tab', { name: 'Raise + Grow', exact: true }));
         await expect(plans.getByRole('tab', { name: 'Raise + Grow', exact: true })).toHaveAttribute('aria-selected', 'true');
         const panel = page.getByRole('tabpanel', { name: 'Raise + Grow', exact: true });
         await expect(panel.getByRole('columnheader', { name: 'Raise + Grow', exact: true })).toBeVisible();
