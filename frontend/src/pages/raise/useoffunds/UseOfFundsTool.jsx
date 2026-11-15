@@ -18,6 +18,7 @@ import {
   useRead, usePlan,
 } from './UseOfFundsParts';
 import { Compare, Forecast, Scenarios } from './ScenariosForecast';
+import { CapTableLinkDialog, FoundersAfterCard, PaidForBy } from './CapTableLink';
 
 /**
  * D1173 (#2455) — the Use of funds tool's tab bar and tab pages. CycleRoute
@@ -40,6 +41,10 @@ import { Compare, Forecast, Scenarios } from './ScenariosForecast';
  * UF21c) inside the tool, at `?section=<key>` on the tab that opened it, from
  * Home, Allocation and Milestones and hires; a hire is added there or beside
  * Add milestone (UF6). The generic section record page is no longer linked.
+ *
+ * D6085 (#6085): Home's plan header says which cap-table scenario pays for
+ * the base ("Paid for by", RA-32) with Change, and Founders after the round
+ * (Modelled) sits under where the money goes once one is linked.
  */
 
 /** D6083: the open section sheet, read from and written to the address. */
@@ -274,6 +279,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                 {!phone ? <ExportMenu projectId={projectId} capabilities={plan.viewer?.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
+              <PaidForBy link={base?.cap_table_link} latest={plan.ties?.cap_table} canWrite={!!plan.viewer?.can_write} onPick={() => setDialog('captable')} onRetry={read.reload} />
               <Tiles plan={plan} />
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
@@ -281,6 +287,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                     <StackBar rows={rows} currency={base?.currency} />
                     {!phone ? <SectionTable rows={rows} base={base} sheetTo={sheet.to} /> : null}
                   </Card>
+                  <FoundersAfterCard link={base?.cap_table_link} phone={phone} onRetry={read.reload} />
                   {!phone ? (plan.viewer?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'
                     ? <p className={`m-0 rounded-lg border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-800`} data-testid="uof-cash-founder-only">Cash over time uses the founder’s own figures. Mercury figures are visible to the founder only.</p>
                     : <CashCard base={base} title="Cash over time" testId="uof-cash" />) : null}
@@ -292,6 +299,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
               </div>
               {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               {dialog === 'ties' ? <WhereUsedDialog plan={plan} rows={tiesRows(plan)} onClose={() => setDialog(null)} onRound={() => setDialog('round')} /> : null}
+              {dialog === 'captable' ? <CapTableLinkDialog projectId={projectId} scenario={base} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               {dialog === 'round' ? <RoundSizeDialog projectId={projectId} plan={plan} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={saved} />
             </>

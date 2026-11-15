@@ -14,6 +14,7 @@
  */
 import { HOME_PATH, NOT_RECORDED, SECTIONS, afterRaiseView, dayText, money, monthsText, runwayTodayView, tabSearch } from './useOfFundsModel';
 import { majorToMinor, parseMinor } from '../../../lib/money.js';
+import { capTableLine, foundersCell } from './capTableLinkModel';
 
 /* Addresses ------------------------------------------------------------- */
 
@@ -224,8 +225,9 @@ export function scenarioCard(s) {
     runway: after,
     target: s.target_runway_months ?? null,
     milestones: fundedLine(s),
-    // Migration 606 stores no link to a cap-table scenario (D1176), so none is shown.
-    capTable: 'No cap-table scenario linked',
+    // D6085: the cap-table scenario this plan scenario names, or why there is none.
+    capTable: capTableLine(s?.cap_table_link),
+    capTableState: s?.cap_table_link?.state || 'not_linked',
     changed: dayText(s.updated_at || s.created_at),
   };
 }
@@ -302,8 +304,9 @@ export function compareTable(read, viewer = {}) {
       cells: scenarios.map((s) => { const a = afterRaiseView(s); return cell(a.value, a.sub); }) },
     { key: 'cashout', label: 'Cash out', today: { text: '—' }, cells: scenarios.map((s) => cell(cashOutMonth(s), s?.model?.cashOut?.reason)) },
     { key: 'milestones', label: 'Milestones funded', today: { text: '—' }, cells: scenarios.map((s) => cell(fundedLine(s))) },
-    // Neither is read here yet: migration 606 links no cap-table scenario, and no read carries a round's commitments (D1177 §9).
-    { key: 'founders', label: 'Founders after the round', today: { text: NOT_RECORDED, missing: true }, cells: scenarios.map(() => cell(null, 'No cap-table scenario linked')) },
+    // D6085: founders together after the round, Modelled from each scenario's linked cap-table scenario.
+    // No read carries a round's commitments yet (D1177 §9).
+    { key: 'founders', label: 'Founders after the round', today: { text: NOT_RECORDED, missing: true }, cells: scenarios.map((s) => foundersCell(s?.cap_table_link)) },
     { key: 'committed', label: 'Committed so far', today: { text: NOT_RECORDED, missing: true }, cells: scenarios.map(() => cell(null, 'Commitments are not read here yet')) },
   ];
   return { cols, rows, today };
