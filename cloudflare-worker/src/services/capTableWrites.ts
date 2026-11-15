@@ -556,7 +556,6 @@ export async function founderAttachments(env: Env, projectId: number, holder: { 
   )) out.push('a co-founder agreement');
   if (await any("SELECT 1 FROM formation_steps WHERE project_id = ? AND for_holder_id = ? AND kind = '83b' LIMIT 1", [projectId, holder.id])) out.push('an 83(b) filing');
   else if (await any('SELECT 1 FROM formation_steps WHERE project_id = ? AND for_holder_id = ? LIMIT 1', [projectId, holder.id])) out.push('a filing for them');
-  if (await any('SELECT 1 FROM formation_step_checks WHERE holder_id = ? LIMIT 1', [holder.id])) out.push('a filing checklist step');
   if (await any('SELECT 1 FROM founder_contributions WHERE project_id = ? AND holder_id = ? LIMIT 1', [projectId, holder.id])) out.push('logged contributions');
   return out;
 }
