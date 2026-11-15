@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { classify, issueTitle, mergeList, parseFailures, queuePr, repoFile, retryDecision, wouldTurnGreen } from './flakyTests.mjs';
+import { classify, issueTitle, stillDefined, mergeList, parseFailures, queuePr, repoFile, retryDecision, wouldTurnGreen } from './flakyTests.mjs';
 import { isNodeTest, queueChangedFiles, readFailures, readFlakyList, retryFailed, withFailureReporter } from '../test-drift-parts.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
@@ -36,6 +36,9 @@ test('D6464: a job log yields each failed test with its file, once', () => {
     { file: 'cloudflare-worker/test/crash.test.ts', test: 'cloudflare-worker/test/crash.test.ts' },
   ]);
   assert.equal(repoFile('/x/y/scripts/lib/flakyTests.test.mjs:3:1'), 'scripts/lib/flakyTests.test.mjs');
+  // TAP escapes `#` and `\\` in a name; the list holds the name as the test wrote it, as the reporter sees it.
+  const escaped = ["not ok 7 - \\#4570 slice 8: a\\\\b # TODO later", "  location: '/r/StudioOS/cloudflare-worker/test/x.test.ts:3:1'"].join('\n');
+  assert.deepEqual(parseFailures(escaped), [{ file: 'cloudflare-worker/test/x.test.ts', test: '#4570 slice 8: a\\b' }]);
   assert.equal(repoFile('/x/not-a-test.mjs:1:1'), null);
   assert.deepEqual([queuePr('gh-readonly-queue/main/pr-6412-abc'), queuePr('main'), queuePr(null)], [6412, null, null]);
 });
@@ -180,4 +183,13 @@ test('D6464: the runner watches only node:test commands under merge_group, and o
   assert.match(src, /if \(retried\.status !== 0\) return r\.status \|\| 1;/);
   assert.match(src, /if \(env\.GITHUB_STEP_SUMMARY && retried\.lines\[0\]\.startsWith\('###'\)\) appendFileSync/);
   assert.doesNotMatch(src, /writeFileSync\([^)]*flaky-tests\.json/, 'the runner never writes the list');
+});
+
+test('D6464: a test renamed or removed since it failed leaves the list', () => {
+  const src = "test('each workflow has a distinct identity', () => {});\ntest('the founder\\'s Home links to Upload', () => {});\n";
+  assert.equal(stillDefined(src, 'each workflow has a distinct identity'), true);
+  assert.equal(stillDefined(src, "the founder's Home links to Upload"), true, 'an escaped quote in the source');
+  assert.equal(stillDefined(src, '11. for a founder the bare address is the module page'), false);
+  assert.equal(stillDefined(null, 'x'), false, 'a deleted file');
+  assert.equal(stillDefined(src, ''), false);
 });

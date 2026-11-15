@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EXPIRY_DAYS, classify, issueTitle, mergeList, parseFailures, queuePr, wouldTurnGreen } from './lib/flakyTests.mjs';
+import { EXPIRY_DAYS, classify, issueTitle, mergeList, parseFailures, queuePr, stillDefined, wouldTurnGreen } from './lib/flakyTests.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DATA = resolve(root, 'scripts/flaky-tests.json');
@@ -146,7 +146,10 @@ async function main(argv) {
   const found = classify(runs, greens);
   const data = readData();
   const now = new Date().toISOString();
-  const tests = mergeList(data.tests, found, now, { expiryDays: data.expiryDays || EXPIRY_DAYS });
+  // A test renamed or removed since it failed is not listed: nothing could match it, and its fix may be why it is gone.
+  const source = (file) => { try { return readFileSync(resolve(root, file), 'utf8'); } catch { return null; } };
+  const tests = mergeList(data.tests, found, now, { expiryDays: data.expiryDays || EXPIRY_DAYS })
+    .filter((e) => stillDefined(source(e.file), e.test));
   const suiteRuns = runs.filter((r) => r.suiteFailed);
   const green = runs.filter((r) => wouldTurnGreen(r, tests)).length;
   const result = { days, failedQueueRuns: failedCount, failedWithSuiteParts: suiteRuns.length, wouldTurnGreen: green, tests };

@@ -39,9 +39,10 @@ export function parseFailures(log) {
   const out = [];
   const seen = new Set();
   for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*not ok \d+ - (.+?)\s*(?:#.*)?$/.exec(lines[i]);
+    // TAP escapes `#` and `\` in a name (`\#`, `\\`); an unescaped ` # SKIP|TODO` is a directive.
+    const m = /^\s*not ok \d+ - (.+?)(?:\s+#\s+(?:SKIP|TODO)\b.*)?\s*$/i.exec(lines[i]);
     if (!m) continue;
-    const name = m[1];
+    const name = m[1].replace(/\\([\\#])/g, '$1');
     let file = repoFile(name);
     let suite = false;
     // The YAML block under the line: its location, and whether it is a suite.
@@ -148,6 +149,18 @@ export function wouldTurnGreen(run, list) {
   const listed = new Set(list.map((e) => `${e.file}\u0000${e.test}`));
   const changed = new Set(run.changedFiles || []);
   return run.failures.every((f) => listed.has(`${f.file}\u0000${f.test}`) && !changed.has(f.file));
+}
+
+/**
+ * Whether a test still exists: its name appears in its file's source, quoted
+ * as written (escapes and typographic quotes undone). A name built at run time
+ * is not found, so it is never listed: this rule only ever shortens the list.
+ */
+export function stillDefined(source, name) {
+  if (typeof source !== 'string' || !name) return false;
+  if (source.includes(name)) return true;
+  const plain = source.replace(/\\(['"`\\])/g, '$1');
+  return plain.includes(name);
 }
 
 /** The title of a listed test's issue; one issue per title. */
