@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Company · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Grow · Company · GR-21 to GR-29 · #6121 · continues Grow v2</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Grow · Company — what the company owes, when, who owns it, and board meetings end to end</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Company (/grow/durable-company-building; the old name stays in the URL, the record keeps /grow/durable-company-building/:id for reminder links). An addendum to the approved Grow v2 canvas: same shell, taxonomy bar, GR-12 states, GR-11 proposal cards and GR-14 Eadwyn rail, numbered on from GR-20. Obligations, reminders, agenda, Mark held with minutes, the nine-item durability checklist, updates history, Mercury cash and runway (team only) and Calendar proposals are real on main. Calendar → Compliance edits the same rows. Eadwyn only proposes; nothing is written until accepted. Violet dashed ◇ tags mark what needs backend work (pack, agenda accept, resolutions, Not applicable, per-jurisdiction checklist, fact-based proposals, team assignee from Grow); amber ⚑ marks owner questions, drawn with the A picks. States follow Platform States (D5129).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Lumen Robotics, Ana Costa, Priya Raman, Jonas Weber, the obligations, dates and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="9">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Company Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-21', 'Company · working view', 'Due strip (Overdue 2 · Next 30 days 3 · Next 90 days 5 · Later 4, each a filter), obligations sorted overdue first with a word and glyph per state, an ownerless row with Pick owner, the checklist (6 of 9), cash and runway from Mercury (team only), two Calendar proposals and the last 5 updates. One line names the second editor. Eadwyn points at the ownerless renewal; its agenda draft is ◇ not live.', [F('GRC21', false, 2060)]],
+      ['GR-22', 'Obligation record · board meeting', 'Agenda, a ◇ Pack drawn as not live, past meetings with minutes stored or not; reminders, documents (Minutes 3 stored, ◇ Resolutions Not recorded) and activity. Mark held is the one primary action. The rail holds Eadwyn’s ◇ draft agenda as a GR-11 card. Then the Mark held sheet and the end-to-end strip.', [F('GRC22', false, 1060), C('GRC22B', 'Mark held sheet', 700, 480), C('GRC22C', 'End to end: agenda → pack → held → next meeting 12 Mar', 1400, 310)]],
+      ['GR-23', 'Add or edit obligation, and proposals', 'The sheet with the owner picked from the company team (agent option, ◇ from Grow), remind up to three, the same-day clash refusal on Due, saving and save failed. Right: live Calendar proposals with Accept and Dismiss, and three ◇ fact-based proposals citing their source.', [F('GRC23', false, 960)]],
+      ['GR-24', 'Durability checklist', 'Option A (owner question 1): the fixed nine with done or open, how each was ticked, the date and tick or untick by hand; Lab and Mercury ticks explain themselves and are not changed here. ◇ Not applicable with a reason. ◇ Option B per jurisdiction and entity type as a side panel.', [F('GRC24', false, 820)]],
+      ['GR-25', 'Company · empty', 'No obligations yet, one Add obligation, two Calendar proposals each with its own Accept and Dismiss, and the checklist showing its items open (runway hidden without Mercury).', [F('GRC25', false, 1000)]],
+      ['GR-26', 'States', 'The whole read Unavailable (only the Company card still shows, Try again is the action); region states: loading, Not recorded, measured zero, one part Unavailable, refused, read only, cash hidden, saving and save failed, the three upload refusals and the Mark held clash. Then the advisor’s read-only page.', [F('GRC26', 'Whole read unavailable', 760), C('GRC26B', 'Region states', 1400, 700), F('GRC26C', 'Read only · advisor, cash hidden', 1360)]],
+      ['GR-27', 'Phone 390', 'Due strip as four chips, obligations as cards, Add obligation full width, the checklist folded; the record full screen; Mark held as a bottom sheet with the system file picker; checklist, cash and Calendar proposals further down.', [P('GRC27a', 'A · Company'), P('GRC27b', 'B · Record'), P('GRC27c', 'C · Mark held sheet'), P('GRC27d', 'D · Checklist, cash, proposals')]],
+      ['GR-28', 'Dark', 'GR-21 on #0B1220 / #111827; Overdue, Snoozed, Done and ◇ keep their words and glyphs.', [F('GRC28', false, 2060)]],
+      ['GR-29', 'Where things sit and handoff', 'The Company area mapped to its stores, with ◇ new marked; handoffs to Reporting, Calendar and the Spin-Out Lab; Brand stays at /build/brand. Then what was checked on main, frontend-only versus backend-required work, open questions and accessibility.', [W('GRC29'), W('GRC29B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

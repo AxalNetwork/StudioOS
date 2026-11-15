@@ -22,7 +22,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { investorHasDealRelationship } from '../services/dealAccess';
+import { investorHasDealRelationship, ventureNdaStatus } from '../services/dealAccess';
 import { dealPageRequestStatement, REQUEST_MESSAGE_MAX } from '../services/dataRoomRequests';
 
 export const WITHDRAW_REASON_MAX = 500;
@@ -67,15 +67,8 @@ r.get('/:id/room-access', async (c) => {
     `SELECT expires_at FROM data_room_grants WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
   ).bind(x.projectId, x.user.id).first<{ expires_at: string | null }>();
-  // The NDA is the venture founder's (data_room.ts projectNdaActive): an active
-  // one is on file until its date; a pending one is out for signature.
-  const nda = await db.prepare(
-    `SELECT n.status, n.valid_until FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
-      WHERE owner.founder_id = ? AND n.party_b_user_id = ?
-        AND n.status IN ('active', 'pending', 'partially_signed')
-        AND (n.status <> 'active' OR n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
-      ORDER BY n.id DESC LIMIT 1`,
-  ).bind(project?.founder_id ?? null, x.user.id).first<{ status: string; valid_until: string | null }>();
+  // The NDA's status, from the one shared read (#6267, `ventureNdaStatus`): the same query that stood here.
+  const nda = await ventureNdaStatus(c.env, x.projectId, x.user.id);
   const request = await db.prepare(
     `SELECT state, created_at, decided_at, decline_reason FROM data_room_access_requests
       WHERE project_id = ? AND investor_user_id = ? ORDER BY id DESC LIMIT 1`,
@@ -86,7 +79,7 @@ r.get('/:id/room-access', async (c) => {
     project_uid: project?.uid ?? null,
     founder_user_id: founder?.id ?? null,
     granted: grant ? { expires_at: grant.expires_at ?? null } : null,
-    nda: nda ? { status: nda.status === 'active' ? 'on_file' : 'out_for_signature', valid_until: nda.valid_until ?? null } : null,
+    nda,
     request: request ?? null,
   });
 });

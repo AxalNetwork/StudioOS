@@ -163,9 +163,13 @@ export function flowRows(scope, { flow, deals }) {
     owner: f?.owner ? { id: Number(f.owner.user_id), name: f.owner.name || null, initials: initials(f.owner.name) } : null,
     enteredVia: f?.entered_via || null,
     enteredAt: f?.entered_at || null,
+    // D6425: the viewer's own invitation ('invited', 'interested', 'passed') or null. A pass answers an open one.
+    myInvitation: f?.my_invitation ?? null,
     daysInStage: f ? num(f.days_in_stage) : null,
     // D1241: the firm's note on its row, for the peek (DLS7).
     note: f?.note ?? null,
+    // D6148: the firm's pass on a passed row ({ reason, passed_at, revisit, revisit_at }), for when it comes back.
+    pass: f?.pass ?? null,
     // A door only where DEAL's rule holds (D1238 `can_open`); a listed round alone is never one.
     canOpen: !!f?.can_open,
   });
@@ -329,7 +333,7 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy';
+export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -467,3 +471,33 @@ export function keepsLines({ view, scope, settings }) {
 }
 
 export const pickToggle = (picked, id) => (picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= MAX_COMPARE ? picked : [...picked, id]);
+
+/**
+ * D6425 (#6425): whether a pass on this row answers the viewer's own invitation, so the Pass dialog may say the
+ * studio is told. A row entered via an invitation that was a colleague's, or one already answered 'passed', is not.
+ */
+export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' || row?.myInvitation === 'interested';
+
+// ---------------------------------------------------------------- Needs your attention (D4815 part 3, DX1)
+
+/**
+ * The strip's items, from reads the page already has a route for. DE01 draws
+ * three: "stale", "new" and "waiting on diligence". Only "new" has a field
+ * behind it, the inbox (`GET /api/deals/flow/inbox`, which DE17 names for this
+ * strip): every deal that reached the investor and is not yet in the flow.
+ * No read records a stale threshold (the flow carries `days_in_stage` and no
+ * rule for when it is stale) or what a deal in Diligence waits on, so those
+ * two are left out (D4815-p3), never guessed.
+ *
+ * `read` is `{ kind: 'loading' | 'unreadable' | 'ok', data }`. A failed read is
+ * `unreadable`, never a count of 0; a way in that could not be read is named,
+ * so a count from the rest reads as "at least".
+ */
+export function attentionOf(read, unreadWords = () => []) {
+  if (!read || read.kind === 'loading') return { kind: 'loading', items: [], unread: [] };
+  if (read.kind !== 'ok') return { kind: 'unreadable', items: [], unread: [] };
+  const deals = new Set((read.data?.items || []).map((i) => String(i.deal_id)));
+  const unread = unreadWords(read.data?.sources || {});
+  const items = deals.size ? [{ key: 'new', count: deals.size, word: `${deals.size} new`, label: `${deals.size} ${deals.size === 1 ? 'deal' : 'deals'} new for you` }] : [];
+  return { kind: 'ok', items, unread };
+}

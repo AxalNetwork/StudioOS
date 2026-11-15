@@ -8,6 +8,7 @@
  * mismatch". Eadwyn's fix carries no number: the figures under it come from
  * the check.
  */
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 import { STATE_LABELS, STATE_TONE } from '../pitch/checkModel.js';
 
 export { STATE_LABELS, STATE_TONE };
@@ -126,10 +127,8 @@ export function appendFix(body, wording) {
 
 /** The Story address that places a fix as a proposal in its section. */
 export function acceptFixHref(search, version, section, uid) {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const out = new URLSearchParams();
-  const project = from.get('project_id') || from.get('project');
-  if (project) out.set('project_id', project);
+  // D5074: the venture comes from the route helpers, in the one form (`ventureQuery.js`).
+  const out = new URLSearchParams(ventureSearch(ventureRef(search)?.id).replace(/^\?/, ''));
   out.set('version', String(version));
   if (section) out.set('section', section);
   out.set('fix', uid);

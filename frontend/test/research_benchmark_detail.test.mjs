@@ -84,7 +84,7 @@ test('the editor sends a blank as null and a blank sample as null, never 0', () 
 });
 
 test('the page is routed for the list’s licences, the list links to it, and it reads through the new methods', () => {
-  assert.match(app, /path="\/research\/benchmarking\/:uid" element=\{guard\(labRoles\(\['admin', 'investor'\]\), <BenchmarkDetail /);
+  assert.match(app, /path="\/research\/benchmarking\/:uid" element=\{adminToResearch\(guard\(\['investor'\], <BenchmarkDetail /);
   assert.match(list, /to=\{`\/research\/benchmarking\/\$\{encodeURIComponent\(b\.uid\)\}`\}/);
   for (const m of ['benchmarkGet', 'benchmarkUpdate', 'benchmarkConstituentAdd', 'benchmarkConstituentRemove']) {
     assert.ok(api.includes(`${m}: (`), `api.js has no ${m}`);

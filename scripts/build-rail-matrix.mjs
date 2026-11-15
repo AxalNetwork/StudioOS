@@ -53,6 +53,8 @@ export const OUT = 'cloudflare-worker/src/services/ai/railMatrix.json';
 const OPTIONS_DIR = 'frontend/src/lib/railOptions';
 /** Each list's file, its export and its profile on the canvas. */
 export const OPTION_LISTS = [
+  { file: 'admin.js', name: 'ADMIN_ASK_CHIPS', profile: 'Admin' },
+  { file: 'superAdmin.js', name: 'SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS', profile: 'Super Admin' },
   { file: 'founder.js', name: 'FOUNDER_OPTIONS', profile: 'Founder' },
   { file: 'investor.js', name: 'INVESTOR_RAIL_OPTIONS', profile: 'Investor' },
   { file: 'advisor.js', name: 'ADVISOR_RAIL_OPTIONS', profile: 'Advisor' },
