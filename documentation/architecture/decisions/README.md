@@ -131,3 +131,4 @@ and citations by number keep working.
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
 
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
+| `D6469.md` | One sorted landing list for the owner (green PRs, T2 and model-changed first, overlap order) in a sticky issue, and the measured T0/T1/T2 share (#6469). |

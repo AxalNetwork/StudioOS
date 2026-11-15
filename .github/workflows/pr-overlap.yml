@@ -37,6 +37,13 @@ jobs:
           stamp="$(date -u +%Y%m%dT%H%MZ)"
           echo "PR_OVERLAP_STAMP=$stamp" >> "$GITHUB_ENV"
           node scripts/pr-overlap.mjs "--snapshot=$RUNNER_TEMP/pr-overlap/pr-overlap-$stamp.json"
+      - name: Update the owner's landing list
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        # D6469: edits one sticky issue body in place; never labels, merges or queues.
+        run: node scripts/landing-list.mjs --sticky
       - name: Upload the advisory baseline snapshot
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
