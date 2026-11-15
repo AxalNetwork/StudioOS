@@ -19,6 +19,7 @@ import { CapRelTabPage } from '../src/pages/raise/caprel/CapRelTool.jsx';
 import SupportReadsCard from '../src/pages/raise/SupportReadsCard.jsx';
 import { NO_READS, readWhen, supportReadRow, supportReadRows } from '../src/pages/raise/supportReads.js';
 import { SAVE_REFUSED } from '../src/ui/reasonGate.js';
+import { CAPREL_STAFF_CAPS } from './_caprel_capabilities.mjs';
 
 const h = React.createElement;
 const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
@@ -141,16 +142,19 @@ test('RR12: an admin on Capital relationships meets the gate on every tab; one r
       return [200, { mode: 'support', read_only: true, page, has_more: page === 1, actions: [], round: { name: 'Seed' },
         items: [{ uid: `p${page}`, name: `Synthetic partner ${page}`, firm: 'Synthetic Fund', stage: 'meeting', email: 'partner@example.com', notes: 'private note' }] }];
     }
+    // D5074 slice 4: the counts-only summary read carries staff's capability map; it is the only read before the reason.
+    if (m === 'GET' && p === '/cycles/raise/modules/capital-relationships') return [200, { mode: 'summary', read_only: true, capabilities: CAPREL_STAFF_CAPS }];
     return [403, { error: 'support_read_required', message: 'Give a reason for a read-only support view.' }];
   });
   const page = await mounted(h(CapRelTabPage, { tab: 'pipeline', projectId: 7, admin: true, viewer: 'super_admin' }));
+  const privateCalls = () => fetch.calls.filter((c) => c.path !== '/cycles/raise/modules/capital-relationships');
   try {
     assert.ok(page.byId('caprel-support-page'));
     assert.match(page.text(), /Why are you opening these capital relationships\?/);
     assert.match(page.text(), /This opens once; each open asks again\./);
-    assert.equal(fetch.calls.length, 0, 'no private read before the reason');
+    assert.deepEqual(fetch.calls.map((c) => [c.method, c.path]), [['GET', '/cycles/raise/modules/capital-relationships']], 'no private read before the reason: only the counts-only summary, for the map');
     await type(page, 'caprel-support', 'Due diligence');
-    assert.deepEqual(fetch.calls.map((c) => [c.method, c.path, c.body]), [['POST', '/cycles/raise/capital-relationships/support-read', { reason: 'Due diligence', page: 1 }]]);
+    assert.deepEqual(privateCalls().map((c) => [c.method, c.path, c.body]), [['POST', '/cycles/raise/capital-relationships/support-read', { reason: 'Due diligence', page: 1 }]]);
     assert.match(page.text(), /Read only · HQ access for Due diligence/);
     assert.match(page.text(), /Synthetic partner 1/);
     assert.doesNotMatch(page.text(), /partner@example|private note/);

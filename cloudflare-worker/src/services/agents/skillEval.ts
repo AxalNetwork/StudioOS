@@ -168,14 +168,21 @@ export async function skillOfUsage(env: Env, usageLogId: number | null): Promise
 
 /** The distinct golden-case contents of a published Axal skill: starter first unless a live row carries it. */
 export async function casesOf(env: Env, s: Pick<SkillRow, 'id' | 'slug'>): Promise<GoldenCase[]> {
-  const live: GoldenCase[] = [];
   const rows = (await env.DB.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
-    .bind(s.id).all<{ uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
+    .bind(s.id).all<LiveCaseRow>()).results ?? [];
+  return goldenCasesFrom(s.slug, rows);
+}
+
+export type LiveCaseRow = { uid: string; name: string; input_json: string; expect_json: string };
+
+/** `casesOf`'s rule over rows already read (D4536-p2 reads every published skill's live cases in one query). */
+export async function goldenCasesFrom(slug: string | null, rows: readonly LiveCaseRow[]): Promise<GoldenCase[]> {
+  const live: GoldenCase[] = [];
   for (const r of rows) {
     const c = checkCase({ name: r.name, input: parse(r.input_json, null), expect: parse(r.expect_json, null) });
     if (c.ok) live.push({ key: r.uid, name: c.name, input: c.input, expect: c.expect });
   }
-  const starter = starterCase(s.slug);
+  const starter = slug ? starterCase(slug) : null;
   if (!starter) return live;
   const starterSha = await caseContentSha(starter);
   const liveShas = new Set(await Promise.all(live.map(caseContentSha)));

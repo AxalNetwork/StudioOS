@@ -1,0 +1,97 @@
+name: Gateway live check (#4870, one synthetic call)
+
+# #4870 items 1 and 2, D4870 part 2. Owner decisions 2026-11-14: Q1 = B (the
+# two gateway variables go into wrangler.toml in the switch-on PR) and Q2 = A
+# (this dispatch-only workflow makes the live checks).
+#
+# One synthetic call on a throwaway Worker, `studioos-s4870-<run>` on
+# workers.dev, whose only binding is AI:
+#
+#   config (flat, refused if it could reach production) → deploy → one call on
+#   openai/gpt-5-mini through the owner's gateway, built as production builds
+#   it → that call's log entry read with `logCarriesNoPayload` → the log's cost
+#   against D851's settled charge → delete the Worker, pass or fail.
+#
+# NEVER PRODUCTION. The production switch, AI_PROVIDER_GATEWAY_OPENAI, is never
+# set; production keeps the gateway path off. The prompt is synthetic
+# ("Reply with the single word: ready"); the summary holds states, counts and
+# amounts only, never the answer or a log head.
+#
+# COST: one gpt-5-mini call capped at 256 output tokens, on Unified Billing
+# credits (a fraction of a cent).
+#
+# DISPATCH ONLY. No schedule and no push trigger: each run spends credits and
+# creates and deletes a Worker, so each is a decision.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway_slug:
+        description: 'The AI Gateway id (D4556 §9 step 1): lower case, digits and hyphens'
+        required: true
+        type: string
+      zdr_on:
+        description: 'I confirm the gateway has Zero Data Retention on, logs off by default, no Logpush, and "Require provider credentials" off'
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: gateway-live-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live-check:
+    name: one synthetic gateway call, then teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: The owner's statement
+        if: ${{ !inputs.zdr_on }}
+        run: |
+          echo '::error::The run needs the ZDR confirmation (D4556 §9 step 1). Nothing was created.'
+          exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      # Secrets are scoped to this one step. The script deletes the Worker from
+      # its own `finally`, so a failed step still cleans up.
+      - name: Live check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GATEWAY_SLUG: ${{ inputs.gateway_slug }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/gateway-live-check.mjs --run "a${GITHUB_RUN_ID}" --summary "$RUNNER_TEMP/gateway-live-check.json"
+
+      - name: Summary (states, counts and amounts only)
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/gateway-live-check.json"
+          if [ -f "$f" ]; then
+            { echo '## Gateway live check (#4870)'; echo; echo '```json'; cat "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No summary was written; the run stopped before the script could write one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gateway-live-check-summary
+          path: ${{ runner.temp }}/gateway-live-check.json
+          if-no-files-found: warn
+          retention-days: 90
