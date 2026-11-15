@@ -17,6 +17,11 @@
       "channel": "#axalvc-actions-agent-stage-a"
     },
     {
+      "id": 419009745,
+      "path": ".github/workflows/archive-observer-deploy.yml",
+      "channel": "#axalvc-actions-archive-observer-deploy"
+    },
+    {
       "id": 280437834,
       "path": ".github/workflows/backup-d1.yml",
       "channel": "#axalvc-actions-backup-d1"
