@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { cyclesApi } from '../../lib/api/cycles';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
@@ -14,12 +14,13 @@ import { CycleBar } from './PhoneModulePage';
 import {
   DISCARD, DISMISS_BODY, DOOR_LINE, EMPTY_LINE, EMPTY_TITLE, FOUNDING_TEAM_LINE, KEEP, LINE, NOTHING_PENDING, NOT_YOURS, NOT_YOURS_LINE, NO_PLAN,
   PAUSED_BY_YOU, PAUSE_BODY, PLAN_TABS, READ_ONLY_LINE, READ_ONLY_NOTE, RESUME_BODY, SECTIONS, SINCE_FOOT, TITLE, UNPREPARED_LINE, UPDATE_BODY,
-  WORDING_TAG, WORD_COST, WORD_LABEL, WORD_LINE, WORD_OPTION, WORD_READS, acceptAllLine, countsLine, isDecided, moduleItems, planCounts, planHref, planScope,
+  WORDING_TAG, WORD_COST, WORD_LABEL, WORD_LINE, WORD_OPTION, WORD_READS, acceptAllLine, countsLine, evidenceParam, isDecided, moduleItems, planCounts, planHref, planScope,
   planSearch, preparedLine, provedCards, sinceLine, ventureSearch, verdictState, wordRefusal, wordingRows, writeRefusal,
 } from './buildPlanModel';
-import { BriefCard, DoneRow, EditDialog, PlanConfirm, ProposalCard } from './BuildPlanCards';
+import { BriefCard, DoneRow, EditDialog, EvidenceSheet, PlanConfirm, ProposalCard } from './BuildPlanCards';
 import PlanProgress from './BuildPlanProgress';
 import SendSheet from './BuildPlanSend';
+import BuildPhoneNav from './BuildPhoneNav';
 import { NOT_FOUNDER_LINE, NOT_FOUNDER_ROLES, NOT_FOUNDER_TITLE, OP_LINE, OP_PILL, OP_TITLE, sendable } from './buildProgressModel';
 
 /**
@@ -288,7 +289,7 @@ function Strip({ plan, verdict, readOnly, lab, counts, tools }) {
 }
 
 /** One Build module's proposals (VB1), or an accordion of them on a phone (VB21). */
-function ModuleSection({ s, plan, words, readOnly, paused, phone, search, open, onToggle, busy, errors, said, onAccept, onEdit, onDismiss, onAcceptAll, onKeep, onDiscardWording, onRetry, briefSlot }) {
+function ModuleSection({ s, plan, words, readOnly, paused, phone, search, open, onToggle, busy, errors, said, onAccept, onEdit, onDismiss, onAcceptAll, onKeep, onDiscardWording, onRetry, onEvidence, briefSlot }) {
   const items = moduleItems(plan, s.slug);
   const pending = items.filter((i) => i.status === 'proposed').length;
   const head = `${s.name} · ${pending} proposed`;
@@ -303,7 +304,7 @@ function ModuleSection({ s, plan, words, readOnly, paused, phone, search, open, 
         : <ProposalCard key={i.uid} item={i} phone={phone} readOnly={readOnly} paused={paused} busy={busy === i.uid} error={errors[i.uid] || ''}
           words={i.status === 'proposed' ? words?.[i.uid] || null : null}
           onAccept={() => onAccept(i, s.slug)} onEdit={() => onEdit(i, s.slug)} onDismiss={() => onDismiss(i, s.slug)}
-          onKeep={() => onKeep(i)} onDiscard={() => onDiscardWording(i)} onRetry={() => onRetry(i, s.slug)} />))}
+          onKeep={() => onKeep(i)} onDiscard={() => onDiscardWording(i)} onRetry={() => onRetry(i, s.slug)} onEvidence={onEvidence} />))}
       {said ? <p className={`${MUTED} lg:col-span-2`} role="status" data-testid={`plan-section-said-${s.slug}`}>{said}</p> : null}
     </div>
   );
@@ -347,6 +348,14 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
   const [open, setOpen] = useState(() => new Set([SECTIONS[0].slug]));
   const [empty, setEmpty] = useState(false);
   const [wordBusy, setWordBusy] = useState(null);
+  // D4602 (#4602, BD4): the open evidence sheet is the address's `?evidence=<uid>`,
+  // replaced rather than pushed, so Back from a record it opened returns to
+  // this plan with the same proposal's sheet open, the venture and scope kept.
+  const [params, setParams] = useSearchParams();
+  const evidenceUid = evidenceParam(`?${params.toString()}`);
+  const showEvidence = useCallback((item) => {
+    setParams((p) => { const n = new URLSearchParams(p); if (item) n.set('evidence', item.uid); else n.delete('evidence'); return n; }, { replace: true });
+  }, [setParams]);
 
   const accept = async (item, slug, edit) => {
     setBusy(item.uid); setErrors((e) => ({ ...e, [item.uid]: '' }));
@@ -435,6 +444,7 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
           onAcceptAll={(m, n) => setDialog({ kind: 'all', module: m, n })}
           onKeep={(i) => wordAct(i.uid, () => buildPlanApi.edit(i.uid, undefined, b.wording.uid))}
           onDiscardWording={(i) => wordAct(i.uid, () => buildPlanApi.discardWording(projectId, b.wording.uid, i.uid, scope))}
+          onEvidence={showEvidence}
           briefSlot={sec.slug === 'solution-design' ? (
             <BriefCard brief={plan.brief} words={briefWords} kept={b.wording?.kept?.brief?.summary || null} readOnly={readOnly} phone={phone} busy={wordBusy === 'brief'}
               onKeep={() => wordAct('brief', () => buildPlanApi.keepWording(projectId, b.wording.uid, 'brief', scope))}
@@ -452,6 +462,10 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
     );
     strip = <Strip plan={plan} verdict={plan?.verdict} readOnly={readOnly} lab={lab} counts={counts} tools={tools} />;
   }
+
+  const evidenceItem = evidenceUid && b.plan
+    ? SECTIONS.flatMap((sec) => moduleItems(b.plan, sec.slug)).find((i) => i.uid === evidenceUid && i.status !== 'discarded') || null
+    : null;
 
   const dialogs = dialog ? (
     dialog.kind === 'send' ? <SendSheet projectId={projectId} scope={scope} items={dialog.items} onClose={() => setDialog(null)} />
@@ -492,6 +506,7 @@ export function PlanBoard({ projectId, scope = 'venture', search = '', readOnly 
         {content}
       </div>
       {dialogs}
+      {evidenceItem ? <EvidenceSheet item={evidenceItem} search={search} onClose={() => showEvidence(null)} /> : null}
     </div>
   );
 }
@@ -582,7 +597,8 @@ export default function BuildPlan({ tab = 'plan', projectId, projectStatus = 're
           )
           : <CycleHeader cycle="build" cards={cards} active="plan" action={action} title={TITLE} sub={readOnly ? READ_ONLY_LINE : LINE} search={ventureSearch(s)} />}
       {pill}
-      <PlanTabBar active={tab} search={s} only={partner ? 'progress' : null} />
+      {/* D4602 (BD14m): on a phone the plan's pages carry Build's own tabs; an Operating Partner keeps Progress only. */}
+      {phone && !partner ? <BuildPhoneNav active={tab} search={s} /> : <PlanTabBar active={tab} search={s} only={partner ? 'progress' : null} />}
       {body}
     </div>
   );

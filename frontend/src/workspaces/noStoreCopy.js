@@ -37,9 +37,9 @@ export const ADVISOR_COPY = {
  * `ORG_BACKED` below is `{founder, investor, partner}`. A founder's zone
  * groups `contacts.organization`, which migration 386 (D551, #1144) added and
  * `PUT /api/contacts/:uid` sets; a partner's groups the book's own column
- * (migration 224). The investor path still ends at
- * `metadata.organization_name`, which nothing writes — #1023's IN3 is to read
- * the same `contacts.organization` there.
+ * (migration 224). An investor's groups each counterpart's own company,
+ * `other.company` on `GET /api/partnernet/relationships` (D572 part 3): the
+ * company that person links on their account, read since D6258.
  *
  * Founder and investor have a body that says what is and is not recorded — a
  * table, its empty state and the zone's notes. Advisor and operator have no body, so

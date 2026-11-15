@@ -163,6 +163,8 @@ export function flowRows(scope, { flow, deals }) {
     owner: f?.owner ? { id: Number(f.owner.user_id), name: f.owner.name || null, initials: initials(f.owner.name) } : null,
     enteredVia: f?.entered_via || null,
     enteredAt: f?.entered_at || null,
+    // D6425: the viewer's own invitation ('invited', 'interested', 'passed') or null. A pass answers an open one.
+    myInvitation: f?.my_invitation ?? null,
     daysInStage: f ? num(f.days_in_stage) : null,
     // D1241: the firm's note on its row, for the peek (DLS7).
     note: f?.note ?? null,
@@ -331,7 +333,7 @@ export function toggleCard(cards, key) {
 }
 
 /** D4635 (#4635): the one place a thesis is set (the My thesis card, D1424); every Fit and empty-state action opens it. */
-export const THESIS_PATH = '/account/security-privacy';
+export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
 
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -469,3 +471,9 @@ export function keepsLines({ view, scope, settings }) {
 }
 
 export const pickToggle = (picked, id) => (picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= MAX_COMPARE ? picked : [...picked, id]);
+
+/**
+ * D6425 (#6425): whether a pass on this row answers the viewer's own invitation, so the Pass dialog may say the
+ * studio is told. A row entered via an invitation that was a colleague's, or one already answered 'passed', is not.
+ */
+export const passAnswersInvitation = (row) => row?.myInvitation === 'invited' || row?.myInvitation === 'interested';
