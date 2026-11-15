@@ -174,3 +174,74 @@ test('a failed name lookup reads unreadable for the list, never not available', 
   assert.ok(r.body.introductions.length > 0);
   for (const row of r.body.introductions) assert.equal(row.target, null);
 });
+
+// ── POST /request refuses a target the investor could not see (the owner's choice B) ──
+
+async function ask(as: number, body: Record<string, unknown>, failOn?: RegExp) {
+  const a = new Hono<any>();
+  a.route('/api/introductions', introductions);
+  a.onError((err: any, c) => {
+    const s = AUTH_ERROR_STATUSES[String(err?.message || '')];
+    if (s) return c.json({ detail: err.message }, s);
+    throw err;
+  });
+  const token = await new SignJWT({ user_id: as, role: ROLE[as] })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await a.request('/api/introductions/request', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }, { DB: makeD1(db, failOn), JWT_SECRET } as any);
+  const text = await res.text(); let out: any = {}; try { out = JSON.parse(text); } catch { out = { raw: text }; } return { status: res.status, body: out };
+}
+const spent = (id: number) => Number((db.prepare(`SELECT investor_quota_intros_used AS n FROM users WHERE id = ?`).get(id) as any)?.n ?? 0);
+const askRows = (id: number) => Number((db.prepare(`SELECT COUNT(*) AS n FROM investor_introductions WHERE investor_user_id = ?`).get(id) as any).n);
+
+test('an ask to a founder or venture the investor may see is sent and spends one slot', async () => {
+  const before = askRows(IAN);
+  const r = await ask(IAN, { founder_user_id: FAY, message: 'Hello.' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ok, true);
+  assert.equal(spent(IAN), 1);
+  const p = await ask(IAN, { project_id: SEEN });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  assert.equal(spent(IAN), 2);
+  assert.equal(askRows(IAN), before + 2);
+});
+
+test('an ask to a hidden, private, deleted, deactivated or unknown target is refused before any slot is spent', async () => {
+  const usedBefore = spent(IAN); const rowsBefore = askRows(IAN);
+  const cases: Record<string, unknown>[] = [
+    { project_id: ELSEWHERE },          // D702 hides it from Ian
+    { project_id: DELETED },
+    { project_id: 999 },                // no such venture: the same answer as a hidden one
+    { founder_user_id: PRI },           // private profile
+    { founder_user_id: OLD },           // deactivated
+    { founder_user_id: IVY },           // not a founder
+    { founder_user_id: 999 },
+    { founder_user_id: FAY, project_id: ELSEWHERE }, // every id the row would store is checked
+    { founder_id: 11 },                 // Pri's founder record
+  ];
+  for (const body of cases) {
+    const r = await ask(IAN, body);
+    assert.equal(r.status, 404, JSON.stringify(body));
+    assert.equal(r.body.error, 'target_not_available', JSON.stringify(body));
+    assert.match(r.body.message, /No ask was sent and none was used/);
+    assert.doesNotMatch(JSON.stringify(r.body), /Quietventure|Pri Private|Old Gone|Ivy Investor/);
+  }
+  assert.equal(spent(IAN), usedBefore);
+  assert.equal(askRows(IAN), rowsBefore);
+  // The refused ask gave Ian no reach: the venture is still hidden from him.
+  const { askTargets } = await import('../src/services/introAskTargets.ts');
+  const out = await askTargets({ DB: makeD1(db) } as any, { id: IAN, role: 'investor' } as any, [{ project_id: ELSEWHERE }]);
+  assert.deepEqual(out.targets, [{ kind: 'project', name: null, available: false }]);
+});
+
+test('when reach cannot be read the ask is refused as unreadable, and nothing is spent', async () => {
+  const usedBefore = spent(IAN); const rowsBefore = askRows(IAN);
+  const r = await ask(IAN, { project_id: SEEN }, /FROM projects WHERE id IN/);
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error, 'target_unreadable');
+  assert.match(r.body.message, /could not be read/);
+  assert.equal(spent(IAN), usedBefore);
+  assert.equal(askRows(IAN), rowsBefore);
+});
