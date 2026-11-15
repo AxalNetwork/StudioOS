@@ -17,7 +17,7 @@ import { reportError } from '../../lib/log';
  *   set         the thesis in the investor's own words, and "Edit in Settings ›"
  * An administrator's preview withholds investor records, so it draws nothing.
  */
-export const THESIS_HREF = '/account/security-privacy';
+export const THESIS_HREF = '/account/security-privacy?from=home#my-thesis';
 
 export function thesisBandState(read) {
   if (!read || read.status === 'loading') return { kind: 'reading' };

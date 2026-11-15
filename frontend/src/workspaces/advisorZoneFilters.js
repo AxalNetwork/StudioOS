@@ -272,44 +272,40 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All time', key: 'all' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM REORDERS RATHER THAN NARROWS. Migration 238
-  // stores `lane` with five values, so Signed, Renewal due and Ended each read
-  // a column directly — `Signed` covers both signed lanes, because
-  // `renewal_due` is a state inside Signed on the canvas's own board and a chip
-  // that excluded it would hide the contracts most in need of attention.
-  //
-  // `By client` IS A SORT, and saying so matters. Every other chip in these four
-  // tables narrows a set; this one orders the board, the renewal history and the
-  // scope cards by client name and drops nothing. A chip called "By client" that
-  // filtered rows out would be lying about what it did — and this file's own
-  // docblock is about exactly that failure mode, a chip whose empty result reads
-  // as an answer.
+  // #4831 (D4831): THE PRACTICE V2 CANVAS'S ROW (PX-03), which replaced PR2's
+  // `All · Signed · Renewal due · Ended · By client`. Each chip narrows the
+  // board and carries its count over the whole record (`chipRows` and
+  // `chipCounts` in `engagementBoard.js`); `Active` is signed or renewal due,
+  // the same set the Active tile counts. `By client` left with the PR2 row: it
+  // was a sort, and the v2 board draws none.
   'practice/engagements': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Signed', key: 'signed' },
-    { canvas: 'Renewal due', key: 'renewal_due' },
-    { canvas: 'Ended', key: 'ended' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Active', key: 'active', label: 'Active {n}' },
+    { canvas: 'Renewal due', key: 'renewal_due', label: 'Renewal due {n}' },
+    { canvas: 'Proposed', key: 'proposed', label: 'Proposed {n}' },
+    { canvas: 'Ended', key: 'ended', label: 'Ended {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
   // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,
   // PX-06), which replaced PR3's `All · Unopened · Opened · Draft · By client`.
   // Each chip narrows on the LATEST version's own stamps (`cardStatus` in
-  // `deliveryTrail.js`): Draft is a latest version with no `sent_at`, Sent has
+  // `deliveryTrail.js`): Draft is a latest version with no `sent_at` and no
+  // Ready mark, Sent has
   // no receipt yet, Opened has `opened_at`, Accepted has `signed_off_at`. The
   // receipts are written by the client's routes, never an advisor's (D72,
   // D4684).
   //
-  // THE CANVAS ALSO DRAWS `Ready`, AND IT IS LEFT OUT, not drawn disabled: the
-  // canvas itself marks it "isn't recorded today" and D4874 lists it as backend
-  // required. `profile_zone_filters.test.mjs` drops it from the canvas row by
-  // name, citing D4874, the way founder's `Cited in deck` is dropped (D549).
+  // `Ready` IS LIVE since #4833 part 2 (D4833-p2): #5316 (D5316) stores the
+  // mark (`ready_at`, `ready_by_user_id` on the version) and the list carries
+  // `ready_version` per work product and `totals.ready`. The chip narrows on
+  // `ready_version` and its count is `totals.ready`, so the two are one set.
   //
   // `By client` left the chip row with the PR3 artboard. Grouping by client is
   // still `?view=by_client` (D571's `/practice/deliverables`), a toggle beside
   // the cards rather than a chip, because it reorders rather than narrows.
   'practice/delivery': [
     { canvas: 'Draft', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Ready', key: 'ready', label: 'Ready {n}' },
     { canvas: 'Sent', key: 'sent', label: 'Sent {n}' },
     { canvas: 'Opened', key: 'opened', label: 'Opened {n}' },
     { canvas: 'Accepted', key: 'accepted', label: 'Accepted {n}' },

@@ -24,6 +24,7 @@ files say how to act on it.
 | `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
 | `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
+| `TEAMS_ENTRA_5809.md` | Inventory the Microsoft calendar app that creates Teams meetings, register its exact callbacks, set and rotate its client, run the licensed-organizer live proof, and recover from each refusal (#5809). |
 | `MEETING_BOT.md` | Set up Eadwyn AI for Zoom, Google Meet and Teams; check notice, consent and retention; interpret failures; switch it off (D886). |
 | `AGENT_RUNTIME_SWITCH.md` | Stop every agent run at once, pause the engine, switch the agent runtime behind its seam and rebuild each scope, and what still works while the engine is down (D1528). |
 | `ZOOM_AND_MEET_TRANSCRIPTS.md` | Create and share the Zoom app, switch on Google Meet transcript import, run the live check, read each refusal and roll back (D757). |
@@ -50,3 +51,5 @@ and a link in `documentation/README.md`.
 | `CLOUDFLARE_ROLLOUT_5670.md` | D5670: source-to-receipt rollout, privacy, outage and rollback checklist. |
 | `CLOUDFLARE_DELIVERY_5671.md` | D5671: private registry/secret setup, connectivity versus receipts, canary, fallback and rollback. |
 | `AGENT_COMPUTE_4557.md` | D4557: local image evidence, immutable scheduling gate, preview acceptance and rollback. |
+| `WORKFLOW_SLACK_6370.md` | D6370: configure the sender, validate a workflow attempt and pause delivery. |
+| `WORKFLOW_FAILURE_ISSUES_6387.md` | D6387: GitHub repair issue activation, evidence and replay. |

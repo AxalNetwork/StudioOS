@@ -17,7 +17,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence.js';
-import { BASE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
+import { BASE, STAFF_READ_LINE, claimWord, coverageTile, investorView, kindWord, refusalOf, sourceLine, sourceWord, strengthWord } from './evidenceModel';
 
 const box = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -170,8 +170,8 @@ function Loading() {
 }
 
 /** The refused read, in the deal page's words; the founder is pointed to their own view. */
-function Refused({ error, onRetry }) {
-  const r = refusalOf(error);
+function Refused({ error, onRetry, role = null }) {
+  const r = refusalOf(error, role);
   return (
     <section className={box} data-testid="evidence-summary" data-stage={`refused-${r.kind}`}>
       <h2 className="m-0 text-[15px] font-bold">Evidence</h2>
@@ -182,12 +182,14 @@ function Refused({ error, onRetry }) {
   );
 }
 
-/** The deal page's Evidence tab: `GET /api/deals/:id/evidence`. */
-export function EvidenceSummary({ dealId, company = null, api = raiseEvidenceApi }) {
+/** The deal page's Evidence tab: `GET /api/deals/:id/evidence`. D6167: staff read the investor's projection, and say so. */
+export function EvidenceSummary({ dealId, company = null, role = null, api = raiseEvidenceApi }) {
   const r = useEvidence(() => api.forDeal(dealId), dealId ? `deal:${dealId}` : null);
   if (r.status === 'loading') return <Loading />;
-  if (r.status === 'refused') return <Refused error={r.error} onRetry={r.retry} />;
-  return <InvestorEvidence read={r.data} onRetry={r.retry} company={company} />;
+  if (r.status === 'refused') return <Refused error={r.error} onRetry={r.retry} role={role} />;
+  const block = <InvestorEvidence read={r.data} onRetry={r.retry} company={company} />;
+  if (r.data?.reader !== 'staff') return block;
+  return <div className="grid gap-2"><p className={`m-0 text-[12px] ${MUTED}`} data-testid="evidence-staff-read">{STAFF_READ_LINE}</p>{block}</div>;
 }
 
 /** The diligence room: `GET /api/data-room/shared/:projectUid/evidence`. A refusal draws nothing: the room already says what is open. */

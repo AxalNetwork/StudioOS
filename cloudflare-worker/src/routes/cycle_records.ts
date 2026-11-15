@@ -7,6 +7,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
+import { narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { activityFor } from '../services/cycleActivity';
 import { campaignOptions } from '../services/campaignOptions';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
@@ -197,7 +198,10 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
     if (!s.spec.formOptions) return c.json({});
     const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
     delete query.project;
-    return c.json(await s.spec.formOptions(s.ctx, query));
+    const options = await s.spec.formOptions(s.ctx, query);
+    // D5074 slice 3: the narrative's versions read carries the caller's capabilities; its writes refuse from the same map.
+    if (isNarrative(c)) return c.json({ ...(options as Record<string, unknown>), capabilities: narrativeCapabilities(await narrativeStanding(c, s.ctx.user, s.ctx.projectId)) });
+    return c.json(options);
   });
   return route;
 }

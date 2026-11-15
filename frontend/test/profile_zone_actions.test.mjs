@@ -168,6 +168,12 @@ const PROFILES = {
     buckets: /^(deals|funds|portfolio|network|research)\//,
     // 18 since D1243 (#3256): Deals · Pipeline retired into Deal flow's table.
     zones: 18,
+    // ON THE ARTBOARD, DELIBERATELY NOT CARRIED. D6205 (#6205): `Add follow-on`
+    // records a round, an admin write, so on the investor's book it could only
+    // ever be a disabled button. The investor asks instead (Ask HQ in the
+    // mark-history Sheet). Each label here must still be on its artboard and
+    // must not be in the table.
+    withheld: { 'portfolio/positions': ['Add follow-on'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -235,7 +241,9 @@ const PROFILES = {
     // SEVENTEENTH (#6230): `funds/reporting`'s `New reporting period`, which
     // replaced `Build pack`. That gap was never real: `FundReportPeriodPage`
     // drafts and issues a period at `/funds/:fundId/reporting/new`.
-    handlers: 17,
+    // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // stores the log and the page draws it; the op scrolls to that card.
+    handlers: 18,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -246,7 +254,9 @@ const PROFILES = {
     // shipped gap rather than deferring one.
     // Reviewed elsewhere-claims, by label — see the assertion below.
     // `New deep-dive` left when Markets became the sector directory.
-    elsewhere: ['Edit rubric', 'Merge duplicates'],
+    // `Merge duplicates` left with D6258: its reason no longer says where
+    // an organisation is stored.
+    elsewhere: ['Edit rubric'],
     // D1243 (#3256): the canvas still draws ID1; its zone is retired and `/deals/pipeline` forwards to Deal flow's table.
     excluded: ['deals/pipeline'],
     embeddedGuards: 1,
@@ -274,6 +284,8 @@ const PROFILES = {
     // silently drop out of this check.
     canvasDirs: ['design/canvases/integrated', 'design/incoming'],
     canvas: /^Pages · Partner /,
+    // #5935 (D4838): Leads' header is the Pipeline v2 canvas's (PP03).
+    v2Ops: [['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads']],
     // `/pipeline` IS IN SCOPE NOW, and the comment that used to sit here is the
     // reason it was not: it said `Pages · Partner Pipeline` "carries no `ops:`
     // on any artboard, so `canvasOps` finds nothing there and this pattern must
@@ -797,6 +809,18 @@ function canvasOps(profile) {
   // in `backlog/` — reading it for intent is not promoting it — and an entry
   // here is a claim that THIS zone's ops come from THAT artboard, checkable
   // because a route the file does not contain fails immediately.
+  // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
+  // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
+  // that call, and they override the older artboard's row for the same route.
+  for (const [zone, file, section] of profile.v2Ops || []) {
+    const src = read(file);
+    const at = src.indexOf(`const ${section} = () => hdr(`);
+    assert.ok(at >= 0, `${file} has no ${section} section builder`);
+    const call = src.slice(at, src.indexOf('+ zones(', at));
+    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
+    out[zone] = ops;
+  }
   for (const [zone, file] of profile.alsoZones || []) {
     const ops = headerOps(read(file), zone);
     assert.ok(ops.length, `${file}'s ${zone} artboard parsed with no ops`);
@@ -886,6 +910,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         assert.ok(!canvas[zone]?.includes(label), `${zone}: ${label} is on the artboard now; drop it from offCanvas`);
       }
       table[zone] = table[zone].filter((l) => !extra.includes(l));
+    }
+    for (const [zone, gone] of Object.entries(profile.withheld || {})) {
+      for (const label of gone) {
+        assert.ok(canvas[zone]?.includes(label), `${zone}: ${label} is withheld but no longer on the artboard; drop it from withheld`);
+        assert.ok(!table[zone]?.includes(label), `${zone}: ${label} is withheld but the table carries it`);
+      }
+      canvas[zone] = canvas[zone].filter((l) => !gone.includes(l));
     }
     for (const [zone, labels] of Object.entries(table)) {
       assert.ok(canvas[zone], `${zone} has no artboard — where did its labels come from?`);

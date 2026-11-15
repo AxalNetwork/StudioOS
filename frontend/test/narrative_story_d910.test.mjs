@@ -24,6 +24,7 @@ import {
   bindingFromItem, bindingsBySection, boundChip, cannotInsert, claimSegments, draftOf, figureStatus, insertGroups, moveSection,
   saveDialog, savePlan, sectionDot, storySections,
 } from '../src/pages/raise/narrative/storyModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
@@ -60,7 +61,8 @@ const SOURCES = { project_id: 3, coverage: {}, items: [
   { source_key: 'raise.mercury_balance', area: 'raise', module: 'Raise › Mercury', label: 'Cash balance', value: null, unit: 'usd', as_of: null, grade: null, source: null, href: null, record_ref: null, snapshot_hash: null, state: 'withheld' },
   { source_key: 'scoring.pmf_band', area: 'scoring', module: 'Scoring', label: 'Product-market fit band', value: null, unit: 'band', as_of: null, grade: null, source: null, href: null, record_ref: null, snapshot_hash: null, state: 'not_recorded', optional: true },
 ] };
-const OPTIONS = { versions: [{ value: '2', label: 'v2 · seed fund' }, { value: '1', label: 'v1 · angel' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '2', label: 'v2 · seed fund' }, { value: '1', label: 'v1 · angel' }] });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 
 function handler(narrative = NARRATIVE(), sources = () => response(SOURCES), put = () => response({ ok: true })) {
@@ -371,7 +373,7 @@ test('an unreadable store says so: the sections, the figures, or the registry', 
 
 test('version 0, the live deck, is read only', async () => {
   const view = await mounted('/raise/investor-narrative/story?project_id=3&version=0', {
-    handle: (u, o) => (u.includes('/form-options') ? response({ versions: [{ value: '0', label: 'v0 · live deck' }] }) : handler(NARRATIVE(0))(u, o)),
+    handle: (u, o) => (u.includes('/form-options') ? response(withNarrativeCapabilities({ versions: [{ value: '0', label: 'v0 · live deck' }] })) : handler(NARRATIVE(0))(u, o)),
   });
   try {
     assert.equal(view.textOf('story-live-deck'), LIVE_DECK);
