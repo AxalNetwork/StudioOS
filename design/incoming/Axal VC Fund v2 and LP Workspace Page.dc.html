@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axal VC Fund v2 and LP Workspace · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.ifv-sh{display:grid;grid-template-columns:212px minmax(0,1fr)}
+.ifv-sd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.ifv-sd .ifv-lg{padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.ifv-sd .ifv-co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg);background:var(--card);color:var(--ink);text-align:left}
+.ifv-sd .ifv-co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.ifv-sd .ifv-co span{margin-left:auto;color:var(--mu);font-weight:500}
+.ifv-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.ifv-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.ifv-sd .ifv-sep{height:1px;background:var(--hair);margin:6px 14px}
+.ifv-crumb{font:600 12px var(--sg);color:var(--mu)}
+.ifv-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.ifv-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.ifv-hd .ifv-hl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ifv-hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.ifv-hd .ifv-act{display:flex;gap:8px;align-items:center;flex:none}
+.ifv-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);flex-wrap:nowrap}
+.ifv-tabs a{padding:9px 13px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.ifv-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ifv-tabs a span{font:600 10.5px var(--mo);color:var(--mu)}
+.ifv-tabs a span.w{color:var(--amT)}
+.ifv-chip{display:inline-flex;align-items:center;gap:6px;padding:2px 10px 2px 8px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:700 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ifv-chip svg{flex:none}
+.ifv-chip.v{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.ifv-chip.sk{color:var(--mu);border-style:dashed}
+.ifv-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);white-space:nowrap}
+.ifv-s svg{flex:none}
+.ifv-s.nr{color:var(--mu);font-style:italic}
+.ifv-s.na{color:var(--mu)}
+.ifv-s.no{color:var(--mu)}
+.ifv-s.un{color:var(--neg);font-weight:700}
+.ifv-s.rf{color:var(--ink);font-weight:700}
+.ifv-s.ok{color:var(--pos);font-weight:700}
+.ifv-s.am{color:var(--amT);font-weight:700}
+.ifv-s.vi{color:var(--vt);font-weight:700}
+.ifv-mod{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;border:1px dashed var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.ifv-mod.om{border-style:solid;border-color:var(--amE);color:var(--amT);background:var(--amBg)}
+.ifv-mod.st{border-color:var(--amE);color:var(--amT)}
+.ifv-cs{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:999px;border:1px solid var(--hair);font:700 11.5px var(--sg);white-space:nowrap;background:var(--raised);color:var(--ink)}
+.ifv-cs.due{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.ifv-cs.part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.ifv-cs.over{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.ifv-cs.paid{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.ifv-tag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;align-self:flex-start}
+.ifv-own{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;align-self:flex-start}
+.ifv-figs{display:grid;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ifv-figs>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ifv-figs>div:last-child{border-right:0}
+.ifv-figs small{font-size:11.5px;color:var(--mu)}
+.ifv-figs b{font:700 19px var(--mo);letter-spacing:-.02em;white-space:nowrap}
+.ifv-figs em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu);line-height:1.4}
+.ifv-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ifv-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.ifv-tbl th.n,.ifv-tbl td.n{text-align:right;font-family:var(--mo)}
+.ifv-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle;height:44px}
+.ifv-tbl td small{display:block;color:var(--mu);font-size:11px}
+.ifv-tbl tr:last-child td{border-bottom:0}
+.ifv-tbl td.mo{font-family:var(--mo);white-space:nowrap}
+.ifv-list{display:flex;flex-direction:column}
+.ifv-list>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);min-height:44px}
+.ifv-list>li:first-child{border-top:0}
+.ifv-list b{font-size:13px}
+.ifv-list small{display:block;font:500 11px var(--mo);color:var(--mu);margin-top:2px}
+.ifv-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.ifv-blk{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ifv-blk h2{font-size:14.5px;font-weight:800;display:flex;align-items:center;gap:8px}
+.ifv-blk h2 span{font:600 11px var(--mo);color:var(--mu)}
+.ifv-blk.hi{border-color:var(--lavE);box-shadow:inset 3px 0 0 #7c3aed}
+.ifv-amt{font:700 24px var(--mo);letter-spacing:-.02em}
+.ifv-kv{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.ifv-kv dt,.ifv-kv dd{padding:7px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.ifv-kv dt{color:var(--mu)}
+.ifv-kv dd{font-weight:600}
+.ifv-kv dd.mo{font-family:var(--mo)}
+.ifv-bar{height:10px;border-radius:999px;background:var(--hair);overflow:hidden;position:relative}
+.ifv-bar i{display:block;height:100%;background:#7c3aed;border-radius:999px}
+.ifv-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ifv-tile{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.ifv-tile b{font:700 22px var(--mo)}
+.ifv-tile small{font-size:12px;color:var(--mu)}
+.ifv-tile em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.ifv-tiers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ifv-tier{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.ifv-tier b{font-size:13.5px}
+.ifv-tier .mo{font:700 15px var(--mo)}
+.ifv-tier ul{list-style:none;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.ifv-tier ul li:before{content:"+ ";color:var(--vt);font-weight:700}
+.ifv-tier.me{border:2px solid #7c3aed}
+.ifv-tier .ifv-me{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--vt)}
+.ifv-ban{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:12px;border:1px solid var(--lavE);background:var(--lav)}
+.ifv-ban b{font-size:15px}
+.ifv-ban p{font-size:12.5px;line-height:1.5;margin-top:3px}
+.ifv-ban.n{background:var(--card);border-color:var(--hair)}
+.ifv-ban.r{background:var(--negBg);border-color:var(--negE)}
+.ifv-ban.a{background:var(--amBg);border-color:var(--amE)}
+.ifv-ban.g{background:var(--posBg);border-color:var(--posE)}
+.ifv-steps{display:flex;gap:0}
+.ifv-steps span{flex:1;text-align:center;padding:6px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu);white-space:nowrap}
+.ifv-steps span+span{border-left:0}
+.ifv-steps span:first-child{border-radius:8px 0 0 8px}.ifv-steps span:last-child{border-radius:0 8px 8px 0}
+.ifv-steps span.dn{color:var(--ink);background:var(--raised)}
+.ifv-steps span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.ifv-scrim{position:absolute;inset:0;background:var(--dim);z-index:5}
+.ifv-side{position:absolute;top:0;right:0;bottom:0;width:520px;background:var(--card);z-index:6;border-left:1px solid var(--hair);box-shadow:-20px 0 50px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ifv-side .ifv-sh2{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--hair)}
+.ifv-side .ifv-sb{padding:16px 20px;display:flex;flex-direction:column;gap:14px;flex:1}
+.ifv-side .ifv-sf{padding:14px 20px;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:flex-end}
+.ifv-wire{border:1px solid var(--hair);border-radius:10px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ifv-wire .ifv-kv{border-top:0}
+.ifv-wire .ifv-kv dt,.ifv-wire .ifv-kv dd{border-bottom:1px dashed var(--hair)}
+.ifv-flt{display:flex;gap:6px;flex-wrap:wrap}
+.ifv-flt button{min-height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.ifv-flt button[aria-pressed=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:800}
+.ifv-flt button span{font:500 11px var(--mo);color:var(--mu);margin-left:4px}
+.ifv-parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 18px;padding:8px 0 4px 18px}
+.ifv-parts li{display:flex;flex-direction:column;gap:1px;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--hair)}
+.ifv-hist{display:flex;flex-direction:column}
+.ifv-hist li{display:grid;grid-template-columns:120px 24px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:44px;border-top:1px solid var(--hair);font-size:12.5px}
+.ifv-hist li:first-child{border-top:0}
+.ifv-hist li>span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.ifv-hist li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font-style:normal;font-size:11px}
+.ifv-hist .ifv-mon{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:12px 0 4px;border-top:0;min-height:0;display:block}
+.ifv-sk{display:block;border-radius:6px;background:var(--skel)}
+.ifv-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+.ifv-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ifv-f label{font-size:12.5px;font-weight:700}
+.ifv-f label span{font-weight:500;color:var(--mu)}
+.ifv-f .ifv-in{display:flex;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);font-size:13px;color:var(--ink)}
+.ifv-f .ifv-in.ro{background:var(--raised);border-style:dashed}
+.ifv-f .ifv-in.ta{min-height:64px;align-items:flex-start;padding-top:10px}
+.ifv-f small{font-size:11.5px;color:var(--mu)}
+.ifv-pills{display:flex;gap:6px;flex-wrap:wrap}
+.ifv-pills span{padding:3px 10px;border-radius:999px;border:1px solid var(--hair);font-size:12px;font-weight:600}
+.ifv-pills span.on{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.ifv-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.ifv-doc h2{font-size:17px;font-weight:800}
+.ifv-doc h3{font-size:13.5px;font-weight:800}
+.ifv-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.ifv-doc .ifv-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.ifv-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.ifv-ph{width:390px;background:var(--bg);display:flex;flex-direction:column;position:relative;min-height:844px}
+.ifv-ph .ifv-pt{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:var(--card);border-bottom:1px solid var(--hair)}
+.ifv-ph .ifv-pb{padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.ifv-ph .ifv-pch{display:flex;gap:6px;overflow:hidden;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--hair);position:sticky;top:0}
+.ifv-ph .ifv-pch a{flex:none;min-height:36px;display:inline-flex;align-items:center;padding:0 12px;border-radius:999px;border:1px solid var(--hair);font:600 12.5px var(--sg);color:var(--ink)}
+.ifv-ph .ifv-pch a[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt);font-weight:800}
+.ifv-ph .btn{min-height:44px}
+.ifv-ph .ifv-full{width:100%}
+.ifv-ph .ifv-psheet{position:absolute;left:0;right:0;bottom:0;top:70px;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.ifv-ph .ifv-psheet .ifv-sh2{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.ifv-ph .ifv-psheet .ifv-sb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.ifv-grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ifv-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.ifv-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.ifv-pv{display:flex;justify-content:space-between;align-items:center;padding:8px 30px;background:var(--amBg);border-bottom:1px solid var(--amE);font:600 12px var(--sg);color:var(--amT)}
+.ifv-pv .ifv-sw{display:flex;gap:4px}
+.ifv-pv .ifv-sw span{white-space:nowrap;padding:2px 9px;border-radius:999px;border:1px solid var(--amE);font-size:11.5px;background:var(--card);color:var(--amT)}
+.ifv-pv .ifv-sw span.on{background:var(--amT);color:#fff}
+.ifv-cap{font-size:12px;color:var(--mu);line-height:1.5}
+.ifv-ic{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--lav);color:var(--vt);font-weight:800;flex:none}
+.ifv-ic.r{background:var(--negBg);color:var(--neg)}
+.ifv-ic.a{background:var(--amBg);color:var(--amT)}
+.ifv-ic.g{background:var(--posBg);color:var(--pos)}
+.ifv-ic.n{background:var(--raised);color:var(--mu)}
+.ifv-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.ifv-ref{display:flex;align-items:center;gap:8px;font:700 13px var(--mo)}
+.ifv-dk .btn{background:var(--raised)}
+.ifv-dk .btn.p{background:#7c3aed}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "IFV04", "options": ["IFV01", "IFV02", "IFV02B", "IFV03", "IFV04", "IFV18", "IFV05", "IFV06", "IFV07", "IFV06B", "IFV07B", "IFV08", "IFV09", "IFV09B", "IFV10", "IFV10B", "IFV11", "IFV11B", "IFV12", "IFV13", "IFV14", "IFV15", "IFV15B", "IFV15C", "IFV16A", "IFV16B", "IFV16C", "IFV17A", "IFV17B", "IFV17C", "IFV17D", "IFV17E", "IFV18B", "IFV19"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'IFV04';
+    const dark = B.indexOf('IFV18') === 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+
+    /* ---------- glyphs: every state has a word and a shape ---------- */
+    const SV = (d, s) => '<svg aria-hidden="true" width="' + (s || 11) + '" height="' + (s || 11) + '" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      ring: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4.5" fill="currentColor"/>'),
+      dash: SV('<path d="M2.5 6h7" stroke="currentColor" stroke-width="1.8"/>'),
+      na: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 9l6-6" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      st: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.6"/>'),
+      star: SV('<path d="M6 1l1.5 3.2 3.5.4-2.6 2.4.7 3.5L6 8.8 2.9 10.5l.7-3.5L1 4.6l3.5-.4z" fill="currentColor"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      doc: SV('<path d="M3 1.5h4l2 2v7H3z" fill="none" stroke="currentColor" stroke-width="1.3"/>')
+    };
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- Platform States (D5129) ---------- */
+    const S = (k, t) => {
+      const m = { nr: ['nr', 'dash', 'Not recorded'], na: ['na', 'na', 'Not applicable'], no: ['no', 'ring', 'None'], un: ['un', 'ua', 'Unavailable'], rf: ['rf', 'lk', 'Refused'], ok: ['ok', 'ok', ''], am: ['am', 'pd', ''], vi: ['vi', 'pd', ''], ns: ['no', 'ring', 'Not started'], ar: ['am', 'ar', ''] }[k];
+      return '<span class="ifv-s ' + m[0] + '">' + G[m[1]] + (t || m[2]) + '</span>';
+    };
+    const NR = (t) => S('nr', t || 'Not recorded');
+    const OM = '<span class="ifv-mod om">✎ Owner-maintained</span>';
+    const STALE = (t) => '<span class="ifv-mod st">' + G.st + ' Stale · ' + t + '</span>';
+    const PROV = '<span class="ifv-mod">Provisional</span>';
+    const TB = (t) => '<span class="ifv-tag" title="Needs backend work">◇ ' + t + '</span>';
+    const TO = (t) => '<span class="ifv-own" title="Owner decision">⚑ ' + t + '</span>';
+    const CS = (k, t) => { const m = { due: ['due', 'pd', 'Due'], part: ['part', 'half', 'Part received'], over: ['over', 'ar', 'Overdue'], paid: ['paid', 'ok', 'Paid'] }[k]; return '<span class="ifv-cs ' + m[0] + '">' + G[m[1]] + (t || m[2]) + '</span>'; };
+
+    /* ---------- standing: derived, never chosen; never lower while loading ---------- */
+    const STAND = {
+      visitor: ['', 'ring', 'Visitor · viewing by invitation'],
+      applicant: ['', 'pd', 'Applicant · application in review'],
+      approved: ['v', 'half', 'Approved · nothing committed yet'],
+      committed: ['v', 'dot', 'Committed LP · [$150,000]'],
+      full: ['v', 'star', 'Full rights · [$300,000]'],
+      loading: ['sk', 'st', 'Reading your standing…']
+    };
+    const chip = (k) => '<span class="ifv-chip ' + STAND[k][0] + '" role="status">' + G[STAND[k][1]] + STAND[k][2] + '</span>';
+
+    /* ---------- shell (#3704): union sidebar, company switcher, Account menu; no Eadwyn rail here (owner request) ---------- */
+    const NAV = ['Studio', 'Spin-Out Lab', 'Deals', 'Axal VC Fund', 'Fund', 'Trust', 'Network', 'Research'];
+    const shell = (body, o) => '<div class="ifv-sh" style="min-height:' + (o.h || 900) + 'px">'
+      + '<aside class="ifv-sd"><div class="ifv-lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="ifv-co" aria-label="Company or project: [Investor entity]"><i aria-hidden="true"></i>[Investor entity]<span>▾</span></button><nav aria-label="Workspace">' + J(NAV.map(t => (t === 'Trust' ? '<div class="ifv-sep"></div>' : '') + '<a href="#"' + (t === (o.nav || 'Axal VC Fund') ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn">' + (o.preview ? '<div class="ifv-pv" role="status"><span>' + G.lk + ' Admin preview · Preview only: nothing on this page writes</span><span class="ifv-sw">' + J(['Visitor', 'Applicant', 'Approved', 'Committed', 'Full rights'].map(x => '<span' + (x === o.preview ? ' class="on"' : '') + '>' + x + '</span>')) + '</span></div>' : '')
+      + '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">IN</button></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv' + (dark ? ' ifv-dk' : '') + '" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + ';position:relative;overflow:hidden">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv' + (dark ? ' ifv-dk' : '') + '" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const doc = (inner) => '<div class="cv" style="' + VARS + '"><div class="ifv-doc">' + inner + '</div></div>';
+
+    /* ---------- header + section tabs (hash anchors, option A) ---------- */
+    const TABS = { visitor: ['Overview', 'Fund and terms', 'Apply and onboarding'], applicant: ['Overview', 'Apply and onboarding', 'Documents', 'Fund and terms', 'History'], full: ['Overview', 'My commitment', 'Documents', 'Reports', 'Fund and terms', 'Apply and onboarding', 'History'] };
+    const BADGE = { 'My commitment': ['1 due', 'w'], Documents: ['8', ''], Reports: ['2', ''] };
+    const tabs = (cur, set, nb) => '<nav class="ifv-tabs" aria-label="Fund workspace sections">' + J((TABS[set] || TABS.full).map(t => '<a href="#' + ({ Overview: 'overview', 'My commitment': 'my-commitment', Documents: 'documents', Reports: 'reports', 'Fund and terms': 'fund', 'Apply and onboarding': 'apply', History: 'history' })[t] + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + (set === 'full' && !nb && BADGE[t] ? '<span class="' + BADGE[t][1] + '">' + BADGE[t][0] + '</span>' : '') + '</a>')) + '</nav>';
+    const head = (o) => '<div class="ifv-crumb">Axal VC Fund › <b style="color:var(--ink)">' + (o.crumb || 'Overview') + '</b></div><header class="ifv-hd"><div><div class="ifv-hl"><h1>Axal VC Spin-Out Fund I</h1>' + chip(o.st) + '</div><p>' + (o.sub || 'Delaware LP · vintage 2026 · pre-seed · /spinout-lab/investor-workspace') + '</p></div><div class="ifv-act">' + (o.sec || '') + (o.pri ? '<button type="button" class="btn p">' + o.pri + '</button>' : '') + '</div></header>' + tabs(o.tab || 'Overview', o.set || 'full', o.nb);
+
+    /* ---------- sample data (fictional; sums agree on every board) ---------- */
+    const LP1 = { commit: '[$150,000]', called: '[$52,500]', paid: '[$30,000]', uncalled: '[$97,500]', dist: '[$0]', ret: '[$31,500]', tvpi: '1.05×', dpi: '0.00×', tier: 'Member', c1: '[$30,000]', c2: '[$22,500]', ref1: 'AXF1-C1-0417', ref2: 'AXF1-C2-0417', fee: '[$750]', floor: '[$150,000]' };
+    const LP2 = { commit: '[$300,000]', called: '[$105,000]', paid: '[$60,000]', uncalled: '[$195,000]', dist: '[$0]', ret: '[$63,000]', tvpi: '1.05×', dpi: '0.00×', tier: 'Allocator', c1: '[$60,000]', c2: '[$45,000]', ref1: 'AXF1-C1-0233', ref2: 'AXF1-C2-0233', fee: '[$1,500]', floor: '[$300,000]' };
+    const AS = 'as of 14 Nov 2026, 09:12 UTC';
+
+    /* ---------- shared blocks ---------- */
+    const figs = (rows, cols) => '<div class="ifv-figs" style="grid-template-columns:repeat(' + (cols || rows.length) + ',minmax(0,1fr))">' + J(rows.map(r => '<div><small>' + r[0] + '</small><b>' + r[1] + '</b>' + (r[2] ? '<em>' + r[2] + '</em>' : '') + '</div>')) + '</div>';
+    const commitFigs = (L) => figs([['Committed (to date)', L.commit, 'limited_partners · LPA signed 3 Sep 2026'], ['Called (to date)', L.called, '2 capital calls'], ['Paid in (to date)', L.paid, 'received on call #1'], ['Uncalled', L.uncalled, 'committed − called'], ['Distributions (to date)', L.dist, 'none paid yet · a recorded $0'], ['TVPI (to date)', L.tvpi, 'returns ' + L.ret + ' ÷ paid in'], ['DPI (to date)', L.dpi, 'distributions ÷ paid in']]);
+    const raise = (o) => { o = o || {}; return '<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span><span class="ifv-lbl">Committed (to date)</span> <b class="mo" style="font-size:20px">[$6.8M]</b> <span class="mu">of [$20M] target</span></span>' + (o.om ? OM : '<span class="raw">Raise ' + AS + '</span>') + '</div><div class="ifv-bar" role="img" aria-label="34 percent of target committed"><i style="width:34%"></i></div><div class="raw">[31] LPs · median ticket [$150K] · target [$20M]' + (o.om ? ' · owner-maintained model, last edited 2 Nov 2026' : ' · GET /api/spinout-lab/fund-metrics') + '</div></div>'; };
+    const tiles = () => '<div class="ifv-tiles">' + J([['[37]', 'Graduates', 'all cohorts'], ['[86%]', 'On-time graduation', 'all cohorts'], ['[78%]', 'Incorporated', 'of graduates']].map(t => '<div class="ifv-tile"><b>' + t[0] + '</b><small>' + t[1] + '</small><em>' + t[2] + ' · read 14 Nov 2026</em></div>')) + '</div>';
+    const TIERS = [['Supporter', '$50K', 'Minimum ticket', ['Quarterly reports, audited statement', 'Cohort dashboard', 'Demo-day livestream']], ['Member', '$100K', '', ['In-person demo day', 'Portfolio deep-dives', 'Founder introductions']], ['Allocator', '$250K', 'Allocation rights', ['Allocation preferences', 'Voting', 'Follow-on co-invest']], ['Anchor', '$500K+', 'By discussion', ['Co-invest priority', 'LPAC seat eligibility']]];
+    const tiers = (me) => '<div class="ifv-tiers">' + J(TIERS.map(t => '<div class="ifv-tier' + (t[0] === me ? ' me' : '') + '">' + (t[0] === me ? '<span class="ifv-me">' + G.dot + ' Your tier</span>' : '') + '<b>' + t[0] + '</b><span class="mo">' + t[1] + '</span>' + (t[2] ? '<span class="raw">' + t[2] + '</span>' : '') + '<ul>' + J(t[3].map(r => '<li>' + r + '</li>')) + '</ul></div>')) + '</div>';
+    const terms = () => '<dl class="ifv-kv"><dt>Target · hard cap</dt><dd class="mo">[$20M] · [$25M]</dd><dt>Minimum ticket</dt><dd class="mo">[$50K]</dd><dt>Fees · carry</dt><dd>2% management fee · 20% carry</dd><dt>Term · domicile</dt><dd>10 years · Delaware LP · vintage 2026</dd><dt>Stage</dt><dd>Pre-seed, Lab graduates</dd><dt>First close (scheduled)</dt><dd>15 Sep 2026 · <span class="mu">date passed; outcome not recorded</span> ' + TB('#6137') + '</dd><dt>Demo day (scheduled)</dt><dd>21 Aug 2026 · <span class="mu">date passed; outcome not recorded</span></dd></dl>';
+    const ONB = (o) => [
+      ['Accredited status', o.acc || S('am', 'Self-certified, not verified'), '<a href="#apply">View answer</a>'],
+      ['KYC / AML', o.kyc || S('ok', 'Approved'), o.kycL || '<a href="#">Open Trust →</a>'],
+      ['Subscription booklet', o.bk || S('ok', 'Sent for signature · GP 4 Sep 2026'), (o.bkL || '<a href="#documents">Open booklet</a>') + ' ' + TB('build now · #6130')],
+      ['Limited partnership agreement', o.lpa || S('ok', 'Signed 3 Sep 2026'), o.lpaL || '<span class="mu">Nothing to do</span>'],
+      ['Banking and capital call setup', NR(), TB('store')]
+    ];
+    const onbTable = (o) => '<table class="ifv-tbl"><thead><tr><th style="width:34%">Requirement</th><th>Status</th><th style="text-align:right">Link</th></tr></thead><tbody>' + J(ONB(o || {}).map(r => '<tr><td><b>' + r[0] + '</b></td><td>' + r[1] + '</td><td style="text-align:right">' + r[2] + '</td></tr>')) + '</tbody></table>';
+    const wire = (L, o) => { o = o || {}; return '<div class="ifv-wire"><div style="display:flex;justify-content:space-between;align-items:center"><span class="ifv-lbl">Wire details · Fund I</span><span class="raw">masked</span></div><dl class="ifv-kv"><dt>Bank</dt><dd>[Bank Name]</dd><dt>Beneficiary</dt><dd>Axal VC Spin-Out Fund I, L.P.</dd><dt>Account</dt><dd class="mo">•••• 4821 <button type="button" class="btn t bsm">Show full account number</button></dd><dt>Reference to quote</dt><dd><span class="ifv-ref">' + L.ref2 + ' <button type="button" class="btn bsm">Copy</button></span></dd></dl>' + (o.warn !== false ? '<div class="nt a" style="padding:8px 10px">' + G.ar + '<span>Confirm these details by phone with the fund team before a first wire. Axal never changes bank details by email.</span></div>' : '') + '<span class="raw">Opening the full number is recorded. Nothing is paid from the platform; you wire from your bank.</span></div>'; };
+    const dueBlk = (L) => '<section class="ifv-blk hi" aria-label="What is due"><h2>What is due <span>1 open line</span></h2><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px"><div><b>Capital call #2</b><div class="ifv-amt">' + L.c2 + '</div><span class="raw">owed · received to date [$0]</span></div>' + CS('due', 'Due · in 17 days') + '</div><dl class="ifv-kv" style="grid-template-columns:100px minmax(0,1fr)"><dt>Issued</dt><dd class="mo">10 Nov 2026</dd><dt>Due</dt><dd class="mo">1 Dec 2026</dd><dt>Account</dt><dd class="mo">[Bank Name] · •••• 4821</dd><dt>Reference</dt><dd class="mo">' + L.ref2 + '</dd><dt>Purpose</dt><dd>' + NR('Not on your read yet') + ' ' + TB('read change') + '</dd></dl><span class="raw">Opens wire details; nothing is paid from the platform.</span></section>';
+    const signBlk = (o) => '<section class="ifv-blk" aria-label="What to sign"><h2>What to sign <span>' + (o && o.left ? o.left : 'nothing left') + '</span></h2>' + (o && o.left ? o.body : '<ul class="ifv-list"><li><div><b>Subscription booklet</b><small>submitted 2 Sep 2026 · LP signed 2 Sep · GP signed 4 Sep</small></div>' + S('ok', 'Complete') + '</li><li><div><b>Limited partnership agreement</b><small>signed 3 Sep 2026</small></div>' + S('ok', 'Signed') + '</li></ul><p class="ifv-cap">Nothing waits for your signature. New documents to sign appear here first.</p>') + '</section>';
+    const arrBlk = (L) => '<section class="ifv-blk" aria-label="What arrived"><h2>What arrived <span>latest 3</span></h2><ul class="ifv-list"><li><div><b>Capital call notice #2</b><small>notice · issued 10 Nov 2026 · ' + L.c2 + '</small></div><a class="btn bsm" href="#">PDF</a></li><li><div><b>Capital statement · Q3 2026</b><small>statement · issued 20 Oct 2026 · revision 1</small></div><a class="btn bsm" href="#">PDF</a></li><li><div><b>Quarterly report · Q3 2026</b><small>report · issued 20 Oct 2026</small></div><a class="btn bsm" href="#reports">Open</a></li></ul><a href="#documents" style="font-weight:700;font-size:12.5px">All documents and notices →</a></section>';
+    const labSum = () => '<section class="cd"><div class="ch"><h2>Spin-Out Lab</h2><a href="#" class="btn t bsm">Open /spinout-lab →</a></div><div class="ifv-tiles" style="grid-template-columns:repeat(4,minmax(0,1fr))">' + J([['[37]', 'Graduates · all cohorts'], ['[86%]', 'On-time graduation'], ['[78%]', 'Incorporated'], ['Oct 2026', 'Cohort shared with you']].map(t => '<div class="ifv-tile"><b style="font-size:18px">' + t[0] + '</b><small>' + t[1] + '</small></div>')) + '</div><span class="raw">Programme figures read 14 Nov 2026 · next scheduled date: none recorded after demo day 21 Aug 2026 (date passed; outcome not recorded)</span></section>';
+    const increaseLine = () => '<div class="ifv-ban n" style="align-items:center;justify-content:space-between"><div><b style="font-size:13.5px">Increase to $250K for allocation and decision rights</b><p class="mu">You hold ' + LP1.commit + ' (Member). The fund team records commitments; a request is not a commitment.</p></div><div style="display:flex;gap:8px;align-items:center;flex:none"><button type="button" class="btn" aria-disabled="true" title="Waiting on a store">Request an increase</button>' + TB('store') + '<a class="btn" href="#">Email the GP of record</a></div></div>';
+    const callsTable = (L, o) => { o = o || {}; return '<table class="ifv-tbl"><thead><tr><th>Call</th><th class="n">Owed</th><th class="n">Received to date</th><th>Issued</th><th>Due</th><th>State</th><th>Purpose ' + TB('read change') + '</th><th></th></tr></thead><tbody>'
+      + '<tr><td><b>#2</b></td><td class="n">' + L.c2 + '</td><td class="n">[$0]</td><td class="mo">10 Nov 2026</td><td class="mo">1 Dec 2026</td><td>' + CS('due', 'Due · in 17 days') + '</td><td>' + NR('Not on your read') + '</td><td style="text-align:right"><button type="button" class="btn bsm">Wire details</button></td></tr>'
+      + '<tr><td><b>#1</b></td><td class="n">' + L.c1 + '</td><td class="n">' + L.c1 + '</td><td class="mo">15 Sep 2026</td><td class="mo">30 Sep 2026</td><td>' + CS('paid', 'Paid · 28 Sep 2026') + '</td><td>' + NR('Not on your read') + '</td><td style="text-align:right"><a class="btn t bsm" href="#">Notice</a></td></tr>'
+      + (o.extra || '') + '</tbody></table>'; };
+
+    /* ---------- boards ---------- */
+    let html;
+
+    if (B === 'IFV01') {
+      html = page(head({ st: 'visitor', set: 'visitor', sec: '<a class="btn" href="#">Fund brief (PDF)</a>', pri: 'Apply to participate' })
+        + '<section class="cd" style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:28px;padding:22px 24px"><div style="display:flex;flex-direction:column;gap:12px"><span class="ifv-lbl">The thesis</span><h2 style="font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.25">Back the companies the Spin-Out Lab builds, from incorporation.</h2><p style="font-size:13.5px;line-height:1.6;color:var(--mu)">Fund I writes the first cheque into Lab graduates: [$100K]–[$150K] initial tickets, a [$250K] conviction cheque, and 30–40% held in reserve for follow-ons. Founders come through a 30-day programme with weekly evidence, so the fund invests on a record, not a deck.</p>' + raise() + '</div><div style="display:flex;flex-direction:column;gap:12px"><span class="ifv-lbl">The Lab programme · proof</span>' + tiles() + '<p class="ifv-cap">Programme figures come from the Lab’s own records (graduates, start dates, incorporations). They describe the programme, not fund returns.</p></div></section>'
+        + '<div class="ifv-two"><section class="cd"><div class="ch"><h2>Key terms</h2>' + OM + '</div>' + terms() + '</section><section class="cd"><div class="ch"><h2>Tiers and rights</h2>' + OM + '</div>' + tiers() + '<p class="ifv-cap">Each tier adds to the one before it. Allocation and decision rights start at [$250K].</p></section></div>'
+        + '<section class="cd" style="flex-direction:row;align-items:center;justify-content:space-between"><div><b>Ready to talk to the fund?</b><p class="ifv-cap">Applying sends your answers to the fund team. It commits nothing and moves no money.</p></div><a href="#apply" class="btn">Read what applying involves</a></section>', { h: 980 });
+    }
+
+    else if (B === 'IFV02') {
+      html = page(head({ st: 'applicant', set: 'applicant', pri: 'Start KYC / AML in Trust', crumb: 'Overview' })
+        + '<div class="ifv-ban"><span class="ifv-ic">' + G.pd + '</span><div style="flex:1"><b>Application in review</b><p>Sent 9 Nov 2026 · target commitment [$100,000] · the fund team reviews each application by hand. You can edit your answers while it is pending.</p><div class="ifv-steps" style="margin-top:10px" role="list" aria-label="What happens next"><span role="listitem" class="on" aria-current="step">1 · Review</span><span role="listitem">2 · KYC / AML</span><span role="listitem">3 · Subscription booklet</span><span role="listitem">4 · Sign the LPA</span></div></div><a href="#apply" class="btn bsm">View my answers</a></div>'
+        + '<section class="cd"><div class="ch"><h2>Onboarding</h2><span class="raw">5 requirements · read 14 Nov 2026, 09:12 UTC</span></div>' + onbTable({ acc: S('am', 'Self-certified, not verified'), kyc: S('ns'), kycL: '<a href="#">Open Trust →</a>', bk: S('ns'), bkL: '<span class="mu">Opens after approval</span>', lpa: S('no', 'No position yet'), lpaL: '<span class="mu">After your position is set up</span>' }) + '<p class="ifv-cap">KYC opens Trust (/trust) and brings you back here. The first unfinished row is the page’s one action.</p></section>'
+        + '<section class="cd"><div class="ch"><h2>The fund in short</h2><a href="#fund" class="btn t bsm">Fund and terms →</a></div><div class="ifv-two" style="gap:24px"><div>' + raise() + '</div><dl class="ifv-kv"><dt>Minimum ticket</dt><dd class="mo">[$50K]</dd><dt>Fees · carry</dt><dd>2% · 20%</dd><dt>First close (scheduled)</dt><dd>15 Sep 2026 · <span class="mu">date passed; outcome not recorded</span></dd></dl></div></section>', { h: 1000 });
+    }
+    else if (B === 'IFV02B') {
+      html = crop('<span class="eye">Applicant · the three cases lpAccessState() reads as “pending”</span>'
+        + '<div class="ifv-ban"><span class="ifv-ic">' + G.pd + '</span><div><b>Application in review</b><p>Sent 9 Nov 2026. Review, then KYC / AML, the subscription booklet and the LPA.</p></div></div>'
+        + '<div class="ifv-ban g"><span class="ifv-ic g">' + G.ok + '</span><div><b>Approved. Your fund position is being set up.</b><p>Reviewed 12 Nov 2026 · “Welcome to Fund I.” The fund team records your position; you will see My commitment once it exists. Meanwhile: KYC / AML and the booklet.</p></div><a href="#" class="btn bsm">Open Trust →</a></div>'
+        + '<div class="ifv-ban a"><span class="ifv-ic a">' + G.half + '</span><div><b>Your position is open. Sign the LPA to continue.</b><p>A position is recorded with [$0] committed and the LPA unsigned. Signing is recorded with its date; it commits no amount.</p></div><button type="button" class="btn bsm">Sign the LPA</button></div>'
+        + '<p class="ifv-cap">Declined or withdrawn returns the person to the Visitor first screen, with the review note kept on Apply and onboarding.</p>', 1100);
+    }
+
+    else if (B === 'IFV03') {
+      html = page(head({ st: 'approved', nb: true, pri: 'Continue the booklet: part 6', crumb: 'Overview' })
+        + '<section class="cd"><div class="ch"><h2>What to do next</h2><span class="raw">LPA signed 12 Nov 2026 · committed [$0]</span></div><div class="ifv-three">'
+        + '<div class="ifv-blk hi"><h2>To sign <span>4 parts left</span></h2><ul class="ifv-list"><li><div><b>Subscription booklet · open</b><small>parts 1–5 answered · 6 Tax Status Certification next</small></div>' + S('vi', 'Open') + '</li><li><div><b>Limited partnership agreement</b><small>signed 12 Nov 2026</small></div>' + S('ok', 'Signed') + '</li></ul><span class="raw">Submitting freezes the booklet and sends it for signature: you, then the GP.</span></div>'
+        + '<div class="ifv-blk"><h2>To fund</h2><b>Show Axal you can fund this</b><p class="ifv-cap">Share a floor, “at least $X”, from your Mercury account. The fund team never sees a balance. It expires 30 days later and you can revoke it.</p><button type="button" class="btn" style="align-self:flex-start">Share proof of funds</button><span class="raw">Goes to the Mercury connector · nothing shared yet</span></div>'
+        + '<div class="ifv-blk"><h2>To commit</h2><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="mu">Your position</span><b class="mo">[$0] of [$50K] minimum</b></div><div class="ifv-bar" role="img" aria-label="0 of minimum"><i style="width:0"></i></div><ul style="list-style:none;display:flex;flex-direction:column;gap:4px;font-size:12px"><li>Supporter <b class="mo">$50K</b> · reports, dashboard</li><li>Member <b class="mo">$100K</b> · demo day, introductions</li><li>Allocator <b class="mo">$250K</b> · allocation, voting</li><li>Anchor <b class="mo">$500K+</b> · co-invest priority</li></ul><a class="btn" href="#" style="align-self:flex-start">Email the GP of record</a><span class="raw">The fund team records commitments; the platform does not.</span></div>'
+        + '</div></section>'
+        + '<section class="cd"><div class="ch"><h2>Reports archive</h2><a href="#reports" class="btn t bsm">All reports →</a></div><ul class="ifv-list"><li><div><b>Quarterly report · Q3 2026</b><small>issued 20 Oct 2026 · GP letter and frozen figures</small></div><a class="btn bsm" href="#">Open</a></li><li><div><b>Quarterly report · Q2 2026</b><small>issued 22 Jul 2026 · figures not recorded for this period</small></div><a class="btn bsm" href="#">Open</a></li></ul></section>'
+        + labSum(), { h: 980 });
+    }
+
+    else if (B === 'IFV04' || B === 'IFV18') {
+      const L = LP1;
+      html = page(head({ st: 'committed', pri: 'Wire details for call #2', sec: '<a class="btn" href="#documents">Documents</a>' })
+        + '<div class="ifv-three">' + dueBlk(L) + signBlk() + arrBlk(L) + '</div>'
+        + '<section class="cd"><div class="ch"><h2>My commitment · Fund I</h2><span class="raw">to date · ' + AS + ' · <a href="#my-commitment">Open My commitment →</a></span></div>' + commitFigs(L) + '</section>'
+        + increaseLine()
+        + labSum()
+        + (B === 'IFV18' ? '<section class="ifv-ban r" style="flex-direction:column;gap:8px"><div style="display:flex;gap:10px;align-items:center"><span class="ifv-ic r">' + G.ua + '</span><b>Calls unavailable</b><span class="ifv-s un">' + G.ua + ' Unavailable</span></div><p>Your capital calls could not be read (capital_calls_recorded: false). This is not “nothing due”. Notices and reports below still work.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>' : ''), { h: B === 'IFV18' ? 1260 : 1120 });
+    }
+
+    else if (B === 'IFV05') {
+      const L = LP2;
+      html = page(head({ st: 'full', pri: 'Wire details for call #2', sec: '<a class="btn" href="#documents">Documents</a>' })
+        + '<div class="ifv-three">' + dueBlk(L) + signBlk() + arrBlk(L) + '</div>'
+        + '<section class="cd"><div class="ch"><h2>My commitment · Fund I</h2><span class="raw">to date · ' + AS + '</span></div>' + figs([['Committed (to date)', L.commit, 'Allocator tier'], ['Called (to date)', L.called, '2 capital calls'], ['Paid in (to date)', L.paid, 'received on call #1'], ['Uncalled', L.uncalled, 'committed − called'], ['Distributions (to date)', L.dist, 'a recorded $0'], ['TVPI (to date)', L.tvpi, 'returns ' + L.ret + ' ÷ paid in'], ['DPI (to date)', L.dpi, 'distributions ÷ paid in']]) + '</section>'
+        + '<section class="cd"><div class="ch"><h2>Your rights · Allocator</h2><span class="raw">from [$250K] committed</span></div><div class="ifv-three">'
+        + '<div class="ifv-blk"><h2>Allocation window ' + TB('#6138') + '</h2><span class="raw">Closes at demo day · 21 Aug 2026 · date passed; outcome not recorded</span>' + J([['[Venture A]', 40], ['[Venture B]', 35], ['[Venture C]', 25]].map(v => '<div style="display:grid;grid-template-columns:90px minmax(0,1fr) 44px;gap:8px;align-items:center;opacity:.6"><span style="font-size:12.5px;font-weight:700">' + v[0] + '</span><div class="ifv-bar"><i style="width:' + v[1] + '%;background:var(--hair2)"></i></div><span class="mo" style="font-size:12px;text-align:right">' + v[1] + '%</span></div>')) + '<p class="ifv-cap">Allocation preferences cannot be sent yet. This is a decision input, not an order.</p><button type="button" class="btn bsm" aria-disabled="true" style="align-self:flex-start">Send preferences · not available</button></div>'
+        + '<div class="ifv-blk"><h2>Co-invest offers ' + TB('store') + '</h2>' + TO('proposal 14') + '<p class="ifv-cap">No co-invest offer can be recorded on the platform yet. When the owner keeps proposal 14 in, offers appear here with their own terms and deadline.</p>' + S('na', 'No offers can be shown yet') + '</div>'
+        + '<div class="ifv-blk"><h2>Cohorts shared with you</h2><ul class="ifv-list"><li><div><b>Cohort · Oct 2026</b><small>access 1 Oct 2026 → 31 Mar 2027 · NDA signed 1 Oct 2026</small></div><a href="#fund" class="btn bsm">3 ventures</a></li></ul><span class="raw">Summary shared · weekly progress not in this grant</span><span class="raw">Cohort start and end dates ' + TB('read change') + '</span></div>'
+        + '</div></section>'
+        + labSum(), { h: 1260 });
+    }
+
+    else if (B === 'IFV06' || B === 'IFV07') {
+      const L = LP1;
+      const body = head({ st: 'committed', tab: 'My commitment', crumb: 'My commitment', pri: 'Wire details for call #2' })
+        + '<section class="cd"><div class="ch"><h2>Axal VC Spin-Out Fund I</h2><span class="raw">to date · ' + AS + '</span></div>' + commitFigs(L) + '</section>'
+        + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:14px 18px"><h2>Capital calls</h2><span class="raw">2 lines · received to date is the total; each receipt by date ' + TB('read change') + '</span></div>' + callsTable(L) + '</section>'
+        + '<div class="ifv-two"><section class="cd"><div class="ch"><h2>Distributions</h2><span class="raw">to date</span></div><div class="ifv-ban n" style="padding:10px 12px"><span>' + S('no', 'None yet') + '</span><p style="margin:0">No distribution has been paid. Distributions (to date): <b class="mo">[$0]</b>, a recorded value.</p></div></section>'
+        + '<section class="cd"><div class="ch"><h2>Agreement</h2></div><dl class="ifv-kv" style="grid-template-columns:200px minmax(0,1fr)"><dt>Limited partnership agreement</dt><dd>' + S('ok', 'Signed 3 Sep 2026') + '</dd><dt>The LPA as a document</dt><dd>' + S('na', 'Not issued on the platform yet') + ' ' + TB('store') + '</dd></dl></section></div>'
+        + '<section class="cd"><div class="ch"><h2>Proof of funds shared</h2><span class="raw">via Mercury · never a balance</span></div><table class="ifv-tbl"><thead><tr><th>Floor</th><th>As of</th><th>Expires</th><th>State</th><th class="n">Views</th><th></th></tr></thead><tbody><tr><td class="mo">at least ' + L.floor + '</td><td class="mo">1 Nov 2026</td><td class="mo">1 Dec 2026</td><td>' + S('ok', 'Active') + '</td><td class="n">2</td><td style="text-align:right"><button type="button" class="btn bsm">Revoke</button></td></tr><tr><td class="mo">at least [$100,000]</td><td class="mo">2 Sep 2026</td><td class="mo">2 Oct 2026</td><td>' + S('no', 'Superseded') + '</td><td class="n">1</td><td></td></tr></tbody></table></section>'
+        + '<section class="cd"><div class="ch"><h2>GP of record</h2></div><dl class="ifv-kv" style="grid-template-columns:200px minmax(0,1fr)"><dt>General partner</dt><dd>Axal VC GP I, LLC · [GP Name]</dd><dt>Fund administrator</dt><dd>[Fund Administrator]</dd><dt>Auditor</dt><dd>' + NR() + '</dd></dl><div style="display:flex;gap:8px;align-items:center"><a class="btn" href="#">Email the GP</a><button type="button" class="btn" aria-disabled="true">Request an increase</button>' + TB('store') + '</div></section>';
+      const sheet = B === 'IFV07' ? '<div class="ifv-scrim"></div><aside class="ifv-side" role="dialog" aria-label="Capital call #2"><div class="ifv-sh2"><div><span class="ifv-lbl">Capital call · Fund I</span><h2 style="font-size:18px;font-weight:800">Capital call #2</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ifv-sb">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-end"><div><span class="ifv-lbl">Amount owed</span><div class="ifv-amt" style="font-size:28px">' + L.c2 + '</div></div>' + CS('due', 'Due · in 17 days') + '</div>'
+        + '<dl class="ifv-kv"><dt>Received to date</dt><dd class="mo">[$0]</dd><dt>Each receipt</dt><dd>' + NR('Not on your read') + ' ' + TB('read change') + '</dd><dt>Issued on</dt><dd class="mo">10 Nov 2026</dd><dt>Due date</dt><dd class="mo">1 Dec 2026</dd><dt>Purpose</dt><dd>' + NR('Not on your read') + ' ' + TB('read change') + '</dd></dl>'
+        + wire(L)
+        + '<a href="#" class="btn" style="align-self:flex-start">' + G.doc + ' Capital call notice #2 (PDF)</a></div><div class="ifv-sf"><a class="btn" href="#">Contact the fund team</a><button type="button" class="btn p">Copy reference</button></div></aside>' : '';
+      html = page(body, { h: B === 'IFV06' ? 1220 : 1180, overlay: sheet });
+    }
+    else if (B === 'IFV06B') {
+      const step = (n) => '<div class="ifv-steps" role="list" aria-label="Request steps">' + J(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt'].map((s, i) => '<span role="listitem" class="' + (i < n ? 'dn' : i === n ? 'on' : '') + '"' + (i === n ? ' aria-current="step"' : '') + '>' + (i < n ? '✓ ' : '') + s + '</span>')) + '</div>';
+      html = crop('<div style="display:flex;gap:8px;align-items:center"><span class="eye">Request to increase a commitment · drawn as option A (a stored request)</span>' + TB('new store') + TO('option A') + '</div>'
+        + '<div class="ifv-two">'
+        + '<section class="cd">' + step(0) + '<h2 style="font-size:16px;font-weight:800">Request an increase</h2><div class="ifv-f"><label>New total commitment <span>(USD)</span></label><div class="ifv-in mo">[$250,000]</div><small>Today ' + LP1.commit + ' · the increase would be [$100,000] · Allocator from [$250K]</small></div><div class="ifv-f"><label>Note to the fund team <span>(optional)</span></label><div class="ifv-in ta">I would like allocation rights before the next cohort.</div></div><p class="ifv-cap">A request is not a commitment. Nothing is called or moved. The fund team answers it and, if agreed, records the new amount with new paper.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Review request</button></div></section>'
+        + '<section class="cd">' + step(4) + '<div class="ifv-ban g" style="padding:12px"><span class="ifv-ic g">' + G.ok + '</span><div><b>Sent, waiting for the fund team</b><p>Request recorded 14 Nov 2026, 09:20 UTC · reference REQ-0031. Your commitment is still ' + LP1.commit + ' until the fund team records a change.</p></div></div><dl class="ifv-kv"><dt>Requested total</dt><dd class="mo">[$250,000]</dd><dt>Status</dt><dd>' + S('am', 'Waiting for the fund team') + '</dd><dt>Authenticated</dt><dd>Passkey · 09:20 UTC</dd></dl><span class="raw">Today’s interim, until the store exists: Email the GP of record.</span></section>'
+        + '</div>', 1240);
+    }
+    else if (B === 'IFV07B') {
+      const card = (t, inner) => '<section class="cd" style="gap:10px"><span class="eye">' + t + '</span>' + inner + '</section>';
+      html = crop('<span class="eye">Capital call sheet · states</span><div class="ifv-two">'
+        + card('Instructions unavailable', '<div style="display:flex;justify-content:space-between"><b>Capital call #2 · ' + LP1.c2 + '</b>' + CS('due', 'Due · in 17 days') + '</div><div class="ifv-ban r" style="padding:10px 12px"><span class="ifv-ic r">' + G.ua + '</span><div><b>Wire details unavailable</b><p>“Payment instructions for this fund are not configured yet. The fund team has been told.” (pay_instructions.available: false)</p></div></div><a class="btn" href="#" style="align-self:flex-start">Contact the fund team</a>')
+        + card('Support session', '<div style="display:flex;justify-content:space-between"><b>Capital call #2 · ' + LP1.c2 + '</b>' + S('rf') + '</div><div class="ifv-ban n" style="padding:10px 12px"><span class="ifv-ic n">' + G.lk + '</span><div><b>A support session cannot see payment instructions.</b><p>The LP opens them from their own account. (403 support_session_refused)</p></div></div>')
+        + card('Paid in full', '<div style="display:flex;justify-content:space-between;align-items:center"><b>Capital call #1 · ' + LP1.c1 + '</b>' + CS('paid', 'Paid · 28 Sep 2026') + '</div><dl class="ifv-kv"><dt>Received to date</dt><dd class="mo">' + LP1.c1 + '</dd><dt>Paid date</dt><dd class="mo">28 Sep 2026 <span class="raw">capital_calls.paid_date</span></dd></dl><p class="ifv-cap">Nothing to wire. Wire details are not shown for a paid line (409 line_already_paid).</p>')
+        + card('Part received and overdue', '<div style="display:flex;justify-content:space-between;align-items:center"><b>Capital call #2 · ' + LP1.c2 + '</b>' + CS('part', 'Part received') + '</div><dl class="ifv-kv"><dt>Received to date</dt><dd class="mo">[$10,000] of ' + LP1.c2 + '</dd><dt>Still owed</dt><dd class="mo">[$12,500]</dd></dl><div style="display:flex;justify-content:space-between;align-items:center"><span class="mu">After 1 Dec 2026 with money still owed</span>' + CS('over', 'Overdue · 4 days') + '</div><div style="display:flex;justify-content:space-between;align-items:center"><span class="mu">A line with no due date</span>' + NR('No due date recorded') + '</div>')
+        + '</div>', 1240);
+    }
+
+    else if (B === 'IFV08') {
+      const L = LP1;
+      const row = (type, title, when, amt, extra, act) => '<tr><td><span class="pl">' + type + '</span></td><td><b>' + title + '</b>' + (extra ? '<small>' + extra + '</small>' : '') + '</td><td class="mo">' + when + '</td><td class="n">' + (amt || '<span class="mu">—</span>') + '</td><td style="text-align:right">' + (act || '<a class="btn bsm" href="#">PDF</a>') + '</td></tr>';
+      html = page(head({ st: 'committed', tab: 'Documents', crumb: 'Documents', pri: 'Wire details for call #2' })
+        + '<div style="display:flex;justify-content:space-between;align-items:center"><div class="ifv-flt" role="group" aria-label="Filter documents">' + J([['All', '8'], ['Notices', '3'], ['Booklet', '1'], ['Statements', '2'], ['Reports', '2'], ['Agreements', '◇'], ['Tax and audit', '◇']].map((f, i) => '<button type="button" aria-pressed="' + (i === 0) + '">' + f[0] + '<span>' + f[1] + '</span></button>')) + '</div><span class="raw">newest first · notices read 14 Nov 2026, 09:12 UTC</span></div>'
+        + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><table class="ifv-tbl"><thead><tr><th style="width:120px">Type</th><th>Title</th><th>Period or issued</th><th class="n">Amount</th><th></th></tr></thead><tbody>'
+        + row('Notice', 'Capital call notice #2', '10 Nov 2026', L.c2, 'reference ' + L.ref2 + ' · account •••• 4821')
+        + row('Statement', 'Capital statement · Q3 2026', 'issued 20 Oct 2026', '', 'revision 1')
+        + row('Statement', 'Management fee statement · Q3 2026', 'issued 20 Oct 2026', L.fee, 'revision 1')
+        + row('Report', 'Quarterly report · Q3 2026', 'issued 20 Oct 2026', '', 'GP letter and frozen figures', '<a class="btn bsm" href="#reports">Open</a>')
+        + row('Notice', 'Capital call notice #1', '15 Sep 2026', L.c1, 'reference ' + L.ref1 + ' · account •••• 4821')
+        + row('Notice', 'Payment instructions letter', '15 Sep 2026', '', 'account •••• 4821')
+        + '<tr><td><span class="pl v">Booklet</span></td><td><b>Subscription booklet · submitted</b><small>submitted 2 Sep 2026 · sent for signature: LP 2 Sep 2026, then GP 4 Sep 2026</small><ol class="ifv-parts">' + J([['1 Cover', 'no signature'], ['2 Instructions and Checklist', 'no signature'], ['3 Subscription Agreement', 'answered'], ['4 Investor Questionnaire', 'answered'], ['5 AML/KYC and Beneficial Ownership', 'answered'], ['6 Tax Status Certification', 'answered'], ['7 Electronic Delivery Consent', 'answered'], ['8 Signature Pages', 'answered'], ['9 Acceptance by the GP', 'GP · 4 Sep']].map(p => '<li><span>' + p[0] + '</span><span class="raw">' + p[1] + '</span></li>')) + '</ol></td><td class="mo">2 Sep 2026</td><td class="n"><span class="mu">—</span></td><td style="text-align:right"><a class="btn bsm" href="#">PDF</a></td></tr>'
+        + row('Report', 'Quarterly report · Q2 2026', 'issued 22 Jul 2026', '', 'figures not recorded for this period', '<a class="btn bsm" href="#reports">Open</a>')
+        + '<tr><td><span class="pl">Agreement</span></td><td><b>Limited partnership agreement</b><small>signed 3 Sep 2026 is recorded; the document itself is not</small></td><td class="mo">—</td><td class="n"><span class="mu">—</span></td><td style="text-align:right">' + S('na', 'Not issued on the platform yet') + ' ' + TB('store') + '</td></tr>'
+        + '<tr><td><span class="pl">Tax and audit</span></td><td><b>Schedule K-1 · 2026</b><small>expected by 15 Mar 2027 (owner-maintained date)</small></td><td class="mo">—</td><td class="n"><span class="mu">—</span></td><td style="text-align:right">' + S('na', 'Not issued on the platform yet') + ' ' + TB('store') + '</td></tr>'
+        + '<tr><td><span class="pl">Tax and audit</span></td><td><b>Audited statements · 2026</b><small>expected by 31 Mar 2027 (owner-maintained date)</small></td><td class="mo">—</td><td class="n"><span class="mu">—</span></td><td style="text-align:right">' + S('na', 'Not issued on the platform yet') + ' ' + TB('store') + '</td></tr>'
+        + '</tbody></table></section><p class="ifv-cap">A notice email opens this shelf with that notice open. Counts cover issued documents; the three ◇ rows are not issued on the platform yet and are never drawn as an empty list.</p>', { h: 1180 });
+    }
+
+    else if (B === 'IFV09') {
+      html = page(head({ st: 'committed', tab: 'Reports', crumb: 'Reports', pri: 'Download Q3 2026 report (PDF)' })
+        + '<div style="display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start"><section class="cd" style="gap:6px"><span class="ifv-lbl">Issued periods · newest first</span><ul class="ifv-list"><li style="background:var(--lav);margin:0 -8px;padding:10px 8px;border-radius:8px"><div><b>Q3 2026</b><small>issued 20 Oct 2026</small></div>' + G.ok + '</li><li><div><b>Q2 2026</b><small>issued 22 Jul 2026</small></div><span class="raw">no figures</span></li></ul></section>'
+        + '<div class="ifv-col"><section class="cd"><div class="ch"><h2>Quarterly report · Q3 2026</h2><span class="raw">issued 20 Oct 2026 · frozen at issue</span></div><div><span class="ifv-lbl">Letter from the GP</span><p style="font-size:13px;line-height:1.6;margin-top:6px">Fund I made its first [4] investments this quarter, all from the July cohort. We called [20%] of commitments on 15 Sep. Two companies closed follow-on rounds after the period; they will appear in Q4. We are not reporting marks before the first year.</p></div>'
+        + '<span class="ifv-lbl">Your figures for the period · frozen</span>' + figs([['Committed', LP1.commit, 'at 30 Sep 2026'], ['Paid in', LP1.paid, 'at 30 Sep 2026'], ['Distributions', '[$0]', 'in the period'], ['TVPI', '1.05×', 'at 30 Sep 2026']]) + '</section>'
+        + '<section class="cd"><div class="ch"><h2>Statements for Q3 2026</h2></div><ul class="ifv-list"><li><div><b>Capital statement · Q3 2026</b><small>issued 20 Oct 2026 · revision 1</small></div><a class="btn bsm" href="#">PDF</a></li><li><div><b>Management fee statement · Q3 2026</b><small>issued 20 Oct 2026 · revision 1 · ' + LP1.fee + '</small></div><a class="btn bsm" href="#">PDF</a></li></ul></section>'
+        + '<section class="cd" style="flex-direction:row;align-items:center;justify-content:space-between"><div><b>Ask about this report</b><p class="ifv-cap">Questions on a report cannot be stored yet. Today: email the GP of record.</p></div><div style="display:flex;gap:8px;align-items:center">' + TB('store') + TO('proposal 14') + '<button type="button" class="btn" aria-disabled="true">Ask about this report</button><a class="btn" href="#">Email the GP</a></div></section>'
+        + '<section class="cd"><div class="ch"><h2>Quarterly report · Q2 2026</h2><span class="raw">issued 22 Jul 2026</span></div>' + NR('Figures not recorded for this period') + '<p class="ifv-cap">This period was issued before the report queue froze figures. The GP letter is kept as issued.</p></section></div></div>', { h: 940 });
+    }
+    else if (B === 'IFV09B') {
+      html = crop('<div style="display:flex;justify-content:space-between;align-items:center"><span class="eye">Reports · admin view</span><span class="pl a">GP only</span></div><section class="cd"><div class="ch"><h2>GP desk</h2><span class="raw">visible to admins only · LPs never see this panel</span></div><table class="ifv-tbl"><thead><tr><th>Period</th><th>State</th><th>Issued</th><th>Figures</th><th></th></tr></thead><tbody><tr><td><b>Q4 2026</b></td><td>' + S('am', 'Draft') + '</td><td>' + S('na', 'Not issued') + '</td><td>' + PROV + '</td><td style="text-align:right"><a class="btn bsm" href="#">Open in Fund admin</a></td></tr><tr><td><b>Q3 2026</b></td><td>' + S('ok', 'Issued') + '</td><td class="mo">20 Oct 2026</td><td>frozen</td><td></td></tr><tr><td><b>Q2 2026</b></td><td>' + S('ok', 'Issued') + '</td><td class="mo">22 Jul 2026</td><td>' + NR() + '</td><td></td></tr></tbody></table><p class="ifv-cap">Issuing happens in Fund admin, not here. This panel only links.</p></section>', 760);
+    }
+
+    else if (B === 'IFV10') {
+      html = page(head({ st: 'committed', tab: 'Fund and terms', crumb: 'Fund and terms', pri: 'Download fund brief (PDF)' })
+        + '<div class="ifv-two"><section class="cd"><div class="ch"><h2>Key terms</h2>' + OM + '</div>' + terms() + '</section>'
+        + '<section class="cd"><div class="ch"><h2>The raise</h2><span class="raw">GET /api/spinout-lab/fund-metrics</span></div>' + raise() + '<div class="ifv-ban a" style="padding:10px 12px"><span class="ifv-ic a">' + G.pd + '</span><div><b>When the read is unavailable</b><p>The owner-maintained model shows instead, labelled ' + OM + ', never “live”.</p></div></div></section></div>'
+        + '<section class="cd"><div class="ch"><h2>Tiers and rights</h2><span class="raw">you: ' + LP1.commit + ' · Member</span></div>' + tiers('Member') + '</section>'
+        + '<section class="cd"><div class="ch"><h2>Fund portfolio</h2><div style="display:flex;gap:6px">' + TB('#6137') + TO('#6137 which figures, who sees them') + '</div></div>' + figs([['Positions', NR(), 'as of —'], ['Invested', NR(), 'as of —'], ['Held at latest marks', NR(), 'as of —'], ['MOIC', NR(), 'as of —'], ['Follow-ons', NR(), 'as of —'], ['Reserve', '30–40%', 'policy · owner-maintained']]) + '<p class="ifv-cap">No fund-level portfolio record exists yet. Option A: once the owner confirms a figure on #6137 it shows labelled Owner-maintained with its as-of date; until then, Not recorded.</p></section>'
+        + '<section class="cd"><div class="ch"><h2>Cohorts shared with you</h2><span class="raw">GET /api/investor-cohorts/me</span></div><table class="ifv-tbl"><thead><tr><th>Cohort</th><th>Access granted</th><th>Access ends</th><th>NDA</th><th>Ventures</th><th>Shared</th></tr></thead><tbody><tr><td><b>Oct 2026</b><small>cohort start and end ' + TB('read change') + '</small></td><td class="mo">1 Oct 2026</td><td class="mo">31 Mar 2027</td><td>' + S('ok', 'Signed 1 Oct 2026') + '</td><td>[Venture A] · [Venture B] · [Venture C]</td><td>Summary · <span class="mu">weekly progress not in this grant</span></td></tr></tbody></table></section>', { h: 1160 });
+    }
+    else if (B === 'IFV10B') {
+      html = crop('<span class="eye">Cohorts · other states</span><div class="ifv-three">'
+        + '<section class="cd"><b>Sign the cohort NDA</b><p class="ifv-cap">You were granted Cohort Oct 2026 on 1 Oct 2026. The ventures show after the cohort NDA is signed. (403 nda_required)</p><button type="button" class="btn" style="align-self:flex-start">Sign the cohort NDA</button></section>'
+        + '<section class="cd"><b>No cohort shared with you</b><p class="ifv-cap">An Axal admin grants access to a cohort. Nothing for you to do here.</p>' + S('no', 'None') + '</section>'
+        + '<section class="cd"><b>Account not verified</b><p class="ifv-cap">Cohorts open to verified investors. (403 not_verified)</p>' + S('rf') + '<a href="#" class="btn" style="align-self:flex-start">Open Trust →</a></section>'
+        + '</div>', 1100);
+    }
+
+    else if (B === 'IFV11') {
+      html = page(head({ st: 'visitor', set: 'visitor', tab: 'Apply and onboarding', crumb: 'Apply and onboarding', pri: 'Submit application' })
+        + '<section class="cd" style="gap:16px"><div class="ch"><h2>Apply to participate</h2><span class="raw">POST /api/spinout-lab/lp-application · nothing is committed by applying</span></div><div class="ifv-form">'
+        + '<div class="ifv-f"><label>Investor type</label><div class="ifv-in">Individual ▾</div></div>'
+        + '<div class="ifv-f"><label>Target commitment <span>(USD)</span></label><div class="ifv-in mo">[$150,000]</div><small>Minimum [$50,000]. Allocation rights from [$250,000].</small></div>'
+        + '<div class="ifv-f" style="grid-column:1/-1"><label>Preference areas <span>(any)</span></label><div class="ifv-pills"><span class="on">Workflow automation</span><span class="on">Climate tech</span><span>Robotics</span><span>Financial infrastructure</span><span>Health</span><span>Cybersecurity</span></div></div>'
+        + '<div class="ifv-f" style="grid-column:1/-1"><label class="ck" style="font-weight:600"><input type="checkbox" checked aria-describedby="acc-n">I certify that I am an accredited investor.</label><small id="acc-n">Self-certified. The fund team verifies accreditation separately; this box does not.</small></div>'
+        + '<div class="ifv-f" style="grid-column:1/-1"><label>Note to the fund team <span>(optional)</span></label><div class="ifv-in ta">Interested in the climate graduates.</div></div>'
+        + '</div><div style="display:flex;justify-content:flex-end;gap:8px"><button type="button" class="btn">Save and finish later</button></div></section>'
+        + '<section class="cd"><div class="ch"><h2>Onboarding</h2><span class="raw">what follows an approved application</span></div>' + onbTable({ acc: S('am', 'Self-certified, not verified'), kyc: S('ns'), bk: S('ns'), bkL: '<span class="mu">Opens after approval</span>', lpa: S('no', 'No position yet'), lpaL: '<span class="mu">After your position is set up</span>' }) + '</section>', { h: 1100 });
+    }
+    else if (B === 'IFV11B') {
+      html = crop('<span class="eye">Application · after sending</span><div class="ifv-three">'
+        + '<section class="cd"><div class="ch"><b>Sent · pending</b>' + S('am', 'Pending') + '</div><dl class="ifv-kv" style="grid-template-columns:110px minmax(0,1fr)"><dt>Sent</dt><dd class="mo">9 Nov 2026</dd><dt>Type</dt><dd>Individual</dd><dt>Target</dt><dd class="mo">[$100,000]</dd><dt>Accredited</dt><dd>Self-certified, not verified</dd></dl><button type="button" class="btn" style="align-self:flex-start">Edit answers</button></section>'
+        + '<section class="cd"><div class="ch"><b>Reviewed · approved</b>' + S('ok', 'Approved') + '</div><dl class="ifv-kv" style="grid-template-columns:110px minmax(0,1fr)"><dt>Reviewed</dt><dd class="mo">12 Nov 2026</dd><dt>Review note</dt><dd>“Welcome to Fund I.”</dd></dl><p class="ifv-cap">Answers are read-only now. To change them, contact the fund team.</p></section>'
+        + '<section class="cd"><div class="ch"><b>Reviewed · declined</b>' + S('rf', 'Declined') + '</div><dl class="ifv-kv" style="grid-template-columns:110px minmax(0,1fr)"><dt>Reviewed</dt><dd class="mo">12 Nov 2026</dd><dt>Review note</dt><dd>“Fund I is closed to this investor type.”</dd></dl><p class="ifv-cap">An application cannot be resubmitted once reviewed (409). Contact the fund team.</p><a class="btn" href="#" style="align-self:flex-start">Contact the fund team</a></section>'
+        + '</div>', 1240);
+    }
+
+    else if (B === 'IFV12') {
+      const H = [['Nov 2026'], ['10 Nov 2026', '↗', 'Capital call #2 issued · ' + LP1.c2, 'Notice'], ['10 Nov 2026', '✉', 'Capital call notice #2 issued', 'PDF'], ['1 Nov 2026', '$', 'Proof of funds shared · at least ' + LP1.floor, 'Open'], ['Oct 2026'], ['20 Oct 2026', '▤', 'Quarterly report Q3 2026 issued', 'Open'], ['20 Oct 2026', '▤', 'Capital statement and management fee statement Q3 2026 issued · revision 1', 'PDF'], ['Sep 2026'], ['15 Sep 2026', '↗', 'Capital call #1 issued · ' + LP1.c1, 'Notice'], ['15 Sep 2026', '✉', 'Payment instructions letter issued', 'PDF'], ['4 Sep 2026', '✎', 'Booklet sent for signature · GP', 'Booklet'], ['3 Sep 2026', '✎', 'LPA signed', ''], ['2 Sep 2026', '✎', 'Booklet submitted · sent for signature · LP', 'Booklet'], ['2 Sep 2026', '$', 'Proof of funds shared · at least [$100,000] (superseded 1 Nov)', ''], ['Aug 2026'], ['25 Aug 2026', '✓', 'Application reviewed · approved', 'Answers'], ['18 Aug 2026', '→', 'Application sent', 'Answers']];
+      html = page(head({ st: 'committed', tab: 'History', crumb: 'History', pri: 'Wire details for call #2' })
+        + '<section class="cd"><div class="ch"><h2>What happened on your position</h2><span class="raw">built from dated records · newest first</span></div><ol class="ifv-hist">' + J(H.map(h => h.length === 1 ? '<li class="ifv-mon">' + h[0] + '</li>' : '<li><span>' + h[0] + '</span><i aria-hidden="true">' + h[1] + '</i><span>' + h[2] + '</span>' + (h[3] ? '<a class="btn bsm" href="#">' + h[3] + '</a>' : '<span></span>') + '</li>')) + '</ol><div class="ifv-ban n" style="padding:10px 12px;align-items:center"><span>Not tracked yet: receipts by date, documents viewed, requests made.</span>' + TB('store') + '</div></section>', { h: 1060 });
+    }
+
+    else if (B === 'IFV13') {
+      html = page('<div class="ifv-crumb">Spin-Out Lab › <b style="color:var(--ink)">Investor view</b></div><header class="ifv-hd"><div><h1>/spinout-lab as an investor sees it</h1><p>Left: a visitor with no position. Right: a committed LP. Every call to action goes to /spinout-lab/investor-workspace.</p></div></header>'
+        + '<div class="ifv-two" style="gap:20px"><div class="ifv-col"><span class="ifv-lbl">Visitor · sales page</span>'
+        + '<section class="cd"><h2 style="font-size:20px;font-weight:800;line-height:1.3">A 30-day Lab that turns research and operators into incorporated companies.</h2><p class="ifv-cap">Founders work in weekly sprints with evidence, a cohort and partners. Graduates incorporate and raise; Fund I can invest from the first cheque.</p><ol style="list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;font-size:12px">' + J(['Week 1 · Problem', 'Week 2 · Evidence', 'Week 3 · Build', 'Week 4 · Raise'].map(s => '<li class="ifv-tile" style="padding:8px 10px"><b style="font-size:12.5px;font-family:var(--sg)">' + s + '</b></li>')) + '</ol></section>'
+        + '<section class="cd"><div class="ch"><h2>The Lab programme</h2><span class="raw">read 14 Nov 2026</span></div>' + tiles() + '</section>'
+        + '<section class="cd"><div class="ch"><h2>A cohort</h2><span class="pl a">Illustrative composite</span></div><p class="ifv-cap">An example of what a cohort looks like, not a real cohort. Real cohort details show only to investors an admin has granted access.</p><ul class="ifv-list"><li><div><b>[Venture A]</b><small>workflow automation · week 4</small></div></li><li><div><b>[Venture B]</b><small>climate tech · week 3</small></div></li></ul></section>'
+        + '<section class="cd" style="flex-direction:row;justify-content:space-between;align-items:center"><a class="btn" href="#">Fund brief (PDF)</a><button type="button" class="btn p">Review the fund →</button></section></div>'
+        + '<div class="ifv-col"><span class="ifv-lbl">Committed LP · short Lab summary</span>'
+        + '<section class="cd"><div class="ch"><h2>Spin-Out Lab</h2>' + chip('committed') + '</div>' + tiles() + '<dl class="ifv-kv"><dt>Your cohorts</dt><dd>Oct 2026 · [Venture A], [Venture B], [Venture C]</dd><dt>Next scheduled date</dt><dd>Demo day 21 Aug 2026 · <span class="mu">date passed; outcome not recorded</span> ' + OM + '</dd></dl><a class="btn" href="#" style="align-self:flex-start">Open my fund workspace →</a></section>'
+        + '<section class="cd"><span class="ifv-lbl">Who sees fund figures here (option A)</span><p class="ifv-cap">Raise figures show to admins, partners, anyone with an investor licence and Fund I holders. A signed-out or non-investor viewer sees programme figures only.</p>' + TO('option A') + '</section></div></div>', { nav: 'Spin-Out Lab', h: 940 });
+    }
+
+    else if (B === 'IFV14') {
+      const E = (t, d, a) => '<section class="cd" style="gap:8px"><span class="ifv-ic n">' + G.ring + '</span><b>' + t + '</b><p class="ifv-cap">' + d + '</p>' + a + '</section>';
+      html = crop('<span class="eye">Empty states · each says its one action or who acts next</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">'
+        + E('No notices yet', 'Your first capital call notice will appear here when the fund issues it.', '<span class="raw">The fund team acts next.</span>')
+        + E('No reports issued', 'The first quarterly report is issued after the period closes.', '<span class="raw">Next period closes 31 Dec 2026.</span>')
+        + E('No calls', 'Nothing called yet. Uncalled: <b class="mo">[$150,000]</b>', '<a href="#" class="btn bsm" style="align-self:flex-start">Show Axal you can fund this</a>')
+        + E('No history', 'Nothing has happened on your position yet. Your application will be the first entry.', '<a href="#apply" class="btn bsm" style="align-self:flex-start">Apply to participate</a>')
+        + E('No cohort shared', 'No cohort has been shared with you. An Axal admin grants access.', '<span class="raw">An Axal admin acts next.</span>')
+        + E('No proof of funds shared', 'You have not shared a floor from Mercury.', '<a href="#" class="btn bsm" style="align-self:flex-start">Share proof of funds</a>')
+        + '</div>', 1240);
+    }
+
+    else if (B === 'IFV15') {
+      html = page(head({ st: 'loading', tab: 'Overview', set: 'visitor', crumb: 'Overview', pri: 'Try again' }).replace('Reading your standing…', 'Standing not read')
+        + '<div class="ifv-ban r"><span class="ifv-ic r">' + G.ua + '</span><div style="flex:1"><b>Your position could not be read. This is not a $0 commitment.</b><p>GET /api/funds/lp-portal failed at 09:12 UTC. Your standing is held back rather than shown as Visitor. Fund and terms and Apply still work.</p></div></div>'
+        + '<div class="ifv-two">'
+        + '<section class="cd"><div class="ch"><h2>Capital calls</h2>' + S('un') + '</div><p class="ifv-cap">Calls could not be read (capital_calls_recorded: false). Not “nothing due”.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>'
+        + '<section class="cd"><div class="ch"><h2>Notices</h2>' + S('un') + '</div><p class="ifv-cap">503 fund_notices_unreadable. Not “no notices”.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>'
+        + '<section class="cd"><div class="ch"><h2>Statements</h2>' + S('un') + '</div><p class="ifv-cap">capital_statements_recorded: false · fee_statements_recorded: false.</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>'
+        + '<section class="cd"><div class="ch"><h2>Onboarding</h2><span class="raw">partial</span></div><dl class="ifv-kv"><dt>KYC / AML</dt><dd>' + S('un', 'Not read') + '</dd><dt>Accredited status</dt><dd>' + S('un', 'Not read') + '</dd><dt>Application</dt><dd>' + S('un', 'Not read · 503, not “never applied”') + '</dd></dl></section>'
+        + '</div><section class="cd"><div class="ch"><h2>Fund and terms · still works</h2><a href="#fund" class="btn t bsm">Open →</a></div>' + raise() + '</section>', { h: 900 });
+    }
+    else if (B === 'IFV15B') {
+      const sk = (w, h) => '<span class="ifv-sk" style="width:' + w + ';height:' + (h || 12) + 'px"></span>';
+      html = page('<div class="ifv-crumb">Axal VC Fund</div><header class="ifv-hd"><div><div class="ifv-hl"><h1>Axal VC Spin-Out Fund I</h1>' + chip('loading') + '</div><p>Delaware LP · vintage 2026 · pre-seed</p></div></header><nav class="ifv-tabs" aria-label="Sections loading"><a aria-current="page">Overview</a></nav>'
+        + '<div class="ifv-three">' + J([0, 1, 2].map(() => '<section class="ifv-blk" aria-busy="true">' + sk('40%', 14) + sk('60%', 26) + sk('90%') + sk('75%') + sk('80%') + '</section>')) + '</div>'
+        + '<section class="cd" aria-busy="true">' + sk('30%', 14) + '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px">' + J([0, 1, 2, 3, 4, 5, 6].map(() => sk('100%', 44))) + '</div></section>'
+        + '<p class="ifv-cap">Loading holds the standing chip back. The page never draws Visitor, the sales page or a $0 commitment while the position is being read; the only tab shown is Overview until it resolves.</p>', { h: 760 });
+    }
+    else if (B === 'IFV15C') {
+      html = crop('<span class="eye">Not recorded · Refused · Saving · Admin preview</span><div class="ifv-two">'
+        + '<section class="cd"><div class="ch"><h2>Not recorded</h2><span class="raw">never drawn as 0 or empty</span></div><dl class="ifv-kv"><dt>Due date</dt><dd>' + NR('No due date recorded') + '</dd><dt>Purpose</dt><dd>' + NR('Not on your read') + ' ' + TB('read change') + '</dd><dt>Call number</dt><dd>Capital call <span class="raw">(no number recorded)</span></dd><dt>GP of record</dt><dd>' + NR() + '</dd><dt>Period figures</dt><dd>' + NR('Figures not recorded for this period') + '</dd><dt>TVPI before paid in</dt><dd>' + S('na', 'No multiple yet') + ' <span class="raw">never 0.00×</span></dd></dl></section>'
+        + '<section class="cd"><div class="ch"><h2>Refused</h2><span class="raw">what to do next</span></div><dl class="ifv-kv"><dt>Cohort</dt><dd>' + S('rf') + ' not verified, NDA required or no grant; an Axal admin grants access</dd><dt>Application reviewed</dt><dd>' + S('rf') + ' already reviewed; contact the fund team</dd><dt>Full account number</dt><dd>' + S('rf') + ' support session; the LP opens it themselves</dd><dt>Line already paid</dt><dd>' + S('rf') + ' nothing to wire</dd></dl></section>'
+        + '<section class="cd"><div class="ch"><h2>Saving and save failed</h2></div><div class="ifv-ban a" style="padding:10px 12px"><span class="ifv-ic a">' + G.ar + '</span><div><b>Your application was not sent.</b><p>Your answers are kept on this page. Nothing was submitted.</p></div><button type="button" class="btn bsm">Try again</button></div><div class="ifv-ban a" style="padding:10px 12px"><span class="ifv-ic a">' + G.ar + '</span><div><b>The LPA signature was not recorded.</b><p>Nothing was signed. Retrying sends the same signature once.</p></div><button type="button" class="btn bsm">Retry</button></div><span class="raw">While saving: Submitting… (button disabled, answers stay editable after)</span></section>'
+        + '<section class="cd"><div class="ch"><h2>Admin preview switcher</h2><span class="pl a">' + G.lk + ' Preview only</span></div><div class="ifv-pv" style="border-radius:10px;border:1px solid var(--amE);padding:8px 12px;flex-wrap:wrap;gap:8px"><span>Preview only: nothing on this page writes</span><span class="ifv-sw"><span>Visitor</span><span>Applicant</span><span>Approved</span><span class="on">Committed</span><span>Full rights</span></span></div><p class="ifv-cap">Inert: it changes what is drawn, not anyone’s standing. Sign, Submit, Revoke and Show full account number are disabled in preview.</p></section>'
+        + '</div>', 1240);
+    }
+
+    /* ---------- phone 390 ---------- */
+    else if (B.indexOf('IFV16') === 0 || B.indexOf('IFV17') === 0) {
+      const ptop = '<div class="ifv-pt"><span style="display:flex;gap:8px;align-items:center;font-weight:800"><span class="logo" aria-hidden="true"></span>Axal VC</span><span style="display:flex;gap:8px"><button type="button" class="ib" aria-label="Notifications" style="width:44px;height:44px">' + bell + '</button><button type="button" class="ib" aria-label="Menu" style="width:44px;height:44px">☰</button></span></div>';
+      const pchips = (cur, st) => '<nav class="ifv-pch" aria-label="Sections">' + J((st === 'visitor' ? ['Overview', 'Fund', 'Apply'] : st === 'applicant' ? ['Overview', 'Apply', 'Documents', 'Fund', 'History'] : ['Overview', 'My commitment', 'Documents', 'Reports', 'Fund']).map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+      const phd = (st) => '<div style="padding:12px 16px 4px;background:var(--card)"><h1 style="font-size:20px;font-weight:800">Axal VC Spin-Out Fund I</h1><div style="margin-top:6px">' + chip(st || 'committed') + '</div></div>';
+      const ph = (cur, body, ov, st) => '<div class="cv" style="' + VARS + '"><div class="ifv-ph">' + ptop + phd(st) + pchips(cur, st) + '<div class="ifv-pb">' + body + '</div>' + (ov || '') + '</div></div>';
+      const callCard = (n, owed, rec, iss, due, cs, act) => '<section class="ifv-blk"><div style="display:flex;justify-content:space-between;align-items:center"><b>Capital call ' + n + '</b>' + cs + '</div><div class="ifv-amt">' + owed + '</div><dl class="ifv-kv" style="grid-template-columns:120px minmax(0,1fr)"><dt>Received to date</dt><dd class="mo">' + rec + '</dd><dt>Issued</dt><dd class="mo">' + iss + '</dd><dt>Due</dt><dd class="mo">' + due + '</dd></dl>' + act + '</section>';
+      const sheet = (title, inner, foot) => '<div class="ifv-scrim" style="position:absolute"></div><div class="ifv-psheet" role="dialog" aria-label="' + title + '"><div class="ifv-grab"></div><div class="ifv-sh2"><b style="font-size:16px">' + title + '</b><button type="button" class="ib" aria-label="Close" style="width:44px;height:44px">✕</button></div><div class="ifv-sb">' + inner + '</div>' + (foot ? '<div style="padding:12px 16px;border-top:1px solid var(--hair)">' + foot + '</div>' : '') + '</div>';
+      if (B === 'IFV16A') html = ph('Overview', dueBlk(LP1).replace('</section>', '<button type="button" class="btn p ifv-full">Wire details for call #2</button></section>') + signBlk() + arrBlk(LP1));
+      else if (B === 'IFV16B') html = ph('My commitment', '<section class="ifv-figs" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + J([['Committed (to date)', LP1.commit], ['Called (to date)', LP1.called], ['Paid in (to date)', LP1.paid], ['Uncalled', LP1.uncalled], ['Distributions (to date)', LP1.dist], ['TVPI · DPI (to date)', '1.05× · 0.00×']].map(f => '<div style="border-bottom:1px solid var(--hair)"><small>' + f[0] + '</small><b style="font-size:16px">' + f[1] + '</b></div>')) + '</section>'
+        + callCard('#2', LP1.c2, '[$0]', '10 Nov 2026', '1 Dec 2026', CS('due', 'Due · in 17 days'), '<button type="button" class="btn ifv-full">Wire details</button>')
+        + callCard('#1', LP1.c1, LP1.c1, '15 Sep 2026', '30 Sep 2026', CS('paid', 'Paid · 28 Sep'), '<a class="btn ifv-full" href="#">Notice (PDF)</a>'));
+      else if (B === 'IFV16C') html = ph('My commitment', '<span class="sk" style="height:400px"></span>', sheet('Capital call #2', '<div style="display:flex;justify-content:space-between;align-items:flex-end"><div><span class="ifv-lbl">Amount owed</span><div class="ifv-amt">' + LP1.c2 + '</div></div>' + CS('due', 'Due · in 17 days') + '</div><dl class="ifv-kv" style="grid-template-columns:120px minmax(0,1fr)"><dt>Received to date</dt><dd class="mo">[$0]</dd><dt>Issued · due</dt><dd class="mo">10 Nov · 1 Dec 2026</dd><dt>Purpose</dt><dd>' + NR('Not on your read') + '</dd></dl><div class="ifv-wire"><span class="ifv-lbl">Wire details · masked</span><dl class="ifv-kv" style="grid-template-columns:96px minmax(0,1fr)"><dt>Bank</dt><dd>[Bank Name]</dd><dt>Beneficiary</dt><dd>Axal VC Spin-Out Fund I, L.P.</dd><dt>Account</dt><dd class="mo">•••• 4821</dd><dt>Reference</dt><dd class="mo">' + LP1.ref2 + '</dd></dl><button type="button" class="btn t" style="align-self:flex-start;min-height:44px">Show full account number</button><span class="raw">Opening it is recorded. You wire from your bank.</span></div>', '<button type="button" class="btn p ifv-full">Copy reference</button>'));
+      else if (B === 'IFV17A') html = ph('Documents', '<div style="display:flex;justify-content:space-between;align-items:center"><b>8 documents</b><button type="button" class="btn">Filter · All ▾</button></div><ul class="ifv-list" style="background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:0 14px">' + J([['Capital call notice #2', 'Notice · 10 Nov 2026 · ' + LP1.c2], ['Capital statement · Q3 2026', 'Statement · 20 Oct 2026 · rev 1'], ['Management fee statement · Q3 2026', 'Statement · 20 Oct 2026 · ' + LP1.fee], ['Quarterly report · Q3 2026', 'Report · 20 Oct 2026'], ['Capital call notice #1', 'Notice · 15 Sep 2026 · ' + LP1.c1], ['Subscription booklet', 'Booklet · submitted 2 Sep 2026']].map(d => '<li><div><b>' + d[0] + '</b><small>' + d[1] + '</small></div><a class="btn" href="#" style="min-height:44px">PDF</a></li>')) + '<li><div><b>Schedule K-1 · 2026</b><small>Tax and audit</small></div>' + S('na', 'Not issued yet') + '</li></ul>');
+      else if (B === 'IFV17B') html = ph('Documents', '<span class="sk" style="height:420px"></span>', sheet('Filter documents', '<div role="radiogroup" aria-label="Document type" style="display:flex;flex-direction:column">' + J([['All', '8'], ['Notices', '3'], ['Booklet', '1'], ['Statements', '2'], ['Reports', '2'], ['Agreements', '◇'], ['Tax and audit', '◇']].map((f, i) => '<label class="ck" style="justify-content:space-between;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:10px;align-items:center"><input type="radio" name="f"' + (i === 0 ? ' checked' : '') + '>' + f[0] + '</span><small>' + f[1] + '</small></label>')) + '</div>', '<button type="button" class="btn p ifv-full">Show 8 documents</button>'));
+      else if (B === 'IFV17C') html = ph('Apply', '<b>Onboarding</b>' + J([['Accredited status', S('am', 'Self-certified, not verified'), 'View answer'], ['KYC / AML', S('ns'), 'Open Trust →'], ['Subscription booklet', S('ns'), 'Opens after approval'], ['Limited partnership agreement', S('no', 'No position yet'), 'After setup'], ['Banking and capital call setup', NR(), '']].map((r, i) => '<section class="ifv-blk" style="gap:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>' + r[0] + '</b>' + r[1] + '</div>' + (r[2] ? (i === 1 ? '<button type="button" class="btn p ifv-full">' + r[2] + '</button>' : '<button type="button" class="btn ifv-full"' + (i > 1 ? ' aria-disabled="true"' : '') + '>' + r[2] + '</button>') : TB('store')) + '</section>')), '', 'applicant');
+      else if (B === 'IFV17D') html = ph('Apply', '<span class="sk" style="height:420px"></span>', sheet('Apply to participate', '<div class="ifv-f"><label>Investor type</label><div class="ifv-in" style="min-height:44px">Individual ▾</div></div><div class="ifv-f"><label>Target commitment <span>(USD)</span></label><div class="ifv-in mo" style="min-height:44px">[$150,000]</div><small>Minimum [$50,000]</small></div><div class="ifv-f"><label>Preference areas</label><div class="ifv-pills"><span class="on">Workflow automation</span><span class="on">Climate tech</span><span>Robotics</span><span>Health</span></div></div><label class="ck" style="font-weight:600"><input type="checkbox" checked>I certify that I am an accredited investor</label><small class="ifv-cap">Self-certified, not verified.</small><div class="ifv-f"><label>Note <span>(optional)</span></label><div class="ifv-in ta"></div></div>', '<button type="button" class="btn p ifv-full">Submit application</button>'), 'visitor');
+      else if (B === 'IFV17E') html = ph('Overview', '<b>History</b><ol class="ifv-list" style="background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:0 14px">' + J([['10 Nov 2026', 'Capital call #2 issued · ' + LP1.c2], ['1 Nov 2026', 'Proof of funds shared · at least ' + LP1.floor], ['20 Oct 2026', 'Q3 2026 report and statements issued'], ['15 Sep 2026', 'Capital call #1 issued · ' + LP1.c1], ['3 Sep 2026', 'LPA signed'], ['2 Sep 2026', 'Booklet submitted · sent for signature'], ['25 Aug 2026', 'Application approved'], ['18 Aug 2026', 'Application sent']].map(h => '<li><div><small style="margin:0 0 2px">' + h[0] + '</small><b style="font-weight:600">' + h[1] + '</b></div><span aria-hidden="true" class="mu">›</span></li>')) + '</ol><p class="ifv-cap">Not tracked yet: receipts by date, documents viewed, requests made.</p>');
+    }
+
+    else if (B === 'IFV18B') {
+      html = crop('<span class="eye">Dark · Unreadable block from VF-15</span><div class="ifv-ban r"><span class="ifv-ic r">' + G.ua + '</span><div style="flex:1"><b>Your position could not be read. This is not a $0 commitment.</b><p>Fund and terms and Apply still work.</p></div><button type="button" class="btn p">Try again</button></div><div class="ifv-two"><section class="cd"><div class="ch"><h2>Notices</h2>' + S('un') + '</div><p class="ifv-cap">Not “no notices”.</p></section><section class="cd"><div class="ch"><h2>Distributions (to date)</h2>' + S('no', 'None yet') + '</div><b class="mo">[$0]</b><p class="ifv-cap">A recorded value, drawn differently from Unavailable and Not recorded (' + NR() + ').</p></section></div>', 1000);
+    }
+
+    else if (B === 'IFV19') {
+      html = doc('<span class="eye">VF-H · Handoff · #6127 · checked on main 6d7712c6d1 (brief written on 45e7c55fa6)</span><h2>Axal VC Fund v2 and LP Workspace · what is real, what is new</h2><div class="ifv-cols">'
+        + '<div><h3>Checked on main</h3><ul><li><code>lpAccessState()</code> (lib/spinoutFundModel.js) derives visitor / pending / approved / committed / voting from <code>lp-portal</code> + the application; approved-with-no-position stays pending.</li><li><code>GET /api/funds/lp-portal</code> (routes/funds.ts) returns calls with <code>call_number</code>, <code>owed_cents</code>, <code>received_cents</code> (a SUM), masked <code>pay_instructions</code> or <code>available:false</code>, and <code>capital_calls_recorded</code>. <code>fund_capital_calls.purpose</code> is stored but not selected.</li><li><code>capital_calls.paid_date</code> exists and comes through <code>cc.*</code>: the Paid date is real; per-receipt dates are not.</li><li>routes/fund_booklets.ts: <code>/mine</code>, <code>/mine/submit</code>, <code>/mine/sign</code>, <code>/mine/paper</code>.</li><li><code>onboardingStatus()</code> (lib/lpCommitmentModel.js) prints Not recorded for the booklet and banking rows.</li><li><code>FUND_SCHEDULE</code>: first close 15 Sep 2026, demo day 21 Aug 2026, both passed; <code>scheduledLabel()</code> already says “date passed; outcome not recorded”.</li><li>Fund notices, mercury attestations, investor cohorts and kyc routes exist as the brief lists.</li></ul></div>'
+        + '<div><h3>Build now (#6130, frontend only)</h3><ul><li>Section tabs with hash anchors; first screen per standing; #my-commitment and #my-notices keep working; /lp-portal and /funds/lp-workspace redirects unchanged.</li><li>Booklet onboarding row reads <code>GET /api/fund-booklets/mine</code>.</li><li>What is due / to sign / arrived from existing reads; one shelf over notices, statements, reports and the booklet.</li><li>History from the dated records only.</li><li>Loading never shows Visitor; each failed read has its own Unavailable block.</li><li>No Eadwyn rail on these routes (owner request).</li></ul><h3 style="margin-top:12px">Preserved</h3><ul><li>Wire details masked; full number only via the recorded reveal route.</li><li>Application 409 once reviewed; accredited stays self-certified.</li></ul></div>'
+        + '<div><h3>Backend required (◇)</h3><ul><li>Fund portfolio figures (#6137) · first close and demo day outcomes (#6137).</li><li>Allocation preferences store (#6138).</li><li>Co-invest offers and questions on a report (proposal 14).</li><li>Increase request store with status.</li><li>Tax documents (K-1), audited statements, the LPA as a document.</li><li>Call purpose on the LP read (one-line select) · each receipt’s amount and date · cohort start and end dates for investors.</li><li>Banking and capital call setup row · wider action history (receipts, views, requests).</li></ul></div>'
+        + '<div><h3>Pending the owner (⚑)</h3><ul><li>Sections as one route with tabs and anchors (A) — drawn.</li><li>Fund-level figures before #6137: Owner-maintained with as-of, else Not recorded (A) — drawn.</li><li>Who sees fund figures: as the raise read does today (A) — drawn.</li><li>Proposal 14 in or out: drawn as waiting on a store (A).</li><li>Increase request: a stored request (A), with Email the GP as today’s interim.</li></ul><h3 style="margin-top:12px">Accessibility</h3><ul><li>Every state and call line pairs a word with a glyph; colour never carries meaning alone.</li><li>44px rows and phone targets; tabs are links with aria-current; the chip row scrolls and sticks.</li><li>The call sheet is a dialog with focus on its heading and Escape to close.</li></ul></div>'
+        + '</div>');
+    }
+
+    else {
+      html = crop('<b>Unknown board</b>', 400);
+    }
+
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

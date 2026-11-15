@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 Company Creation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · Company creation · #6035 · Build v2 addendum (D4846) · BD25–BD32</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Company creation beyond BD11 — entity summary, incorporate first, 83(b) per founder, papers on record</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Company creation (/build/company-creation) for the venture’s founders, who can edit, and for an Axal admin through founder preview. It answers what company exists, what is still to file and by when, and which papers are on record, and its one primary action is the nearest-deadline filing, as on BD11. This addendum continues Build v2: its shell, Build state words and the Eadwyn rail (BD21). BD26 replaces BD19 B; BD11, BD19 A, BD20, BD22 and BD24 B stay as drawn. States follow Platform States (D5129): Not recorded, Could not be read and a measured zero never look alike, and every state has a word and a glyph. 83(b) copy is a record, not tax advice. Violet dashed ◇ tags mark Worker work on #6035; amber ⚑ tags mark the owner’s three questions, drawn at option A. Each board says whether it is frontend only or needs the Worker.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · venture Northline, [Founder A], [Founder B], [Founder C], [Northline, Inc.], [Registered agent] and every date and count are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build v2 Company Creation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BD25', 'Company creation, company formed · Worker (◇ summary fields, ◇ 83(b) join) + frontend', 'Top to bottom: the entity summary band with the order line (Order paid → Packet ready → Filed with state), the nearest-deadline filing as the one primary action, the 83(b) tracker (the viewer’s row in full, a co-founder’s row limited until the join exists), the BD11 filings table, documents with Stored or Missing, Bank account and IP assignment as steps, and the hand-off links. B · The Eadwyn rail with two proposals the founder can Accept, Edit or Discard; Eadwyn never files or marks anything filed.', [F('BUC25', 'A · Company formed', 1700), F('BUC25E', 'B · Eadwyn rail, two proposals', 1000)]],
+      ['BD26', 'No company yet, incorporate first · frontend only · replaces BD19 B', 'No order, no entity, no filings. One action, Start guided incorporation (/incorporate); a text link for a company formed elsewhere (Add a filing, BD11). What follows is a greyed preview with no figures. B · After payment the page becomes BD25 with the order line at Order paid.', [F('BUC26', 'A · No company yet', 820), C('BUC26B', 'B · After the order is paid', 1220, 203)]],
+      ['BD27', 'Filing sheet, who changes what · frontend only (◇ delete, ◇ reminders)', 'A · The founder’s own Build filing: checklist, Upload proof, Edit, Remind me ◇, Add to calendar ◇ and Delete ◇. B · A Lab step: read only, updated from the incorporation order. C · An entity obligation: read only except the proof upload; never deleted, it leaves the list when Axal files or waives it. D · Delete as Scope → Review → Result, naming the filing.', [F('BUC27A', 'A · Your Build filing', 1000), F('BUC27B', 'B · Lab step', 900), F('BUC27C', 'C · Set by Axal', 900), C('BUC27D', 'D · Delete, own Build filing only', 1040, 258)]],
+      ['BD28', 'Suggested filings and reminder placement · Worker ◇', 'A · The US Delaware C-Corp pack’s filings offered as suggestions, each with Add to my filings or Not now (Q3 A), and the Remind me control on each open filing row. B · A jurisdiction with no pack shows no list. C · The reminder control and its menu; only the placement is drawn, the job belongs to the reminders proposal.', [F('BUC28', 'A · Suggestions and the reminder column', 1120), C('BUC28B', 'B · No pack for this jurisdiction', 800, 170), C('BUC28C', 'C · Remind me 14 days before', 1240, 386)]],
+      ['BD29', 'States · frontend only (◇ where marked)', 'A · Loading in real shapes; Not recorded with each reason; each block failing on its own (documents, 83(b) trackers, bank row, GitHub/Vercel) with Try again on that block only; No filings yet versus Filings could not be read; company not linked; refused; no grant date; saving and a failed upload; 83(b) Missed. B · Founder preview: the banner names the founder, and an upload asks first, naming Super Admin.', [C('BUC29', 'A · States', 1440, 1162), F('BUC29B', 'B · Founder preview, upload asks first', 900)]],
+      ['BD30', 'Phone 390 · frontend only (◇ where marked)', 'The dominant action, the summary as a stacked card and 83(b) cards; filings as cards with days left; documents, steps and links; the filing sheet as a bottom sheet (Upload opens the system file picker); and incorporate first. 44px targets; no table wider than the screen.', [P('BUC30A', 'A · Action, summary, 83(b)'), P('BUC30B', 'B · Filings'), P('BUC30C', 'C · Documents, steps, links'), P('BUC30D', 'D · Filing bottom sheet'), P('BUC30E', 'E · Incorporate first')]],
+      ['BD31', 'Dark · frontend only', 'BD25 on the dark tokens. Due soon, Missing, Not recorded and Pending keep their words and glyphs.', [F('BUC31', false, 1700)]],
+      ['BD32', 'Handoff', 'What was checked on main, what is preserved, what needs the Worker (◇, #6035), the owner’s three questions (⚑, drawn at A), frontend-only work and accessibility.', [W('BUC32')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
