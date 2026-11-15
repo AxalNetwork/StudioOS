@@ -3,6 +3,7 @@ import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
+import { mvpTargetHref } from './mvpTable.js';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { GROW_MODULE_TITLES, growTabs, reportingHref, growArea, growSubsections } from './growOverviewModel';
@@ -142,7 +143,11 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
   );
 }
 
-export function FigureTile({ fig, details = null }) {
+/**
+ * One overview figure. `setLink` (`{ href, text }`, D6022, #6022) is where a
+ * writer records a figure that is Not recorded: its line becomes that link.
+ */
+export function FigureTile({ fig, details = null, setLink = null }) {
   const value = figureValue(fig);
   const delta = figureDelta(fig);
   const unreadable = fig?.state === 'unreadable';
@@ -157,7 +162,9 @@ export function FigureTile({ fig, details = null }) {
       </span>
       {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
+        {value == null && !unreadable && setLink?.href
+          ? <Link to={setLink.href} className="text-[11.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid={`cycle-figure-${fig?.key}-set`}>{setLink.text} ›</Link>
+          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>}
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
       {details}
@@ -294,7 +301,8 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
             <div className={`grid gap-3 ${figureCols(figureCount)}`} data-testid="cycle-figures" data-count={figureCount}>
               {status === 'loading'
                 ? Array.from({ length: figurePlaceholders }, (_, i) => <div key={i} className="h-[92px] rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" aria-busy="true" />)
-                : figures.map((f) => <FigureTile key={f.key} fig={f} />)}
+                : figures.map((f) => <FigureTile key={f.key} fig={f}
+                    setLink={!readOnly && meta.key === 'build' && f.key === 'days_to_mvp' ? { href: mvpTargetHref(search), text: 'Set the MVP target date' } : null} />)}
             </div>
           )}
           {status !== 'loading' && lead}

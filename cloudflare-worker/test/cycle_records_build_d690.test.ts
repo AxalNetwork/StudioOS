@@ -501,7 +501,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   const solution = (await one(db, 'solution-design', 1)).body;
   assert.deepEqual(pillText(solution), ['High impact', 'Low effort']);
   assert.deepEqual(pillText((await one(db, 'solution-design', 2)).body), ['Low impact', 'High effort', 'Out of scope'], 'a NULL scope with Low impact reads Out of scope');
-  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Tomas Reyes', c: 'High', tone: 'bad' }]);
+  // D6023 (#6023): owner, state and mitigation beside the severity; a writer's row opens Edit a risk.
+  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Owner: Tomas Reyes · State: Open · Mitigation: Not recorded',
+    c: 'High', tone: 'bad', action: { key: 'edit-risk', body: { risk_id: 1 } } }]);
   assert.deepEqual(section(solution, 'appears_in').rows.map((r: any) => [r.a, r.b, r.href]), [
     ['Prototype / MVP', 'Must-have', `/build/prototype-mvp/1?project=${P}`], ['Roadmap', 'Bank coverage · Now', `/build/product-roadmap/3?project=${P}`]]);
   assert.equal(section(solution, 'brief').rows[0].a, 'Not recorded');
