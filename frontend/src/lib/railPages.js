@@ -351,6 +351,7 @@ const SUPER = [
   own('/admin/licences', key(SA, 'Licences')),
   alias('/admin/licences/programs', key(SA, 'Licences'), 'Program access by licence (D981’s Program grants, renamed by D4819), the Licences strip’s second item.'),
   alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program access by licence’s History tab (D1126).'),
+  alias('/admin/licences/packages', key(SA, 'Licences'), 'The Axal VC package catalogue (L29, D5896), the Licences strip’s third item.'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),
