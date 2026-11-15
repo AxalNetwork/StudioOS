@@ -55,6 +55,28 @@ const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-
 // Drawer / inline-form controls (design 1478-1536).
 const FLD = 'block text-[11.5px] font-semibold text-gray-700 dark:text-gray-300 mb-1';
 const INP = 'w-full h-[34px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 text-[12.5px] text-gray-900 dark:text-gray-50 placeholder-gray-400 dark:placeholder-gray-500';
+// D6011: the source picker is a phone tap target (44px).
+const INP_TALL = INP.replace('h-[34px]', 'h-11');
+
+/**
+ * D6011 (#6011): what the sizing save says about where its figures came from.
+ * The method is the drawer's methodology; the source is a stored source's id,
+ * whose title the Worker copies (it never takes a title from the page).
+ */
+export function sizingProvenance(methodology, sourceId) {
+  const id = Number(sourceId);
+  return {
+    method: methodology === 'Bottom-up' ? 'bottom_up' : 'top_down',
+    market_source_id: Number.isSafeInteger(id) && id > 0 ? id : null,
+  };
+}
+
+/** The picker's starting value: the current TAM's named source, or none. */
+export function sizingSourceSeed(readiness) {
+  const id = Number(readiness?.figures?.tam?.market_source_id);
+  const known = (readiness?.sources || []).some((r) => Number(r?.id) === id);
+  return Number.isSafeInteger(id) && id > 0 && known ? String(id) : '';
+}
 const TXA = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2.5 py-2 text-[12.5px] text-gray-900 dark:text-gray-50 placeholder-gray-400 dark:placeholder-gray-500 resize-y';
 // Toggle pills — selected #7c3aed on white (design 2195-2196).
 const SEG_ON = 'bg-violet-600 border-violet-600 text-white';
@@ -359,6 +381,9 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
   const [founderSources, setFounderSources] = useState([]);
   const [srcAdding, setSrcAdding] = useState(false);
   const [srcForm, setSrcForm] = useState({ title: '', type: 'Report' });
+  // D6011 (#6011): the source the three figures are saved with — one of
+  // `founderSources` by id, or '' for none named. Seeded from the current TAM row.
+  const [sizingSourceId, setSizingSourceId] = useState('');
 
   useEffect(() => () => clearInterval(animRef.current), []);
 
@@ -436,6 +461,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
             id: r.id, title: r.title, type: r.kind,
             date: new Date(String(r.created_at).replace(' ', 'T') + (String(r.created_at).includes('Z') ? '' : 'Z')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
           })));
+          setSizingSourceId(sizingSourceSeed(readiness));
         }
         setCompass(cp);
         setLens(fl);
@@ -534,8 +560,10 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
     finishRef.current = { tween: false, saved: false };
     tweenTo({ tam, sam, som });
     try {
-      const updated = await api.updateProject(project.id, { tam, sam, som });
+      const updated = await api.updateProject(project.id, { tam, sam, som, market_figure_source: sizingProvenance(f.methodology, sizingSourceId) });
       setProject((prev) => ({ ...prev, ...updated }));
+      // D6011: the figures saved but their `market_figures` rows did not; said, not hidden.
+      const sourceSaved = updated?.market_figures?.recorded !== null;
       // THE REASONING GOES WITH THE RESULT, since migration 247. Saved AFTER the
       // three figures and not instead of them: `projects.tam/.sam/.som` stay the
       // canonical derived values every other surface reads, and this is what they
@@ -555,6 +583,10 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
         reportError('SpinoutLabMarketPage:assumptions', e);
         assumptionsSaved = false;
         setSaveError('Your sizing saved. The assumptions behind it did not — press Recalculate again to keep them.');
+      }
+      if (!sourceSaved) {
+        assumptionsSaved = false;
+        setSaveError('Your sizing saved. Where it came from did not — press Recalculate again to keep it.');
       }
       // W1 deliverable — sizing counts once both TAM and SAM are on record
       // (citations aggregate automatically from MI sources for the sector).
@@ -679,6 +711,7 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
       }
     }
     setFounderSources((prev) => prev.filter((_, idx) => idx !== i));
+    if (row?.id != null && String(row.id) === sizingSourceId) setSizingSourceId('');
   };
 
   const derived = useMemo(() => {
@@ -1562,6 +1595,23 @@ export default function SpinoutLabMarketPage({ from = 'lab' } = {}) {
                   </select>
                 </label>
               </div>
+            </div>
+
+            {/* D6011 (#6011): the figures' source, saved with each of them and shown on Validate's market chart. */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Source</div>
+              <label>
+                <span className={FLD}>Where these figures come from</span>
+                <select value={sizingSourceId} onChange={(e) => setSizingSourceId(e.target.value)} className={INP_TALL} data-testid="select-sizing-source">
+                  <option value="">None named</option>
+                  {founderSources.filter((s) => s.id != null).map((s) => (
+                    <option key={s.id} value={String(s.id)}>{s.title}</option>
+                  ))}
+                </select>
+              </label>
+              {founderSources.every((s) => s.id == null) && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1.5" data-testid="sizing-source-none">Add a source under Sources on this page to name it here.</p>
+              )}
             </div>
 
             {/* TAM inputs */}

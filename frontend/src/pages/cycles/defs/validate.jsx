@@ -19,6 +19,7 @@ import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
 import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
 import { projectSearch } from '../founderToolNavigation';
+import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
 import { InterviewsSection, PainThemesSection, HypothesesSection } from '../ValidateSections';
@@ -184,11 +185,13 @@ const validate = {
     // D6010 (#6010): the stored positioning and assumptions marks and the sources, under the table.
     // D1087 (#2952): research pages from Notion, as sources (title and link).
     // D6019 (#6019): each of the next three modules' parts opens with its Export.
-    'market-intelligence': (_data, ctx) => (
+    'market-intelligence': (data, ctx) => (
       <>
         <ModuleExport slug="market-intelligence" projectId={ctx.projectId} />
         <MarketReadiness projectId={ctx.projectId} />
         <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
+        {/* D6011 (#6011): every change to the three figures, with who and when. */}
+        <MarketFigureHistory part={data?.parts?.market_history} />
       </>
     ),
     'demand-signals': (data, ctx) => (

@@ -637,30 +637,36 @@ test('Retainers: the mounted Monthly cells use the Worker projection and leave e
   } finally { await m.unmount(); restore(); }
 });
 
-test('Retainers: saving one row keeps another row’s unsaved amount through the refresh', async () => {
+test('Retainers: a refresh after another save keeps the sheet open and its unsaved amount (#5939)', async () => {
+  // D4838 PP06: one editor at a time, in a sheet with tabs. The sheet holds an
+  // engagement id and each form a draft, so the refresh that follows logging
+  // hours on the Usage tab neither closes the sheet nor resets the Terms draft.
+  // Mutations checked: the sheet keyed on a row object that a refresh replaces;
+  // the Terms form re-seeded from the stored values on every render.
   const reload = deferred();
   let reads = 0;
-  const rows = () => [retainerRow(1, 'Acme', 800000), retainerRow(2, 'Birch', 500000)];
+  const rows = () => [retainerRow(1, 'Acme', 800000), retainerRow(2, 'Birch', 500000)]
+    .map((r) => ({ ...r, founder_name: r.client }));
   const restore = stub({
     listPartnerRetainers: () => { reads += 1; return reads === 1 ? Promise.resolve(retBody(rows())) : reload.promise; },
-    savePartnerRetainer: async () => ({}),
+    savePartnerRetainerUsage: async () => ({}),
   });
   const m = await mountContracts(h(PartnerRetainersZone));
   const u = ui(m);
   try {
     await m.flush();
-    const openers = m.nodes().filter((n) => n.tagName === 'BUTTON' && /Update|Edit|Open|Show/.test(u.textOf(n)));
-    assert.ok(openers.length >= 2, 'each row has an opener');
-    for (const o of openers.slice(0, 2)) await act(async () => { m.props(o).onClick({ stopPropagation() {} }); });
-    assert.equal(amountBoxes(m).length, 2);
+    await u.press('Acme');
+    await u.press('Terms');
+    assert.equal(amountBoxes(m).length, 1, 'one editor, in the sheet');
     await u.type(amountBoxes(m)[0], '9999');
-    await u.press('Save retainer', 1);
+    await u.press('Usage');
+    await u.type(u.byPlaceholder('e.g. 31.5'), '12');
+    await u.press('Log hours');
     await m.flush();
-    assert.equal(reads, 2);
-    assert.equal(u.value(amountBoxes(m)[0]), '9999');
+    assert.equal(reads, 2, 'the log refreshed the list');
     await act(async () => { reload.resolve(retBody(rows())); });
     await m.flush();
-    assert.equal(amountBoxes(m).length, 2, 'both editors survived');
-    assert.equal(u.value(amountBoxes(m)[0]), '9999', 'row 1 was not reset to its stored 8000');
+    assert.equal(amountBoxes(m).length, 1, 'the sheet survived the refresh');
+    assert.equal(u.value(amountBoxes(m)[0]), '9999', 'the Terms draft was not reset to its stored 8000');
   } finally { await m.unmount(); restore(); }
 });
