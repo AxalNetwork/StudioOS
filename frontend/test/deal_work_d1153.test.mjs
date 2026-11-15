@@ -266,6 +266,7 @@ test('D6181: only an archived case on this company is no live case, and the tab 
   } finally { await v.close(); }
 });
 
+const DD_NOW = new Date('2026-11-15T12:00:00Z');
 const DD_REQUESTS = [
   { id: 1, title: 'Burn plan', state: 'requested', created_at: '2026-10-21 08:00:00' },
   { id: 2, title: 'Bank statements', state: 'received', response_note: 'Attached the latest statements.',
@@ -284,7 +285,7 @@ function founderRequestHandler({
       const path = new URL(url, 'https://x.test').pathname;
       if (method === 'GET') return response({ case: live, sections: [], reviewers: [], requests: structuredClone(requests) });
       if (path.endsWith('/requests')) {
-        const recorded = { ...JSON.parse(init.body), id: 4, state: 'requested', created_at: new Date().toISOString() };
+        const recorded = { ...JSON.parse(init.body), id: 4, state: 'requested', created_at: DD_NOW.toISOString() };
         requests.unshift(recorded);
         return response({ request: recorded }, 201);
       }
@@ -292,7 +293,7 @@ function founderRequestHandler({
       if (path.endsWith('/withdraw')) {
         withdrawals += 1;
         if (withdrawals === 1) return response({ error: 'This request is already withdrawn', code: 'withdrawn' }, 409);
-        requests.find((r) => r.id === 1).withdrawn_at = new Date().toISOString();
+        requests.find((r) => r.id === 1).withdrawn_at = DD_NOW.toISOString();
         return response({ ok: true });
       }
       if (path.endsWith('/documents/download')) return response({ error: 'Storage not configured' }, 503);
@@ -301,7 +302,8 @@ function founderRequestHandler({
   });
 }
 
-test('D6179: the owner sends a founder request from a dialog and sees Waiting 0 days', async () => {
+test('D6179: the owner sends a founder request from a dialog and sees Waiting 0 days', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: DD_NOW });
   const v = await mounted('/deals/4/diligence', INVESTOR, founderRequestHandler({ requests: [] }));
   try {
     await v.click('deal-dd-request-new');
@@ -309,7 +311,7 @@ test('D6179: the owner sends a founder request from a dialog and sees Waiting 0 
     await v.click('deal-dd-new-request-dialog-confirm');
     assert.match(v.textOf('deal-dd-new-request-dialog'), /Say what you need/);
     assert.equal(v.posts(/\/requests$/).length, 0);
-    const due = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const due = '2026-11-16';
     await v.type('deal-dd-request-title', '  Current cash balance  ');
     await v.type('deal-dd-request-details', 'Month-end balance and currency.');
     await v.type('deal-dd-request-due', due);
