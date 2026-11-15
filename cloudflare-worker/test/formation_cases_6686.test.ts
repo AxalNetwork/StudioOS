@@ -130,13 +130,14 @@ test('two transitions raced from the same read: one moves, one answers 409, and 
   assert.ok(c);
   // Both callers read the case before either writes: the second batch runs
   // while the first is held at its batch() call.
-  let release!: () => void;
+  let release!: () => void, entered!: () => void;
   const gate = new Promise<void>((r) => { release = r; });
+  const atBatch = new Promise<void>((r) => { entered = r; });
   let held = false;
-  const DB = { ...inner, prepare: inner.prepare.bind(inner), batch: async (s: any) => { if (!held) { held = true; await gate; } return inner.batch(s); } };
+  const DB = { ...inner, prepare: inner.prepare.bind(inner), batch: async (s: any) => { if (!held) { held = true; entered(); await gate; } return inner.batch(s); } };
   const env: any = { DB };
   const first = transition(env, c!.id, 'preparing', { party: 'system' });
-  await new Promise((r) => setTimeout(r, 5));
+  await atBatch; // the first caller has read the case and is held at its batch
   const second = transition(env, c!.id, 'ready_to_file', { party: 'system' });
   const secondOut = await second;
   release();

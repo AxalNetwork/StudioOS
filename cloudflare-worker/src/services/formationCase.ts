@@ -85,12 +85,40 @@ const SET_STATUS: Readonly<Record<OrderStatus, string>> = Object.freeze({
   filed: "UPDATE incorporations SET status = 'filed'",
 });
 
+// Every statement below is fixed text, assembled once from the fragments
+// above; nothing a caller passes reaches the SQL text (check-sql-prepare).
+const CASE_BY_ID = 'SELECT ' + CASE_COLS + ' FROM formation_cases c WHERE c.id = ?';
+const CASE_BY_ORDER = 'SELECT ' + CASE_COLS + ' FROM formation_case_orders o JOIN formation_cases c ON c.id = o.case_id WHERE o.incorporation_id = ?';
+const CASE_AS_READ = 'EXISTS (SELECT 1 FROM formation_cases WHERE id = ? AND stage = ? AND revision = ? AND closed_at IS NULL)';
+const ORDER_AS_READ = 'EXISTS (SELECT 1 FROM incorporations WHERE id = ? AND status = ?)';
+const EVENT_INSERT_HEAD =
+  'INSERT INTO formation_case_events (case_id, actor_user_id, party, kind, from_stage, to_stage, to_revision, visibility, detail_json) '
+  + "SELECT ?, ?, ?, 'stage_change', ?, ?, ?, ?, ? WHERE " + CASE_AS_READ;
+const EVENT_INSERT_NO_ORDER = EVENT_INSERT_HEAD;
+const EVENT_INSERT_WITH_ORDER = EVENT_INSERT_HEAD + ' AND ' + ORDER_AS_READ;
+// The order's D601 fields: a NULL leaves the column as it was; a 1 in a *_now
+// slot stamps it with datetime('now').
+const ORDER_UPDATE_TAIL =
+  ', packet_document_id = COALESCE(?, packet_document_id), packet_ready_by = COALESCE(?, packet_ready_by)'
+  + ", packet_ready_at = CASE WHEN ? = 1 THEN datetime('now') ELSE packet_ready_at END"
+  + ', filed_on = COALESCE(?, filed_on), filed_by = COALESCE(?, filed_by)'
+  + ", filed_recorded_at = CASE WHEN ? = 1 THEN datetime('now') ELSE filed_recorded_at END"
+  + ", updated_at = datetime('now') WHERE id = ? AND status = ? AND " + CASE_AS_READ;
+const ORDER_UPDATE: Readonly<Record<OrderStatus, string>> = Object.freeze(
+  Object.fromEntries(Object.entries(SET_STATUS).map(([k, head]) => [k, head + ORDER_UPDATE_TAIL])) as Record<OrderStatus, string>,
+);
+const CASE_UPDATE =
+  "UPDATE formation_cases SET stage = ?, stage_entered_at = datetime('now'), revision = revision + 1, "
+  + "waiting_on = COALESCE(?, waiting_on), updated_at = datetime('now') "
+  + 'WHERE id = ? AND stage = ? AND revision = ? '
+  + 'AND EXISTS (SELECT 1 FROM formation_case_events WHERE case_id = ? AND to_revision = ?)';
+
 export function legacyCaseUid(incorporationId: number): string {
   return `fc_legacy_${incorporationId}`;
 }
 
 export async function readCase(env: Env, caseId: number): Promise<CaseRow | null> {
-  return (await env.DB.prepare(`SELECT ${CASE_COLS} FROM formation_cases c WHERE c.id = ?`).bind(caseId).first<CaseRow>()) || null;
+  return (await env.DB.prepare(CASE_BY_ID).bind(caseId).first<CaseRow>()) || null;
 }
 
 /**
@@ -103,7 +131,7 @@ export async function readCase(env: Env, caseId: number): Promise<CaseRow | null
 export async function ensureCaseForOrder(env: Env, incorporationId: number): Promise<CaseRow | null> {
   await ensureIncorporationsSchema(env);
   const linked = await env.DB.prepare(
-    `SELECT ${CASE_COLS} FROM formation_case_orders o JOIN formation_cases c ON c.id = o.case_id WHERE o.incorporation_id = ?`,
+    CASE_BY_ORDER,
   ).bind(incorporationId).first<CaseRow>();
   if (linked) return linked;
   const order = await env.DB.prepare(
@@ -128,7 +156,7 @@ export async function ensureCaseForOrder(env: Env, incorporationId: number): Pro
     ).bind(stage, JSON.stringify({ incorporation_id: order.id, status: order.status }), uid),
   ]);
   return (await env.DB.prepare(
-    `SELECT ${CASE_COLS} FROM formation_case_orders o JOIN formation_cases c ON c.id = o.case_id WHERE o.incorporation_id = ?`,
+    CASE_BY_ORDER,
   ).bind(incorporationId).first<CaseRow>()) || null;
 }
 
@@ -167,36 +195,27 @@ export async function transition(
   const toStatus = order ? statusForStage(to) : null;
   const nextRevision = c.revision + 1;
 
-  // The precondition, as SQL: the case as read, and its order at the status read.
-  const caseAsRead = 'EXISTS (SELECT 1 FROM formation_cases WHERE id = ? AND stage = ? AND revision = ? AND closed_at IS NULL)';
+  // The precondition: the case as read, and its order at the status read.
   const caseBinds = [c.id, c.stage, c.revision];
-  const orderAsRead = order ? ' AND EXISTS (SELECT 1 FROM incorporations WHERE id = ? AND status = ?)' : '';
   const orderBinds = order ? [order.id, order.status] : [];
 
   const statements: D1PreparedStatement[] = [];
-  statements.push(env.DB.prepare(
-    `INSERT INTO formation_case_events (case_id, actor_user_id, party, kind, from_stage, to_stage, to_revision, visibility, detail_json)
-     SELECT ?, ?, ?, 'stage_change', ?, ?, ?, ?, ? WHERE ${caseAsRead}${orderAsRead}`,
-  ).bind(
+  statements.push(env.DB.prepare(order ? EVENT_INSERT_WITH_ORDER : EVENT_INSERT_NO_ORDER).bind(
     c.id, actor.userId ?? null, actor.party, c.stage, to, nextRevision, payload.visibility ?? 'hq_only',
     JSON.stringify({ ...(payload.detail || {}), incorporation_id: order?.id ?? null, status_from: order?.status ?? null, status_to: toStatus }),
     ...caseBinds, ...orderBinds,
   ));
-  const set = Object.entries(payload.orderSet || {});
-  const now = payload.orderNow || [];
-  if (order && (toStatus !== order.status || set.length || now.length)) {
-    const cols = [...set.map(([k]) => `${k} = ?`), ...now.map((k) => `${k} = datetime('now')`), "updated_at = datetime('now')"];
-    statements.push(env.DB.prepare(
-      `${SET_STATUS[toStatus as OrderStatus]}, ${cols.join(', ')} WHERE id = ? AND status = ? AND ${caseAsRead}`,
-    ).bind(...set.map(([, v]) => v), order.id, order.status, ...caseBinds));
+  const set = payload.orderSet || {};
+  const now = new Set(payload.orderNow || []);
+  if (order && toStatus && (toStatus !== order.status || Object.keys(set).length || now.size)) {
+    statements.push(env.DB.prepare(ORDER_UPDATE[toStatus]).bind(
+      set.packet_document_id ?? null, set.packet_ready_by ?? null, now.has('packet_ready_at') ? 1 : 0,
+      set.filed_on ?? null, set.filed_by ?? null, now.has('filed_recorded_at') ? 1 : 0,
+      order.id, order.status, ...caseBinds,
+    ));
   }
   const caseIndex = statements.length;
-  statements.push(env.DB.prepare(
-    `UPDATE formation_cases SET stage = ?, stage_entered_at = datetime('now'), revision = revision + 1,
-            waiting_on = COALESCE(?, waiting_on), updated_at = datetime('now')
-      WHERE id = ? AND stage = ? AND revision = ?
-        AND EXISTS (SELECT 1 FROM formation_case_events WHERE case_id = ? AND to_revision = ?)`,
-  ).bind(to, WAITING_ON[to] ?? null, c.id, c.stage, c.revision, c.id, nextRevision));
+  statements.push(env.DB.prepare(CASE_UPDATE).bind(to, WAITING_ON[to] ?? null, c.id, c.stage, c.revision, c.id, nextRevision));
   statements.push(...(payload.extra || []));
 
   const results = await env.DB.batch(statements);
