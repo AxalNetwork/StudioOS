@@ -39,6 +39,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { COMPANY_INSTRUCTION, FOUNDING_INSTRUCTION, companyMaterial, foundingMaterial } from '../services/buildRecordDrafts';
 import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
@@ -3134,6 +3135,36 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'build/founding': {
+    // D6042 (#6042): Founding team's band. A check of the split and the
+    // vesting the cap table records for the founders, and a list of what it
+    // does not record. The failure it prevents is the helpful one: a model
+    // asked about vesting supplies "the usual four years with a one-year
+    // cliff", and asked about a split that does not reach 100% it rounds it
+    // off. Neither is in the record, so the material spells each gap as NOT
+    // RECORDED and carries the total it computed (`buildRecordDrafts.ts`).
+    instruction: FOUNDING_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return foundingMaterial(c, pid);
+    },
+  },
+
+  'build/company': {
+    // D6042 (#6042): Company creation's band. A summary of the open filings,
+    // what is due next and where formation stands, from the formation order,
+    // the formation steps and the entity's open obligations — the stores the
+    // module's own table combines. No filing rule, fee or deadline the record
+    // does not carry: the day counts are computed in the material and given.
+    instruction: COMPANY_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return companyMaterial(c, pid);
+    },
+  },
+
   'raise/capital': {
     // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
     // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
@@ -3550,6 +3581,8 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'build/this-week': 'Founder · Build · Operating systems',
   'build/retro': 'Founder · Build · Operating systems',
   'build/kpi': 'Founder · Build · Operating systems',
+  'build/founding': 'Founder · Build · Founding team',
+  'build/company': 'Founder · Build · Company creation',
   'raise/data-room': 'Founder · Raise · Fundraising readiness',
   'raise/legal': 'Founder · Raise · Fundraising readiness',
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',

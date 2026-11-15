@@ -233,6 +233,7 @@ pull.
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
+| `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 | `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
