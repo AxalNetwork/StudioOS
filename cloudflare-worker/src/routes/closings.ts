@@ -35,7 +35,9 @@
  * `closing_events` row in the same batch. Every refusal goes through `refuse()`
  * with a code and echoes no input.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import type { Env } from '../types';
 import { requireAdmin, requireAuth } from '../auth';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
@@ -48,6 +50,7 @@ import {
 
 const onError = (error: any, c: any) => {
   if (error instanceof Response) return error;
+  if (error instanceof HTTPException) return error.getResponse();
   if (error instanceof ClosingRefusal) return refuse(c, error.status, { code: error.code, message: error.sentence });
   if (error?.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error), 403);
   const status = AUTH_ERROR_STATUSES[error?.message];
@@ -63,6 +66,8 @@ const body = async (c: any) => {
 /** An Admin in their own session: a support session never writes a closing. */
 async function admin(c: any) {
   const user = await requireAdmin(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) throw new HTTPException(403, { res: previewRefusal });
   if (await isSupportSession(c)) {
     throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot change a closing.');
   }
@@ -146,6 +151,8 @@ r.post('/:uid/lines/:lineUid/declaration/withdraw', async (c) => {
 
 r.post('/:uid/captable/accept', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (await isSupportSession(c)) throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot decide a cap-table change.');
   await decideCaptable(c.env, user, c.req.param('uid'), 'accepted');
   return c.json({ ok: true, state: 'accepted' });
@@ -153,6 +160,8 @@ r.post('/:uid/captable/accept', async (c) => {
 
 r.post('/:uid/captable/dismiss', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (await isSupportSession(c)) throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot decide a cap-table change.');
   await decideCaptable(c.env, user, c.req.param('uid'), 'dismissed');
   return c.json({ ok: true, state: 'dismissed' });
