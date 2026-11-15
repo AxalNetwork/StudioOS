@@ -256,7 +256,9 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
     assert.equal(v.text('uof-tile-committed-value'), 'Unavailable', 'D6081: this fixture carries no committed block');
     assert.equal(v.all('uof-section-row').length, 5);
     assert.ok(v.text('uof-cash').includes('Modelled'));
-    assert.ok(v.text('uof-ties').includes('! Different raise'));
+    // D5081 (RA-21): where the plan is used is its Dependencies card, each row marked; a different raise is Stale.
+    assert.equal(v.text('uof-dep-cap'), 'Stale');
+    assert.ok(v.text('uof-tie-cap').includes('This plan raises $1,500,000'));
     assert.ok(v.by('uof-need-round_disagreement'));
     assert.ok(v.sent.some((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3'));
     assert.equal(v.by('uof-admin-banner'), undefined, 'the founder has no banner');
@@ -266,7 +268,10 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
 test('UF3 Edit split: a total other than 100 waits; a good split saves the raise, the shares and the target', async () => {
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': () => response({ ok: true }) } });
   try {
-    await v.click('uof-edit-split-open');
+    // D5081 (RA-14): on a desktop Home, Edit split opens from the header's Set raise & allocation, drawn once.
+    assert.equal(v.text('cycle-action'), 'Set raise & allocation');
+    assert.equal(v.by('uof-edit-split-open'), undefined, 'the action is not drawn twice');
+    await v.click('cycle-action');
     assert.equal(v.pr(v.by('uof-edit-split')).role, 'dialog', 'D1317: Edit split opens as the shared Sheet');
     assert.ok(v.pr(v.by('uof-edit-split'))['aria-labelledby']);
     assert.equal(v.pr(v.by('uof-edit-split'))['data-width'], 640);
@@ -292,7 +297,7 @@ test('D5069 a split refused because the plan changed keeps the dialog, says so, 
   const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': conflict } });
   try {
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     await v.type('uof-split-amount', '2000000');
     await v.click('uof-split-save');
     assert.match(v.text('uof-split-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
@@ -346,7 +351,7 @@ test('UF16: an admin works under the banner, their writes say so, and Mercury fi
     assert.ok(v.text('uof-admin-banner').includes('as an Admin. Changes are logged under your name.'));
     assert.equal(v.text('uof-tile-today-value'), 'Founder only');
     assert.ok(v.by('uof-cash-founder-only'));
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     assert.ok(v.text('uof-split-admin').includes('logged under your name'));
   } finally { await v.close(); }
   const a = await mounted('/raise/use-of-funds/actuals?project_id=3', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
@@ -360,7 +365,8 @@ test('UF17–UF19: empty, error and Mercury partial each say what they are', asy
   let v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ empty: true }) });
   try {
     assert.ok(v.text('uof-empty').includes('Set your raise and split to see what it buys.'));
-    assert.equal(v.text('uof-tile-raise-value'), 'Not recorded');
+    // D5081 (RA-14): first use collapses the analytics to its set-up actions; no tile draws Not recorded four times.
+    assert.equal(v.by('uof-tile-raise-value'), undefined);
   } finally { await v.close(); }
   v = await mounted('/raise/use-of-funds?project_id=3', { plan: null });
   try {

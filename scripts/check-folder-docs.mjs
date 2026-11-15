@@ -179,6 +179,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],
   ['frontend/src/pages/raise/caprel',         'the Capital relationships tool (D1188, D1192, D1193): its tabs inside the module page, the dialogs, and the models they read'],
   ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
+  ['frontend/src/pages/raise/useoffunds',     'the Use of funds tool (D1173, D1177, D1178, D5081): Home and its tabs inside the module page, the dialogs, the shared plan read and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],

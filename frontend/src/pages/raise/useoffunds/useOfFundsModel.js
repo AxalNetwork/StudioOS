@@ -294,6 +294,119 @@ export function tiesRows(plan) {
   return rows;
 }
 
+/* ------------------------------------------------------------------ *
+ * D5081 (#5081; Raise v2 boards RA-14, RA-21) — the tool owns its Home:
+ * its frame, its one primary action, its dependencies marked from the
+ * plan read, runway recorded against modelled, the milestones funded and
+ * the first-use setup actions. Every mark comes from a block the plan
+ * read already carries; a dependency it does not read is not drawn.
+ * ------------------------------------------------------------------ */
+
+/** Home's frame (RA-21 A) and the tool's primary action (RA-14's table). */
+export const HOME_FRAME = 'What does this round buy us?';
+export const SET_ACTION = 'Set raise & allocation';
+
+/**
+ * The module header's primary action on Home, from Home's own plan read: Set raise & allocation, which opens
+ * Edit split. None while the plan is unread or unreadable, for a viewer who cannot write, or on first use, where
+ * the empty state's first action is the page's one primary (D5076's rule). Never Build your deck.
+ */
+export function homeAction(read) {
+  const plan = read && read.status !== 'unreadable' ? read.data : null;
+  if (!plan || !plan.viewer?.can_write || plan.base?.state !== 'ok' || planEmpty(plan)) return null;
+  return { label: SET_ACTION, dialog: 'split' };
+}
+
+/** The dependency marks (RA-21, RA-23's words). */
+export const MARK = { current: 'Current', stale: 'Stale', unavailable: 'Unavailable', not_linked: 'Not linked', founder_only: 'Founder only', refused: 'Refused' };
+const MARK_TONE = { current: 'green', stale: 'amber', unavailable: 'red', not_linked: 'dashed', founder_only: 'neutral', refused: 'neutral' };
+const dep = (key, eyebrow, mark, text, why = null, href = null) => ({ key, eyebrow, mark, word: MARK[mark], tone: MARK_TONE[mark], text, why, href });
+
+/**
+ * What this plan depends on (RA-21 A), each marked Current, Stale, Unavailable or Not linked from the plan read:
+ * the round (`round`), its commitments (`committed`), the cap table and the deck (`ties`) and Mercury
+ * (`runway_today.sources.mercury`). Stale means the record and this plan disagree, or the deck's Ask slide is not
+ * marked in sync; Unavailable means the block could not be read, never that nothing is there. Readiness and a
+ * hiring plan are not in the plan read, so they are not drawn (D5081 names them as Worker follow-ups).
+ */
+export function dependencyRows(plan) {
+  const rows = [];
+  const raise = raiseView(plan);
+  const round = plan?.round;
+  if (!round) rows.push(dep('round', 'Round', 'unavailable', 'The round could not be read.'));
+  else if (!round.chosen) rows.push(dep('round', 'Round', 'not_linked', 'No round size is recorded.', round.reason || null));
+  else if (round.disagreements?.length) rows.push(dep('round', 'Round', 'stale', `The plan raises ${raise.value}`, 'Recorded round sizes differ.'));
+  else rows.push(dep('round', 'Round', 'current', `The plan raises ${raise.value}`, raise.sub));
+
+  const c = committedView(plan?.committed);
+  if (c.state === 'ok') rows.push(dep('committed', 'Capital relationships', 'current', `Committed ${c.value}`, c.sub));
+  else if (c.state === 'not_recorded') rows.push(dep('committed', 'Capital relationships', 'not_linked', 'No active round holds commitments.', c.sub, c.href));
+  else if (c.state === 'refused') rows.push(dep('committed', 'Capital relationships', 'refused', 'Commitments are not read for you here.', c.sub));
+  else rows.push(dep('committed', 'Capital relationships', 'unavailable', 'Commitments could not be read.', c.sub));
+
+  const cap = plan?.ties?.cap_table;
+  if (cap?.state === 'ok' && cap.value) {
+    const r = cap.value.rounds?.find((x) => x.value != null);
+    const name = cap.value.name || 'Cap-table scenario';
+    if (!r) rows.push(dep('cap', 'Cap table', 'not_linked', name, 'The scenario records no round amount.', '/raise/cap-table'));
+    else if (raise.cents != null && r.value !== raise.cents) rows.push(dep('cap', 'Cap table', 'stale', `${name} raises ${money(r.value)}`, raise.value ? `This plan raises ${raise.value}.` : null, '/raise/cap-table'));
+    else rows.push(dep('cap', 'Cap table', 'current', `${name} raises ${money(r.value)}`, sourceText('Modelled'), '/raise/cap-table'));
+  } else if (cap?.state === 'ok') rows.push(dep('cap', 'Cap table', 'not_linked', 'No cap-table scenario is recorded.', null, '/raise/cap-table'));
+  else rows.push(dep('cap', 'Cap table', 'unavailable', 'The cap table could not be read.'));
+
+  const deck = plan?.ties?.deck;
+  const d = deck?.state === 'ok' ? deck.value : null;
+  const deckHref = d?.href ? d.href.replace(/^\/raise\/pitch\?project=(\d+)$/, '/raise/pitch?project_id=$1') : null;
+  if (d?.state === 'synced') rows.push(dep('deck', 'Pitch deck', 'current', `v${d.version} · Ask slide`, dayText(d.synced_at) ? `In sync since ${dayText(d.synced_at)}` : 'In sync', deckHref));
+  else if (d?.state === 'out_of_sync') rows.push(dep('deck', 'Pitch deck', 'stale', `v${d.version} · Ask slide`, 'The Ask slide is not marked in sync with this plan.', deckHref));
+  else if (d) rows.push(dep('deck', 'Pitch deck', 'not_linked', 'No pitch deck is recorded.', null, deckHref));
+  else rows.push(dep('deck', 'Pitch deck', 'unavailable', 'The pitch deck could not be read.'));
+
+  const rt = plan?.runway_today;
+  const m = rt?.sources?.mercury;
+  const fact = (rt?.candidates || []).find((x) => x.kind === 'mercury');
+  if (m?.state === 'founder_only') rows.push(dep('mercury', 'Mercury', 'founder_only', 'Balance and burn', 'Mercury figures are visible to the founder only.'));
+  else if (m?.state === 'unreadable' || !m) rows.push(dep('mercury', 'Mercury', 'unavailable', 'Mercury could not be read.'));
+  else if (fact) rows.push(dep('mercury', 'Mercury', 'current', 'Balance and burn', dayText(fact.as_of) ? `Read ${dayText(fact.as_of)}` : null));
+  else rows.push(dep('mercury', 'Mercury', 'not_linked', 'No Mercury balance and burn are recorded.', null, '/account/connectors/mercury'));
+  return rows;
+}
+
+/** Runway, recorded against modelled (RA-21 A): today from its measured source, after the raise from the model, and the target. */
+export function runwayRows(plan) {
+  const base = baseOf(plan);
+  const today = runwayTodayView(plan?.runway_today, plan?.viewer);
+  const after = afterRaiseView(base);
+  return [
+    { key: 'today', label: 'Today', tag: today.state === 'recorded' ? 'Recorded' : today.state === 'founder_only' ? 'Founder only' : null, value: today.state === 'founder_only' ? null : today.value, sub: today.sub },
+    { key: 'after', label: 'After the raise', tag: 'Modelled', value: after.value, sub: after.value ? 'If the plan holds.' : after.sub },
+    { key: 'target', label: 'Your target', tag: base?.target_runway_months ? base.source || 'Typed' : null, value: base?.target_runway_months ? monthsText(base.target_runway_months) : null, sub: base?.target_runway_months ? null : 'Set it in Set raise & allocation.' },
+  ];
+}
+
+/** Milestones funded (RA-21 A): each milestone, the section that pays for it, its date and the model's word for it. */
+export function milestonesFunded(base) {
+  const states = new Map((base?.model?.milestones?.value || []).map((m) => [String(m.id), m.state]));
+  return (base?.milestones || [])
+    .slice().sort((a, b) => String(a.due_on || '9999').localeCompare(String(b.due_on || '9999')))
+    .map((m) => ({ id: m.id, label: m.label || NOT_RECORDED, section: sectionOf(m.category_key)?.label || NOT_RECORDED, by: m.due_on || null, state: states.get(String(m.id)) || null }));
+}
+
+/**
+ * First use (RA-14, #5081): the analytics collapse to at most three set-up actions, each one the plan read can
+ * back. Set raise & allocation for a writer; Connect Mercury when no runway today is measured and Mercury is the
+ * viewer's own to connect; Open Commitments when no active round holds commitments.
+ */
+export function setupActions(plan) {
+  const out = [];
+  if (plan?.viewer?.can_write) out.push({ key: 'split', text: SET_ACTION, act: 'split' });
+  const rt = plan?.runway_today;
+  if (!rt?.chosen && plan?.viewer?.mercury !== false && rt?.sources?.mercury?.state !== 'founder_only') out.push({ key: 'mercury', text: 'Connect Mercury', href: '/account/connectors/mercury' });
+  const c = committedView(plan?.committed);
+  if (c.state === 'not_recorded' && c.href) out.push({ key: 'round', text: 'Open Commitments', href: c.href });
+  return out.slice(0, 3);
+}
+
 /** The round's sources and which one the plan uses (UF13). */
 export function roundSourceRows(plan) {
   const KIND = { round_call: 'Round call', round_record: 'Round record', plan: 'This plan', cap_table: 'Cap-table scenario' };
