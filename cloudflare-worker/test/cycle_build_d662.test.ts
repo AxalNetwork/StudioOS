@@ -241,9 +241,12 @@ test('solution links and founder risks share the project but not the analyst reg
   const added = await call(env, '/api/cycles/build/risks?project=101', 1, 'POST', { title: 'Vendor outage', severity: 'high', mitigation: 'Keep an export' });
   assert.equal(added.status, 201);
   const module = await call(env, '/api/cycles/build/modules/solution-design?project=101');
-  assert.equal(module.body.records.rows[0].cells.pain_theme, 'Slow reporting');
+  // #6030 (BD7): the evidence cell links the pain theme and the hypothesis records.
+  assert.deepEqual(module.body.records.rows[0].cells.evidence.links, [
+    { text: 'Pain · Slow reporting', href: '/validate/problem-discovery/1?project=101' },
+    { text: 'Hypothesis · Automate the monthly close', href: '/validate/experiments/2?project=101' },
+  ]);
   assert.equal(cardView(module.body.card).state, 'ok');
-  assert.equal(module.body.records.rows[0].cells.hypothesis, 'Automate the monthly close');
   // #4603 part 2: the module page counts risks (the card's series) and no longer lists them in facts.
   assert.equal(db.prepare('SELECT title FROM venture_risks WHERE project_id = 101').get()?.title, 'Vendor outage');
   assert.equal(module.body.facts.risks, undefined);

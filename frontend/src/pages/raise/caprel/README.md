@@ -17,6 +17,7 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 | `capRelUrlFilters.js` | D5377 (#5377): each tab's filters, sort and page in the address — the allowed values, defaults kept out, the page reset on a filter change, cleared on a venture switch — and `useTabFilters`, which Match, Activity, Commitments and Pipeline's Passed column read through. |
 | `CapRelExportMenu.jsx` | D6078 (#6078, CRL16a): the More menu for Pipeline and Commitments. |
 | `capRelExports.js` | D6078 (#6078): spreadsheet-safe rows for the two CSV downloads. |
+| `capRelPipelineFilters.js` | D6077 (#6077): pure rules for Pipeline's bar (CRL2, CRL3 `pipeBar`): search, the Stage, Fit, Warm path, Source and Next step filters, and the four sorts, over the loaded prospects read. |
 
 ## Where the tool lives
 

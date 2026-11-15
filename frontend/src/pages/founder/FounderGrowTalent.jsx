@@ -45,7 +45,8 @@ export function rankPosting(jobs, view) {
 
 export default function FounderGrowTalent() {
   const [params, setParams] = useSearchParams();
-  const requestedId = params.get('project_id');
+  // #6109: a legacy `?project=` deep link names the venture too, so its links keep it.
+  const requestedId = params.get('project_id') || params.get('project');
   const [project, setProject] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -121,7 +122,7 @@ function TalentContent({ project, jobs, applications, visible, selectedJob, sele
         {/* Its tabs are the zone header's now. The canvas's Backend and GTM are
         sample role names, so the chips there are the roles actually linked
         to this startup — and when none is, that is what the row says. */}
-    <div className="fg-talent-tabs"><div className="fg-talent-actions"><Link to={`/build/team?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-talent-workspace"><BriefcaseBusiness size={13} /> Open workspace</Link></div></div>
+    <div className="fg-talent-tabs"><div className="fg-talent-actions"><Link to={`/grow/team-expansion${query}`} data-testid="link-grow-talent-roles">Roles and hiring plan <ChevronRight size={13} /></Link><Link to={`/build/team?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-talent-workspace"><BriefcaseBusiness size={13} /> Open workspace</Link></div></div>
     <div className="fg-talent-stats"><Stat label="Applicants" value={error ? 'Unavailable' : applicantCount} note={error ? 'Applicant source unavailable' : `across ${jobs.length} linked role${jobs.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Shortlisted" value={error ? 'Unavailable' : shortlistCount} note={error ? 'Applicant source unavailable' : applications.length ? `${Math.round((shortlistCount / applications.length) * 100)}% of applicants` : 'No applicants recorded'} muted={Boolean(error)} /><Stat label="Time to screen" value="Unavailable" note="No screening-event source connected" muted /><Stat label="Reserved" value="Unavailable" note="No project equity-reservation source connected" muted /></div>
     <section className="a5-card fg-talent-table"><Head icon={Users} title={`Ranked candidates · ${text(selectedJob?.title, 'selected role')}`} meta="The score always says why" />
       {/* #3938 GR4: Eadwyn ranks this role's applicants by meaning and writes one line each; nothing changes an application. */}

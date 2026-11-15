@@ -23,6 +23,24 @@
  *                                 tells the founder team
  *   POST /periods/:uid/waive      the period is waived by the holder
  *
+ * D4817 part 9 (#5311, addendum PFA03–PFA05, PFA10): both investor reads say
+ * whether the caller may act (`can_act`, false for a support session, with
+ * the sentence the write would refuse with), and each period carries the
+ * caller's own ask (`asked_at`) and who waived it (`waived_by_you`: true,
+ * false, or null when the row records no waiver or no waiver's author). The
+ * ask and the waive answer with the record they stored, read back: the
+ * event's time, the period, and for an ask how many of the founder team's
+ * in-app notices were stored (email delivery is never confirmed here).
+ *
+ * WHO MAY WAIVE A HOLDING THROUGH AN SPV (owner answer 2026-11-14, #5311):
+ * on a duty whose line's route is `syndicate`, only the SPV's lead may waive
+ * a period. The lead is the `created_by` of the syndicate the line's vehicle
+ * names (`vehicle_ref = 'syndicate:<id>'`, D1219). Anyone else is refused
+ * 403 `spv_lead_only`; where no lead is recorded (no vehicle, or no such
+ * syndicate) the waive is refused 409 `spv_lead_not_recorded`, never allowed.
+ * Each period in the investor reads says so (`can_waive`, `waive_refusal`).
+ * Ask is unchanged.
+ *
  * AN INVESTOR NEVER SEES ANOTHER INVESTOR. Every investor read and write is
  * scoped by `holder_user_id = caller`; another investor's duty or period is
  * the same 404 as one that does not exist, and the investor's rows carry no
@@ -71,12 +89,12 @@ type DutyRow = {
   id: number; uid: string; project_id: number; holder_user_id: number | null; holder_name?: string | null; kind: Kind; cadence: Cadence;
   due_rule: DueRule; due_days: number; required_figures: string; required_documents: string; source_document: string; source_clause: string;
   source_kind: string; source_envelope_id: number | null; body_sha256: string | null; defaulted_json: string; starts_on: string; status: string;
-  closing_line_uid: string; holding_route?: string | null;
+  closing_line_uid: string; holding_route?: string | null; spv_lead_user_id?: number | null;
 };
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
   expected_on: string | null; expected_note: string | null; waived_at: string | null; met_update_id: number | null; met_at: string | null;
-  report_uid?: string | null;
+  report_uid?: string | null; waived_by?: number | null;
 };
 
 /** The duty's words and terms. `withHolder` is the founder's view; an investor's never names a holder. */
@@ -119,7 +137,7 @@ function record(periods: Array<{ duty_uid: string; state: string }>) {
 async function periodsOf(env: Env, dutyIds: number[]): Promise<PeriodRow[]> {
   if (!dutyIds.length) return [];
   const rows = (await env.DB.prepare(
-    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, met_update_id, met_at,
+    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, waived_by, met_update_id, met_at,
             (SELECT u.uid FROM portfolio_updates u WHERE u.id = reporting_periods.met_update_id) AS report_uid
        FROM reporting_periods WHERE duty_id IN (SELECT value FROM json_each(?)) ORDER BY period_start, duty_id`,
   ).bind(JSON.stringify(dutyIds)).all<PeriodRow>()).results || [];
@@ -223,7 +241,9 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
     `SELECT d.id, d.uid, d.project_id, d.holder_user_id, d.kind, d.cadence, d.due_rule, d.due_days, d.required_figures, d.required_documents,
             d.source_document, d.source_clause, d.source_kind, d.source_envelope_id, d.body_sha256, d.defaulted_json, d.starts_on, d.status,
             d.closing_line_uid, p.uid AS project_uid, p.name AS project_name,
-            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route
+            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route,
+            (SELECT s.created_by FROM closing_lines l JOIN syndicates s ON l.vehicle_ref = 'syndicate:' || s.id
+              WHERE l.uid = d.closing_line_uid) AS spv_lead_user_id
        FROM reporting_duties d JOIN projects p ON p.id = d.project_id
       WHERE d.holder_user_id = ? AND (? IS NULL OR d.project_id = ?) ORDER BY p.name, d.id`,
   ).bind(userId, projectId, projectId).all<DutyRow & { project_uid: string; project_name: string }>()).results || []);
@@ -232,10 +252,15 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
 async function companies(env: Env, userId: number, projectId: number | null) {
   const duties = await ownDuties(env, userId, projectId);
   const day = today();
-  const periods = periodsWithState(duties, await periodsOf(env, duties.map((d) => d.id)), day);
-  const asked = new Set(((await env.DB.prepare(
-    `SELECT p.uid FROM reporting_events e JOIN reporting_periods p ON p.id = e.period_id WHERE e.event = 'asked' AND e.actor_user_id = ?`,
-  ).bind(userId).all<any>()).results || []).map((x: any) => x.uid));
+  const raw = await periodsOf(env, duties.map((d) => d.id));
+  const periods = periodsWithState(duties, raw, day);
+  // D4817 part 9: who waived each period, as the caller may read it: themself, someone else (never named), or not recorded.
+  const waivedBy = new Map(raw.map((p) => [p.uid, !p.waived_at || p.waived_by == null ? null : Number(p.waived_by) === userId]));
+  // The caller's own ask per period, with when it was stored: the audit row is the record.
+  const asked = new Map(((await env.DB.prepare(
+    `SELECT p.uid, MAX(e.created_at) AS asked_at FROM reporting_events e JOIN reporting_periods p ON p.id = e.period_id
+      WHERE e.event = 'asked' AND e.actor_user_id = ? GROUP BY p.uid`,
+  ).bind(userId).all<any>()).results || []).map((x: any) => [x.uid, x.asked_at ?? null]));
   const rec = record(periods);
   const byProject = new Map<number, any>();
   for (const d of duties) {
@@ -245,15 +270,36 @@ async function companies(env: Env, userId: number, projectId: number | null) {
   }
   for (const p of periods) {
     const d = duties.find((x) => x.uid === p.duty_uid)!;
-    byProject.get(d.project_id).periods.push({ ...p, asked: asked.has(p.uid) });
+    const rule = waiveRule(d.holding_route, d.spv_lead_user_id, userId);
+    byProject.get(d.project_id).periods.push({
+      ...p, asked: asked.has(p.uid), asked_at: asked.get(p.uid) ?? null, waived_by_you: waivedBy.get(p.uid) ?? null,
+      // Whether this holding lets the caller waive at all (the period's own state still decides): the SPV lead rule.
+      can_waive: !rule, waive_refusal: rule ? rule.sentence : null,
+    });
   }
   return { today: day, companies: [...byProject.values()] };
+}
+
+const ACT_REFUSED = 'A support session cannot ask for a report or waive a period.';
+
+/** Owner answer 2026-11-14: a holding through an SPV is waived only by the SPV's lead; with no lead recorded, by no one here. */
+const SPV_LEAD_ONLY = { status: 403, code: 'spv_lead_only', sentence: 'You hold this through an SPV, and only the SPV’s lead can waive a period.' };
+const SPV_LEAD_NOT_RECORDED = { status: 409, code: 'spv_lead_not_recorded', sentence: 'You hold this through an SPV, and the SPV’s lead is not recorded, so no one can waive a period here.' };
+function waiveRule(route: string | null | undefined, lead: number | null | undefined, userId: number) {
+  if (route !== 'syndicate') return null;
+  if (lead == null) return SPV_LEAD_NOT_RECORDED;
+  return Number(lead) === userId ? null : SPV_LEAD_ONLY;
+}
+/** D4817 part 9: whether the caller may ask or waive here, and the sentence the write would refuse with when not. */
+async function actAs(c: any) {
+  const support = await isSupportSession(c);
+  return { can_act: !support, act_refusal: support ? ACT_REFUSED : null };
 }
 
 r.get('/portfolio', async (c) => {
   const user = await requireAuth(c);
   c.header('Cache-Control', 'no-store');
-  return c.json({ ok: true, ...(await companies(c.env, Number(user.id), null)) });
+  return c.json({ ok: true, ...(await actAs(c)), ...(await companies(c.env, Number(user.id), null)) });
 });
 
 r.get('/companies/:projectUid', async (c) => {
@@ -264,14 +310,17 @@ r.get('/companies/:projectUid', async (c) => {
   const p = await c.env.DB.prepare('SELECT id FROM projects WHERE uid = ?').bind(uid).first<{ id: number }>();
   const out = p ? await companies(c.env, Number(user.id), Number(p.id)) : null;
   if (!out || !out.companies.length) throw new Refusal(404, 'not_found', 'No such company.');
-  return c.json({ ok: true, today: out.today, company: out.companies[0] });
+  return c.json({ ok: true, today: out.today, ...(await actAs(c)), company: out.companies[0] });
 });
 
 /** The caller's own period, with its duty's terms; another investor's is the same 404 as none. */
 async function ownPeriod(env: Env, userId: number, uid: string) {
   const row = await env.DB.prepare(
     `SELECT p.id, p.uid, p.duty_id, p.period_label, p.period_start, p.period_end, p.due_on, p.waived_at, p.met_update_id,
-            d.project_id, d.kind, d.cadence, d.due_rule, d.due_days, pr.name AS project_name, pr.founder_id
+            d.project_id, d.kind, d.cadence, d.due_rule, d.due_days, pr.name AS project_name, pr.founder_id,
+            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route,
+            (SELECT s.created_by FROM closing_lines l JOIN syndicates s ON l.vehicle_ref = 'syndicate:' || s.id
+              WHERE l.uid = d.closing_line_uid) AS spv_lead_user_id
        FROM reporting_periods p JOIN reporting_duties d ON d.id = p.duty_id JOIN projects pr ON pr.id = d.project_id
       WHERE p.uid = ? AND d.holder_user_id = ?`,
   ).bind(uid, userId).first<any>();
@@ -299,16 +348,28 @@ r.post('/periods/:uid/ask', async (c) => {
   ]);
   if (!Number((chase as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_asked', 'You already asked for this period’s report.');
   // The founder team is told. Best-effort: the chase and the event are the record.
+  // D4817 part 9: count the in-app notices actually stored; email delivery is not confirmed here.
+  const told: { team: number | null; in_app: number } = { team: null, in_app: 0 };
   try {
-    for (const userId of await founderTeam(c.env, Number(p.project_id))) {
-      await notify(c.env, {
+    const team = await founderTeam(c.env, Number(p.project_id));
+    told.team = team.length;
+    for (const userId of team) {
+      const notice = await notify(c.env, {
         userId, type: 'reporting_asked', title: `An investor asked for the ${p.period_label} ${KIND_WORDS[p.kind as Kind]?.toLowerCase() || 'report'}`,
         body: 'Prepare it from Reporting, or give an expected date.', link: `/grow/reporting?project_id=${p.project_id}`,
         payload: { project_id: p.project_id, period_label: p.period_label }, channels: ['in_app', 'email'], category: 'portfolio',
       });
+      if (notice != null) told.in_app += 1;
     }
   } catch { console.warn('[reporting] ask notify failed'); }
-  return c.json({ ok: true, asked: true, chase_uid: chaseUid });
+  // The receipt is the stored row, read back, never the clock of this request.
+  const stored = await c.env.DB.prepare(
+    `SELECT created_at FROM reporting_events WHERE period_id = ? AND actor_user_id = ? AND event = 'asked' ORDER BY id DESC LIMIT 1`,
+  ).bind(p.id, user.id).first<{ created_at: string | null }>();
+  return c.json({
+    ok: true, asked: true, chase_uid: chaseUid, period: { uid: p.uid, label: p.period_label }, asked_at: stored?.created_at ?? null, by_you: true,
+    told,
+  });
 });
 
 r.post('/periods/:uid/waive', async (c) => {
@@ -317,6 +378,8 @@ r.post('/periods/:uid/waive', async (c) => {
   const p = await ownPeriod(c.env, Number(user.id), c.req.param('uid'));
   if (p.state === 'sent') throw new Refusal(409, 'period_sent', 'This period’s report was sent, so there is nothing to waive.');
   if (p.state === 'waived') throw new Refusal(409, 'already_waived', 'You already waived this period.');
+  const rule = waiveRule(p.holding_route, p.spv_lead_user_id, Number(user.id));
+  if (rule) throw new Refusal(rule.status, rule.code, rule.sentence);
   const [upd] = await c.env.DB.batch([
     c.env.DB.prepare(`UPDATE reporting_periods SET waived_at = datetime('now'), waived_by = ? WHERE id = ? AND waived_at IS NULL AND met_update_id IS NULL`)
       .bind(user.id, p.id),
@@ -326,7 +389,13 @@ r.post('/periods/:uid/waive', async (c) => {
     ).bind(p.project_id, p.duty_id, p.id, user.id),
   ]);
   if (!Number((upd as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_waived', 'You already waived this period.');
-  return c.json({ ok: true, waived: true });
+  // D4817 part 9: the receipt is the row as stored.
+  const stored = await c.env.DB.prepare('SELECT waived_at, waived_by FROM reporting_periods WHERE id = ?').bind(p.id)
+    .first<{ waived_at: string | null; waived_by: number | null }>();
+  return c.json({
+    ok: true, waived: true, period: { uid: p.uid, label: p.period_label }, waived_at: stored?.waived_at ?? null,
+    waived_by_you: stored?.waived_by == null ? null : Number(stored.waived_by) === Number(user.id),
+  });
 });
 
 export default r;
