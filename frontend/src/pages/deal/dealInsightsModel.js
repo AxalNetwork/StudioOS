@@ -158,6 +158,8 @@ export function sizingView(block) {
         value: value == null ? null : usd0.format(value),
         source: sourceText(f.source),
         reason: value == null ? (f.reason || NOT_RECORDED) : (f.source ? null : f.reason || 'No source recorded for this figure'),
+        // D6171 (#6171): the day the figure was set, when `market_figures` holds one.
+        asOf: value != null && dateText(f.as_of) ? `As of ${dateText(f.as_of)}` : null,
       };
     }),
   };
@@ -170,10 +172,26 @@ export function safeUrl(u) {
 
 const DECISIONS = { go: 'Entering', enter: 'Entering', entering: 'Entering', served: 'Served', serve: 'Served', hold: 'On hold', no_go: 'Not entering', exit: 'Leaving' };
 
-/** A company market: its name, where it stands, and when it was decided. */
+/** D6171 (#6171): the four readiness parts the read returns for each market (Grow MG6), in the canvas's order. */
+export const READINESS = [['demand', 'Demand'], ['regulation', 'Regulation'], ['partners', 'Partners'], ['cost', 'Cost']];
+
+/** One readiness part: its score out of 10 with its source, or Not recorded. A recorded 0 stays 0. */
+export function readinessPart(m, key, label) {
+  const n = m?.[`${key}_score`];
+  const score = typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 10 ? n : null;
+  if (score == null) return { key, label, score: null, source: null, text: `${label} ${NOT_RECORDED}` };
+  const source = sourceText(m?.[`${key}_source`]);
+  return { key, label, score, source, text: `${label} ${score}/10${source ? ` · ${source}` : ''}` };
+}
+
+/** A company market: its name, where it stands, when it was decided, and its readiness. */
 export function marketRow(m) {
   const where = DECISIONS[String(m.decision ?? '').toLowerCase()] || (m.state ? String(m.state).replace(/_/g, ' ') : null);
-  return { name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null };
+  const readiness = READINESS.map(([key, label]) => readinessPart(m, key, label));
+  return {
+    name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null,
+    readiness, readinessText: readiness.map((p) => p.text).join(' · '),
+  };
 }
 
 // ---------------------------------------------------------------- DL6 Traction

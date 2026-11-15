@@ -344,7 +344,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; and 3 more
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 4 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 5 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 19 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; and 2 more
 - Network: **gap**, `#3721`
@@ -550,7 +550,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; `DK8 on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 10 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 11 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`; `DK8 on "Founder · Raise · Fundraising readiness"`; `DK8 on "Founder · Raise"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `BU2 on "Founder · Grow · Team expansion"`; and 2 more
 - Network: **gap**, `#3721`

@@ -10,8 +10,9 @@ import { Link } from 'react-router-dom';
 import { Lightbox, usePhoneWidth } from '../../ui';
 import { dd } from '../../lib/api';
 import {
-  ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, NOT_RECORDED, SOURCE_WORD, WHO, activityFilters,
-  activityRows, bandWord, caseContextLinks, caseTiles, decisionStrip, evidenceByItem, filterItems, flagRows, flagSourceWord, flagsHeadline,
+  ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, LINK_LINE, NOT_RECORDED, NO_REMOVE_LINE, SEVERITY_STATUSES,
+  SOURCE_WORD, WHO, activityFilters, activityRows, bandWord, caseContextLinks, caseRefusal, caseTiles, decisionStrip, evidenceByItem, evidenceRows,
+  filterItems, flagRows, flagSourceWord, flagsHeadline,
   fmtDay, itemCounts, may, maySection, peopleOf, personName, sectionRow,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
@@ -83,6 +84,25 @@ export function Table({ head, children, testId }) {
   );
 }
 export const Td = ({ children, className = '' }) => <td className={`${tdCls} ${className}`}>{children}</td>;
+
+/** A file's two-minute link, issued to the caller alone (D1248); a refusal is said beside it. */
+export function OpenLink({ uid, kind, id, name }) {
+  const [refused, setRefused] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    setBusy(true); setRefused(null);
+    try { const r = await dd.documentLink(uid, kind, id); if (r?.url) window.open(r.url, '_blank', 'noopener,noreferrer'); }
+    catch (e) { setRefused(caseRefusal(e, 'The file could not be opened.')); }
+    finally { setBusy(false); }
+  };
+  return (
+    <span className="flex flex-col">
+      <button type="button" className="w-fit text-left font-semibold text-violet-700 underline dark:text-violet-300" onClick={go} aria-label={`Open ${name}`}>{busy ? 'Opening…' : 'Open'}</button>
+      {refused ? <span role="alert" className="text-[12px] text-red-700 dark:text-red-300">{refused}</span> : null}
+    </span>
+  );
+}
 
 const SEV_CLS = {
   critical: 'bg-red-600 text-white', high: 'bg-orange-500 text-white', medium: 'bg-amber-300 text-amber-950',
@@ -197,8 +217,9 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
 
 const SEGMENTS = ['pending', 'pass', 'flag', 'fail', 'n_a'];
 
-function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
+function ItemRow({ uid, item, people, evidence, works, picked, onPick, open }) {
   const [actions, setActions] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const set = (status) => {
     setActions(false);
     if (status !== item.status) open('item', { item, status });
@@ -235,17 +256,63 @@ function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
           </>
         ) : <span className="text-[12px] font-semibold" data-testid={`dd-item-status-${item.id}`}>{ITEM_STATUS_WORD[item.status] || NOT_RECORDED}</span>}
       </div>
-      <div className={`flex flex-wrap gap-3 text-[12px] ${muted}`}>
+      <div className={`flex flex-wrap items-center gap-3 text-[12px] ${muted}`}>
         <span>Owner: {personName(people, item.owner_user_id) || 'No owner'}</span>
         <span>{item.due_date ? `Due ${fmtDay(item.due_date)}` : 'No due date'}</span>
         <span>{evidence == null ? 'Evidence: Not recorded' : `Evidence: ${evidence.length || 'none'}`}</span>
-        {item.note ? <span>Note: {item.note}</span> : null}
+        {item.note && !expanded ? <span>Note: {item.note}</span> : null}
+        <button type="button" className="min-h-11 font-semibold text-violet-700 underline md:min-h-0 dark:text-violet-300" aria-expanded={expanded}
+          aria-controls={`dd-item-detail-${item.id}`} onClick={() => setExpanded((x) => !x)} data-testid={`dd-item-expand-${item.id}`}>
+          {expanded ? 'Hide details' : 'Details'}
+        </button>
       </div>
+      {expanded ? <ItemDetail uid={uid} item={item} people={people} evidence={evidence} works={works} open={open} /> : null}
     </li>
   );
 }
 
-export function ChecklistTab({ data, open }) {
+/** DDL4, one row expanded (#6290): the item's note, severity, owner, due date and evidence. */
+function ItemDetail({ uid, item, people, evidence, works, open }) {
+  const rows = evidenceRows(evidence);
+  const severe = SEVERITY_STATUSES.includes(item.status);
+  return (
+    <div id={`dd-item-detail-${item.id}`} className="mt-1 flex flex-col gap-2 rounded-lg border border-axal-hairline bg-gray-50 p-3 text-[12.5px] dark:border-gray-800 dark:bg-gray-800/40" data-testid={`dd-item-detail-${item.id}`}>
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className={muted}>Note</dt><dd className="m-0 whitespace-pre-wrap" data-testid={`dd-item-note-${item.id}`}>{item.note || 'No note'}</dd>
+        <dt className={muted}>Severity</dt>
+        <dd className="m-0" data-testid={`dd-item-severity-${item.id}`}>{severe ? (item.severity ? <Severity s={item.severity} /> : NOT_RECORDED) : 'Set on an item marked Flag or Fail'}</dd>
+        <dt className={muted}>Owner</dt><dd className="m-0">{personName(people, item.owner_user_id) || 'No owner'}</dd>
+        <dt className={muted}>Due</dt><dd className="m-0">{item.due_date ? fmtDay(item.due_date) : 'No due date'}</dd>
+      </dl>
+      <div data-testid={`dd-item-evidence-${item.id}`}>
+        <div className={eyebrowCls}>Evidence</div>
+        {rows == null ? <p className="m-0">Not recorded: the case read could not carry this item’s evidence.</p>
+          : !rows.length ? <p className={`m-0 ${muted}`}>No evidence on this item yet.</p> : (
+            <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0">
+              {rows.map((e) => (
+                <li key={e.key} className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid={`dd-item-evidence-row-${e.key}`}>
+                  <span className="font-semibold">{e.name}</span>
+                  <span className={muted}>{e.kind === 'file' ? 'File' : 'Link'} · {e.by} · {e.at}</span>
+                  {e.kind === 'file' && e.attachmentId ? <OpenLink uid={uid} kind="attachment" id={e.attachmentId} name={e.name} />
+                    : e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-700 underline dark:text-violet-300">Visit link</a> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        {rows?.some((e) => e.kind === 'file') ? <p className={`m-0 mt-1 text-[12px] ${muted}`}>{LINK_LINE}</p> : null}
+      </div>
+      {works ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={btnCls} onClick={() => open('evidence', { item })} data-testid={`dd-evidence-open-${item.id}`}>Add evidence</button>
+          <button type="button" className={btnCls} onClick={() => open('item-edit', { item })} data-testid={`dd-item-edit-open-${item.id}`}>Edit item</button>
+          <span className={`text-[12px] ${muted}`} data-testid={`dd-item-no-remove-${item.id}`}>{NO_REMOVE_LINE}</span>
+        </div>
+      ) : <Who text={WHO.work} testId={`dd-who-item-${item.id}`} />}
+    </div>
+  );
+}
+
+export function ChecklistTab({ uid, data, open }) {
   const [chip, setChip] = useState('all');
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState([]);
@@ -287,7 +354,7 @@ export function ChecklistTab({ data, open }) {
             {!all.length ? <p className={`m-0 text-[12.5px] ${muted}`}>This section has no checklist items.</p> : (
               <ul className="m-0 list-none p-0">
                 {items.map((i) => (
-                  <ItemRow key={i.id} item={i} people={people} evidence={evidence ? evidence.get(Number(i.id)) || [] : null}
+                  <ItemRow key={i.id} uid={uid} item={i} people={people} evidence={evidence ? evidence.get(Number(i.id)) || [] : null}
                     works={works} picked={picked.includes(i.id)} onPick={pick} open={open} />
                 ))}
               </ul>

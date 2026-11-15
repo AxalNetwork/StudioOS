@@ -41,6 +41,10 @@ addresses are `../dealPageModel.js` (D1148).
 - `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
   data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
   each change behind an in-page dialog.
+- `DealPaper.jsx` — D6184 (#6184): one envelope on Documents' Deal paper card:
+  its signed count, Download once fully signed (the Worker's refusal shown in
+  the row), and how to sign, which points to the emailed link and never
+  builds one.
 - `dealAudienceModel.js` — D1155 (#3060, part 7): DL15's table of who sees
   what (twelve kinds against seven viewers, each with the read that holds it
   and each place today's Worker departs from the canvas, said), `viewerOf`,
