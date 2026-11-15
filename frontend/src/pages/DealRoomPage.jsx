@@ -1,7 +1,7 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -53,6 +53,7 @@ export default function DealRoomPage() {
   // D1148 (#2421): each tab is its own address under /deals/:dealId. D4815 part 4
   // (#5903, DE04): the eight tabs hold every view, each still at its own address.
   const { dealId, tab: tabParam } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const role = useCurrentRole();
   const { user } = useAuth() || {};
@@ -65,6 +66,7 @@ export default function DealRoomPage() {
   // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
   const isPartner = role === 'partner';
   const tab = tabOf(tabParam, role);
+  const evidenceNote = isInvestor ? location.state?.evidenceNote : null;
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
   const blocked = blockedRole(role);
 
@@ -205,7 +207,7 @@ export default function DealRoomPage() {
       {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
       {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
-      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} role={role} />}
+      {tab === 'evidence' && <EvidenceSummary key={deal.id} dealId={deal.id} company={deal.project_name || null} role={role} ndaHref={isInvestor ? tabHref(deal.id, 'documents') : null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
       {tab === 'market' && <DealMarket deal={deal} />}
       {tab === 'traction' && <DealTraction deal={deal} />}
@@ -219,7 +221,7 @@ export default function DealRoomPage() {
       {tab === 'commitment' && !isInvestor && <DealCommitmentsStaff dealId={deal.id} currency={deal.currency} viewer={viewerOf(role, user, deal)} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'closing' && <ClosingRoom dealId={deal.id} role={role} deal={deal} />}
       {/* DL14: an investor's Notes tab: their firm's notes, Eadwyn's draft slot and the activity. */}
-      {tab === 'notes' && <DealNotes dealId={deal.id} userId={user?.id} />}
+      {tab === 'notes' && <DealNotes key={evidenceNote ? location.key : deal.id} dealId={deal.id} userId={user?.id} evidenceNote={evidenceNote} />}
       {tab === 'activity' && <DealActivity dealId={deal.id} />}
       {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
