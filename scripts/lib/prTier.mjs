@@ -10,9 +10,10 @@ export const MAX_BASE_MINUTES = 120;
  * A null parts list delegates to the existing full matrix. Keep the full
  * matrix defined by the planner so changes to sharding also apply to fallbacks.
  */
-export function tierFor({ event, fork, headSha, selection } = {}) {
+export function tierFor({ event, draft, fork, headSha, selection } = {}) {
   const full = (reason) => ({ mode: 'full', reason, parts: null });
   if (event !== 'pull_request') return full('event');
+  if (draft === true) return { mode: 'draft', reason: 'draft', parts: ['rest'] };
   if (fork !== false) return full('fork-or-unknown');
   if (!isSha(headSha)) return full('unknown-head');
   if (selection?.mode !== 'selected' || !Array.isArray(selection.files) ||
