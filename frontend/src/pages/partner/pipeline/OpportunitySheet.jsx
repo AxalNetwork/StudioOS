@@ -75,7 +75,10 @@ export async function readOpportunity(id, sources = OPPORTUNITY_SOURCES, prev = 
 
 /** The rows of one opportunity across the four reads, joined by id; and which reads could not answer. */
 export function resolveOpportunity(id = {}, reads = {}) {
-  const items = (k) => (reads[k]?.state === 'ok' && Array.isArray(reads[k].value?.items) ? reads[k].value.items : []);
+  const items = (k) => {
+    const value = reads[k]?.state === 'ok' ? reads[k].value : null;
+    return Array.isArray(value?.items) ? value.items : [];
+  };
   const proposals = items('proposals');
   const proposal = proposals.find((p) => same(p.quote_id, id.quoteId))
     || proposals.find((p) => same(p.need_id, id.needId))
@@ -273,7 +276,7 @@ function Overview({ r }) {
 
 function Activity({ activity, onRetry }) {
   if (activity.state === 'unreadable') return <UnreadableBlock what="This opportunity’s activity could not be read." onRetry={onRetry} testId="opportunity-activity-unreadable" />;
-  const rows = activity.state === 'ok' ? activityRows(activity.items) : [];
+  const rows = activity.state === 'ok' ? activityRows(activity.items || []) : [];
   if (!rows.length) {
     return (
       <div className="grid gap-1.5" data-testid="opportunity-activity-none">
