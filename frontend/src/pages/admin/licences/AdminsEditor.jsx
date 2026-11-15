@@ -29,11 +29,32 @@ import { STATUS_TONE, Chip } from './licenceShared';
 // A FAILED READ IS NOT AN EMPTY LIST. `items === null` after a failure renders
 // the server's own sentence; "no administrators" is a claim about the licence
 // and must never be produced by a request that did not arrive.
+/**
+ * D4819 part 5 (#5931) — the licence's administrators, read once for this editor and for New licence step 4
+ * (`NewLicenceSteps.jsx`). `items` is undefined while reading, an array when read (empty is None), and null when
+ * the read failed, with `loadErr` the server's sentence: a failed read is never an empty list.
+ */
+export function useLicenceAdmins(uid) {
+  const [items, setItems] = useState(undefined);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = useCallback(() => {
+    setLoadErr(null);
+    api.licenceAdmins(uid)
+      .then((d) => setItems(Array.isArray(d?.items) ? d.items : []))
+      .catch((e) => {
+        reportError('AdminLicences:licenceAdmins', e);
+        setItems(null);
+        setLoadErr(e?.message || 'The administrator list could not be read.');
+      });
+  }, [uid]);
+  useEffect(load, [load]);
+  return { items, loadErr, load };
+}
+
 export function AdminsEditor({ licence, onSaved, prefill = null }) {
   // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
   const [reasonDialog, ask] = useReasonDialog();
-  const [items, setItems] = useState(undefined);
-  const [loadErr, setLoadErr] = useState(null);
+  const { items, loadErr, load } = useLicenceAdmins(licence.uid);
   // D801 — "Grant admin" from a delegate request arrives with the email and the
   // role filled; HQ still reads the form and appoints, through the same POST.
   const [form, setForm] = useState(() => (prefill
@@ -41,18 +62,6 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
     : { email: '', admin_role: 'principal', reason: '' }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-
-  const load = useCallback(() => {
-    setLoadErr(null);
-    api.licenceAdmins(licence.uid)
-      .then((d) => setItems(Array.isArray(d?.items) ? d.items : []))
-      .catch((e) => {
-        reportError('AdminLicences:licenceAdmins', e);
-        setItems(null);
-        setLoadErr(e?.message || 'The administrator list could not be read.');
-      });
-  }, [licence.uid]);
-  useEffect(load, [load]);
 
   const refresh = () => { load(); onSaved?.(); };
 
