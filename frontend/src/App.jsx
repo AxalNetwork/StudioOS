@@ -1286,6 +1286,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
           <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
+          <StripLink to="/admin/licences/packages">Axal VC packages</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (

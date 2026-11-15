@@ -99,7 +99,7 @@ test('D1151: missing, expired, malformed and wrong-pair NDAs reveal only the pub
   const f=fixture();
   try {
     // Break every section store. A masked response must not read any of them.
-    for (const table of ['project_members','market_sources','portfolio_updates']) f.db.exec(`DROP TABLE ${table}`);
+    for (const table of ['project_members','market_sources','portfolio_updates','market_figures']) f.db.exec(`DROP TABLE ${table}`);
     for (const [status,expiry] of [['pending',null],['active','2000-01-01'],['active','not-a-date'],['revoked',null]] as const) {
       nda(f,status,expiry);
       for (const section of ['team','market','traction']) {
@@ -176,7 +176,7 @@ test('D1151: market preserves provenance gaps, recorded zero and project scoping
   try {
     nda(f);
     const market=(await read(f,'/100/market')).body;
-    assert.deepEqual(market.sizing.data,{tam:{value:1000,source:null,reason:'No source recorded for this figure'},sam:{value:null,source:null,reason:'Not recorded'},som:{value:0,source:null,reason:'No source recorded for this figure'}});
+    assert.deepEqual(market.sizing.data,{tam:{value:1000,source:null,as_of:null,reason:'No source recorded for this figure'},sam:{value:null,source:null,as_of:null,reason:'Not recorded'},som:{value:0,source:null,as_of:null,reason:'No source recorded for this figure'}});
     assert.deepEqual(market.sources.data,[{title:'General source',url:'https://example.test/market',kind:'manual'}]);
     assert.deepEqual(market.who_pays.data,[{name:'Buyers',description:null,source:'manual'}]);
     assert.deepEqual(market.company_markets.data.map((x:any)=>[x.name,x.state,x.demand_score]),[['Canada','served',null]]);
