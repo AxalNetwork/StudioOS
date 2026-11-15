@@ -26,6 +26,7 @@ import type { Env, User } from '../../types';
 import { hydrateSuperAdmin, isSuperAdmin } from '../../auth';
 import { logCycleWriteStatement } from '../cycleActivity';
 import { notifyReasonedRead } from '../reasonedReadNotice';
+import { narrativeCan, narrativeCapabilities } from './capabilities';
 
 export const READ_REASON_HOURS = 8;
 export const REASON_MIN = 3;
@@ -68,7 +69,8 @@ export async function activeReason(env: Env, projectId: number, userId: number):
  */
 export async function narrativeAdminGate(c: any, user: User, projectId: number, mode: Mode): Promise<Response | null> {
   if (!isAdmin(user)) return null;
-  if (mode === 'write') return c.json({ detail: ADMIN_READ_ONLY, code: 'admin_read_only' }, 403);
+  // D5074: the write refusal is the capability map's (`./capabilities.ts`), the one the versions read returns.
+  if (mode === 'write' && !narrativeCan(narrativeCapabilities({ admin: true, founder: false }), 'edit')) return c.json({ detail: ADMIN_READ_ONLY, code: 'admin_read_only' }, 403);
   let reason: Reason | null;
   try {
     reason = await activeReason(c.env, projectId, Number(user.id));

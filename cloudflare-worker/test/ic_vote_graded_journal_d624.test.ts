@@ -113,7 +113,7 @@ function freshDb() {
       ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      resolved_at TEXT, resolved_by INTEGER
+      resolved_at TEXT, resolved_by INTEGER, owner_user_id INTEGER, owner_label TEXT
     );
     CREATE TABLE ic_meetings (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,

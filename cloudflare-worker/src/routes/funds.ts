@@ -12,7 +12,7 @@ import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
-import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
+import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod,deleteFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator, fundManageScope } from '../services/fundGpAccess';
 import { assertFundAct, assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
@@ -148,7 +148,8 @@ funds.get('/lp-portal', async (c) => {
   const user = await requireAuth(c);
   // listByUser selects the fund's GP-of-record and service-provider columns so a
   // quarterly report can name the responsible fiduciary without an admin call.
-  await ensureFundGpColumns(c.env);
+  const readOnly = c.req.query('view') === 'studio';
+  if (!readOnly) await ensureFundGpColumns(c.env);
 
   // Claim first, then read. This handler is where the two LP predicates used to
   // meet: the positions came back on `user_id` alone while the capital calls
@@ -156,17 +157,23 @@ funds.get('/lp-portal', async (c) => {
   // whose position the same page had just failed to find. Claiming links those
   // rows to the account once; every query beneath is then the same question,
   // asked once, through lpSelfScope.
-  await claimLpRowsByEmail(c.env, Number(user.id), user.email);
+  // Studio only sees account-linked rows. The portal claims any legacy email match.
+  const actor = readOnly ? { ...user, email: undefined } : user;
+  if (!readOnly) await claimLpRowsByEmail(c.env, Number(user.id), user.email);
 
-  const my = await LPs.listByUser(c.env, user);
+  const my = await LPs.listByUser(c.env, actor);
   const lpRows: any[] = my.results || [];
+  const unlinked = readOnly && Boolean(await c.env.DB.prepare(
+    'SELECT 1 FROM limited_partners WHERE user_id IS NULL AND LOWER(email)=LOWER(?) LIMIT 1',
+  ).bind(user.email ?? null).first());
+
 
   // Aggregate cash flows per-fund for TVPI / DPI
-  const distRows = await Distributions.listByUser(c.env, user, 200);
+  const distRows = await Distributions.listByUser(c.env, actor, 200);
 
   // Self-view, so lpSelfScope and not lpMembershipScope: an admin's own
   // portal must show their own positions, not the sum of everyone's.
-  const callScope = lpSelfScope(user as any);
+  const callScope = lpSelfScope(actor);
   // D372: each line carries what the ledger (D371) knows about it — the cents
   // it owes, the cents received against it, the call's number and its fund —
   // so the My-commitment card can say called, due and uncalled without
@@ -249,6 +256,7 @@ funds.get('/lp-portal', async (c) => {
   return c.json({
     ok: true,
     lp_holdings: lpRows,
+    ...(readOnly ? { unlinked_commitment: unlinked } : {}),
     capital_calls: calls,
     capital_calls_recorded: callsRecorded,
     distributions: distRows,
@@ -897,6 +905,19 @@ funds.post('/:id/report-periods', async (c) => {
   const result=await saveFundPeriod(c.env,fundId,gp.user.id,body);
   await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:result.period?.id??null});
   return c.json({ok:true,period:result.period},result.created?201:200);
+ }catch(error){return fundReportError(c,error);}
+});
+
+funds.delete('/:id/report-periods/:periodId', async (c) => {
+ try{
+  const fundId=reportId(c.req.param('id')), periodId=reportId(c.req.param('periodId'));
+  if(!fundId||!periodId)throw new FundReportRefusal('not_found',404);
+  const gp=await requireFundGp(c,fundId);
+  await assertFundAct(c,gp,'fund_report.draft');
+  const body=await c.req.json().catch(()=>null);
+  await deleteFundPeriod(c.env,fundId,periodId,gp.user.id,body?.revision);
+  await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:periodId,deleted:true});
+  return c.json({ok:true});
  }catch(error){return fundReportError(c,error);}
 });
 
