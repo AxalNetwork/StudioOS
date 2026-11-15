@@ -221,6 +221,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('segmentSuggestion', true),
       m('licence', true, true),
       m('reportUsage', true, true),
+      // D5949 — a branch's promo issued and spend, on the 05:10 run (promoIssuedReport.ts).
+      m('reportPromoIssued', true, true),
       m('reportProgramUsage', true, true),
     ],
   },
@@ -255,6 +257,11 @@ export const NOT_FROM_ANALYTICS = [
 
 /** Every workflow invoking `wrangler deploy`, explicitly distinguishing offline validation from publication. */
 export const DEPLOY_WORKFLOWS = [
+  {
+    file: 'archive-observer-deploy.yml',
+    trigger: 'on archive observer or tail consumer changes in a push to main, or by hand from main; enablement variable required',
+    deploys: 'only the independent studioos-archive-observer-disabled Worker, using its separate deploy token after an offline package check',
+  },
   {
     file: 'agent-compute-image.yml',
     trigger: 'on each pull request affecting general compute',

@@ -88,7 +88,7 @@ test('the renames: no module_map, firm_standing or "Module map"; Lab tools, Firm
 test('the defaults are the canvas’s, within the cap, each in its catalogue at its own default size', () => {
   const short = (p: string) => STUDIO_DEFAULTS[p as keyof typeof STUDIO_DEFAULTS].map((d) => `${d.key} ${d.size}`);
   assert.deepEqual(short('founder'), ['company_progress full', 'eadwyn_questions 1/2', 'lab_tools 1/2']);
-  assert.deepEqual(short('investor'), ['usage_quota', 'deal_lifecycle', 'scored_opportunities', 'quick_stats', 'portfolio_glance', 'upcoming_events'].map((k) => `${k} 1/2`));
+  assert.deepEqual(short('investor'), ['usage_quota', 'deal_lifecycle', 'scored_opportunities', 'quick_stats', 'portfolio_glance', 'upcoming_events', 'fund_commitment', 'needs_you'].map((k) => `${k} 1/2`));
   assert.deepEqual(short('advisor'), ['today 1/2', 'storefront 1/2', 'engagements 1/2', 'consented_proof 1/2', 'earnings full']);
   assert.deepEqual(short('partner'), ['firm_tiles full', 'operating_brief full', 'firm_feed full']);
   for (const p of STUDIO_PROFILES) {
@@ -101,7 +101,7 @@ test('the defaults are the canvas’s, within the cap, each in its catalogue at 
   }
 });
 
-test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab member no Grow and 23; an investor one group and 6; in_default marks exactly the defaults', async () => {
+test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab member no Grow and 23; an investor one group and 8; in_default marks exactly the defaults', async () => {
   const w = world();
   try {
     const founder = await modules(w.env, 1);
@@ -123,7 +123,7 @@ test('GET /modules: the founder gets five groups and 30 modules; a Spin-Out Lab 
     const admin = await modules(w.env, 5, '?profile=founder');
     assert.equal(admin.body.modules.length, 30, 'an admin previews the founder Studio with Grow');
     const inv = await modules(w.env, 2);
-    assert.deepEqual([inv.body.groups, inv.body.modules.length], [[{ key: 'investor', label: 'Investor' }], 6]);
+    assert.deepEqual([inv.body.groups, inv.body.modules.length], [[{ key: 'investor', label: 'Investor' }], 8]);
     assert.ok(inv.body.modules.every((m: any) => m.in_default));
     const scored = inv.body.modules.find((m: any) => m.key === 'scored_opportunities');
     assert.deepEqual([scored.locked_by_plan, scored.plan], [false, null], 'the canvas’s Investor Pro lock is not added');
