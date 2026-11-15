@@ -37,6 +37,7 @@ import {
 } from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
+import { currentMarketFigures, marketFigureHistory, type MarketFigureRow } from './marketFigures';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
 
 export const CYCLE = 'validate';
@@ -748,19 +749,28 @@ export async function icpCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-type MarketFigure = { value: number | null; source: string | null; reason: string | null };
+type MarketFigure = {
+  value: number | null; source: string | null; reason: string | null;
+  /** D6011: the date the current figure was set, its link and method, when a `market_figures` row holds them. */
+  as_of: string | null; source_url: string | null; method: string | null;
+};
 
+/**
+ * D6011 (#6011): each figure's latest `market_figures` row, while it still
+ * describes the project's value; otherwise `projects.*` with no source.
+ */
 async function loadMarket(ctx: Ctx) {
-  const p = await ctx.env.DB.prepare('SELECT tam, sam, som FROM projects WHERE id = ?')
-    .bind(ctx.projectId).first<{ tam: number | null; sam: number | null; som: number | null }>();
-  const fig = (v: number | null | undefined): MarketFigure => {
-    const n = Number(v);
-    if (v == null || !Number.isFinite(n) || n <= 0) return { value: null, source: null, reason: 'No figure entered' };
-    // No store records where a total, serviceable or obtainable figure came
-    // from — only the sizing INPUTS carry a sourced fill. Said, not guessed.
-    return { value: n, source: null, reason: 'No source recorded for this figure' };
+  const { values, current } = await currentMarketFigures(ctx.env, ctx.projectId);
+  const fig = (n: number | null, cur: MarketFigureRow | null): MarketFigure => {
+    if (n == null || n <= 0) return { value: null, source: null, reason: 'No figure entered', as_of: null, source_url: null, method: null };
+    // A figure saved before D6011, or by a writer that records no row yet.
+    if (!cur) return { value: n, source: null, reason: 'No source recorded for this figure', as_of: null, source_url: null, method: null };
+    const as_of = String(cur.set_at).slice(0, 10);
+    return cur.source_title
+      ? { value: n, source: cur.source_title, reason: null, as_of, source_url: cur.source_url, method: cur.method }
+      : { value: n, source: null, reason: 'No source named when this figure was saved', as_of, source_url: null, method: cur.method };
   };
-  return { tam: fig(p?.tam), sam: fig(p?.sam), som: fig(p?.som) };
+  return { tam: fig(values.tam, current.tam), sam: fig(values.sam, current.sam), som: fig(values.som, current.som) };
 }
 
 async function loadMarketReadiness(ctx: Ctx) {
@@ -1383,7 +1393,17 @@ async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     id: /^[a-z0-9][a-z0-9_-]*$/.test(String(c.id)) ? c.id : null,
     company: c.name, kind: c.kind, latest_signal: c.latest_signal, date: c.latest_on,
     source: c.source_url ?? c.source_kind ?? null,
-  })), rq.page, listOf('market-intelligence'));
+  })), rq.page, { ...listOf('market-intelligence'), parts: { market_history: await marketHistoryPart(ctx) } });
+}
+
+/** D6011 (#6011): the History part, every figure change with who and when. Unreadable is null, on its own. */
+async function marketHistoryPart(ctx: Ctx) {
+  try {
+    return { rows: await marketFigureHistory(ctx.env, ctx.projectId) };
+  } catch (e) {
+    console.warn('[cycleValidate] market history unreadable:', (e as Error)?.message);
+    return null;
+  }
 }
 
 /**
