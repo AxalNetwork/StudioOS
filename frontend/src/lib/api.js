@@ -539,6 +539,10 @@ export async function refusalError(res, fallback) {
   return e;
 }
 
+function getInvestorPreviewHeader(method) {
+  return MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
+}
+
 /**
  * D717 (#1853) — the headers `request()` merges below: auth, CSRF and the
  * active company. A `lib/api/` module that has to call `fetch` itself (a binary
@@ -547,8 +551,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  const preview = MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...preview };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...getInvestorPreviewHeader(method) };
 }
 
 /**
@@ -585,10 +588,14 @@ export async function request(path, options = {}) {
     // sets it (with the multipart boundary). Setting application/json here
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const requestHeaders = rawRequestHeaders(options.method);
+    const csrfHeader = getCsrfHeader(options.method);
+    const companyHeader = getActiveCompanyHeader();
+    // D765: the rail's page (and option), so the Worker records and switches each run by it.
+    const railHeader = railPageHeaders();
+    const previewHeader = getInvestorPreviewHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...requestHeaders, ...options.headers }
-      : { 'Content-Type': 'application/json', ...requestHeaders, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
