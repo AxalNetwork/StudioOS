@@ -189,9 +189,9 @@ test('an unreadable flow says Unreadable with Try again, and offers no Pass', as
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('D4815 names the fields with nothing behind them', () => {
-  const doc = readFileSync('documentation/architecture/decisions/D4815.md', 'utf8');
-  const part = doc.slice(doc.indexOf('### DX6 built'));
-  assert.ok(part.length > 20, 'D4815 has no DX6 section');
-  for (const f of NOT_IN_READ) assert.ok(part.includes(f), `${f} is not named in D4815`);
+test('D4815 part 5 names the fields with nothing behind them', () => {
+  const doc = readFileSync('documentation/architecture/decisions/D4815-p5.md', 'utf8');
+  const part = doc.slice(doc.indexOf('## D4815 part 5'));
+  assert.ok(doc.includes('## D4815 part 5') && part.includes('DE06'), 'D4815 part 5 has no DX6 section');
+  for (const f of NOT_IN_READ) assert.ok(part.includes(f), `${f} is not named in D4815 part 5`);
 });
