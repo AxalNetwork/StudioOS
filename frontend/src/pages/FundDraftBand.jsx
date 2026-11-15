@@ -10,10 +10,10 @@ import { useState } from 'react';
  * (`onAccept`), which decides what Accept writes; Discard forgets it. A refusal (AI off, the budget, nothing
  * recorded) is the Worker's own sentence, shown beside the button.
  *
- * `acceptBlocked`: where Accept cannot write yet, the sentence that says why, in place of the button.
  */
-export default function FundDraftBand({ title, body, writes, run = 'Draft it', onRun, onAccept, acceptBlocked = null, blocked = null, testId }) {
+export default function FundDraftBand({ title, body, writes, run = 'Draft it', onRun, onAccept, blocked = null, testId }) {
   const [state, setState] = useState({ busy: false, draft: null, error: null });
+  const [accepting, setAccepting] = useState(false);
   const press = async () => {
     if (blocked || state.busy) return;
     setState({ busy: true, draft: null, error: null });
@@ -27,11 +27,21 @@ export default function FundDraftBand({ title, body, writes, run = 'Draft it', o
       setState({ busy: false, draft: null, error: sentence });
     }
   };
-  const accept = () => {
-    if (!state.draft || !onAccept) return;
-    const refusal = onAccept(state.draft.body.trim());
-    if (typeof refusal === 'string' && refusal) setState((s) => ({ ...s, error: refusal }));
-    else setState({ busy: false, draft: null, error: null });
+  const accept = async () => {
+    if (!state.draft || !onAccept || accepting) return;
+    setAccepting(true);
+    setState((s) => ({ ...s, error: null }));
+    try {
+      const refusal = await onAccept(state.draft.body.trim(), state.draft);
+      if (typeof refusal === 'string' && refusal) setState((s) => ({ ...s, error: refusal }));
+      else setState({ busy: false, draft: null, error: null });
+    } catch (failure) {
+      const message = [400, 402, 403, 404, 413, 503].includes(failure?.status) && failure?.message
+        ? failure.message : 'Accept could not be confirmed. Try again with this draft.';
+      setState((s) => ({ ...s, error: message }));
+    } finally {
+      setAccepting(false);
+    }
   };
   return <article className="fd-card fd-draft" aria-label={title} data-testid={testId}>
     <h2>{title}</h2>
@@ -44,8 +54,8 @@ export default function FundDraftBand({ title, body, writes, run = 'Draft it', o
       <h3>Drawn from</h3>
       <ol className="fd-draft-sources">{state.draft.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol>
       <div className="fd-actions">
-        {onAccept ? <button type="button" onClick={accept}>Accept</button> : acceptBlocked ? <p>{acceptBlocked}</p> : null}
-        <button type="button" onClick={() => setState({ busy: false, draft: null, error: null })}>Discard</button>
+        {onAccept && <button type="button" disabled={accepting} onClick={accept}>{accepting ? 'Accepting…' : 'Accept'}</button>}
+        <button type="button" disabled={accepting} onClick={() => setState({ busy: false, draft: null, error: null })}>Discard</button>
       </div>
     </>}
     {state.error && <p role="alert">{state.error}</p>}

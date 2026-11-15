@@ -16,6 +16,10 @@ export const fundDraftsApi = {
   brief: (fundId) => request(`/funds/${id(fundId)}/drafts/brief`, {
     method: 'POST', headers: railPressHeaders('draft:fund-brief'), body: JSON.stringify({ page: here() }),
   }),
+  latestBrief: (fundId) => request(`/funds/${id(fundId)}/drafts/brief/latest`),
+  acceptBrief: (fundId, receipt) => request(`/funds/${id(fundId)}/drafts/brief/accept`, {
+    method: 'POST', body: JSON.stringify({ receipt }),
+  }),
   /** The letter's opening paragraph, from the saved period's recorded capital movements. */
   letter: (fundId, periodId) => request(`/funds/${id(fundId)}/report-periods/${id(periodId)}/drafts/letter`, {
     method: 'POST', headers: railPressHeaders('draft:letter-opening'), body: JSON.stringify({ page: here() }),

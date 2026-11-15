@@ -16,9 +16,55 @@
  */
 
 import { formatMinor } from '../../../frontend/src/lib/money.js';
+import type { Env } from '../types';
+import { constantTimeEqual } from '../rpc/secret';
+import { signHmac } from './scoreIntegrity';
 
 export interface DraftSource { n: number; kind: string; ref: string; label: string; date: string | null }
 export interface DraftMaterial { lines: string[]; sources: DraftSource[] }
+
+interface BriefDraft {
+  uid: string;
+  fund: number;
+  author: number;
+  body: string;
+  sources: DraftSource[];
+}
+
+export const BRIEF_RECEIPT_MAX = 32 * 1024;
+const briefSignature = (env: Env, payload: string) => signHmac(env, `fund-brief:v1:${payload}`);
+
+/** Bind the accepted note to the exact draft and source snapshot the GP saw. */
+export async function briefReceipt(env: Env, fund: number, author: number, body: string, sources: DraftSource[]) {
+  const payload = JSON.stringify({ uid: crypto.randomUUID(), fund, author, body, sources } satisfies BriefDraft);
+  // Bound the replay request, including escaping and multibyte characters.
+  if (new TextEncoder().encode(JSON.stringify({ receipt: { payload, signature: '0'.repeat(64) } })).length > BRIEF_RECEIPT_MAX) return null;
+  return { payload, signature: await briefSignature(env, payload) };
+}
+
+export async function readBriefReceipt(env: Env, raw: unknown, fund: number, author: number): Promise<BriefDraft | null> {
+  if (!raw || typeof raw !== 'object') return null;
+  const { payload, signature } = raw as { payload?: unknown; signature?: unknown };
+  if (typeof payload !== 'string' || typeof signature !== 'string' || !/^[0-9a-f]{64}$/.test(signature)) return null;
+  if (!constantTimeEqual(signature, await briefSignature(env, payload))) return null;
+  const brief = JSON.parse(payload) as BriefDraft;
+  return brief.fund === fund && brief.author === author ? brief : null;
+}
+
+export async function latestFundBrief(env: Env, fund: number) {
+  const row = await env.DB.prepare(
+    'SELECT body, sources_json, created_at FROM fund_notes WHERE fund_id = ? ORDER BY id DESC LIMIT 1',
+  ).bind(fund).first<{ body: string; sources_json: string; created_at: string }>();
+  return row ? { body: row.body, sources: JSON.parse(row.sources_json) as DraftSource[], created_at: row.created_at } : null;
+}
+
+export async function saveFundBrief(env: Env, brief: BriefDraft) {
+  await env.DB.prepare(
+    `INSERT INTO fund_notes (uid, fund_id, author_user_id, body, sources_json)
+     VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO NOTHING`,
+  ).bind(brief.uid, brief.fund, brief.author, brief.body, JSON.stringify(brief.sources)).run();
+  return latestFundBrief(env, brief.fund);
+}
 
 // The fund pages record USD (D631's `currency: 'USD'`); formatted by the shared money rules, never by hand.
 const money = (cents: unknown): string | null =>

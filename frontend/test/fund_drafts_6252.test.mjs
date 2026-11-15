@@ -36,9 +36,10 @@ test('D6252 the fund brief band is the GP\'s alone, in the canvas\'s words, and 
   } finally { fundDraftsApi.brief = original; }
 });
 
-test('D6252 a pressed draft shows its body and every record it cites; with no store, Accept is a sentence, not a button', async () => {
+test('D6252 a pressed draft shows its body and every record it cites; Discard does not Accept', async () => {
   let runs = 0;
-  const view = await mountForm(React.createElement(FundDraftBand, { title: 'Fund brief', body: 'b', writes: 'w', run: 'Draft the brief', onRun: async () => { runs++; return draft; }, acceptBlocked: 'Keeping the brief as a note is not built yet.' }));
+  let saves = 0;
+  const view = await mountForm(React.createElement(FundDraftBand, { title: 'Fund brief', body: 'b', writes: 'w', run: 'Draft the brief', onRun: async () => { runs++; return draft; }, onAccept: () => { saves++; } }));
   try {
     assert.equal(runs, 0, 'nothing on mount');
     await view.click('Draft the brief');
@@ -47,11 +48,40 @@ test('D6252 a pressed draft shows its body and every record it cites; with no st
     assert.match(text, /Recorded Fund is investing \[1\]\./);
     assert.match(text, /Status: investing/);
     assert.match(text, /Limited partnership agreement: signed · 2026-07-01/);
-    assert.match(text, /Keeping the brief as a note is not built yet\./);
-    assert.equal(view.nodes().some((n) => n.tagName === 'BUTTON' && /^Accept$/.test(view.text(n))), false);
+    assert.equal(saves, 0);
     await view.click('Discard');
+    assert.equal(saves, 0);
     assert.doesNotMatch(view.text(), /Recorded Fund is investing/);
   } finally { await view.unmount(); }
+});
+
+test('the managing fund page reads the latest brief and retries a failed Accept with the original receipt', async () => {
+  const originals = { ...fundDraftsApi };
+  const receipt = { payload: 'opaque draft payload', signature: 'signed by the worker' };
+  const calls = [];
+  fundDraftsApi.latestBrief = async () => ({ note: { body: 'Previous accepted brief.', sources: [] } });
+  fundDraftsApi.brief = async () => ({ draft: { ...draft.draft, receipt } });
+  fundDraftsApi.acceptBrief = async (fundId, value) => {
+    calls.push([fundId, value]);
+    if (calls.length === 1) throw Object.assign(new Error('Accept could not be confirmed. Try again with this draft.'), { status: 503 });
+    return { note: draft.draft };
+  };
+  const view = await mountForm(React.createElement(FundPage, { reading: ready(page) }));
+  try {
+    assert.match(view.text(), /Latest accepted brief.*Previous accepted brief/s);
+    await view.click('Draft the brief');
+    assert.equal(calls.length, 0);
+    await view.click('Accept');
+    assert.match(view.text(), /Accept could not be confirmed/);
+    assert.match(view.text(), /Previous accepted brief/);
+    await view.click('Accept');
+    assert.deepEqual(calls, [[10, receipt], [10, receipt]]);
+    assert.match(view.text(), /Latest accepted brief.*Recorded Fund is investing/s);
+    assert.doesNotMatch(view.text(), /Previous accepted brief|Accept could not be confirmed/);
+  } finally {
+    await view.unmount();
+    Object.assign(fundDraftsApi, originals);
+  }
 });
 
 test('D6252 AI off, no budget or nothing recorded: the Worker\'s own sentence, and no draft', async () => {
@@ -120,7 +150,15 @@ test('D6252 the client posts to the mounted routes with the rail option and the 
   try {
     await fundDraftsApi.brief(10);
     await fundDraftsApi.letter(10, 4);
-    assert.deepEqual(sent.map((s) => [s.url, s.o.method]), [['/funds/10/drafts/brief', 'POST'], ['/funds/10/report-periods/4/drafts/letter', 'POST']]);
+    await fundDraftsApi.latestBrief(10);
+    await fundDraftsApi.acceptBrief(10, { payload: 'draft', signature: 'signed' });
+    assert.deepEqual(sent.map((s) => [s.url, s.o.method || 'GET']), [
+      ['/funds/10/drafts/brief', 'POST'],
+      ['/funds/10/report-periods/4/drafts/letter', 'POST'],
+      ['/funds/10/drafts/brief/latest', 'GET'],
+      ['/funds/10/drafts/brief/accept', 'POST'],
+    ]);
+    assert.deepEqual(JSON.parse(sent[3].o.body), { receipt: { payload: 'draft', signature: 'signed' } });
     const header = (s, k) => (s.o.headers instanceof Headers ? s.o.headers.get(k) : s.o.headers?.[k]);
     assert.equal(decodeURIComponent(header(sent[0], 'X-Rail-Option')), 'draft:fund-brief');
     assert.equal(decodeURIComponent(header(sent[1], 'X-Rail-Option')), 'draft:letter-opening');
