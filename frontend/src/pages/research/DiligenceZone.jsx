@@ -70,8 +70,8 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
       )}
       <ZoneHeading
         title="Diligence pulls"
-        sub="The rooms founders have opened to you, and how much of each they actually staged."
-        right={data ? <Pill tone={data.granted_count ? 'ok' : 'neutral'}>{`${data.granted_count} rooms granted`}</Pill> : null}
+        blurb="The rooms founders have opened to you, and how much of each they actually staged."
+        action={data ? <Pill tone={data.granted_count ? 'ok' : 'neutral'}>{`${data.granted_count} rooms granted`}</Pill> : null}
       />
 
       <ZoneBody

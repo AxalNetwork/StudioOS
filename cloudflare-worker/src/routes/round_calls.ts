@@ -8,9 +8,10 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { mapError } from './_t13t14t15_helpers';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
 import { roundCallsEnabled, verifiedInvestor } from '../services/roundCallPolicy';
 import { RoundCallError, loadCall, projectFacts, projectRecord, roundContext, saveDraft, audience, saveAudience, notOnAxal, ventureMember, ventureReadinessRead,
-  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview } from '../services/roundCalls';
+  founderPage, sendCall, investorPage, respond, recordCounsel, manageCall, answerQuestion, requestCounsel, counselQueue, audiencePreview, wordRoundTerms } from '../services/roundCalls';
 
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
@@ -101,6 +102,24 @@ routes.get('/',async c=>{
 routes.post('/',async c=>{
   try { const body=await input(c),access=await owner(c,id(body.project_id),{members:true}); return c.json(await saveDraft(c.env,access.project,access.user,body),201); }
   catch(e){return failure(c,e);}
+});
+routes.post('/:uid/terms-draft', async c => {
+  try {
+    const body = await input(c);
+    const uid = c.req.param('uid');
+    const existing = uid === 'new' ? null : await callOwner(c, { members: true });
+    const access = existing ?? await owner(c, id(body.project_id), { members: true });
+    if (existing && existing.call.state !== 'draft') return c.json({ code: 'call_not_draft', message: 'Only a draft call can be worded.' }, 409);
+    const rail = railFor(c, { page: 'Founder · Raise', option: 'draft:raise/round-calls' },
+      uid === 'new' ? `project:${access.project.id}` : `round_call:${uid}`);
+    const { result, draft } = await wordRoundTerms(c.env, access.project, access.user, body, rail);
+    if (!result.ok) return refuseRun(c, result) || c.json({ code: 'ai_unavailable', message: 'Eadwyn could not draft these words. Try again.' }, 503);
+    if (!draft) {
+      console.warn('[round-calls:wording] model output could not be kept', { usageLogId: result.usageLogId ?? null });
+      return c.json({ code: 'nothing_kept', message: 'Eadwyn’s wording could not be kept. This draft used your AI allowance. You can use the wording from your fields.' }, 422);
+    }
+    return c.json({ draft });
+  } catch (error) { return failure(c, error); }
 });
 // Static queue path must precede /:uid, which accepts 'counsel-queue' as a UID.
 routes.get('/counsel-queue',async c=>{

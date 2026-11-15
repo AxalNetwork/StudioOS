@@ -1,3 +1,4 @@
+import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -25,9 +26,9 @@ import { DRAFT_PURPOSES, followUpGroups, followUpMeta, mailtoHref, snoozedDue } 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
-const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
+const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[13px] max-lg:min-h-11 text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
-const BTN_S = 'inline-flex min-h-[32px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_S = 'inline-flex min-h-11 items-center focus-visible:outline-2 focus-visible:outline-violet-600 lg:min-h-[32px] justify-center rounded-lg border border-axal-hairline bg-white px-2.5 text-[12px] font-semibold text-axal-ink no-underline hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const EADWYN = 'flex h-6 w-6 flex-none items-center justify-center rounded-full bg-axal-violet text-[11px] font-extrabold text-white dark:bg-violet-600';
 const H3 = `m-0 text-[14px] font-extrabold ${INK}`;
 
@@ -207,22 +208,24 @@ function Materials({ projectId, search }) {
       {read.status === 'unreadable' ? <div className="px-4 py-3"><Unreadable what="Materials sent" claim="This is not a claim that nothing was sent." onRetry={read.reload} /></div> : null}
       {read.status === 'loading' && !read.data ? <div className="m-4 h-24 animate-pulse rounded-lg bg-axal-ground dark:bg-gray-800" /> : null}
       {read.data ? (
-        <div className="overflow-x-auto px-1">
-          <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-            <thead><tr className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
-              {['Investor', 'Deck link', 'Data room', 'Call for Capital'].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {(read.data.items || []).map((m) => (
-                <tr key={m.prospect_id} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid="caprel-material">
-                  <td className={`px-3 py-2 font-bold ${INK}`}>{m.name}</td>
-                  <td className={`px-3 py-2 font-mono ${tone(m.deck)}`}>{m.deck.text}</td>
-                  <td className={`px-3 py-2 font-mono ${tone(m.data_room)}`}>{m.data_room.text}</td>
-                  <td className={`px-3 py-2 ${tone(m.call)}`}>{m.call.text}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <ResponsiveRecords>
+            <table role="table" className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+              <thead role="rowgroup"><tr role="row" className={`border-b border-axal-hairline text-[10.5px] font-extrabold uppercase tracking-wide ${MUTED} dark:border-gray-800`}>
+                {['Investor', 'Deck link', 'Data room', 'Call for Capital'].map((h) => <th role="columnheader" key={h} className="px-3 py-2">{h}</th>)}
+              </tr></thead>
+              <tbody role="rowgroup">
+                {(read.data.items || []).map((m) => (
+                  <tr role="row" key={m.prospect_id} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid="caprel-material">
+                    <td role="cell" className={`px-3 py-2 font-bold ${INK}`}><RecordLabel>Investor</RecordLabel>{m.name}</td>
+                    <td role="cell" className={`px-3 py-2 font-mono ${tone(m.deck)}`}><RecordLabel>Deck link</RecordLabel>{m.deck.text}</td>
+                    <td role="cell" className={`px-3 py-2 font-mono ${tone(m.data_room)}`}><RecordLabel>Data room</RecordLabel>{m.data_room.text}</td>
+                    <td role="cell" className={`px-3 py-2 ${tone(m.call)}`}><RecordLabel>Call for Capital</RecordLabel>{m.call.text}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ResponsiveRecords>
           {!(read.data.items || []).length ? <p className={`m-0 px-3 py-2 text-[12.5px] ${MUTED}`}>No investor is in conversation yet.</p> : null}
         </div>
       ) : null}
