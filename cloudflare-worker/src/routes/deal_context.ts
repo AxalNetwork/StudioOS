@@ -131,16 +131,31 @@ r.get('/:id/whats-new', async c => {
   } catch { return c.json({ error: 'changes_unreadable', message: 'Changes are unreadable. Try again.' }, 503); }
 });
 
+/**
+ * #6192: `?tag=` narrows the list and its `total` to one tag (exact, as saved), so a
+ * filtered count is the Worker's, never the page's. Each item names its author for
+ * the firm (`author_name`): a firm note is read only by members of that firm (D1150),
+ * and those members already see each other on the firm's own pages. A note with no
+ * firm is the caller's own. `author_name` is null when the account has no name.
+ */
 r.get('/:id/notes', async c => {
   try {
     const x = await context(c); if ('error' in x) return x.error;
     const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 25));
     const offset = Math.max(0, Number(c.req.query('offset')) || 0);
     if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(offset)) return c.json({error:'invalid_page'},400);
-    const rows = await c.env.DB.prepare(`SELECT id, uid, author_user_id, company_id, tag, body, created_at, updated_at FROM deal_notes
-      WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT ? OFFSET ?`).bind(x.id,x.company,x.user.id,limit,offset).all();
-    const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM deal_notes WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?)').bind(x.id,x.company,x.user.id).first<{n:number}>();
-    return c.json({ items: rows.results, total: count!.n });
+    const tag = (c.req.query('tag') ?? '').trim();
+    if (tag.length > 80) return c.json({error:'invalid_tag'},400);
+    // An empty tag matches every note: one fixed statement, the tag bound twice.
+    const binds = [x.id, x.company, x.user.id, tag, tag];
+    const rows = await c.env.DB.prepare(`SELECT n.id, n.uid, n.author_user_id, n.company_id, n.tag, n.body, n.created_at, n.updated_at,
+        NULLIF(trim(u.name), '') AS author_name
+      FROM deal_notes n LEFT JOIN users u ON u.id = n.author_user_id
+      WHERE n.deal_id = ? AND n.company_id IS ? AND (n.company_id IS NOT NULL OR n.author_user_id = ?) AND (? = '' OR n.tag = ?)
+      ORDER BY n.id DESC LIMIT ? OFFSET ?`).bind(...binds,limit,offset).all();
+    const count = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM deal_notes n
+      WHERE n.deal_id = ? AND n.company_id IS ? AND (n.company_id IS NOT NULL OR n.author_user_id = ?) AND (? = '' OR n.tag = ?)`).bind(...binds).first<{n:number}>();
+    return c.json({ items: rows.results, total: count!.n, tag: tag || null });
   } catch { return c.json({ error: 'notes_unreadable', message: 'Notes are unreadable. Try again.' },503); }
 });
 
