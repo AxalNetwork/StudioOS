@@ -1,3 +1,4 @@
+import { announceInvestorPreviewRefusal, investorPreviewHeaders } from './investorPreview';
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
@@ -534,6 +535,7 @@ export async function refusalError(res, fallback) {
   const e = new Error(message || res.statusText || fallback);
   e.status = res.status;
   if (code) e.code = code;
+  announceInvestorPreviewRefusal(res.status, code);
   return e;
 }
 
@@ -545,7 +547,8 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
+  const preview = MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...preview };
 }
 
 /**
@@ -582,13 +585,10 @@ export async function request(path, options = {}) {
     // sets it (with the multipart boundary). Setting application/json here
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const csrfHeader = getCsrfHeader(options.method);
-    const companyHeader = getActiveCompanyHeader();
-    // D765: the rail's page (and option), so the Worker records and switches each run by it.
-    const railHeader = railPageHeaders();
+    const requestHeaders = rawRequestHeaders(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
+      ? { ...requestHeaders, ...options.headers }
+      : { 'Content-Type': 'application/json', ...requestHeaders, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -675,6 +675,7 @@ export async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       if (refusal.code) e.code = refusal.code;
+      announceInvestorPreviewRefusal(res.status, refusal.code);
       e.data = detailObj || errorObj || err || null;
       // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
       // so form components can highlight the offending input.

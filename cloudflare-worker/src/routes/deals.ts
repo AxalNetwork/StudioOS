@@ -1,4 +1,5 @@
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
@@ -816,6 +817,8 @@ deals.put('/:id', async (c) => {
 // ---------------------------------------------------------------------------
 deals.post('/:id/advance', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
@@ -872,6 +875,8 @@ deals.post('/:id/advance', async (c) => {
 // ---------------------------------------------------------------------------
 deals.post('/:id/pass', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json().catch(() => ({} as any));
   const reason = (body as any)?.reason;
@@ -1128,6 +1133,8 @@ deals.get('/:id/commitments', async (c) => {
 
 deals.post('/:id/commitments', async (c) => {
   const user = await requireRole(c, 'investor');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   await requireApprovedKyc(c);
   const id = Number(c.req.param('id'));
   const data = await c.req.json();
@@ -1371,6 +1378,8 @@ deals.post('/:id/transfers', async (c) => {
   // the closing checklist's ticks and no longer records money; the deal's
   // investors read it.
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (user.role !== 'admin') {
     return c.json({
       error: 'admin_records_transfers',
@@ -1500,6 +1509,8 @@ const CLOSING_TEMPLATE_SLUGS = new Set(['safe', 'spa', 'subscription']);
 
 deals.post('/:id/closing-checklist/apply', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json().catch(() => ({} as any));
   const slug = String(data?.template_slug || '');
@@ -1589,6 +1600,8 @@ function checklistNote(data: any): string | null | undefined {
 
 deals.post('/:id/closing-checklist/items', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
@@ -1641,11 +1654,15 @@ deals.post('/:id/closing-checklist/items', async (c) => {
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
   // D4631, kept by D6156: role partner plus canMoveRound sets state, owner, due date and note alike.
   const user = await requireRole(c, 'partner');
+  const data = await c.req.json().catch(() => ({} as any));
+  if (data?.state !== undefined || data?.owner_user_id !== undefined || data?.owner_label !== undefined || data?.due_date !== undefined) {
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+  }
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
-  const data = await c.req.json().catch(() => ({} as any));
   const stateGiven = data?.state !== undefined;
   const state = stateGiven ? String(data.state ?? '') : '';
   if (stateGiven && !CHECKLIST_STATES.includes(state)) {
@@ -1815,6 +1832,8 @@ deals.post('/:id/invitations', async (c) => {
 
 deals.post('/:id/invitations/respond', async (c) => {
   const user = await requireRole(c, 'investor');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
   const resp = data.response;
