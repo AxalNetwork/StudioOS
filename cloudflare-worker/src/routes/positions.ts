@@ -8,6 +8,8 @@
  *
  * Mounted at /api/positions. Added to STUDIO_PREFIXES so founders get a 402;
  * admin/investor bypass the studio gate and are narrowed here via canViewLpData.
+ * D4636 part 5: a founder who is GP of record passes that gate on the five
+ * reads below (`STUDIO_GP_READS`, middleware/requireTier.ts); writes do not.
  *
  * Who reads which rows (D1057, D4636 parts 2 and 3), evaluated per request:
  *   admin       every recorded position
@@ -97,7 +99,7 @@ async function latestMarksByProject(env: Env, projectIds: number[] | null = null
  * `investorHeldProjectIds` answers null ("every row") for a caller without the
  * investor licence. Anyone else gets null, which each read answers with 403.
  */
-type PositionScope = {
+export type PositionScope = {
   held: number[] | null;
   funds: number[];
   gpOnly: number[];
@@ -108,7 +110,7 @@ type PositionScope = {
   visibleCsv: string | null;
 };
 
-async function positionScope(c: any, user: any): Promise<PositionScope | null> {
+export async function positionScope(c: any, user: any): Promise<PositionScope | null> {
   const licensed = canViewLpData(user);
   // Never the held read without the licence: it is null, every row, for a non-investor.
   const held = licensed ? await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user)) : [];

@@ -5451,12 +5451,18 @@ export const api = {
     ),
 
     // Diligence — no store of its own. Room access assembled from the grants
-    // this investor already holds.
+    // this investor already holds. #6267: each room carries `nda: { status:
+    // none | out_for_signature | on_file, valid_until }`, and the read adds
+    // `requests`, the investor's own open and declined room requests no live
+    // grant answers (`project_name` null where the call or deal behind it did
+    // not name the venture); `requests: null` with `requests_unreadable` when
+    // they could not be read, never an empty list.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
     // that does not exist; a document behind an NDA they have not signed is a
     // 403 (`nda_required`) that carries the room and nothing about the file.
+    // #6267: the room carries the same `nda` status object as the list.
     diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
     diligenceFile: (grantUid, fileUid) =>
       request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),
@@ -5467,6 +5473,8 @@ export const api = {
 // founders are blocked at the worker level (any 403 surfaces directly).
 export const dd = {
   catalog: () => request('/dd/catalog'),
+  // Every filter the Worker's list reads passes through, `subject_id` among
+  // them (D6181: one subject's cases, exactly, under the same reader scope).
   listCases: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/dd/cases${q ? `?${q}` : ''}`);
@@ -5984,13 +5992,15 @@ export const events = {
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
   // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
-  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
+  // #5868 (D3724 gap 5): `topic`, one of the Worker's `EVENT_TOPICS` (D1487).
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price, topic } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
     if (format) qs.set('format', format);
     if (price) qs.set('price', price);
+    if (topic) qs.set('topic', topic);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);
