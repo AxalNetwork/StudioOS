@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investor Fund v2 · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.dsh{display:grid;grid-template-columns:212px minmax(0,1fr) 44px}
+.dsh.wr{grid-template-columns:212px minmax(0,1fr) 320px}
+.dsd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.dsd .co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg)}
+.dsd .co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.dsd .co span{margin-left:auto;color:var(--mu);font-weight:500}
+.dsd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.dsd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.dsd .sep{height:1px;background:var(--hair);margin:6px 14px}
+.zn{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.zn a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.zn a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.zn a span{font:600 10.5px var(--mo);color:var(--mu)}
+.fco{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;border:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--card);white-space:nowrap}
+.fco:before{content:"CO";color:var(--mu);font-weight:600;margin-right:2px}
+.fme{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 11px var(--sg);border:1px solid var(--lavE);white-space:nowrap}
+.fme:before{content:"";width:6px;height:6px;border-radius:999px;background:#7c3aed}
+.ftx{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:6px;border:1px solid var(--hair2);border-left:3px solid #0f766e;font:700 11px var(--sg);color:#0f766e;background:var(--card);white-space:nowrap}
+.ftx.w{border-left-color:var(--amD);color:var(--amT)}
+.ab{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);white-space:nowrap}
+.ab.anr{color:var(--mu);font-style:italic}
+.ab.anp{color:var(--mu);text-decoration:underline dashed;text-underline-offset:3px}
+.ab.ane{color:var(--mu);opacity:.8}
+.ab.aur{color:var(--neg)}
+.ab.alk{color:var(--ink)}
+.scs{display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden}
+.scs i{flex:1;background:var(--hair)}
+.scs i.h{background:#7c3aed}.scs i.m{background:#a78bfa}.scs i.l{background:#ddd6fe}.scs i.x{background:repeating-linear-gradient(45deg,var(--hair) 0 3px,transparent 3px 6px)}
+.sc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sc3>div{border:1px solid var(--hair);border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.sc3 small{font-size:10.5px;color:var(--mu)}
+.sc3 b{font:700 15px var(--mo)}
+.sc3 em{font-style:normal;font-size:10.5px;color:var(--mu)}
+.sc3 .dlt{color:var(--pos);font:700 10.5px var(--mo)}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.col{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.col h3{font-size:13px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+.col h3 span{font:500 11px var(--mo);color:var(--mu)}
+.dcard{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+.dcard .t{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.dc b.n{font-size:13.5px;font-weight:800}
+.dcard .mt{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dcard .ft{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:6px}
+.dcard.stale{border-color:var(--amE)}
+.dcard.pass{opacity:.7;border-style:dashed}
+.prog8{display:flex;gap:0}
+.prog8 span{flex:1;text-align:center;padding:7px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.prog8 span+span{border-left:0}
+.prog8 span:first-child{border-radius:8px 0 0 8px}.prog8 span:last-child{border-radius:0 8px 8px 0}
+.prog8 span.dn{color:var(--ink);background:var(--raised)}
+.prog8 span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.fin5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.fin5>div{padding:11px 14px;border-right:1px solid var(--hair)}
+.fin5>div:last-child{border-right:0}
+.fin5 small{display:block;font-size:11.5px;color:var(--mu)}
+.fin5 b{font:700 18px var(--mo)}
+.s11{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:4px}
+.s11>div{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.s11 i{display:block;width:100%;height:30px;border-radius:5px;background:var(--hair);position:relative}
+.s11 i b{position:absolute;inset:auto 0 0 0;border-radius:5px}
+.s11 small{font-size:10px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.s11 span{font:700 12px var(--mo)}
+.cmpb{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--hair)}
+.cmpb .br{height:12px;border-radius:3px}
+.cmpb .bw{display:flex;align-items:center;gap:6px}
+.stk{position:sticky;left:0;background:var(--card)}
+.dv{display:flex;justify-content:space-between;gap:10px}
+.sc3 em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc3 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsd .co{justify-content:flex-start;text-align:left}
+.rz li>.fco,.rz li>.fme,.rz li>.ftx,.rz li>.ab{justify-self:start}
+.dsd .co{background:var(--card);color:var(--ink)}
+
+.ifd-sh{display:grid;grid-template-columns:212px minmax(0,1fr)}
+.ifd-sd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.ifd-sd .ifd-lg{padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.ifd-sd .ifd-co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg);background:var(--card);color:var(--ink);text-align:left}
+.ifd-sd .ifd-co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.ifd-sd .ifd-co span{margin-left:auto;color:var(--mu);font-weight:500}
+.ifd-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.ifd-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.ifd-sd .ifd-sep{height:1px;background:var(--hair);margin:6px 14px}
+.ifd-crumb{font:600 12px var(--sg);color:var(--mu)}
+.ifd-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.ifd-hd h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.ifd-hd .ifd-hl{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ifd-hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.ifd-hd .ifd-act{display:flex;gap:8px;align-items:center;flex:none}
+.ifd-tabs{display:flex;gap:2px;border-bottom:1px solid var(--hair);flex-wrap:nowrap}
+.ifd-tabs a{padding:9px 13px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.ifd-tabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ifd-tabs a span{font:600 10.5px var(--mo);color:var(--mu)}
+.ifd-tabs a span.w{color:var(--amT)}
+.ifd-chip{display:inline-flex;align-items:center;gap:6px;padding:2px 10px 2px 8px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:700 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ifd-chip svg{flex:none}
+.ifd-chip.v{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.ifd-chip.sk{color:var(--mu);border-style:dashed}
+.ifd-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);white-space:nowrap}
+.ifd-s svg{flex:none}
+.ifd-s.nr{color:var(--mu);font-style:italic}
+.ifd-s.na{color:var(--mu)}
+.ifd-s.no{color:var(--mu)}
+.ifd-s.un{color:var(--neg);font-weight:700}
+.ifd-s.rf{color:var(--ink);font-weight:700}
+.ifd-s.ok{color:var(--pos);font-weight:700}
+.ifd-s.am{color:var(--amT);font-weight:700}
+.ifd-s.vi{color:var(--vt);font-weight:700}
+.ifd-mod{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:5px;border:1px dashed var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.ifd-mod.om{border-style:solid;border-color:var(--amE);color:var(--amT);background:var(--amBg)}
+.ifd-mod.st{border-color:var(--amE);color:var(--amT)}
+.ifd-cs{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:999px;border:1px solid var(--hair);font:700 11.5px var(--sg);white-space:nowrap;background:var(--raised);color:var(--ink)}
+.ifd-cs.due{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.ifd-cs.part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.ifd-cs.over{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.ifd-cs.paid{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.ifd-tag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;align-self:flex-start}
+.ifd-own{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;align-self:flex-start}
+.ifd-figs{display:grid;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ifd-figs>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ifd-figs>div:last-child{border-right:0}
+.ifd-figs small{font-size:11.5px;color:var(--mu)}
+.ifd-figs b{font:700 19px var(--mo);letter-spacing:-.02em;white-space:nowrap}
+.ifd-figs em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu);line-height:1.4}
+.ifd-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.ifd-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.ifd-tbl th.n,.ifd-tbl td.n{text-align:right;font-family:var(--mo)}
+.ifd-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle;height:44px}
+.ifd-tbl td small{display:block;color:var(--mu);font-size:11px}
+.ifd-tbl tr:last-child td{border-bottom:0}
+.ifd-tbl td.mo{font-family:var(--mo);white-space:nowrap}
+.ifd-list{display:flex;flex-direction:column}
+.ifd-list>li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);min-height:44px}
+.ifd-list>li:first-child{border-top:0}
+.ifd-list b{font-size:13px}
+.ifd-list small{display:block;font:500 11px var(--mo);color:var(--mu);margin-top:2px}
+.ifd-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.ifd-blk{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ifd-blk h2{font-size:14.5px;font-weight:800;display:flex;align-items:center;gap:8px}
+.ifd-blk h2 span{font:600 11px var(--mo);color:var(--mu)}
+.ifd-blk.hi{border-color:var(--lavE);box-shadow:inset 3px 0 0 #7c3aed}
+.ifd-amt{font:700 24px var(--mo);letter-spacing:-.02em}
+.ifd-kv{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.ifd-kv dt,.ifd-kv dd{padding:7px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.ifd-kv dt{color:var(--mu)}
+.ifd-kv dd{font-weight:600}
+.ifd-kv dd.mo{font-family:var(--mo)}
+.ifd-bar{height:10px;border-radius:999px;background:var(--hair);overflow:hidden;position:relative}
+.ifd-bar i{display:block;height:100%;background:#7c3aed;border-radius:999px}
+.ifd-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ifd-tile{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.ifd-tile b{font:700 22px var(--mo)}
+.ifd-tile small{font-size:12px;color:var(--mu)}
+.ifd-tile em{font-style:normal;font:500 10.5px var(--mo);color:var(--mu)}
+.ifd-tiers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ifd-tier{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--card);min-width:0}
+.ifd-tier b{font-size:13.5px}
+.ifd-tier .mo{font:700 15px var(--mo)}
+.ifd-tier ul{list-style:none;display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.ifd-tier ul li:before{content:"+ ";color:var(--vt);font-weight:700}
+.ifd-tier.me{border:2px solid #7c3aed}
+.ifd-tier .ifd-me{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--vt)}
+.ifd-ban{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-radius:12px;border:1px solid var(--lavE);background:var(--lav)}
+.ifd-ban b{font-size:15px}
+.ifd-ban p{font-size:12.5px;line-height:1.5;margin-top:3px}
+.ifd-ban.n{background:var(--card);border-color:var(--hair)}
+.ifd-ban.r{background:var(--negBg);border-color:var(--negE)}
+.ifd-ban.a{background:var(--amBg);border-color:var(--amE)}
+.ifd-ban.g{background:var(--posBg);border-color:var(--posE)}
+.ifd-steps{display:flex;gap:0}
+.ifd-steps span{flex:1;text-align:center;padding:6px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu);white-space:nowrap}
+.ifd-steps span+span{border-left:0}
+.ifd-steps span:first-child{border-radius:8px 0 0 8px}.ifd-steps span:last-child{border-radius:0 8px 8px 0}
+.ifd-steps span.dn{color:var(--ink);background:var(--raised)}
+.ifd-steps span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.ifd-scrim{position:absolute;inset:0;background:var(--dim);z-index:5}
+.ifd-side{position:absolute;top:0;right:0;bottom:0;width:520px;background:var(--card);z-index:6;border-left:1px solid var(--hair);box-shadow:-20px 0 50px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.ifd-side .ifd-sh2{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--hair)}
+.ifd-side .ifd-sb{padding:16px 20px;display:flex;flex-direction:column;gap:14px;flex:1}
+.ifd-side .ifd-sf{padding:14px 20px;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:flex-end}
+.ifd-wire{border:1px solid var(--hair);border-radius:10px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ifd-wire .ifd-kv{border-top:0}
+.ifd-wire .ifd-kv dt,.ifd-wire .ifd-kv dd{border-bottom:1px dashed var(--hair)}
+.ifd-flt{display:flex;gap:6px;flex-wrap:wrap}
+.ifd-flt button{min-height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.ifd-flt button[aria-pressed=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:800}
+.ifd-flt button span{font:500 11px var(--mo);color:var(--mu);margin-left:4px}
+.ifd-parts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 18px;padding:8px 0 4px 18px}
+.ifd-parts li{display:flex;flex-direction:column;gap:1px;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--hair)}
+.ifd-hist{display:flex;flex-direction:column}
+.ifd-hist li{display:grid;grid-template-columns:120px 24px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:44px;border-top:1px solid var(--hair);font-size:12.5px}
+.ifd-hist li:first-child{border-top:0}
+.ifd-hist li>span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.ifd-hist li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font-style:normal;font-size:11px}
+.ifd-hist .ifd-mon{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:12px 0 4px;border-top:0;min-height:0;display:block}
+.ifd-sk{display:block;border-radius:6px;background:var(--skel)}
+.ifd-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 18px}
+.ifd-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ifd-f label{font-size:12.5px;font-weight:700}
+.ifd-f label span{font-weight:500;color:var(--mu)}
+.ifd-f .ifd-in{display:flex;align-items:center;min-height:40px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);font-size:13px;color:var(--ink)}
+.ifd-f .ifd-in.ro{background:var(--raised);border-style:dashed}
+.ifd-f .ifd-in.ta{min-height:64px;align-items:flex-start;padding-top:10px}
+.ifd-f small{font-size:11.5px;color:var(--mu)}
+.ifd-pills{display:flex;gap:6px;flex-wrap:wrap}
+.ifd-pills span{padding:3px 10px;border-radius:999px;border:1px solid var(--hair);font-size:12px;font-weight:600}
+.ifd-pills span.on{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.ifd-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.ifd-doc h2{font-size:17px;font-weight:800}
+.ifd-doc h3{font-size:13.5px;font-weight:800}
+.ifd-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.ifd-doc .ifd-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.ifd-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.ifd-ph{width:390px;background:var(--bg);display:flex;flex-direction:column;position:relative;min-height:844px}
+.ifd-ph .ifd-pt{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:var(--card);border-bottom:1px solid var(--hair)}
+.ifd-ph .ifd-pb{padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.ifd-ph .ifd-pch{display:flex;gap:6px;overflow:hidden;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--hair);position:sticky;top:0}
+.ifd-ph .ifd-pch a{flex:none;min-height:36px;display:inline-flex;align-items:center;padding:0 12px;border-radius:999px;border:1px solid var(--hair);font:600 12.5px var(--sg);color:var(--ink)}
+.ifd-ph .ifd-pch a[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt);font-weight:800}
+.ifd-ph .btn{min-height:44px}
+.ifd-ph .ifd-full{width:100%}
+.ifd-ph .ifd-psheet{position:absolute;left:0;right:0;bottom:0;top:70px;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.ifd-ph .ifd-psheet .ifd-sh2{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.ifd-ph .ifd-psheet .ifd-sb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.ifd-grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ifd-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.ifd-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.ifd-pv{display:flex;justify-content:space-between;align-items:center;padding:8px 30px;background:var(--amBg);border-bottom:1px solid var(--amE);font:600 12px var(--sg);color:var(--amT)}
+.ifd-pv .ifd-sw{display:flex;gap:4px}
+.ifd-pv .ifd-sw span{white-space:nowrap;padding:2px 9px;border-radius:999px;border:1px solid var(--amE);font-size:11.5px;background:var(--card);color:var(--amT)}
+.ifd-pv .ifd-sw span.on{background:var(--amT);color:#fff}
+.ifd-cap{font-size:12px;color:var(--mu);line-height:1.5}
+.ifd-ic{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--lav);color:var(--vt);font-weight:800;flex:none}
+.ifd-ic.r{background:var(--negBg);color:var(--neg)}
+.ifd-ic.a{background:var(--amBg);color:var(--amT)}
+.ifd-ic.g{background:var(--posBg);color:var(--pos)}
+.ifd-ic.n{background:var(--raised);color:var(--mu)}
+.ifd-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.ifd-ref{display:flex;align-items:center;gap:8px;font:700 13px var(--mo)}
+.ifd-dk .btn{background:var(--raised)}
+.ifd-dk .btn.p{background:#7c3aed}
+/* ---------- IFD additions (Investor Fund v2, #6229) ---------- */
+.ifd-nr.dsh{grid-template-columns:212px minmax(0,1fr)}
+.ifd-pick{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);font:700 13px var(--sg);color:var(--ink);white-space:nowrap}
+.ifd-pick small{font:500 11px var(--mo);color:var(--mu)}
+.ifd-zc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ifd-zcard{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.ifd-zcard b{font-size:14px}
+.ifd-zcard .ifd-n{font:700 18px var(--mo)}
+.ifd-zcard small{font-size:11.5px;color:var(--mu);line-height:1.4}
+.ifd-zcard a{font-weight:700;font-size:12.5px;margin-top:4px}
+.ifd-chart{display:flex;flex-direction:column;gap:8px}
+.ifd-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink)}
+.ifd-leg span{display:inline-flex;align-items:center;gap:6px}
+.ifd-leg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.ifd-res{font-size:12.5px;padding:8px 12px;border-radius:9px;background:var(--raised);border:1px dashed var(--hair2)}
+.ifd-res b{font-family:var(--mo)}
+.ifd-main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
+.ifd-sel{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 9px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font:600 12px var(--sg);color:var(--ink);white-space:nowrap}
+.ifd-tot{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-top:2px solid var(--ink);font:700 12.5px var(--mo)}
+.ifd-box{border:1px dashed var(--hair2);border-radius:10px;padding:12px 14px;background:var(--raised);display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.ifd-box b{font-size:13px}
+.ifd-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.ifd-acts{display:flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+.ifd-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ifd-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.ifd-rail .ifd-rh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.ifd-rail .ifd-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1}
+.ifd-rail .ifd-rf{padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.ifd-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px}
+.ifd-task{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;background:var(--card)}
+.ifd-task b{font-size:13px}
+.ifd-task small{font-size:11.5px;color:var(--mu);line-height:1.45}
+.ifd-prop{border:1px solid var(--lavE);border-radius:10px;background:var(--lav);padding:12px;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.55}
+.ifd-sec{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.ifd-sec h3{font-size:13.5px;font-weight:800;display:flex;justify-content:space-between;align-items:center}
+.ifd-txt{border:1px solid var(--hair2);border-radius:9px;padding:10px 12px;font-size:12.5px;line-height:1.55;background:var(--card);min-height:56px}
+.ifd-txt.ro{background:var(--raised);border-style:dashed}
+.ifd-dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:480px;background:var(--card);border-radius:14px;z-index:7;box-shadow:0 30px 70px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.ifd-dlg .ifd-dh{padding:16px 20px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.ifd-dlg .ifd-db{padding:16px 20px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.5}
+.ifd-dlg .ifd-df{padding:14px 20px;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:flex-end}
+.ifd-panel{border:1px solid var(--hair);border-radius:12px;background:var(--card);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.ifd-panel>.ifd-ph2{padding:12px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ifd-panel>.ifd-pb2{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.ifd-panel>.ifd-pf2{padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px;justify-content:flex-end}
+.ifd-ttl{font:800 15px var(--sg)}
+.ifd-cardx{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ifd-cardx .ifd-r{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ifd-sticky{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;background:var(--card);border-top:1px solid var(--hair);display:flex;gap:8px;z-index:4}
+.ifd-hs{overflow:hidden;border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:10px 0 6px 12px}
+.ifd-lock{display:grid;place-items:center;width:40px;height:40px;border-radius:11px;background:var(--lav);color:var(--vt)}
+.ifd-inc{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.ifd-inc>div{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;background:var(--card)}
+.ifd-inc b{font-size:13px}
+.ifd-inc small{font-size:11.5px;color:var(--mu);line-height:1.45}
+.ifd-slot{fill:none;stroke:var(--neg);stroke-dasharray:4 3;stroke-width:1.5}
+.ifd-dk .ifd-pick,.ifd-dk .ifd-sel{background:var(--raised)}
+.ifd-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ifd-tbl td b,.ifd-tbl td.n,.ifd-tbl td .mo,.ifd-tbl td .ifd-cs{white-space:nowrap}
+.ifd-tbl .ifd-acts .btn{min-height:28px}
+.ifd-tbl td:first-child{white-space:nowrap}
+.ifd-dk .ifd-tbl td,.ifd-dk .ifd-kv dd,.ifd-dk .ifd-kv dt{color:var(--ink)}
+.ifd-dk .ifd-tbl td small,.ifd-dk .ifd-kv dt{color:var(--mu)}
+.ifd-tbl.ifd-tight th,.ifd-tbl.ifd-tight td{padding-left:7px;padding-right:7px}
+.ifd-ph .ifd-pb{padding-bottom:12px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "IFD01", "options": ["IFD01", "IFD15A", "IFD01B", "IFD02", "IFD03", "IFD03B", "IFD04", "IFD04B", "IFD05", "IFD15B", "IFD06", "IFD06B", "IFD07", "IFD08", "IFD08S", "IFD08B", "IFD09", "IFD09B", "IFD10", "IFD11", "IFD11B", "IFD12A", "IFD12B", "IFD12C", "IFD12D", "IFD12E", "IFD12F", "IFD13A", "IFD13B", "IFD02P", "IFD14A", "IFD14B", "IFD14C", "IFD14D", "IFD14E", "IFD14F", "IFD14G", "IFD14H", "IFD16"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'IFD01';
+    const dark = B.indexOf('IFD15') === 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#5f5a6b', hair: '#e7e5ee', hair2: '#d3d0dc', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#e7e5ee' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+
+    /* ---------- glyphs: every state has a word and a shape (D5129) ---------- */
+    const SV = (d, s) => '<svg aria-hidden="true" width="' + (s || 11) + '" height="' + (s || 11) + '" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>'),
+      pd: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      ar: SV('<path d="M6 1l5 9.5H1z" fill="currentColor"/>'),
+      half: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 1.5a4.5 4.5 0 0 1 0 9z" fill="currentColor"/>'),
+      ring: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      dot: SV('<circle cx="6" cy="6" r="4.5" fill="currentColor"/>'),
+      dash: SV('<path d="M2.5 6h7" stroke="currentColor" stroke-width="1.8"/>'),
+      na: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 9l6-6" stroke="currentColor" stroke-width="1.5"/>'),
+      ua: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 10.5l9-9" stroke="currentColor" stroke-width="1.6"/>'),
+      lk: SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      st: SV('<circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 1.6"/>'),
+      fl: SV('<path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="2.2"/>'),
+      pt: SV('<rect x="1.5" y="1.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.4 1.6"/><path d="M1.5 6h9" stroke="currentColor" stroke-width="1.4"/>')
+    };
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const S = (k, t) => {
+      const m = { nr: ['nr', 'dash', 'Not recorded'], na: ['na', 'na', 'Not applicable'], no: ['no', 'ring', 'None'], un: ['un', 'ua', 'Unavailable'], rf: ['rf', 'lk', 'Refused'], ok: ['ok', 'ok', ''], am: ['am', 'pd', ''], vi: ['vi', 'pd', ''], pa: ['am', 'pt', 'Partial'], st: ['am', 'st', 'Stale'] }[k];
+      return '<span class="ifd-s ' + m[0] + '">' + G[m[1]] + (t || m[2]) + '</span>';
+    };
+    const NR = (t) => S('nr', t ? 'Not recorded · ' + t : 'Not recorded');
+    const UN = (t) => S('un', t ? 'Unavailable · ' + t : 'Unavailable');
+    const TB = (t) => '<span class="ifd-tag" title="Needs backend work">◇ ' + t + '</span>';
+    const TO = (t) => '<span class="ifd-own" title="Owner decision">⚑ ' + t + '</span>';
+    const CS = (k, t) => { const m = { open: ['due', 'ring', 'Open'], part: ['part', 'half', 'Part paid'], paid: ['paid', 'ok', 'Paid'], over: ['over', 'ar', 'Overdue'], pend: ['due', 'pd', 'Pending'], fail: ['over', 'fl', 'Failed'], draft: ['', 'st', 'Draft'], iss: ['paid', 'ok', 'Issued'], pub: ['paid', 'ok', 'Published'], cl: ['', 'lk', 'Closed'], op: ['due', 'ring', 'Open'] }[k]; return '<span class="ifd-cs ' + m[0] + '">' + G[m[1]] + (t || m[2]) + '</span>'; };
+    const AS = 'as of 14 Nov 2026';
+    const fx = (s) => '<span class="mo">' + s + '</span>';
+
+    /* ---------- sample data (fictional; every sum agrees on every board) ---------- */
+    const F1 = '[Sample Fund I]';
+    const D = { size: '[$25,000,000.00]', committed: '[$24,000,000.00]', called: '[$6,500,000.00]', collected: '[$5,401,666.68]', outstanding: '[$1,098,333.32]', deployed: '[$4,200,000.00]', dist: '[$287,500.00]', dry: '[$1,201,666.68]', dpi: '0.04×', cPct: '27.1%', colPct: '83.1%', c2: '[$3,500,000.00]', c1: '[$2,400,000.00]', pre: '[$600,000.00]', c2out: '[$1,058,333.32]', fee: '[$120,000.00]', exp: '[$6,200.00]' };
+    const LPS = [
+      { k: 'A', n: '[LP · Family office A]', ty: 'Family office', c: '[$5,000,000.00]', cd: '14 Oct 2025', paid: '[$1,025,000.00]', lpa: 'Signed 20 Oct 2025', kyc: 'ok', last: 'Call reminder · 12 Nov 2026' },
+      { k: 'B', n: '[LP · Institution B]', ty: 'Institution', c: '[$8,000,000.00]', cd: '14 Oct 2025', paid: '[$2,166,666.68]', lpa: 'Signed 21 Oct 2025', kyc: 'ok', last: 'Call notice · 2 Nov 2026' },
+      { k: 'C', n: '[LP · Individual C]', ty: 'Individual', c: '[$1,500,000.00]', cd: '3 Nov 2025', paid: '[$187,500.00]', lpa: 'Signed 5 Nov 2025', kyc: 'pend', last: 'Call notice · 2 Nov 2026' },
+      { k: 'D', n: '[LP · Fund of funds D]', ty: 'Fund of funds', c: '[$6,000,000.00]', cd: '14 Oct 2025', paid: '[$1,625,000.00]', lpa: 'Signed 22 Oct 2025', kyc: 'ok', last: 'Update · 20 Oct 2026' },
+      { k: 'E', n: '[LP · Corporate E]', ty: 'Corporate', c: '[$2,500,000.00]', cd: '3 Nov 2025', paid: '[$312,500.00]', lpa: 'Signed 6 Nov 2025', kyc: 'ok', last: 'Call notice · 2 Nov 2026' },
+      { k: 'F', n: '[LP · Individual F]', ty: null, c: '[$1,000,000.00]', cd: '3 Nov 2025', paid: '[$85,000.00]', lpa: null, kyc: null, last: null }
+    ];
+    const KYC = (v) => v === 'ok' ? S('ok', 'Approved') : v === 'pend' ? S('am', 'Pending review') : NR('no account');
+    const LPA = (v) => v ? S('ok', v) : S('am', 'Unsigned');
+    /* call #2: pro-rata in whole cents; the 2-cent residual sits on Institution B */
+    const C2 = [
+      ['B', '[$1,166,666.68]', '[$1,166,666.68]', '[$0.00]', 'paid', 'Paid · 10 Nov', 'ok', true],
+      ['D', '[$875,000.00]', '[$875,000.00]', '[$0.00]', 'paid', 'Paid · 12 Nov', 'ok'],
+      ['A', '[$729,166.66]', '[$400,000.00]', '[$329,166.66]', 'part', '', 'ok'],
+      ['E', '[$364,583.33]', '[$0.00]', '[$364,583.33]', 'open', '', 'ok'],
+      ['C', '[$218,750.00]', '[$0.00]', '[$218,750.00]', 'open', '', 'pend'],
+      ['F', '[$145,833.33]', '[$0.00]', '[$145,833.33]', 'open', '', null]
+    ];
+    const LPn = (k) => LPS.find(l => l.k === k).n;
+    const DIST = [['A', '[$62,500.00]', 'paid'], ['B', '[$100,000.00]', 'paid'], ['C', '[$18,750.00]', 'paid'], ['D', '[$75,000.00]', 'paid'], ['E', '[$31,250.00]', 'paid'], ['F', '[$12,500.00]', 'pend']];
+
+    /* ---------- shell (#3704) + the shared Eadwyn rail (#5130) ---------- */
+    const NAV = ['Studio', 'Spin-Out Lab', 'Deals', 'Axal VC Fund', 'Fund', 'Trust', 'Network', 'Research'];
+    const railC = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Fund tasks" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const railOpen = (body) => '<aside class="ifd-rail" aria-label="Eadwyn"><div class="ifd-rh"><span style="display:flex;gap:8px;align-items:center"><span class="ifd-e">E</span><b style="font-size:13.5px">Eadwyn</b><span class="raw">Fund</span></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div class="ifd-rb">' + body + '</div><div class="ifd-rf"><div class="inp" style="min-width:0;min-height:38px">Ask about this fund…</div><button type="button" class="disc2" aria-expanded="false">Model and usage ▾</button></div></aside>';
+    const shell = (body, o) => '<div class="dsh' + (o.norail ? ' ifd-nr' : '') + '" style="min-height:' + (o.h || 900) + 'px' + (o.rail ? ';grid-template-columns:212px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="dsd"><div style="padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="co" aria-label="Company or project: [GP company]"><i aria-hidden="true"></i>[GP company]<span>▾</span></button><nav aria-label="Investor">' + J(NAV.map(t => (t === 'Trust' ? '<div class="sep"></div>' : '') + '<a href="#"' + (t === 'Fund' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn">' + (o.preview ? '<div class="ifd-pv" role="status"><span>' + G.lk + ' Super Admin preview · ' + F1 + ' · issuing a call or executing a distribution here is a Super Admin act, with a step-up</span></div>' : '')
+      + '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">GP</button></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.norail ? '' : o.rail ? railOpen(o.rail) : railC) + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv' + (dark ? ' ifd-dk' : '') + '" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + ';position:relative;overflow:hidden">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv' + (dark ? ' ifd-dk' : '') + '" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const doc = (inner) => '<div class="cv" style="' + VARS + '"><div class="ifd-doc">' + inner + '</div></div>';
+
+    /* ---------- header, fund picker, zone row ---------- */
+    const ZN = [['Overview', ''], ['LPs', '6'], ['Calls', '5 open'], ['Ledger', ''], ['Reporting', '1 draft']];
+    const zones = (cur, plain) => '<nav class="zn" aria-label="Fund">' + J(ZN.map(z => '<a href="#"' + (z[0] === cur ? ' aria-current="page"' : '') + '>' + z[0] + (z[1] && !plain ? '<span>' + z[1] + '</span>' : '') + '</a>')) + '</nav>';
+    const picker = (f) => '<button type="button" class="ifd-pick" aria-haspopup="listbox" aria-label="Fund: ' + (f || F1) + '">' + (f || F1) + ' <small>Active · vintage 2025 · 1 of 2</small> ▾</button>';
+    const head = (o) => '<div class="ifd-crumb">Fund › <b style="color:var(--ink)">' + o.crumb + '</b> <span class="raw">' + o.route + '</span></div><header class="ifd-hd"><div><div class="ifd-hl"><h1>' + o.h1 + '</h1>' + (o.nopick ? '' : picker()) + '</div><p>' + o.sub + '</p></div><div class="ifd-act">' + (o.sec || '') + (o.pri ? '<button type="button" class="btn p">' + o.pri + '</button>' : '') + '</div></header>' + zones(o.zone, o.plain);
+    const steps = (cur) => '<div class="ifd-steps" role="list" aria-label="Money action steps">' + J(['Prepare', 'Review', 'Confirm', 'Authenticate', 'Receipt'].map((s, i) => '<span role="listitem" class="' + (i < cur ? 'dn' : i === cur ? 'on' : '') + '"' + (i === cur ? ' aria-current="step"' : '') + '>' + (i < cur ? '✓ ' : '') + (i + 1) + ' · ' + s + '</span>')) + '</div>';
+    const sheet = (title, eyebrow, inner, foot, w) => '<div class="ifd-scrim"></div><aside class="ifd-side" role="dialog" aria-label="' + title + '" style="width:' + (w || 560) + 'px"><div class="ifd-sh2"><div><span class="ifd-lbl">' + eyebrow + '</span><h2 style="font-size:18px;font-weight:800">' + title + '</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ifd-sb">' + inner + '</div><div class="ifd-sf">' + foot + '</div></aside>';
+    const tbl = (hd, rows, cls) => '<table class="ifd-tbl' + (cls ? ' ' + cls : '') + '"><thead><tr>' + J(hd.map(h => '<th' + (h.charAt(0) === '#' ? ' class="n"' : '') + '>' + h.replace(/^#/, '') + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map((c, i) => '<td' + (hd[i] && hd[i].charAt(0) === '#' ? ' class="n"' : '') + '>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const figs = (rows, cols) => '<div class="ifd-figs" style="grid-template-columns:repeat(' + (cols || rows.length) + ',minmax(0,1fr))">' + J(rows.map(r => '<div><small>' + r[0] + '</small><b' + (r[3] ? ' style="font-size:' + r[3] + '"' : '') + '>' + r[1] + '</b>' + (r[2] ? '<em>' + r[2] + '</em>' : '') + '</div>')) + '</div>';
+    const ban = (k, ic, title, body, act) => '<div class="ifd-ban ' + k + '"><span class="ifd-ic ' + k + '">' + ic + '</span><div style="flex:1"><b>' + title + '</b><p>' + body + '</p></div>' + (act || '') + '</div>';
+    const unblk = (title, src, extra) => '<section class="cd"><div class="ch"><h2>' + title + '</h2>' + UN() + '</div><p class="ifd-cap">' + src + ' could not be read. This is not a claim that none exist.' + (extra || '') + '</p><button type="button" class="btn bsm" style="align-self:flex-start">Try again</button></section>';
+    const sk = (w, h) => '<span class="ifd-sk" style="width:' + w + ';height:' + (h || 12) + 'px"></span>';
+
+    /* ---------- shared blocks ---------- */
+    const capTiles = () => '<section class="cd"><div class="ch"><div><span class="ifd-lbl">Committed · ' + AS + '</span><div style="display:flex;gap:10px;align-items:baseline"><b class="mo" style="font-size:26px">' + D.committed + '</b><span class="mu">of ' + D.size + ' fund size · 6 LPs</span></div></div><span class="raw">GET /api/funds/:id/analytics · fundRollup.ts</span></div>'
+      + figs([['Called', D.called, 'sum of call lines · ' + D.cPct + ' of committed'], ['Collected', D.collected, 'dated receipts · ' + D.colPct + ' of called'], ['Outstanding', D.outstanding, 'called less receipts · 5 lines'], ['Deployed', D.deployed, 'vc_funds.deployed_capital'], ['Distributed', D.dist, 'paid distributions only'], ['Dry powder', D.dry, 'collected less deployed'], ['DPI', D.dpi, 'distributed ÷ called']].map(r => r.concat(['15px'])), 7)
+      + '<span class="raw">Every tile ' + AS + ', 09:12 UTC · fee 2.0% · carry 20% (default: no rate recorded on the fund)</span></section>';
+    const navRow = () => '<section class="cd"><div class="ch"><h2>NAV-based figures</h2>' + NR() + '</div>'
+      + '<div class="ifd-figs" style="grid-template-columns:repeat(4,minmax(0,1fr))">' + J([['NAV', 'No position is attributed to this fund, so no investment mark counts toward it.'], ['RVPI', 'Needs NAV: every attributed position needs a dated valuation.'], ['TVPI', 'Needs NAV. DPI above is recorded; TVPI is not 0.04×.'], ['IRR', 'Needs NAV and dated cash flows for each attributed position.']].map(r => '<div><small>' + r[0] + '</small><b style="font-size:15px">' + NR() + '</b><em style="font-family:var(--sg);font-size:11.5px">' + r[1] + '</em></div>')) + '</div>'
+      + '<span class="raw">GET /api/fund-performance/:id · fund_position_valuations · never drawn as 0</span></section>';
+    const QS = [['Q4 2025', 600000, 600000, 0], ['Q1 2026', 2400000, 2100000, 0], ['Q2 2026', 0, 260000, 0], ['Q3 2026', 0, 0, 287500], ['Q4 2026 to date', 3500000, 2441666.68, 0]];
+    const chart = (o) => {
+      o = o || {};
+      const W = o.w || 820, H = o.compact ? 170 : 210, base = o.compact ? 140 : 170, top = 16, max = 4000000, gw = (W - 70) / QS.length, bw = Math.min(26, gw / 5);
+      const col = ['#7c3aed', '#c4b5fd', '#0f766e'];
+      let s = '<svg role="img" aria-label="Quarterly history: called, collected and distributed by quarter; marks not recorded in any quarter" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Roboto Mono,monospace">';
+      [0, 1, 2, 3, 4].forEach(i => { const y = base - (base - top) * i / 4; s += '<line x1="60" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="' + P.hair + '" stroke-width="1"/><text x="54" y="' + (y + 3) + '" font-size="9.5" text-anchor="end" fill="' + P.mu + '">$' + i + 'M</text>'; });
+      QS.forEach((q, qi) => {
+        const x0 = 70 + qi * gw + (gw - bw * 3 - 8) / 2;
+        const un = o.un === qi;
+        if (un) { s += '<rect class="ifd-slot" x="' + (x0 - 4) + '" y="' + top + '" width="' + (bw * 3 + 16) + '" height="' + (base - top) + '" rx="4"/><text x="' + (x0 + bw * 1.5 + 4) + '" y="' + (base - 60) + '" font-size="10" text-anchor="middle" fill="' + P.neg + '" font-weight="700">Unavailable</text><text x="' + (x0 + bw * 1.5 + 4) + '" y="' + (base - 46) + '" font-size="9" text-anchor="middle" fill="' + P.neg + '">read failed</text>'; }
+        else {
+          [q[1], q[2], q[3]].forEach((v, i) => {
+            const x = x0 + i * (bw + 4);
+            if (v === 0) s += '<rect x="' + x + '" y="' + (base - 2) + '" width="' + bw + '" height="2" fill="' + P.ink + '"/><text x="' + (x + bw / 2) + '" y="' + (base - 6) + '" font-size="9" text-anchor="middle" fill="' + P.mu + '">0</text>';
+            else { const h = (base - top) * v / max; s += '<rect x="' + x + '" y="' + (base - h) + '" width="' + bw + '" height="' + h + '" rx="2" fill="' + col[i] + '"' + (i === 1 ? ' stroke="#7c3aed" stroke-width="1"' : '') + '/>'; }
+          });
+        }
+        s += '<text x="' + (x0 + bw * 1.5 + 4) + '" y="' + (base + 18) + '" font-size="10" text-anchor="middle" fill="' + P.ink + '" font-weight="600">' + q[0] + '</text>';
+      });
+      s += '<line x1="60" x2="' + W + '" y1="' + base + '" y2="' + base + '" stroke="' + P.ink + '" stroke-width="1"/></svg>';
+      return '<div class="ifd-chart"><div class="ifd-leg"><span><i style="background:#7c3aed"></i>Called</span><span><i style="background:#c4b5fd;border:1px solid #7c3aed"></i>Collected</span><span><i style="background:#0f766e"></i>Distributed</span>' + (o.compact ? '<span>' + G.dash + ' Marks: no record (gap) · ▁ 0 on baseline</span>' : '<span>' + G.dash + ' Marks: no record in any quarter (a gap, no line drawn)</span><span>▁ a measured 0 sits on the baseline</span>') + '' + (o.un !== undefined ? '<span style="color:var(--neg)">' + G.ua + ' outlined slot: that quarter’s read failed</span>' : '') + '</div>' + s + '</div>';
+    };
+    const histCard = (o) => '<section class="cd"><div class="ch"><h2>Quarterly history</h2><span style="display:flex;gap:8px;align-items:center"><span class="raw">GET /api/fund-performance/:id/history?step=quarter · ' + AS + '</span><button type="button" class="btn bsm">Show as table</button></span></div>' + chart(o) + '</section>';
+    const gaps = () => '<section class="cd"><div class="ch"><h2>What is not recorded yet</h2><span class="raw">4 gaps · each with the one action that fills it</span></div><ul class="ifd-list">'
+      + J([['5 call lines have no receipt for ' + D.outstanding, 'Collected and DPI move when a dated receipt is recorded.', 'Record a receipt', 'Calls'], ['No position is attributed to ' + F1, 'NAV, RVPI, TVPI and IRR stay Not recorded until one is, with a dated valuation.', 'Attribute a position', 'Portfolio'], ['Q4 2026 has no issued period', 'The Q4 2026 draft was last saved 13 Nov 2026. LPs read issued periods only.', 'Open the Q4 2026 draft', 'Reporting'], ['1 LP has no type, 1 LP has no linked account', LPn('F') + ': type Not recorded; KYC Not recorded until they link an account.', 'Open the LP', 'LPs']].map(g => '<li><div><b>' + g[0] + '</b><small style="font-family:var(--sg)">' + g[1] + '</small></div><a class="btn bsm" href="#">' + g[2] + ' →</a></li>')) + '</ul></section>';
+    const zoneCards = () => '<div class="ifd-zc">' + J([['LPs', '6 LPs', '1 KYC pending · 1 LPA unsigned', 'Open LPs'], ['Calls and distributions', '2 calls · 5 open lines', D.outstanding + ' outstanding · call 2 due 2 Dec 2026 · 1 distribution pending', 'Open Calls'], ['Ledger', 'Q4 2026 · open', 'Fee accrued ' + D.fee + ' · balanced', 'Open Ledger'], ['Reporting', '5 periods · 1 draft', 'Last issued: Q3 2026 on 20 Oct 2026', 'Open Reporting']].map(z => '<div class="ifd-zcard"><b>' + z[0] + '</b><span class="ifd-n">' + z[1] + '</span><small>' + z[2] + '</small><a href="#">' + z[3] + ' →</a></div>')) + '</div>';
+
+    /* LPs */
+    const lpRows = (o) => LPS.map(l => ['<a href="#" style="font-weight:700;color:var(--ink)">' + l.n + '</a><small>' + l.cd + '</small>', '<span class="ifd-sel" aria-label="LP type">' + (l.ty || '<span class="ifd-s nr">' + G.dash + 'Not recorded</span>') + ' ▾</span>', l.c, l.paid, LPA(l.lpa), KYC(l.kyc), l.last ? '<span style="font-size:12px">' + l.last + '</span>' : S('no', 'No message logged')]);
+    const totals = () => figs([['LPs', '6', 'status committed'], ['Committed', D.committed, 'commitment_amount'], ['Paid to date', D.collected, 'dated receipts'], ['KYC pending', '1', 'from linked accounts; 1 Not recorded'], ['LPA unsigned', '1', 'lpa_signed false']], 5);
+
+    /* Calls */
+    const c2Rows = (lim) => C2.slice(0, lim || 6).map(r => {
+      const st = r[4] === 'paid' ? CS('paid', r[5]) : r[4] === 'part' ? CS('part') : CS('open');
+      const acts = r[4] === 'paid' ? '<span class="raw">Nothing outstanding</span>' : '<button type="button" class="btn bsm">Record receipt</button><span style="display:flex;gap:2px"><button type="button" class="btn t bsm">Draft reminder</button><button type="button" class="btn t bsm">Log as sent</button></span>';
+      return ['<b>' + LPn(r[0]) + '</b>' + (r[7] ? '<small>carries the 2¢ residual</small>' : ''), r[1], r[2], '<b>' + r[3] + '</b>', st, '<span class="mo">12 d</span>', r[6] === null ? NR('no account') : KYC(r[6]), '<div class="ifd-acts" style="flex-direction:column;align-items:flex-end;gap:2px">' + acts + '</div>'];
+    });
+    const callHead = () => '<div class="ch"><div><span class="ifd-lbl">Call 2 · current</span><div style="display:flex;gap:10px;align-items:baseline"><b class="mo" style="font-size:22px">' + D.c2 + '</b><span>Follow-on reserve for [Venture B] and fund expenses</span></div></div><span class="raw">issued 2 Nov 2026 by [GP Name] · due 2 Dec 2026 · 6 lines</span></div><div class="ifd-res">Each LP’s pro-rata share is in whole cents. The rounding residual of <b>[$0.02]</b> sits on <b>' + LPn('B') + '</b>’s line.</div>';
+
+    let html;
+    /* =================== FV1 · Overview =================== */
+    if (B === 'IFD01' || B === 'IFD15A') {
+      html = page(head({ crumb: 'Overview', route: '/funds', h1: 'Fund overview', sub: 'Your fund’s capital, history and gaps, each figure traced to the record that produced it. Each zone below owns its own action.', zone: 'Overview' })
+        + capTiles() + navRow()
+        + '<div class="ifd-main" style="grid-template-columns:minmax(0,1fr) 460px">' + histCard({ w: 650 }) + gaps() + '</div>'
+        + zoneCards(), { h: 1250, norail: true });
+    }
+    else if (B === 'IFD01B') {
+      html = page('<div class="ifd-crumb">Fund › <b style="color:var(--ink)">Overview</b> <span class="raw">/funds</span></div><header class="ifd-hd"><div><h1>Fund overview</h1><p>Institutional tier · [GP company]</p></div></header>' + zones('Overview', true)
+        + '<section class="cd" style="padding:28px;gap:14px;max-width:880px"><span class="ifd-lbl">No fund record</span><h2 style="font-size:22px;font-weight:800">No fund to operate yet.</h2><p class="ifd-cap" style="font-size:13px">You hold the Institutional tier, but no fund names you as its general partner of record under [GP company]. Create one to open the LP register, calls, the ledger and reporting.</p>'
+        + '<div class="ifd-form"><div class="ifd-f"><label>Fund name</label><div class="ifd-in">[Sample Fund II]</div></div><div class="ifd-f"><label>Vintage year</label><div class="ifd-in mo">2026</div></div><div class="ifd-f"><label>Fund size <span>(USD)</span></label><div class="ifd-in mo">[$40,000,000.00]</div></div><div class="ifd-f"><label>Management fee · carry <span>(%)</span></label><div class="ifd-in mo">2.0 · 20.0</div><small>Left blank, the platform uses 2% and 20%.</small></div></div>'
+        + '<div class="ifd-box"><b>What creating does</b><span>You become the GP of record of the new fund. An LPA draft is queued for it; nothing is sent to anyone and no LP is invited.</span><span class="raw">POST /api/funds · vc_funds.gp_user_id</span></div>'
+        + '<div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn p">Create a fund</button></div></section>'
+        + '<section class="cd" style="max-width:880px;flex-direction:row;align-items:center;justify-content:space-between"><span style="font-size:13px">Your own commitments are in My commitment.</span><a class="btn bsm" href="#">My commitment (Axal VC Fund) →</a></section>'
+        + '<p class="raw">/spinout-lab/investor-workspace#my-commitment · an LP-only investor sees the same page with this line, not the form.</p>', { h: 900 });
+    }
+
+    /* =================== FV2 · Locked =================== */
+    else if (B === 'IFD02') {
+      html = page('<div class="ifd-crumb">Fund › <b style="color:var(--ink)">{zone}</b> <span class="raw">/funds/lps · one surface for /funds and every zone</span></div>'
+        + '<section class="cd" style="padding:32px;gap:16px;max-width:1040px"><div style="display:flex;gap:14px;align-items:center"><span class="ifd-lock">' + SV('<rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>', 18) + '</span><div><span class="ifd-lbl">' + S('rf', 'Locked · Institutional add-on') + '</span><h1 style="font-size:24px;font-weight:800;margin-top:4px">LPs is part of the Institutional add-on</h1></div></div>'
+        + '<p style="font-size:13.5px;line-height:1.55;max-width:760px">The Fund section runs your own fund’s back office. Your account is on a lower tier, so it is locked. Your investor tools and any LP seat you hold work as before.</p>'
+        + '<div class="ifd-inc">' + J([['LP register', 'Commitments, LPA, KYC from linked accounts, a comms log and each LP’s statement.'], ['Numbered capital calls', 'Pro-rata lines in whole cents, dated receipts, reminders you send yourself.'], ['Distributions', 'A preview with basis, profit and carry before anything is queued.'], ['Operational ledger', 'Periods, journal, trial balance and fees, kept by the fund administrator.'], ['LP reporting periods', 'A letter, developments, outlook and subsequent events, issued to LPs.']].map(x => '<div><b>' + x[0] + '</b><small>' + x[1] + '</small></div>')) + '</div>'
+        + '<div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn p">Talk to Axal</button><span class="ifd-cap">Sends a contact request to the Axal team. Nothing changes on your account until they reply.</span>' + TO('(c) A · contact request') + '</div>'
+        + '<span class="raw">402 below tier · {zone} = Overview, LPs, Calls, Ledger or Reporting · the zone row is not drawn while locked</span></section>', { h: 760, norail: true });
+    }
+
+    /* =================== FV3 · LPs register =================== */
+    else if (B === 'IFD03' || B === 'IFD03B') {
+      const body = head({ crumb: 'LPs', route: '/funds/lps?fund=12', h1: 'LPs', sub: 'Who has committed to ' + F1 + ', what they have paid and what is still open with them.', zone: 'LPs', pri: 'Add LP' })
+        + totals()
+        + '<div class="ifd-tools"><div class="ifd-flt" role="group" aria-label="Filter LPs"><button type="button" aria-pressed="true">All<span>6</span></button><button type="button">KYC pending<span>1</span></button><button type="button">Individual<span>1</span></button><button type="button">Family office<span>1</span></button><button type="button">Institution<span>1</span></button><button type="button">Fund of funds<span>1</span></button><button type="button">Corporate<span>1</span></button><button type="button">Type not recorded<span>1</span></button></div></div>'
+        + '<section class="cd" style="padding:0;gap:0;overflow:hidden">' + tbl(['LP', 'Type', '#Commitment', '#Paid to date', 'LPA', 'KYC', 'Last logged message'], lpRows()) + '<div class="qft"><span>6 LPs · ' + AS + ' · GET /api/funds/:id/lps</span><span class="raw">Type changes save on select (PUT …/lps/:lpId/type) · a row opens the LP record</span></div></section>';
+      const sh = B === 'IFD03B' ? sheet('Add LP', F1 + ' · Prepare', steps(0)
+        + '<div class="ifd-form" style="grid-template-columns:1fr"><div class="ifd-f"><label>Name</label><div class="ifd-in">[LP · Family office G]</div></div><div class="ifd-f"><label>Email</label><div class="ifd-in">[office-g@example.com]</div><small>Their KYC reads from the account linked to this email. Until one exists, KYC is Not recorded.</small></div><div class="ifd-f"><label>Commitment <span>(USD)</span></label><div class="ifd-in mo">[$2,000,000.00]</div></div></div>'
+        + '<div class="ifd-box"><b>First call (optional)</b><div class="ifd-form"><div class="ifd-f"><label>Amount <span>(USD)</span></label><div class="ifd-in mo">[$200,000.00]</div></div><div class="ifd-f"><label>Due date</label><div class="ifd-in mo">15 Dec 2026</div></div></div><span>A first call is queued, not sent. Its line appears in Calls once it is issued.</span></div>'
+        + '<span class="raw">POST /api/funds/:id/lps {name, email, commitment_amount, first_call_cents?, first_call_due_date?}</span>', '<button type="button" class="btn">Cancel</button><button type="button" class="btn p">Review</button>') : '';
+      html = page(body, { h: 900, overlay: sh });
+    }
+
+    /* =================== FV4 · LP record =================== */
+    else if (B === 'IFD04') {
+      const L = LPS[0];
+      html = page('<div class="ifd-crumb">Fund › LPs › <b style="color:var(--ink)">' + L.n + '</b> <span class="raw">/funds/lps?fund=12&amp;lp=41</span></div><header class="ifd-hd"><div><div class="ifd-hl"><h1>' + L.n + '</h1><span class="ifd-chip">' + G.dot + 'Committed</span><span class="ifd-sel">Family office ▾</span></div><p>[office-a@example.com] · ' + F1 + '</p></div><div class="ifd-act"><button type="button" class="btn" aria-disabled="true">Edit details</button>' + TB('#6229 edit name, email, commitment') + '<button type="button" class="btn p">Record receipt</button></div></header>' + zones('LPs')
+        + '<div class="ifd-three">'
+        + '<section class="ifd-blk"><h2>Commitment</h2><div class="ifd-amt">' + L.c + '</div><dl class="ifd-kv" style="grid-template-columns:110px minmax(0,1fr)"><dt>Committed on</dt><dd class="mo">14 Oct 2025</dd><dt>Paid to date</dt><dd class="mo">' + L.paid + '</dd><dt>Called to date</dt><dd class="mo">[$1,354,166.66]</dd></dl></section>'
+        + '<section class="ifd-blk"><h2>LPA</h2>' + S('ok', 'Signed 20 Oct 2025') + '<span class="raw">limited_partners.lpa_signed_at</span><h2 style="margin-top:6px">KYC</h2>' + S('ok', 'Approved') + '<span class="raw">from their linked account (users.kyc_status)</span></section>'
+        + '<section class="ifd-blk"><h2>Distributions to this LP</h2>' + tbl(['Paid on', '#Amount', 'Type', 'Status'], [['<span class="mo">25 Sep 2026</span>', '[$62,500.00]', 'Return of capital', CS('paid')]]) + '<span class="raw">1 distribution · paid only counts toward DPI</span></section></div>'
+        + '<div class="ifd-main"><div class="ifd-stack"><section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>Calls and receipts</h2><span class="raw">line by line · owed is computed</span></div>'
+        + tbl(['Call', '#Owed', '#Received', '#Outstanding', 'State', ''], [['<b>Call 2</b><small>due 2 Dec 2026</small>', '[$729,166.66]', '[$400,000.00]<small>11 Nov 2026 · FO-A-C2-01</small>', '<b>[$329,166.66]</b>', CS('part'), '<div class="ifd-acts" style="flex-direction:column;align-items:flex-end"><button type="button" class="btn bsm">Record receipt</button><button type="button" class="btn t bsm">Draft reminder</button></div>'], ['<b>Call 1</b><small>due 15 Apr 2026</small>', '[$500,000.00]', '[$500,000.00]<small>10 Apr 2026</small>', '[$0.00]', CS('paid', 'Paid · 10 Apr'), ''], ['<b>Before numbering</b><small>issued 18 Nov 2025 · held in dollars</small>', '[$125,000.00]', '[$125,000.00]<small>2 Dec 2025</small>', '[$0.00]', CS('paid', 'Paid · 2 Dec'), '']]) + '</section>'
+        + '<section class="cd"><div class="ch"><h2>Comms log</h2><button type="button" class="btn bsm">Log a message</button></div><ul class="ifd-list">' + J([['Call reminder', 'Call 2: [$329,166.66] still open', '12 Nov 2026 · logged by [GP Name]'], ['Call notice', 'Capital call 2 notice', '2 Nov 2026 · logged by [GP Name]'], ['Update', 'Q3 2026 letter', '20 Oct 2026 · logged by [GP Name]']].map(m => '<li><div><b>' + m[1] + '</b><small>' + m[0] + ' · ' + m[2] + '</small></div><span class="raw">subject only · no body stored</span></li>')) + '</ul></section></div>'
+        + '<section class="cd"><div class="ch"><h2>Statement preview</h2><span class="raw">as the LP sees it</span></div><div class="ifd-box" style="background:var(--card)"><span class="ifd-lbl">' + F1 + ' · capital statement · ' + AS + '</span><dl class="ifd-kv" style="grid-template-columns:150px minmax(0,1fr)"><dt>Commitment</dt><dd class="mo">' + L.c + '</dd><dt>Called</dt><dd class="mo">[$1,354,166.66]</dd><dt>Paid in</dt><dd class="mo">' + L.paid + '</dd><dt>Unfunded</dt><dd class="mo">[$3,975,000.00]</dd><dt>Distributions</dt><dd class="mo">[$62,500.00]</dd><dt>NAV · TVPI</dt><dd>' + NR('no fund NAV') + '</dd></dl></div><span class="raw">GET /api/funds/:id/lp-report/:lpId · LP-portal shape</span></section></div>', { h: 1040 });
+    }
+    else if (B === 'IFD04B') {
+      html = crop('<span class="eye">FV4 · Log a message · and the edit that needs a backend</span><div class="ifd-two">'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Log a message · ' + LPn('A') + '</b><button type="button" class="ib" aria-label="Close">✕</button></div><div class="ifd-pb2"><div class="ifd-f"><label>Kind</label><div class="ifd-pills"><span>Call reminder</span><span class="on">Call notice</span><span>Update</span><span>Other</span></div></div><div class="ifd-f"><label>Subject</label><div class="ifd-in">Capital call 2 notice</div></div><div class="ifd-f"><label>Sent on</label><div class="ifd-in mo">2 Nov 2026</div></div><div class="ifd-f"><label>Linked call <span>(optional)</span></label><div class="ifd-in">Call 2 ▾</div></div><p class="ifd-cap">Logging records that you sent it, outside the platform. The body is not stored and nothing is sent.</p></div><div class="ifd-pf2"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Log message</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Edit details</b>' + TB('#6229 · no write route') + '</div><div class="ifd-pb2"><div class="ifd-f"><label>Name</label><div class="ifd-in ro">' + LPn('A') + '</div></div><div class="ifd-f"><label>Email</label><div class="ifd-in ro">[office-a@example.com]</div></div><div class="ifd-f"><label>Commitment <span>(USD)</span></label><div class="ifd-in ro mo">[$5,000,000.00]</div></div><p class="ifd-cap">Only the LP type has a write today (PUT /api/funds/:id/lps/:lpId/type). A commitment change would re-split future calls, so it follows Prepare → Review → Confirm → Authenticate → Receipt once it exists.</p></div><div class="ifd-pf2"><button type="button" class="btn p" aria-disabled="true">Review change</button></div></div>'
+        + '</div>', 1100);
+    }
+
+    /* =================== FV5 · Calls ledger =================== */
+    else if (B === 'IFD05' || B === 'IFD15B') {
+      html = page(head({ crumb: 'Calls', route: '/funds/calls?fund=12', h1: 'Calls and distributions', sub: 'Numbered capital calls, each LP’s line, receipts, and distributions to LPs.', zone: 'Calls', pri: 'New call', sec: '<button type="button" class="btn">New distribution</button>' })
+        + figs([['Called to date', D.called, D.cPct + ' of committed ' + D.committed], ['Collected', D.collected, D.colPct + ' of called · dated receipts'], ['Outstanding', D.outstanding, 'across 5 lines in 2 calls'], ['Current call', 'Call 2 · ' + D.c2, 'due 2 Dec 2026 · 4 lines open', '16px']], 4)
+        + '<div class="ifd-tools" style="justify-content:space-between"><div class="ifd-flt" role="group" aria-label="Show"><button type="button" aria-pressed="true">Latest call</button><button type="button">All calls<span>2 + 1 group</span></button><button type="button">Outstanding<span>5</span></button></div><nav class="seg" aria-label="Calls or distributions"><button type="button" aria-checked="true">Calls</button><button type="button" aria-checked="false">Distributions</button></nav></div>'
+        + '<section class="cd" style="gap:10px">' + callHead() + tbl(['LP', '#Owed', '#Received', '#Outstanding', 'State', 'Age', 'KYC', ''], c2Rows(), 'ifd-tight') + '<div class="ifd-tools" style="justify-content:space-between"><span class="raw">Call 2 · outstanding ' + D.c2out + ' on 4 lines · GET /api/funds/:id/capital-calls</span>' + TB('#6229 notice Axal HQ issued on this call: not readable by the GP') + '</div></section>'
+        + '<div class="ifd-two"><section class="cd"><div class="ch"><h2>Wire trail</h2><button type="button" class="btn bsm">Export wires</button></div>' + tbl(['Received on', 'LP', '#Amount', 'Reference'], [['<span class="mo">12 Nov 2026</span><small>by [GP Name]</small>', LPn('D'), '[$875,000.00]', '<span class="mo">FOF-D-C2</span>'], ['<span class="mo">11 Nov 2026</span><small>by [GP Name]</small>', LPn('A'), '[$400,000.00]', '<span class="mo">FO-A-C2-01</span>'], ['<span class="mo">10 Nov 2026</span><small>by [GP Name]</small>', LPn('B'), '[$1,166,666.68]', NR()]]) + '<span class="raw">newest first · 17 receipts · GET /api/funds/:id/ledger</span></section>'
+        + '<div class="ifd-stack"><section class="cd"><div class="ch"><h2>From Mercury</h2><span class="raw">your own connection · nothing written until Accept</span></div><div class="ifd-prop"><span>This <b class="mo">[$145,833.33]</b> credit on <b class="mo">13 Nov 2026</b> matches <b>Call 2 · ' + LPn('F') + '</b>?</span><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Discard</button></div><span class="raw">Accept records a receipt dated 13 Nov 2026 · source mercury</span></div></section>'
+        + '<section class="cd"><div class="ch"><h2>Issued before calls were numbered</h2><span class="raw">6 lines · held in dollars, rounded to the cent</span></div><dl class="ifd-kv" style="grid-template-columns:150px minmax(0,1fr)"><dt>Issued</dt><dd class="mo">18 Nov 2025</dd><dt>Owed · received</dt><dd class="mo">' + D.pre + ' · ' + D.pre + '</dd><dt>Outstanding</dt><dd class="mo">[$0.00] · ' + S('no', 'none open') + '</dd></dl></section></div></div>', { h: 1340 });
+    }
+
+    /* =================== FV6 · New call =================== */
+    else if (B === 'IFD06') {
+      const base = head({ crumb: 'Calls', route: '/funds/calls?fund=12', h1: 'Calls and distributions', sub: '', zone: 'Calls', pri: 'New call' }) + '<span class="ifd-sk" style="height:560px"></span>';
+      const prev = [['B', '[$8,000,000.00]', '[$1,166,666.68]', true], ['D', '[$6,000,000.00]', '[$875,000.00]'], ['A', '[$5,000,000.00]', '[$729,166.66]'], ['E', '[$2,500,000.00]', '[$364,583.33]'], ['C', '[$1,500,000.00]', '[$218,750.00]'], ['F', '[$1,000,000.00]', '[$145,833.33]']];
+      html = page(base, { h: 1000, overlay: sheet('New call', F1 + ' · Call 3 · Review', steps(1)
+        + '<div class="ifd-f"><label>Amount <span>(USD)</span></label><div class="ifd-in mo">[$3,500,000.00]</div><small>Changing the amount drops this preview.</small></div>'
+        + '<section class="ifd-box" style="background:var(--card)"><b>Preview split · nothing issued</b>' + tbl(['LP', '#Commitment', '#Share', 'KYC'], prev.map(p => [LPn(p[0]) + (p[3] ? '<small>+[$0.02] residual</small>' : ''), p[1], p[2], KYC(LPS.find(l => l.k === p[0]).kyc)])) + '<div class="ifd-res">Shares are in whole cents. The residual of <b>[$0.02]</b> sits on <b>' + LPn('B') + '</b>’s line. Total <b>[$3,500,000.00]</b>.</div><span class="raw">POST /api/funds/:id/capital-calls/preview</span></section>'
+        + '<div class="ifd-form"><div class="ifd-f"><label>Due date <span>(optional)</span></label><div class="ifd-in mo">15 Jan 2027</div></div><div class="ifd-f"><label>Purpose <span>(optional)</span></label><div class="ifd-in">[Venture C] seed and fees</div></div></div>'
+        + '<p class="ifd-cap">2 LPs have KYC that is not approved. Their lines are issued like the rest; the KYC column shows it on every line.</p>', '<button type="button" class="btn">Back</button><button type="button" class="btn p">Confirm call 3</button>', 600) });
+    }
+    else if (B === 'IFD06B') {
+      html = crop('<span class="eye">FV6 · Confirm · Authenticate · Receipt · and the refusals</span><div class="ifd-three">'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Confirm call 3</b></div><div class="ifd-pb2">' + steps(2) + '<dl class="ifd-kv" style="grid-template-columns:120px minmax(0,1fr)"><dt>Amount</dt><dd class="mo">[$3,500,000.00]</dd><dt>Lines</dt><dd>6 LPs · residual [$0.02] on ' + LPn('B') + '</dd><dt>Due</dt><dd class="mo">15 Jan 2027</dd><dt>Purpose</dt><dd>[Venture C] seed and fees</dd></dl><p class="ifd-cap">Issuing writes call 3 and its lines. Notices go out through the queued job; LPs pay by wire outside the platform.</p></div><div class="ifd-pf2"><button type="button" class="btn">Back</button><button type="button" class="btn p">Issue call</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Authenticate</b>' + TB('#6229 step-up for a GP') + '</div><div class="ifd-pb2">' + steps(3) + '<div class="ifd-f"><label>Code from your authenticator</label><div class="ifd-in mo">• • • • • •</div></div><p class="ifd-cap">On main, a Super Admin issuing in preview is stepped up; a non-admin GP of record is not asked today. Drawn as the target.</p></div><div class="ifd-pf2"><button type="button" class="btn p">Verify and issue</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Receipt</b>' + S('ok', 'Issued') + '</div><div class="ifd-pb2">' + steps(4) + '<dl class="ifd-kv" style="grid-template-columns:120px minmax(0,1fr)"><dt>Call</dt><dd>Call 3 · [$3,500,000.00]</dd><dt>Issued</dt><dd class="mo">14 Nov 2026 09:20 UTC · [GP Name]</dd><dt>Lines written</dt><dd>6</dd></dl><p class="ifd-cap">Issued is not delivered: notices are queued (capital_call_notice job).</p></div><div class="ifd-pf2"><button type="button" class="btn">Open call 3</button></div></div>'
+        + '</div><div class="ifd-two">' + ban('r', G.lk, 'Refused · 409 no_billable_lps', 'This fund has no committed or active LP with a commitment, so a call would bill nobody. Add an LP first.', '<button type="button" class="btn bsm">Add LP</button>') + ban('a', G.lk, 'Super Admin preview · Axal’s own Fund I only', 'A call is held while Fund I has no payable account (D708). Nothing was written.', '') + '</div>', 1240);
+    }
+
+    /* =================== FV7 · Receipt and chase =================== */
+    else if (B === 'IFD07') {
+      html = crop('<span class="eye">FV7 · on the Call 2 line for ' + LPn('A') + ' · owed [$729,166.66] · received [$400,000.00] · outstanding [$329,166.66]</span><div class="ifd-three">'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">A · Record receipt</b>' + CS('part') + '</div><div class="ifd-pb2">' + steps(0) + '<div class="ifd-f"><label>Amount <span>(USD)</span></label><div class="ifd-in mo">[$329,166.66]</div><small>Prefilled with what is outstanding.</small></div><div class="ifd-f"><label>Received on</label><div class="ifd-in mo">14 Nov 2026</div></div><div class="ifd-f"><label>Wire reference <span>(optional)</span></label><div class="ifd-in mo">FO-A-C2-02</div></div><div class="ifd-ban a" style="padding:8px 10px"><span class="ifd-ic a">' + G.ar + '</span><p style="margin:0">A receipt cannot be edited or deleted. A correction is a second receipt.</p></div></div><div class="ifd-pf2"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Review receipt</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">B · Draft reminder</b><span class="raw">Eadwyn · proposal</span></div><div class="ifd-pb2"><div class="ifd-prop"><span class="ifd-lbl">Proposal · not sent · for ' + LPn('A') + ' alone</span><b>Subject: Call 2 · [$329,166.66] outstanding</b><span>Thank you for the [$400,000.00] received on 11 Nov 2026. [$329,166.66] remains on Call 2, due 2 Dec 2026. Please quote reference FO-A-C2 on the wire.</span><span class="raw">Read: the Call 2 line · this LP’s comms log (last: call notice, 2 Nov 2026)</span></div><p class="ifd-cap">Nothing is sent: send it yourself, then Log as sent.</p></div><div class="ifd-pf2"><button type="button" class="btn">Discard</button><button type="button" class="btn">Edit</button><button type="button" class="btn p">Accept draft</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">C · Log as sent</b></div><div class="ifd-pb2"><div class="ifd-f"><label>Subject</label><div class="ifd-in">Call 2 · [$329,166.66] outstanding</div></div><div class="ifd-f"><label>Sent on</label><div class="ifd-in mo">14 Nov 2026</div></div><span class="raw">kind: call reminder · linked to Call 2</span>' + ban('g', G.ok, 'Logged · call reminder · 14 Nov 2026', 'It is in ' + LPn('A') + '’s comms log. Logged means you sent it; the platform did not.', '') + '</div><div class="ifd-pf2"><button type="button" class="btn p">Log as sent</button></div></div>'
+        + '</div>'
+        + '<div class="ifd-two"><div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">A · Review and confirm the receipt</b></div><div class="ifd-pb2">' + steps(2) + '<dl class="ifd-kv" style="grid-template-columns:140px minmax(0,1fr)"><dt>Line</dt><dd>Call 2 · ' + LPn('A') + '</dd><dt>Amount</dt><dd class="mo">[$329,166.66]</dd><dt>Line after</dt><dd>received [$729,166.66] · outstanding [$0.00] · ' + CS('paid') + '</dd></dl></div><div class="ifd-pf2"><button type="button" class="btn">Back</button><button type="button" class="btn p">Record receipt</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">A · Receipt</b>' + S('ok', 'Recorded') + '</div><div class="ifd-pb2">' + steps(4) + '<p class="ifd-cap">Recorded 14 Nov 2026 09:24 UTC by [GP Name] · POST …/capital-calls/lines/:lineId/receipts. Authenticate is drawn as the target: a GP is not stepped up today ' + TB('#6229 step-up') + '. Collected becomes [$5,730,833.34]; the other boards show the figures before this receipt.</p></div></div></div>', 1240);
+    }
+
+    /* =================== FV8 · Distributions =================== */
+    else if (B === 'IFD08' || B === 'IFD08S') {
+      const list = head({ crumb: 'Calls', route: '/funds/calls?fund=12&amp;view=distributions', h1: 'Calls and distributions', sub: 'Distributions to LPs. Distributed counts paid rows only.', zone: 'Calls', pri: 'New distribution', sec: '<button type="button" class="btn">New call</button>' })
+        + figs([['Distributed (paid)', D.dist, 'to date · 5 rows'], ['Pending', '[$12,500.00]', '1 row · counts once marked paid'], ['Failed', '[$0.00]', 'none recorded · a measured 0'], ['DPI', D.dpi, 'distributed ÷ called']], 4)
+        + '<section class="cd" style="padding:0;gap:0;overflow:hidden">' + tbl(['LP', '#Amount', 'Type', 'Status', 'Paid on', ''], DIST.map(d => [LPn(d[0]), d[1], 'Return of capital', d[2] === 'paid' ? CS('paid') : CS('pend'), d[2] === 'paid' ? '<span class="mo">25 Sep 2026</span>' : NR('not paid yet'), d[2] === 'paid' ? '' : '<div class="ifd-acts"><button type="button" class="btn bsm">Mark paid</button></div>'])) + '<div class="qft"><span>6 rows · GET /api/funds/distributions?fund_id=12</span>' + TO('(a) A · GP runs distributions') + '</div></section>';
+      html = page(list, { h: B === 'IFD08' ? 760 : 1060, overlay: B === 'IFD08' ? '' : sheet('New distribution', F1 + ' · Review', steps(1)
+        + '<div class="ifd-f"><label>Proceeds <span>(USD)</span></label><div class="ifd-in mo">[$1,200,000.00]</div><small>From [Venture A] secondary sale. Changing it drops the preview.</small></div>'
+        + figs([['Basis returned', '[$800,000.00]', '', '15px'], ['Profit', '[$400,000.00]', '', '15px'], ['Carry withheld', '[$80,000.00]', 'at 20% · default rate', '15px']], 3)
+        + '<span class="pl a">' + G.ar + ' Default 20%: no carry rate is recorded on this fund</span>'
+        + tbl(['LP', '#Line'], [[LPn('B'), '[$373,333.33]'], [LPn('D'), '[$280,000.00]'], [LPn('A'), '[$233,333.33]'], [LPn('E'), '[$116,666.66]'], [LPn('C'), '[$70,000.00]'], [LPn('F'), '[$46,666.66]']])
+        + '<div class="ifd-res">To LPs <b>[$1,119,999.98]</b> · no line received <b>[$0.02]</b> (unallocated cents)</div><span class="raw">POST /api/funds/:id/distributions/preview · same split the job runs</span>', '<button type="button" class="btn">Back</button><button type="button" class="btn p">Confirm distribution</button>', 560) });
+    }
+    else if (B === 'IFD08B') {
+      html = crop('<span class="eye">FV8 · Execute · Authenticate · Receipt · Mark paid</span><div class="ifd-three">'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Confirm · execute</b></div><div class="ifd-pb2">' + steps(2) + '<dl class="ifd-kv" style="grid-template-columns:130px minmax(0,1fr)"><dt>Proceeds</dt><dd class="mo">[$1,200,000.00]</dd><dt>Carry withheld</dt><dd class="mo">[$80,000.00] · 20% default</dd><dt>To LPs</dt><dd class="mo">[$1,119,999.98] · 6 lines</dd></dl><p class="ifd-cap">Execute queues the distribution (returns_distribution job). Rows appear as Pending. No money leaves the platform.</p></div><div class="ifd-pf2"><button type="button" class="btn">Back</button><button type="button" class="btn p">Execute</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Authenticate</b>' + TB('#6229 step-up for a GP') + '</div><div class="ifd-pb2">' + steps(3) + '<div class="ifd-f"><label>Code from your authenticator</label><div class="ifd-in mo">• • • • • •</div></div><p class="ifd-cap">Super Admin preview steps up today; a non-admin GP is not asked yet.</p></div><div class="ifd-pf2"><button type="button" class="btn p">Verify and execute</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Receipt</b>' + CS('pend', 'Queued') + '</div><div class="ifd-pb2">' + steps(4) + '<dl class="ifd-kv" style="grid-template-columns:130px minmax(0,1fr)"><dt>Queued</dt><dd class="mo">14 Nov 2026 09:31 UTC</dd><dt>Liquidity event</dt><dd class="mo">LE-0007</dd><dt>Rows</dt><dd>6 · ' + CS('pend') + '</dd></dl><p class="ifd-cap">Distributed does not move until a row is marked paid.</p></div></div>'
+        + '</div><div class="ifd-two"><div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Mark paid · ' + LPn('F') + ' · [$12,500.00]</b></div><div class="ifd-pb2"><p style="font-size:13px">Mark this row paid? It credits the LP’s returns and adds [$12,500.00] to Distributed. Only do this once the wire has left.</p></div><div class="ifd-pf2"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Mark paid</button></div></div>'
+        + '<div class="ifd-stack">' + ban('r', G.lk, 'Refused · 409 already settled', 'This row is already paid. Nothing was credited twice.', '') + ban('r', G.lk, 'Refused · support session', 'A support session cannot move fund money or write a fund’s books.', '') + '</div></div>', 1240);
+    }
+
+    /* =================== FV9 · Ledger =================== */
+    else if (B === 'IFD09' || B === 'IFD09B') {
+      const b = B === 'IFD09B';
+      const capLines = '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>Capital lines</h2><span class="raw">' + AS + ' · analytics</span></div>' + tbl(['Line', '#Amount', 'Source', 'State'], [['Committed', D.committed, 'limited_partners', S('ok', 'Value')], ['Called', D.called, 'capital_calls', S('ok', 'Value')], ['Collected', D.collected, 'capital_call_receipts', S('ok', 'Value')], ['Outstanding', D.outstanding, 'called less receipts', S('ok', 'Value')], ['Deployed', D.deployed, 'vc_funds.deployed_capital', S('ok', 'Value')], ['Dry powder', D.dry, 'collected less deployed', S('ok', 'Value')], ['Distributions', D.dist, 'fund_distributions (paid)', S('ok', 'Value')], ['NAV', NR(), 'fund_position_valuations', '<small style="font-size:11.5px">No position is attributed to this fund</small>']]) + '</section>';
+      const fees = '<section class="cd"><div class="ch"><h2>Fees</h2><span class="raw">GET /api/fund-fees/:fundId · always readable by the GP of record</span></div><dl class="ifd-kv" style="grid-template-columns:150px minmax(0,1fr)"><dt>Fee terms</dt><dd>2.0% a year on committed · quarterly in advance · from 14 Oct 2025</dd></dl>' + tbl(['Fee period', '#Basis', '#Fee', 'State'], [['Q4 2026', D.committed, D.fee, CS('op')], ['Q3 2026', D.committed, D.fee, CS('cl')], ['Q2 2026', D.committed, D.fee, CS('cl')]]) + '</section>';
+      const what = '<div class="ifd-box"><b>What you can do here</b><span>Posting, reconciling and closing a period belong to an admin or the fund’s assigned administrator ([Administrator Name]). This page never closes a period or exports a journal.</span></div>';
+      const top = head({ crumb: 'Ledger', route: '/funds/ledger?fund=12', h1: 'Ledger', sub: 'The operational ledger for ' + F1 + ': not the statutory books.', zone: 'Ledger' })
+        + '<div class="ifd-tools" style="justify-content:space-between"><div class="ifd-flt" role="group" aria-label="Period"><button type="button">Q2 2026 · closed</button><button type="button">Q3 2026 · closed</button><button type="button" aria-pressed="true">Q4 2026 · open</button></div><nav class="seg" aria-label="View">' + J(['Summary', 'Journal', 'Fees'].map(v => '<button type="button" aria-checked="' + (v === (b ? 'Summary' : 'Journal')) + '"' + (b && v === 'Journal' ? ' aria-disabled="true"' : '') + '>' + v + '</button>')) + '</nav></div>';
+      if (!b) {
+        const JE = [['1 Oct', 'JE-0410', 'Management fee expense', '[$120,000.00]', '', 'fee accrual'], ['1 Oct', 'JE-0410', 'Fees payable', '', '[$120,000.00]', 'fee accrual'], ['15 Oct', 'JE-0411', 'Fund expenses · legal', '[$6,200.00]', '', 'manual'], ['15 Oct', 'JE-0411', 'Accounts payable', '', '[$6,200.00]', 'manual'], ['2 Nov', 'JE-0412', 'LP receivable', '[$3,500,000.00]', '', 'call 2'], ['2 Nov', 'JE-0412', 'Capital called', '', '[$3,500,000.00]', 'call 2'], ['10 Nov', 'JE-0413', 'Cash', '[$1,166,666.68]', '', 'receipt · Mercury ✓'], ['10 Nov', 'JE-0413', 'LP receivable', '', '[$1,166,666.68]', 'receipt'], ['11 Nov', 'JE-0414', 'Cash · LP receivable', '[$400,000.00]', '[$400,000.00]', 'receipt'], ['12 Nov', 'JE-0415', 'Cash · LP receivable', '[$875,000.00]', '[$875,000.00]', 'receipt · Mercury ✓']];
+        html = page(top + figs([['Fee accrued', D.fee, 'Q4 2026'], ['Fund expenses', D.exp, 'Q4 2026'], ['Debits', '[$6,067,866.68]', '12 lines in 6 entries'], ['Credits', '[$6,067,866.68]', S('ok', 'Balanced')]], 4)
+          + '<div class="ifd-main"><section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>Journal · Q4 2026</h2><span style="display:flex;gap:8px"><div class="inp" style="min-width:180px;min-height:32px">⌕ Search entries</div><button type="button" class="dd">Account: All ▾</button></span></div>' + tbl(['Date', 'Entry', 'Account', '#Debit', '#Credit', 'Source'], JE.map(r => ['<span class="mo">' + r[0] + '</span>', '<span class="mo">' + r[1] + '</span>', r[2], r[3], r[4], '<small style="font-size:11.5px">' + r[5] + '</small>'])) + '<div class="ifd-tot"><span>Totals</span><span>[$6,067,866.68] · [$6,067,866.68] · ' + S('ok', 'Balanced') + '</span></div></section>'
+          + '<div class="ifd-stack"><section class="cd"><div class="ch"><h2>Trial balance</h2><span class="raw">Q4 2026 to date</span></div>' + tbl(['Account', '#Dr', '#Cr'], [['Cash', '[$2,441,666.68]', ''], ['LP receivable', '[$1,058,333.32]', ''], ['Mgmt fee expense', D.fee, ''], ['Fund expenses', D.exp, ''], ['Capital called', '', '[$3,500,000.00]'], ['Fees payable', '', D.fee], ['Accounts payable', '', D.exp]]) + '<div class="ifd-tot"><span>Total</span><span>[$3,626,200.00] · [$3,626,200.00]</span></div></section>'
+          + '<section class="cd"><div class="ch"><h2>From Mercury</h2><span class="raw">ledger proposals</span></div><div class="ifd-prop"><span>Post <b class="mo">[$2,350.00]</b> debit on 9 Nov 2026 to <b>Fund expenses · bank fees</b>?</span><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Discard</button></div></div></section>' + what + TO('(b) A · GP reads the journal') + TB('#6229 fund_ledger.ts grants full read on gp_user_id') + '</div></div>', { h: 1180 });
+      } else {
+        html = page(top + ban('n', G.lk, 'The ledger is kept by the fund’s assigned administrator', 'You are the GP of record but not the assigned administrator, so the operational journal is not shown (today: fund absent from GET /api/fund-ledger, 404 on /:id). Capital lines and Fees are shown from their own reads.', '')
+          + '<div class="ifd-two">' + capLines + '<div class="ifd-stack">' + fees
+          + '<section class="cd"><div class="ch"><h2>Your LP seat · summary</h2><span class="raw">you also hold an LP seat in this fund</span></div><dl class="ifd-kv" style="grid-template-columns:150px minmax(0,1fr)"><dt>Called</dt><dd class="mo">[$54,166.67]</dd><dt>Collected</dt><dd class="mo">[$54,166.67]</dd><dt>Outstanding</dt><dd class="mo">[$0.00]</dd></dl><span class="raw">illustrative seat · the LP summary scope of fund_ledger.ts</span></section>' + what + '</div></div>', { h: 1000 });
+      }
+    }
+
+    /* =================== FV10 · Reporting archive =================== */
+    else if (B === 'IFD10') {
+      const PER = [['Q4 2026', '1 Oct – 31 Dec 2026', 'draft', '', '', ''], ['Q3 2026', '1 Jul – 30 Sep 2026', 'iss', '20 Oct 2026', '[GP Name]', ''], ['Q2 2026 · correction', '1 Apr – 30 Jun 2026', 'iss', '5 Aug 2026', '[GP Name]', 'Corrects Q2 2026'], ['Q2 2026', '1 Apr – 30 Jun 2026', 'iss', '20 Jul 2026', '[GP Name]', ''], ['Q1 2026', '1 Jan – 31 Mar 2026', 'iss', '20 Apr 2026', '[GP Name]', '']];
+      html = page(head({ crumb: 'Reporting', route: '/funds/reporting?fund=12', h1: 'Reporting', sub: 'Reporting periods you write and issue, and the LP report archive. Issued is not delivered.', zone: 'Reporting', pri: 'New period' })
+        + figs([['Periods', '5', 'fund_report_periods'], ['Issued', '4', 'LPs can read these'], ['Drafts', '1', 'Q4 2026 · saved 13 Nov 2026']], 3)
+        + '<section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>Reporting periods</h2><span class="raw">GET /api/funds/:id/report-periods</span></div>' + tbl(['Period', 'Dates', 'State', 'Issued on · by', 'Correction', 'Delivered ' + TB('#6229'), ''], PER.map(p => ['<b>' + p[0] + '</b>', '<span class="mo">' + p[1] + '</span>', p[2] === 'draft' ? CS('draft') : CS('iss'), p[3] ? '<span class="mo">' + p[3] + '</span> · ' + p[4] : S('na', 'Not issued'), p[5] ? '<a href="#">' + p[5] + '</a>' : '', p[2] === 'draft' ? S('na') : NR('delivery is not tracked'), '<a class="btn bsm" href="#">Open</a>'])) + '</section>'
+        + '<div class="ifd-stack"><section class="cd" style="padding:0;gap:0;overflow:hidden"><div class="ch" style="padding:12px 16px"><h2>LP report archive</h2><span class="raw">GET /api/lp-reports?fund_id=12 · figures as recorded on each report</span></div>' + tbl(['Period', 'State', 'Published', '#Called', '#Distributed', 'DPI', 'NAV · TVPI · IRR'], [['Q3 2026', CS('pub'), '<span class="mo">20 Oct 2026</span>', '[$3,000,000.00]', '[$287,500.00]', '<span class="mo">0.10×</span>', NR()], ['Q2 2026', CS('pub'), '<span class="mo">20 Jul 2026</span>', '[$3,000,000.00]', '[$0.00]', '<span class="mo">0.00×</span>', NR()], ['Q1 2026', CS('pub'), '<span class="mo">20 Apr 2026</span>', '[$3,000,000.00]', '[$0.00]', '<span class="mo">0.00×</span>', NR()], ['Q4 2025', CS('pub'), '<span class="mo">20 Jan 2026</span>', NR(), NR(), NR(), NR()]]) + '</section>'
+        + '<section class="cd"><div class="ch"><h2>From Mercury</h2><span class="raw">your own connection</span></div><dl class="ifd-kv" style="grid-template-columns:140px minmax(0,1fr)"><dt>Month-end cash</dt><dd class="mo">[$412,380.15] · 31 Oct 2026</dd></dl><div class="ifd-prop"><span>Attach <b>October 2026</b>’s statement to the Q4 2026 draft?</span><div style="display:flex;gap:6px"><button type="button" class="btn bsm">Accept</button><button type="button" class="btn bsm">Discard</button></div></div><span class="raw">GET /api/mercury/investor/reporting?fund_id=12</span></section></div>', { h: 1060 });
+    }
+
+    /* =================== FV11 · Period editor =================== */
+    else if (B === 'IFD11') {
+      const sec = (t, inner, add) => '<section class="ifd-sec"><h3>' + t + (add ? '<button type="button" class="btn bsm">' + add + '</button>' : '') + '</h3>' + inner + '</section>';
+      html = page('<div class="ifd-crumb">Fund › Reporting › <b style="color:var(--ink)">Q4 2026</b> <span class="raw">/funds/12/reporting/31</span></div><header class="ifd-hd"><div><div class="ifd-hl"><h1>Q4 2026 report</h1>' + CS('draft') + '</div><p>' + F1 + ' · saved 13 Nov 2026 16:40 UTC · revision 4</p></div><div class="ifd-act"><button type="button" class="btn">Issue…</button><button type="button" class="btn p">Save draft</button></div></header>' + zones('Reporting')
+        + '<div class="ifd-main" style="grid-template-columns:minmax(0,1fr) 420px"><div class="ifd-stack"><div class="ifd-form" style="grid-template-columns:2fr 1fr 1fr"><div class="ifd-f"><label>Label</label><div class="ifd-in">Q4 2026</div></div><div class="ifd-f"><label>Start</label><div class="ifd-in mo">1 Oct 2026</div></div><div class="ifd-f"><label>End</label><div class="ifd-in mo">31 Dec 2026</div></div></div>'
+        + sec('Letter', '<div class="ifd-txt">Dear partners, the fund issued its second call on 2 Nov 2026 to support a follow-on in [Venture B]…</div><div class="ifd-tools">' + TB('#6229 Eadwyn: Draft the letter from this period’s snapshot') + '<button type="button" class="btn bsm" aria-disabled="true">Draft with Eadwyn</button></div>')
+        + sec('Key developments', tbl(['Date', 'Title', 'Text'], [['<span class="mo">2 Nov 2026</span>', 'Call 2 issued', '[$3,500,000.00] across 6 LPs'], ['<span class="mo">28 Oct 2026</span>', '[Venture B] follow-on', 'Pro-rata in a [$6M] round']]), 'Add')
+        + sec('Outlook', '<div class="ifd-txt">' + NR('add an outlook before issuing, or leave it out') + '</div>')
+        + sec('Subsequent events', '<div class="ifd-txt">' + S('no', 'None added') + '</div>', 'Add')
+        + '</div><section class="cd"><div class="ch"><h2>LP preview</h2><span class="ifd-sel">' + LPn('A') + ' ▾</span></div><p class="ifd-cap">What this LP will read once the period is issued.</p><div class="ifd-box" style="background:var(--card)"><span class="ifd-lbl">' + F1 + ' · Q4 2026 · draft</span><dl class="ifd-kv" style="grid-template-columns:130px minmax(0,1fr)"><dt>Commitment</dt><dd class="mo">[$5,000,000.00]</dd><dt>Called</dt><dd class="mo">[$1,354,166.66]</dd><dt>Paid in</dt><dd class="mo">[$1,025,000.00]</dd><dt>Distributions</dt><dd class="mo">[$62,500.00]</dd><dt>NAV · TVPI</dt><dd>' + NR('no fund NAV') + '</dd></dl></div><span class="raw">figures freeze into snapshot_json on Issue</span></section></div>', { h: 960 });
+    }
+    else if (B === 'IFD11B') {
+      html = crop('<span class="eye">FV11 · Issue · Issued (read-only) · correcting period</span><div class="ifd-two">'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Issue Q4 2026?</b></div><div class="ifd-pb2"><p style="font-size:13px">Issuing cannot be undone. LPs can read it.</p><p class="ifd-cap">The figures freeze into the period’s snapshot. Issuing is not delivery: no per-LP delivery is recorded ' + TB('#6229') + '.</p><label class="ck"><input type="checkbox">I have checked the letter and the LP preview</label></div><div class="ifd-pf2"><button type="button" class="btn">Cancel</button><button type="button" class="btn p">Issue period</button></div></div>'
+        + '<div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Q3 2026 report</b>' + CS('iss') + '</div><div class="ifd-pb2"><dl class="ifd-kv" style="grid-template-columns:130px minmax(0,1fr)"><dt>Issued</dt><dd class="mo">20 Oct 2026 · [GP Name]</dd><dt>Delivered</dt><dd>' + NR('delivery is not tracked') + '</dd></dl><div class="ifd-txt ro">Dear partners, in the third quarter the fund made its first distribution…</div><p class="ifd-cap">Read-only. To change an issued period, issue a correcting period; it links back to this one.</p></div><div class="ifd-pf2"><button type="button" class="btn">LP statement preview</button><button type="button" class="btn p">Issue a correcting period</button></div></div>'
+        + '</div>', 1100);
+    }
+
+    /* =================== FV12 · States =================== */
+    else if (B === 'IFD12A') {
+      html = page('<div class="ifd-crumb">Fund › <b style="color:var(--ink)">Overview</b></div><header class="ifd-hd"><div><h1>Fund overview</h1><p>Reading your fund…</p></div></header>' + zones('Overview', true)
+        + '<section class="cd" aria-busy="true">' + sk('22%', 12) + sk('30%', 26) + '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px">' + J([0, 1, 2, 3, 4, 5, 6].map(() => sk('100%', 56))) + '</div></section>'
+        + '<section class="cd" aria-busy="true"><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">' + J([0, 1, 2, 3].map(() => sk('100%', 56))) + '</div></section>'
+        + '<div class="ifd-main" style="grid-template-columns:minmax(0,1fr) 460px"><section class="cd" aria-busy="true">' + sk('30%', 12) + sk('100%', 200) + '</section><section class="cd" aria-busy="true">' + sk('50%', 12) + sk('100%', 40) + sk('100%', 40) + sk('100%', 40) + '</section></div>'
+        + '<p class="ifd-cap">Skeletons take the real layout’s shape. No tile shows 0 and no picker shows “no fund” while reading. Each zone loads the same way: register rows, call lines, journal rows, period rows.</p>', { h: 900, norail: true });
+    }
+    else if (B === 'IFD12B') {
+      const E = [['Overview', 'No fund to operate yet.', 'Create a fund', 'FV1b'], ['LPs', 'No LPs yet.', 'Add LP', ''], ['Calls', 'No numbered call has been issued.', 'New call', ''], ['Outstanding', 'Nothing is outstanding.', '', 'every line is paid · a measured [$0.00]'], ['Distributions', 'No distributions recorded.', 'New distribution', ''], ['Ledger', 'No accounting period recorded.', '', 'the fund’s administrator opens one'], ['Reporting', 'No period yet.', 'New period', '']];
+      html = crop('<span class="eye">FV12 · Empty · each with one action, or who acts next</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">' + J(E.map(e => '<section class="ifd-blk"><span class="ifd-lbl">' + e[0] + '</span>' + S('no', 'None') + '<b style="font-size:14px">' + e[1] + '</b>' + (e[2] ? '<button type="button" class="btn p bsm" style="align-self:flex-start">' + e[2] + '</button>' : '') + (e[3] ? '<span class="ifd-cap">' + e[3] + '</span>' : '') + '</section>')) + '</div>', 1240);
+    }
+    else if (B === 'IFD12C') {
+      html = crop('<span class="eye">FV12 · Not recorded · each with its reason as visible text · never 0, never empty</span><div class="ifd-two"><section class="cd"><dl class="ifd-kv" style="grid-template-columns:170px minmax(0,1fr)">'
+        + J([['Call purpose', NR('none given at issue')], ['Due date', NR('none given at issue')], ['LP type', NR('choose one in the register')], ['KYC', NR('no linked account yet') + ' <span class="raw">never “pending”</span>'], ['Wire reference', NR('none given with the receipt')], ['Distribution paid on', NR('not paid yet')]].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl></section><section class="cd"><dl class="ifd-kv" style="grid-template-columns:170px minmax(0,1fr)">'
+        + J([['From Mercury', NR('Connect Mercury') + ' <a class="btn t bsm" href="#">Connect Mercury</a>'], ['NAV', NR('no position is attributed to this fund')], ['RVPI · TVPI', NR('need NAV')], ['IRR', NR('needs NAV and dated cash flows')], ['Report figures', NR('blank on that report')], ['Delivered', NR('delivery is not tracked') + ' ' + TB('#6229')]].map(r => '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>')) + '</dl></section></div>', 1240);
+    }
+    else if (B === 'IFD12D') {
+      html = page(head({ crumb: 'Calls', route: '/funds/calls?fund=12', h1: 'Calls and distributions', sub: 'Each source fails on its own; everything else on the page keeps working.', zone: 'Calls', pri: 'New call' })
+        + figs([['Called to date', D.called, D.cPct + ' of committed'], ['Collected', D.collected, D.colPct + ' of called'], ['Outstanding', D.outstanding, 'across 5 lines'], ['Current call', 'Call 2 · ' + D.c2, 'due 2 Dec 2026', '16px']], 4)
+        + '<div class="ifd-ban r"><span class="ifd-ic r">' + G.ua + '</span><div style="flex:1"><b>The call ledger could not be read</b><p>GET /api/funds/:id/capital-calls failed at 09:12 UTC. This is not a claim that no calls exist. The figures above come from analytics and still stand.</p></div><button type="button" class="btn">Try again</button></div>'
+        + '<div class="ifd-three">' + unblk('Wire trail', 'GET /api/funds/:id/ledger') + unblk('From Mercury', '502 mercury_unreadable: your Mercury connection', ' Nothing was written.') + '<section class="cd"><div class="ch"><h2>Distributions</h2>' + S('ok', 'Read') + '</div><p class="ifd-cap">5 paid · 1 pending · read on its own and still works.</p><a class="btn bsm" href="#" style="align-self:flex-start">Open distributions</a></section></div>'
+        + '<section class="cd"><div class="ch"><h2>Unavailable, by source</h2><span class="raw">same block everywhere: name, Unavailable, “not a claim that none exist”, Try again</span></div><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px">' + J(['Fund list', 'Analytics', 'Performance history', 'LP register', 'Call ledger', 'Wire trail', 'Ledger period', 'Fee terms', 'Report archive', 'Mercury'].map(x => '<div class="ifd-box" style="padding:8px 10px"><b>' + x + '</b>' + UN() + '</div>')) + '</div></section>', { h: 1020 });
+    }
+    else if (B === 'IFD12E') {
+      html = crop('<span class="eye">FV12 · Partial · Refused</span><section class="cd"><div class="ch"><h2>Quarterly history</h2>' + S('pa') + '</div><div class="ifd-ban a" style="padding:10px 12px"><span class="ifd-ic a">' + G.pt + '</span><div><b>Analytics read; performance history is Unavailable</b><p>The tiles stand. The chart’s Q3 2026 slot failed to read and is outlined; TVPI and IRR, which it would feed, are withheld with that reason.</p></div><button type="button" class="btn bsm">Try again</button></div>' + chart({ un: 3, w: 1160 }) + '</section>'
+        + '<div class="ifd-three">' + J([['402 below tier', 'Opens the locked surface (FV2) for whichever zone was asked for.'], ['Not GP of record', '“No fund to operate”, with a link to My commitment when you hold an LP seat.'], ['Support session', 'A support session cannot move fund money, write the books or read Mercury.'], ['Admin preview', 'Issuing a call or executing a distribution in preview is a Super Admin act, with a step-up.'], ['Admin and a period', 'An admin issues a period from the reporting queue, not from this editor.'], ['Distribution settled', '409: already paid. Nothing was credited twice.']].map(r => '<section class="ifd-blk"><h2>' + S('rf') + '</h2><b>' + r[0] + '</b><p class="ifd-cap">' + r[1] + '</p></section>')) + '</div>', 1240);
+    }
+    else if (B === 'IFD12F') {
+      html = crop('<span class="eye">FV12 · Saving and save failed · the input is always kept</span><div class="ifd-two">'
+        + '<div class="ifd-stack"><div class="ifd-panel"><div class="ifd-ph2"><b class="ifd-ttl">Record receipt</b><span class="raw">Saving…</span></div><div class="ifd-pb2"><div class="ifd-f"><label>Amount</label><div class="ifd-in mo">[$329,166.66]</div></div><button type="button" class="btn p" aria-disabled="true" style="align-self:flex-start">Recording…</button></div></div>'
+        + ban('a', G.ar, 'The receipt was not recorded', 'Network error. Your amount, date and reference are kept. Nothing was written, so retrying records it once.', '<button type="button" class="btn bsm">Retry</button>')
+        + ban('a', G.ar, 'Call 3 was not issued', 'Your amount, due date and purpose are kept. Preview again before issuing; nothing was written.', '<button type="button" class="btn bsm">Retry</button>') + '</div>'
+        + '<div class="ifd-stack">' + ban('a', G.ar, 'The Q4 2026 draft was not saved', 'Your letter and sections are kept on this page. Reason: 503 from report-periods.', '<button type="button" class="btn bsm">Save again</button>')
+        + ban('r', G.lk, 'Someone saved this period first', '[Administrator Name] saved revision 5 at 09:18 UTC. Your text is kept; Reload shows theirs side by side.', '<button type="button" class="btn bsm">Reload</button>')
+        + ban('r', G.lk, 'This period is issued', 'An issued period cannot be saved. Issue a correcting period instead.', '<button type="button" class="btn bsm">Issue a correcting period</button>') + '</div></div>', 1240);
+    }
+
+    /* =================== FV13 · Eadwyn rail =================== */
+    else if (B === 'IFD13A' || B === 'IFD13B') {
+      const a = B === 'IFD13A';
+      const body = a
+        ? '<span class="eye">What Eadwyn can do in Fund</span>' + J([['Draft the reminder', 'Calls · built', 'Reads the call line and this LP’s comms log.'], ['From Mercury matches', 'Calls, Ledger, Reporting · built', 'Reads your own Mercury feed, never Axal’s accounts.'], ['Draft the period letter', TB('#6229'), 'Would read the period snapshot.']].map(t => '<div class="ifd-task"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>' + t[0] + '</b><span class="raw">' + t[1] + '</span></div><small>' + t[2] + '</small></div>')) + '<p class="foot">Nothing is sent, posted or issued without Accept.</p>'
+        : '<span class="eye">Draft the reminder · ' + LPn('E') + '</span><div class="ifd-task"><b>' + S('vi', 'Running') + '</b><small>Reading Call 2 line (owed [$364,583.33], due 2 Dec 2026) and the comms log (call notice, 2 Nov 2026)…</small></div><div class="ifd-prop"><span class="ifd-lbl">Proposal · not sent</span><b>Subject: Call 2 · [$364,583.33] due 2 Dec 2026</b><span>A reminder that [$364,583.33] is due on Call 2 by 2 Dec 2026. Please quote reference CORP-E-C2.</span><span class="raw">Sources: call 2 line · comms log</span><div style="display:flex;gap:6px"><button type="button" class="btn p bsm">Accept</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div></div><p class="foot">Accept puts the text in your clipboard and opens Log as sent. It sends nothing.</p>';
+      html = '<div class="cv' + '" style="' + VARS + ';width:700px;display:flex;justify-content:flex-end;background:var(--bg)"><div style="flex:1;padding:20px;display:flex;flex-direction:column;gap:10px"><span class="eye">FV13 ' + (a ? 'A · default' : 'B · running, then proposal') + '</span><p class="ifd-cap">The shared rail (#5130), opened from the collapsed tab on any Fund zone. Not on the overview.</p></div><div style="width:340px;min-height:640px;display:flex">' + railOpen(body) + '</div></div>';
+    }
+
+    /* =================== FV14 · Phone 390 =================== */
+    else if (B.indexOf('IFD14') === 0 || B === 'IFD02P') {
+      const ptop = '<div class="ifd-pt"><span style="display:flex;gap:8px;align-items:center;font-weight:800"><span class="logo" aria-hidden="true"></span>Fund</span><span style="display:flex;gap:4px"><button type="button" class="ib" aria-label="Notifications" style="width:44px;height:44px">' + bell + '</button><button type="button" class="ib" aria-label="Menu" style="width:44px;height:44px">☰</button></span></div>';
+      const pch = (cur) => '<nav class="ifd-pch" aria-label="Fund zones">' + J(['Overview', 'LPs', 'Calls', 'Ledger', 'Reporting'].map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+      const ph = (cur, h1, body, ov) => '<div class="cv" style="' + VARS + '"><div class="ifd-ph">' + ptop + '<div style="padding:12px 16px 6px;background:var(--card)"><h1 style="font-size:20px;font-weight:800">' + h1 + '</h1><button type="button" class="ifd-pick" style="margin-top:6px;min-height:44px">' + F1 + ' <small>Active</small> ▾</button></div>' + pch(cur) + '<div class="ifd-pb">' + body + '</div>' + (ov || '') + '</div></div>';
+      const psheet = (title, inner, foot) => '<div class="ifd-scrim" style="position:absolute"></div><div class="ifd-psheet" role="dialog" aria-label="' + title + '" style="top:0;border-radius:0"><div class="ifd-sh2"><b style="font-size:16px">' + title + '</b><button type="button" class="ib" aria-label="Close" style="width:44px;height:44px">✕</button></div><div class="ifd-sb">' + inner + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair)">' + foot + '</div></div>';
+      const kv = (rows) => '<dl class="ifd-kv" style="grid-template-columns:120px minmax(0,1fr)">' + J(rows.map(r => '<dt>' + r[0] + '</dt><dd' + (r[2] ? '' : ' class="mo"') + '>' + r[1] + '</dd>')) + '</dl>';
+      const card = (t, right, inner) => '<section class="ifd-cardx"><div class="ifd-r"><b>' + t + '</b>' + (right || '') + '</div>' + inner + '</section>';
+      const pst = (n) => steps(n).replace(/(\d) · /g, '').replace('Authenticate', 'Auth').replace('Prepare', 'Prep');
+      if (B === 'IFD02P') html = '<div class="cv" style="' + VARS + '"><div class="ifd-ph">' + ptop + '<div class="ifd-pb"><span class="ifd-lock">' + G.lk + '</span>' + S('rf', 'Locked · Institutional add-on') + '<h1 style="font-size:22px;font-weight:800">Calls is part of the Institutional add-on</h1><p style="font-size:13.5px;line-height:1.55">The Fund section runs your own fund’s back office. Your investor tools and any LP seat you hold work as before.</p>' + J(['LP register', 'Numbered capital calls with receipts', 'Distributions with a preview', 'Operational ledger', 'LP reporting periods'].map(x => '<div class="ifd-cardx" style="padding:10px 12px"><b style="font-size:13px">' + x + '</b></div>')) + '<button type="button" class="btn p ifd-full">Talk to Axal</button><p class="ifd-cap">Sends a contact request. Nothing changes on your account until Axal replies.</p></div></div></div>';
+      else if (B === 'IFD14A') html = ph('Overview', 'Fund overview', '<span class="ifd-lbl">Committed · ' + AS + '</span><b class="mo" style="font-size:22px">' + D.committed + '</b>' + figs([['Called', D.called, D.cPct + ' of committed', '15px'], ['Collected', D.collected, D.colPct + ' of called', '15px']], 2) + figs([['Outstanding', D.outstanding, '5 lines', '15px'], ['DPI', D.dpi, 'distributed ÷ called', '15px']], 2)
+        + card('NAV-based figures', NR(), '<span class="ifd-cap">NAV: no position is attributed to this fund. RVPI, TVPI, IRR: need NAV.</span>')
+        + '<div class="ifd-hs"><span class="raw">Quarterly history · scrolls sideways →</span>' + chart({ w: 520, compact: true }) + '</div>');
+      else if (B === 'IFD14B') html = ph('LPs', 'LPs', '<span class="ifd-sk" style="height:300px"></span>', psheet('Add LP', pst(0) + '<div class="ifd-f"><label>Name</label><div class="ifd-in" style="min-height:44px">[LP · Family office G]</div></div><div class="ifd-f"><label>Email</label><div class="ifd-in" style="min-height:44px">[office-g@example.com]</div></div><div class="ifd-f"><label>Commitment (USD)</label><div class="ifd-in mo" style="min-height:44px">[$2,000,000.00]</div></div><div class="ifd-f"><label>First call amount (optional)</label><div class="ifd-in mo" style="min-height:44px">[$200,000.00]</div></div><div class="ifd-f"><label>First call due (optional)</label><div class="ifd-in mo" style="min-height:44px">15 Dec 2026</div></div><p class="ifd-cap">A first call is queued, not sent.</p>', '<button type="button" class="btn p ifd-full">Review</button>'));
+      else if (B === 'IFD14C') html = ph('LPs', LPn('A'), card('Commitment', S('ok', 'LPA signed'), kv([['Committed', '[$5,000,000.00]'], ['Paid to date', '[$1,025,000.00]'], ['KYC', S('ok', 'Approved'), 1]])) + card('Call 2', CS('part'), kv([['Owed', '[$729,166.66]'], ['Outstanding', '[$329,166.66]']]) + '<button type="button" class="btn p ifd-full">Record receipt</button>'), psheet('Log a message', '<div class="ifd-f"><label>Kind</label><div class="ifd-in" style="min-height:44px">Call reminder ▾</div></div><div class="ifd-f"><label>Subject</label><div class="ifd-in" style="min-height:44px">Call 2 · [$329,166.66] outstanding</div></div><div class="ifd-f"><label>Sent on</label><div class="ifd-in mo" style="min-height:44px">14 Nov 2026</div></div><p class="ifd-cap">The body is not stored. Nothing is sent.</p>', '<button type="button" class="btn p ifd-full">Log message</button>'));
+      else if (B === 'IFD14D') html = ph('Calls', 'Calls', '<div class="ifd-res" style="font-size:12px">Call 2 · ' + D.c2 + ' · due 2 Dec 2026 · residual [$0.02] on ' + LPn('B') + '</div>' + J(C2.slice(2, 5).map(r => card(LPn(r[0]), r[4] === 'part' ? CS('part') : CS('open'), kv([['Owed', r[1]], ['Outstanding', r[3]]]) + '<div style="display:flex;gap:8px"><button type="button" class="btn p" style="flex:1">Record receipt</button><button type="button" class="btn">More…</button></div>'))));
+      else if (B === 'IFD14E') html = ph('Calls', 'Distributions', '<span class="ifd-sk" style="height:200px"></span>', psheet('New distribution · Review', pst(1) + kv([['Proceeds', '[$1,200,000.00]'], ['Basis returned', '[$800,000.00]'], ['Profit', '[$400,000.00]'], ['Carry withheld', '[$80,000.00]'], ['Rate', '20% · default', 1], ['To LPs', '[$1,119,999.98]'], ['Unallocated', '[$0.02]']]) + J([['B', '[$373,333.33]'], ['D', '[$280,000.00]'], ['A', '[$233,333.33]']].map(x => '<div class="ifd-r" style="display:flex;justify-content:space-between;font-size:12.5px"><span>' + LPn(x[0]) + '</span><b class="mo">' + x[1] + '</b></div>')) + '<span class="raw">+ 3 more lines</span>', '<button type="button" class="btn p ifd-full">Confirm distribution</button>'));
+      else if (B === 'IFD14F') html = ph('Ledger', 'Ledger', '<div class="ifd-flt"><button type="button" aria-pressed="true" style="min-height:44px">Q4 2026 · open</button><button type="button" style="min-height:44px">Q3 2026</button></div>' + card('Summary', S('ok', 'Balanced'), kv([['Fee accrued', D.fee], ['Expenses', D.exp], ['Debits = credits', '[$6,067,866.68]']])) + J([['JE-0415 · 12 Nov', 'Cash · LP receivable', '[$875,000.00]'], ['JE-0414 · 11 Nov', 'Cash · LP receivable', '[$400,000.00]'], ['JE-0413 · 10 Nov', 'Cash · LP receivable', '[$1,166,666.68]']].map(j => card(j[0], '<span class="raw">receipt</span>', kv([['Accounts', j[1], 1], ['Dr = Cr', j[2]]])))));
+      else if (B === 'IFD14G') html = ph('Reporting', 'Reporting', J([['Q4 2026', CS('draft'), [['Dates', '1 Oct – 31 Dec 2026'], ['Saved', '13 Nov 2026']]], ['Q3 2026', CS('iss'), [['Issued', '20 Oct 2026'], ['Delivered', NR('not tracked'), 1]]], ['Q2 2026 · correction', CS('iss'), [['Issued', '5 Aug 2026'], ['Corrects', 'Q2 2026', 1]]]].map(p => card(p[0], p[1], kv(p[2]) + '<button type="button" class="btn ifd-full">Open</button>'))) + '<button type="button" class="btn p ifd-full">New period</button>');
+      else if (B === 'IFD14H') html = ph('Reporting', 'Q4 2026 report', '<div class="ifd-f"><label>Label</label><div class="ifd-in" style="min-height:44px">Q4 2026</div></div><section class="ifd-sec"><h3>Letter</h3><div class="ifd-txt">Dear partners, the fund issued its second call on 2 Nov 2026…</div></section><section class="ifd-sec"><h3>Key developments<button type="button" class="btn">Add</button></h3><span style="font-size:12.5px"><b class="mo">2 Nov</b> · Call 2 issued</span></section><section class="ifd-sec"><h3>Outlook</h3>' + NR() + '</section>', '<div class="ifd-sticky"><button type="button" class="btn" style="flex:1">Save draft</button><button type="button" class="btn p" style="flex:1">Issue…</button></div>');
+    }
+
+    /* =================== FV-H · Handoff =================== */
+    else if (B === 'IFD16') {
+      html = doc('<span class="eye">FV-H · Handoff and backend fit · #6229 · checked on main 6d7712c6d1 (brief written on 45e7c55fa6)</span><h2>Investor Fund v2 · each board, its Worker route, and what is new</h2><div class="ifd-cols">'
+        + '<div><h3>Boards → Worker routes (all on main)</h3><ul><li>FV1 <code>GET /api/funds</code>, <code>/api/funds/:id/analytics</code> (fundRollup.ts), <code>/api/fund-performance/:id</code> and <code>/history?step=quarter</code>; FV1b <code>POST /api/funds</code>.</li><li>FV2 the 402 from <code>requireFundGp</code>; <code>LockedFund</code> in InvestorFundLanding.jsx today offers no next step.</li><li>FV3–FV4 <code>GET/POST /api/funds/:id/lps</code>, <code>PUT …/lps/:lpId/type</code>, <code>GET/POST …/comms</code>, <code>GET …/lp-report/:lpId</code>.</li><li>FV5–FV7 <code>GET …/capital-calls</code>, <code>POST …/capital-calls/preview</code>, <code>POST …/capital-call</code> (409 <code>no_billable_lps</code>, Fund I hold D708), <code>POST …/lines/:lineId/receipts</code>, <code>GET …/ledger</code>; reminder via <code>ZoneDraft surface="funds/calls"</code>.</li><li>FV8 <code>GET /api/funds/distributions</code>, <code>POST …/distributions/preview</code>, <code>/distributions/execute</code>, <code>/distributions/:id/mark-paid</code>.</li><li>FV9 <code>GET /api/fund-ledger</code>, <code>/:id?period_id=</code>, <code>GET /api/fund-fees/:fundId</code>.</li><li>FV10–FV11 <code>GET /api/lp-reports</code>, <code>…/report-periods</code>; Mercury <code>/api/mercury/investor/proposals</code> and <code>/reporting</code>.</li></ul></div>'
+        + '<div><h3>Backend required (◇)</h3><ul><li>Edit an LP’s name, email or commitment: only the type has a write.</li><li>The GP reading call notices Axal HQ issued on their fund (<code>legal_notices</code> is admin-issued and LP-read).</li><li>Per-LP delivery of a period or pack: none is recorded; issued is never delivered.</li><li>Eadwyn drafting the period letter.</li><li>Fund-level NAV: positions attributed to the fund (<code>PUT /api/fund-performance/positions/:id/fund</code>) with dated marks.</li><li>(b) A: <code>fund_ledger.ts</code> grants full read on <code>fund_admin_user_id</code>, not <code>gp_user_id</code>; a read-only GP scope is a Worker change.</li><li>Authenticate step for a non-admin GP: <code>fundAdminAccess.ts</code> gates support sessions and steps up Super Admin acts only; a GP of record is not stepped up on calls, receipts or distributions today.</li></ul><h3 style="margin-top:12px">Owner picks drawn (⚑)</h3><ul><li>(a) A · the GP previews, executes and marks paid · (b) A · read-only journal · (c) A · Talk to Axal · (d) A · four zone cards stay.</li><li>D5129 Q2: Unavailable is the failed-read word.</li></ul></div>'
+        + '<div><h3>Frontend only</h3><ul><li>Zone row with counts; <code>?fund=</code> travels across zones; the picker shows only for 2+ funds.</li><li>Overview: tiles with their counting rule and as-of; NAV row with reasons; chart gap rules; the gap list; zone cards.</li><li>Locked surface with the zone as a variable; No fund to operate with My commitment.</li><li>Steppers on every money sheet (Prepare → Review → Confirm → Authenticate → Receipt); a changed amount drops the preview.</li><li>Phone cards and full-height sheets; dark tokens.</li></ul><h3 style="margin-top:12px">Handoffs</h3><ul><li>LP row → LP record · outstanding line → Record receipt or Draft reminder · issued period → LP statement preview · LP-only investor → My commitment (Axal VC Fund).</li></ul></div>'
+        + '<div><h3>Accessibility</h3><ul><li>Every state pairs a word and a glyph; colour never carries meaning alone. The chart has a legend in words, a table view, and an aria-label; a 0 is a labelled baseline tick, a gap is named, a failed quarter is an outlined, labelled slot.</li><li>44px rows, phone targets and sheet buttons; tables never wider than the phone (cards instead).</li><li>Sheets and dialogs are dialogs with focus on the heading and Escape to close; the stepper exposes aria-current="step".</li><li>Reasons are visible text, never a hover.</li></ul><h3 style="margin-top:12px">Open</h3><ul><li>The brief names sections FV1 onward; board keys here carry the IFD prefix (IFD01 = FV1).</li><li>The ◇ items have no build issue yet; they are tagged #6229.</li></ul></div>'
+        + '</div>');
+    }
+    else {
+      html = crop('<b>Unknown board</b>', 400);
+    }
+
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

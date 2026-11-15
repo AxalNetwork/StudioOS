@@ -26,7 +26,7 @@ import type { Env, User } from '../../types';
 import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 import { canAccessProject } from '../projectAccess';
 import { ensureProjectMetricsSchema } from '../../routes/progress';
-import { channelRows, readiness, utmSource, MARKET_PARTS, type Ctx as GrowCtx, type MarketRow } from '../growCycle';
+import { APPLICATION_STAGES, channelRows, readiness, utmSource, MARKET_PARTS, type Ctx as GrowCtx, type MarketRow } from '../growCycle';
 import { billingPeriods, computeMovements, movementGap, readRecurring } from '../revenueMovements';
 import { runwayMonths } from '../saasMetrics';
 import {
@@ -36,11 +36,12 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  markHeld, obligationKind, obligationState, openMinutes, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
-import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
+import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
+import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -573,6 +574,10 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
 // ── Team expansion — id: the posting's id ───────────────────────────────────
 
 const ROLE_TEAMS = ['Engineering', 'Product', 'Go-to-market', 'Operations'];
+/** #6110: how many applicants the record lists; the rest are on the jobs board's own page. */
+export const APPLICANTS_SHOWN = 50;
+/** A non-host's count line: "1 at interview · 1 at offer · 2 hired". */
+const COUNT_WORD: Record<string, string> = { applied: 'applied', screen: 'at screen', interview: 'at interview', offer: 'at offer', hired: 'hired', declined: 'declined' };
 const ROLE_EDIT = ['title', 'team', 'target_start', 'type', 'comp_min_cents', 'comp_max_cents', 'comp_currency', 'equity_pct'] as const;
 
 const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team-expansion'], async (rc, id) => {
@@ -594,22 +599,36 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     createdBy: p.host_user_id, createdAt: p.created_at,
   }, { p, stages });
 }, [
+  // #6110 (D6110): every stage of APPLICATION_STAGES, Hired and Declined included, so a move shows in the counts.
   section('pipeline', 'Pipeline', async (_rc, _id, record) => {
     const { stages } = loadedOf(record);
-    return { rows: (['applied', 'screen', 'interview', 'offer'] as const).map((s) => ({ a: label(s), c: String(stages.get(s) ?? 0) })) };
+    return { rows: APPLICATION_STAGES.map((s) => ({ a: label(s), c: String(stages.get(s) ?? 0) })) };
   }),
+  // #6110 (D6110): every applicant the host may see, each with Move to… (`move-applicant`). Names stay the host's.
   section('shortlist', 'Shortlist', async (rc, _id, record) => {
     const { p, stages } = loadedOf(record);
-    const interview = Number(stages.get('interview') ?? 0); const offer = Number(stages.get('offer') ?? 0);
-    if (!interview && !offer) return { rows: [], empty: 'Nobody is at interview or offer yet.' };
+    const total = [...(stages as Map<string, number>).values()].reduce((a, b) => a + Number(b), 0);
+    if (!total) return { rows: [], empty: 'Nobody has applied yet.' };
     // Applicant names follow the jobs board's canManage (decision 9); everyone else sees counts.
     if (!managesPosting(rc, p.host_user_id)) {
-      return { rows: [{ a: joined(interview ? `${interview} at interview` : null, offer ? `${offer} at offer` : null), b: 'names are for the role\'s host' }] };
+      const counts = APPLICATION_STAGES.filter((s) => Number(stages.get(s) ?? 0) > 0).map((s) => `${stages.get(s)} ${COUNT_WORD[s]}`);
+      return { rows: [{ a: joined(...counts), b: 'names are for the role\'s host' }] };
     }
     const res = await rc.env.DB.prepare(
-      "SELECT name, stage FROM job_applications WHERE posting_id = ? AND stage IN ('interview', 'offer') ORDER BY stage DESC, stage_changed_at DESC, id DESC LIMIT 20",
-    ).bind(p.id).all<{ name: string | null; stage: string }>();
-    return { rows: (res.results || []).map((a) => ({ a: a.name || 'An applicant with no name', c: label(a.stage), tone: a.stage === 'offer' ? 'ok' : 'vio' })) };
+      `SELECT id, name, stage FROM job_applications WHERE posting_id = ?
+        ORDER BY CASE stage WHEN 'offer' THEN 0 WHEN 'interview' THEN 1 WHEN 'screen' THEN 2 WHEN 'applied' THEN 3 WHEN 'hired' THEN 4 ELSE 5 END,
+                 stage_changed_at DESC, id DESC LIMIT ?`,
+    ).bind(p.id, APPLICANTS_SHOWN + 1).all<{ id: number; name: string | null; stage: string }>();
+    const all = res.results || [];
+    const rows: Row[] = all.slice(0, APPLICANTS_SHOWN).map((a) => ({
+      a: a.name || 'An applicant with no name',
+      // On Hired, the way to the team roster; nothing is written there on its own.
+      ...(a.stage === 'hired' ? { b: 'Add to the team roster', href: '/build/team' } : {}),
+      c: label(a.stage), tone: a.stage === 'offer' || a.stage === 'hired' ? 'ok' : a.stage === 'declined' ? 'grey' : 'vio',
+      action: { key: 'move-applicant', body: { application_id: Number(a.id) } },
+    }));
+    if (all.length > APPLICANTS_SHOWN) rows.push({ a: `${total - APPLICANTS_SHOWN} more applicants`, b: 'on the jobs board', href: `/jobs/${p.id}/manage` });
+    return { rows };
   }),
   section('compensation', 'Compensation', async (_rc, _id, record) => {
     const { p } = loadedOf(record);
@@ -634,6 +653,32 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     actions.push({ key: 'close-role', label: 'Close role', kind: 'write', tone: 'danger',
       confirm: { title: `Close ${p.title}?`, body: 'It leaves the jobs board.', cta: 'Close role' },
       execute: (c) => refusing(async () => ({ ok: true, record: await closeRole(c.env, c.projectId, userOf(c), Number(id)) })) });
+  }
+  // #6110 (D6110): the host moves one applicant, from that applicant's row. The row sends its id; the stage is chosen here.
+  if (manages) {
+    // The applicant is a field too, as Update an experiment's is, so the action also runs from the record's own
+    // action row; a row's Move to… arrives with its applicant chosen (`recordFormFor` fills it from the row's body).
+    const applicants = (await rc.env.DB.prepare(
+      'SELECT id, name, stage FROM job_applications WHERE posting_id = ? ORDER BY name, id LIMIT 200',
+    ).bind(p.id).all<{ id: number; name: string | null; stage: string }>()).results || [];
+    if (applicants.length) actions.push({
+      key: 'move-applicant', label: 'Move to…', kind: 'form',
+      form: { title: 'Move an applicant', cta: 'Move', fields: [
+        { key: 'application_id', label: 'Applicant', kind: 'CH', required: true,
+          options: applicants.map((a) => ({ value: String(a.id), label: `${a.name || 'An applicant with no name'} · ${label(a.stage)}` })) },
+        { key: 'stage', label: 'Move to', kind: 'CH', required: true, options: opts(APPLICATION_STAGES, LABEL) },
+      ] },
+      execute: (c, _id, body) => refusing(async () => {
+        const applicationId = Number(field(body, 'application_id'));
+        // The writer checks the venture only; the applicant must be on THIS role.
+        const own = Number.isSafeInteger(applicationId) && applicationId > 0
+          ? await c.env.DB.prepare('SELECT 1 AS ok FROM job_applications WHERE id = ? AND posting_id = ?').bind(applicationId, Number(id)).first()
+          : null;
+        if (!own) throw new Refused(404, 'That applicant is not on this role.', 'application_id');
+        await setApplicationStage(c.env, c.projectId, userOf(c), applicationId, { stage: field(body, 'stage') });
+        return { ok: true };
+      }),
+    });
   }
   const canPublish = manages && (p.status === 'draft' || p.status === 'rejected');
   const hasBand = p.comp_min_cents != null || p.comp_max_cents != null;
@@ -683,6 +728,23 @@ export function termsText(g: Any): string | null {
   return amount ? `${label(g.terms_kind)} · ${amount}` : label(g.terms_kind);
 }
 
+/** "Oct 2026" for a stored YYYY-MM. */
+function monthYear(raw: unknown): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(raw ?? ''));
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${month} ${m[1]}` : String(raw ?? '');
+}
+
+/**
+ * D6112: Enter revenue's amount, in US dollars as typed ("1,200", "$40.50"), to cents through the money
+ * layer (D5373); partner revenue carries no currency, and every reader shows it in dollars.
+ */
+function typedRevenueCents(v: unknown): number {
+  const parsed = parseMinor(String(v ?? '').trim().replace(/^\$/, ''), 'USD');
+  if (!parsed.ok) throw new Refused(400, 'Type an amount in US dollars, 0 or more', 'amount');
+  return parsed.minor;
+}
+
 const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
@@ -713,6 +775,14 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     return { rows: (res.results || []).map((d) => ({ a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' })),
       empty: 'No deal recorded.', action: 'add-deal' };
   }),
+  // D6112 (#6112): each month's partner-sourced revenue with where it came from; a month no one entered has no row.
+  section('revenue', 'Revenue by month', async (rc, _id, record) => {
+    const { g } = loadedOf(record);
+    const res = await rc.env.DB.prepare('SELECT month, amount_cents, source FROM partner_revenue WHERE partner_id = ? ORDER BY month DESC LIMIT 24')
+      .bind(g.id).all<Any>();
+    return { rows: (res.results || []).map((r) => ({ a: monthYear(r.month), b: partnerRevenueSource(r.source), c: money(r.amount_cents) ?? '' })),
+      empty: 'No month entered.', action: 'enter-revenue' };
+  }),
   section('terms', 'Terms', async (_rc, _id, record) => {
     const { g } = loadedOf(record);
     const terms = termsText(g);
@@ -735,6 +805,16 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
   }
+  actions.push({
+    key: 'enter-revenue', label: 'Enter revenue', kind: 'form',
+    form: { title: 'Enter revenue', sub: 'Revenue this partner sourced in one month.', cta: 'Save',
+      foot: 'A month already typed is replaced. A month that came from another source keeps its figure.', fields: [
+        { key: 'month', label: 'Month', kind: 'T', placeholder: 'YYYY-MM', value: new Date().toISOString().slice(0, 7), required: true },
+        { key: 'amount', label: 'Amount', kind: 'T', input: 'money', required: true, note: 'US dollars.' },
+      ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setPartnerRevenue(c.env, c.projectId, userOf(c), id,
+      String(field(body, 'month') ?? '').trim(), { amount_cents: typedRevenueCents(field(body, 'amount')) }) })),
+  });
   actions.push({
     key: 'add-deal', label: 'Add deal', kind: 'form',
     form: { title: 'Add deal', cta: 'Add', fields: [

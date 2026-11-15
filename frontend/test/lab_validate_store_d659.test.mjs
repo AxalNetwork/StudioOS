@@ -67,7 +67,7 @@ test('D659: the client names the project on every call and the routes the Worker
   assert.deepEqual(Object.keys(cycleValidateApi).sort(), [
     // D6020 (#6020): six writes no page called are gone; the record actions and forms make them.
     'addMarketSource', 'marketReadiness', 'module', 'overview', 'removeMarketSource', 'setEvidenceStrength',
-    'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
+    'setInterviewSegment', 'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
   ]);
   const src = raw('frontend/src/lib/api/cycleValidate.js');
   for (const line of src.split('\n').filter((l) => l.includes('request(`'))) {
