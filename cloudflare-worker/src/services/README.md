@@ -40,6 +40,10 @@ runs these directly against an in-process SQLite, with no request at all.
 transactional legacy copy/Base writer. See its README for the part-3 contract;
 forecasts stay Modelled and never supply runway today.
 
+`financialStatements/` (D5833, #5833) holds the provider-neutral accounting
+statement contract: exact amounts, revisions, the QuickBooks and Xero report
+adapters and the venture-guarded store. See its README.
+
 `bankAccountHistory.ts` (D1182, #3111) reads the masked reveal ledger and
 bank-account/Mercury audit history. It uses a successful read audit as its route
 gate, validates bound filters, pins append-only source ids for insertion-stable

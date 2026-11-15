@@ -2,12 +2,14 @@
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { SlackOutbox } from './outbox.mjs';
 import { slackTransport } from './transport.mjs';
+import { WorkflowLogRelay } from './workflow-channels.mjs';
 import { registryOf } from './presentation-v1.mjs';
 export class DeliveryActor extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       this.outbox = new SlackOutbox({ sql: ctx.storage.sql, transaction: fn => ctx.storage.transactionSync(fn), registry: JSON.parse(env.ROUTING_REGISTRY), deliver: slackTransport({ token: env.SLACK_BOT_TOKEN }) });
+      this.workflowLogs = new WorkflowLogRelay(this.outbox);
     });
   }
   async enqueue(event, policy) {
@@ -21,7 +23,15 @@ export class DeliveryActor extends DurableObject {
     return result;
   }
   async wake() { const next = this.outbox.nextWake(); if (next !== null && this.env.DELIVERY_ENABLED === 'true') await this.ctx.storage.setAlarm(next); return this.outbox.summary(); }
-  async summary() { return this.outbox.summary(); }
+  async pollWorkflowLogs() {
+    if (this.env.DELIVERY_ENABLED !== 'true' || this.env.WORKFLOW_LOGS_ENABLED !== 'true') return;
+    try {
+      await this.workflowLogs.poll(this.env.ENGINEERING_EVENTS);
+    } finally {
+      await this.wake();
+    }
+  }
+  async summary() { return { ...this.outbox.summary(), workflowLogs: this.workflowLogs.summary() }; }
   async receipt(key) { const row = this.outbox.get(key); return row ? { key, state: row.state, receipt: row.receipt, code: row.code || null, attempts: row.attempts } : { key, state: 'unknown' }; }
   async alarm() {
     if (this.env.DELIVERY_ENABLED !== 'true') return;
@@ -40,7 +50,11 @@ export class SlackPublisher extends WorkerEntrypoint {
 }
 export default {
   async scheduled(event, env, ctx) {
-    if (env.DELIVERY_ENABLED === 'true') ctx.waitUntil(actor(env).wake().then(summary => console.log(JSON.stringify({ service: 'engineering-slack', lastAttemptAt: summary.lastAttemptAt, lastAcknowledgedAt: summary.lastAcknowledgedAt }))));
+    if (env.DELIVERY_ENABLED === 'true') {
+      const sender = actor(env);
+      ctx.waitUntil(sender.wake().then(summary => console.log(JSON.stringify({ service: 'engineering-slack', lastAttemptAt: summary.lastAttemptAt, lastAcknowledgedAt: summary.lastAcknowledgedAt }))));
+      if (env.WORKFLOW_LOGS_ENABLED === 'true') ctx.waitUntil(sender.pollWorkflowLogs());
+    }
   },
   async fetch(request, env) {
     if (request.method !== 'GET' || new URL(request.url).pathname !== '/health') return new Response('not found', { status: 404 });

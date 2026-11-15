@@ -273,6 +273,8 @@ const PROFILES = {
     // #4834 (D4834): Earnings' row is the canvas's period selector, a
     // `seg` radiogroup rather than `chips([…])`, so it is read by `row: 'seg'`.
     v2Zones: [
+      // #4831 (D4831): Engagements' row (PX-03), read from `const engagements = () => … chips([…])`.
+      ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery', { omit: ['Ready'], why: 'D4874' }],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
     ],

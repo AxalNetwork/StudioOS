@@ -10,6 +10,7 @@ The owner performs the initial deployment in D5618; the kill switch defaults on.
 | `test/` | Node/SQLite policy, restart and ingress tests; runtime adapter is test-only. |
 | `env.d.ts` | Wrangler-generated bindings; regenerate with the dedicated config. |
 | `tsconfig.json` | Independent typecheck with the installed Worker types. |
+| `contract/` | Pure contracts the studioos Worker also reads (D5624). |
 
 `npm run test:merge-control` runs focused tests and typechecking inside the drift
 suite. The deployed entrypoint is `src/index.ts`. Owner routes use a dedicated

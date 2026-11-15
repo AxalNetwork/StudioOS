@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expertise v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Advisor · Expertise · v2 · #4823 (with #4824–#4828)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Expertise — a credibility control center</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The overview answers four questions: is my presence complete and credible, what can founders engage me for, what is public, and what should I do next. It follows Build → Prove → Publish → Engage → Learn, with one recommended step (at most three) derived from real state. Edit profile and Preview public profile are separate actions, and the admin preview gets one banner and one call to action. The boards follow current main: proof is confirmed by the named person with an emailed code (D4670), services are private records and booking runs through Practice › Sessions (D4681), and each section loads and retries on its own (D4697). What the brief asks for beyond that is tagged ◇ backend required. Eadwyn is a compact launcher.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · advisor Sofia Brandt and every person, company, service and article are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Expertise v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['EX-01', 'Overview · desktop', 'Header with Edit profile and Preview public profile ↗; the Build → Prove → Publish → Engage → Learn line; one recommended step (reconfirm a pre-D4670 confirmation); the five-cell Your Expertise strip with real counts; two more steps at most; what is public and what is private; Eadwyn as a compact card.', [F('EX01', false, 1150)]],
+      ['EX-02', 'Overview · no profile yet', 'For a real advisor without a profile: “Your Expertise profile isn’t ready yet” with Create profile as the one action, then what comes next. Preview is disabled, with the reason.', [F('EX02', false, 860)]],
+      ['EX-03', 'Admin preview · no advisor', 'One banner (Viewing as Advisor · No advisor selected · Impersonate · Exit) and one intentional state instead of five absence explanations; a data-free layout preview.', [F('EX03', false, 700)]],
+      ['EX-04', 'Tablet and phone', 'A · Tablet 768: section nav, recommended step and proof cards in two columns. B · Phone 390: a section tab bar, a full-width next step and areas as rows.', [D('EX04a', 'A · Tablet 768', 768, 1024, 16), P('EX04b', 'B · Phone 390')]],
+      ['EX-05', 'Profile editor', 'A · Saved: live character counters and “Profile updated · your public profile now reflects these changes”. B · Validation: an over-limit headline is refused with nothing cut and the text kept. Completion counts fields only. Draft-then-publish needs the backend.', [F('EX05a', 'A · Saved', 960), F('EX05b', 'B · Validation', 960)]],
+      ['EX-06', 'Services list', 'Cards with kind, duration, explicit currency and price, or No price set; Active or Inactive (D4681), with an Undo toast. A notice says services aren’t public or bookable and links to Practice › Sessions. Published and Bookable are a proposal.', [F('EX06', false, 1000)]],
+      ['EX-07', 'Service editor', 'Edited in place, with only the changed fields saved. Currency is explicit: CHF 450.00, and “450,00” is refused, never reinterpreted. A concurrent-edit warning needs #4674.', [C('EX07', false, 760, 520)]],
+      ['EX-08', 'Proof list', 'Private proof with whole-list counts; cards for Needs reconfirmation, Awaiting, Confirmed (“Confirmed by …”, never “Verified”), Self-stated and Declined, each with one action.', [F('EX08', false, 900)]],
+      ['EX-09', 'Proof request flow', 'Claim → Attester → Request → Confirmation. The exact pinned claim, the attester’s details, and the requester’s own address refused. No mail on ask: copy the invitation link. Resend by email is not built.', [C('EX09', false, 760, 780)]],
+      ['EX-10', 'Attestation recipient', 'A · What they’re asked, how they’ll appear, what confirming means, how to withdraw, and Email me a code to the masked address. B · Six-digit code, tries left, Confirm or I can’t confirm. C · Confirmed, with history and Withdraw.', [C('EX10a', 'A · Arrive', 900, 520), C('EX10b', 'B · Code', 900, 600), C('EX10c', 'C · Confirmed', 900, 560)]],
+      ['EX-11', 'Thinking workspace', 'Eight real editorial states (D4681), each saying who can read it and offering one next step plus History; filters for Needs you, With editors and Published; paged.', [F('EX11', false, 820)]],
+      ['EX-12', 'Visibility workspace', 'Article opens are labelled raw opens, not people. Booking requests are attributed to links. Talk reach and profile views are Not recorded. A link-less offer gets Add booking link.', [F('EX12', false, 760)]],
+      ['EX-13', 'Public profile relationship', 'What founders see on /advisors/:uid versus what stays private, section by section.', [C('EX13', false, 1100, 420)]],
+      ['EX-14', 'States', 'Per-section loading, empty, error with its own retry, success, permission denied (no Advisor licence), unavailable, Not recorded, and a destructive confirmation that names the third-party data deleted.', [C('EX14', false, 1400, 420)]],
+      ['EX-15', 'Current-state map, IA and state dimensions', 'The live problems and their fixes, the revised IA, and the five state dimensions with their sources.', [W('EX15')]],
+      ['EX-16', 'Components, accessibility and backend fit', 'Reusable components, the accessibility specification, and a board-by-board split between frontend work and backend work.', [W('EX16')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

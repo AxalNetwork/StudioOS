@@ -274,7 +274,7 @@ per canvas row (its README has the rules). So:
 - The map's two projections, `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md`, are
   not committed (D4103). Never commit them and never regenerate them in a task
   PR: CI builds them, keeps them as the `routing-docs` artifact of the
-  `routing docs (artifact)` job, and `node scripts/build-profile-routing.mjs --check` fails a
+  `ci / fast` job, and `node scripts/build-profile-routing.mjs --check` fails a
   routing inconsistency or a committed copy. `npm run docs:routing` writes them
   locally if you want to read them.
 

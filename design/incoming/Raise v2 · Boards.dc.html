@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raise v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Raise · v2 · #4863 · Revised 9 Nov 2026 for the browser-audited prompt</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Raise — one fundraising operating workflow</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Revised for the browser-audited prompt (8 Nov). Raise is four stages: Prepare (Evidence, Readiness) · Build the story (Narrative, Pitch) · Prepare diligence (Data room, Cap table, Use of funds) · Run the raise (Capital relationships, with Calls, Commitments and Closing inside). One desktop nav plus each tool’s own tabs; the Module select is compact-only. A mature tool owns its page, with no generic Cycle layer under it and a header action that fits it. A refused source stops the page; an unreadable one makes the page say what it could not check, never zero or all-clear. Recorded and Modelled never look alike. Eadwyn starts with the page’s own tasks. Every tool has a purpose-built empty state, a conflict state and a mobile layout.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 9 Nov 2026 · founder unless noted · bracketed names and figures ([Northwind Labs], [Investor name], [$1.5m]) are sample data · RA-01 to RA-13 from 7 Nov, updated; RA-14 to RA-26 and RA-D new</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="30">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Raise v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w + 40, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RA-01', 'Overview · early raise', 'Prepare to raise is the primary action beside Ask. The four-stage journey strip marks Prepare as current. Readiness reads “6 of 8 areas assessed · 3 need attention” with the unassessed areas named. The three next actions each carry a reason, an outcome and one CTA. The five materials appear as one status table instead of six empty cards. Investor activity and Connected evidence each collapse to a single actionable line. Detailed readiness comes last, with Not recorded for Team and Market (Product-market fit is shown separately in Readiness). Incorporate and Co-Founder Agreement sit under Related company setup.', [F('RA01', false, 1700)]],
+      ['RA-02', 'Overview · active raise', 'Add investor is the primary action. The journey strip marks Run the raise as current, with Prepare diligence in progress. Next best actions cover follow-ups due, an unanswered objection and the last data-room items. Materials are rich cards, and Pitch shows a reviewed saved version so Share is offered. Investor activity is computed from prospects, calls and deck links. Connected evidence shows per-source freshness (fresh, stale, unavailable). Detailed readiness is collapsed.', [F('RA02', false, 1500)]],
+      ['RA-03', 'Primary action by state', 'Prepare to raise → Build pitch → Share with investor → Add investor, each chosen by a recorded rule (narrative versions, /deck-ready, prospects), never by the readiness score. Ask is the same secondary action in every state.', [C('RA03', false, 1300, 200)]],
+      ['RA-04', 'Readiness summary and next actions', 'Next actions come before the score breakdown, with at most three. Readiness impact is shown as a neutral label, not a reward, and needs a per-area delta from the assessment (backend required, see RA-C).', [C('RA04', false, 1180, 420)]],
+      ['RA-05', 'Pitch card states', 'No deck, working draft, saved but not reviewed (Share disabled), reviewed and ready to send, and shared with live links and views. Routes follow the Pitch Studio family (#4853).', [C('RA05', false, 1400, 300)]],
+      ['RA-06', 'Connected evidence', 'With nothing connected: one message and Connect sources. With sources: one row each, showing fresh, stale or unavailable status.', [C('RA06', false, 900, 400)]],
+      ['RA-07', 'Detailed readiness, accessible', 'A titled chart with a text summary and a Bars / Table switch. Unassessed areas are hatched and labelled Not recorded, never drawn as 0.', [C('RA07', false, 900, 460)]],
+      ['RA-08', '0 · Not recorded · Unavailable · Not applicable', 'One value component for every Raise card, so “Deck views 0” and “Data room files Not recorded” for the same room can no longer disagree.', [C('RA08', false, 1300, 240)]],
+      ['RA-09', 'States', 'Loading, no fundraising data, an unreadable card, a disconnected source, stale readiness, permission denied, error and AI unavailable. Each says what happened and what to do next.', [C('RA09', false, 1400, 400)]],
+      ['RA-10', 'Eadwyn on Raise', 'A · Seven fundraising tasks first and an answer that names its source, with Model: Recommended and AI usage and pricing as secondary controls. Nothing is called free. B · Eadwyn unavailable while every module keeps working.', [F('RA10a', 'A · Tasks first', 900), F('RA10b', 'B · Unavailable', 900)]],
+      ['RA-11', 'Mobile 390', 'A · Module select, a full-width primary action, readiness and three next actions. B · Materials as disclosure rows and investor activity in a 2×2 grid. C · Ask Eadwyn as a bottom sheet with 44px task buttons.', [P('RA11a', 'A · Status and next actions'), P('RA11b', 'B · Materials and investors'), P('RA11c', 'C · Ask sheet')]],
+      ['RA-12', 'Navigation specification', 'Four stages as headings in one desktop list, with no new routes: Prepare · Build the story · Prepare diligence · Run the raise. Calls, Commitments and Closing live inside Capital relationships. The Module select exists only below 1024px and the inactive variant is hidden. Mature tools own their page; header actions are per tool; Pitch entries open the one Pitch Studio (D4853).', [C('RA12', false, 1300, 441)]],
+      ['RA-13', 'Dark mode', 'The active-raise Overview on #0B1220 / #111827 with violet #A78BFA. States keep their words and shapes.', [F('RA13', false, 1500)]],
+['RA-14', 'Framework-layer cleanup', 'Before and after for Use of funds: the dedicated Home stays, the generic Cycle “at a glance + next 18 months + edit split + records” layer goes. A table names the layer each Raise tool keeps and its contextual primary action; “Build your deck” stops being a global header action (#5081).', [C('RA14', false, 1240, 852)]],
+      ['RA-15', 'Evidence', 'A · Home: claims checked, needing attention, changed records, shared with investors; Needs you first (Mismatch, Not backed, Founder figure, Changed), the evidence library with strength, freshness and sharing, and investor visibility before and after NDA. B · First use: Build your evidence base, with three actions. C · Support view: “This venture has no visible evidence yet.” No zero-filled dashboard in either.', [F('RA15', 'A · Home', 960), C('RA15b', 'B · Founder, empty', 760, 267), C('RA15c', 'C · Admin viewer, empty', 760, 225)]],
+      ['RA-16', 'Fundraising readiness', 'Header names coverage and freshness. At most three priorities come first, then the eight areas as a table with status, evidence, why it matters and one action each. Waitlist reads “Not recorded · no target set”. Product-market fit sits apart as supporting evidence and is not averaged in. Score history, raise kit and AI gap analysis are collapsed below; the List / Chart switch keeps a table.', [F('RA16', false, 1160)]],
+      ['RA-17', 'Investor narrative', 'Investor Narrative · v5 working with its states in one line: Working (unsaved), v4 Saved and Checked, evidence issues, Pitch out of sync. A three-column workspace: sections tagged Backed / Founder figure / Mismatch, the writing surface with the mismatch explained and two choices, and that section’s evidence. Versions are releases with Based on and Used by.', [F('RA17', false, 1150)]],
+      ['RA-18', 'Pitch integration', 'Pitch Studio stays as built (D4853). Raise links into its journey Narrative → Deck → Review → Share → Engagement and its four version states. Three fixes from the browser audit: coverage names its denominator, a failed review has an inline Retry, and usage reads in plain terms.', [C('RA18', false, 1240, 371)]],
+      ['RA-19', 'Data room', 'A · Home: 8 of 12 diligence areas covered with the missing ones named, investor access (NDA, expiring), investor activity and recently added. B · Support access: Read-only access, why are you opening this, quick reasons, a reason the founder sees, Open read only, a timer and End access. This replaces the dead-end message.', [F('RA19', 'A · Home', 900), C('RA19b', 'B · Support read-only', 1100, 316)]],
+      ['RA-20', 'Cap table', 'A · Current ownership is Recorded (solid ink, as of a date); Model the next round is Modelled (dashed violet hatch, every scenario tagged). Scenarios never change the record. B · Refused: “This cap table belongs to another company.” with Switch company and Ask for access, and nothing after it (#5079).', [F('RA20', 'A · Recorded vs modelled', 1000), C('RA20b', 'B · Refused', 760, 298)]],
+      ['RA-21', 'Use of funds', 'A · What does this round buy us? Raise, target runway (Modelled), current runway (Recorded, Mercury), committed from confirmed commitments; what the raise buys; runway recorded vs modelled; dependencies marked Current, Stale, Unavailable or Not linked; milestones funded. B · Commitments unreadable: Committed is Unavailable and Remaining is not shown, never $0.', [F('RA21', 'A · Home', 1060), C('RA21b', 'B · Commitments unavailable', 1100, 949)]],
+      ['RA-22', 'Capital relationships', 'A · Fundraising pipeline: target, committed, active, in diligence, follow-ups due; Needs you; stages. Tabs Pipeline · Match · Outreach · Commitments · Calls · Activity · Closing. B · Start your investor pipeline (no zero analytics, no “Not read here yet”). C · Commitments unreadable: “Needs you could not be fully checked.” with Partial and Retry (#5080). D · Investor sheet: Overview · Timeline · Materials · Engagement · Notes · Commitment.', [F('RA22', 'A · Pipeline', 950), F('RA22b', 'B · Empty', 700), F('RA22c', 'C · Partial', 950), F('RA22d', 'D · Investor sheet', 950)]],
+      ['RA-23', 'State and version vocabulary', 'Twelve states used across Raise, each with a word, a glyph and a border style: Recorded, Modelled, Founder figure, Backed, Mismatch, Not recorded, Unavailable, Partial, Stale, Changed, Founder only, Refused. Versions run Working → Saved → Checked → Ready → Shared and name what they were checked against.', [C('RA23', false, 1240, 431)]],
+      ['RA-24', 'Conflict', '“This changed since you opened it.” Your edits are kept; Review latest, Compare changes or Copy my version. Used by every Raise write that can go stale (#5069).', [C('RA24', false, 720, 219)]],
+      ['RA-25', 'Eadwyn, page by page', 'What Eadwyn does on each of the eight tools and its three suggested tasks there. Rail order: description → Suggested here → Related → Ask → Model: Recommended → Usage & pricing (collapsed). The rail appears on RA-15 to RA-22.', [C('RA25', false, 1240, 402)]],
+      ['RA-26', 'Mobile, per module', 'A · Evidence as claim cards with one action each. B · Cap table: Recorded ownership, instruments and a Modelled scenario as cards, with View table. C · Use of funds: what the round buys and runway, Recorded vs Modelled. D · Pipeline: stage chips that scroll and investor cards with the next action named. 44px targets throughout.', [P('RA26a', 'A · Evidence'), P('RA26b', 'B · Cap table'), P('RA26c', 'C · Use of funds'), P('RA26d', 'D · Pipeline')]],
+      ['RA-A', 'Current-state audit and before / after', 'For each change: the problem, the solution, why it is better, and what is preserved. Rows marked 8 Nov come from the authenticated browser audit.', [W('RAA')]],
+      ['RA-B', 'Journey, IA and component hierarchy', 'The four-stage journey, the Overview order and the component rules, including ModuleHeader, ConflictBanner, ContextRail and RefusalBlock.', [W('RAB')]],
+      ['RA-C', 'Roadmap and backend fit', 'Fifteen changes ranked by impact over complexity, each with its backend dependency and the open issue it maps to (#5069–#5081).', [W('RAC')]],
+      ['RA-D', 'Accessibility, components and tokens', 'WCAG 2.2 AA targets, the component list and the two added tokens (recorded, modelled).', [W('RAD')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

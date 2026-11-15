@@ -17,7 +17,7 @@ import { SignJWT } from 'jose';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import advisors from '../src/routes/advisors.ts';
-import { ENGAGEMENTS_NOTE, NO_LINK_NOTE, OPENS_NOTE, VIEWS_NOTE, visibilityWindow } from '../src/services/advisorVisibility.ts';
+import { ENGAGEMENTS_NOTE, NO_LINK_NOTE, OPENS_NOTE, TOP_ARTICLES, UNLINKED_PAGE, VIEWS_NOTE, visibilityWindow } from '../src/services/advisorVisibility.ts';
 
 const SECRET = 'test'.repeat(16);
 test.after(() => removeMigratedDatabases());
@@ -119,6 +119,9 @@ test('writing: published pieces and their opens, the caller\'s own; never added 
   const r = await get(21);
   assert.deepEqual(r.body.writing, {
     published: 2, opens: 312, opens_note: OPENS_NOTE,
+    // D4827: the most-opened pieces by name, and the rest, adding up to the whole.
+    top: [{ slug: 'a1', title: 'One', opens: 300, published_at: r.body.writing.top[0].published_at }, { slug: 'a2', title: 'Two', opens: 12, published_at: r.body.writing.top[1].published_at }],
+    others: { count: 0, opens: 0 },
     requests: null, requests_note: 'A booking does not record which piece led to it.',
   });
   for (const s of r.body.surfaces) assert.ok(s.requests < 312, 'no surface carries the opens');
@@ -166,4 +169,60 @@ test('a founder, partner or Explorer is refused; an advisor with no profile gets
   const none = await get(23);
   assert.notEqual(none.status, 200);
   assert.doesNotMatch(none.text, /surfaces/);
+});
+
+// ── D4827 (#4827): the board's articles by opens and its "no booking link yet" ──
+
+// Mutation checked: `top` ordered by id instead of opens (fails); `others` left at zero (the sums fail);
+// another author's piece in `top` (fails).
+test('#4827 writing names the most-opened pieces and adds the rest up, so the parts make the whole', async () => {
+  const { db, get } = fixture();
+  const art = db.prepare("INSERT INTO articles(slug,title,author_user_id,status,views,published_at) VALUES (?,?,?,?,?,?)");
+  art.run('a5', 'Five', 21, 'published', 40, ago(9)); art.run('a6', 'Six', 21, 'published', 7, ago(8)); art.run('a7', 'Seven', 21, 'published', 41, ago(7));
+  const w = (await get(21)).body.writing;
+  assert.equal(TOP_ARTICLES, 3);
+  assert.deepEqual(w.top.map((a: any) => [a.slug, a.opens]), [['a1', 300], ['a7', 41], ['a5', 40]], 'by opens, never the 5,000-open piece of another author');
+  assert.deepEqual(w.others, { count: 2, opens: 19 });
+  assert.equal(w.top.reduce((t: number, a: any) => t + a.opens, 0) + w.others.opens, w.opens);
+  assert.equal(w.top.length + w.others.count, w.published);
+});
+
+// Mutation checked: a paused link counted as selling the type (t-paused disappears: fails); an inactive type listed
+// (fails); another advisor's type listed (fails); the LIMIT unbounded or `more` forced false (the bound fails).
+test('#4827 unlinked_services: active session types no active booking link sells, this advisor’s only, bounded', async () => {
+  const { db, get, env } = fixture();
+  const t = db.prepare('INSERT INTO advisor_session_types(id,uid,advisor_id,name,is_active,sort_order) VALUES (?,?,?,?,?,?)');
+  t.run(601, 't-linked', 201, 'Intro call', 1, 1); t.run(602, 't-paused', 201, 'Pricing review', 1, 2);
+  t.run(603, 't-none', 201, 'Fundraising strategy', 1, 3); t.run(604, 't-off', 201, 'Retired', 0, 4);
+  t.run(605, 't-theirs', 202, 'Their session', 1, 1);
+  db.prepare('UPDATE advisor_booking_links SET session_type_id = 601 WHERE id = 501').run();
+  db.prepare('UPDATE advisor_booking_links SET session_type_id = 602 WHERE id = 502').run(); // 502 is paused
+  const r = await get(21);
+  assert.deepEqual(r.body.unlinked_services, { items: [{ uid: 't-paused', name: 'Pricing review' }, { uid: 't-none', name: 'Fundraising strategy' }], more: false });
+  assert.equal(r.body.unreadable, false);
+  for (let i = 0; i < UNLINKED_PAGE; i += 1) t.run(700 + i, `t-${i}`, 201, `Type ${i}`, 1, 10 + i);
+  // The bound is SQL's: the read returns one row past the page, never every unlinked type.
+  const real = env.DB.prepare.bind(env.DB);
+  const read: number[] = [];
+  env.DB.prepare = (sql: string) => {
+    const st = real(sql);
+    if (!/FROM advisor_session_types t/.test(sql)) return st;
+    return { bind: (...a: unknown[]) => { const b = st.bind(...a); return { all: async () => { const r = await b.all(); read.push((r.results || []).length); return r; } }; } };
+  };
+  const many = (await get(21)).body.unlinked_services;
+  assert.deepEqual([many.items.length, many.more], [UNLINKED_PAGE, true]);
+  assert.deepEqual(read, [UNLINKED_PAGE + 1]);
+});
+
+// Mutation checked: a failed session-type read answered as an empty list (fails).
+test('#4827 a failed session-type read is null and unreadable, never "every type has a link"; the rest still reads', async () => {
+  const f = fixture();
+  f.fail.table = 'advisor_session_types';
+  const r = await f.get(21);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.unlinked_services, null);
+  assert.equal(r.body.unreadable, true);
+  assert.equal(surface(r.body, 'link:l-pub').requests, 4);
+  assert.equal(r.body.writing.opens, 312);
+  assert.doesNotMatch(r.text, /synthetic/);
 });

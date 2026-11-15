@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Network overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv.dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.hdr{display:flex;flex-direction:column;gap:6px}
+.hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c9{grid-column:span 9}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn.ask .em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.tl{display:flex;flex-direction:column}
+.tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.tl li:first-child{border-top:0}
+.tl .mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.tl .mk.ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.tl .mk.cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.tl .mk.wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.tl .mk.no{border-style:dashed}
+.tl .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hrow h1{font-size:22px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.lst li:first-child{border-top:0}
+.lst b{font-size:13.5px}
+.lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.bar i{display:block;height:100%;background:var(--vi)}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast a{color:#c4b5fd!important}
+.pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.pr:first-of-type{border-top:0}
+.pr b{font-size:13px}
+.pr small{display:block;font-size:12px;color:var(--mu)}
+.grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.grp:first-of-type{border-top:0}
+</style>
+</helmet>
+<div class="{{cvClass}}" style="width:1440px;min-height:1560px">
+<div class="sh" style="min-height:1560px">
+<aside class="sd">
+<div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div>
+<button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company: Northwind Labs">Northwind Labs <span aria-hidden="true">▾</span></button>
+<span class="eye grp">Founder</span>
+<nav aria-label="Founder">
+<a href="#">Home</a><a href="#">Validate</a><a href="#">Build</a><a href="#">Raise</a><a href="#">Grow</a><a href="#" aria-current="page">Network</a><a href="#">Research</a><a href="#">Trust</a><a href="#">Company Settings</a>
+</nav>
+</aside>
+<div class="mn">
+<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg></button><span class="av" role="img" aria-label="Account">MR</span></div></div>
+<main class="bd">
+<header class="hdr">
+<span class="eye">Network · Relationship intelligence</span>
+<div class="hrow">
+<div><h1>Your network</h1><p>Know who you can reach, which relationships need attention, and which introductions are moving.</p></div>
+<div class="acts"><button type="button" class="btn ask"><span class="em" aria-hidden="true">E</span>Ask</button><button type="button" class="btn p">Request introduction</button></div>
+</div>
+</header>
+<nav class="ptabs" aria-label="Network">
+<a href="#" aria-current="page">Overview</a><a href="#">Relationships <span>142</span></a><a href="#">Introductions <span>9</span></a><a href="#">Organizations <span>38</span></a>
+</nav>
+
+<section class="kp" aria-label="Network summary">
+<a class="k" href="#"><span class="eye">Connections</span><span class="kv">142</span><span class="ks">people in your relationship book · <span style="color:var(--vt);font-weight:700">Open →</span></span></a>
+<a class="k att" href="#"><span class="eye">Needs attention</span><span class="kv">7</span><span class="ks">◷ follow-ups past their due date</span></a>
+<a class="k att" href="#"><span class="eye">Awaiting my action</span><span class="kv">3</span><span class="ks">! team requests asking you to decide</span></a>
+<a class="k" href="#"><span class="eye">Active introductions</span><span class="kv">5</span><span class="ks">2 waiting · 3 accepted, not yet made</span></a>
+</section>
+
+<div class="g">
+<div class="c7" style="display:flex;flex-direction:column;gap:16px">
+
+<section class="cd" aria-labelledby="na">
+<div class="ch"><h2 id="na">Relationships needing attention</h2><span class="sm">7 · oldest due first</span></div>
+<div class="pr"><span class="av">AO</span><div><b>Ada Okafor</b> <span class="mu">· Partner, Harbor Seed</span><small>Last recorded: intro made 41 days ago · Follow-up “Send Q3 update” due <span class="mo">2026-10-28</span></small></div><div class="acts"><span class="pl a">◷ Overdue 10 d</span><button type="button" class="btn">Open</button></div></div>
+<div class="pr"><span class="av">BL</span><div><b>Ben Larsen</b> <span class="mu">· Head of Ops, Quill Analytics</span><small>Last recorded: note 63 days ago · Follow-up “Ask about pilot” due <span class="mo">2026-11-02</span></small></div><div class="acts"><span class="pl a">◷ Overdue 5 d</span><button type="button" class="btn">Open</button></div></div>
+<div class="pr"><span class="av">CM</span><div><b>Chloé Marin</b> <span class="mu">· Angel</span><small>Imported from LinkedIn · Follow-up “Coffee in Lisbon” due <span class="mo">2026-11-05</span></small></div><div class="acts"><span class="pl a">◷ Overdue 2 d</span><button type="button" class="btn">Open</button></div></div>
+<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>Relationship strength: Not recorded.</b> The platform stores follow-ups, notes and introductions, not a strength score, so none is shown. <a href="#">Why</a></div></div>
+<div class="cf"><span class="foot">Source: your follow-ups and notes · refreshed 2 min ago</span><a class="btn t" href="#">All 7 in Relationships →</a></div>
+</section>
+
+<section class="cd" aria-labelledby="ip">
+<div class="ch"><h2 id="ip">Introductions in progress</h2><button type="button" class="ib" aria-label="Refresh introductions">↻</button></div>
+<div class="grp"><span class="eye">Awaiting my decision · 3</span></div>
+<div class="pr"><span class="av">DV</span><div><b>Dev Varma → Lena Sato</b><small>Dev asks you to introduce him · requested <span class="mo">2026-11-05</span></small></div><div class="acts"><span class="pl a">! Your decision</span><a class="btn" href="#">Decide</a></div></div>
+<div class="grp"><span class="eye">Awaiting someone else · 2</span></div>
+<div class="pr"><span class="av">YO</span><div><b>You → Marco Ruiz, via Iris Chen</b><small>Waiting on Iris · requested <span class="mo">2026-11-01</span></small></div><div class="acts"><span class="pl">◷ Waiting</span><a class="btn t" href="#">Open</a></div></div>
+<div class="grp"><span class="eye">Accepted — not yet made · 3</span></div>
+<div class="pr"><span class="av">YO</span><div><b>You → Priya Nair, via Tom Becker</b><small>Tom accepted <span class="mo">2026-11-03</span> · the introduction itself has not been made yet</small></div><div class="acts"><span class="pl v">✓ Accepted · ◷ not made</span><a class="btn t" href="#">Open</a></div></div>
+<div class="grp"><span class="eye">Made · last 30 days · 4</span></div>
+<div class="pr"><span class="av">YO</span><div><b>You → Sara Holm, via Iris Chen</b><small>Made <span class="mo">2026-10-22</span> · outcome: meeting held</small></div><div class="acts"><span class="pl g">✓✓ Made</span><a class="btn t" href="#">Open</a></div></div>
+<div class="cf"><span class="foot">Accepted and Made are separate recorded states. Declined and withdrawn live in Introductions.</span><a class="btn t" href="#">All introductions →</a></div>
+</section>
+
+<section class="cd" aria-labelledby="ra">
+<div class="ch"><h2 id="ra">Recent network activity</h2><span class="sm">recorded events only</span></div>
+<ul class="tl">
+<li><span class="mk ok" aria-hidden="true">✓</span><div><b>Follow-up completed</b> · Ada Okafor</div><span class="w">2026-11-06 16:20</span></li>
+<li><span class="mk" aria-hidden="true">→</span><div><b>Introduction requested</b> · You → Marco Ruiz via Iris Chen</div><span class="w">2026-11-01 09:12</span></li>
+<li><span class="mk ok" aria-hidden="true">✓</span><div><b>Request accepted</b> · Tom Becker accepted your request for Priya Nair</div><span class="w">2026-11-03 11:04</span></li>
+<li><span class="mk" aria-hidden="true">⇩</span><div><b>Contacts imported</b> · LinkedIn CSV · 118 added, 6 to review</div><span class="w">2026-10-30 18:47</span></li>
+<li><span class="mk" aria-hidden="true">⇄</span><div><b>Duplicate merged</b> · Chloé Marin</div><span class="w">2026-10-30 18:52</span></li>
+</ul>
+</section>
+</div>
+
+<div class="c5" style="display:flex;flex-direction:column;gap:16px">
+<section class="cd" aria-labelledby="wp">
+<div class="ch"><h2 id="wp">Find a warm path</h2></div>
+<p class="sub">Search a person by LinkedIn URL or email, or a company or fund by name. Only teammates who share their book are searched.</p>
+<div class="seg" role="radiogroup" aria-label="Search for"><button type="button" role="radio" aria-checked="true">Person</button><button type="button" role="radio" aria-checked="false">Company</button><button type="button" role="radio" aria-checked="false">Fund</button></div>
+<label class="eye" for="wpq">LinkedIn URL or email</label>
+<div style="display:flex;gap:8px"><input id="wpq" class="inp" style="flex:1;min-width:0;color:var(--ink);font-family:var(--sg)" value="linkedin.com/in/lena-sato"><button type="button" class="btn p">Find who knows them</button></div>
+<div class="pr"><span class="av">IC</span><div><b>Iris Chen</b> <span class="mu">· your co-founder</span><small>Has Lena Sato in her book · last recorded contact 3 weeks ago</small></div><button type="button" class="btn">Ask for an intro</button></div>
+<p class="foot">Teammates’ private notes and email addresses are never shown here.</p>
+</section>
+
+<section class="cd" aria-labelledby="pk">
+<div class="ch"><h2 id="pk">People you may know</h2><span class="sm">curated matches</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)"><span class="sub">Spendable intro credits</span><b class="mo" style="font-size:15px">4</b></div>
+<div style="border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:10px;align-items:center"><span class="av">NK</span><div style="flex:1"><b>Nadia Kim</b><small style="display:block;font-size:12px;color:var(--mu)">GP, Latitude Seed</small></div><span class="pl">◷ Expires <span class="mo">2026-11-14</span></span></div>
+<p class="sub">Why: invests pre-seed B2B SaaS · Lisbon · thesis matches your sector.</p>
+<div class="cf"><span class="foot">Accepting spends <b class="mo">1</b> credit · 3 left after</span><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn p">Accept</button></div></div>
+</div>
+<div style="border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:10px;align-items:center"><span class="av">OP</span><div style="flex:1"><b>Omar Petrov</b><small style="display:block;font-size:12px;color:var(--mu)">Operating partner, Fieldline</small></div><span class="pl">◷ Expires <span class="mo">2026-11-20</span></span></div>
+<p class="sub">Why: scaled two ops teams past Series A.</p>
+<div class="cf"><span class="foot">Accepting spends <b class="mo">1</b> credit · 3 left after</span><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn p">Accept</button></div></div>
+</div>
+<a class="btn t" href="#" style="align-self:flex-start">All curated matches →</a>
+</section>
+</div>
+</div>
+</main>
+</div>
+<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask about your network</span></aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return { cvClass: (this.props.dark ?? false) ? 'cv dk' : 'cv' }; }
+}
+</script>
+</body>
+</html>

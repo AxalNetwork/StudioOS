@@ -419,7 +419,7 @@ grants.get('/shared/list', async (c) => {
   if (!isAdvisorNow(user)) return c.json({ items: [], detail: 'Only an advisor holds client grants' });
   const rows = await c.env.DB.prepare(
     `SELECT g.uid AS grant_uid, g.created_at, g.expires_at,
-            g.scope_project, g.scope_data_room, g.scope_sessions,
+            g.scope_project, g.scope_data_room, g.scope_sessions, g.granted_by_user_id,
             p.uid AS project_uid, p.name AS project_name
        FROM advisor_client_grants g
        JOIN projects p ON p.id = g.project_id
@@ -432,6 +432,10 @@ grants.get('/shared/list', async (c) => {
       grant_uid: r.grant_uid,
       project_uid: r.project_uid,
       project_name: r.project_name,
+      // #4831 (D4831): who opened this record to the advisor. The Practice
+      // Client Sheet joins a client's grants, and their access log rows, to
+      // the client's account by it, never by the project's name.
+      granted_by_user_id: r.granted_by_user_id ?? null,
       scope_project: !!r.scope_project,
       scope_data_room: !!r.scope_data_room,
       scope_sessions: !!r.scope_sessions,

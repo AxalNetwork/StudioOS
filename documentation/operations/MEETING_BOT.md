@@ -225,6 +225,85 @@ consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
   each later report and once more after the check ends (D4857), so press Try
   again, and read the host's log for `diagnose_delivery_failed`.
 
+## 4b. Teams deployment matrix and preflight (#5815, D5815)
+
+Teams uses the same two bot hosts as Meet and Zoom. Nothing about its
+deployment is Teams-only except the switch and, once #5812 lands, the page
+driver inside the one image. `node scripts/check-meeting-bot-teams.mjs` checks
+the matrix below offline, from `wrangler.toml`, `wrangler.meeting-bot.toml`,
+`meeting-bot-deploy.yml`, the image's Dockerfile and lockfile manifest and
+the host's container source. It prints `pass`/`FAIL` per row and never a
+value, and it runs in `npm run test:guards` on every PR.
+
+| Row | Production | Preview | Checked by |
+|---|---|---|---|
+| Site → host binding | `studioos` binds `MEETING_BOT_CONTAINER` to `studioos-meeting-bot` | `studioos-preview` binds it to `studioos-meeting-bot-preview` | `site_binds_its_own_bot_host` |
+| Run state | `MEETING_BOT_RUN` (`MeetingBotRun`) on the site, never on the host | same | `site_has_run_state_object` |
+| Chunk store | site's private `FILES` bucket, reached only through the one-use chunk PUT | the preview site's own `FILES` bucket | `site_has_private_files_bucket`, `environments_distinct`, `host_holds_no_member_oauth` |
+| Callback origin | host `APP_URL` is exactly the production app origin | host `APP_URL` is the preview site's `workers.dev` origin | `host_callback_origin_is_this_site` |
+| Signing context | no audience var; `MEETING_BOT_SECRET` set per host | `CF_BOT_AUDIENCE = "preview"`; its own `MEETING_BOT_SECRET` and `MEETING_BOT_PREVIEW_SECRET` | `host_signing_audience_scoped` (secrets: presence only, below) |
+| Container | `MeetingBotContainer` class, its Durable Object and migration, image from `meeting-bot/Dockerfile` | same, separate application and namespace | `host_container_declared` |
+| Image and browser | exact Playwright version from the lockfile; Chromium installed from it; one Node major | same image | `browser_pinned` |
+| Readiness and egress | `standard-2`, egress on, `/healthz` ready and version before the signed command | same | `container_readiness_and_egress` |
+| Revisions | `MEETING_BOT_VERSION` = the deployed commit; promoted only after the preview receipt | `MEETING_BOT_VERSION` = the same commit, deployed and verified first | `revision_stamped_and_preview_first` |
+| Member OAuth | Microsoft, Google and Zoom member credentials stay on the site; the host binds no bucket, database or KV | same | `host_holds_no_member_oauth` |
+| Switches | `MEETING_BOT = "canary"`, `MEETING_BOT_TEAMS = "off"` | `MEETING_BOT = "off"`, `MEETING_BOT_TEAMS = "off"` | `meeting_bot_switch_valid`, `teams_switch_valid`, `teams_never_wider_than_bot` |
+
+A switch value outside its allowed exact set fails the check, because the
+code reads anything but `on` as off and a typo would hide silently.
+
+**Secrets, by presence only.** `MEETING_BOT_SECRET` must be set on the site
+and on its host, with the same value per environment and different values
+between environments. Check presence with `wrangler secret list` for each of
+the four scripts; never print or post a value. Row 1 of §4a
+(`secret_missing`, `runtime_refused`) is the live confirmation that a pair
+matches. Rotation: set the new value on the host first, then on its site, in
+one maintenance window with no run active (`runtime_refused` in between is
+expected); then run §4a row 1 and the preview receipt again.
+
+### Off, canary and the Teams pilot
+
+- **Teams off** (`MEETING_BOT_TEAMS` anything but `on`): the capabilities
+  read reports `teams.can_join_as_bot: false`, `GET /meetings/bot` reports
+  `platforms.teams: false`, and a Teams send answers `503 bot_unavailable`
+  before any `meeting_bots` row, charge or token hold. Meet and Zoom keep
+  their own answers. `cloudflare-worker/test/meeting_bot_teams_d1451.test.ts`
+  pins the availability and the refusal (no row, no reservation, no start, and
+  a Meet send on the same session still queues); the capabilities row reads
+  the same `platforms.teams` (`founder_validate_meetings.ts`).
+- **Teams canary** (`MEETING_BOT = "canary"` and `MEETING_BOT_TEAMS = "on"`):
+  Super Admins only, under every consent, notice and budget gate.
+- **Positive testing** happens only in an isolated preview pilot or an owner
+  pilot: the preview site and host with `MEETING_BOT` and `MEETING_BOT_TEAMS`
+  set for that run, a Microsoft 365 developer tenant (§3), one run at a time,
+  the plan's 30-minute limit, and the preview `FILES` bucket. Turning Teams on
+  in production is the owner's separate rollout issue, not this runbook.
+- **Version check** before and after any pilot: the host's `/health` and
+  §4a row 1 report the commit; it must equal the site's deployed commit and
+  the preview receipt's `revision`.
+- **Failure signals:** §4a's stage codes, §5's failure codes, the preview
+  receipt's `state`/`stage` (`[cf][preview][studioos-meeting-bot-preview]`,
+  #5675) and production alerting (#5674). `platform_blocked` on Teams means
+  the tenant's guest policy, `BlockDetectedBots` or a CAPTCHA.
+- **Rollback to Teams off:** set `MEETING_BOT_TEAMS = "off"` in the
+  environment's vars and ship through `DEPLOY.md`; press Stop on any Teams run
+  (§6). Then send one Meet or Zoom run under canary to confirm another
+  provider still works.
+
+### Stage results
+
+Record each environment's result here as states and codes only: environment,
+site commit, host commit, image digest prefix, stage, `pass`/`fail`/`UNVERIFIED`.
+
+| Environment | Stage | State | Evidence |
+|---|---|---|---|
+| both | offline matrix (`check-meeting-bot-teams.mjs`) | pass, 24 of 24 rows | this PR's CI |
+| preview | signed preview receipt (#5675) | UNVERIFIED | waits on #5675's isolated callback |
+| preview | Teams driver fixture in the packaged image | UNVERIFIED | waits on #5812 |
+| preview | host → signed callback → upload → assembly, synthetic session | UNVERIFIED | waits on #5812 and #5675 |
+| preview | corrupted, replayed and wrong-environment delivery refused or deduplicated | UNVERIFIED live; forged, stale and path-swapped events pinned offline by `meeting_bot_control_d886.test.ts`, replayed sequences by `meeting_bot_privacy_d886.test.ts` | waits on #5675 |
+| production | preflight (bindings, secrets present, `/health` commit, Teams off) | UNVERIFIED | owner step after the preview receipt |
+
 ## 5. Failure codes and operator response
 
 The merged runtime's `FailureCode` in `meeting-bot/src/types.ts` has seven

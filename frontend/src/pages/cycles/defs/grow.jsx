@@ -12,10 +12,11 @@ import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';
 import FromNotion from '../FromNotion';
 import { ImprovementPosthog, RevenuePosthog } from '../GrowPosthog';
 import UpdateAskReplies from '../UpdateAskReplies';
+import FeedbackThemes from '../FeedbackThemes';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
-import { growArea } from '../growOverviewModel';
+import { growModuleTitle } from '../growOverviewModel';
 
 // D4574 (#4574, H5): Grow's steps, each behind its own lazy boundary.
 const CalendarWeek = lazyStep(() => import('../distribution/CalendarTab.jsx'), 'CalendarWeek');
@@ -37,7 +38,7 @@ const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data
  */
 const grow = {
   Overview: GrowOverview,
-  moduleName: (slug) => growArea(slug)?.name || null,
+  moduleName: (slug) => growModuleTitle(slug),
   modules: MODULES.grow,
   path: 'update',
   Mount: GrowMount,
@@ -46,6 +47,8 @@ const grow = {
   tools: toFnMap({
     'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
     'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
+    // #6109: the pair's other half. Partnerships reads the co-marketing pitches and attributions.
+    'partner-network': (q) => ({ label: 'Open Partnerships: pitches and attributions', href: `/grow/partnerships${q}` }),
     'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
   }),
   add: toFnMap({}),
@@ -81,7 +84,10 @@ const grow = {
       <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
     </>),
     // D1090 (#2955): a feedback database in Notion, as product feedback.
-    'product-improvement': (_data, ctx) => (<>
+    // D6098 (#6098): Rename or merge a theme; `parts.themes` reaches writers only.
+    'product-improvement': (data, ctx) => (<>
+      <FeedbackThemes themes={data?.parts?.themes}
+        onRename={ctx.projectId ? (body) => cyclesWrite.grow.feedbackTheme(ctx.projectId, body).then((out) => { ctx.reload(); return out; }) : undefined} />
       <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />
       {/* D1608 (#3731): survey scores and feedback from the founder's PostHog. */}
       <ImprovementPosthog projectId={ctx.projectId} />
