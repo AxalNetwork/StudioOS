@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate v2 Market and Demand · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Validate · Validate v2 addendum · V17–V31 · #6009</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Validate v2 · Market intelligence and Demand and urgency signals: how big, who else, and is anyone committing</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the approved Validate v2 canvas (#4837, V0–V16): same venture header, module selector, counted-figure tiles, direction tags, suggestion cards, Eadwyn rail (V12) and states (V13). These boards take V17–V31; the other addendum (#5995) starts at V32. /validate/market-intelligence asks whether the market is big enough, who else is in it and where we stand; /validate/demand-signals asks whether anyone is committing. Every figure says what it counts and for which period. Eadwyn proposes sizing inputs with a citation, never a market size, and amounts are never summed across currencies. States follow Platform States (D5129, a failed read is Unavailable). Founders and co-founders write; partners read with no actions and are Refused on sizing inputs, From Google and From PostHog; anyone else is Refused on the page. Violet dashed ◇ tags mark what needs Worker work; amber ⚑ tags mark the four owner questions, drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Tidepool, its people, the bracketed companies and every figure are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Validate v2 Market and Demand Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['V17', 'Market intelligence · desktop 1440', 'A · The page: next action from the card, three sizing figures each with “No source recorded for this figure” and a ◇ as-of line, method and assumptions with the reviewed mark, the positioning map (price × depth, unpositioned competitors listed under it), competitors tracked with Kind and Signal filters, From interviews, sources, and where the figures go next. Primary action: Add competitor. B · The Eadwyn rail proposes a sizing input with its citation and a competitor from a scan, each accepted, edited or discarded.', [F('VAM18', 'A · Market intelligence', 1940), F('VAM18B', 'B · Eadwyn proposes inputs and competitors', 900)]],
+      ['V18', 'Sizing and assumptions sheet', 'Scope, method and inputs with the citation under each Eadwyn-proposed input; how it was computed (population × ACV, × serviceable %, × win rate); the override kept apart; ◇ Use a Research figure and ◇ history. B · Saving, Save failed with edits kept, and an override in use.', [F('VAM19', 'A · Sizing sheet', 1250), C('VAM19B', 'B · Save states and override', 1340, 240)]],
+      ['V19', 'Compare competitors', 'Two to four tracked competitors side by side; nothing is blank, it says Not recorded; the table scrolls sideways inside its panel. B · A member who did not run the analysis: summary, relevance and sources are ◇, the tracked facts still show.', [F('VAM20', 'A · You ran the analysis', 960), F('VAM20B', 'B · Someone else ran it', 960)]],
+      ['V20', 'Competitor record', 'Direct, Watching, the facts (Headcount removed, ⚑ Q2), signals with the re-run foot line, positioning, From interviews, Research › Companies, “Show signals for” (⚑ Q1, renamed from Watch for) and activity. B · Stop tracking as Scope → Review → Result: it leaves the list, its signals stay.', [F('VAM21', 'A · Record', 960), C('VAM21B', 'B · Stop tracking', 1340, 240)]],
+      ['V21', 'Market intelligence · empty', 'One Still to establish list led by Add the total market, with its source (opens V18), then Add a competitor and Ask Eadwyn to suggest competitors. 0 tracked is a value.', [F('VAM22', false, 900)]],
+      ['V22', 'Demand and urgency signals · desktop 1440', 'Next action, the waitlist line over 13 weeks against the labelled bar with Set bar and what makes up the 140, PostHog beside it (never added), need-to-have share, totals by kind labelled “confirmed, all time”, ◇ committed value per currency, ◇ the urgency strip, the signals table with Kind and Period filters, From Google and where signals go next. Primary action: Add signal.', [F('VAM23', false, 2180)]],
+      ['V23', 'Urgency view · ◇', 'Triggers, timing, budget, urgency level in words and objections by kind, grouped and counted “from N interviews”, each opening its interviews. The whole board waits on a module-level read.', [F('VAM24', false, 900)]],
+      ['V24', 'Signal record', 'A letter of intent: amount and period, Confirmed, counts toward “No bar is set for this kind” (⚑ Q3), evidence file and linked interview, the hypothesis it feeds, who and segment, and budget, timing, urgency, trigger and objections from its interview. B · A revenue- record with no actions and two waitlist- records, a Lovable sign-up with no name and one with no bar set.', [F('VAM25', 'A · Letter of intent', 1090), C('VAM25B', 'B · Revenue and waitlist records', 1340, 293)]],
+      ['V25', 'Suggestions to review', 'One queue: interview findings, a Google Form answer already at To confirm, a PostHog survey question the founder marks, and ◇ Typeform (#5829, #5830). Each card shows its evidence, the reading and where Accept writes; Accept is retry-safe.', [F('VAM26', false, 1090)]],
+      ['V26', 'Demand · empty and too little', 'A · No waitlist connected, with the doors: landing page, Lovable sign-up address, a signal by hand, an interview. B · Two weeks with a sign-up: tiles show and the line waits for 3.', [F('VAM27', 'A · Empty', 900), F('VAM27B', 'B · Fewer than 3 weeks', 900)]],
+      ['V27', 'States', 'Loading; Value 0, None and Not recorded side by side; Not applicable amounts; Provisional To confirm; Unavailable per part with Try again; Stale and Partial; saving, save failed and upload failed; Refused for the whole page and per part for a partner.', [C('VAM28', false, 1440, 736)]],
+      ['V28', 'Tablet 768', 'A · Market and B · Demand: module selector, tiles 2×2, the map full width, tables as cards with Sort.', [D('VAM29A', 'A · Market intelligence', 768, 1024, 16), D('VAM29B', 'B · Demand', 768, 1024, 16)]],
+      ['V29', 'Phone 390', 'A · Market: stacked figures, assumptions as a sheet, competitor cards, positions as Price and Depth pairs. B · Demand with suggestions as a bottom sheet. C · Competitor record. D · Signal record. 44px targets, no table wider than the screen.', [P('VAM30A', 'A · Market'), P('VAM30B', 'B · Demand'), P('VAM30C', 'C · Competitor record'), P('VAM30D', 'D · Signal record')]],
+      ['V30', 'Dark', 'A · V17 and B · V22 on the dark tokens; states keep their words, glyphs and borders.', [F('VAM31A', 'A · Market intelligence', 1940), F('VAM31B', 'B · Demand', 2180)]],
+      ['V31', 'Developer handoff', 'One row per element on V17–V30: what it reads or writes on main, or ◇ with what is missing, the backend dependency and how to verify it; the owner questions, frontend-only work, access and accessibility.', [W('VAM32')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network v2 Investor · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+.nwi-cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;--bg:#f4f3f7;--card:#ffffff;--raised:#f8f7fb;--ink:#18181b;--mu:#6b6577;--hair:#ececf1;--hair2:#d9d6e0;--vi:#7c3aed;--vt:#6d28d9;--lav:#f4f0fe;--lavE:#ddd0fb;--pos:#047857;--posBg:#ecfdf5;--posE:#a7f3d0;--neg:#b91c1c;--negBg:#fef2f2;--negE:#fecaca;--amT:#92400e;--amBg:#fffbeb;--amE:#fcd34d;--amD:#f59e0b;--dim:rgba(24,24,27,.38);--skel:#ececf1;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.nwi-cv.nwi-dk{--bg:#0b1220;--card:#111827;--raised:#1f2937;--ink:#e5e7eb;--mu:#9ca3af;--hair:#374151;--hair2:#4b5563;--vi:#a78bfa;--vt:#c4b5fd;--lav:#221d3f;--lavE:#4c3a8a;--pos:#34d399;--posBg:rgba(52,211,153,.1);--posE:rgba(52,211,153,.4);--neg:#f87171;--negBg:rgba(248,113,113,.1);--negE:rgba(248,113,113,.45);--amT:#fcd34d;--amBg:rgba(245,158,11,.1);--amE:rgba(245,158,11,.45);--amD:#f59e0b;--dim:rgba(3,7,18,.66);--skel:#1f2937}
+.nwi-cv *{box-sizing:border-box}
+.nwi-cv a{color:var(--vt);text-decoration:none}
+.nwi-cv button{font-family:var(--sg);cursor:pointer}
+.nwi-cv :focus-visible,.nwi-cv .nwi-fv{outline:2px solid var(--vi);outline-offset:2px}
+.nwi-cv h1,.nwi-cv h2,.nwi-cv h3,.nwi-cv p,.nwi-cv ol,.nwi-cv ul,.nwi-cv dl,.nwi-cv dd,.nwi-cv dt{margin:0;padding:0}
+.nwi-cv ol,.nwi-cv ul{list-style:none}
+.nwi-mo{font-family:var(--mo)}
+.nwi-mu{color:var(--mu)}
+.nwi-eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.nwi-sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.nwi-sd .nwi-lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.nwi-logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.nwi-sd .nwi-grp{padding:6px 20px 4px}
+.nwi-sd nav{display:flex;flex-direction:column;gap:2px}
+.nwi-sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.nwi-sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.nwi-sw2{margin:0 8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;background:var(--raised);font:700 12.5px var(--sg);color:var(--ink)}
+.nwi-mn{min-width:0;display:flex;flex-direction:column}
+.nwi-tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.nwi-srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.nwi-bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.nwi-ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.nwi-av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo);flex:none}
+.nwi-sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.nwi-sp .nwi-e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.nwi-sp .nwi-vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.nwi-hdr{display:flex;flex-direction:column;gap:6px}
+.nwi-hrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.nwi-hrow h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.nwi-hrow p{font-size:13px;color:var(--mu);margin-top:3px}
+.nwi-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nwi-ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.nwi-ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nwi-ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.nwi-ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.nwi-kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nwi-k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;color:var(--ink)!important}
+.nwi-k.nwi-att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.nwi-kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.nwi-kv.nwi-un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.nwi-ks{font-size:12px;color:var(--mu);line-height:1.45}
+.nwi-g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.nwi-c3{grid-column:span 3}
+.nwi-c4{grid-column:span 4}
+.nwi-c5{grid-column:span 5}
+.nwi-c6{grid-column:span 6}
+.nwi-c7{grid-column:span 7}
+.nwi-c8{grid-column:span 8}
+.nwi-c9{grid-column:span 9}
+.nwi-c12{grid-column:span 12}
+.nwi-cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.nwi-ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.nwi-ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.nwi-ch .nwi-sm{font:500 12px var(--mo);color:var(--mu)}
+.nwi-sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.nwi-cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.nwi-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.nwi-btn.nwi-p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.nwi-btn.nwi-t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.nwi-btn.nwi-ask .nwi-em{display:grid;place-items:center;width:16px;height:16px;border-radius:5px;background:#7c3aed;color:#fff;font:800 9px var(--sg)}
+.nwi-btn[aria-disabled=true]{opacity:.6;cursor:default}
+.nwi-lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.nwi-foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.nwi-pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.nwi-pl.nwi-a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.nwi-pl.nwi-g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.nwi-pl.nwi-v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.nwi-pl.nwi-r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.nwi-nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nwi-nt.nwi-r{background:var(--negBg);border-color:var(--negE)}
+.nwi-nt.nwi-a{background:var(--amBg);border-color:var(--amE)}
+.nwi-nt.nwi-g{background:var(--posBg);border-color:var(--posE)}
+.nwi-ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nwi-nt.nwi-r .nwi-ic{background:var(--neg)}
+.nwi-nt.nwi-a .nwi-ic{background:var(--amT)}
+.nwi-nt.nwi-g .nwi-ic{background:var(--pos)}
+.nwi-nt .nwi-bt{margin-left:auto;flex:none}
+.nwi-sk{display:block;border-radius:6px;background:var(--skel)}
+.nwi-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.nwi-tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.nwi-tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.nwi-tbl .nwi-n{text-align:right;font-family:var(--mo)}
+.nwi-tbl td.nwi-na{color:var(--mu);font-weight:500}
+.nwi-tbl td b{font-weight:700}
+.nwi-tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.nwi-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nwi-inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.nwi-dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.nwi-seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.nwi-seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.nwi-pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.nwi-pg .nwi-pb{display:flex;gap:5px;align-items:center}
+.nwi-pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.nwi-pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.nwi-st{display:grid;gap:14px 18px}
+.nwi-st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.nwi-st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nwi-dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.nwi-sheet-r{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:4;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 60px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.nwi-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.nwi-dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.nwi-dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.nwi-df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);margin-top:auto}
+.nwi-stp{display:flex;align-items:center;gap:0;font-size:12px;flex-wrap:wrap}
+.nwi-stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.nwi-stp span:first-child{border-radius:999px 0 0 999px}
+.nwi-stp span:last-child{border-radius:0 999px 999px 0}
+.nwi-stp span+span{border-left:0}
+.nwi-stp span.nwi-on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.nwi-stp span.nwi-nx{border-style:dashed}
+.nwi-tl{display:flex;flex-direction:column}
+.nwi-tl li{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--hair);align-items:start}
+.nwi-tl li:first-child{border-top:0}
+.nwi-tl .nwi-mk{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:800 10px var(--sg);color:var(--mu)}
+.nwi-tl .nwi-mk.nwi-ok{background:var(--pos);border-color:var(--pos);color:#fff}
+.nwi-tl .nwi-mk.nwi-cur{background:var(--vi);border-color:var(--vi);color:#fff}
+.nwi-tl .nwi-mk.nwi-wa{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.nwi-tl .nwi-mk.nwi-no{border-style:dashed}
+.nwi-tl .nwi-w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-ph{width:390px;display:flex;flex-direction:column;min-height:844px}
+.nwi-pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.nwi-pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.nwi-pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.nwi-ph .nwi-hrow h1{font-size:22px}
+.nwi-ph .nwi-kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.nwi-ph .nwi-k{padding:12px 13px}
+.nwi-ph .nwi-kv{font-size:22px}
+.nwi-ph .nwi-btn{min-height:44px}
+.nwi-ph .nwi-lk{min-height:44px}
+.nwi-msel{display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font:700 14px var(--sg);color:var(--ink);width:100%}
+.nwi-lst li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:56px;padding:9px 0;border-top:1px solid var(--hair)}
+.nwi-lst li:first-child{border-top:0}
+.nwi-lst b{font-size:13.5px}
+.nwi-lst small{grid-column:1;font-size:12px;color:var(--mu)}
+.nwi-bar{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.nwi-bar i{display:block;height:100%;background:var(--vi)}
+.nwi-toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.nwi-toast a{color:#c4b5fd!important}
+.nwi-pr{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.nwi-pr:first-of-type{border-top:0}
+.nwi-pr b{font-size:13px}
+.nwi-pr small{display:block;font-size:12px;color:var(--mu)}
+.nwi-grp{display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grp:first-of-type{border-top:0}
+.nwi-step{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--lav);color:var(--vt);font:800 16px var(--mo)}
+.nwi-ec h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.nwi-tbl tr.nwi-cur td{background:var(--lav)}
+.nwi-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--hair)}
+.nwi-sec h3{font-size:13.5px;font-weight:800}
+.nwi-ck{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12.5px}
+.nwi-ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.nwi-ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.nwi-k.nwi-bad{border-color:var(--negE)}
+.nwi-tag{align-self:flex-start;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px}
+.nwi-lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+/* ---- NWI addendum (#6256): additions to the approved Network workspace look ---- */
+.nwi-cv{text-align:left}
+.nwi-cv table{border-spacing:0}
+.nwi-st.nwi-tx dd{font:700 14px var(--sg);letter-spacing:0;line-height:1.3}
+.nwi-sh.nwi-ro{grid-template-columns:196px minmax(0,1fr) 360px}
+.nwi-sd .nwi-sep{height:1px;background:var(--hair);margin:8px 16px}
+.nwi-bk{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--vt);background:var(--lav);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-ow{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px solid var(--amE);font:700 10px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap;line-height:1.7;vertical-align:middle}
+.nwi-s{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);white-space:nowrap}
+.nwi-s.nwi-ur{color:var(--neg)}
+.nwi-s.nwi-rf{color:var(--ink)}
+.nwi-s b{font:800 12px var(--mo)}
+.nwi-cold{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;border:1px dashed var(--amE);background:var(--amBg);color:var(--amT);font:700 11px var(--sg);white-space:nowrap;line-height:1.6}
+.nwi-vd{text-decoration:line-through;color:var(--mu)}
+.nwi-rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;min-width:0}
+.nwi-rh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.nwi-rh b{display:flex;align-items:center;gap:8px;font-size:14px}
+.nwi-rh .nwi-e{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)}
+.nwi-rb{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.nwi-q{align-self:flex-end;max-width:88%;padding:9px 12px;border-radius:12px 12px 4px 12px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.nwi-an{padding:11px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;display:flex;flex-direction:column;gap:8px}
+.nwi-src{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--mu)}
+.nwi-src span::before{content:"↳ ";color:var(--vt)}
+.nwi-draft{border:1.5px dashed var(--lavE);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.nwi-draft p.nwi-tx{font-size:12.5px;line-height:1.55;white-space:normal}
+.nwi-cost{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font:600 11.5px var(--mo);color:var(--mu)}
+.nwi-ent{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:600 12.5px var(--sg);color:var(--ink)}
+.nwi-ent[aria-disabled=true]{color:var(--mu);border-style:dashed}
+.nwi-rin{margin-top:auto;padding:12px 16px;border-top:1px solid var(--hair);display:flex;gap:8px}
+.nwi-rin span{flex:1;display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:9px;color:var(--mu);font-size:12.5px}
+.nwi-line{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--card);font-size:13px;flex-wrap:wrap}
+.nwi-line b.nwi-mo{font-size:14px}
+.nwi-grh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0 4px;border-top:1px solid var(--hair)}
+.nwi-grh:first-child{border-top:0;padding-top:0}
+.nwi-grh h3{font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+.nwi-mc{border:1px solid var(--hair);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.nwi-mc .nwi-mh{display:flex;gap:10px;align-items:center}
+.nwi-mc .nwi-mh>div{flex:1;min-width:0}
+.nwi-mc small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rs{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink)}
+.nwi-rs span::before{content:"· ";color:var(--mu)}
+.nwi-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.nwi-strip{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--lavE);border-radius:10px;background:var(--lav);flex-wrap:wrap}
+.nwi-strip .nwi-it{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 10px;border-radius:9px;background:var(--card);border:1px solid var(--hair);font-size:12.5px}
+.nwi-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.nwi-f{display:flex;flex-direction:column;gap:5px}
+.nwi-f label,.nwi-f .nwi-lb{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.nwi-in{display:flex;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);font-size:13px;color:var(--ink)}
+.nwi-in.nwi-hint{color:var(--mu)}
+.nwi-ta{min-height:76px;align-items:flex-start;padding:9px 11px;line-height:1.5}
+.nwi-cnt{align-self:flex-end;font:500 11px var(--mo);color:var(--mu)}
+.nwi-panel{background:var(--card);border:1px solid var(--hair);border-radius:14px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.nwi-panel .nwi-dh{padding:16px 20px 12px}
+.nwi-panel .nwi-dc{padding:14px 20px}
+.nwi-panel .nwi-df{padding:12px 20px}
+.nwi-pick{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--hair);border-radius:10px}
+.nwi-pick.nwi-on{border-color:var(--vi);box-shadow:inset 0 0 0 1px var(--vi);background:var(--lav)}
+.nwi-pick small{display:block;font-size:12px;color:var(--mu)}
+.nwi-rv{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:12.5px}
+.nwi-rv dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-bn{display:flex;align-items:center;gap:10px;padding:10px 30px;font-size:12.5px;border-bottom:1px solid var(--hair)}
+.nwi-bn.nwi-ro{background:#334155;color:#fff}
+.nwi-bn.nwi-sup{background:var(--amBg);color:var(--amT);border-color:var(--amE)}
+.nwi-bn b{font-weight:800}
+.nwi-lbl{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt);background:var(--lav);border:1px solid var(--lavE);border-radius:6px;padding:2px 7px;align-self:flex-start}
+.nwi-cmp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.nwi-cmp>div{border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.nwi-cmp dl{display:grid;grid-template-columns:80px minmax(0,1fr);gap:4px 10px}
+.nwi-cmp dt{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);padding-top:2px}
+.nwi-src2{display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.nwi-tile{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.nwi-tile b{font:700 22px var(--mo)}
+.nwi-ph.nwi-fx{height:844px;overflow:hidden}
+.nwi-ph .nwi-pbd{flex:1;min-height:0}
+.nwi-stk{flex:none;display:flex;gap:8px;padding:10px 16px 18px;border-top:1px solid var(--hair);background:var(--card)}
+.nwi-stk .nwi-btn{flex:1;min-height:44px;font-size:14px}
+.nwi-pc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nwi-pc .nwi-r1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nwi-pc small{font-size:12px;color:var(--mu)}
+.nwi-tab{width:768px;display:flex;flex-direction:column;min-height:1024px;position:relative}
+.nwi-doc{width:1200px;padding:34px 40px;background:var(--card);display:flex;flex-direction:column;gap:18px}
+.nwi-doc h2{font-size:17px;font-weight:800}
+.nwi-doc h3{font-size:13.5px;font-weight:800;margin-bottom:6px}
+.nwi-doc ul{list-style:disc;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;line-height:1.5}
+.nwi-doc .nwi-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px}
+.nwi-doc code{font:500 11.5px var(--mo);background:var(--raised);padding:0 4px;border-radius:4px}
+.nwi-crop{padding:20px;background:var(--bg);display:flex;flex-direction:column;gap:16px}
+.nwi-sheetc{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:640px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.25);display:flex;flex-direction:column}
+.nwi-lst small{display:block}
+.nwi-lst li>div{min-width:0}
+.nwi-cv td,.nwi-cv th,.nwi-cv dd,.nwi-cv li,.nwi-cv p,.nwi-cv h1,.nwi-cv h2,.nwi-cv h3{color:inherit}
+.nwi-tbl td{color:var(--ink)}
+.nwi-tbl td.nwi-mo{white-space:nowrap}
+.nwi-crop,.nwi-doc{box-sizing:border-box}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "NWI12", "options": ["NWI12", "NWI12_1", "NWI12_2", "NWI12_2P", "NWI2_2", "NWI2_3", "NWI2_3B", "NWI3", "NWI3_1", "NWI3_1B", "NWI3_3", "NWI3_3B", "NWI3_5", "NWI4", "NWI4B", "NWI4_1", "NWI6", "NWI7", "NWI5A", "NWI1_1", "NWI1_1B", "NWI8_1A", "NWI8_1B", "NWI8_1C", "NWI8_1D", "NWI8_1E", "NWI8_1F", "NWI12_3A", "NWI12_3B", "NWI12_3C", "NWI9", "NWI11", "NWI12_4", "NWI12_4B", "NWIH"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'NWI12';
+    /* NW12.4 boards draw on the dark tokens; everything else is light. */
+    const dark = B.indexOf('NWI12_4') === 0;
+    const CV = 'cv' + (dark ? ' dk' : '');
+    const J = (a) => a.join('');
+    const mo = (s) => `<span class="mo">${s}</span>`;
+
+    /* ---------- annotations (not product copy) ---------- */
+    const TB = (t) => `<span class="bk" title="Needs backend work">◇ ${t}</span>`;
+    const TO = (t) => `<span class="ow" title="Owner decision">⚑ ${t}</span>`;
+    const LBL = (t) => `<span class="lbl">${t}</span>`;
+
+    /* ---------- NW5 state words: each has a glyph and a word ---------- */
+    const NR = (t) => `<span class="s">— Not recorded${t ? ' · ' + t : ''}</span>`;
+    const UR = (t) => `<span class="s ur">? Could not be read${t ? ' · ' + t : ''}</span>`;
+    const NONE = `<span class="s">○ None</span>`;
+    const RF = (t) => `<span class="s rf">⊘ Refused${t ? ' · ' + t : ''}</span>`;
+    const COLD = `<span class="cold">▽ Going cold</span>`;
+    const LATE = (t) => `<span class="pl a">◷ ${t}</span>`;
+    const E = `<span class="em" aria-hidden="true">E</span>`;
+    const SR = (t) => `<span class="sr">${t}</span>`;
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+
+    /* ---------- sample data: fictional; every figure agrees on every board ----------
+       Today Sat 14 Nov 2026. Ties on Axal 38 · contacts you keep 142 (17 by hand + 125 imported)
+       · going cold 6 · reminders due 3 · matches awaiting 4 of 11 · credits 4 = 2 of 3 (Nov) + 2 referral
+       · asks 2 of 3 left (Q4 2026) · organizations 24. */
+    const N = { ties: 38, contacts: 142, hand: 17, imp: 125, cold: 6, due: 3, att: 7, match: 4, matchAll: 11, orgs: 24 };
+    const CRED = `<b class="mo">4</b> credits available: <b class="mo">2</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">2</b> earned by referral`;
+    const ASKS = `<b class="mo">2</b> of <b class="mo">3</b> asks left this quarter (Q4 2026)`;
+    const TIES = [
+      { i: 'AO', n: '[Ada Okafor]', r: 'Investor', ty: 'Co-investor', co: '[Harbor Seed]', lt: '2026-08-30', d: 76, cold: 1, ctx: 'Co-led the [Kelpwise] seed', rem: ['Send Q3 update', '2026-11-10', '4 days late'] },
+      { i: 'EL', n: '[Eva Lindqvist]', r: 'Investor', ty: 'Co-investor', co: '[Northstar Capital]', lt: '2026-09-08', d: 67, cold: 1, ctx: null, rem: ['Share deal memo', '2026-11-13', '1 day late'] },
+      { i: 'OP', n: '[Omar Petrov]', r: 'Partner', ty: 'Strategic alliance', co: '[Fieldline]', lt: '2026-10-21', d: 24, ctx: '[Fieldline] fund II LP talks', rem: ['Call about co-invest', '2026-11-14', 'due today'] },
+      { i: 'HB', n: '[Hugo Brandt]', r: 'Investor', ty: 'Co-investor', co: '[Northstar Capital]', lt: '2026-07-28', d: 109, cold: 1, ctx: null },
+      { i: 'BL', n: '[Ben Larsen]', r: 'Founder', ty: 'Operator partner', co: '[Quill Analytics]', lt: '2026-09-02', d: 73, cold: 1, ctx: null },
+      { i: 'GT', n: '[Grace Tan]', r: 'Founder', ty: 'Advisor to mentee', co: '[Tidepool Labs]', lt: '2026-09-12', d: 63, cold: 1, ctx: null },
+      { i: 'ID', n: '[Ines Duarte]', r: 'Partner', ty: 'Operator partner', co: '[Quill Analytics]', lt: '2026-09-14', d: 61, cold: 1, ctx: null },
+      { i: 'LS', n: '[Lena Sato]', r: 'Founder', ty: 'Advisor to founder', co: '[Kelp Bio]', lt: '2026-11-06', d: 8, ctx: null },
+      { i: 'CM', n: '[Chloé Marin]', r: 'Founder', ty: 'Advisor to founder', co: null, lt: '2026-11-03', d: 11, ctx: null, up: ['Follow up on Lisbon pilot', '2026-11-20'] },
+      { i: 'FH', n: '[Farid Haddad]', r: 'Investor', ty: 'Co-investor', co: '[Lumen Partners]', lt: null, ctx: null, up: ['Intro to co-investors', '2026-11-27'] }
+    ];
+    const ORGS = [
+      { n: '[Quill Analytics]', p: [['[Ben Larsen]', 'their account'], ['[Ines Duarte]', 'their account'], ['[Maya Chen]', 'imported company']], c: 3, lt: '2026-09-14', o: null },
+      { n: '[Northstar Capital]', p: [['[Eva Lindqvist]', 'their account'], ['[Hugo Brandt]', 'their account'], ['[Sam Ortiz]', 'imported company']], c: 3, lt: '2026-09-08', o: '1 reminder · due 2026-11-13' },
+      { n: '[Harbor Seed]', p: [['[Ada Okafor]', 'their account'], ['[Rui Costa]', 'contact’s organization field']], c: 2, lt: '2026-08-30', o: '1 reminder · due 2026-11-10' },
+      { n: '[Kelp Bio]', p: [['[Lena Sato]', 'their account'], ['[Theo Grant]', 'imported company']], c: 2, lt: '2026-11-06', o: null },
+      { n: '[Fieldline]', p: [['[Omar Petrov]', 'their account']], c: 1, lt: '2026-10-21', o: '1 reminder · due 2026-11-14' },
+      { n: '[Tidepool Labs]', p: [['[Grace Tan]', 'their account']], c: 1, lt: '2026-09-12', o: null },
+      { n: '[Lumen Partners]', p: [['[Farid Haddad]', 'their account']], c: 1, lt: null, o: '1 reminder · due 2026-11-27' },
+      { n: '[Arden Bio]', p: [['[Paula Reyes]', 'contact’s organization field']], c: 1, lt: '2026-10-02', o: '1 follow-up · due 2026-11-18' }
+    ];
+    const MATCHES = [
+      { i: 'NK', n: '[Nadia Kim]', w: 'GP, [Latitude Seed]', ex: '2026-11-20', os: '✓ Agreed', why: ['Both back pre-seed B2B SaaS in the Nordics', 'Co-invested with [Ada Okafor] in 2025'] },
+      { i: 'JW', n: '[Jonas Weber]', w: 'Founder, [Brightwell Health] · on Axal', ex: '2026-11-24', os: '○ Not answered', why: ['Raising a seed round that fits your thesis (health, $250k–$500k cheques)'] },
+      { i: 'LF', n: '[Lucía Ferrer]', w: 'Founder, [Tidewater Robotics] · on Axal', ex: '2026-11-28', os: '○ Not answered', why: ['Robotics, pre-seed, Lisbon: three of your thesis filters'] },
+      { i: 'KM', n: '[Kenji Mori]', w: 'Angel, [Mori Family Office]', ex: '2026-12-02', os: '✓ Agreed', why: null }
+    ];
+
+    /* ---------- shell: company/project switcher top-left, sidebar = held licences, Account menu holds Portfolio, Companies, Licences ---------- */
+    const NAVS = {
+      i: ['Home', 'Deals', 'Portfolio', 'Axal VC Fund', 'Network', 'Research', '|', 'Trust', 'Firm Settings'],
+      f: ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', '|', 'Trust', 'Company Settings'],
+      a: ['Home', 'Network', 'Research', '|', 'Admin console']
+    };
+    const SW = { i: '[Harbor Lane Capital]', f: '[Northwind Labs]', a: '[Axal HQ]' };
+    const GRP = { i: 'Investor', f: 'Founder', a: 'HQ' };
+    const INI = { i: 'RO', f: 'MR', a: 'HQ' };
+    const side = (r) => `<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="sw2" aria-haspopup="listbox" aria-label="Switch company or project: ${SW[r]}">${SW[r]} <span aria-hidden="true">▾</span></button><span class="eye grp">${GRP[r]}</span><nav aria-label="${GRP[r]}">${J(NAVS[r].map((t) => t === '|' ? '<div class="sep"></div>' : `<a href="#"${t === 'Network' ? ' aria-current="page"' : ''}>${t}</a>`))}</nav></aside>`;
+    const top = (r) => `<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">${bell}</button><button type="button" class="av" style="border:0" aria-label="Account menu: Portfolio, Companies, Licences">${INI[r]}</button></div></div>`;
+    const RAILC = (t) => `<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Expand Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">${t || 'Ask about your network'}</span></aside>`;
+    const railOpen = (c, ph) => `<aside class="rail" aria-label="Eadwyn"><div class="rh"><b><span class="e" aria-hidden="true">E</span>Eadwyn</b><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">→</button></div><div class="rb">${c}</div><div class="rin"><span>${ph || 'Ask about your network…'}</span><button type="button" class="btn">Ask</button></div></aside>`;
+    const shell = (r, body, o) => {
+      o = o || {};
+      const h = o.h || 900;
+      return `<div class="${CV}" style="width:1440px;min-height:${h}px">${o.banner || ''}<div class="sh${o.rail ? ' ro' : ''}" style="min-height:${h}px">${side(r)}<div class="mn">${top(r)}<main class="bd">${body}</main></div>${o.rail ? railOpen(o.rail, o.railPh) : RAILC(o.railT)}</div>${o.overlay ? '<div class="dim" aria-hidden="true"></div>' + o.overlay : ''}</div>`;
+    };
+    const TABS = (cur) => `<nav class="ptabs" aria-label="Network">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<a href="#"${t === cur ? ' aria-current="page"' : ''}>${t}</a>`))}</nav>`;
+    const HEAD = (o) => `${o.crumb ? `<nav aria-label="Breadcrumb" class="foot">${o.crumb}</nav>` : ''}<header class="hdr"><span class="eye">${o.eye || 'Network · Relationship intelligence'}</span><div class="hrow"><div><h1>${o.h1 || 'Your network'}</h1><p>${o.sub || 'Which ties need a touch, which reminders are due, and which introductions are moving.'}</p></div><div class="acts">${o.acts !== undefined ? o.acts : `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Request introduction</button>`}</div></div></header>${o.tab === false ? '' : TABS(o.tab || 'Overview')}`;
+
+    /* ---------- shared pieces ---------- */
+    const fig = (cls, eye, v, s) => `<a class="k${cls ? ' ' + cls : ''}" href="#"><span class="eye">${eye}</span><span class="kv">${v}</span><span class="ks">${s}</span></a>`;
+    const KPI = `<section class="kp" aria-label="Network figures">${fig('', 'Ties on Axal', N.ties, 'accepted two-sided ties · <span style="color:var(--vt);font-weight:700">Open →</span>')}${fig('att', 'Going cold', N.cold, '▽ ties with no touch in over 60 days')}${fig('att', 'Reminders due', N.due, '◷ due today or earlier')}${fig('', 'Curated matches', N.match, 'awaiting your decision · first expires 2026-11-20')}</section>`;
+    const ASKLINE = `<div class="line"><span>${ASKS} · an ask names a founder or a startup on Axal</span><span class="acts"><span class="foot">Free tier · Q1 2027 starts 2027-01-01</span><a class="btn t" href="#">Your asks →</a></span></div>`;
+    const tieMeta = (t) => `${t.r} · ${t.ty} tie · ${t.co || 'company not recorded'}`;
+    const lastTouch = (t) => t.lt ? `Last touch ${mo(t.lt)} (${t.d} days ago)` : 'Last touch: Not recorded';
+    const attRow = (t, stacked) => `<div class="pr"><span class="av">${t.i}</span><div><b>${t.n}</b> <span class="mu">· ${tieMeta(t)}</span><small>${lastTouch(t)} · ${t.ctx ? 'Context: ' + t.ctx : 'Context: Not recorded'}${t.rem ? ` · Reminder “${t.rem[0]}” due ${mo(t.rem[1])}` : ''}</small>${stacked ? `<div class="acts" style="margin-top:5px">${t.cold ? COLD : ''}${t.rem ? LATE(t.rem[2]) : ''}</div>` : ''}</div><div class="acts">${stacked ? '' : (t.cold ? COLD : '') + (t.rem ? LATE(t.rem[2]) : '')}<button type="button" class="btn">Open</button></div></div>`;
+    const ATT = TIES.filter((t) => t.cold || t.rem);
+    const REMDUE = TIES.filter((t) => t.rem);
+    const REMUP = TIES.filter((t) => t.up);
+    const remRow = (t, due) => `<li><div><b>${due ? t.rem[0] : t.up[0]}</b><small>${t.n} · due ${mo(due ? t.rem[1] : t.up[1])}${due ? ' · ◷ ' + t.rem[2] : ''}</small></div><button type="button" class="btn">Done</button></li>`;
+    const REMCARD = (n) => `<section class="cd" aria-labelledby="rm"><div class="ch"><h2 id="rm">Reminders</h2><span class="sm">${N.due} due · ${REMUP.length} upcoming</span></div>
+      <div class="grh"><h3>◷ Due today or earlier · ${N.due}</h3></div><ul class="lst">${J(REMDUE.map((t) => remRow(t, true)))}</ul>
+      <div class="grh"><h3>○ Upcoming · ${REMUP.length}</h3></div><ul class="lst">${J(REMUP.slice(0, n || 2).map((t) => remRow(t, false)))}</ul>
+      <div class="cf"><span class="foot">Reminders are yours; done ones stay on each Tie Sheet.</span><a class="btn t" href="#">All reminders →</a></div></section>`;
+    const matchCard = (m, full) => `<div class="mc"><div class="mh"><span class="av">${m.i}</span><div><b>${m.n}</b><small>${m.w}</small></div><span class="pl">◷ Expires ${mo(m.ex)}</span></div>${full ? (m.why ? `<div class="rs">${J(m.why.map((w) => `<span>${w}</span>`))}</div>` : `<div class="rs" style="color:var(--mu)">Reasons: Not recorded</div>`) : ''}<div class="cf" style="padding-top:8px"><span class="foot">Other side: <b>${m.os}</b> · Accepting uses <b class="mo">1</b> credit</span><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn">Accept</button></div></div></div>`;
+    const teamRows = [
+      ['DV', '[Dev Varma] → [Lena Sato]', `[Dev] asks you to introduce him · requested ${mo('2026-11-11')}`, '<span class="pl a">! Your decision</span>', '<a class="btn" href="#">Decide</a>'],
+      ['RO', 'You → [Priya Nair], via [Tom Becker]', `[Tom] accepted ${mo('2026-11-09')} · not made yet`, '<span class="pl v">✓ Accepted · ○ not made</span>', '<a class="btn t" href="#">Open</a>'],
+      ['RO', 'You → [Sara Holm], via [Iris Chen]', `Made ${mo('2026-10-22')} · follow-up due ${mo('2026-11-12')}`, '<span class="pl g">✓✓ Made</span>', '<a class="btn t" href="#">Open</a>']
+    ];
+    const pr3 = (r) => `<div class="pr"><span class="av">${r[0]}</span><div><b>${r[1]}</b><small>${r[2]}</small></div><div class="acts">${r[3]}${r[4]}</div></div>`;
+    const INTROCARD = `<section class="cd" aria-labelledby="ip"><div class="ch"><h2 id="ip">Introductions in progress</h2><button type="button" class="ib" aria-label="Refresh introductions">↻</button></div>
+      <div class="grh"><h3>From your team · 3</h3><span class="foot">no credit used</span></div>${J(teamRows.map(pr3))}
+      <div class="grh"><h3>Curated matches · ${N.match} awaiting your decision</h3><span class="foot">${CRED}</span></div>${matchCard(MATCHES[0], false)}
+      <div class="grh"><h3>Your asks · 1</h3><span class="foot">${ASKS}</span></div>
+      <div class="pr"><span class="av">SL</span><div><b>[Sofia Lind] ${TB('name · #6260')}</b><small>Founder of [Arcpoint Energy] · asked ${mo('2026-10-19')} · what happens next is not decided yet</small></div><div class="acts"><span class="pl">◷ Pending</span></div></div>
+      <div class="cf"><span class="foot">Three sources, three counts: never added together.</span><a class="btn t" href="#">All introductions →</a></div></section>`;
+    const ORGPREV = `<section class="cd" aria-labelledby="og"><div class="ch"><h2 id="og">Organizations</h2><span class="sm">${N.orgs} names from your ties and contacts</span></div>
+      <ul class="lst">${J(ORGS.slice(0, 6).map((o) => `<li><div><b>${o.n}</b><small>${o.c} ${o.c === 1 ? 'person' : 'people'} · latest touch ${o.lt ? mo(o.lt) : 'Not recorded'}</small></div><a class="btn t" href="#">Open</a></li>`))}</ul>
+      <div class="cf"><span class="foot">Only recorded companies. Email domains are never used.</span><a class="btn t" href="#">Show all ${N.orgs} →</a></div></section>`;
+    const ATTCARD = (n, stacked) => `<section class="cd" aria-labelledby="na"><div class="ch"><h2 id="na">Ties needing attention</h2><span class="sm">${N.att} · going cold or a reminder due</span></div>${J(ATT.slice(0, n).map((t) => attRow(t, stacked)))}
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>Going cold means the last logged touch is more than 60 days old. A tie with no touch logged reads <b>Not recorded</b>, not cold. No strength score is recorded, so none is shown.</div></div>
+      <div class="cf"><span class="foot">Source: touches either of you logged · reminders you set</span><a class="btn t" href="#">All ${N.att} in Relationships →</a></div></section>`;
+
+    /* Eadwyn rail contents */
+    const RAIL_FOLLOW = `<span class="eye">Suggested · from your book</span>
+      <div class="an"><b>A follow-up is due on a made introduction.</b><span>You → [Sara Holm], via [Iris Chen], made ${mo('2026-10-22')}. Its follow-up date was ${mo('2026-11-12')}.</span>
+      <div class="cost"><span>Estimated cost</span><b>[1,200] tokens</b></div>
+      <div class="acts"><button type="button" class="btn">Draft follow-up</button><button type="button" class="btn t">Not now</button></div>
+      <span class="foot">Nothing is drafted until you choose. Nothing is ever sent by Eadwyn.</span></div>
+      <span class="eye">For a cold tie</span>
+      <div class="ent" aria-disabled="true"><span>Draft a note to this cold tie</span>${TB('#6256')}</div>
+      <p class="foot">Eadwyn drafts only three things today: the reason for a team request, the introduction for a request you accepted, and the follow-up on a made introduction. Every manual action works without it.</p>`;
+    const RAIL_QA = (who) => `<div class="q">${who === 'f' ? 'Which relationships have I not followed up on lately?' : 'Which of my ties have gone longest without a touch?'}</div>
+      <div class="an"><span>${who === 'f' ? 'Three relationships in your book have no note or follow-up recorded since September: [Ben Larsen], [Grace Tan] and [Ines Duarte].' : 'Six ties have no touch in over 60 days. The longest is [Hugo Brandt]: last touch 2026-07-28, 109 days ago. Next are [Ada Okafor] (76 days) and [Ben Larsen] (73 days).'}</span>
+      <div class="src"><span>${who === 'f' ? 'Your relationship book · 142 people' : 'Ties on Axal · 38, read 14:02'}</span><span>${who === 'f' ? 'Follow-ups and notes' : 'Touch history · logged by either side'}</span></div>
+      <span class="foot">${who === 'f' ? 'People with nothing recorded are left out, not counted as late.' : 'Ties with no touch logged (1) are left out: their last touch is Not recorded.'}</span></div>
+      <span class="eye">Proposed · follow-up on a made introduction</span>
+      <div class="draft"><span class="foot">You → [Sara Holm], via [Iris Chen] · made ${mo('2026-10-22')} · follow-up due ${mo('2026-11-12')}</span>
+      <div class="cost"><span>Cost, quoted before drafting</span><b>[1,200] tokens · used</b></div>
+      <p class="tx">Hi Sara, thanks again for making time after Iris’s introduction. I wanted to follow up on our call about the [Q1 pilot]. Would a short call in the week of 23 November work?</p>
+      <div class="acts"><button type="button" class="btn">Accept into composer</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div>
+      <span class="foot">Accept puts the text in your Email composer. You send it yourself.</span></div>
+      <p class="foot">Eadwyn never sends, accepts, declines, spends a credit or an ask, or edits a note.</p>`;
+
+    /* ---------- boards ---------- */
+    const overview = (o) => shell('i', `${HEAD({})}${KPI}${ASKLINE}
+      <div class="g"><div class="c7" style="display:flex;flex-direction:column;gap:16px">${ATTCARD(4, true)}${INTROCARD}</div>
+      <div class="c5" style="display:flex;flex-direction:column;gap:16px">${REMCARD(2)}${ORGPREV}</div></div>`, { h: o.h, rail: RAIL_FOLLOW });
+
+    const TIEHEAD = `<tr><th scope="col">Person</th><th scope="col">Role · tie type</th><th scope="col">Company</th><th scope="col">Last touch</th><th scope="col">Deal or fund context</th><th scope="col">Reminders</th></tr>`;
+    const tieRow = (t, cur) => `<tr${cur ? ' class="cur"' : ''}><td><a href="#"><b>${t.n}</b></a></td><td>${t.r}<small>${t.ty}</small></td><td${t.co ? '' : ' class="na"'}>${t.co || '— Not recorded'}</td><td${t.lt ? ' class="mo"' : ' class="na"'}>${t.lt ? t.lt + `<small>${t.d} days ago</small>` : '— Not recorded'}${t.cold ? '<div style="margin-top:3px">' + COLD + '</div>' : ''}</td><td${t.ctx ? '' : ' class="na"'}>${t.ctx || '— Not recorded'}</td><td>${t.rem ? LATE(t.rem[2]) : t.up ? `1 · due ${mo(t.up[1])}` : '<span class="s">○ None</span>'}</td></tr>`;
+    const CONTACTS = [
+      ['[Rui Costa]', '[Harbor Seed]', 'Principal', 'Added by you', '1 note · 2026-10-02'],
+      ['[Paula Reyes]', '[Arden Bio]', 'CEO', 'Added by [Tom Becker] · owner [Tom Becker]', '1 follow-up · due 2026-11-18'],
+      ['[Maya Chen]', '[Quill Analytics]', 'Head of Product', 'LinkedIn import · 2026-10-30', '<span class="s">○ None</span>'],
+      ['[Theo Grant]', '[Kelp Bio]', 'VP Partnerships', 'LinkedIn import · 2026-10-30', '<span class="s">○ None</span>'],
+      ['[Sam Ortiz]', '[Northstar Capital]', 'Associate', 'CSV import · 2026-09-21', '1 note · 2026-09-22'],
+      ['[Wen Li]', '<span class="s">— Not recorded</span>', '<span class="s">— Not recorded</span>', 'CSV import · 2026-09-21', '<span class="s">○ None</span>']
+    ];
+    const CONTHEAD = `<tr><th scope="col">Person</th><th scope="col">Organization</th><th scope="col">Title</th><th scope="col">Source · owner</th><th scope="col">Notes and follow-ups</th></tr>`;
+    const contRow = (c) => `<tr><td><b>${c[0]}</b></td><td>${c[1]}</td><td>${c[2]}</td><td>${c[3]}</td><td>${c[4]}</td></tr>`;
+    const pager = (a, b, tot) => `<div class="pg"><span>${a}–${b} of ${tot}</span><div class="pb"><button type="button" aria-label="Previous page" aria-disabled="true">‹</button><button type="button" aria-current="page">1</button><button type="button">2</button>${tot > 50 ? '<span>…</span><button type="button">' + Math.ceil(tot / 25) + '</button>' : ''}<button type="button" aria-label="Next page">›</button></div></div>`;
+    const VIEWS = `<div class="seg" role="radiogroup" aria-label="View"><button type="button" role="radio" aria-checked="true">Everyone</button><button type="button" role="radio" aria-checked="false">Founders</button><button type="button" role="radio" aria-checked="false">Co-investors</button><button type="button" role="radio" aria-checked="false">▽ Going cold · 6</button><button type="button" role="radio" aria-checked="false" aria-disabled="true" style="opacity:.55">LPs</button></div>`;
+    const REQSTRIP = (ro) => `<div class="strip" role="region" aria-label="Tie requests waiting for you"><b>Tie requests waiting for you · 2</b><span class="foot" style="flex-basis:100%;margin-top:-6px">A tie counts only once you accept it.</span>
+      <div class="it"><span class="av" style="width:26px;height:26px">KM</span><span><b>[Kenji Mori]</b> · Co-investor · requested ${mo('2026-11-12')}</span>${ro ? '' : '<button type="button" class="btn">Decline</button><button type="button" class="btn">Accept</button>'}</div>
+      <div class="it"><span class="av" style="width:26px;height:26px">MH</span><span><b>[Mara Holt]</b> · Operator partner · requested ${mo('2026-11-10')}</span>${ro ? '' : '<button type="button" class="btn">Decline</button><button type="button" class="btn">Accept</button>'}</div></div>`;
+    const RELPAGE = (o) => `${HEAD({ tab: 'Relationships', h1: 'Relationships', sub: 'Your ties on Axal and the contacts you keep, in two labelled groups with their own counts.', acts: o.ro ? `<button type="button" class="btn ask">${E}Ask</button>` : undefined })}
+      <div class="tools"><label for="rq" class="sr">Search ties and contacts</label><input id="rq" class="inp" style="color:var(--ink);font-family:var(--sg)" placeholder="Search by name or company">${VIEWS}<span class="foot">LPs: ${TB('an LP register is a fund record')}</span>
+      ${o.ro ? '' : `<span style="margin-left:auto" class="acts"><button type="button" class="btn">↻ Refresh relationships</button><button type="button" class="btn">Import contacts</button><button type="button" class="btn">Add person</button><button type="button" class="btn" aria-disabled="true">Invite to Axal</button>${TB('founders only today')}</span>`}</div>
+      ${REQSTRIP(o.ro)}
+      <section class="cd" aria-labelledby="g1"><div class="ch"><h2 id="g1">On Axal</h2><span class="sm">${N.ties} ties · accepted by both sides</span></div>
+      <table class="tbl"><thead>${TIEHEAD}</thead><tbody>${J(TIES.slice(0, o.n || 7).map((t, i) => tieRow(t, i === 0 && o.sheet)))}</tbody></table>${pager(1, 25, N.ties)}</section>
+      <section class="cd" aria-labelledby="g2"><div class="ch"><h2 id="g2">Contacts you keep</h2><span class="sm">${N.contacts} contacts · ${N.hand} added by hand · ${N.imp} imported</span></div>
+      <table class="tbl"><thead>${CONTHEAD}</thead><tbody>${J(CONTACTS.slice(0, o.m || 6).map(contRow))}</tbody></table>${pager(1, 25, N.contacts)}
+      <div class="cf"><span class="foot">Two groups, two counts: ${N.ties} ties and ${N.contacts} contacts are never added together. ${TO('Q1 · A, two groups')}</span></div></section>`;
+
+    const TIESHEET = `<aside class="sheet-r" role="dialog" aria-modal="true" aria-labelledby="ts">
+      <div class="dh"><div style="display:flex;gap:12px;align-items:center"><span class="av" style="width:40px;height:40px;font-size:12px">AO</span><div><span class="eye">Tie on Axal</span><h2 id="ts">[Ada Okafor]</h2><p class="sub">Investor · Co-investor tie</p></div></div><button type="button" class="ib" aria-label="Close Tie Sheet">✕</button></div>
+      <div class="dc" style="overflow:hidden">
+      <div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Unsaved edit.</b> Your private note has changes that are not saved yet. <button type="button" class="btn t" style="min-height:24px">Save note</button></div></div>
+      <dl class="st tx" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div><dt>Company</dt><dd>[Harbor Seed]<small>from her own account</small></dd></div><div><dt>Last touch</dt><dd><span class="mo">2026-08-30</span><small>76 days ago · ▽ Going cold</small></dd></div><div style="grid-column:span 2"><dt>Deal or fund context</dt><dd>Co-led the [Kelpwise] seed<small>free text on the tie · a structured deal or fund link ${TB('#6256')}</small></dd></div></dl>
+      <div class="sec"><h3>Touch history</h3><ul class="tl">
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Meeting</b> · coffee about the [Kelpwise] follow-on<div class="foot">logged by you</div></div><span class="w">2026-08-30 <button type="button" class="lk">Void</button></span></li>
+      <li><span class="mk no" aria-hidden="true">⊘</span><div class="vd"><b>Call</b> · logged twice by mistake</div><span class="w">2026-08-30 · voided</span></li>
+      <li><span class="mk ok" aria-hidden="true">✓</span><div><b>Email</b> · sent the Q2 portfolio note<div class="foot">logged by [Ada]</div></div><span class="w">2026-07-02 <button type="button" class="lk">Void</button></span></li></ul>
+      <button type="button" class="btn" style="align-self:flex-start">Add touch</button></div>
+      <div class="sec"><h3>Reminders</h3>
+      <label class="ck"><input type="checkbox"> Send Q3 update ${LATE('4 days late')}<small>due 2026-11-10</small></label>
+      <label class="ck"><input type="checkbox" checked="checked"> <span class="vd">Thank-you after intro</span> <span class="pl g">✓ Done</span><small>done 2026-09-01</small></label>
+      <button type="button" class="btn" style="align-self:flex-start">Add reminder</button></div>
+      <div class="sec"><h3>Private note <span class="foot">· only you can read it</span></h3><label for="pn" class="sr">Private note</label>
+      <textarea id="pn" rows="2" style="width:100%;border:1px solid var(--lavE);border-radius:8px;padding:8px 10px;font:500 12.5px var(--sg);color:var(--ink);background:var(--card)">Wants first look at our Q1 health deals.</textarea></div>
+      </div>
+      <div class="df"><span class="acts"><button type="button" class="btn ask" aria-disabled="true">${E}Draft a note</button>${TB('#6256')}</span><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><button type="button" class="btn p">Request introduction</button><span class="foot">[Ada] is an investor: this starts a team request.</span></div></div></aside>`;
+
+    const INTROPAGE = (o) => {
+      o = o || {};
+      const recv = `<tr><td><b>[Lena Sato]</b><small>[Kelp Bio]</small></td><td>You</td><td>[Dev Varma]</td><td>“Exploring a pilot with [Kelp Bio]’s lab team.”</td><td class="mo">2026-11-11</td><td><span class="pl a">◷ Waiting · your decision</span></td><td><a class="btn" href="#">Decide</a></td></tr>`;
+      const sent = [
+        ['[Priya Nair]', '[Kelp Bio]', '[Tom Becker]', '“We’re looking at two biotech labs; Priya runs partnerships.”', '2026-11-02', '<span class="pl v">✓ Accepted · ○ not made</span>', '<a class="btn t" href="#">Remind</a>'],
+        ['[Sara Holm]', '[Holm Robotics]', '[Iris Chen]', '“Interested in their seed.”', '2026-10-14', '<span class="pl g">✓✓ Made 2026-10-22</span><small>follow-up due 2026-11-12</small>', '<a class="btn t" href="#">Follow up</a>'],
+        ['[Marco Ruiz]', '[Ruiz & Co]', '[Iris Chen]', '“Co-invest on [Arcpoint Energy]?”', '2026-11-01', '<span class="pl">◌ Not now</span><small>“Not the right moment; ask again in January.”</small>', '<span class="s">○ None</span>'],
+        ['[Paul Grant]', '[Grant Labs]', '[Tom Becker]', '<span class="s">— Not recorded</span>', '2026-10-27', '<span class="pl">⊘ Withdrawn 2026-10-30</span>', '<span class="s">○ None</span>']
+      ];
+      return `${HEAD({ tab: 'Introductions', h1: 'Introductions', sub: 'Requests between teammates, matches Axal curates for you, and the asks your tier allows. Three sources, never one count.' })}
+      <section class="cd" aria-labelledby="ft"><div class="ch"><h2 id="ft">From your team</h2><span class="sm">1 received · 4 sent · no credit is used</span></div>
+      <div class="seg" role="radiogroup" aria-label="Direction"><button type="button" role="radio" aria-checked="true">All</button><button type="button" role="radio" aria-checked="false">Received · 1</button><button type="button" role="radio" aria-checked="false">Sent · 4</button></div>
+      <table class="tbl"><thead><tr><th scope="col">Target</th><th scope="col">Teammate</th><th scope="col">Requester</th><th scope="col">Note</th><th scope="col">Date</th><th scope="col">Status</th><th scope="col">Next</th></tr></thead><tbody>
+      <tr><td colspan="7" class="eye" style="padding-top:12px">Received · 1</td></tr>${recv}
+      <tr><td colspan="7" class="eye" style="padding-top:12px">Sent · 4</td></tr>${J(sent.map((s) => `<tr><td><b>${s[0]}</b><small>${s[1]}</small></td><td>${s[2]}</td><td>You</td><td>${s[3]}</td><td class="mo">${s[4]}</td><td>${s[5]}</td><td>${s[6]}</td></tr>`))}</tbody></table>
+      <p class="foot">Made is recorded only when the teammate who accepted sends the introduction from the Email composer.</p></section>
+      <section class="cd" aria-labelledby="cm"><div class="ch"><h2 id="cm">Curated matches</h2><span class="sm">${CRED}</span></div>
+      <div class="tools"><div class="seg" role="radiogroup" aria-label="Matches"><button type="button" role="radio" aria-checked="true">Awaiting your decision · 4</button><button type="button" role="radio" aria-checked="false">Accepted · 3</button><button type="button" role="radio" aria-checked="false">Declined · 2</button><button type="button" role="radio" aria-checked="false">Stalled · 2 expired</button></div><span class="foot" style="margin-left:auto">Accept uses 1 credit · Decline is free · no credits are sold; more come by <a href="#">referral</a></span></div>
+      <div class="g2">${J(MATCHES.map((m) => matchCard(m, true)))}</div>
+      ${pager(1, 4, '4 awaiting · 11 matches in all')}</section>
+      <section class="cd" aria-labelledby="ya"><div class="ch"><h2 id="ya">Your asks</h2><span class="sm">${ASKS}</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Target</th><th scope="col">Message</th><th scope="col">Asked</th><th scope="col">Status</th></tr></thead><tbody>
+      <tr><td><b>[Sofia Lind]</b> ${TB('name · #6260')}<small>Founder of [Arcpoint Energy]</small></td><td>“We back climate hardware at seed and would like to meet before your round opens.”</td><td class="mo">2026-10-19</td><td><span class="pl">◷ Pending</span><small>What happens next is not decided yet. ${TB('#6261')} ${TO('Q3 · A, Pending only')}</small></td></tr></tbody></table></section>`;
+    };
+
+    /* request-introduction panels */
+    const STP = (n) => `<div class="stp" role="list" aria-label="Steps">${J(['Who', 'Introducer', 'Review'].map((t, i) => `<span role="listitem"${i + 1 === n ? ' class="on" aria-current="step"' : ''}>${i + 1 < n ? '✓ ' : ''}${i + 1} ${t}</span>`))}</div>`;
+    const panel = (eye, h, body, foot, w) => `<div class="panel" role="dialog" aria-labelledby="p${h.length}" style="width:${w || 440}px"><div class="dh"><div><span class="eye">${eye}</span><h2 id="p${h.length}">${h}</h2></div><button type="button" class="ib" aria-label="Close">✕</button></div><div class="dc">${body}</div><div class="df">${foot}</div></div>`;
+    const P1 = (ph) => panel('Request introduction · step 1 of 3', 'Who do you want to meet?', `${STP(1)}<div class="seg" role="radiogroup" aria-label="Search for"><button type="button" role="radio" aria-checked="true">Person</button><button type="button" role="radio" aria-checked="false">Company</button><button type="button" role="radio" aria-checked="false">Fund</button></div><div class="f"><label for="w1">LinkedIn URL or email</label><span id="w1" class="in">linkedin.com/in/[theo-grant]</span></div><p class="foot">Only teammates who share their book are searched. Their private notes and email addresses are never shown.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Find who knows them</button>`, ph ? '100%' : 440);
+    const P2 = (ph) => panel('Request introduction · step 2 of 3', 'Who can introduce you?', `${STP(2)}<p class="sub">[Theo Grant] · VP Partnerships, [Kelp Bio]</p>
+      <div class="pick on"><span class="av">IC</span><div><b>[Iris Chen]</b><small>Teammate at [Harbor Lane Capital] · worked with Theo at [Kelp Bio]</small></div><span class="pl v">✓ Chosen</span></div>
+      <div class="pick"><span class="av">TB</span><div><b>[Tom Becker]</b><small>Teammate at [Harbor Lane Capital] · connected on LinkedIn</small></div><span></span></div>
+      <div class="f"><label for="w2">Note to [Iris] (optional)</label><span id="w2" class="in ta hint">Why you want to meet Theo…</span><span class="cnt">0 / 1000</span></div>
+      <div class="acts"><button type="button" class="btn ask">${E}Draft the reason</button><span class="foot">est. [400] tokens, quoted before drafting</span></div>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Continue</button>`, ph ? '100%' : 440);
+    const P3 = (ph) => panel('Request introduction · step 3 of 3', 'Review and send', `${STP(3)}<dl class="rv"><dt>Target</dt><dd>[Theo Grant] · [Kelp Bio]</dd><dt>Teammate</dt><dd>[Iris Chen]</dd><dt>Note</dt><dd>“We’re building a health pilot shortlist and Theo runs partnerships at [Kelp Bio].” <span class="foot">· Eadwyn draft, edited by you</span></dd><dt>Cost</dt><dd><b>No credit is used for a team request</b></dd></dl>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>What happens next.</b> [Iris] accepts or says Not now, and you can read her note. If she accepts, she writes the introduction from her Email composer, and it is recorded as Made when she sends it.</div></div>`, `<button type="button" class="btn t">Back</button><button type="button" class="btn p">Send request</button>`, ph ? '100%' : 440);
+    const PSENT = panel('Request introduction', 'Request sent', `<div class="nt g"><span class="ic" aria-hidden="true">✓</span><div><b>Sent to [Iris Chen].</b> It shows in Introductions under From your team · Sent, as Waiting.</div></div><a class="btn t" href="#" style="align-self:flex-start">Open the request →</a>`, `<span></span><button type="button" class="btn p">Done</button>`);
+    const PASK = (ph) => panel('Request introduction · no teammate knows them', 'Ask Axal for an introduction', `<div class="nt"><span class="ic" aria-hidden="true">i</span><div>No teammate who shares their book knows [Amara Osei]. She is a founder on Axal (<b>[Loomcraft]</b>), so you can use an ask.</div></div>
+      <div class="line"><span>${ASKS}</span><span class="foot">this uses 1</span></div>
+      <div class="f"><label for="w3">Message to Axal (optional)</label><span id="w3" class="in ta">We back early textile-tech and would like to meet before [Loomcraft]’s seed.</span><span class="cnt">76 / 2,000</span></div>
+      <p class="sub"><b>An ask is not consent from the founder.</b> It stays Pending; what happens after Pending is not decided yet.</p>`, `<button type="button" class="btn t">Cancel</button><button type="button" class="btn p">Use 1 ask and send</button>`, ph ? '100%' : 440);
+    const PNO = panel('Request introduction · no teammate knows them', 'No warm path for [Corran Ventures]', `<div class="nt"><span class="ic" aria-hidden="true">○</span><div><b>No teammate knows them.</b> Nobody on your teams who shares their book has [Corran Ventures] recorded.</div></div><div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>An ask cannot be used here.</b> An ask can name only a founder or a startup on Axal, and [Corran Ventures] is a fund.</div></div><p class="foot">Your asks stay at 2 of 3 this quarter.</p>`, `<button type="button" class="btn t">Close</button><button type="button" class="btn">Search someone else</button>`);
+
+    /* phone helpers */
+    const phTop = (t, back) => `<div class="pt"><button type="button" class="pi" aria-label="${back ? 'Back' : 'Open menu'}">${back ? '‹' : '☰'}</button><b style="font-size:15px">${t}</b><div style="display:flex"><button type="button" class="pi" aria-label="Ask Eadwyn"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font:800 12px var(--sg)">E</span></button><button type="button" class="pi" aria-label="Notifications">${bell}</button></div></div>`;
+    const phone = (t, body, stk, o) => `<div class="${CV} ph${stk ? ' fx' : ''}" style="width:390px;min-height:${(o && o.h) || 844}px">${phTop(t, o && o.back)}<main class="pbd" style="overflow:hidden">${body}</main>${stk ? `<div class="stk">${stk}</div>` : ''}</div>`;
+    const MSEL = (cur) => `<label class="eye" for="ms">Section</label><select id="ms" class="msel" aria-label="Network section">${J(['Overview', 'Relationships', 'Introductions', 'Organizations'].map((t) => `<option${t === cur ? ' selected="selected"' : ''}>${t}</option>`))}</select>`;
+
+    /* crop wrapper for state grids */
+    const crop = (w, body) => `<div class="${CV} crop" style="width:${w}px">${body}</div>`;
+    const stcard = (tag, h, body, cls) => `<section class="cd${cls ? ' ' + cls : ''}"><span class="tag">${tag}</span><div class="ch"><h2>${h}</h2></div>${body}</section>`;
+
+    let html = '';
+
+    /* ===== NW12 · Investor Overview ===== */
+    if (B === 'NWI12') html = overview({ h: 2200 });
+
+    /* ===== NW12.1 · empty ===== */
+    else if (B === 'NWI12_1') html = shell('i', `${HEAD({ acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn">Request introduction</button>` })}
+      <section class="cd" aria-labelledby="st" style="padding:28px;gap:18px"><div style="display:flex;flex-direction:column;gap:6px;max-width:760px"><span class="eye">Start here</span><h2 id="st" style="font-size:22px;font-weight:800;letter-spacing:-.02em">Your book is empty</h2>
+      <p class="sub" style="font-size:13.5px">Add the people you already know. They are not contacted. A tie on Axal appears here once the other person accepts it; until then nothing about it counts.</p></div>
+      <div class="acts"><button type="button" class="btn p" style="min-height:40px">Add person</button><a class="btn t" href="#">Import contacts</a></div>
+      <p class="foot">Add person writes a contact you keep: name, email, title and organization as text. ${TO('Q2 · A, partner book')}</p></section>
+      <section class="kp" aria-label="Network figures"><div class="k"><span class="eye">Ties on Axal</span><span class="kv">0</span><span class="ks">read just now · no tie accepted yet</span></div><div class="k"><span class="eye">Contacts you keep</span><span class="kv">0</span><span class="ks">read just now</span></div>${fig('', 'Curated matches', 2, 'awaiting your decision · first expires 2026-11-22')}<div class="k"><span class="eye">Asks this quarter</span><span class="kv">3</span><span class="ks">of 3 left · Q4 2026</span></div></section>
+      <div class="g"><section class="c6 cd" aria-labelledby="e1"><div class="ch"><h2 id="e1">Curated matches</h2><span class="sm"><b class="mo">3</b> credits available: <b class="mo">3</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">0</b> earned by referral</span></div>${matchCard({ i: 'NK', n: '[Nadia Kim]', w: 'GP, [Latitude Seed]', ex: '2026-11-22', os: '✓ Agreed', why: ['Both back pre-seed B2B SaaS'] }, true)}<p class="foot">Matches do not depend on your book.</p></section>
+      <section class="c6 cd" aria-labelledby="e2"><div class="ch"><h2 id="e2">Your asks</h2><span class="sm"><b class="mo">3</b> of <b class="mo">3</b> asks left this quarter (Q4 2026)</span></div><p class="sub">None yet. An ask names a founder or a startup on Axal and asks Axal for an introduction.</p>
+      <div class="ch"><h2>From your team</h2></div><p class="sub">None yet. Requests you send to or receive from teammates appear in Introductions.</p></section></div>`, { h: 1000 });
+
+    /* ===== NW12.2 · Relationships + Tie Sheet ===== */
+    else if (B === 'NWI12_2') html = shell('i', RELPAGE({ sheet: 1 }), { h: 1500, overlay: TIESHEET });
+    else if (B === 'NWI12_2P') html = shell('i', RELPAGE({}), { h: 1500 });
+
+    /* ===== NW2.2 · Leads (founders) ===== */
+    else if (B === 'NWI2_2') html = shell('f', `${HEAD({ tab: 'Relationships', crumb: '<a href="#">Network</a> › <a href="#">Relationships</a> › Leads', h1: 'Leads from your pages', sub: 'Landing-page signups and invites from [Northwind Labs] projects. Kept apart from your relationship book.', acts: `<button type="button" class="btn ask">${E}Ask</button><button type="button" class="btn p">Invite to Axal</button>` })}
+      <div class="tools"><button type="button" class="dd">Project: [Northwind Labs · Pilot site] ▾</button><button type="button" class="dd">Source: All ▾</button><button type="button" class="dd">Status: All ▾</button><span class="foot" style="margin-left:auto">31 leads · not in your relationship book</span></div>
+      <section class="cd" aria-labelledby="ld"><div class="ch"><h2 id="ld">Leads</h2><span class="sm">31 · from 3 pages and 1 invite flow</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Person</th><th scope="col">Source</th><th scope="col">Lead type</th><th scope="col">Status</th><th scope="col">Last activity</th><th scope="col">Follow-ups</th></tr></thead><tbody>
+      <tr><td><b>[Gus Demo]</b></td><td>/careers page</td><td>Talent</td><td><span class="pl v">● Contacted</span></td><td class="mo">2026-11-04</td><td>Call · due ${mo('2026-11-16')}</td></tr>
+      <tr><td><b>[Hana Ito]</b></td><td>/pricing page</td><td>Customer</td><td><span class="pl">○ New</span></td><td class="mo">2026-11-06</td><td><span class="s">○ None</span></td></tr>
+      <tr><td><b>[Ivo Petrak]</b></td><td>Invite · sent by you</td><td>Advisor</td><td><span class="pl g">✓ Joined Axal</span></td><td class="mo">2026-11-02</td><td><span class="s">○ None</span></td></tr>
+      <tr><td><b>[Jun Park]</b></td><td>/pilot page</td><td>Customer</td><td><span class="pl a">◷ Replied</span></td><td class="mo">2026-11-12</td><td>Send deck · due ${mo('2026-11-15')}</td></tr>
+      <tr><td><b>[Kai Holm]</b></td><td>/pilot page</td><td><span class="s">— Not recorded</span></td><td><span class="pl">○ New</span></td><td class="mo">2026-11-13</td><td><span class="s">○ None</span></td></tr></tbody></table>${pager(1, 25, 31)}
+      <div class="cf"><span class="foot">Promote a lead to add them to your relationship book. Lead and book counts are never combined.</span></div></section>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div>${LBL('Note on this board')} Investors have no Leads group, and their shell shows none: <code>GET /api/contacts</code> and <code>POST /api/contacts/invite</code> answer founders only.</div></div>`, { h: 1000 });
+
+    /* ===== NW2.3 · Imports and duplicate review ===== */
+    else if (B === 'NWI2_3') html = shell('i', `${HEAD({ tab: 'Relationships', crumb: '<a href="#">Network</a> › <a href="#">Relationships</a> › Import contacts', h1: 'Import contacts', sub: 'Bring contacts into the book you keep. Each import shows a preview before anything is written.', acts: `<button type="button" class="btn ask">${E}Ask</button>` })}
+      <div class="g"><section class="c4 cd" aria-labelledby="i1"><div class="ch"><h2 id="i1">LinkedIn Connections CSV</h2><span class="pl g">✓ Last import done</span></div><p class="sub">The Connections export LinkedIn emails you.</p>
+      <dl class="st tx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><dt>Added</dt><dd class="mo">118</dd></div><div><dt>Skipped</dt><dd class="mo">4</dd></div><div><dt>Needs review</dt><dd class="mo">6</dd></div></dl><p class="foot">Imported ${mo('2026-10-30 18:47')} · 128 rows read</p><button type="button" class="btn" style="align-self:flex-start">Import another file</button></section>
+      <section class="c4 cd" aria-labelledby="i2"><div class="ch"><h2 id="i2">CSV file</h2><span class="pl v">◷ Preview · nothing written yet</span></div><p class="sub"><b>[advisors-2026.csv]</b> · 42 rows · columns mapped to contacts</p>
+      <table class="tbl"><thead><tr><th scope="col">Your column</th><th scope="col">Contact field</th></tr></thead><tbody><tr><td>Full name</td><td>Name</td></tr><tr><td>Firm</td><td>Company</td></tr><tr><td>Role</td><td>Title</td></tr><tr><td>Profile</td><td>LinkedIn link</td></tr></tbody></table>
+      <p class="sub"><b class="mo">39</b> to add · <b class="mo">3</b> skipped (no name)</p><div class="acts"><button type="button" class="btn t">Change mapping</button><button type="button" class="btn p">Import 39 contacts</button></div></section>
+      <section class="c4 cd" aria-labelledby="i3"><div class="ch"><h2 id="i3">Import in progress</h2><span class="pl v">◷ Importing</span></div><p class="sub" role="status">[clients.csv] · <b class="mo">212</b> of <b class="mo">480</b> rows read</p><span class="bar"><i style="width:44%"></i></span><p class="foot">You can leave this page; the result appears in Imports.</p>
+      <div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>HubSpot and Affinity</b> bring in deals, not contacts. They live in deal imports, not here. <a href="#">Deal imports →</a></div></div></section></div>
+      <section class="cd" aria-labelledby="du"><div class="ch"><h2 id="du">Possible duplicates</h2><span class="sm">6 from the LinkedIn import of 2026-10-30 · nothing is merged on its own</span></div>
+      <div class="cmp"><div><span class="eye">Imported 2026-10-30</span><dl><dt>Name</dt><dd><b>[Maya Chen]</b></dd><dt>Company</dt><dd>[Quill Analytics]</dd><dt>Title</dt><dd>Head of Product</dd></dl></div><div><span class="eye">Already held · imported contact</span><dl><dt>Name</dt><dd><b>[Maya Chen]</b></dd><dt>Company</dt><dd>[Quill]</dd><dt>Title</dt><dd><span class="s">— Not recorded</span></dd></dl></div></div>
+      <div class="cf"><span class="foot">Reason: same name, similar company</span><div class="acts"><button type="button" class="btn t">Dismiss</button><button type="button" class="btn">Keep both</button><button type="button" class="btn">Merge</button></div></div>
+      <div class="cmp"><div><span class="eye">Imported 2026-10-30</span><dl><dt>Name</dt><dd><b>[Rui Costa]</b></dd><dt>Company</dt><dd>[Harbor Seed]</dd><dt>Title</dt><dd>Principal</dd></dl></div><div><span class="eye">Already held · added by hand</span><dl><dt>Name</dt><dd><b>[Rui Costa]</b></dd><dt>Organization</dt><dd>[Harbor Seed]</dd><dt>Email</dt><dd>[rui@example.com]</dd></dl></div></div>
+      <div class="cf"><span class="foot">Only two of your own contacts can be merged. Keep both, or dismiss it. ${TB('merge across stores · #6256')}</span><div class="acts"><button type="button" class="btn t">Dismiss</button><button type="button" class="btn">Keep both</button></div></div>
+      ${pager(1, 2, '6 to review')}</section>`, { h: 1110 });
+    else if (B === 'NWI2_3B') html = crop(1100, `<div class="g3">${stcard('Empty, read', 'Possible duplicates', '<p class="sub">No possible duplicates to review.</p>')}${stcard('Could not be read', 'Possible duplicates', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Possible duplicates could not be read.</b> Nothing is shown as zero. Your contacts are unchanged.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`, 'bad')}${stcard('Import failed', 'CSV file', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>[clients.csv] was not imported.</b> No column could be mapped to Name. Nothing was written.</div></div><button type="button" class="btn" style="align-self:flex-start">Change mapping</button>`)}</div>`);
+
+    /* ===== NW3 · Introductions workspace ===== */
+    else if (B === 'NWI3') html = shell('i', INTROPAGE(), { h: 1420, railT: 'Ask about introductions' });
+
+    /* ===== NW3.1 · Request introduction ===== */
+    else if (B === 'NWI3_1') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">${P1()}${P2()}${P3()}</div>`);
+    else if (B === 'NWI3_1B') html = crop(1400, `<div style="display:flex;gap:20px;align-items:flex-start">${PSENT}${PASK()}${PNO}</div><p class="foot">${LBL('Investor branch')} Shown when no teammate knows them. An ask is offered only when the target is a founder or a startup on Axal; <code>POST /api/introductions/request</code> takes <code>founder_user_id</code>, <code>founder_id</code> or <code>project_id</code>.</p>`);
+
+    /* ===== NW3.3 · Received introduction decision ===== */
+    else if (B === 'NWI3_3') html = shell('i', `${HEAD({ tab: 'Introductions', crumb: '<a href="#">Network</a> › <a href="#">Introductions</a> › From your team › Received', eye: 'Introduction · from your team', h1: '[Dev Varma] asks you to introduce him to [Lena Sato]', sub: `Requested ${mo('2026-11-11')} · [Dev] is your teammate at [Harbor Lane Capital]`, acts: `<span class="pl a" style="font-size:12.5px;padding:3px 11px">◷ Waiting · your decision</span><button type="button" class="btn ask">${E}Ask</button>` })}
+      <div class="g"><div class="c8" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="rq"><div class="ch"><h2 id="rq">The request</h2></div><dl class="st tx" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><dt>Requester</dt><dd>[Dev Varma]<small>teammate · [Harbor Lane Capital]</small></dd></div><div><dt>Target</dt><dd>[Lena Sato]<small>Founder, [Kelp Bio]</small></dd></div><div><dt>How you know them</dt><dd>Your tie on Axal<small>Advisor to founder · last touch 2026-11-06</small></dd></div></dl>
+      <div class="nt"><span class="ic" aria-hidden="true">“</span><div><b>[Dev]’s note.</b> “Exploring a pilot with [Kelp Bio]’s lab team. Lena would know who runs it.”</div></div></section>
+      <section class="cd" aria-labelledby="dc"><div class="ch"><h2 id="dc">Your decision</h2></div>
+      <div class="f"><label for="dn">Note (optional)</label><span id="dn" class="in ta hint">Add a note for [Dev]…</span><span class="cnt">0 / 1000</span></div>
+      <p class="sub"><b>The requester will be able to read this note.</b></p>
+      <div class="cf"><span class="foot">Not now ends the request; [Dev] sees “Not now” and your note.</span><div class="acts"><button type="button" class="btn">Not now</button><button type="button" class="btn p">Accept</button></div></div></section></div>
+      <div class="c4" style="display:flex;flex-direction:column;gap:16px"><section class="cd"><div class="ch"><h2>After you accept</h2></div><p class="sub">The request shows <b>Write the introduction</b>. It opens your Email composer with this request attached. When you send it, the introduction is recorded as Made.</p><p class="foot">There is no Made button: Made is never recorded without a send.</p></section>
+      <section class="cd"><div class="ch"><h2>Credits</h2></div><p class="sub">Team introductions use no credit and no ask.</p></section></div></div>`, { h: 900, railT: 'Ask about this request' });
+    else if (B === 'NWI3_3B') html = crop(1300, `<div class="g"><section class="c7 cd"><span class="tag">After Accept</span><div class="ch"><h2>[Dev Varma] → [Lena Sato]</h2><span class="pl v">✓ Accepted · ○ not made</span></div><p class="sub">You accepted ${mo('2026-11-14 10:12')} with the note “Happy to, I’ll write it today.”</p>
+      <div class="nt a"><span class="ic" aria-hidden="true">◷</span><div><b>Not made yet.</b> It is recorded as Made when you send the introduction from the Email composer.</div></div>
+      <div class="cf"><span class="foot">Opens the composer with the request attached.</span><button type="button" class="btn p">Write the introduction</button></div></section>
+      <section class="c5 cd"><span class="tag">Eadwyn · introduction draft</span><div class="draft"><div class="cost"><span>Cost, quoted before drafting</span><b>[900] tokens</b></div><p class="tx">Lena, meet Dev, my colleague at [Harbor Lane Capital]. He is exploring a pilot with your lab team and I thought you two should talk. Dev, Lena founded [Kelp Bio]…</p>
+      <div class="acts"><button type="button" class="btn">Accept into composer</button><button type="button" class="btn">Edit</button><button type="button" class="btn t">Discard</button></div><span class="foot">You send it yourself. Without Eadwyn, the composer opens empty.</span></div></section></div>`);
+
+    /* ===== NW3.5 · Delivery could not be confirmed ===== */
+    else if (B === 'NWI3_5') html = crop(1400, `<div class="g">
+      <section class="c6 cd"><span class="tag">record_pending · sent, not recorded</span><div class="ch"><h2>You → [Lena Sato] for [Dev Varma]</h2><span class="pl a">! Needs recording</span></div><div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>The introduction was sent, but its status could not be fully recorded.</b> The email went out ${mo('2026-11-14 10:31')}. It will not be sent again.</div></div><div class="acts"><button type="button" class="btn p">Record it as made</button><button type="button" class="btn">View delivery details</button></div><p class="foot">Record it as made sends nothing. There is no Resend: delivery is known.</p></section>
+      <section class="c6 cd"><span class="tag">unconfirmed · an earlier send</span><div class="ch"><h2>You → [Lena Sato] for [Dev Varma]</h2><span class="pl">? Delivery not confirmed</span></div><div class="nt a"><span class="ic" aria-hidden="true">?</span><div><b>Did it arrive?</b> A send started ${mo('2026-11-14 10:31')} but the mail service did not confirm it. Check with [Lena] or [Dev] before writing it again.</div></div><div class="acts"><button type="button" class="btn">Yes, record it as made</button><button type="button" class="btn">No, write it again</button><button type="button" class="btn t">View delivery details</button></div></section>
+      <section class="c6 cd"><span class="tag">not_sent</span><div class="ch"><h2>You → [Lena Sato] for [Dev Varma]</h2><span class="pl r">✕ Not sent</span></div><div class="nt r"><span class="ic" aria-hidden="true">✕</span><div><b>The introduction was not sent.</b> Nothing went out and it is still Accepted.</div></div><div class="acts"><button type="button" class="btn p">Write it again from the Email composer</button></div></section>
+      <section class="c6 cd"><span class="tag">sending</span><div class="ch"><h2>You → [Lena Sato] for [Dev Varma]</h2><span class="pl v">◷ Sending</span></div><p class="sub" role="status">Sending from your Email composer… Do not send it again.</p><span class="sk" style="width:60%;height:10px" aria-hidden="true"></span></section></div>`);
+
+    /* ===== NW4 · Organizations directory ===== */
+    else if (B === 'NWI4') html = shell('i', `${HEAD({ tab: 'Organizations', h1: 'Organizations', sub: 'Names grouped from your ties and contacts, with who is under each and where the name came from.' })}
+      <div class="tools"><label for="oq" class="sr">Search organizations</label><input id="oq" class="inp" style="color:var(--ink);font-family:var(--sg)" placeholder="Search organizations"><div class="seg" role="radiogroup" aria-label="View"><button type="button" role="radio" aria-checked="true">All · ${N.orgs}</button><button type="button" role="radio" aria-checked="false">Co-investors · 5</button><button type="button" role="radio" aria-checked="false" aria-disabled="true" style="opacity:.55">Portfolio</button><button type="button" role="radio" aria-checked="false" aria-disabled="true" style="opacity:.55">Passed</button><button type="button" role="radio" aria-checked="false" aria-disabled="true" style="opacity:.55">LPs</button></div>
+      <span class="foot">${TB('Portfolio: no tie links a holding')} ${TB('Passed: no tie links a passed deal')} ${TB('LPs: no LP store')}</span></div>
+      <section class="cd" aria-labelledby="ol"><div class="ch"><h2 id="ol">All organizations</h2><span class="sm">${N.orgs} · most people first</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Organization</th><th scope="col">People · where the name came from</th><th scope="col" class="n">People</th><th scope="col">Latest touch</th><th scope="col">Open reminders · follow-ups</th></tr></thead><tbody>
+      ${J(ORGS.map((o) => `<tr><td><a href="#"><b>${o.n}</b></a></td><td>${J(o.p.map((p) => `<div>${p[0]} <span class="src2">${p[1]}</span></div>`))}</td><td class="n">${o.c}</td><td${o.lt ? ' class="mo"' : ' class="na"'}>${o.lt || '— Not recorded'}</td><td${o.o ? '' : ''}>${o.o || '<span class="s">○ None</span>'}</td></tr>`))}</tbody></table>${pager(1, 8, N.orgs)}
+      <div class="cf"><span class="foot">Organizations come only from a recorded company. Email domains are never used. ${TB('an organization record · #6256')}</span></div></section>`, { h: 900 });
+    else if (B === 'NWI4B') html = crop(900, `<div class="g">${stcard('Empty, read', 'Organizations', '<p class="sub">No organization is recorded on your relationships yet.</p><p class="foot">Organizations come only from a recorded company. Email domains are never used.</p>', 'c6')}${stcard('Could not be read', 'Organizations', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Companies could not be read.</b> Your ties still show in Relationships, without their company.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`, 'c6 bad')}</div>`);
+
+    /* ===== NW4.1 · Organization detail ===== */
+    else if (B === 'NWI4_1') html = shell('i', `${HEAD({ tab: 'Organizations', crumb: '<a href="#">Network</a> › <a href="#">Organizations</a> › [Northstar Capital]', eye: 'Organization · a name, not a record', h1: '[Northstar Capital]', sub: `3 people in your book · latest touch ${mo('2026-09-08')} · ${TB('no organization record: website, type and location are not stored')}` })}
+      <div class="g"><div class="c8" style="display:flex;flex-direction:column;gap:16px">
+      <section class="cd" aria-labelledby="pb"><div class="ch"><h2 id="pb">People in your book</h2><span class="sm">2 ties · 1 contact</span></div>
+      <table class="tbl"><thead><tr><th scope="col">Person</th><th scope="col">Kind</th><th scope="col">Name came from</th><th scope="col">Last touch</th><th scope="col"><span class="sr">Open</span></th></tr></thead><tbody>
+      <tr><td><b>[Eva Lindqvist]</b><small>Investor</small></td><td>Tie · Co-investor</td><td><span class="src2">their account</span></td><td class="mo">2026-09-08<small>67 days ago</small><div style="margin-top:3px">${COLD}</div></td><td><button type="button" class="btn">Tie Sheet</button></td></tr>
+      <tr><td><b>[Hugo Brandt]</b><small>Investor</small></td><td>Tie · Co-investor</td><td><span class="src2">their account</span></td><td class="mo">2026-07-28<small>109 days ago</small><div style="margin-top:3px">${COLD}</div></td><td><button type="button" class="btn">Tie Sheet</button></td></tr>
+      <tr><td><b>[Sam Ortiz]</b><small>Associate</small></td><td>Contact · CSV import</td><td><span class="src2">imported company</span></td><td class="na">— Not recorded</td><td><button type="button" class="btn">Open</button></td></tr></tbody></table></section>
+      <section class="cd" aria-labelledby="in"><div class="ch"><h2 id="in">Introductions that name this company</h2><span class="sm">1</span></div>
+      ${pr3(['RO', 'You → [Ravi Shah], via [Iris Chen]', `[Northstar Capital] · made ${mo('2026-09-30')} · outcome: meeting held`, '<span class="pl g">✓✓ Made</span>', '<a class="btn t" href="#">Open</a>'])}</section></div>
+      <div class="c4" style="display:flex;flex-direction:column;gap:16px"><section class="cd" aria-labelledby="or"><div class="ch"><h2 id="or">Open reminders</h2><span class="sm">1</span></div><ul class="lst"><li><div><b>Share deal memo</b><small>[Eva Lindqvist] · due ${mo('2026-11-13')} · ◷ 1 day late</small></div><button type="button" class="btn">Done</button></li></ul></section>
+      <section class="cd" aria-labelledby="wk"><div class="ch"><h2 id="wk">Who knows them</h2><span class="sm">teammates who share</span></div>
+      <div class="pr"><span class="av">IC</span><div><b>[Iris Chen]</b><small>knows [Ravi Shah] · shares her book with [Harbor Lane Capital]</small></div></div>
+      <div class="pr"><span class="av">TB</span><div><b>[Tom Becker]</b><small>knows [Hugo Brandt] · shares his book</small></div></div>
+      <p class="foot">Teammates’ notes and email addresses are never shown.</p></section></div></div>`, { h: 960 });
+
+    /* ===== NW6 · Permission and support-session states ===== */
+    else if (B === 'NWI6') html = shell('i', `${HEAD({ acts: `<button type="button" class="btn ask" aria-disabled="true">${E}Ask</button>` })}
+      <div class="g">
+      <section class="c6 cd"><span class="tag">Refused · server</span><div class="ch"><h2>From your team</h2>${RF()}</div><p class="sub">A support session cannot read or change a member’s shared relationships.</p><p class="foot"><code>/api/relationships/*</code> answers 403 <code>support_session_refused</code>.</p></section>
+      <section class="c6 cd"><span class="tag">Refused · server</span><div class="ch"><h2>Who knows them</h2>${RF()}</div><p class="sub">A support session cannot read or change a member’s shared relationships.</p></section>
+      <section class="c6 cd"><span class="tag">Read-only · server</span><div class="ch"><h2>Contacts you keep · imported</h2><span class="pl">⊘ Read-only</span></div><p class="sub">A support session cannot change this member’s contacts.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Add note</button><button type="button" class="btn" aria-disabled="true">Add follow-up</button><button type="button" class="btn" aria-disabled="true">Import contacts</button></div></section>
+      <section class="c6 cd"><span class="tag">Disabled in the page · server does not refuse yet</span><div class="ch"><h2>Ties, touches, reminders, notes, hand-added contacts</h2>${TB('refuse support writes on /api/partnernet/* · #6256')}</div><p class="sub">A support session cannot change this member’s relationships.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Add touch</button><button type="button" class="btn" aria-disabled="true">Add reminder</button><button type="button" class="btn" aria-disabled="true">Save note</button><button type="button" class="btn" aria-disabled="true">Add person</button></div></section>
+      <section class="c6 cd"><span class="tag">Refused · role</span><div class="ch"><h2>Your asks</h2>${RF()}</div><p class="sub"><b>Your role cannot open introduction asks.</b> Asks need an investor licence, which HQ grants.</p><a class="btn t" href="#" style="align-self:flex-start">How licences are granted →</a></section>
+      <section class="c6 cd"><span class="tag">Refused · team filter</span><div class="ch"><h2>Who knows them · team</h2>${RF()}</div><p class="sub">You can search only teams you are on.</p><p class="foot">The same words whether or not the team exists.</p></section></div>`, { h: 920, banner: `<div class="bn sup" role="status"><span aria-hidden="true">⚠</span><b>Support session</b> · [Axal Support · Jo Park] is viewing [Rhea Okoro]’s account, started ${mo('2026-11-14 09:40')}. Each section says what it does in this session.<button type="button" class="btn" style="margin-left:auto">End session</button></div>` });
+
+    /* ===== NW7 · Credits, quota and Eadwyn unavailable ===== */
+    else if (B === 'NWI7') html = crop(1400, `<div class="g">
+      ${stcard('Credits could not be read', 'Curated matches', `<div class="line" style="border-color:var(--negE);background:var(--negBg)"><span>Introduction credits</span>${UR()}</div><p class="sub">Accept is off until the balance loads, so a match is never accepted against an unknown balance. Decline still works.</p><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn" aria-disabled="true">Accept</button><button type="button" class="btn t">Try again</button></div>`, 'c4 bad')}
+      ${stcard('Zero credits · read just now', 'Curated matches', `<div class="line"><span><b class="mo">0</b> credits available: <b class="mo">0</b> of this month’s <b class="mo">3</b> (November 2026) + <b class="mo">0</b> earned by referral</span></div><p class="sub">No introduction credits are available. This month’s allowance is used; earn more by referral.</p><div class="acts"><button type="button" class="btn">Decline</button><button type="button" class="btn" aria-disabled="true">Accept</button><a class="btn t" href="#">Referrals →</a></div>`, 'c4')}
+      ${stcard('Quota could not be read', 'Ask Axal', `<div class="line" style="border-color:var(--negE);background:var(--negBg)"><span>Asks this quarter</span>${UR()}</div><p class="sub">Ask Axal is off until your asks left this quarter can be read. Team requests still work.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Ask Axal for an introduction</button><button type="button" class="btn t">Try again</button></div>`, 'c4 bad')}
+      ${stcard('Quota used up', 'Ask Axal', `<div class="line"><span><b class="mo">0</b> of <b class="mo">3</b> asks left this quarter (Q4 2026)</span></div><p class="sub">You have used all <b class="mo">3</b> introductions for Q4 2026. Q1 2027 starts 2027-01-01.</p><div class="acts"><button type="button" class="btn" aria-disabled="true">Ask Axal for an introduction</button><a class="btn t" href="#">Compare tiers →</a></div><p class="foot">The next tier allows more asks a quarter. Upgrading is a separate, priced step.</p>`, 'c4')}
+      ${stcard('Eadwyn unavailable', 'Eadwyn', `<div class="nt a"><span class="ic" aria-hidden="true">!</span><div><b>Eadwyn is unavailable right now.</b> Drafts are off. Every manual action still works: write the note, the introduction or the follow-up yourself.</div></div>`, 'c4')}
+      ${stcard('Eadwyn out of tokens', 'Eadwyn', `<div class="line"><span>AI tokens left</span><b class="mo">0</b></div><p class="sub">The draft needs about [1,200] tokens. Every manual action still works.</p><a class="btn t" href="#" style="align-self:flex-start">Add tokens →</a>`, 'c4')}</div>`);
+
+    /* ===== NW5 on the new sections ===== */
+    else if (B === 'NWI5A') html = crop(1400, `<div class="g">
+      ${stcard('Loading', 'Ties on Axal', '<span class="sk" style="width:70px;height:28px" aria-hidden="true"></span><span class="sk" style="width:100%;height:12px" aria-hidden="true"></span><span class="sk" style="width:80%;height:12px" aria-hidden="true"></span><p class="foot" role="status">Loading ties…</p>', 'c3')}
+      ${stcard('Not recorded', 'Tie fields', `<dl class="rv"><dt>Company</dt><dd>${NR()}</dd><dt>Context</dt><dd>${NR()}</dd><dt>Last touch</dt><dd>${NR()}<small class="foot" style="display:block">not cold: unknown</small></dd><dt>Private note</dt><dd>${NR()}</dd><dt>Ask message</dt><dd>${NR()}</dd></dl>`, 'c3')}
+      ${stcard('Could not be read', 'Reminders', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Reminders could not be read.</b> This is not zero. Ties, touches and notes still work.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`, 'c3 bad')}
+      ${stcard('Could not be read', 'Ties on Axal', `<div class="nt r"><span class="ic" aria-hidden="true">?</span><div><b>Ties could not be read.</b> Contacts you keep, matches and asks still show below.</div></div><button type="button" class="btn" style="align-self:flex-start">Try again</button>`, 'c3 bad')}
+      ${stcard('Stale', 'Curated matches', `<div class="nt a"><span class="ic" aria-hidden="true">◷</span><div><b>As of 14:02, 47 minutes ago.</b> Matches could not be refreshed. Accept waits until they reload.</div></div><button type="button" class="btn" style="align-self:flex-start">Refresh matches</button>`, 'c3')}
+      ${stcard('Refused', 'From your team', `<p>${RF()}</p><p class="sub">You are not on a team that shares books. A team admin adds you to the team.</p>`, 'c3')}
+      ${stcard('Saving', 'Private note', `<p class="sub" role="status">◷ Saving your note…</p><span class="foot">Edits stay in the box while it saves.</span>`, 'c3')}
+      ${stcard('Save failed', 'Private note', `<div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Your note was not saved.</b> Your edits are kept in the box.</div></div><button type="button" class="btn" style="align-self:flex-start">Save again</button>`, 'c3 bad')}</div>`);
+
+    /* ===== NW1.1 · Overview with Ask open ===== */
+    else if (B === 'NWI1_1') html = shell('f', `${HEAD({ sub: 'Know who you can reach, which relationships need attention, and which introductions are moving.' })}
+      <section class="kp" aria-label="Network summary">${fig('', 'Connections', 142, 'people in your relationship book')}${fig('att', 'Needs attention', 7, '◷ follow-ups past their due date')}${fig('att', 'Awaiting my action', 3, '! team requests asking you to decide')}${fig('', 'Active introductions', 5, '2 waiting · 3 accepted, not yet made')}</section>
+      <section class="cd" aria-labelledby="na"><div class="ch"><h2 id="na">Relationships needing attention</h2><span class="sm">7 · oldest due first</span></div>
+      <div class="pr"><span class="av">BL</span><div><b>[Ben Larsen]</b> <span class="mu">· Head of Ops, [Quill Analytics]</span><small>Follow-up “Ask about pilot” due ${mo('2026-11-02')}</small></div><div class="acts">${LATE('12 days late')}<button type="button" class="btn">Open</button></div></div>
+      <div class="pr"><span class="av">GT</span><div><b>[Grace Tan]</b> <span class="mu">· [Tidepool Labs]</span><small>Follow-up “Send Q3 update” due ${mo('2026-11-05')}</small></div><div class="acts">${LATE('9 days late')}<button type="button" class="btn">Open</button></div></div></section>
+      <section class="cd" aria-labelledby="ip"><div class="ch"><h2 id="ip">Introductions in progress</h2></div>
+      ${pr3(['MR', 'You → [Sara Holm], via [Iris Chen]', `Made ${mo('2026-10-22')} · follow-up due ${mo('2026-11-12')}`, '<span class="pl g">✓✓ Made</span>', '<a class="btn t" href="#">Open</a>'])}
+      ${pr3(['MR', 'You → [Priya Nair], via [Tom Becker]', `Accepted ${mo('2026-11-03')} · not made yet`, '<span class="pl v">✓ Accepted · ○ not made</span>', '<a class="btn t" href="#">Open</a>'])}</section>`, { h: 1000, rail: RAIL_QA('f') });
+    else if (B === 'NWI1_1B') html = `<div class="${CV}" style="width:360px">${railOpen(RAIL_QA('i'))}</div>`;
+
+    /* ===== NW8.1 · Phone introduction flow ===== */
+    else if (B === 'NWI8_1A') html = phone('Request introduction', `${STP(1)}<h1 style="font-size:20px;font-weight:800">Who do you want to meet?</h1><div class="seg" role="radiogroup" aria-label="Search for" style="width:100%"><button type="button" role="radio" aria-checked="true" style="flex:1;min-height:40px">Person</button><button type="button" role="radio" aria-checked="false" style="flex:1;min-height:40px">Company</button><button type="button" role="radio" aria-checked="false" style="flex:1;min-height:40px">Fund</button></div><div class="f"><label for="m1">LinkedIn URL or email</label><span id="m1" class="in" style="min-height:44px">linkedin.com/in/[theo-grant]</span></div><p class="foot">Only teammates who share their book are searched.</p>`, '<button type="button" class="btn p">Find who knows them</button>', { back: 1 });
+    else if (B === 'NWI8_1B') html = phone('Request introduction', `${STP(2)}<h1 style="font-size:20px;font-weight:800">Who can introduce you?</h1><div class="pick on"><span class="av">IC</span><div><b>[Iris Chen]</b><small>worked with Theo at [Kelp Bio]</small></div><span class="pl v">✓</span></div><div class="pick"><span class="av">TB</span><div><b>[Tom Becker]</b><small>connected on LinkedIn</small></div><span></span></div><div class="f"><label for="m2">Note to [Iris] (optional)</label><span id="m2" class="in ta hint">Why you want to meet Theo…</span><span class="cnt">0 / 1000</span></div><button type="button" class="btn ask" style="min-height:44px">${E}Draft with Eadwyn · est. [400] tokens</button>`, '<button type="button" class="btn p">Continue</button>', { back: 1 });
+    else if (B === 'NWI8_1C') html = phone('Request introduction', `${STP(3)}<h1 style="font-size:20px;font-weight:800">Review and send</h1><div class="pc"><span class="eye">Target</span><b>[Theo Grant] · [Kelp Bio]</b><span class="eye" style="margin-top:6px">Teammate</span><b>[Iris Chen]</b><span class="eye" style="margin-top:6px">Note</span><span>“We’re building a health pilot shortlist and Theo runs partnerships.”</span></div><div class="line"><b>No credit is used for a team request</b></div><p class="sub">[Iris] accepts or says Not now. If she accepts, she writes the introduction from her Email composer.</p>`, '<button type="button" class="btn p">Send request</button>', { back: 1 });
+    else if (B === 'NWI8_1D') html = phone('Ask Axal', `<h1 style="font-size:20px;font-weight:800">Ask Axal for an introduction</h1><p class="sub">No teammate knows [Amara Osei]. She is a founder on Axal ([Loomcraft]).</p><div class="line"><span>${ASKS}</span></div><div class="f"><label for="m4">Message (optional)</label><span id="m4" class="in ta">We back early textile-tech and would like to meet before [Loomcraft]’s seed.</span><span class="cnt">76 / 2,000</span></div><p class="sub"><b>An ask is not consent from the founder.</b></p>`, '<button type="button" class="btn p">Use 1 ask and send</button>', { back: 1 });
+    else if (B === 'NWI8_1E') html = phone('Introduction', `<span class="pl a" style="align-self:flex-start">◷ Waiting · your decision</span><h1 style="font-size:20px;font-weight:800">[Dev Varma] asks you to introduce him to [Lena Sato]</h1><div class="pc"><span class="eye">How you know her</span><span>Your tie on Axal · Advisor to founder</span><span class="eye" style="margin-top:6px">[Dev]’s note</span><span>“Exploring a pilot with [Kelp Bio]’s lab team.”</span></div><div class="f"><label for="m5">Note (optional)</label><span id="m5" class="in ta hint">Add a note for [Dev]…</span></div><p class="sub"><b>The requester will be able to read this note.</b></p>`, '<button type="button" class="btn">Not now</button><button type="button" class="btn p">Accept</button>', { back: 1 });
+    else if (B === 'NWI8_1F') html = phone('Introduction', `<span class="pl v" style="align-self:flex-start">✓ Accepted · ○ not made</span><h1 style="font-size:20px;font-weight:800">[Dev Varma] → [Lena Sato]</h1><div class="nt a"><span class="ic" aria-hidden="true">◷</span><div><b>Not made yet.</b> It is recorded as Made when you send it from the Email composer.</div></div><div class="draft"><div class="cost"><span>Eadwyn draft</span><b>[900] tokens</b></div><p class="tx">Lena, meet Dev, my colleague at [Harbor Lane Capital]…</p><div class="acts"><button type="button" class="btn" style="min-height:44px">Accept</button><button type="button" class="btn" style="min-height:44px">Edit</button><button type="button" class="btn t" style="min-height:44px">Discard</button></div></div>`, '<button type="button" class="btn p">Write the introduction</button>', { back: 1 });
+
+    /* ===== NW12.3 · Investor phone ===== */
+    else if (B === 'NWI12_3A') html = phone('Network', `<header style="display:flex;flex-direction:column;gap:8px"><span class="eye">Network</span><div class="hrow"><div><h1>Your network</h1></div></div><button type="button" class="btn p" style="width:100%;font-size:14px">Request introduction</button></header>${MSEL('Overview')}
+      <section class="kp" aria-label="Network figures">${fig('', 'Ties on Axal', N.ties, 'accepted ties')}${fig('att', 'Going cold', N.cold, '▽ no touch in over 60 days')}${fig('att', 'Reminders due', N.due, '◷ today or earlier')}${fig('', 'Curated matches', N.match, 'awaiting your decision')}</section>
+      <div class="line"><span>${ASKS}</span></div>
+      <section class="cd"><div class="ch"><h2>Ties needing attention</h2><span class="sm">${N.att}</span></div><ul class="lst">${J(ATT.slice(0, 3).map((t) => `<li><div><b>${t.n}</b><small>${t.lt ? 'Last touch ' + t.lt : 'Last touch: Not recorded'}${t.rem ? ' · “' + t.rem[0] + '” due ' + t.rem[1] : ''}</small><div class="acts" style="margin-top:4px">${t.cold ? COLD : ''}${t.rem ? LATE(t.rem[2]) : ''}</div></div><a class="btn" href="#">Open</a></li>`))}</ul><a class="btn t" href="#" style="min-height:44px;align-self:flex-start">All ${N.att} →</a></section>
+      <section class="cd"><div class="ch"><h2>Reminders</h2><span class="sm">${N.due} due</span></div><ul class="lst">${J(REMDUE.map((t) => `<li><div><b>${t.rem[0]}</b><small>${t.n} · due ${t.rem[1]}</small></div><button type="button" class="btn">Done</button></li>`))}</ul></section>
+      <section class="cd"><div class="ch"><h2>Introductions in progress</h2></div><span class="eye">From your team · 3</span><ul class="lst"><li><div><b>[Dev Varma] → [Lena Sato]</b><small>your decision</small></div><a class="btn" href="#">Decide</a></li><li><div><b>You → [Priya Nair]</b><small>via [Tom Becker] · accepted, not made</small></div><span class="pl v">✓</span></li></ul><span class="eye">Curated matches · 4 awaiting</span><p class="foot">${CRED}</p><span class="eye">Your asks · 1</span><ul class="lst"><li><div><b>[Sofia Lind]</b> ${TB('#6260')}<small>asked 2026-10-19</small></div><span class="pl">◷ Pending</span></li></ul></section>
+      <section class="cd"><div class="ch"><h2>Organizations</h2><span class="sm">${N.orgs}</span></div><ul class="lst">${J(ORGS.slice(0, 3).map((o) => `<li><div><b>${o.n}</b><small>${o.c} people</small></div><a class="btn t" href="#">Open</a></li>`))}</ul><a class="btn t" href="#" style="min-height:44px;align-self:flex-start">Show all ${N.orgs} →</a></section>`, null, { h: 2060 });
+    else if (B === 'NWI12_3B') html = phone('Relationships', `${MSEL('Relationships')}<label for="pq" class="sr">Search</label><input id="pq" class="inp" style="min-height:44px;min-width:0;width:100%" placeholder="Search by name or company"><div class="seg" role="radiogroup" aria-label="View" style="align-self:flex-start"><button type="button" role="radio" aria-checked="true">Everyone</button><button type="button" role="radio" aria-checked="false">Founders</button><button type="button" role="radio" aria-checked="false">▽ Cold</button></div>
+      <div class="ch"><h2>On Axal</h2><span class="sm">${N.ties} ties</span></div>${J(TIES.slice(0, 3).map((t) => `<div class="pc"><div class="r1"><div><b>${t.n}</b><br><small>${t.r} · ${t.ty} · ${t.co || 'company not recorded'}</small></div><button type="button" class="pi" aria-label="Open ${t.n}">›</button></div><small>${t.lt ? 'Last touch ' + t.lt + ' · ' + t.d + ' days' : 'Last touch: Not recorded'}</small><div class="acts">${t.cold ? COLD : ''}${t.rem ? LATE(t.rem[2]) : ''}</div></div>`))}
+      <p class="foot">1–25 of ${N.ties} · <a href="#">More</a></p><div class="ch"><h2>Contacts you keep</h2><span class="sm">${N.contacts}</span></div>${J(CONTACTS.slice(0, 1).map((c) => `<div class="pc"><b>${c[0]}</b><small>${c[1]} · ${c[2]} · ${c[3]}</small></div>`))}`, '<button type="button" class="btn">Add person</button><button type="button" class="btn p">Request introduction</button>');
+    else if (B === 'NWI12_3C') html = phone('[Ada Okafor]', `<span class="eye">Tie on Axal</span><h1 style="font-size:20px;font-weight:800">[Ada Okafor]</h1><p class="sub">Investor · Co-investor tie · [Harbor Seed]</p>
+      <div class="pc"><span class="eye">Last touch</span><span><span class="mo">2026-08-30</span> · 76 days ago</span>${COLD}<span class="eye" style="margin-top:6px">Deal or fund context</span><span>Co-led the [Kelpwise] seed</span></div>
+      <div class="sec"><h3>Touch history</h3><ul class="lst"><li><div><b>Meeting</b><small>2026-08-30 · by you</small></div><button type="button" class="btn t">Void</button></li><li><div class="vd"><b>Call</b><small>2026-08-30 · voided</small></div><span></span></li></ul></div>
+      <div class="sec"><h3>Reminders</h3><ul class="lst"><li><div><b>Send Q3 update</b><small>due 2026-11-10 · ◷ 4 days late</small></div><button type="button" class="btn">Done</button></li><li><div class="vd"><b>Thank-you after intro</b><small>done 2026-09-01</small></div><span class="pl g">✓</span></li></ul></div>`, '<button type="button" class="btn">Add touch</button><button type="button" class="btn p">Request introduction</button>', { back: 1 });
+
+    /* ===== NW9 · Tablet 768 ===== */
+    else if (B === 'NWI9') html = `<div class="${CV} tab">${phTop('Network').replace('class="pt"', 'class="pt" style="padding:0 12px"')}<main class="bd" style="padding:20px 24px">${HEAD({ tab: 'Relationships', h1: 'Relationships', sub: 'Ties on Axal and contacts you keep, counted apart.' })}
+      <div class="tools"><input class="inp" style="min-width:0;flex:1" placeholder="Search by name or company" aria-label="Search"><button type="button" class="dd">View: Everyone ▾</button><button type="button" class="dd">Add ▾</button></div>
+      <section class="cd"><div class="ch"><h2>On Axal</h2><span class="sm">${N.ties} ties</span></div><table class="tbl"><thead><tr><th scope="col">Person</th><th scope="col">Company</th><th scope="col">Last touch</th></tr></thead><tbody>${J(TIES.slice(0, 6).map((t, i) => `<tr${i === 0 ? ' class="cur"' : ''}><td><b>${t.n}</b><small>${t.ty}</small></td><td${t.co ? '' : ' class="na"'}>${t.co || '— Not recorded'}</td><td class="mo">${t.lt || '— Not recorded'}${t.cold ? ' ' + COLD : ''}</td></tr>`))}</tbody></table>${pager(1, 25, N.ties)}</section>
+      <section class="cd"><div class="ch"><h2>Contacts you keep</h2><span class="sm">${N.contacts} contacts</span></div><table class="tbl"><tbody>${J(CONTACTS.slice(0, 3).map((c) => `<tr><td><b>${c[0]}</b></td><td>${c[1]}</td><td>${c[3]}</td></tr>`))}</tbody></table></section></main>
+      <div class="dim" aria-hidden="true"></div>${TIESHEET.replace('width:520px', '').replace('class="sheet-r"', 'class="sheet-r" style="width:440px"')}</div>`;
+
+    /* ===== NW11 · Admin / HQ read-only ===== */
+    else if (B === 'NWI11') html = shell('a', `${HEAD({ sub: 'HQ’s own relationships. Read-only: nothing here writes.', acts: `<button type="button" class="btn ask">${E}Ask</button>` })}
+      <section class="kp" aria-label="HQ network figures"><div class="k"><span class="eye">Ties on Axal</span><span class="kv">54</span><span class="ks">HQ’s accepted ties</span></div><div class="k att"><span class="eye">Going cold</span><span class="kv">9</span><span class="ks">▽ no touch in over 60 days</span></div><div class="k"><span class="eye">Reminders due</span><span class="kv">2</span><span class="ks">◷ due today or earlier</span></div><div class="k"><span class="eye">Contacts kept</span><span class="kv">310</span><span class="ks">by HQ · counted apart from ties</span></div></section>
+      <div class="g"><section class="c7 cd"><div class="ch"><h2>Ties needing attention</h2><span class="sm">11</span></div>
+      ${J([['ZA', '[Zora Abara]', 'Investor · Co-investor · [Kite Ventures]', '2026-08-01', 105, 1], ['MB', '[Mats Berg]', 'Partner · Strategic alliance · [Fjord Legal]', '2026-08-20', 86, 1], ['YN', '[Yara Nunes]', 'Founder · Advisor to founder · [Solace Labs]', '2026-09-03', 72, 1]].map((r) => `<div class="pr"><span class="av">${r[0]}</span><div><b>${r[1]}</b> <span class="mu">· ${r[2]}</span><small>Last touch ${mo(r[3])} (${r[4]} days ago)</small></div><div class="acts">${COLD}<button type="button" class="btn">View</button></div></div>`))}</section>
+      <section class="c5 cd"><div class="ch"><h2>What this view is</h2></div><p class="sub">HQ’s own book: the ties and contacts held by the HQ account. It never opens a member’s book, and there is no search across members.</p><p class="foot">Owner choice C1 on #4799: read-only.</p></section>
+      <section class="c12 cd"><div class="ch"><h2>Relationships · On Axal</h2><span class="sm">54 ties · read-only</span></div><table class="tbl"><thead><tr><th scope="col">Person</th><th scope="col">Role · tie type</th><th scope="col">Company</th><th scope="col">Last touch</th><th scope="col">Context</th></tr></thead><tbody>
+      <tr><td><b>[Zora Abara]</b></td><td>Investor<small>Co-investor</small></td><td>[Kite Ventures]</td><td class="mo">2026-08-01<div>${COLD}</div></td><td class="na">— Not recorded</td></tr>
+      <tr><td><b>[Mats Berg]</b></td><td>Partner<small>Strategic alliance</small></td><td>[Fjord Legal]</td><td class="mo">2026-08-20<div>${COLD}</div></td><td>Licence counsel for the Nordics</td></tr>
+      <tr><td><b>[Ola Fenn]</b></td><td>Advisor<small>Operator partner</small></td><td class="na">— Not recorded</td><td class="na">— Not recorded</td><td class="na">— Not recorded</td></tr></tbody></table>${pager(1, 25, 54)}</section></div>`, { h: 1100, banner: `<div class="bn ro" role="status"><span aria-hidden="true">⊘</span><b>Read-only: HQ’s own relationships</b> · no write controls are shown, and no member’s book can be opened from here.</div>` });
+
+    /* ===== NW12.4 · Dark ===== */
+    else if (B === 'NWI12_4') html = overview({ h: 2200 });
+    else if (B === 'NWI12_4B') html = shell('i', INTROPAGE(), { h: 1420, railT: 'Ask about introductions' });
+
+    /* ===== Handoff ===== */
+    else if (B === 'NWIH') html = `<div class="${CV} doc"><div><span class="eye">Network v2 addendum · investor · #6256 · handoff</span><h2 style="font-size:22px;margin-top:4px">What was checked, what ships as frontend, and what needs the backend</h2></div>
+      <div class="cols">
+      <div><h3>Checked on main (6d7712c6d1)</h3><ul>
+      <li><code>routes/partnernet.ts</code>: ties (<code>GET /relationships</code>, accepted rows), requests and <code>/respond</code>, <code>PATCH /relationships/:id</code> (private note), touches with <code>/void</code>, reminders (<code>?all=1</code>), the hand-added book (<code>/book</code>). No support-session guard anywhere in the file.</li>
+      <li><code>lib/networkBook.js</code>: <code>COLD_AFTER_DAYS = 60</code>, strict <code>&gt;</code>; no recorded touch is unknown, not cold.</li>
+      <li><code>routes/introductions.ts</code>: <code>/quota</code> and <code>/request</code> are investor-only (403 <code>investor_only</code>, 402 <code>quota_intros_exhausted</code>); message sliced to 2,000; target by <code>founder_user_id</code>, <code>founder_id</code> or <code>project_id</code>; propositions <code>LIMIT 200</code>; accept 402 <code>no_credits</code>; decline free.</li>
+      <li><code>routes/relationships.ts</code>: who-knows, intro requests (decide, withdraw, outcome, follow-up), <code>/delivery/reconcile</code>, three Eadwyn drafts; every route refuses support sessions (403 <code>support_session_refused</code>).</li>
+      <li><code>routes/contact_imports.ts</code>: LinkedIn CSV with preview, duplicate reviews with merge/keep/dismiss, imported book notes and tasks; writes 403 <code>support_session</code>.</li>
+      <li><code>routes/contacts.ts</code>: <code>GET /</code> leads and <code>POST /invite</code> are the founder Leads surface.</li>
+      <li><code>pages/investor/InvestorNetworkWorkspace.jsx</code> and <code>shellConfig.js</code> (<code>NETWORK_ZONES</code>, the investor sidebar).</li></ul>
+      <h3 style="margin-top:12px">Preserved from the approved canvas</h3><ul><li>Header “Your network”, one primary and Ask beside it; the four links; the Person Sheet (now Tie Sheet); NW5 state words; NW3.2/NW3.4 lifecycle.</li><li>Numbering: the ids #4799 reserved (NW1.1, NW2.2, NW2.3, NW3, NW3.1, NW3.3, NW3.5, NW4, NW4.1, NW6, NW7, NW8.1, NW9, NW11), then NW12 onward. Board keys carry the NWI prefix (NWI12_2 = NW12.2).</li></ul></div>
+      <div><h3>Backend required (◇)</h3><ul><li>Portfolio, Passed and LPs views: nothing links a tie to <code>investor_portfolio_holdings</code> or a passed deal; no LP store.</li><li>An organization record (only derived names exist).</li><li>A structured deal or fund link on a tie.</li><li>The target’s name on an investor ask (#6260).</li><li>Any ask status after Pending (#6261).</li><li>An Eadwyn draft for an ask message, and a follow-up draft for a tie.</li><li>Merge when the held record is not an imported contact.</li><li>Invite to Axal for investors.</li><li>Refusing support-session writes on <code>/api/partnernet/*</code>.</li></ul>
+      <h3 style="margin-top:12px">Owner picks drawn (⚑)</h3><ul><li>Q1 A: one Relationships page, two labelled groups, two counts.</li><li>Q2 A: Add person writes the partner book.</li><li>Q3 A: Your asks shows Pending only.</li></ul>
+      <h3 style="margin-top:12px">Frontend only</h3><ul><li>The investor Overview, Relationships groups, Tie Sheet, Introductions groups, Organizations views, request sheet with the ask branch, NW6/NW7 states, phone, tablet and dark, all over existing routes.</li></ul>
+      <h3 style="margin-top:12px">Accessibility</h3><ul><li>Going cold, due, refused and could-not-be-read each pair a word with a glyph; colour never carries meaning alone.</li><li>Sheets are modal dialogs with a labelled heading; the stepper sets <code>aria-current="step"</code>; disabled actions keep a visible reason.</li><li>Phone targets 44px, sticky primary, tables become cards.</li></ul>
+      <h3 style="margin-top:12px">Open</h3><ul><li>Dropped from the old LP canvas I7: the standalone Eadwyn card, Support given rows and co-investor suggestions for a live deal.</li><li>The ◇ items without an issue number are tagged #6256.</li></ul></div></div></div>`;
+
+    html = html.replace(/class="([^"]*)"/g, (m, c) => 'class="' + c.split(/\s+/).filter(Boolean).map((x) => 'nwi-' + x).join(' ') + '"');
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

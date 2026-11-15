@@ -31,6 +31,7 @@ import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { formsFor } from '../src/pages/cycles/forms.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { apiModulesBlock } from './_apiModulesBlock.mjs';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -46,7 +47,16 @@ async function mounted(element, handle) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const requests = [];
-  globalThis.fetch = async (u, options = {}) => { requests.push([options.method || 'GET', String(u), options.body || null]); return handle(String(u), options); };
+  // D5074 slice 3: the versions read carries the map the Worker sends this viewer: an admin with a reason when the
+  // page is mounted for an admin, else the founder. A fixture that sets its own map keeps it.
+  const viewer = element?.props?.admin ? { admin: true } : { founder: true };
+  globalThis.fetch = async (u, options = {}) => {
+    requests.push([options.method || 'GET', String(u), options.body || null]);
+    const reply = await handle(String(u), options);
+    if (!String(u).includes('/modules/investor-narrative/form-options') || !reply?.ok) return reply;
+    const data = await reply.json().catch(() => null);
+    return data && typeof data === 'object' && !('capabilities' in data) ? response(withNarrativeCapabilities(data, viewer), reply.status) : response(data, reply.status);
+  };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
