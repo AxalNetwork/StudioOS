@@ -27,7 +27,7 @@
  *   · growWriters.ts `has(b, 'owner_name') ? … : s.owner_name` → always `str(b.owner_name, 120)` → test 3 fails.
  *   · growWriters.ts removeEntryStep's logCycleWriteStatement dropped from the batch → test 4 fails.
  *   · grow.ts remove-entry-step without `confirm` → test 4 fails.
- *   · grow.ts `rowOnly: true` dropped from edit-entry-step → test 1 fails.
+ *   · grow.ts `row_only: true` dropped from edit-entry-step → test 1 fails.
  *   · cycle_records.ts strip of `actions` for non-writers removed → test 1 fails.
  *   · cycle_records.ts nextFor returning only the key → test 1 fails.
  *
@@ -121,8 +121,8 @@ test('1: each step names its uid, with Mark done or Reopen, Edit with its own va
   assert.equal(declared['remove-entry-step'].tone, 'danger');
   assert.equal(declared['edit'].form.title, 'Edit market', 'the record\'s own Edit is unchanged');
   // The step's actions run only from its row, so the record's own actions row never draws them.
-  for (const k of ['mark-entry-step-done', 'reopen-entry-step', 'edit-entry-step', 'remove-entry-step']) assert.equal(declared[k].rowOnly, true, k);
-  assert.equal(declared['edit'].rowOnly, undefined);
+  for (const k of ['mark-entry-step-done', 'reopen-entry-step', 'edit-entry-step', 'remove-entry-step']) assert.equal(declared[k].row_only, true, k);
+  assert.equal(declared['edit'].row_only, undefined);
   // The open step is next, and its CTA keeps the step it runs on.
   assert.deepEqual(r.body.next, { text: 'Register the company · Ana · 15 Jan', action: { key: 'mark-entry-step-done', body: { step: 'stepa1' } } });
   // An advisor reads the plan with no action on any row.

@@ -293,15 +293,15 @@ test('6. download writes use the signed download door without rereading; foreign
 async function assertRowValues(View = CycleRoute) {
   const data = record();
   data.actions = [...data.actions,
-    { key: 'edit-step', kind: 'form', label: 'Edit step', rowOnly: true, form: { title: 'Edit step', fields: [{ key: 'text', label: 'Step', kind: 'T', required: true }] } },
-    { key: 'done-step', kind: 'write', label: 'Mark step done', rowOnly: true }];
+    { key: 'edit-step', kind: 'form', label: 'Edit step', row_only: true, form: { title: 'Edit step', fields: [{ key: 'text', label: 'Step', kind: 'T', required: true }] } },
+    { key: 'done-step', kind: 'write', label: 'Mark step done', row_only: true }];
   data.main = [{ title: 'Entry plan', rows: [
     { a: 'First step', c: 'Open', action: { key: 'done-step', body: { step: 's1' } }, actions: [{ key: 'edit-step', body: { step: 's1' }, values: { text: 'First step' } }] },
     { a: 'Second step', c: 'Open', action: { key: 'done-step', body: { step: 's2' } }, actions: [{ key: 'edit-step', body: { step: 's2' }, values: { text: 'Second step' } }] },
   ] }];
   const view = await mounted((url, opts) => opts.method === 'POST' ? response({ ok: true }) : response(data), { View });
   try {
-    // A rowOnly action draws on its rows only, never among the record's own actions.
+    // A row_only action draws on its rows only, never among the record's own actions.
     const edits = view.nodes().filter(n => n.tagName === 'BUTTON' && view.props(n)?.children === 'Edit step');
     assert.equal(edits.length, 2);
     await view.run(() => view.props(edits[1]).onClick());

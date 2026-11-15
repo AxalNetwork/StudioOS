@@ -11,7 +11,7 @@
  *   · recordModel.js availableRecord not filtering `actions` → the model test fails (an undeclared key survives).
  *   · RecordView.jsx desktop `{more}` removed → the view test fails.
  *   · RecordView.jsx phone rows not including `...more` → the phone test fails.
- *   · RecordView.jsx header or phone Actions drawing `rowOnly` actions → the desktop or phone test fails.
+ *   · RecordView.jsx header or phone Actions drawing `row_only` actions → the desktop or phone test fails.
  * (Each is run below through `mutationCheck`, so the suite re-proves them every run.)
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_row_actions_6113.test.mjs
@@ -43,12 +43,12 @@ const record = () => ({
   ] }],
   side: [],
   actions: [
-    { key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', rowOnly: true },
-    { key: 'edit-entry-step', label: 'Edit step', kind: 'form', rowOnly: true, form: { title: 'Edit entry step', fields: [
+    { key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', row_only: true },
+    { key: 'edit-entry-step', label: 'Edit step', kind: 'form', row_only: true, form: { title: 'Edit entry step', fields: [
       { key: 'text', label: 'Step', kind: 'T', required: true }, { key: 'owner_name', label: 'Owner', kind: 'T', value: 'declared' },
     ] } },
     { key: 'edit', label: 'Edit market', kind: 'form', tone: 'primary', form: { fields: [] } },
-    { key: 'remove-entry-step', label: 'Remove step', kind: 'write', tone: 'danger', rowOnly: true, confirm: { title: 'Remove this entry step?', cta: 'Remove' } },
+    { key: 'remove-entry-step', label: 'Remove step', kind: 'write', tone: 'danger', row_only: true, confirm: { title: 'Remove this entry step?', cta: 'Remove' } },
   ],
   activity: [], activity_total: 0,
 });
@@ -87,7 +87,7 @@ const plan = (html) => html.slice(html.indexOf('Entry plan'), html.indexOf('Acti
 
 function assertDesktop(m) {
   const whole = desktop(m);
-  // A rowOnly action is not one of the record's own: only the row draws it.
+  // A row_only action is not one of the record's own: only the row draws it.
   const header = whole.slice(0, whole.indexOf('Entry plan'));
   for (const label of ['Mark done', 'Edit step', 'Remove step']) assert.ok(!header.includes(label), `${label} not in the header`);
   assert.ok(header.includes('Edit market'), 'the record\'s own Edit stays');
@@ -101,7 +101,6 @@ test('desktop: a row draws its further actions after its own', async () => {
   assertDesktop(view);
   await mutationCheck(viewSource, 'pages/cycles/RecordView.jsx', assertDesktop, [
     ['{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}{more}', '{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}'],
-    ['actions={recordOwn(record.actions)} handlers={handlers}', 'actions={record.actions} handlers={handlers}'],
   ], true);
 });
 
@@ -118,6 +117,7 @@ test('phone: a row\'s further actions are rows beneath it', async () => {
   assertPhone(view);
   await mutationCheck(viewSource, 'pages/cycles/RecordView.jsx', assertPhone, [
     ['return [main, ...more];', 'return [main];'],
-    ['<RecordActions actions={recordOwn(record.actions)}', '<RecordActions actions={record.actions}'],
+    // The phone Actions group leaves a row_only action out (D6101's filter, reused by D6113).
+    ['actions.filter((action) => dispatchOf(action) && !action.row_only)', 'actions.filter((action) => dispatchOf(action))'],
   ], true);
 });

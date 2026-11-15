@@ -91,7 +91,8 @@ export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
   const { emailTo, onEmail } = useRecordHeader();
   if (phone) {
-    const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
+    // D6101: a `row_only` action (a KPI entry's Remove) runs from its section row alone.
+    const rows = actions.filter((action) => dispatchOf(action) && !action.row_only).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
     // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
@@ -99,7 +100,7 @@ export function RecordActions({ actions = [], ...handlers }) {
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">
-    {actions.map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
+    {actions.filter((action) => !action.row_only).map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
   </div>;
 }
 
@@ -232,8 +233,6 @@ function RecordNext({ next, declarations, handlers }) {
   </section>;
 }
 
-/** D6113 (#6113): the record's own actions; a `rowOnly` one runs only from the row that names it. */
-const recordOwn = (actions = []) => (actions ?? []).filter((action) => !action?.rowOnly);
 
 export default function RecordView({ record, activity, cycleName, moduleName, ...handlers }) {
   const declarations = declaredActions(record);
@@ -249,12 +248,12 @@ export default function RecordView({ record, activity, cycleName, moduleName, ..
       {(record.main ?? []).map((section) => <RecordSection key={section.key} section={section} {...context} />)}
       {(record.side ?? []).map((section) => <RecordSection key={section.key} section={section} side {...context} />)}
       <RecordActivity rows={phoneActivity} total={record.activity_total} {...context} />
-      <RecordActions actions={recordOwn(record.actions)} {...handlers} />
+      <RecordActions actions={record.actions} {...handlers} />
     </div>;
   }
   return <div className="space-y-3" data-testid="record-view">
     {/* D1454 (#3710, IV-D1): the pills beside the title and the one action row at top right of the header. */}
-    <RecordHeaderRow pills={<RecordPills pills={record.pills} />} actions={recordOwn(record.actions)} handlers={handlers}
+    <RecordHeaderRow pills={<RecordPills pills={record.pills} />} actions={record.actions} handlers={handlers}
       inline={(pills, row) => <div className="flex flex-wrap items-center justify-between gap-3.5">
         <div className="flex flex-wrap items-center gap-2" data-testid="record-pills">{pills}</div>{row}</div>} />
     <RecordFacts facts={record.facts} declarations={declarations} handlers={handlers} />

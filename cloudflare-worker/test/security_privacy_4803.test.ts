@@ -16,6 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -98,6 +99,6 @@ test('an unreadable ledger is available: false with its reason, never an empty h
 });
 
 test('/overview\'s dsr block carries the history', () => {
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8');
+  const src = readAdminSecurity();
   assert.match(src, /ledger_reason: ledgerReason[\s\S]{0,300}recent: await loadRecentDsrClosures\(env\),/);
 });

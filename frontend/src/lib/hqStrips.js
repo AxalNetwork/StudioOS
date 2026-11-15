@@ -32,10 +32,12 @@ const strip = (rows) => rows.map(([label, route, group]) => (group ? { label, ro
 
 export const HQ_STRIPS = {
   // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants";
-  // D4819 (#4819) names the second "Program access by licence", at the same address.
+  // D4819 (#4819) names the second "Program access by licence", at the same address;
+  // D5896 (#5896) adds L29's Axal VC package catalogue third.
   Licences: strip([
     ['Ledger', '/admin/licences'],
     ['Program access by licence', '/admin/licences/programs'],
+    ['Axal VC packages', '/admin/licences/packages'],
   ]),
   // D4860 part 5 (#4860, findings 12 and 13): grouped by domain, in the
   // groups and order of the overview's Detailed consoles (`CONSOLE_GROUPS`,

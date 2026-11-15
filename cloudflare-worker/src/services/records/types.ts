@@ -113,10 +113,11 @@ export type RecordAction = {
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
   /**
-   * D6113 (#6113): run only from a row that names it (with that row's body), so it is not drawn among the
-   * record's own actions. An entry step's Mark done, Reopen, Edit and Remove.
+   * D6101 (#6101): run only from a section row that names it with its body (a KPI
+   * entry's Remove); the page draws no header or Actions button for it. D6113 uses
+   * the same flag for an entry step's Mark done, Reopen, Edit and Remove.
    */
-  rowOnly?: true;
+  row_only?: boolean;
   /**
    * D5375: fields the client sends back with the form's values, as read with this record. Edit split
    * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.

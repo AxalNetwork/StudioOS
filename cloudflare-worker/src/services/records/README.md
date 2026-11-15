@@ -94,6 +94,6 @@ D1456 (#4014): Customer research returns recorded channel/capture labels, writer
 
 D6113 (#6113): a row may carry further actions (`actions`, after its own `action`), a row's
 reference may carry `values` (a form's starting values for that row), and an action marked
-`rowOnly` runs only from the row that names it, so the record's own actions row never draws it.
+`row_only` runs only from the row that names it, so the record's own actions row never draws it.
 Market expansion's entry steps use all three, each step proved in `owned.ts`
 (`market_entry_steps`) and again against its market by the writer.
