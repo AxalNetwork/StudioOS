@@ -90,6 +90,8 @@ test('partial reads state their bound; same-name clients never share an account 
   assert.equal(cockpitModel(src, NOW).clients.find(c => c.id === 20).relationship, 'Relationship partially read');
   src.engagements = list([]); src.bookings = list([src.bookings.data.items.find(b => b.status === 'completed')]); src.deliverables = list([]);
   assert.equal(cockpitModel(src, NOW).clients[0].relationship, 'Client');
+  src.bookings.data.items=[];src.bookings.data.complete=false;src.bookings.data.total=7000;src.ledger.data.states.billed={gross_cents:0,sessions:0};
+  const partialEmpty=markup(src);assert.match(partialEmpty,/Partial view/);assert.match(partialEmpty,/Loaded 0 of 7000/);assert.doesNotMatch(partialEmpty,/Nothing needs attention/);
 });
 test('empty, loading and unreadable are visibly distinct; provenance is behind a disclosure', () => {
   const src = fixture(); for (const key of ['bookings', 'engagements', 'deliverables']) src[key] = list([]);
