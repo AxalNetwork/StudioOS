@@ -27,7 +27,6 @@ import {
 } from './packageCompareModel';
 
 const CARD = 'rounded-xl border border-gray-200 bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
-const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100';
 const SUB = 'text-[12px] leading-[1.45] text-gray-500 dark:text-gray-400';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-bold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400';
 const TD = 'px-3 py-2.5 align-top text-[13px] text-gray-900 dark:text-gray-100';
