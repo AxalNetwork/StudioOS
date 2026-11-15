@@ -90,6 +90,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `GrowOverview.jsx` | #4862: GR-01/02/13/16 focus-first overview, ranked attention, setup facts and compact domains on desktop and phone. |
 | `growOverviewModel.js` | #4862: canonical Grow labels over existing routes, action gating and focus-value formatting. |
 | `buildEadwyn.js` | D5077 (#5077, BD21 B): each Build module's own Eadwyn asks (`BUILD_ASKS`, `moduleAsks`), which fill Ask's composer and never run on their own, and the rail's sentence per module (`BUILD_RAIL_NOTES`, `moduleRailNote`); `defs/build.jsx` hands both to `CycleRoute`. |
+| `ReadinessHome.jsx` | D6049 (#6049, Raise v2 RA-16): Fundraising readiness's own page, drawn by `CycleModulePage`/`PhoneModulePage` in place of the generic chart and table (`defs/raise.jsx` `homes`): at most three priorities, every area in one table (status, evidence, why it matters, one action from the Worker's `fix_href`; List / Chart), Product-market fit apart (`PmfPart`), Detail collapsed (history, raise kit and benchmark); `ReadinessBands` folds the page's Eadwyn bands as AI gap analysis. Writes nothing. |
+| `readinessModel.js` | D6049: pure. The areas from the module read's records (Product-market fit left out), their RA-23 state words, evidence and "Not recorded · no target set", the priorities (at most three, by gain, never Team), the summary and the header's coverage line. |
 | `MarketFigureHistory.jsx` | D6011 (#6011): Market intelligence's History part, from the module read's `parts.market_history`: each change to the three figures with its value, method, source, who and when; Unreadable when null, and "No change recorded yet" when empty |
 
 ## Rules
