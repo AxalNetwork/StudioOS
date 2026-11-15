@@ -100,6 +100,7 @@ const DOCUMENTED = new Map([
   ['scripts',                         'build, deploy and the CI guards'],
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
+  ['scripts/landing-bot',             'pull request admission, queue requests and bot safeguards'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['documentation',                   'every hand-written document'],
