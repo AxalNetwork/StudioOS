@@ -15,6 +15,7 @@
  */
 import { SIGNAL_WORD } from '../../lib/licenceLegalReadiness';
 import { daysTo } from '../../lib/notices';
+import { PRICING_SIGNALS } from './licences/pricingHqModel.js';
 
 /** How near a renewal has to be before it needs HQ: the canvas's "renew in the next 90 days". */
 export const RENEWAL_WINDOW_DAYS = 90;
@@ -89,15 +90,18 @@ export const notInstrumentedCell = () => cell('not_instrumented', 'Not instrumen
  * `complete` is false when its requests could not be read, so a row with no
  * known item never reads as needing nothing.
  */
-export function attentionOf(l, read) {
+export function attentionOf(l, read, pricing) {
   const items = [];
   if (renewalApproaching(l)) items.push('renewal');
   if (read?.ok && read.total > 0) items.push('requests');
+  // D5020 — the pricing signals fold into Attention (board L28: no new column).
+  const mine = pricing?.byUid?.[l.uid]?.signals;
+  if (mine) for (const [signal] of PRICING_SIGNALS) if (mine[signal] === true) items.push(signal);
   return { items, complete: Boolean(read?.ok) };
 }
 
-export function attentionCell(l, read) {
-  const a = attentionOf(l, read);
+export function attentionCell(l, read, pricing) {
+  const a = attentionOf(l, read, pricing);
   const n = a.items.length;
   const said = `${n} ${n === 1 ? 'item' : 'items'}`;
   if (!read) return n ? cell('value', said) : cell('reading', 'Reading…');
@@ -115,6 +119,20 @@ const LEGAL_NEEDS = Object.entries(SIGNAL_WORD).map(([signal, title]) => ({
   label: (n) => `${title} · ${n}`,
   matches: (licence) => licence.legal_signals?.includes(signal) === true,
   legal: true,
+  group: 'legal',
+}));
+
+/**
+ * D5020 (#5020) — the four pricing signals, from `/api/admin/licence-pricing/signals` joined by licence uid
+ * (`pricingHqModel.js` `pricingSignalsRead`). A signal the read could not compute is Unavailable, never a "no".
+ */
+const PRICING_NEEDS = PRICING_SIGNALS.map(([signal, title]) => ({
+  key: signal,
+  title,
+  label: (n) => `${title} · ${n}`,
+  matches: (licence, read, pricing) => pricing?.byUid?.[licence.uid]?.signals?.[signal] === true,
+  pricing: true,
+  group: 'pricing',
 }));
 
 export const NEEDS = Object.freeze([
@@ -123,15 +141,21 @@ export const NEEDS = Object.freeze([
     title: 'Requests waiting',
     label: (n) => `${n} ${n === 1 ? 'request' : 'requests'} waiting`,
     matches: (l, read) => Boolean(read?.ok && read.total > 0),
+    group: 'operations',
   },
   {
     key: 'renewal',
     title: 'Renewals approaching',
     label: (n) => `${n} ${n === 1 ? 'renewal' : 'renewals'} approaching`,
     matches: (l) => renewalApproaching(l),
+    group: 'operations',
   },
   ...LEGAL_NEEDS,
+  ...PRICING_NEEDS,
 ]);
+
+/** The Needs HQ groups, in the canvas's order (L28). */
+export const NEED_GROUPS = Object.freeze([['pricing', 'Pricing'], ['legal', 'Legal'], ['operations', 'Operations']]);
 export const NEED_KEYS = Object.freeze(NEEDS.map((n) => n.key));
 export const NOT_INSTRUMENTED = Object.freeze(['Branch out of sync', 'Overdue invoices']);
 
@@ -148,9 +172,16 @@ export const needsToParam = (keys) => (keys.length ? NEED_KEYS.filter((k) => key
  * Requests count only once every loaded row's read has answered; until then
  * the item is `reading`, never a partial count dressed as the whole.
  */
-export function needsSummary(rows, reads) {
+export function needsSummary(rows, reads, pricing) {
   const list = Array.isArray(rows) ? rows : [];
   return NEEDS.map((n) => {
+    if (n.pricing) {
+      const state = pricing?.state || 'reading';
+      if (state === 'reading') return { key: n.key, state: 'reading', label: `${n.title} · Reading…` };
+      if (state !== 'ok' || list.some((l) => pricing.byUid[l.uid]?.signals?.[n.key] === null)) {
+        return { key: n.key, state: 'unavailable', label: `${n.title} · Unavailable` };
+      }
+    }
     if (n.key === 'requests') {
       if (list.some((l) => reads?.[l.uid] && !reads[l.uid].ok)) return { key: n.key, state: 'unavailable', label: `${n.title} · Unavailable` };
       if (list.some((l) => !reads?.[l.uid])) return { key: n.key, state: 'reading', label: `${n.title} · Reading…` };
@@ -158,7 +189,7 @@ export function needsSummary(rows, reads) {
     if (n.legal && list.some((l) => !Array.isArray(l.legal_signals))) {
       return { key: n.key, state: 'unavailable', label: `${n.title} · Unavailable` };
     }
-    const count = list.filter((l) => n.matches(l, reads?.[l.uid])).length;
+    const count = list.filter((l) => n.matches(l, reads?.[l.uid], pricing)).length;
     return count
       ? { key: n.key, state: 'value', count, label: n.label(count) }
       : { key: n.key, state: 'none', count: 0, label: `${n.title} · None` };
@@ -166,11 +197,11 @@ export function needsSummary(rows, reads) {
 }
 
 /** The rows every chosen Needs HQ item matches (all of them, so two chips narrow). */
-export function filterByNeeds(rows, reads, keys) {
+export function filterByNeeds(rows, reads, keys, pricing) {
   const list = Array.isArray(rows) ? rows : [];
   if (!keys?.length) return list;
   const chosen = NEEDS.filter((n) => keys.includes(n.key));
-  return list.filter((l) => chosen.every((n) => n.matches(l, reads?.[l.uid])));
+  return list.filter((l) => chosen.every((n) => n.matches(l, reads?.[l.uid], pricing)));
 }
 
 /* ------------------------------------------------------------------ *
@@ -243,9 +274,10 @@ function renewalMatches(l, window) {
   return d > RENEWAL_WINDOW_DAYS; // later
 }
 
-function attentionMatches(l, read, attention) {
+function attentionMatches(l, read, attention, pricing) {
   if (!attention) return true;
-  const a = attentionOf(l, read);
+  // D5020: the pricing signals are Attention items, so the menu reads them as the cell does.
+  const a = attentionOf(l, read, pricing);
   if (attention === 'needs') return a.items.length > 0;
   if (attention === 'clear') return a.complete && a.items.length === 0;
   return !a.complete && a.items.length === 0; // unknown
@@ -263,12 +295,12 @@ export function menusFromParams(get) {
 export const menusChosen = (m) => Boolean(m?.territory || m?.renewal || m?.attention);
 
 /** The loaded rows every chosen menu matches (all of them, so two menus narrow), from the reads already made. */
-export function filterByMenus(rows, reads, menus) {
+export function filterByMenus(rows, reads, menus, pricing) {
   const list = Array.isArray(rows) ? rows : [];
   if (!menusChosen(menus)) return list;
   return list.filter((l) => territoryMatches(l, menus.territory)
     && renewalMatches(l, menus.renewal)
-    && attentionMatches(l, reads?.[l.uid], menus.attention));
+    && attentionMatches(l, reads?.[l.uid], menus.attention, pricing));
 }
 
 /**

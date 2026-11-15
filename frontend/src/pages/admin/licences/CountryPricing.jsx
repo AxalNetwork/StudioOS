@@ -15,6 +15,7 @@ import {
   BASIS_LABELS, NOT_RECORDED, PRICING_FIGURES, REVIEW_KIND_LABELS, REVIEW_STATE_LABELS,
   basketOf, buildApply, changesContract, difference, figure, freshness, indexLabel,
 } from './countryPricingModel';
+import { PRICING_PATHS, licenceMarketFacts } from './pricingHqModel';
 
 const input = 'mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900';
 const btn = 'rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
@@ -249,13 +250,20 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
   }
   const after = () => { setForm(null); load(); onSaved?.(); };
   const multi = view.territory.length > 1;
+  // D5020 (L26): staleness, the recommendation's standing and the accepted terms, said apart.
+  const facts = licenceMarketFacts(view, today());
 
   return (
     <section className="mt-8 border-t border-gray-200 pt-4 dark:border-gray-800" data-testid="country-pricing" aria-labelledby="country-pricing-h">
-      <h3 id="country-pricing-h" className="text-sm font-semibold">Country pricing</h3>
+      <h3 id="country-pricing-h" className="text-sm font-semibold">Pricing &amp; Market</h3>
       <p className="mt-1 text-[12px] text-gray-600 dark:text-gray-400">
-        A recommendation from market data. Refreshing it never changes the licence; applying it changes the annual fee and royalty above.
-        Regulatory classes are commercial planning metadata.
+        Country pricing: a recommendation from market data. Refreshing it never changes the licence; applying it changes the annual fee and royalty above.
+        Regulatory classes are commercial planning metadata. Recommendation, accepted terms and an override are three different records.
+      </p>
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-gray-200 px-3 py-2 text-[12px] text-gray-700 dark:border-gray-800 dark:text-gray-300" data-testid="pricing-exclusivity-ref">
+        <span><b>Exclusivity and development commitments</b> are kept on the Territory tab (D5019).</span>
+        <a href={`/admin/licences/${encodeURIComponent(view.licence_uid)}/territory`} className="font-semibold text-indigo-700 underline dark:text-indigo-300">Open</a>
+        <a href="/admin/licences/pricing/reviews" className="font-semibold text-indigo-700 underline dark:text-indigo-300">Annual review queue</a>
       </p>
       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
         <div><dt className="text-[11px] uppercase text-gray-500">Model</dt><dd>{view.model ? `${view.model.version} (${view.model.currency})` : view.model_reason}</dd></div>
@@ -268,20 +276,27 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
           return (
             <li key={c.country_code}>{c.country_code}: {c.recorded ? f.label : c.reason}
               {f.missing.length ? ` · not recorded: ${f.missing.join(', ')}` : ''}{f.provisional.length ? ` · provisional: ${f.provisional.join(', ')}` : ''}
+              {' · '}<a href={PRICING_PATHS.country(c.country_code)} className="text-indigo-700 underline dark:text-indigo-300">Sources and calculation</a>
             </li>
           );
         })}
       </ul>
+      {facts.stale.length > 0 && (
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="pricing-stale">
+          Stale: {facts.stale.map((x) => `${x.code} (oldest input ${x.oldest}, ${x.months} months)`).join(', ')}. The recommendation uses a source older than 12 months; refresh the country data before applying it.
+        </p>
+      )}
       {(multi || view.basis?.policy) && <BasisEditor api={api} key={view.basis?.policy?.revision ?? 0} view={view} onSaved={load} setNotice={setNotice} />}
 
       {snap ? (
         <div className="mt-3 overflow-x-auto">
+          <p className="text-[12px] font-medium text-gray-700 dark:text-gray-300" data-testid="pricing-recommendation-standing">{facts.recommendation}</p>
           <p className="text-[12px] text-gray-600 dark:text-gray-400">
             Recommendation of {snap.created_at.slice(0, 10)}{snap.components?.length === 1 && snap.trace?.components?.[0] ? ` · index ${indexLabel(snap.trace.components[0].country_index)} · tier ${snap.trace.components[0].tier || NOT_RECORDED}` : ' · index and tier per country under “View calculation”'}
             {snap.available ? '' : ` · unavailable: ${snap.unavailable_reason}`}
           </p>
           <table className="mt-1 w-full min-w-[28rem] text-sm" data-testid="pricing-table">
-            <thead><tr className="text-left text-[11px] uppercase text-gray-500"><th className="py-1">Figure</th><th>Recommended</th><th>Current licence</th><th>Difference</th></tr></thead>
+            <thead><tr className="text-left text-[11px] uppercase text-gray-500"><th className="py-1">Figure</th><th>Recommended</th><th>Accepted terms</th><th>Difference</th></tr></thead>
             <tbody>
               {PRICING_FIGURES.map((f) => {
                 const curVal = f.term ? view.terms[f.term] : view.latest_decision?.accepted?.[f.key] ?? null;
@@ -306,6 +321,13 @@ export function CountryPricing({ licence, onSaved, api = licencePricingApi }) {
           {view.agreement.reason}
         </p>
       )}
+      {facts.noDecision && (
+        <p className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-2 text-[12px] text-gray-700 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-300" data-testid="pricing-no-decision">
+          <b>No pricing decision recorded.</b> These terms are the ones in the agreement; nothing has compared them with a recommendation yet.
+          Refresh the recommendation, or open the annual review, to record the first one. Nothing is backfilled.
+        </p>
+      )}
+      {facts.accepted && <p className="mt-2 text-[12px] font-medium text-gray-700 dark:text-gray-300" data-testid="pricing-accepted-line">Current terms · {facts.accepted}</p>}
       {view.latest_decision && (
         <p className="mt-2 text-[12px] text-gray-600 dark:text-gray-400">
           Last decision: {view.latest_decision.decision === 'overridden' ? 'overridden' : 'accepted'} on {view.latest_decision.created_at.slice(0, 10)},
