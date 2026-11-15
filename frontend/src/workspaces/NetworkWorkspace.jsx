@@ -91,10 +91,11 @@ const ADVISOR_ZONE = {
  * no `organization` column: the table is sixteen columns and the only three
  * `ALTER TABLE contacts` in the repo add `promoted_ref_id`, `utm_json` and
  * `referrer`, so the founder page's grouping key skips every row and its list
- * is permanently empty. The investor side reaches `metadata.organization_name`
- * on `partner_relationships`, a free-text JSON column that would accept one —
- * and the only writer in the product sends `partner_id`, `relationship_type`
- * and `strength_score`, so no row has ever carried it.
+ * was permanently empty. (Migration 386, D551, has since given `contacts` an
+ * `organization`, which the founder body reads.) The investor side groups each
+ * counterpart's own company, `other.company` on the relationship read (D572
+ * part 3, read there since D6258): the company that person links on their
+ * account. Nothing is stored on the relationship itself.
  *
  * What the set actually decides is whether a body renders at all. Founder and
  * investor have one: a table, a stat block and prose that says plainly it found
@@ -109,8 +110,8 @@ const ADVISOR_ZONE = {
  * contact — as text, with no organization record behind it, which is exactly
  * what the `pn3` artboard is about — so a partner's zone groups real rows and
  * says on its own face that the roll-up is not built. That is a body, and a
- * fuller one than founder's: it has something to group. Nothing changes for the
- * other three; `contacts` still has no organisation column at all (task #94).
+ * fuller one than founder's: it has something to group. Investor has had
+ * something to group too since D6258.
  */
 // Defined in `noStoreCopy.js` beside the copy it decides between — there used
 // to be a second copy in `boards/network.js` and the two disagreed.
@@ -119,10 +120,10 @@ const ADVISOR_ZONE = {
 /**
  * One line per zone, shared by the overview cards and the zone headers below
  * so the two cannot drift apart. Organizations is the one line that describes
- * an intention rather than a result: no licence stores a person-to-organisation
- * edge, so the roll-up it names produces nothing anywhere. On founder and
- * investor the body says so on the page, in its empty state and its stats and
- * now in four and five header-row notes; on advisor and operator there is no
+ * an intention on some licences rather than a result: an investor's roll-up
+ * reads each counterpart's linked company (D6258) and a partner's the book's
+ * column, and where a body finds nothing it says so on the page, in its empty
+ * state and its header-row notes; on advisor and operator there is no
  * body and the card carries the gap instead. `ORG_BACKED` is the same set the
  * zone body and the rail consult, and it distinguishes those two shapes.
  */

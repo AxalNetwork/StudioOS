@@ -308,7 +308,15 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
       delivery = 'unavailable';
     }
   }
-  return { ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
+  let incidentDelivery: 'checked' | 'unconfigured' | 'unavailable';
+  try {
+    const { drainSectionIncidents } = await import('./sectionIncidentOutbox');
+    incidentDelivery = await drainSectionIncidents(env, now);
+  } catch {
+    console.warn('[section-incident-outbox] drain unavailable');
+    incidentDelivery = 'unavailable';
+  }
+  return { section_incident_delivery: incidentDelivery, ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
 }
 
 /** History for the trend view, with the D1 projection. An unreadable store says so; it is not an empty history. */
