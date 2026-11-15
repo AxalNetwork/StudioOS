@@ -15,7 +15,7 @@
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/licence_sync_retry_d6733.test.ts
  */
-import test from 'node:test';
+import test, { after, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,6 +30,10 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 1;
 const ADMIN = 2;
 const LIC = 'lic_fr';
+const NOW = Date.parse('2026-11-15T12:00:00.000Z');
+
+before(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+after(() => mock.timers.reset());
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -183,7 +187,6 @@ test('D6733: a failed retry is recorded as a cron attempt is, and the cron’s 6
   const db = freshDb();
   owe(db, 10);
   const b = branch({ throws: true });
-  const before = Date.now();
   const r = await retry(db, b);
   assert.equal(r.status, 200, 'the attempt ran; the branch’s failure is reported, never thrown (D111)');
   assert.equal(r.body.pushed.ok, false);
@@ -193,7 +196,7 @@ test('D6733: a failed retry is recorded as a cron attempt is, and the cron’s 6
   assert.equal(row.revision, 144, 'the row stands for the revision this attempt carried');
   assert.equal(row.failure_code, 'unreachable');
   const at = Date.parse(row.last_attempt_at);
-  assert.ok(at >= before - 1000 && at <= Date.now() + 1000, `last_attempt_at is this attempt (${row.last_attempt_at})`);
+  assert.equal(at, NOW, 'last_attempt_at is the time of the manual attempt');
   assert.equal(r.body.sync.pending.attempts, 2);
   assert.equal(r.body.sync.pending.last_attempt_at, row.last_attempt_at);
 
