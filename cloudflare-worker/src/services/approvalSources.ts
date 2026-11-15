@@ -602,6 +602,53 @@ export function ageHours(createdAt: unknown, nowMs: number): number | null {
   return Math.max(0, (nowMs - ms) / 3_600_000);
 }
 
+/** A row as every lane's `rowsSql` selects it. */
+type LaneRow = { id: number; who: string; what: string; created_at: string };
+
+/** One lane row as the board and the one-item read show it. */
+function itemOf(src: ApprovalSource, r: LaneRow, now: number): ApprovalItem {
+  const age = ageHours(r.created_at, now);
+  return {
+    lane: src.key,
+    lane_label: src.label,
+    id: Number(r.id),
+    who: String(r.who ?? ''),
+    what: String(r.what ?? ''),
+    created_at: String(r.created_at ?? ''),
+    age_hours: age === null ? null : Math.round(age * 10) / 10,
+    sla: slaFor(age),
+  };
+}
+
+/**
+ * D5874 (#5874): a lane's one-row read, derived from its `rowsSql` rather than
+ * written beside it. Every lane's rows query ends `LIMIT ?` (a test holds all
+ * of them to it); without that cap it is the lane's waiting set, and the outer
+ * `WHERE id = ?` picks one row of it by the id the board shows. So the columns,
+ * the joins and the waiting condition are the board's own, by construction:
+ * a second, hand-written query per lane is a second definition of "waiting"
+ * that would drift from the first.
+ *
+ * Nothing reaches the query text but the lane's own literal: the id is bound.
+ */
+export function itemSqlOf(src: ApprovalSource): string {
+  if (!/ LIMIT \?$/.test(src.rowsSql)) throw new Error(`${src.key}: rowsSql does not end with LIMIT ?`);
+  return 'SELECT * FROM (' + src.rowsSql.replace(/ LIMIT \?$/, '') + ') WHERE id = ? LIMIT 1';
+}
+
+/**
+ * D5874: one waiting item of one lane, by id, wherever it sits in the lane —
+ * not looked for in the lane's first N rows. `null` when the row is not
+ * waiting (decided, withdrawn, never there). A failed read THROWS, so a caller
+ * can tell "unreadable" from "not waiting"; it never answers `null` for it.
+ */
+export async function approvalItem(env: Env, src: ApprovalSource, id: number, now = Date.now()): Promise<ApprovalItem | null> {
+  const row = await env.DB.prepare(itemSqlOf(src))
+    .bind(...(src.bindings?.(env) || []), id)
+    .first<LaneRow>();
+  return row ? itemOf(src, row, now) : null;
+}
+
 export type ApprovalBoard = {
   items: ApprovalItem[];
   /** Per lane, so a lane that answered 0 is distinguishable from one that failed. */
@@ -640,21 +687,9 @@ export async function approvalBoard(
     try {
       const rows = await env.DB.prepare(src.rowsSql)
         .bind(...(src.bindings?.(env) || []), Math.max(1, Math.trunc(Number(limit) || 100)))
-        .all<{ id: number; who: string; what: string; created_at: string }>();
+        .all<LaneRow>();
       const got = rows.results || [];
-      for (const r of got) {
-        const age = ageHours(r.created_at, now);
-        items.push({
-          lane: src.key,
-          lane_label: src.label,
-          id: Number(r.id),
-          who: String(r.who ?? ''),
-          what: String(r.what ?? ''),
-          created_at: String(r.created_at ?? ''),
-          age_hours: age === null ? null : Math.round(age * 10) / 10,
-          sla: slaFor(age),
-        });
-      }
+      for (const r of got) items.push(itemOf(src, r, now));
       lanes.push({ key: src.key, label: src.label, count: got.length });
     } catch {
       lanes.push({ key: src.key, label: src.label, count: null });

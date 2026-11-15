@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
@@ -25,6 +25,11 @@ import { createRecordGate, recordKey, sameRecord } from './recordGate.js';
  *
  * THE DRAFT IS A RESTATEMENT, NOT A MODEL, as the canvas draws it: it repeats
  * the fields on the page, and Accept writes it as the reading.
+ *
+ * DELETE ASKS FIRST, BY NAME (D6275). The confirm step names the metric and
+ * says its named constituents go with it, because the Worker removes them
+ * before the row. Only a delete the Worker confirmed leaves the page; a failed
+ * one says so here and the benchmark stays drawn. A 404 is the D278 sentence.
  */
 
 const eyebrow = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
@@ -33,6 +38,13 @@ const inputClass = 'mt-1 w-full rounded-lg border border-axal-hairline bg-white 
   + 'placeholder:text-axal-faint focus:border-indigo-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const primaryBtn = 'rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-indigo-700 '
   + 'disabled:cursor-not-allowed disabled:bg-indigo-200 disabled:text-indigo-800';
+// D6275: the delete step's buttons are 44px tall and full width on a phone.
+const dangerBtn = 'min-h-[44px] w-full rounded-lg bg-red-700 px-4 py-2 text-[13px] font-semibold text-white hover:bg-red-800 '
+  + 'disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto';
+const dangerGhostBtn = 'min-h-[44px] w-full rounded-lg border border-red-200 px-4 py-2 text-[13px] font-semibold text-red-700 '
+  + 'hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40';
+const keepBtn = 'min-h-[44px] w-full rounded-lg border border-axal-hairline px-4 py-2 text-[13px] font-semibold text-axal-ink '
+  + 'hover:bg-gray-50 disabled:opacity-50 sm:w-auto dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-900';
 const ghostBtn = 'rounded-lg border border-indigo-200 px-3 py-1.5 text-[12px] font-semibold text-indigo-700 hover:bg-indigo-50 '
   + 'disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:text-indigo-300 dark:hover:bg-indigo-950/40';
 
@@ -60,6 +72,8 @@ function Tile({ k, v, sub, nr, warn }) {
 
 export default function BenchmarkDetail({ role = 'investor' }) {
   const { uid } = useParams();
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
   const [detail, setDetail] = useState(null);
   const [state, setState] = useState('loading'); // loading | ready | missing | unreadable
   const [form, setForm] = useState(null);
@@ -83,7 +97,7 @@ export default function BenchmarkDetail({ role = 'investor' }) {
   const gate = useRef(null);
   if (!gate.current) gate.current = createRecordGate();
   const writeFor = useRef(0);
-  useEffect(() => { writeFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setConstituent(EMPTY_CONSTITUENT); }, [uid]);
+  useEffect(() => { writeFor.current += 1; setBusy(''); setNotice(null); setPreview(''); setConstituent(EMPTY_CONSTITUENT); setConfirming(false); }, [uid]);
   useEffect(() => () => { gate.current.invalidate(); writeFor.current += 1; }, []);
 
   const load = useCallback(async () => {
@@ -127,6 +141,31 @@ export default function BenchmarkDetail({ role = 'investor' }) {
       return false;
     } finally {
       if (writeFor.current === mine) setBusy('');
+    }
+  };
+
+  // D6275: the delete. Only a delete the Worker answered leaves the page, and
+  // only while the route still names the benchmark it was sent for.
+  const remove = async () => {
+    if (!current) return;
+    const mine = ++writeFor.current;
+    const metric = detail?.item?.metric || '';
+    setBusy('delete');
+    setNotice(null);
+    try {
+      await api.research.benchmarkRemove(target);
+      if (writeFor.current !== mine) return;
+      navigate('/research/benchmarking', { state: { removedBenchmark: metric } });
+    } catch (e) {
+      if (writeFor.current !== mine) return;
+      setConfirming(false);
+      setNotice({
+        ok: false,
+        text: e?.status === 404
+          ? 'This benchmark is not on your list.'
+          : `This benchmark was not deleted. ${e?.message || 'The request failed.'}`,
+      });
+      setBusy('');
     }
   };
 
@@ -369,6 +408,38 @@ export default function BenchmarkDetail({ role = 'investor' }) {
                     : 'Leave the peer field blank and the row stays tracked. Fill it and source and sample become required.'}
                 </span>
               </div>
+            </Card>
+
+            <Card data-testid="benchmark-delete" className="border-red-200 dark:border-red-900">
+              <div className={eyebrow}>Delete this benchmark</div>
+              {confirming ? (
+                <div role="alertdialog" aria-label="Confirm delete" className="mt-2">
+                  <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">
+                    {`Delete “${item.metric}”?`}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
+                    {cons.length === 0
+                      ? 'Its named constituents go with it; none are named against it now. This cannot be undone.'
+                      : `Its ${cons.length} named ${cons.length === 1 ? 'constituent goes' : 'constituents go'} with it. This cannot be undone.`}
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button type="button" className={dangerBtn} disabled={busy !== ''} onClick={remove}>
+                      {busy === 'delete' ? 'Deleting…' : 'Delete benchmark'}
+                    </button>
+                    <button type="button" className={keepBtn} disabled={busy === 'delete'} onClick={() => setConfirming(false)}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button type="button" className={dangerGhostBtn} disabled={busy !== ''}
+                    onClick={() => { setNotice(null); setConfirming(true); }}>
+                    Delete…
+                  </button>
+                  <span className="text-[11.5px] text-axal-muted">Removes the benchmark and the constituents named against it.</span>
+                </div>
+              )}
             </Card>
 
             <div data-testid="benchmark-draft" className="rounded-[14px] border border-indigo-200 bg-indigo-50 px-4 py-3.5 dark:border-indigo-900 dark:bg-indigo-950/40">

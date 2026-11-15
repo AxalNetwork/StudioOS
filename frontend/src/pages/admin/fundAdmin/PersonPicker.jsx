@@ -109,7 +109,7 @@ function PersonRow({ name, kind, reason = null, state, checked, onPick, testId, 
   return (
     <label className={`flex min-h-[52px] items-center gap-3 rounded-[9px] border px-3 py-2 ${checked ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline dark:border-gray-800'} ${off ? 'cursor-not-allowed' : 'cursor-pointer'}`} data-testid={testId}>
       <input type="radio" name={group} className="sr-only" checked={checked} disabled={off} onChange={onPick} />
-      <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-axal-muted dark:bg-gray-800 dark:text-gray-300">{initials || '—'}</span>
+      <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[12px] font-bold text-axal-muted dark:bg-gray-800 dark:text-gray-300">{initials || '—'}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13.5px] font-bold text-axal-ink dark:text-gray-100">{name}</span>
         <span className="block text-[12px] text-axal-muted dark:text-gray-400">{reason ? `${kind} · ${reason}` : kind}</span>

@@ -429,6 +429,39 @@ export async function bookOf(env: Env, owner: number, q: string, page: number, f
   };
 }
 
+/**
+ * #5310 (NW1, owner answer B1): "needs attention" is overdue follow-ups only — an open follow-up on
+ * the member's own book whose due date is before today (UTC). Oldest due first; `total` counts every
+ * overdue follow-up, not the page. A follow-up with no due date is never overdue. Each row names its
+ * contact and the last note on them (`last_note_at`, null when none is recorded). Every statement
+ * binds the owner, so another member's book is never read.
+ */
+export const FOLLOW_UPS_DUE_MAX = 20;
+export async function followUpsDueOf(env: Env, owner: number, limit: number) {
+  const n = Math.min(FOLLOW_UPS_DUE_MAX, Math.max(1, Math.trunc(limit) || 5));
+  const rows = (await env.DB.prepare(
+    `SELECT t.uid AS task_uid, t.title AS task_title, t.due_on, n.id AS contact_id, n.name, n.company, n.title,
+            (SELECT MAX(x.created_at) FROM network_contact_notes x WHERE x.owner_user_id = ? AND x.contact_id = n.id) AS last_note_at,
+            (SELECT GROUP_CONCAT(DISTINCT s.source) FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id) AS sources
+       FROM network_contact_tasks t JOIN network_connections n ON n.id = t.contact_id AND n.user_id = ?
+      WHERE t.owner_user_id = ? AND t.done_at IS NULL AND t.due_on IS NOT NULL AND t.due_on < date('now')
+      ORDER BY t.due_on, t.id LIMIT ?`,
+  ).bind(owner, owner, owner, owner, n).all<any>()).results || [];
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM network_contact_tasks t JOIN network_connections n ON n.id = t.contact_id AND n.user_id = ?
+      WHERE t.owner_user_id = ? AND t.done_at IS NULL AND t.due_on IS NOT NULL AND t.due_on < date('now')`,
+  ).bind(owner, owner).first<{ n: number }>();
+  if (!total || !Number.isSafeInteger(Number(total.n))) throw new Error('follow-ups count unreadable');
+  return {
+    total: Number(total.n),
+    items: rows.map((r) => ({
+      task_uid: String(r.task_uid), task_title: r.task_title, due_on: r.due_on,
+      contact: { id: Number(r.contact_id), name: r.name, company: r.company ?? null, title: r.title ?? null, sources: r.sources ? String(r.sources).split(',').sort() : [] },
+      last_note_at: r.last_note_at ?? null,
+    })),
+  };
+}
+
 export async function notesOf(env: Env, owner: number, contactId: number) {
   return ((await env.DB.prepare('SELECT uid, body, created_at FROM network_contact_notes WHERE owner_user_id = ? AND contact_id = ? ORDER BY created_at DESC, id DESC LIMIT 200')
     .bind(owner, contactId).all<any>()).results ?? []);

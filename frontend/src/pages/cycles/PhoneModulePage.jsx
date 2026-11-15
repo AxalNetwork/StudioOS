@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
-import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
-import { Sources } from './CycleModulePage.jsx';
+import { ExportButton, Sources } from './CycleModulePage.jsx';
+import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
+import { asksCountLabel } from './buildEadwyn.js';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -69,6 +71,31 @@ function firstAdd(add, records) {
   return list.find((a) => a?.text && (a.onClick || safeHref(a.href))) || null;
 }
 
+/**
+ * D5077 (#5077, BD24 A): Ask, folded, on a phone module with nothing recorded yet: one row naming how
+ * many asks this module has. It opens the one Ask panel (a bottom sheet here), whose chips lead with
+ * them; no model, price or allowance is drawn inline. Nothing where Ask does not serve the viewer.
+ */
+export function PhoneAskEntryView({ asks, available, onOpen }) {
+  const n = Array.isArray(asks) ? asks.filter((a) => typeof a === 'string' && a.trim()).length : 0;
+  if (!available || n === 0 || typeof onOpen !== 'function') return null;
+  return (
+    <button type="button" onClick={onOpen} data-testid="phone-module-ask"
+      className="mt-[18px] flex min-h-[52px] w-full items-center gap-3 rounded-[14px] border border-gray-200 bg-white px-4 text-left dark:border-gray-800 dark:bg-gray-900">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <b className="text-[14px] text-gray-900 dark:text-gray-100">Ask Eadwyn</b>
+        <span className="text-[12.5px] text-gray-600 dark:text-gray-400">{asksCountLabel(asks)}</span>
+      </span>
+      <span aria-hidden="true" className="text-[18px] text-gray-500 dark:text-gray-400">›</span>
+    </button>
+  );
+}
+
+function PhoneAskEntry({ asks }) {
+  const ask = useAskPanel();
+  return <PhoneAskEntryView asks={asks} available={ask.available} onOpen={() => openAskPanel()} />;
+}
+
 function Cta({ add }) {
   const className = 'mt-6 flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-violet-700 px-4 text-[15px] font-bold text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500';
   if (add.onClick) return <button type="button" onClick={add.onClick} className={className} data-testid="phone-module-cta">{add.text}</button>;
@@ -78,7 +105,11 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
+  // D6031: a module's own phone row (Prototype / MVP's carries Due, Test, Built and Tested); `phoneRow` by default.
+  phoneRow: rowOf = phoneRow,
+  // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
+  sources = null, sourcesAction = null, asks = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -115,6 +146,8 @@ export default function PhoneModulePage({
   const progressive = progressiveFor(meta.key, slug);
   const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
   const zero = stage === 'zero';
+  // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
+  const hasChildren = Children.toArray(children).length > 0;
   const controls = stage === 'many';
   const addOne = zero ? dominantAdd(add, recs, progressive, (a) => a.onClick || safeHref(a.href)) : firstAdd(add, recs);
   const headline = zero ? progressive.heading : card?.next?.text || addOne?.text || null;
@@ -132,7 +165,7 @@ export default function PhoneModulePage({
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
     rows: rows.map((r, i) => {
-      const base = phoneRow(cols, r);
+      const base = rowOf(cols, r);
       const href = rowLinks(recs, r) ? recordHref(meta.key, slug, recordId(r), search) : null;
       const act = !href && typeof rowAction === 'function' ? rowAction(r) : null;
       return {
@@ -180,7 +213,7 @@ export default function PhoneModulePage({
               <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
                 onChange={(e) => set({ filter: { ...(query.filter || {}), [f.key]: e.target.value } })}>
                 <option value="">{f.label}: all</option>
-                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {(f.options || []).map((o) => <option key={o.value} value={o.value}>{optionLabel(o)}</option>)}
               </select>
             ))}
             {sorts.length > 0 && (
@@ -196,6 +229,8 @@ export default function PhoneModulePage({
         {rStatus === 'unreadable' && <div className="px-[22px]"><Unreadable what={`The ${String(title || 'records').toLowerCase()}`} claim={recordsMessage || 'This is not a claim that there are none.'} onRetry={onRetryRecords || onRetry} /></div>}
         {rStatus === 'loading' && <div className="flex flex-col gap-2 px-[22px]" aria-busy="true">{[0, 1, 2].map((i) => <div key={i} className="h-[56px] rounded bg-gray-100 dark:bg-gray-800" />)}</div>}
         {rStatus === 'ready' && <PhoneRows groups={[group]} />}
+        {/* D6124: the table's Export, under its rows as the desktop draws it beside Add. */}
+        {rStatus === 'ready' && rows.length > 0 && typeof onExport === 'function' && <div className="mt-2 flex flex-wrap items-center gap-2 px-[22px]"><ExportButton onExport={onExport} className={CONTROL} /></div>}
         {rStatus === 'ready' && rows.length === 0 && (
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}
@@ -213,7 +248,13 @@ export default function PhoneModulePage({
           {item.label || `Open ${name}`}
         </Link>
       ))}
-      {children && (zero ? <Sources phone>{children}</Sources> : <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>)}
+      {zero && <PhoneAskEntry asks={asks} />}
+      {zero
+        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+        : <>
+          {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+          {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+        </>}
     </div>
   );
 }

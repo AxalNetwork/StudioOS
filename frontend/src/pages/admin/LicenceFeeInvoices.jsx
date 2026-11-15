@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
 import { Pill } from '../../ui';
-import { feeLine, invoiceStatus, money, paidLine, parseAmount } from './licenceFeeInvoicesModel';
+import { FEE_CHANGE_NOTE, feeLine, invoiceStatus, money, paidLine, parseAmount, voidLine } from './licenceFeeInvoicesModel';
+import { TryAgain } from './licences/LicenceOverview';
 import { toMajorString } from '../../lib/money.js';
 
 /**
@@ -10,6 +11,12 @@ import { toMajorString } from '../../lib/money.js';
  * recorded by hand (D.8) and the PDF as issued. Plain controls; D801 (#2234)
  * restyles it from board L9 if needed. Issuing and recording ask for a recent
  * sign-in, which `lib/api.js` prompts for.
+ *
+ * D4819 part 12 (#5923) — board L13, Operations › Billing: "Annual licence-fee
+ * invoices", each with its state, the PDF as issued and Void…, which asks for
+ * a reason before it sends. A void invoice shows the reason it was voided. The
+ * foot says what Void records and that an issued invoice keeps its fee. A
+ * failed read says so with Try again; it is never "no invoices".
  */
 // `today` (a UTC day) is the Worker's own clock for Overdue (D5036); a test passes it.
 export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesApi, today = new Date().toISOString().slice(0, 10) }) {
@@ -40,7 +47,8 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   if (read.status !== 'ready') {
     return (
       <p className="text-sm text-red-700" role="alert" data-testid="fee-invoices-unreadable">
-        The invoices could not be read. {read.message} <button type="button" className="underline" onClick={load}>Try again</button>
+        The invoices could not be read, so whether any is issued or owed is unknown — not none. {read.message}{' '}
+        <TryAgain what="the invoices" onClick={() => { setRead({ status: 'loading', data: null, message: '' }); load(); }} />
       </p>
     );
   }
@@ -48,7 +56,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   const invoices = Array.isArray(read.data.invoices) ? read.data.invoices : [];
   return (
     <div data-testid="fee-invoices">
-      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Annual fee invoices</h3>
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Annual licence-fee invoices</h3>
       {fee && <p className={`mt-1 text-[12.5px] ${fee.ok ? 'text-gray-600 dark:text-gray-400' : 'text-amber-800'}`} data-testid="fee-invoices-fee">{fee.text}</p>}
       <div className="mt-3">
         <button type="button" disabled={busy || !fee?.ok} data-testid="fee-invoices-issue"
@@ -67,8 +75,8 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
         <table className="mt-3 w-full text-left text-[12.5px]" data-testid="fee-invoices-table">
           <thead>
             <tr className="text-[11px] uppercase text-gray-500">
-              <th className="py-1 pr-3">Licence year</th><th className="py-1 pr-3">Issued</th><th className="py-1 pr-3">Due</th>
-              <th className="py-1 pr-3 text-right">Amount</th><th className="py-1 pr-3">Received</th><th className="py-1 pr-3">Status</th><th className="py-1">Actions</th>
+              <th className="py-1 pr-3">Invoice</th><th className="py-1 pr-3">Licence year</th><th className="py-1 pr-3 text-right">Amount</th>
+              <th className="py-1 pr-3">Due</th><th className="py-1 pr-3">Received</th><th className="py-1 pr-3">State</th><th className="py-1"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +84,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
           </tbody>
         </table>
       )}
+      <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400" data-testid="fee-invoices-foot">{FEE_CHANGE_NOTE}</p>
     </div>
   );
 }
@@ -95,16 +104,16 @@ function InvoiceRow({ inv, licence, api, busy, act, today }) {
   return (
     <>
       <tr className="border-t border-gray-100 dark:border-gray-800" data-testid={`fee-invoice-${inv.uid}`}>
-        <td className="py-1.5 pr-3">{inv.period_label}<div className="font-mono text-[11px] text-gray-500">{inv.reference}</div></td>
-        <td className="py-1.5 pr-3">{inv.issued_at}</td>
-        <td className="py-1.5 pr-3">{inv.due_at}</td>
+        <td className="py-1.5 pr-3 font-mono text-[12px]">{inv.reference || 'Not recorded'}<div className="font-sans text-[11px] text-gray-500">Issued {inv.issued_at ? String(inv.issued_at).slice(0, 10) : 'Not recorded'}</div></td>
+        <td className="py-1.5 pr-3">{inv.period_label}</td>
         <td className="py-1.5 pr-3 text-right font-mono">{money(inv.amount_cents, inv.currency)}</td>
+        <td className="py-1.5 pr-3 font-mono">{inv.due_at ? String(inv.due_at).slice(0, 10) : 'Not recorded'}</td>
         <td className="py-1.5 pr-3">{paidLine(inv)}</td>
-        <td className="py-1.5 pr-3"><Pill tone={status.tone}>{status.word}</Pill>{status.overdue && <div className="text-[11px] text-red-700 dark:text-red-300" data-testid="fee-invoice-overdue">{status.days} {status.days === 1 ? 'day' : 'days'} past due</div>}</td>
+        <td className="py-1.5 pr-3"><Pill tone={status.tone}>{status.word}</Pill>{status.overdue && <div className="text-[11px] text-red-700 dark:text-red-300" data-testid="fee-invoice-overdue">{status.days} {status.days === 1 ? 'day' : 'days'} past due</div>}{inv.status === 'void' && <div className="text-[11px] text-gray-600 dark:text-gray-400" data-testid="fee-invoice-void-reason">{voidLine(inv)}</div>}</td>
         <td className="py-1.5">
           {inv.pdf_url && <button type="button" className="mr-2 underline" disabled={busy} onClick={download} data-testid="fee-invoice-pdf">PDF</button>}
           {inv.status !== 'void' && <button type="button" className="mr-2 underline" onClick={() => setMode(mode === 'pay' ? null : 'pay')} data-testid="fee-invoice-record">Record payment</button>}
-          {inv.status !== 'void' && inv.paid_cents === 0 && <button type="button" className="underline text-red-700" onClick={() => setMode(mode === 'void' ? null : 'void')} data-testid="fee-invoice-void">Void</button>}
+          {inv.status !== 'void' && inv.paid_cents === 0 && <button type="button" className="underline text-red-700" onClick={() => setMode(mode === 'void' ? null : 'void')} aria-expanded={mode === 'void'} data-testid="fee-invoice-void">Void…</button>}
         </td>
       </tr>
       {mode === 'pay' && (
@@ -125,7 +134,9 @@ function InvoiceRow({ inv, licence, api, busy, act, today }) {
         <tr><td colSpan={7} className="pb-2">
           <form className="flex flex-wrap items-center gap-2" data-testid="fee-invoice-void-form"
             onSubmit={(e) => { e.preventDefault(); if (note.trim().length >= 10) act(() => api.voidInvoice(licence.uid, inv.uid, note.trim(), inv.revision), 'Invoice voided.'); }}>
-            <input className="w-80 rounded border px-2 py-1" placeholder="Why it is void (at least 10 characters)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-void-note" />
+            <label className="text-[12px]">Reason · required, kept with the invoice
+              <input className="ml-2 w-80 rounded border px-2 py-1" placeholder="Why it is void (at least 10 characters)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-void-note" />
+            </label>
             <button type="submit" className="rounded border border-red-300 px-3 py-1 text-xs text-red-700 disabled:opacity-50" disabled={busy || note.trim().length < 10} data-testid="fee-invoice-void-save">Void invoice</button>
           </form>
         </td></tr>
