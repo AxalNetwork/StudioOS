@@ -30,7 +30,7 @@ import { APPLICATION_STAGES, channelRows, readiness, utmSource, MARKET_PARTS, ty
 import { billingPeriods, computeMovements, movementGap, readRecurring } from '../revenueMovements';
 import { runwayMonths } from '../saasMetrics';
 import {
-  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiRows, type KpiAlert, type KpiRow,
+  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiEntries, kpiRows, removeKpiEntry, type KpiAlert, type KpiRow,
 } from '../growKpis';
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
@@ -96,7 +96,8 @@ function money(cents: unknown, currency: unknown = 'usd'): string | null {
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
   try { return await work(); } catch (err) {
     if (err instanceof Refused || err instanceof KpiRefused) {
-      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}) }),
+      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}),
+        ...(err instanceof KpiRefused && err.code ? { code: err.code } : {}) }),
         { status: err.status, headers: { 'Content-Type': 'application/json' } });
     }
     throw err;
@@ -462,6 +463,37 @@ async function kpiHistory(rc: RecordContext, row: KpiRow): Promise<Array<{ month
     .map(([month, v]) => ({ month, text: kpiValueText(v, unit) ?? '' }));
 }
 
+/** A typed KPI's own unit, for an entry when the KPI row reads Not recorded. */
+const ENTRY_UNIT: Record<string, string> = { mrr: 'usd', paying_accounts: 'count', churn: 'pct', net_burn: 'usd' };
+/** What a KPI's History lists entries of: a typed or custom KPI, unless Churn reads the ledger. */
+const listsEntries = (row: KpiRow) => (row.id in ENTRY_UNIT && !(row.id === 'churn' && row.unit === 'usd_cents')) || row.id.startsWith(CUSTOM_PREFIX);
+const HISTORY_ROWS = 24;
+
+/**
+ * D6101 (#6101): History as entries, newest first, for a KPI a person can type:
+ * each hand entry with its day and a Remove, and a connected source's last
+ * figure each month (it writes one a day). Null for a derived or PostHog KPI,
+ * which keeps its months.
+ */
+async function historyEntries(rc: RecordContext, row: KpiRow): Promise<Row[] | null> {
+  if (!listsEntries(row)) return null;
+  const unit = row.unit ?? ENTRY_UNIT[row.id] ?? (await customKpis(rc.env, rc.projectId)).find((k) => `${CUSTOM_PREFIX}${k.uid}` === row.id)?.unit ?? null;
+  const shown = unit === 'money' ? 'usd_cents' : unit;
+  const months = new Set<string>();
+  const rows: Row[] = [];
+  for (const e of await kpiEntries(rc.env, rc.projectId, row.id)) {
+    if (!e.manual) {
+      const month = `${e.source}:${e.day.slice(0, 7)}`;
+      if (months.has(month)) continue;
+      months.add(month);
+    }
+    rows.push({ a: e.day, b: kpiValueText(e.value, shown) ?? '', c: e.manual ? 'By hand' : e.source, tone: e.manual ? 'grey' : 'vio',
+      ...(e.manual ? { action: { key: 'remove-entry', body: { entry: e.entry } } } : {}) });
+    if (rows.length >= HISTORY_ROWS) break;
+  }
+  return rows;
+}
+
 const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, id) => {
   await ensureProjectMetricsSchema(rc.env);
   const row = (await kpiRows(rc.env, rc.projectId, Date.now())).find((r) => r.id === id);
@@ -483,6 +515,8 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
 }, [
   section('history', 'History', async (rc, _id, record) => {
     const { row } = loadedOf(record);
+    const entries = await historyEntries(rc, row);
+    if (entries) return { rows: entries, empty: 'Not recorded yet.' };
     const months = await kpiHistory(rc, row);
     return { rows: months.map((m) => ({ a: m.month, b: m.text })), empty: 'Not recorded yet.' };
   }),
@@ -529,6 +563,21 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
         await ensureProjectMetricsSchema(c.env);
         const out = await enterKpi(c.env, c.projectId, Number(c.user.id), { kpi: id, value: field(body, 'value'), as_of: field(body, 'as_of'), note: field(body, 'note') });
         await logGrowWrite(c.env, c.projectId, Number(c.user.id), { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entered', summary: `KPI entered for ${out.as_of}` });
+        return { ok: true, record: out };
+      }),
+    });
+  }
+  // D6101 (#6101): a hand entry's Remove, run from its History row (`row_only`: no header button).
+  if (listsEntries(row)) {
+    actions.push({
+      key: 'remove-entry', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+      confirm: { title: `Remove this ${row.kpi} entry?`, cta: 'Remove',
+        body: `For a figure typed with the wrong value: ${row.kpi} then reads the next latest value, here, on the Overview and in a report draft. A report already sent keeps its figures.` },
+      execute: (c, _id, body) => refusing(async () => {
+        await ensureProjectMetricsSchema(c.env);
+        const out = await removeKpiEntry(c.env, c.projectId, id, field(body, 'entry'));
+        await logGrowWrite(c.env, c.projectId, Number(c.user.id), { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entry_removed',
+          summary: `Hand entry removed: ${kpiValueText(out.value, ENTRY_UNIT[out.id] ?? row.unit) ?? out.value} for ${out.as_of}` });
         return { ok: true, record: out };
       }),
     });

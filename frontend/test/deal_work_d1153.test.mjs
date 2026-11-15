@@ -16,6 +16,7 @@ import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import {
   caseForDeal, caseCard, caseDoors, casePath, icStep, openFlagRows, sectionProgress, templateChoices, requestRows, roomStateOf, roomListing, paperRows, proposedTerms, myCommitment, roundLines, withdrawError, NOTE_READERS,
 } from '../src/pages/deal/dealWorkModel.js';
+import { paperSigning, signedLine } from '../src/pages/deal/dealWorkModel.js';
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
@@ -429,4 +430,91 @@ test('D6180: opening a case offers the template depths when more than one is off
     await one.click('deal-dd-open-dialog-confirm');
     assert.equal(one.posts(/\/dd\/cases$/)[0].body.template_depth, 'standard');
   } finally { await one.close(); }
+});
+
+// D6184 (#6184) — the Deal paper card: the signed count, Download once fully signed (the Worker's refusal shown),
+// how to sign (the emailed link; no signing URL is built in the browser), declined and unreadable.
+const ENVELOPES = [
+  { id: 31, document_title: 'Subscription agreement', status: 'completed', completed_at: '2026-11-02', recipient_count: 3, signed_count: 3, signed_r2_key: 'esign/signed/31.pdf' },
+  { id: 32, document_title: 'Side letter', status: 'partially_signed', created_at: '2026-11-03', recipient_count: 3, signed_count: 2 },
+  { id: 33, document_title: 'Term sheet', status: 'rejected', created_at: '2026-11-04', recipient_count: 2, signed_count: 0 },
+];
+const DETAIL_32 = { id: 32, status: 'partially_signed', recipients: [
+  { id: 1, recipient_email: 'founder@example.com', status: 'signed', signed_at: '2026-11-03' },
+  { id: 2, recipient_email: 'axal@example.com', status: 'signed', signed_at: '2026-11-03' },
+  { id: 3, recipient_email: 'Ada@Example.com', status: 'pending', signed_at: null, token_expires_at: '2026-11-10' },
+], audit_log: [], can_manage: false };
+const pdf = () => ({ ok: true, status: 200, headers: { get: () => 'application/pdf' }, blob: async () => new Blob(['%PDF-1.4']), json: async () => { throw new Error('not json'); } });
+const paperHandler = (over = {}) => handlerWith({
+  'legal/esign/31/document': over.document || (() => pdf()),
+  'legal/esign/32(\\?|$)': over.detail || (() => response(DETAIL_32)),
+  'legal/esign\\?': over.list || (() => response({ envelopes: ENVELOPES })),
+});
+
+test('D6184 model: the signed count from recipient_count and signed_count, each envelope\'s action, and how to sign by email', () => {
+  // Mutation checked: the count's two fields swapped; a missing count drawn as 0; Download offered on a partly signed
+  // envelope; `rejected` read as open; the viewer matched case-sensitively; a signed viewer told to sign.
+  assert.equal(signedLine({ recipient_count: 3, signed_count: 2 }), '2 of 3 signed');
+  assert.equal(signedLine({ recipient_count: 3 }), 'Signatures not recorded', 'never a guessed 0');
+  assert.equal(signedLine({ recipient_count: 0, signed_count: 0 }), 'No signer is recorded on this envelope');
+  const rows = paperRows(ENVELOPES);
+  assert.deepEqual(rows.map((r) => [r.state, r.signed, r.action, r.tone]), [
+    ['Fully signed 2 Nov 2026', '3 of 3 signed', 'download', 'done'],
+    ['Partly signed · sent 3 Nov 2026', '2 of 3 signed', 'sign', 'wait'],
+    ['Declined · sent 4 Nov 2026', '0 of 2 signed', 'closed', 'off'],
+  ]);
+  const mine = paperSigning(ready(DETAIL_32), 'ada@example.com');
+  assert.equal(mine.state, 'yours');
+  assert.match(mine.line, /^Your signing link was sent by email to Ada@Example\.com\./);
+  assert.doesNotMatch(mine.line, /https?:|\/esign\//, 'no link is built');
+  assert.equal(paperSigning(ready(DETAIL_32), 'founder@example.com').state, 'signed');
+  assert.match(paperSigning(ready(DETAIL_32), 'founder@example.com').line, /^You signed on 3 Nov 2026\./);
+  assert.equal(paperSigning(ready(DETAIL_32), 'other@example.com').state, 'not_signer');
+  assert.equal(paperSigning({ status: 'unreadable' }, 'ada@example.com').state, 'unreadable');
+});
+
+test('D6184: a completed envelope downloads through the Worker; a partly signed one says the link was sent by email; a declined one offers neither', async () => {
+  // Mutation checked: Download drawn for every row; the download not read from /document; the sign line dropped.
+  const made = [];
+  const prev = URL.createObjectURL;
+  URL.createObjectURL = (b) => { made.push(b); return 'blob:x'; };
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler());
+  try {
+    const card = v.textOf('deal-paper');
+    assert.match(card, /Subscription agreement[\s\S]*Fully signed 2 Nov 2026[\s\S]*3 of 3 signed/);
+    assert.match(card, /Side letter[\s\S]*Partly signed[\s\S]*2 of 3 signed[\s\S]*Download opens once the envelope is fully signed\.[\s\S]*Your signing link was sent by email to Ada@Example\.com\./);
+    assert.match(card, /Term sheet[\s\S]*Declined[\s\S]*0 of 2 signed[\s\S]*It can no longer be signed/);
+    assert.equal(v.byId('deal-paper-download').length, 1, 'Download on the completed envelope alone');
+    assert.equal(v.requests.filter((r) => /legal\/esign\/(31|33)(\?|$)/.test(r.line)).length, 0, 'how to sign is read for the open envelope only');
+    assert.equal(v.byId('deal-paper-sign').length, 1);
+    assert.doesNotMatch(v.textOf('deal-paper-sign'), /https?:|\/esign\//, 'no signing URL in the browser');
+    await v.click('deal-paper-download');
+    assert.equal(v.requests.filter((r) => r.line === 'GET /api/legal/esign/31/document').length, 1, 'the signed copy is read from the Worker');
+    assert.equal(made.length, 1, 'the PDF is handed to the browser');
+    assert.equal(v.has('deal-paper-refusal'), false);
+  } finally { URL.createObjectURL = prev; await v.close(); }
+});
+
+test('D6184: when the Worker refuses the download, its refusal shows in the row', async () => {
+  // Mutation checked: the refusal swallowed; the fallback shown over the Worker's words.
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler({ document: () => response({ error: 'Document not yet signed' }, 409) }));
+  try {
+    await v.click('deal-paper-download');
+    assert.equal(v.textOf('deal-paper-refusal'), 'Document not yet signed');
+  } finally { await v.close(); }
+});
+
+test('D6184: an unreadable paper list and an unreadable envelope each say Unreadable, never "nothing sent"', async () => {
+  // Mutation checked: a failed detail read drawn as "not a signer"; a failed list drawn as no envelope.
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler({ detail: () => response({ error: 'boom' }, 500) }));
+  try {
+    const card = v.textOf('deal-paper');
+    assert.match(card, /How to sign this envelope/);
+    assert.doesNotMatch(card, /not a signer|signing link was sent/);
+  } finally { await v.close(); }
+  const w = await mounted('/deals/4/documents', INVESTOR, paperHandler({ list: () => response({ error: 'boom' }, 500) }));
+  try {
+    assert.match(w.textOf('deal-paper'), /That is not a claim that nothing was sent\./);
+    assert.doesNotMatch(w.textOf('deal-paper'), /No envelope on this deal has been sent to you yet/);
+  } finally { await w.close(); }
 });

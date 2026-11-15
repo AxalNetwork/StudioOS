@@ -66,3 +66,5 @@ image's own aspect, so one press records all three. Both go through
 `recommendationsAdapter.js` to `frontend/src/lib/api/eventCovers.js`. A cover
 with nothing recorded about it reads as "not recorded", never as a blank image
 or a 0.
+
+D5871 (#5871, D3724 §gaps 13, NE1): `EventMeetField.jsx` is the editor's join link with "Create the meeting for me · Google Meet", and `eventMeetModel.js` its rules and words. The press asks the next Save for the link (`add_meet: true`); the Worker makes it inside that save and undoes it if the save fails. Zoom is words, not a button.

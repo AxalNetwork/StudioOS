@@ -133,6 +133,17 @@ function idealCustomerProfile(s) {
   return out;
 }
 
+/**
+ * D6011 (#6011): a figure's source and the date it was set, from its
+ * `market_figures` row. Saved before that store, it has neither and says so;
+ * saved with none named, it says that and keeps its date.
+ */
+export function marketBandSource(f) {
+  const day = typeof f?.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of) ? f.as_of : null;
+  if (!day) return nonEmpty(f?.source) || 'source not recorded';
+  return `${nonEmpty(f?.source) || 'no source named'} · as of ${day}`;
+}
+
 function marketIntelligence(s) {
   if (!s || typeof s !== 'object') return [];
   // A figure the founder typed carries no source yet (D659 says so rather
@@ -140,7 +151,7 @@ function marketIntelligence(s) {
   const band = (label, f) => ({
     label,
     value: usdShort(f?.value),
-    source: num(f?.value) ? (nonEmpty(f?.source) || 'source not recorded') : undefined,
+    source: num(f?.value) ? marketBandSource(f) : undefined,
   });
   const out = [{ kind: 'bands', items: [band('Total addressable', s.tam), band('Serviceable', s.sam), band('Obtainable', s.som)] }];
   if (num(s.competitors_tracked)) {
