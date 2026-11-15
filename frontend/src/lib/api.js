@@ -1497,7 +1497,10 @@ export const api = {
   dealsTransfers: () => request('/deals/transfers'),
   dealClosingChecklist: (id) => request(`/deals/${id}/closing-checklist`),
   dealClosingChecklistApply: (id, templateSlug) => request(`/deals/${id}/closing-checklist/apply`, { method: 'POST', body: JSON.stringify({ template_slug: templateSlug }) }),
-  dealClosingChecklistAddItem: (id, label) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ label }) }),
+  // D6156: an item may carry owner_user_id, owner_label, due_date (YYYY-MM-DD)
+  // and note; a PATCH sends any of those and/or state, null clearing a field.
+  // Every write appends one event, read through dealClosingHistoryApi.
+  dealClosingChecklistAddItem: (id, label, fields = {}) => request(`/deals/${id}/closing-checklist/items`, { method: 'POST', body: JSON.stringify({ ...fields, label }) }),
   dealClosingChecklistSetItem: (id, itemUid, data) => request(`/deals/${id}/closing-checklist/items/${itemUid}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   listUsers: (role) => request(`/users${role ? `?role=${role}` : ''}`),
@@ -5464,6 +5467,8 @@ export const api = {
 // founders are blocked at the worker level (any 403 surfaces directly).
 export const dd = {
   catalog: () => request('/dd/catalog'),
+  // Every filter the Worker's list reads passes through, `subject_id` among
+  // them (D6181: one subject's cases, exactly, under the same reader scope).
   listCases: (params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/dd/cases${q ? `?${q}` : ''}`);
@@ -5981,13 +5986,15 @@ export const events = {
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
   // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
-  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
+  // #5868 (D3724 gap 5): `topic`, one of the Worker's `EVENT_TOPICS` (D1487).
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price, topic } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
     if (format) qs.set('format', format);
     if (price) qs.set('price', price);
+    if (topic) qs.set('topic', topic);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);
