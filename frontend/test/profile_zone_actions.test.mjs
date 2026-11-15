@@ -240,7 +240,8 @@ const PROFILES = {
     //
     // SEVENTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
-    handlers: 17,
+    // D6636: the network picker is now supplied by its page.
+    handlers: 18,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
