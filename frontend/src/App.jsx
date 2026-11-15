@@ -43,7 +43,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
-import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
+import { pitchFocusMode, ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -1215,7 +1215,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // `.main { padding }`, so a workspace route wants `p-0` here on every
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
-  const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+  const pitchFocused = pitchFocusMode(location.pathname);
+  const fullBleedSurface = pitchFocused || (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
     || SHARED_FULL_BLEED.includes(location.pathname)
     // D631's two fund child pages carry WorkspaceShell's own inset and rail.
     || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
@@ -1437,7 +1438,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
             and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
+        {!pitchFocused && <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1570,10 +1571,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
-        </HeaderForWidth>
+        </HeaderForWidth>}
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className={`
+          {!pitchFocused && <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
             inset-y-0 left-0 z-50 ${effectiveCollapsed ? 'w-20' : 'w-64'} bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
@@ -1581,9 +1582,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
             <SidebarNav groups={sidebarGroups} role={shellRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
-          </aside>
+          </aside>}
 
-          {sidebarOpen && (
+          {!pitchFocused && sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
           {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
@@ -1591,7 +1592,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               resolved, without the sidebar's `|| 'founder'` fallback, so a
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
-          <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />
+          {!pitchFocused && <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />}
           {/* D699 — the founder's last opened cycle per company, for the
               company sheet. Never while an operator acts as someone else. */}
           <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
@@ -1611,7 +1612,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
-            {stripInFrame ? null : hqStripNav}
+            {pitchFocused || stripInFrame ? null : hqStripNav}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -1628,7 +1629,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
-            {!onboardingCanvas && (
+            {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
