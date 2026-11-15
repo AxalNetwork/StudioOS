@@ -1,5 +1,5 @@
 /**
- * #5935 (D4838, boards PP03, PP03b, PP03m) — Pipeline · Leads redrawn to the Pipeline v2 canvas: reasons before
+ * #5935 (D4838 part 2, D4838-p2.md, boards PP03, PP03b, PP03m) — Pipeline · Leads redrawn to the Pipeline v2 canvas: reasons before
  * the score, the five views, a strip whose zeros carry a population, and a structured pass dialog whose reasons
  * are the Worker's own list.
  *

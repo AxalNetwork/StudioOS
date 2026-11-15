@@ -1,5 +1,5 @@
 /**
- * D4838 (#5935, boards PP03, PP03b, PP03m) — the rules the Leads zone draws by, as pure functions over the
+ * D4838 part 2 (D4838-p2.md; #5935, boards PP03, PP03b, PP03m) — the rules the Leads zone draws by, as pure functions over the
  * Worker's own `GET /partner/pipeline/leads` payload, so the page and its tests agree on each one.
  *
  *   · A lead is in exactly one fit state: `excluded` (a rule of the firm's rules out the need, no number),
