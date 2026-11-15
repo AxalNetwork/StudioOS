@@ -227,6 +227,21 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
     verified_on: null,
   },
+  typeform: {
+    tagline: 'Choose the Typeform form for this company, read only.',
+    long_description: ['Sign in with Typeform, in the US or EU data center your account uses, then choose one form for this company. This release connects your account and binds the form with its field identifiers. Response imports come later.', 'Disconnecting removes the connection from Axal VC. To end the grant at Typeform as well, remove the app in your Typeform account.'],
+    tools: [],
+    never_does: ['StudioOS does not create, edit or delete a form, a response or a webhook in Typeform.'],
+    prompts: [],
+    prompts_reason: notRead('Typeform'),
+    made_by: AXAL,
+    service: { name: 'Typeform', href: 'https://www.typeform.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with Typeform', key_help_href: null },
+    endpoints: { sign_in: 'https://api.typeform.com/oauth/authorize', api: 'https://api.typeform.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://www.typeform.com/developers/get-started/applications/' },
+    verified_on: null,
+  },
   lovable: {
     tagline: 'Works without signing in. Launch links and app links for your venture.',
     long_description: [

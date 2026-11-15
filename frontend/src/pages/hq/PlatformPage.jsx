@@ -610,6 +610,7 @@ export const PROVIDER_LABEL = {
   github: 'GitHub',
   vercel: 'Vercel',
   tiktok: 'TikTok',
+  typeform: 'Typeform',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

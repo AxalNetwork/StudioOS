@@ -46,6 +46,7 @@ const PROVIDER_LABELS = {
   github: 'GitHub',
   vercel: 'Vercel',
   tiktok: 'TikTok',
+  typeform: 'Typeform',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

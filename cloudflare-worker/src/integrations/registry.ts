@@ -24,6 +24,7 @@ import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
+import { TYPEFORM_READ_SCOPES } from './typeformOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
 import { TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
@@ -639,6 +640,14 @@ export const REGISTRY: ProviderDescriptor[] = [
     audience_rule: 'venture', docs_url: 'https://developers.tiktok.com/docs/en/login-kit-web',
     icon: 'Video', oauth_scopes: [...TIKTOK_READ_SCOPES],
   },
+  // D5827 (#5827): Typeform, read only; one chosen form per venture, in the member's data center.
+  {
+    key: 'typeform', display_name: 'Typeform', integration_type: 'data_feed',
+    description: 'Your Typeform forms, read only, through Typeform’s own sign-in: each company reads one form you choose and its responses. It never creates, edits or deletes a form or a response.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://www.typeform.com/developers/get-started/applications/',
+    icon: 'ClipboardList', oauth_scopes: [...TYPEFORM_READ_SCOPES],
+  },
   {
     key: 'beehiiv', display_name: 'Beehiiv', integration_type: 'data_feed',
     description: 'Your newsletter on Beehiiv, read only, through Beehiiv’s own sign-in: each company reads one publication you choose. It reads audience and post figures, never your subscribers’ addresses.',
@@ -655,6 +664,8 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
+  typeform: { category: 'Data', verified: false, pulls: [], sends: [], feeds: [],
+    permissions: ['Read your forms and their fields.', 'Read the responses to the form you choose.', 'Keep the connection when you are away, so responses can sync.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
