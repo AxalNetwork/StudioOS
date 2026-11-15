@@ -16,6 +16,9 @@ import { HOME_PATH, SET_ACTION, forecastHref, tabSearch } from '../../raise/useo
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+// D5081 (#5081, RA-14): Use of funds' Home read, which CycleRoute holds for the header's action and Home (HUBS.md: a cycle's
+// new part comes in through its defs file, so the frozen route gains no import).
+export { useUseOfFundsHome } from '../../raise/useoffunds/useOfFundsRead.js';
 
 // D4574 (#4574, H5): Raise's step behind its own lazy boundary.
 const NarrativeHome = lazyStep(() => import('../../raise/narrative/NarrativeTool'), 'NarrativeHome');

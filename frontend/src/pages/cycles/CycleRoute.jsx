@@ -65,7 +65,6 @@ import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableMode
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { HOME_FRAME as UOF_FRAME, homeAction as uofHomeAction, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
-import { useUseOfFundsHome } from '../raise/useoffunds/useOfFundsRead.js';
 import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
 import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
@@ -75,6 +74,7 @@ import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 import { lazyStep } from './lazyStep.jsx';
 import validateDef from './defs/validate.jsx';
 import raiseDef from './defs/raise.jsx';
+import { useUseOfFundsHome } from './defs/raise.jsx';
 import growDef from './defs/grow.jsx';
 import buildDef from './defs/build.jsx';
 
