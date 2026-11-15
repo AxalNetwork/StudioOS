@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
+import { cycleValidateApi } from '../../../lib/api/cycleValidate';
 import { validateExportsApi } from '../../../lib/api/founderValidateExports';
 import { useRailOption } from '../../../ui/railCrumbs';
 import Lightbox from '../../../ui/Lightbox';
@@ -19,7 +20,7 @@ import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
-import { InterviewsSection, PainThemesSection, HypothesesSection } from '../ValidateSections';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -188,6 +189,8 @@ const validate = {
         <ValidateDemandPosthog projectId={ctx.projectId} />
       </>
     ),
+    'ideal-customer-profile': (data, ctx) => <SegmentsSection key={ctx.projectId} parts={data?.parts}
+      onAssign={(interviewId, segmentId) => cycleValidateApi.setInterviewSegment(ctx.projectId, interviewId, segmentId).then(ctx.reload)} />,
     'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.

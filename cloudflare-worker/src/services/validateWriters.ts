@@ -187,7 +187,7 @@ export async function assignInterviewSegment(
   let segmentName: string | null = null;
   if (input.segmentId != null) {
     const seg = await env.DB.prepare(
-      'SELECT id, name FROM customer_segments WHERE id = ? AND project_id = ?',
+      'SELECT id, name FROM customer_segments WHERE id = ? AND project_id = ? AND archived_at IS NULL',
     ).bind(input.segmentId, input.projectId).first<{ id: number; name: string }>();
     if (!seg) throw new WriterError(404, 'Segment not found on this project');
     segmentName = seg.name;
