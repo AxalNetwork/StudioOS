@@ -50,6 +50,7 @@ export const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-gro
 const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 export function Cell({ cell, first = false, linkState = undefined, plain = false }) {
+  if (cell?.blank === true) return null;
   // D1327: a provenance cell is Fill with Eadwyn's one mark.
   if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
   const v = cellView(cell);
@@ -160,6 +161,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           })}
           {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
+          {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
         {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
@@ -208,7 +210,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
                   {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint lg:hidden">{c.label}</span>}
                   {ci === 0 && href ? <Link to={href} className="after:absolute after:inset-0 focus-visible:underline">
                     <Cell cell={r.cells?.[c.key]} first plain />
-                  </Link> : <Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href} />}
+                  </Link> : <span className={r.cells?.[c.key]?.separateLink ? 'relative z-10' : undefined}><Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href && !r.cells?.[c.key]?.separateLink} /></span>}
                 </span>
               ))}
               {acts && <RowAction action={rowAction(r)} />}
@@ -351,11 +353,14 @@ export default function CycleModulePage({
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined;
+  // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
+  const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}

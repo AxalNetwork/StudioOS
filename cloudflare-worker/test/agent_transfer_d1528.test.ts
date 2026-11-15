@@ -331,6 +331,12 @@ test('#4394 (TM18b): an out move names the runs it stopped, each scope only its 
     assert.ok((await load(d, ca.run.uid)).go);
     await move(w, null); // out of every company: an out move for both the company and the project
     assert.equal((await onProjectMoved(w.env, { projectId: PROJECT, from: COMPANY, to: null, actorUserId: SPONSOR }, fakeDeps().deps)).ended, 2);
+    // Keep the move, its stopped runs, and the return in distinct SQLite seconds.
+    // Crossing a real second during the async calls must not put a stopped run
+    // on the next move's exclusive timestamp boundary.
+    const outMove = w.db.prepare("SELECT MAX(id) AS id FROM company_membership_events WHERE kind = 'project_move' AND project_id = ?").get(PROJECT) as { id: number };
+    w.db.prepare('UPDATE company_membership_events SET created_at = ? WHERE id = ?').run('2026-10-01 10:00:00', outMove.id);
+    w.db.prepare('UPDATE agent_task_runs SET ended_at = ? WHERE uid IN (?, ?)').run('2026-10-01 10:00:01', a.run.uid, ca.run.uid);
     const t = (id: number) => w.db.prepare('SELECT uid, title FROM scope_tasks WHERE id = ?').get(id) as any;
     const agentUid = (id: number) => (w.db.prepare('SELECT uid FROM team_agents WHERE id = ?').get(id) as any).uid;
 
@@ -345,6 +351,8 @@ test('#4394 (TM18b): an out move names the runs it stopped, each scope only its 
 
     // Moving back in names no stopped runs, and the earlier out move keeps only its own.
     await w.DB.batch(projectMoveStatements(w.env, { projectId: PROJECT, from: null, to: COMPANY, actorUserId: SPONSOR }));
+    w.db.prepare("UPDATE company_membership_events SET created_at = ? WHERE kind = 'project_move' AND project_id = ? AND id > ?")
+      .run('2026-10-01 10:00:02', PROJECT, outMove.id);
     const back = await call(w, SPONSOR, `/project/${PROJECT}/moves`);
     assert.equal(back.body.moves[0].direction, 'in');
     assert.equal('stopped_runs' in back.body.moves[0], false, 'an in move carries no stopped_runs');
