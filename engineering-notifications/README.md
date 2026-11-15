@@ -54,3 +54,5 @@ change or when the sender reports an unmapped workflow:
 gh api --paginate --slurp 'repos/AxalNetwork/StudioOS/actions/workflows?per_page=100' > /tmp/studioos-actions-workflows.json
 STUDIOOS_ACTIONS_WORKFLOW_SNAPSHOT=/tmp/studioos-actions-workflows.json node --test frontend/test/workflow_channel_inventory.test.mjs
 ```
+| `workflow-failure-dispatch.mjs` | D6387: signed workflow completion intake and batched main-branch dispatch. |
+| `wrangler.workflow-failures.jsonc` | D6387: independent failure dispatch Worker and queue bindings. |

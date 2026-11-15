@@ -37,10 +37,12 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * working code.
  */
 
-// `/funds/ledger` fails for one reason across several filters, so the reason
-// is written once and shared by every entry it covers rather than restated per
-// label. (`/funds/calls` shared one too, until D371 built its ledger.)
-const NO_LEDGER_LINES = 'the operational ledger has its own fund and period controls below; LP accounts receive summaries, and only the assigned administrator or an admin may read journal lines';
+// `/funds/ledger` (D6231): Journal and Fees are live views, locked with one
+// shared reason for a reader who is not the fund's administrator; Audit trail
+// has no read behind it. (`/funds/calls` shared a reason too, until D371 built
+// its ledger.)
+export const LEDGER_LINES_LOCKED = 'only the fund’s assigned administrator or an admin reads journal lines and fees; your access reads the summary';
+const NO_LEDGER_AUDIT = 'no audit-trail read exists for the operational ledger; each posted journal line already names who recorded it';
 // `/network/relationships`. Going cold reads `partner_interactions` (the log's
 // MAX). LPs stay unbuilt: an LP register is a fund record, not a relationship.
 const NO_LP_RELATIONSHIP =
@@ -58,27 +60,26 @@ const NO_LP_RELATIONSHIP =
 // tables and not one.
 const NO_OFFER_ON_THIS_DESK =
   'an introduction you offered is logged as value-add support, not on this desk — every row here is one addressed to you, or one you asked for';
-// `/network/organizations`, AND THE FOUR-STEP CHECK ENDS AT STEP FOUR HERE.
-// `metadata` is a real column on `partner_relationships` and it is free-text
-// JSON, so `metadata.organization_name` is a shape the store could physically
-// hold — which is exactly the trap D52 was written about. The write path exists
-// (`POST /partnernet/relationships`) and the client method exists
-// (`api.createRelationship`). What it no longer has is a CALLER: this note used
-// to cite `RelationshipsPage.jsx:154` sending `{partner_id, relationship_type,
-// strength_score}` and no metadata, and that page has since been rebuilt onto
-// the firm book (migration 224) and calls neither. So the count of writers went
-// from one-that-omits-it to none, which makes the conclusion stronger rather
-// than stale. The string `organization_name` appears nowhere in the worker or
-// the backend. Nothing has ever written one.
+// `/network/organizations` (D6258). An organisation on this zone is the
+// counterpart's OWN company, which `GET /api/partnernet/relationships` has
+// returned as `other.company` since D572 part 3: the company the other person
+// links on their account, read at query time. Nothing is stored on the
+// relationship. That makes `All` a live chip, and leaves two labels that would
+// have to say what KIND of firm a company is to you, which nothing records.
 //
-// AND THE BOOK'S `organization` COLUMN IS NOT AN ANSWER HERE. Migration 224
-// gives a contact an employer as text, which is what `pn3`'s intended-shape
-// table would group by — but that table is the PARTNER licence's book, read
-// through `/api/partnernet/book`, and an investor's Organizations zone rolls up
-// `partner_relationships`. A column on a table this zone does not read is not a
-// column this zone has.
-const NO_ORG_ON_A_RELATIONSHIP =
-  'a relationship records two accounts, a type and a strength, and nothing on it names the firm either of them is at, so there are no organisations here to select between; where one would be recorded is the owner’s decision, asked on #1023 (D497)';
+// `Portfolio` would need the company tied to a deal you invested in; the
+// company is a name read off another person's account, and this page never
+// loads your deals. `Co-investors` is a live chip one zone up, where
+// `relationship_type = 'co_investor'` selects PEOPLE. Here it would have to
+// select firms, and a tie's type describes the person, not the company they
+// link, so calling a firm a co-investor because one person at it is would be a
+// guess printed as a fact.
+const NO_PORTFOLIO_LINK =
+  'a company here is the name the other person links on their own account, and nothing ties it to a deal you invested in; this page never loads your deals';
+const NO_PORTFOLIO_LINK_HOVER = 'Nothing ties these companies to your investments yet.';
+const NO_FIRM_KIND =
+  'a tie’s type describes the person, not the company they link, so a company cannot be called a co-investor because one person at it is';
+const NO_FIRM_KIND_HOVER = 'A tie’s type describes the person, not their company.';
 // The other two name records that are real and are kept somewhere this page
 // never opens: it loads the relationship book, the network summary and the
 // introductions desk, and nothing else. `limited_partners` is keyed on
@@ -86,13 +87,6 @@ const NO_ORG_ON_A_RELATIONSHIP =
 // taxonomy on a deal, which the pipeline zone reads and this one does not.
 const KEPT_IN_ANOTHER_STORE =
   'both name records this page never loads: an LP belongs to a fund’s own register, and a pass is a reason stamped on a deal';
-// `/research/library` is a shared surface, so its reasons read the same as
-// founder's — deliberately. One component draws both rows, and a reader moving
-// between licences must not find one absence explained two ways. Ask's
-// `NO_SESSION_RECORD` was the other half of that pairing and is gone from both
-// files together: migration 221 stored the session history it denied.
-const NO_SUCH_KIND =
-  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
 // `/research/markets`. The same absence founder's row states, in this licence's
 // words: all four labels are lifecycle states of a SAVED DEEP-DIVE, which the
 // artboard shows as `Analysis · Method · Run · State`. Two of them look nearly
@@ -146,11 +140,14 @@ export const INVESTOR_ZONE_FILTERS = {
 
   // `Summary` is real — it reads the fund analytics totals. The other three
   // reached a panel that told you so only after you clicked.
+  // D6231 (#6231): the header row is the ledger panel's one view control.
+  // Journal and Fees are live for the fund's administrator; the page locks
+  // them, with LEDGER_LINES_LOCKED, for a reader who gets the summary only.
   'funds/ledger': [
     { canvas: 'Summary', key: 'summary' },
-    { canvas: 'Journal', unbuilt: NO_LEDGER_LINES },
-    { canvas: 'Fees', unbuilt: NO_LEDGER_LINES },
-    { canvas: 'Audit trail', unbuilt: NO_LEDGER_LINES },
+    { canvas: 'Journal', key: 'journal' },
+    { canvas: 'Fees', key: 'fees' },
+    { canvas: 'Audit trail', unbuilt: NO_LEDGER_AUDIT },
   ],
 
   // Four real predicates over `api.lpReportsList` / `api.fundsReportPeriods`.
@@ -245,7 +242,8 @@ export const INVESTOR_ZONE_FILTERS = {
   // Each key narrows a real collection: `scored` and `flags` come from
   // `score_snapshots` (six dimensions, `admin_review_status`, `anomaly_flags`),
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
-  // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
+  // CHECKed pass taxonomy, counted over the firm's own passes
+  // (`GET /api/deals/flow/passes`, D6148).
   // D1260 (#3283): Screening reads the venture scorecard. The canvas's Scored,
   // Rubric and Red flags were the Lab scorer's (a total, six dimensions, its
   // anomaly flags), which investors no longer see; Scorecards is the eleven scopes.
@@ -299,23 +297,20 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Stalled', key: 'stalled' },
   ],
 
-  // FIVE LABELS, NO CHIPS. The section this row sits over is honest already —
-  // "No organization identity is recorded on your relationship records yet" —
-  // and it is honest because it has always been empty: `orgIdentity` tries six
-  // paths and the last of them, `metadata.organization_name`, is a key nothing
-  // in this product writes. `All` is prose for the same reason it is on the
-  // founder row: there is no collection for it to select.
+  // ONE LIVE CHIP, FOUR REASONS (D6258). `All` is every company a counterpart
+  // links (`other.company`, D572 part 3), which is the whole list the section
+  // draws. `Portfolio` and `Co-investors` would have to type a firm, and
+  // nothing does; `LPs` and `Passed` are kept in stores this page never loads.
   //
   // `Co-investors` IS THE ONE WORTH READING TWICE. It is a live chip one zone
   // up, where `relationship_type = 'co_investor'` selects people. Here the same
-  // word would have to select firms, and the store holds none. Same label, same
-  // table, two zones apart, live in one and dead in the other — which is the
-  // clearest statement this workstream has of why a filter's verdict belongs to
-  // the row it sits on and not to the word.
+  // word would have to select firms, and nothing types one. Same label, same
+  // table, two zones apart, live in one and dead in the other, which is why a
+  // filter's verdict belongs to the row it sits on and not to the word.
   'network/organizations': [
-    { canvas: 'All', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
-    { canvas: 'Portfolio', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
-    { canvas: 'Co-investors', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Portfolio', unbuilt: NO_PORTFOLIO_LINK, hover: NO_PORTFOLIO_LINK_HOVER },
+    { canvas: 'Co-investors', unbuilt: NO_FIRM_KIND, hover: NO_FIRM_KIND_HOVER },
     { canvas: 'LPs', unbuilt: KEPT_IN_ANOTHER_STORE },
     { canvas: 'Passed', unbuilt: KEPT_IN_ANOTHER_STORE },
   ],
@@ -399,14 +394,13 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Retired', unbuilt: NO_SAVED_DEEP_DIVE },
     { canvas: 'Builder', unbuilt: NO_SAVED_DEEP_DIVE },
   ],
-  // `Diligence` looks like the two live chips partner gets from this same
-  // column and is not one of them. `research_documents.kind` is free text, so
-  // the column check and the write-path check both pass — but the only writer
-  // is the upload form, which offers `Document`, `My playbook` and `About a
-  // client`, and the worker coerces anything else. No row can carry it.
+  // D6282: `Diligence` is live. The upload form offers an investor the
+  // `diligence` kind and the Worker keeps it, so the chip filters on a value a
+  // row can now carry. `Benchmarks` stays off on purpose: a benchmark is a row
+  // in Benchmarking, not a document, and no `benchmark` kind exists.
   'research/library': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Diligence', unbuilt: NO_SUCH_KIND },
+    { canvas: 'Diligence', key: 'diligence' },
     {
       canvas: 'Benchmarks',
       unbuilt: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',

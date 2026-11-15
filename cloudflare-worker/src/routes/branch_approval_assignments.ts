@@ -40,7 +40,7 @@ r.post('/approvals/assignments', async (c) => {
     requireBranchTier(c.env);
     await requireBranchNotSuspended(c);
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    const result = await assignFromBody(c.env, admin, body, { sources: APPROVAL_SOURCES, boardLimit: 100 });
+    const result = await assignFromBody(c.env, admin, body, { sources: APPROVAL_SOURCES });
     if (!result.ok) return refuse(c, result.status, { code: result.code, message: result.message, audience: 'member' });
     return c.json({ assigned: result.assigned });
   } catch (e) { return mapError(c, e); }

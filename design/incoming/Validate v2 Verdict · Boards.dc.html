@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validate v2 Verdict · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Validate · Verdict · #6021 · addendum to Validate v2 (#4837), boards V17 to V24</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Verdict — Eadwyn reads the evidence before you decide, and a recorded decision can be shared with named people</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues Validate v2: same shell, palette, V10 decision picker, V12 Eadwyn rail and V14 suggestion card, numbered from V17. On Record a decision (/validate/verdict/new), a rail task (#5130, not a second panel) reads only the evidence offered for this decision and sorts it into Contradicts, Supports and Checked but not counted, with what would change it. Every line cites one evidence row (E1…). It never picks Proceed, Pivot or Stop, and its text is saved nowhere unless the founder uses it as reasoning. The decision picker stays the page's primary action. Sharing a recorded decision with named people is an open owner call (Q1 to Q3); the boards draw option B as ⚑ options, not a decision. States follow Platform States (D5129): Not recorded and Unavailable are never drawn as 0. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark owner calls. Neither is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Tidepool, Mia Lund, Elena Varga, Daniel Okafor, Hannah Lindqvist, Kofi Mensah, the interviewees and every figure are fictional; the $0.04 hold is a sample</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Validate v2 Verdict Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['V17', 'Verdict · Eadwyn reads the evidence', 'Record a decision for H2 (V10 A: no choice pre-selected) with the rail open on the task “Read the evidence for this decision”. Contradicts first (2 sources), Supports (2), Checked but not counted (2 links, with why), and What would change this: H2’s disproof is Not recorded with Add to H2, its success bar and deadline. Each line links to its row; E1 is highlighted. The coverage sentence: 4 of 5 distinct sources, so a decision now would be Withheld. Use as reasoning, Copy, Discard. No recommended choice and no Proceed, Pivot or Stop button in the rail.', [F('VAV17', false, 1240)]],
+      ['V18', 'Eadwyn summary · states', 'A · Not run yet, with the quoted hold before Send. B · Reading: a skeleton; the page stays usable. C · Eadwyn off for your account, with AI settings. D · Not available: the platform’s sentence, and nothing charged. E · Evidence Unavailable with Try again; no summary over a failed read. F · Out of date: 1 row added since, with Run again. G · No evidence yet, with Go to Hypotheses.', [C('VAV18A', false, 320, 640), C('VAV18B', false, 320, 640), C('VAV18C', false, 320, 640), C('VAV18D', false, 320, 640), C('VAV18E', false, 320, 640), C('VAV18F', false, 320, 640), C('VAV18G', false, 320, 640)]],
+      ['V19', 'Decision record · share the memo (option B)', 'First, the three owner calls as ⚑ options; none is answered, and the boards draw Q1 B, Q2 A, Q3 A. Then the CO:368 decision record (Pivot for the venture, given 13 Nov, 5 counted) with the Memo side section: Export memo as today and ◇ Share with…. The sheet picks named Operating Partners and investors, says what they will and will not see, includes the reasoning only when ticked, and lists who it is shared with, with Revoke. Variants: not shared yet, Withheld (cannot be shared), and a revoked share.', [C('VAV19Q', 'Owner calls · not decided', 1400, 400), F('VAV19', 'Record with the share sheet open', 1140), C('VAV19B', 'Memo section variants', 1200, 260)]],
+      ['V20', 'Shared memo · recipient and refusals', 'A · What Elena Varga (named) sees: a read-only page with the decision, scope, date and author, the evidence with directions and counted / not counted, commitments, the included reasoning and “Shared by Mia Lund on 13 Nov”. No edit, no other decision, no Eadwyn actions. B · Refused: not named, or after a revoke. C · Superseded: the memo opens with a banner and never shows the later decision. D · Unavailable with Try again.', [F('VAV20A', 'A · Named recipient', 1140), C('VAV20B', 'B · Refused', 520, 220), C('VAV20C', 'C · Superseded', 520, 260), C('VAV20D', 'D · Unavailable', 520, 200)]],
+      ['V21', 'States', 'Loading; Not recorded for disproof, success bar, reasoning, strength and a commitment’s owner and due; evidence read Unavailable (picker disabled); record read Unavailable (Export memo and Share disabled); Refused for a partner today; Share saving and failed, Revoke saving and failed, with the selection kept.', [C('VAV21', false, 1400, 520)]],
+      ['V22', 'Phone 390', 'A · V10 C order: scope, coverage sentence, Read the evidence, evidence groups as cards, then the picker below. B · The summary as a bottom sheet with the same groups and its three actions at 44px. C · The share sheet at full height.', [P('VAV22A', 'A · Record a decision'), P('VAV22B', 'B · Eadwyn bottom sheet'), P('VAV22C', 'C · Share sheet')]],
+      ['V23', 'Dark', 'V17 and V19 on the dark tokens; states keep their words and shapes.', [F('VAV23A', 'V17 · dark', 1240), F('VAV23B', 'V19 · dark', 1140)]],
+      ['V24', 'Handoff', 'Checked on main, requires engineering (◇), pending the owner (⚑), frontend only, preserved, and accessibility.', [W('VAV24')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
