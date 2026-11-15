@@ -105,8 +105,8 @@ test('#5060 CT-17 rules: three filters in the canvas order, each with words for 
   const drawn = /J\(\['Agreement type', ([^\]]+)\]/.exec(canvas)[1];
   const order = ['Agreement type', ...[...drawn.matchAll(/'([^']+)'/g)].map((m) => m[1])];
   const built = FILTER_BUTTONS.map(([, name]) => name);
-  // The canvas draws "Licence / territory" and "Signed / effective"; Effective is not a filter (D5050 part 2).
-  assert.deepEqual(built, order.map((n) => (n === 'Signed / effective' ? 'Signed date' : n)));
+  // The canvas draws "Licence / territory" and "Signed / effective"; Effective is not a filter (D5050 part 2), and the date filter reads Executed date (D4811-p23).
+  assert.deepEqual(built, order.map((n) => (n === 'Signed / effective' ? 'Executed date' : n)));
   for (const k of ['licence_family', 'licence_type', 'holder']) assert.ok(AGREEMENT_FILTER_KEYS.includes(k), k);
   const f = { licence_family: 'user', licence_type: 'operating_partner', holder: 'user:42' };
   const names = { 'user:42': 'Synthetic Founder' };

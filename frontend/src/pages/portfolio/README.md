@@ -67,6 +67,18 @@ Decision notes: `documentation/architecture/decisions/D4817-p4.md`.
 - The rail's structure is #5130's; the Account-menu move is #4473's. The frame
   places the rail and links Portfolio's own routes, and changes neither.
 
+D4817 part 5 (canvas PF-05) draws Value-add
+(`../investor/InvestorPortfolioValueAdd.jsx` at `/portfolio/value-add`) in the
+same frame (`tab="value-add"`). `valueAddModel.js` is its pure model over the
+support ledger (`/api/portfolio-support`): the six figures (`figuresOf`), the
+commitments with owner, state and dates (`commitmentOf`), the introductions
+(`introductionsOf`, counted only over a read that holds every entry), hours
+(`hoursLabel`, `hoursOf`) and the per-company rollup. In progress, Cancelled,
+a due date and the meetings that came of an introduction are not recorded by
+the ledger and read Not recorded with that reason; failed figures (`totals:
+null`) read Unreadable beside the entries that were read. `valueAdd.css` holds
+its figure row, tables, in-place confirmation and Log support form. Decision
+notes: `documentation/architecture/decisions/D4817-p5.md`.
 D4817 part 7 (canvas PF-07) takes the two money writes, a valuation mark and
 a distribution recorded by an admin against one company's position, Prepare →
 Review → Confirm → Receipt. The writes stay where they were, in the admin
@@ -86,12 +98,17 @@ D4817 part 6 (canvas PF-06) draws one company's workspace
 on Financials' Ownership & rights) in the same frame, through its optional
 `title`, `crumb`, `nav` and `docTitle`. Its pure model is `companyModel.js`
 (tabs and titles, who the company is to the caller, the holding route, the
-six key facts, evidence and next actions, rounds, return, support and each
-source's own activity); `CompanyPanels.jsx` draws Financials, Support and
+six key facts, evidence and next actions, rounds, return, support and the
+joined activity timeline); `CompanyPanels.jsx` draws Financials, Support and
 Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
 
+D6227 (#6227) turns Activity into one timeline: the Worker's joined read
+`GET /api/positions/:uid/activity` (client `../../lib/api/positionActivity.js`),
+drawn by `CompanyActivity` through `companyModel.js`' `activityOf`. A source
+the Worker reports as failed is named with its own Retry, never read as no
+activity. Decision notes: `documentation/architecture/decisions/D6227.md`.
 D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
 "Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
 rules (the most pressing open period, its obligation facts, who may act from

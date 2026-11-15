@@ -56,6 +56,8 @@ jobs:
   # need the pinned SDK.
   selftest:
     name: claude review (self-test)
+    # #6461: a draft skips the self-test (no runner); ready_for_review, already a type above, runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

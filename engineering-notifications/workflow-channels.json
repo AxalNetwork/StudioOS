@@ -112,6 +112,11 @@
       "channel": "#axalvc-actions-form-lightbox-contracts"
     },
     {
+      "id": null,
+      "path": ".github/workflows/gateway-live-check.yml",
+      "channel": "#axalvc-actions-gateway-live-check"
+    },
+    {
       "id": 412302440,
       "path": ".github/workflows/github-alerts.yml",
       "channel": "#axalvc-actions-github-alerts"

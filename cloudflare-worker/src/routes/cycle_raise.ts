@@ -10,6 +10,8 @@
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
  *     Investor narrative's `parts.narrative` (D909): every version with its
  *     based-on, saved, by and read-by; the newest's check; the current deck.
+ *     D6068: `claims`, the newest's claim store tally (backed of total, and
+ *     the sections with a Mismatch), unreadable on its own.
  *     `{ state: 'unreadable' }` when it could not be read.
  *     The first sort is the default. Row ids are D691's (#1699): an item key,
  *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
@@ -413,7 +415,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
   if (pmf) parts.pmf = pmf;
   // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
   if (slug === 'investor-narrative') {
-    parts.narrative = await narrativeHome(ctx).catch((e) => {
+    parts.narrative = await narrativeHome(ctx, sectionOfField).catch((e) => {
       console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
       return { state: 'unreadable', reason: 'The narrative versions could not be read' };
     });
