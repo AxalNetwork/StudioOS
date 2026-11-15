@@ -49,10 +49,14 @@ test('writers set and clear a waitlist bar, and a refusal preserves the saved va
     unreadable = true;
     await act(async () => render());
     assert.match(words(), /Waitlist bar could not be read/);
+    assert.match(words(), /Saving a new bar replaces any existing target/);
     assert.equal(node('FORM') !== undefined, true);
+    assert.ok(!node('BUTTON', 'button'), 'clearing requires a readable saved target');
     assert.doesNotMatch(words(), /No bar set/);
+    await act(async () => props(node('INPUT')).onChange({ target: { value: '60' } }));
+    await act(async () => props(node('FORM')).onSubmit({ preventDefault() {} }));
     unreadable = false;
-    assert.deepEqual(calls, [[42, 50], [42, null], [42, null]]);
+    assert.deepEqual(calls, [[42, 50], [42, null], [42, null], [42, 60]]);
     value = 30;
     canWrite = false;
     await act(async () => render());

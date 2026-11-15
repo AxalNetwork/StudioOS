@@ -37,7 +37,10 @@ export default function WaitlistBar({ projectId, value, unreadable = false, canW
   return (
     <section id="waitlist-bar" className="grid gap-2 rounded-xl border border-axal-hairline p-4">
       <h2 className="text-sm font-bold">Waitlist bar</h2>
-      <p className="text-sm">{unreadable ? 'Waitlist bar could not be read.' : value == null ? 'No bar set' : `${value.toLocaleString()} sign-ups`}</p>
+      <p className="text-sm">
+        {unreadable ? 'Waitlist bar could not be read.' : value == null ? 'No bar set' : `${value.toLocaleString()} sign-ups`}
+        {unreadable && canWrite && ' Saving a new bar replaces any existing target.'}
+      </p>
       {canWrite && (
         <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); if (canSave) save(target); }}>
           <label className="grid min-w-0 gap-1 text-sm">
@@ -46,7 +49,7 @@ export default function WaitlistBar({ projectId, value, unreadable = false, canW
               disabled={busy} onChange={(event) => setDraft(event.target.value)} />
           </label>
           <button className={inputClass} type="submit" disabled={!canSave}>Save bar</button>
-          {(value != null || unreadable) && <button className={inputClass} type="button" disabled={busy} onClick={() => save(null)}>Clear bar</button>}
+          {!unreadable && value != null && <button className={inputClass} type="button" disabled={busy} onClick={() => save(null)}>Clear bar</button>}
         </form>
       )}
       {error && <p role="alert" className="text-sm text-red-700 dark:text-red-400">{error}</p>}
