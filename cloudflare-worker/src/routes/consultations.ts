@@ -14,6 +14,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { buildBestFitReport, persistBestFitReport } from '../services/bestFit';
 import { ensureAxalFitSchema } from '../services/axalFitSchema';
+import { notify } from '../services/notify';
 
 const CONSULTATION_STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'] as const;
 type ConsultationStatus = typeof CONSULTATION_STATUSES[number];
@@ -23,6 +24,52 @@ export const CONSULTATION_TRANSITIONS: Readonly<Record<ConsultationStatus, reado
   completed: [],
   cancelled: [],
 });
+
+/**
+ * D5886 (#5886) — the owner chose B, in app only: the member is told when an
+ * admin confirms (with the slot time) or cancels their consultation. A
+ * completed consultation is not announced, and nothing is emailed.
+ */
+export const MEMBER_NOTICE_STATUSES: readonly ConsultationStatus[] = Object.freeze(['confirmed', 'cancelled']);
+
+function slotText(slotAt: unknown): string | null {
+  if (typeof slotAt !== 'string' || !slotAt) return null;
+  const at = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(slotAt) ? slotAt : `${slotAt.replace(' ', 'T')}Z`);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }).format(at)} UTC`;
+}
+
+/**
+ * The member's in-app notice for a committed transition. Runs only after the
+ * status and its event committed (D5300 §3): a failed notice never undoes or
+ * fails the decision; the route reports `notified: false` instead.
+ */
+export async function noticeMember(env: Env, row: Record<string, unknown>): Promise<boolean | null> {
+  const status = String(row.status) as ConsultationStatus;
+  if (!MEMBER_NOTICE_STATUSES.includes(status)) return null;
+  const topic = typeof row.topic === 'string' && row.topic.trim() ? row.topic.trim().slice(0, 120) : null;
+  const slot = slotText(row.slot_at);
+  const confirmed = status === 'confirmed';
+  try {
+    const id = await notify(env, {
+      userId: Number(row.user_id),
+      type: confirmed ? 'consultation_confirmed' : 'consultation_cancelled',
+      title: confirmed ? 'Your Best-Fit consultation is confirmed' : 'Your Best-Fit consultation was cancelled',
+      body: confirmed
+        ? (slot ? `It is booked for ${slot}.` : 'The time has not been set yet; you will see it on your Studio home.')
+          + (topic ? ` Topic: ${topic}.` : '')
+        : `The consultation${topic ? ` about ${topic}` : ''} will not take place. You can request another from your Studio home.`,
+      link: '/studio',
+      payload: { booking_id: Number(row.id), status, slot_at: typeof row.slot_at === 'string' ? row.slot_at : null },
+      channels: ['in_app'],
+      category: 'calendar',
+    });
+    return id !== null;
+  } catch (e) {
+    console.warn('[consultations] member notice failed', (e as Error)?.name ?? 'error');
+    return false;
+  }
+}
 
 const ADMIN_BOOKING_SELECT = `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
   b.topic, b.notes, b.report_id, b.created_at, b.version,
@@ -157,5 +204,6 @@ adminConsultations.post('/:id/status', async (c) => {
   if (Number(updated.meta?.changes ?? 0) !== 1) {
     return c.json({ code: 'version_conflict', message: 'This consultation changed after you read it.', current: row }, 409);
   }
-  return c.json({ booking: row });
+  // D5886: after commit only. `null` for a status the member is not told about.
+  return c.json({ booking: row, notified: await noticeMember(c.env, row) });
 });

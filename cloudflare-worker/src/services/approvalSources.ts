@@ -329,7 +329,8 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'b.created_at AS created_at '
       + 'FROM admin_consultation_bookings b LEFT JOIN users u ON u.id = b.user_id '
       + "WHERE b.status = 'requested' ORDER BY b.created_at ASC LIMIT ?",
-    notifies: 'Nobody yet',
+    // D5886: in app, on confirm (with the slot time) and on cancel; not on completion.
+    notifies: 'The member, in app',
     decidedOn: 'Best-Fit',
   },
   {
