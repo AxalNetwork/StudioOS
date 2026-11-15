@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 IC Actions · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals · Commit · Deals v2 addendum B · #6142 (continues #4815, DE19 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Investment committee actions — open a decision, vote or recuse, close, conditions, minutes and every past decision</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Continues the Deals v2 canvas (DE01 to DE18) with its #3704 Investor shell, Deals zone row and DE07’s Investment committee page, numbered DE19 to DE31 (component keys DIC19 onward) and extending DE07 / DE07b. Everything happens on /deals/commit: a Current | All decisions switch, no new route. Every vote records its reason; changing a vote replaces it. Abstain is a vote cast and stays in the count; Recused is a declared conflict with its own word, ⊘ glyph and dashed shape, counted beside the tally and never in it. Open conditions block Closing. Zero, Not recorded and Unreadable never look alike (Platform States, D5129). Eadwyn proposes the memo from members’ own quoted reasons; it never votes, recuses, closes, resolves or writes a reason. Each action board carries a dashed Canvas note naming its route. Violet dashed ◇ tags mark backend work (#6142 until filed); amber ⚑ tags mark owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Northwind Ventures, [Acme Robotics], [Marlow Bio], the members [Name A] to [Name G], dates and every figure are fictional sample content (bracketed)</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="14">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 IC Actions Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DE19', 'Open a decision', 'Dialog over /deals/commit: Title, Deal (sets the venture), Diligence case, Memo, and Start the memo from the venture’s scoring memo. The IC meeting line comes from the deal. Saved as Draft; voting opens with the first vote. B · no meeting (Schedule IC meeting), Deal not found and Write a title with edits kept, and Send to IC, which skips the dialog.', [F('DIC19', 'A · Open a decision', 1100), C('DIC19B', 'B · No meeting, save failed, Send to IC', 1600, 824)]],
+      ['DE20', 'Decision and my vote', 'Decision card with ◇ opened by, tally Invest 2 · Pass 1 · Abstain 1 of 4 cast with Recused 1 apart, ◇ voting list and ◇ quorum; my vote (Invest / Pass / Abstain, reason required, Record vote, Recuse myself); latest vote per member. Eadwyn proposes the memo for the author or an Admin, quoting each reason. B · after I vote (3 · 1 · 1 of 5), Change my vote, and no memo proposal for others.', [F('DIC20', 'A · Before my vote, author view', 1240), C('DIC20B', 'B · After I vote, change, others', 1340, 421)]],
+      ['DE20b', 'No votes yet', 'Draft decision: 0 · 0 · 0 of votes cast on this decision, Recused 0, “No votes yet. Voting opens when the first vote is cast.” The vote form is the one action.', [F('DIC20C', false, 1080)]],
+      ['DE21', 'Recuse', 'How it differs from Abstain, the declaration (required) and “I understand a recusal is final.” B · recusing after voting replaces the vote. C · after: the form is gone, my row reads Recused with the declaration, and the tally becomes 2 · 1 · 1 with Recused 2.', [C('DIC21', false, 1540, 526)]],
+      ['DE22', 'Close the vote', 'For the author or an Admin: the tally restated, Invest / Pass / Defer, open conditions that stay open, Close vote. After: Decided · Invest · [14 Nov], form gone, ◇ closing does not yet lock votes, ⚑ Q5. A colleague sees the rule without a button (◇ no name); a decided decision reads Closed as Invest.', [C('DIC22', false, 1240, 572)]],
+      ['DE23', 'Conditions', 'Rows with status word and glyph, Blocks Closing on open ones, Added by, Resolved by, ◇ Owner; Mark met / Waive / Reopen for the author or an Admin. B · Add condition sheet, save failed in the platform’s words, the view for others, Reopen clearing the resolution, empty, and ◇ Eadwyn wording.', [F('DIC23', 'A · Author view', 1080), C('DIC23B', 'B · Sheet, roles, reopen, empty', 1340, 1346)]],
+      ['DE24', 'Minutes', 'Recorded (title, time, invitation list by reply, text, recorded by and on, Export, Edit); linked but unwritten for the organiser and for others; no meeting on the deal with Schedule IC meeting; the full-height editor; ◇ minutes for any other decision.', [C('DIC24', false, 1440, 687)]],
+      ['DE25', 'All decisions', '24 decisions you can see (Draft 3, Voting 4, Decided 17), 5 open conditions, 96 of 101 votes with a reason, 3 recused. Filters and a table of Decision, Venture, Stage, Decision made, Closed on, Votes cast, Open conditions, Outcome. B · empty with Open a decision.', [F('DIC25', 'A · All decisions', 1000), C('DIC25B', 'B · Empty', 940, 214)]],
+      ['DE26', 'Decision record', '[Bluefern Health] seed, decided Invest on [2 Oct]: votes with reasons (one older vote reads No reason recorded), conditions with their latest resolution and ◇ no history, memo, ◇ minutes for earlier decisions, Outcome Not recorded with Set outcome, Export decision record.', [F('DIC26', false, 1120)]],
+      ['DE27', 'How voting works', 'The disclosure under the tally, expanded: reasons, changing a vote, recusal versus abstain, who closes, open conditions and transfers, minutes belong to the deal’s IC meeting.', [C('DIC27', false, 940, 382)]],
+      ['DE28', 'States', 'Loading; Not recorded; zero as a value; committee Unreadable with the rest of Deals working; meeting-only Unreadable; Refused for plan, role and another firm (not found); Schedule IC meeting refused; Saving; the four save-failed sentences; Super Admin preview option A with option B as the alternate (⚑ #4815).', [C('DIC28', false, 1480, 897)]],
+      ['DE29', 'Phone 390', 'Decision, tally in two lines with Recused apart, my vote as three 44px buttons; votes and conditions as cards with an overflow menu and minutes collapsed; Recuse, Close vote and Open a decision as bottom sheets; All decisions as cards.', [P('DIC29A', 'Decision and my vote'), P('DIC29B', 'Votes and conditions'), P('DIC29C', 'Recuse sheet'), P('DIC29D', 'All decisions'), P('DIC29E', 'Close vote sheet'), P('DIC29F', 'Open a decision sheet')]],
+      ['DE30', 'Dark', 'DE20 and DE23 on the dark tokens; Recused, Abstain, Open, Met and Waived keep their words and shapes.', [F('DIC30A', 'Decision and my vote · dark', 1240), F('DIC30B', 'Conditions · dark', 1080)]],
+      ['DE31', 'Developer handoff', 'What main has for each action, the ◇ backend work, owner questions as option A, frontend-only work, the handoff to Closing, and accessibility.', [W('DIC31')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

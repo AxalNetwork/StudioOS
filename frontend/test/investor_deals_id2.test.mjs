@@ -91,10 +91,13 @@ test('D1260: the ops row and chips are the scorecard\'s, not the Lab scorer\'s',
   const rows = INVESTOR_ZONE_FILTERS['deals/screening'];
   assert.deepEqual(rows.map((r) => [r.canvas, r.key ?? null]), [['Scored', 'scorecards'], ['Rubric', null], ['Red flags', null], ['Pass reasons', 'passes']]);
   for (const r of rows.filter((x) => !x.key)) assert.match(r.unbuilt, /Lab scorer’s/, `${r.canvas} lost its reason`);
-  const at = Z.indexOf('const rows = useMemo(');
-  assert.ok(at >= 0, 'the narrowing memo is gone');
-  assert.match(Z.slice(at, Z.indexOf('}, [', at)), /view === 'scorecards'/, 'the Scorecards chip selects nothing');
-  assert.match(Z, /rows=\{visible\.map/, 'the instrument draws something other than the narrowed set');
+  // D4815 (#5909, board DE06): the decision table always leads, and the Pass
+  // reasons chip opens the secondary view under it (the same state as the
+  // disclosure) rather than replacing the table.
+  assert.match(Z, /const rows = dealRows;/, 'the decision table no longer lists the desk');
+  assert.match(Z, /const passesOpen = view === 'passes';/, 'the Pass reasons chip no longer opens its view');
+  assert.match(Z, /aria-expanded=\{passesOpen\}/, 'the disclosure and the chip read different states');
+  assert.match(Z, /\{visible\.map\(\(r\) =>/, 'the table draws something other than the narrowed set');
 });
 
 test('D1260: a scorecard with nothing to show is never a zero', () => {

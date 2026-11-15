@@ -146,7 +146,7 @@ export const FILTER_BUTTONS = Object.freeze([
   // D5060 part 4: CT-17 draws these three between the package and the template.
   ['family', 'Licence family', 'Family'], ['licence_type', 'Licence type', 'Licence type'], ['holder', 'Holder', 'Holder'],
   ['template', 'Template', 'Template'],
-  ['signed', 'Signed date', 'Signed'],
+  ['signed', 'Executed date', 'Executed'],
 ]);
 
 /** What one filter button reads after its name: the value (one), the count (several), or null while unset. */
@@ -181,8 +181,8 @@ export function activeAgreementChips(filters = {}, names = {}) {
   if (f.licence_type) chips.push({ key: 'licence_type', label: `Licence type: ${labelIn(LICENCE_TYPE_OPTIONS, f.licence_type)}` });
   if (f.holder) chips.push({ key: 'holder', label: `Holder: ${holderLabel(f.holder, names)}` });
   if (f.template) chips.push({ key: 'template', label: `Template: ${f.template}` });
-  if (f.signed_from) chips.push({ key: 'signed_from', label: `Signed from ${f.signed_from}` });
-  if (f.signed_to) chips.push({ key: 'signed_to', label: `Signed to ${f.signed_to}` });
+  if (f.signed_from) chips.push({ key: 'signed_from', label: `Executed from ${f.signed_from}` });
+  if (f.signed_to) chips.push({ key: 'signed_to', label: `Executed to ${f.signed_to}` });
   return chips;
 }
 
