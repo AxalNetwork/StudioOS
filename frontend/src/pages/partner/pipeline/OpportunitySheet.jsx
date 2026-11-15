@@ -22,7 +22,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sheet } from '../../../ui';
-import { api, partnerPipelineActivityApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { partnerPipelineActivityApi } from '../../../lib/api/partnerPipelineActivity';
 import { readAllLeadPages, readAllPages } from '../../../lib/pagedRead';
 import { NotRecorded } from '../../../workspaces/canvasKit';
 import { Pill, buttonClass, formatDay, moneyCents, moneyDollars } from '../kit';
