@@ -6,7 +6,7 @@ import { entityErrorWords, entityState } from './mercuryEntityModel';
 import { BASE, ending, money } from './fundAdminModel';
 import { activityRow, activityTime, attentionItems, fundPosition, healthRows } from './workspaceModel';
 import { useRead } from './useRead';
-import { Line, NUM, Note, Panel, ReadFailure as Unreadable, TH } from './parts';
+import { Line, NUM, Note, Panel, ReadFailure as Unreadable, TAP, TH } from './parts';
 
 /**
  * D4812 (#4812, board FA-01) — the Overview, attention first: Needs attention
@@ -111,7 +111,7 @@ function Funds({ overview, performance, fundId, onRetry }) {
           : rows.map((r) => (
             <div key={r.id} className="grid grid-cols-1 gap-2 border-b border-axal-hairline px-4 py-3.5 last:border-b-0 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,2fr)_auto] sm:items-center sm:gap-4 sm:px-5 dark:border-gray-800" data-testid={`overview-fund-${r.id}`}>
               <div className="min-w-0">
-                <Link to={`${BASE}/funds/${r.id}`} className="text-[14px] font-bold text-axal-ink hover:text-axal-violet-deep hover:underline dark:text-gray-100 dark:hover:text-violet-300">{r.name}</Link>
+                <Link to={`${BASE}/funds/${r.id}`} className={`${TAP} text-[14px] font-bold text-axal-ink hover:text-axal-violet-deep hover:underline dark:text-gray-100 dark:hover:text-violet-300`}>{r.name}</Link>
                 <div className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">{r.ident || <Unrecorded>Status not read</Unrecorded>}</div>
               </div>
               <div className={`text-[13px] text-zinc-700 dark:text-gray-200 ${NUM}`}>
