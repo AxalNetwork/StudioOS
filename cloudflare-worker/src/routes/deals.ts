@@ -7,7 +7,7 @@ import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
-import { STARTUP_NOT_PUBLIC_STATUSES } from './public';
+import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
