@@ -1,5 +1,5 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
-import { dealMoney, dealBackLink } from '../components/deals/dealMoney';
+import { dealMoney } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
@@ -15,13 +15,17 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../compo
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
-import { TAB_DEFS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
+import { tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
 import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
 import { dealContextApi } from '../lib/api/dealContext';
-import { blockedRole, keyStrip, readFailure, trackOf } from './deal/dealFrameModel';
-import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPermission, RespondDialog, StageTrack } from './deal/DealFrame';
+import { backOf, blockedRole, financialStrip, headerOf, readFailure, trackOf, viewerCommitment } from './deal/dealFrameModel';
+import {
+  BTN_P, BTN_S, CompanyStageChip, DealLoading, DealNotFound, DealTabs, DealUnreadable, FinancialStrip, NextAction, NoPermission, ProgressChip, RespondDialog, StageTrack, WebsiteIcon, YourPosition,
+} from './deal/DealFrame';
+import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { usePhoneWidth } from '../ui';
 import DealOverview from './deal/DealOverview';
 import DealNotes, { DealActivity } from './deal/DealNotes';
 import { DealCommitment, DealDiligence, DealDocuments, DealTerms } from './deal/DealWorkTabs';
@@ -30,7 +34,7 @@ import DealCommitmentsStaff from './deal/DealCommitmentsStaff';
 import { READ_ONLY, viewerOf } from './deal/dealAudienceModel';
 import { DealMarket, DealTeam, DealTraction } from './deal/DealInsightTabs';
 import {
-  ArrowLeft, FileText, Loader2, X, DollarSign, Send, Check, Users,
+  ArrowLeft, DollarSign, FileText, Loader2, X, Send, Check, Users,
 } from 'lucide-react';
 
 function useCurrentRole() {
@@ -47,17 +51,20 @@ function fmtMoney(n, currency = 'USD') {
 }
 
 export default function DealRoomPage() {
-  // D1148 (#2421): each tab is its own address under /deals/:dealId.
+  // D1148 (#2421): each tab is its own address under /deals/:dealId. D4815 part 4
+  // (#5903, DE04): the eight tabs hold every view, each still at its own address.
   const { dealId, tab: tabParam } = useParams();
   const navigate = useNavigate();
   const role = useCurrentRole();
   const { user } = useAuth() || {};
-  const back = dealBackLink(role);
+  const back = backOf(role);
+  const phone = usePhoneWidth();
+  // D4815 part 4: the commitment shown as yours is read for the firm selected now; a switch reads again.
+  const firmId = useActiveCompany()?.company?.id ?? null;
   const isInvestor = role === 'investor';
   const isAdmin = role === 'admin';
   // D1155 (DL15–DL17): the founder's, an Admin's and an Operating Partner's views.
   const isPartner = role === 'partner';
-  const tabs = dealTabsFor(role);
   const tab = tabOf(tabParam, role);
   // D1152 (DL22): an Advisor and an Explorer get their words, and nothing is read.
   const blocked = blockedRole(role);
@@ -103,36 +110,33 @@ export default function DealRoomPage() {
   const loadMine = () => {
     const current = begin('mine');
     const id = dealId;
+    const firm = firmId;
     setMine({ status: 'loading' });
-    api.dealCommitments(dealId).then((d) => { if (current()) setMine({ status: 'ready', dealId: id, items: Array.isArray(d) ? d : null }); })
-      .catch((e) => { reportError('DealRoom:keyCommitments', e); if (current()) setMine({ status: 'unreadable', dealId: id }); });
+    api.dealCommitments(dealId).then((d) => { if (current()) setMine({ status: 'ready', dealId: id, firmId: firm, items: Array.isArray(d) ? d : null }); })
+      .catch((e) => { reportError('DealRoom:yourPosition', e); if (current()) setMine({ status: 'unreadable', dealId: id, firmId: firm }); });
   };
 
   useEffect(() => { if (!blocked) loadDeal(); /* eslint-disable-next-line */ }, [dealId, blocked]);
   // A Free-plan deal reads nothing more (D1149): its card is drawn from the deal read alone.
   const full = Boolean(deal && !deal.plan_limited);
   useEffect(() => {
-    if (!full) return;
-    loadMine();
-    if (isInvestor) loadStage();
+    if (!full || !isInvestor) return;
+    loadStage();
     /* eslint-disable-next-line */
   }, [full, dealId, isInvestor]);
+  // Your position is an investor's own commitment, read for the firm selected now.
+  useEffect(() => {
+    if (!full || !isInvestor) return;
+    loadMine();
+    /* eslint-disable-next-line */
+  }, [full, dealId, isInvestor, firmId]);
 
   const respond = async (response) => {
     await api.respondDealInvitation(dealId, response);
     loadStage();
   };
 
-  const tabRow = (id) => (
-    <nav aria-label="Deal" className="flex gap-1 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="deal-tabs">
-      {tabs.map(t => (
-        <Link key={t} to={tabHref(id, t)} aria-current={tab === t ? 'page' : undefined} data-testid={`deal-tab-${t}`}
-          className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-[13px] font-bold ${tab === t ? 'border-axal-violet text-axal-violet-deep dark:border-violet-400 dark:text-violet-300' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-200'}`}>
-          {TAB_DEFS[t].label}
-        </Link>
-      ))}
-    </nav>
-  );
+  const tabRow = (id) => <DealTabs dealId={id} role={role} tab={tab} />;
 
   if (blocked) return <NoPermission kind={blocked} />;
   // D4633: nothing, an action least of all, is drawn for a deal the address no longer names.
@@ -150,56 +154,68 @@ export default function DealRoomPage() {
   // D6191: Commit only when it can succeed; Change amount on a Pending one; nothing on a Confirmed one.
   const headerCommit = isInvestor && deal ? commitAction(deal, myCommitment(mine, deal.currency || 'USD', deal.id)) : { kind: null, reason: null };
 
+  const head = headerOf(deal);
+  const next = track && (track.state === 'ready' || track.state === 'none') ? track.next : null;
+
   return (
     <div className="flex flex-col gap-4 pb-20 md:pb-0">
-      {/* DL1: the header, one h1. */}
-      <header className="flex flex-col gap-2">
-        <button type="button" onClick={() => navigate(back.path)} className="inline-flex w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
-          <ArrowLeft size={14} /> {back.label}
-        </button>
-        <div className="flex flex-wrap items-start justify-between gap-3.5">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <h1 className="m-0 text-[24px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{deal.project_name || `Deal #${deal.id}`}</h1>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {deal.project_sector && <span className={PILL_N}>{deal.project_sector}</span>}
-              <span className={`${PILL_N} capitalize`} data-testid="deal-status">{deal.status || 'Status not recorded'}</span>
-              {deal.lead_partner_name && <span className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Lead: {deal.lead_partner_name}</span>}
-              {isPartner && <span className={PILL_N} data-testid="deal-read-only">◉ {READ_ONLY}</span>}
-            </div>
+      {/* DE04: Back to Deals, then the header with one h1. */}
+      <button type="button" onClick={() => navigate(back.path)} className="inline-flex min-h-[44px] w-fit items-center gap-1 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink md:min-h-0 dark:text-gray-400 dark:hover:text-gray-200" data-testid="deal-crumb">
+        <ArrowLeft size={14} /> {back.label}
+      </button>
+      <header className="flex flex-wrap items-start justify-between gap-3.5" data-testid="deal-header">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="m-0 text-[24px] font-extrabold tracking-axal-heading text-axal-ink md:text-[28px] dark:text-gray-100">{head.name}</h1>
+            <CompanyStageChip stage={head.stage} />
+            <WebsiteIcon href={head.website} />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {track?.state === 'ready' && track.stage === 'Invited' && (
-              <button type="button" onClick={() => setRespondTo('passed')} className={BTN_S} data-testid="deal-pass">Pass</button>
-            )}
-            {canInvite && (
-              <button type="button" onClick={() => setInviteOpen(true)} className={BTN_S}><Users size={14} /> Invite Investors</button>
-            )}
-            {isInvestor && headerCommit.kind === 'commit' && (
-              <button type="button" onClick={() => setCommitOpen({ current: null })} className={BTN_P} data-testid="deal-header-commit"><DollarSign size={14} /> Commit</button>
-            )}
-            {isInvestor && headerCommit.kind === 'change' && (
-              <button type="button" onClick={() => setCommitOpen({ current: headerCommit.row })} className={BTN_S} data-testid="deal-header-change">Change amount</button>
-            )}
+          <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400" data-testid="deal-sector-place">
+            <span className={head.sectorMissing ? 'italic' : ''}>{head.sector}</span> · <span className="italic" title={head.placeReason}>{head.place}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isInvestor && <ProgressChip track={track} />}
+            {/* The studio's round status is staff's and the founder's; an investor reads their own progress. */}
+            {!isInvestor && <span className={`${PILL_N} capitalize`} data-testid="deal-status">{deal.status || 'Status not recorded'}</span>}
+            {deal.lead_partner_name && <span className="text-[12.5px] font-semibold text-axal-muted dark:text-gray-400">Lead: {deal.lead_partner_name}</span>}
+            {isPartner && <span className={PILL_N} data-testid="deal-read-only">◉ {READ_ONLY}</span>}
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {track?.state === 'ready' && track.stage === 'Invited' && (
+            <button type="button" onClick={() => setRespondTo('passed')} className={BTN_S} data-testid="deal-pass">Pass</button>
+          )}
+          {canInvite && (
+            <button type="button" onClick={() => setInviteOpen(true)} className={BTN_S}><Users size={14} /> Invite Investors</button>
+          )}
+          {isInvestor && headerCommit.kind === 'commit' && (
+            <button type="button" onClick={() => setCommitOpen({ current: null })} className={BTN_P} data-testid="deal-header-commit"><DollarSign size={14} /> Commit</button>
+          )}
+          {isInvestor && headerCommit.kind === 'change' && (
+            <button type="button" onClick={() => setCommitOpen({ current: headerCommit.row })} className={BTN_S} data-testid="deal-header-change">Change amount</button>
+          )}
+          {/* The one next action; on a phone it sits at the foot instead (DE15). */}
+          {!phone && <NextAction next={next} onRespond={setRespondTo} />}
         </div>
       </header>
 
-      <KeyStrip tiles={keyStrip(deal, mine, role)} />
+      <FinancialStrip cells={financialStrip(deal)} />
       {track && <StageTrack track={track} onRetry={loadStage} onRespond={setRespondTo} />}
       {isInvestor && <DealRoomMembership dealId={deal.id} />}
 
       {tabRow(deal.id)}
 
+      {tab === 'overview' && isInvestor && <YourPosition position={viewerCommitment(mine, { userId: user?.id, dealId: deal.id, firmId }, deal.currency || 'USD')} dealId={deal.id} onRetry={loadMine} />}
       {tab === 'overview' && (
         <>
-          <DealOverview deal={deal} track={track} investor={isInvestor} />
+          <DealOverview deal={deal} investor={isInvestor} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
       {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
       {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
-      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}
+      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} role={role} />}
       {tab === 'team' && <DealTeam deal={deal} />}
       {tab === 'market' && <DealMarket deal={deal} />}
       {tab === 'traction' && <DealTraction deal={deal} />}

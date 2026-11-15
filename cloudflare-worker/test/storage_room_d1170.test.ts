@@ -222,6 +222,8 @@ const SITES: Array<[string, string, string]> = [
   ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
   ['routes/brand.ts', "brand.post('/logo/upload'", 'await files.put(key, logoBytes'],
   ['routes/captable.ts', "captable.post('/register/:projectId/snapshot'", 'await c.env.FILES.put(key, bytes'],
+  // D6084 (#6084): Use of funds' dated PDF filed in the data room, weighed as the cap table's snapshot is.
+  ['routes/cycle_use_of_funds.ts', "r.post('/snapshot'", 'await c.env.FILES.put(key,bytes'],
   ['services/r2.ts', 'export async function putHeadshotFromDataUri', 'await env.FILES.put(fileKey, bytes'],
   ['services/validateWriters.ts', 'export async function attachDemandEvidence', 'await env.FILES.put(key, await input.file.arrayBuffer()'],
   ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],
@@ -237,6 +239,8 @@ const SITES: Array<[string, string, string]> = [
   ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await drawDeckImages(c.env'],
   // D1506: upload and import (an external image copied in) both land through `landImage`.
   ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
+  // D5960 (#5960): a deliverable version's file is the advisor's own upload, weighed before it lands.
+  ['routes/advisors_deliverables.ts', 'async function storeVersionFile', 'await c.env.FILES.put(key, bytes'],
   // D1506: save/export-time copies also check room before storage.
   ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   // D1545 (#3788): a deck's uploaded MP4 is the member's file, weighed before it lands.
@@ -306,6 +310,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
   'routes/admin_governance.ts': 'the Axal entities\' governance documents (D4563): HQ records, never counted',
   'routes/deck_rehearsals.ts': 'a deck rehearsal\'s recording (D1580): held an hour for transcription, then deleted unless the founder keeps it; kept audio is not yet a measured D1169 store',
+  'services/workGraphBlobs.ts': 'WorkGraph content-addressed revision bytes (D5581 part 3): verified by digest and held to their own per-tenant byte cap, not a measured D1169 member store',
 };
 
 test('every R2 write in the Worker is a guarded member upload or named as something else', () => {
