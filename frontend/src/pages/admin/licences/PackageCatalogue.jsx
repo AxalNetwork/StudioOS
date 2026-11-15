@@ -8,10 +8,12 @@
  *   - each shown version's detail, for its programs: its own cell state, so one failed detail leaves the table;
  *   - the chosen package's versions, for the history card: its own block state.
  *
- * The row's rules are `packageCatalogueModel.js`. Create, Edit, Publish and Retire are part 1 (b); Preview
- * pricing and the comparison are part 1 (c), so no control here writes.
+ * The row's rules are `packageCatalogueModel.js`. Create, Edit, Publish and Retire are part 1 (b), so no control
+ * here writes. D5898 (part 1 (c)): each row's Preview pricing opens the comparison narrowed to that version, and
+ * the header links the full comparison (`PackageCompare.jsx`).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { licencePackagesApi } from '../../../lib/api/licencePackages';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader } from '../../../ui';
@@ -19,6 +21,7 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import {
   CATALOGUE_COLUMNS, NOT_RECORDED, PER_LICENCE_REASON, catalogueRows, historyRows, programList, rowCells,
 } from './packageCatalogueModel';
+import { previewHref } from './packageCompareModel';
 
 const CARD = 'rounded-xl border border-gray-200 bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100';
@@ -91,7 +94,7 @@ function CatalogueTable({ rows, details, chosen, onChoose }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse" data-testid="package-catalogue-table">
-        <thead><tr className="border-b border-gray-200 dark:border-gray-800">{CATALOGUE_COLUMNS.map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+        <thead><tr className="border-b border-gray-200 dark:border-gray-800">{CATALOGUE_COLUMNS.map((h) => <th key={h} className={TH}>{h}</th>)}<th className={TH}><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>
           {rows.map((v) => {
             const c = rowCells(v, details[`${v.package_key}:${v.version}`]);
@@ -108,6 +111,7 @@ function CatalogueTable({ rows, details, chosen, onChoose }) {
                 <td className={TD}><Cell word={c.standalone} /></td>
                 <td className={TD}><Cell word={c.saving} /></td>
                 <td className={TD}><Cell word={c.effective} mono={!absent(c.effective) && c.effective !== 'Not in force'} /></td>
+                <td className={TD}><Link to={previewHref(v)} className="whitespace-nowrap text-[12.5px] font-semibold text-indigo-700 hover:underline dark:text-indigo-300" data-testid="package-preview-pricing">Preview pricing</Link></td>
               </tr>
             );
           })}
@@ -179,7 +183,7 @@ export function PackageCatalogueView() {
             <>
               <section className={`${CARD} flex flex-col gap-2 !px-0 !pb-2`}>
                 <CatalogueTable rows={rows} details={details} chosen={chosen} onChoose={setPicked} />
-                <p className={`${SUB} m-0 px-[18px]`} data-testid="package-catalogue-note">Standalone sum and Bundle saving: {PER_LICENCE_REASON}</p>
+                <p className={`${SUB} m-0 px-[18px]`} data-testid="package-catalogue-note">Standalone sum and Bundle saving: {PER_LICENCE_REASON} <Link to="/admin/licences/packages/compare" className="font-semibold text-indigo-700 hover:underline dark:text-indigo-300">Compare Axal VC packages for one licence</Link></p>
               </section>
               {chosen ? <VersionHistory key={chosen} packageKey={chosen} name={chosenName} /> : null}
             </>
