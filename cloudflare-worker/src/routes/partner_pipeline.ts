@@ -71,6 +71,56 @@ import {
 
 const partnerPipeline = new Hono<{ Bindings: Env }>();
 
+partnerPipeline.get('/activity', async (c) => {
+  try {
+    const { partnerId, companyId } = await actingPartner(c);
+    const raw = c.req.query('need_id');
+    const needId = raw == null ? null : Number(raw);
+    if (raw != null && (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(needId))) {
+      return c.json({ detail: 'Name an opportunity by its need ID.' }, 400);
+    }
+    const { results } = await c.env.DB.prepare(
+      `WITH scoped_quotes AS (
+         SELECT id, need_id, status, decided_at FROM quotes
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), scoped_engagements AS (
+         SELECT id, need_id FROM engagements
+         WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
+           AND (? IS NULL OR need_id = ?)
+       ), events AS (
+         SELECT need_id, 'passed' AS kind, passed_at AS occurred_at, id AS source_id
+           FROM partner_lead_passes WHERE partner_id = ? AND (? IS NULL OR need_id = ?)
+         UNION ALL
+         SELECT q.need_id, 'proposal_version', v.created_at, v.id
+           FROM quote_versions v JOIN scoped_quotes q ON q.id = v.quote_id
+         UNION ALL
+         SELECT need_id, CASE status WHEN 'accepted' THEN 'proposal_won' ELSE 'proposal_lost' END, decided_at, id
+           FROM scoped_quotes WHERE status IN ('accepted', 'rejected') AND decided_at IS NOT NULL
+         UNION ALL
+         SELECT q.need_id, 'negotiation_moved', g.last_moved_at, g.id
+           FROM quote_negotiations g JOIN scoped_quotes q ON q.id = g.quote_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_created', r.created_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id
+         UNION ALL
+         SELECT e.need_id, 'retainer_ended', r.ended_at, r.id
+           FROM partner_retainers r JOIN scoped_engagements e ON e.id = r.engagement_id WHERE r.ended_at IS NOT NULL
+       )
+       SELECT e.kind, e.occurred_at, e.source_id, n.id AS need_id, n.uid AS need_uid, n.title
+       FROM events e JOIN founder_needs n ON n.id = e.need_id
+       WHERE julianday(e.occurred_at) IS NOT NULL
+       ORDER BY julianday(e.occurred_at) DESC, e.kind, e.source_id DESC LIMIT ?`,
+    ).bind(partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, ...companyBinds(companyId), needId, needId,
+      partnerId, needId, needId, listLimit(c.req.query('limit')))
+      .all<{ kind: string; occurred_at: string; source_id: number; need_id: number; need_uid: string; title: string }>();
+    return c.json({ items: results.map(({ kind, occurred_at, source_id, need_id, need_uid, title }) => ({
+      key: `${kind}:${source_id}`, kind, occurred_at, opportunity: { need_id, uid: need_uid, title },
+    })) });
+  } catch (e) { return mapError(c, e); }
+});
+
 /** The partner row for the caller, or a throw `mapError` will shape. */
 async function actingPartner(c: any): Promise<{ user: User; partnerId: number; companyId: number | null }> {
   const user = (await requireAuth(c)) as User;
@@ -853,7 +903,16 @@ function termDto(r: any) {
   };
 }
 
-const STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign', 'closed'];
+const WIP_STAGES = ['scoping', 'terms', 'legal', 'ready_to_sign'];
+const STAGES = [...WIP_STAGES, 'closed'];
+
+async function readNegotiationWipLimits(env: Env, partnerId: number) {
+  const { results } = await env.DB.prepare(
+    'SELECT stage, wip_limit FROM partner_negotiation_wip_limits WHERE partner_id = ?',
+  ).bind(partnerId).all<{ stage: string; wip_limit: number }>();
+  const stored = new Map(results.map(({ stage, wip_limit }) => [stage, wip_limit]));
+  return Object.fromEntries(WIP_STAGES.map(stage => [stage, stored.get(stage) ?? null]));
+}
 const BALLS = ['us', 'them'];
 const TERM_STATES = ['open', 'agreed', 'conceded', 'refused'];
 
@@ -953,6 +1012,7 @@ partnerPipeline.get('/negotiations', async (c) => {
       },
     );
     return c.json({
+      wip_limits: await readNegotiationWipLimits(c.env, partnerId),
       items,
       next_cursor: pageRead.next,
       has_more: pageRead.next !== null,
@@ -974,6 +1034,30 @@ partnerPipeline.get('/negotiations', async (c) => {
       close_probability: null,
       close_probability_note: 'Nothing here forecasts a close. Migration 234 records why a proposal was LOST, which is a taxonomy rather than a rate, and a handful of decided deals cannot support a probability conditioned on stage. A number drawn from stage alone would be the stage relabelled as a forecast.',
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+partnerPipeline.put('/negotiations/wip-limits/:stage', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const stage = c.req.param('stage');
+    if (!WIP_STAGES.includes(stage)) return c.json({ detail: 'Unknown negotiation lane' }, 400);
+    const limit: unknown = (await body<{ limit?: unknown } | null>(c))?.limit;
+    if (limit !== null && (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 0)) {
+      return c.json({ detail: 'Limit must be a non-negative whole number or null' }, 400);
+    }
+    if (limit === null) {
+      await c.env.DB.prepare(
+        'DELETE FROM partner_negotiation_wip_limits WHERE partner_id = ? AND stage = ?',
+      ).bind(partnerId, stage).run();
+    } else {
+      await c.env.DB.prepare(
+        `INSERT INTO partner_negotiation_wip_limits (partner_id, stage, wip_limit)
+         VALUES (?, ?, ?)
+         ON CONFLICT (partner_id, stage) DO UPDATE SET wip_limit = excluded.wip_limit`,
+      ).bind(partnerId, stage, limit).run();
+    }
+    return c.json({ stage, limit });
   } catch (e) { return mapError(c, e); }
 });
 

@@ -784,3 +784,20 @@ test('demand commits keep currency and period separate and exclude interest and 
     { currency: 'USD', period: 'month', amount_cents: 10000 },
   ]);
 });
+
+// #5999: the overview says whether the viewer may write, by the gate the target's writer uses.
+// Mutation checked: `can_write: true` in the route fails it (a partner reads true); no `can_write`
+// fails it (undefined for every viewer); the PUT gated on `canReadBoard` in place of `canWrite` fails
+// it and D685's test (a partner's save is allowed).
+test('#5999: the overview returns can_write — true for a writer, false for a read-only partner — and the PUT agrees', async () => {
+  const db = fixture();
+  for (const [who, pid, can] of [[FOUNDER, P, true], [ADMIN, P, true], [LAB, P_LAB, true], [PARTNER, P, false]] as const) {
+    const o = await overview(db, who, pid);
+    assert.equal(o.status, 200);
+    assert.equal(o.body.can_write, can, `overview can_write, user ${who}`);
+    // The same viewer's save: allowed exactly where the read says it may write.
+    const put = await call(db, who, 'PUT', `/interviews-target?project=${pid}`, { value: 8 });
+    assert.equal(put.status, can ? 200 : 403, `PUT /interviews-target, user ${who}`);
+  }
+  assert.equal((await call(db, PARTNER, 'PUT', `/interviews-target?project=${P}`, { value: null })).status, 403, 'a non-writer cannot clear it either');
+});

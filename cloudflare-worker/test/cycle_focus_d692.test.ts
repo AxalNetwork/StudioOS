@@ -311,32 +311,28 @@ test('6: a new venture keeps #1652\'s first-feature focus', async () => {
   assert.equal(r.body.meter, null);
 });
 
-test('6: two of five systems connected leads with connect_tools, its meter and the must-haves Then', async () => {
+test('6: D6027 (#6027): partly connected systems no longer lead; the MVP date does, then the card rule', async () => {
+  // D6027 replaced this rule ('connect_tools' for any venture short of five core systems) with the canvas's
+  // order (BD1, BD2); `build_overview_6027.test.ts` covers each rule. The meter is unchanged.
   const db = fixture();
   mustHaves(db);
   tool(db, 'active', 'hubspot', 'crm');
   tool(db, 'active', 'quickbooks', 'accounting');
-  db.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').run(day(47), P);
   const r = await bRead(db);
-  assert.equal(r.body.focus.rule, 'connect_tools');
-  assert.equal(r.body.focus.headline, 'Connect the tools your company already runs on.');
-  assert.equal(r.body.focus.why, 'Connected tools fill the roadmap, the MVP burn-up and your KPIs without typing. 2 of 5 core systems are connected.');
-  assert.deepEqual(r.body.focus.cta, { label: 'Connect a tool', href: `/build/connect?project_id=${P}` });
-  assert.equal(r.body.focus.then, `Ship the last 2 must-haves before ${dayMonth(day(47))}.`);
+  assert.equal(r.body.focus.rule, 'set_mvp_date');
+  assert.equal(r.body.focus.then, null);
   assert.deepEqual(r.body.meter, { key: 'must_haves_done', label: 'Must-haves done', count: 7, target: 9, target_reason: null, display: '7 of 9' });
-
-  db.prepare('UPDATE projects SET mvp_target_date = NULL WHERE id = ?').run(P);
-  assert.equal((await bRead(db)).body.focus.then, null, 'no date: no Then');
-  db.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').run(day(-3), P);
-  assert.equal((await bRead(db)).body.focus.then, null, 'a past date: no Then');
+  db.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').run(day(47), P);
+  assert.equal((await bRead(db)).body.focus.rule, 'card');
 });
 
-test('6: a company with no system mapped drops the count, never "0 of 5"; all five connected, or no company, gives the card rule', async () => {
+test('6: a company with no system mapped, all five connected, or no company: never "0 of 5", and never connect_tools', async () => {
   const db = fixture();
   mustHaves(db);
+  db.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').run(day(47), P);
   const r = await bRead(db);
-  assert.equal(r.body.focus.rule, 'connect_tools');
-  assert.equal(r.body.focus.why, 'Connected tools fill the roadmap, the MVP burn-up and your KPIs without typing.');
+  assert.equal(r.body.focus.rule, 'card');
+  assert.doesNotMatch(JSON.stringify(r.body), /0 of 5/);
 
   for (const [kind, provider] of [['bank', 'mercury'], ['accounting', 'quickbooks'], ['payroll', 'gusto'], ['crm', 'hubspot']]) tool(db, 'active', provider, kind);
   db.prepare(`INSERT INTO project_core_systems (project_id, kind, provider_key, updated_by) VALUES (?, 'workspace', 'google_calendar', ?)`).run(P, FOUNDER);
@@ -347,6 +343,7 @@ test('6: a company with no system mapped drops the count, never "0 of 5"; all fi
 
   const noCompany = fixture(null);
   mustHaves(noCompany);
+  noCompany.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').run(day(47), P);
   assert.ok(['card', null].includes((await bRead(noCompany)).body.focus?.rule ?? null));
 });
 
@@ -725,7 +722,9 @@ test('11: a throwing query in one part leaves that part null and the rest of the
     const x = (await bRead(b)).body;
     assert.equal(x.cards[5].state, 'unreadable');
     assert.equal(row(x, 'tools').value, 'Unreadable');
-    assert.ok(['card', null].includes(x.focus?.rule ?? null), 'no connect rule from an unreadable systems read');
+    // D6027: no MVP date is recorded, so that rule leads; nothing from the unreadable systems read does.
+    assert.ok(!['connect_tools', 'reconnect_tool'].includes(x.focus?.rule), 'no connect rule from an unreadable systems read');
+    assert.equal(x.attention.unreadable.includes('operating-systems'), true);
     assert.equal(x.meter.display, '7 of 9');
   } finally { NEEDLE = null; }
 

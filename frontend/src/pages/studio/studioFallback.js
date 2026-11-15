@@ -24,6 +24,8 @@ export const FALLBACK_DEFAULTS = Object.freeze({
     { key: 'quick_stats', size: '1/2' },
     { key: 'portfolio_glance', size: '1/2' },
     { key: 'upcoming_events', size: '1/2' },
+    { key: 'fund_commitment', size: '1/2' },
+    { key: 'needs_you', size: '1/2' },
   ],
   advisor: [
     { key: 'today', size: '1/2' },
@@ -49,6 +51,8 @@ export const FALLBACK_TITLES = Object.freeze({
   quick_stats: 'Quick stats',
   portfolio_glance: 'Portfolio glance',
   upcoming_events: 'Upcoming events',
+  fund_commitment: 'Fund',
+  needs_you: 'Needs you',
   today: 'Today',
   storefront: 'Storefront',
   engagements: 'Engagements',

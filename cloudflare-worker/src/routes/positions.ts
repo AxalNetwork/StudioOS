@@ -8,6 +8,8 @@
  *
  * Mounted at /api/positions. Added to STUDIO_PREFIXES so founders get a 402;
  * admin/investor bypass the studio gate and are narrowed here via canViewLpData.
+ * D4636 part 5: a founder who is GP of record passes that gate on the five
+ * reads below (`STUDIO_GP_READS`, middleware/requireTier.ts); writes do not.
  *
  * Who reads which rows (D1057, D4636 parts 2 and 3), evaluated per request:
  *   admin       every recorded position
@@ -26,6 +28,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
+import { logAdminAction } from '../services/adminAudit';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
@@ -96,7 +99,7 @@ async function latestMarksByProject(env: Env, projectIds: number[] | null = null
  * `investorHeldProjectIds` answers null ("every row") for a caller without the
  * investor licence. Anyone else gets null, which each read answers with 403.
  */
-type PositionScope = {
+export type PositionScope = {
   held: number[] | null;
   funds: number[];
   gpOnly: number[];
@@ -107,7 +110,7 @@ type PositionScope = {
   visibleCsv: string | null;
 };
 
-async function positionScope(c: any, user: any): Promise<PositionScope | null> {
+export async function positionScope(c: any, user: any): Promise<PositionScope | null> {
   const licensed = canViewLpData(user);
   // Never the held read without the licence: it is null, every row, for a non-investor.
   const held = licensed ? await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user)) : [];
@@ -367,7 +370,10 @@ r.get('/analytics', async (c) => {
     const user = await requireAuth(c);
     const scope = await positionScope(c, user);
     if (!scope) return c.json({ detail: 'Forbidden' }, 403);
-    const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
+    // D6207 (#6207): one clock read for the whole answer, so `as_of_default`
+    // and `read_at` always name the same instant.
+    const readAt = new Date().toISOString();
+    const today = isoDate(c.req.query('as_of')) || readAt.slice(0, 10);
 
     const [positions, distributions, marks] = await Promise.all([
       c.env.DB.prepare(
@@ -428,6 +434,14 @@ r.get('/analytics', async (c) => {
       // The date the figures speak for, echoed so the page states it: with an
       // explicit `as_of`, the flows and the marks are both cut at that date.
       as_of: asOf,
+      // D6207 (#6207): the Worker's own UTC date and the instant of this read,
+      // so a page can say what date a default read speaks for without the
+      // browser clock. `as_of` keeps its meaning: null unless the caller cut
+      // the read at an explicit date. `as_of_default` is the date the figures
+      // were computed for when no cut was asked (IRR's terminal date); it is
+      // returned on every read, explicit or not.
+      as_of_default: readAt.slice(0, 10),
+      read_at: readAt,
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
       /** D4644: positions whose recorded mark could not be used, and why not. */
@@ -652,6 +666,13 @@ r.post('/:projectUid/marks', async (c) => {
       user.id, nowIso(), nowIso(),
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_marks WHERE uid = ?').bind(uid).first<any>();
+    // D4817 part 7 (#5311): an admin moves the figures every holder of this
+    // company reads, so the act is audited in both stores (`logAdminAction`
+    // never throws, so it cannot undo the mark).
+    await logAdminAction(c.env, Number(user.id), String(user.email ?? ''), 'portfolio.mark_recorded', {
+      project_uid: c.req.param('projectUid'), mark_uid: uid, as_of_date: asOf, fmv, basis,
+      fund_id: body.fund_id != null ? Number(body.fund_id) : null,
+    });
     return c.json(fresh, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -680,6 +701,11 @@ r.post('/:projectUid/distributions', async (c) => {
       body.note ? String(body.note).slice(0, 2000) : null, user.id, nowIso(), nowIso(),
     ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_distributions WHERE uid = ?').bind(uid).first<any>();
+    // D4817 part 7 (#5311): audited as the mark is, for the same reason.
+    await logAdminAction(c.env, Number(user.id), String(user.email ?? ''), 'portfolio.distribution_recorded', {
+      project_uid: c.req.param('projectUid'), distribution_uid: uid, distribution_date: date, amount, kind,
+      fund_id: body.fund_id != null ? Number(body.fund_id) : null,
+    });
     return c.json(fresh, 201);
   } catch (e) { return mapError(c, e); }
 });

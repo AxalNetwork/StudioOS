@@ -436,6 +436,8 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
       ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
       ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
+      // #5959 / migration 202611141017: the optional summary, apart from the change note.
+      ['version_summary', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN version_summary TEXT'],
       // #5960 / migration 202611141100: a version's document as a stored file.
       ['file_key', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_key TEXT'],
       ['file_name', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_name TEXT'],
@@ -443,6 +445,14 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['file_size', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_size INTEGER'],
       ['file_sha256', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN file_sha256 TEXT'],
     ]);
+    // #5959: written once, as the migration's trigger holds it. Only where the
+    // column exists: a database without the table gets no trigger on it.
+    if ((await tableColumns(env, 'advisor_deliverable_versions')).has('version_summary')) await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS advisor_deliverable_versions_summary_immutable
+   BEFORE UPDATE OF version_summary ON advisor_deliverable_versions
+   WHEN OLD.version_summary IS NOT NEW.version_summary
+   BEGIN
+     SELECT RAISE(ABORT, 'version_summary_immutable');
+   END`).run();
     await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
     ]);

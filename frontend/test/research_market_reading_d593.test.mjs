@@ -168,14 +168,14 @@ test('the page root carries the licence\'s ACCENT values, for both grounds', () 
   assert.deepEqual(accentVars('nobody'), accentVars('founder'));
 });
 
-test('buttons, the ZONEDRAFT pill, Accept, the focus ring and the back link read the accent, light and dark', () => {
+test('buttons, the draft pill, Accept, the focus ring and the back link read the accent, light and dark', () => {
   const current = page({ role: 'partner' });
   const stale = page({ role: 'partner', item: reading({ ran_at: ago(130) }) });
 
   const fills = [
     ['Record this reading', current],
     ['Record a fresh reading', stale],
-    ['ZONEDRAFT', current],
+    ['Draft, not saved', current],
     ['Draft', current],
   ];
   for (const [label, html] of fills) {
@@ -316,9 +316,10 @@ function attachSays(html) {
 const proposalInk = (html) => />Proposal<\/div><div class="([^"]*)"/.exec(part(html, 'market-reading-tiles'))?.[1] || '';
 
 test('with no proposal to attach to, neither the header nor the tile says Attachable', () => {
-  // A licence without a partner profile reads no proposals; neither does a
-  // partner with no quote yet.
-  for (const role of ['founder', 'partner']) {
+  // A partner with no quote yet reads no proposals, and so does an advisor.
+  // Founder and investor draw no Proposal tile at all (#6279,
+  // research_market_reading_licences_6279.test.mjs).
+  for (const role of ['advisor', 'partner']) {
     const html = page({ role, proposals: [] });
     assert.deepEqual(attachSays(html), {
       pill: 'No proposal to attach to', tile: 'No proposal', sub: 'this account has no quote to attach it to',

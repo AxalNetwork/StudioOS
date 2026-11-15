@@ -33,6 +33,7 @@ import { GROW_OLD_ROWS } from '../src/services/records/grow.ts';
 import type { Store } from '../src/services/records/types.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleGrow from '../src/routes/cycle_grow.ts';
+import cycleBuild from '../src/routes/cycle_build.ts';
 import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -128,6 +129,7 @@ const envOf = (db: DatabaseSync, extra: Record<string, unknown> = {}) =>
 
 const app = new Hono<any>();
 app.route('/api/cycles/grow', cycleGrow);
+app.route('/api/cycles/build', cycleBuild);
 app.route('/api/cycles', createCycleRecords());
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
@@ -165,7 +167,7 @@ const CANVAS: Array<[string, string, string[], string[], string[]]> = [
   ['distribution', 'cha1', ['Spend · 30 d', 'Customers', 'CAC', 'Bar'], ['Funnel', 'Experiments'], ['Customers acquired']],
   ['revenue-and-traction', 'mrr', ['Value', 'Change · 30 d', 'Source', 'As of'], ['History', 'Split'], ['Alerts', 'Shared']],
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
-  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Terms'], ['Contact', 'Introductions']],
+  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
   ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
 ];
@@ -185,7 +187,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const fb = await rec(db, 'product-improvement', 'fba1');
   assert.equal(fb.body.title, '"Exports are slow"');
   assert.equal(fb.body.sub, 'Customer · Rui Tomas · 1 Sep');
-  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio' });
+  assert.deepEqual(sectionOf(fb, 'theme').rows[0], { a: 'Speed', b: '2 items', c: 'Planned', tone: 'vio', action: 'add-to-roadmap' });
   assert.deepEqual(sectionOf(fb, 'customer').rows.map((r: any) => [r.a, r.b]), [['Rui Tomas · Harbour Mill', 'Customers →'], ['Plan', 'Paid']]);
   assert.equal(sectionOf(fb, 'closing-the-loop').rows[0].c, 'Due');
   const partner = await rec(db, 'partner-network', 'pta1');
@@ -631,4 +633,117 @@ test('9: its apply writes the row PATCH /feedback/:uid writes, and refuses anoth
   // A theme that no longer exists, or a row themed meanwhile, is refused on accept.
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Gone', body: '' }, 'x'), /no longer exists/);
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Speed', body: '' }, 'x'), /already has a theme/);
+});
+
+// ---------------------------------------------------------------------------
+// #6110 (D6110): the role's host moves an applicant between stages from the record.
+// ---------------------------------------------------------------------------
+
+// Mutation checked: the posting check dropped (Omar on posting 33 moves from posting 31, fails); the host gate on the
+// action dropped (the co-founder sees and runs it, fails); the pipeline back to four stages (fails).
+test('#6110 the host moves an applicant through every stage, and the counts follow on re-read', async () => {
+  const db = fixture();
+  const read = async (who = FOUNDER) => rec(db, 'team-expansion', 31, { who });
+  const r = await read();
+  const rows = sectionOf(r, 'shortlist').rows;
+  assert.deepEqual(rows.map((x: any) => [x.a, x.c]), [['Sol Ito', 'Offer'], ['Lena Park', 'Interview']]);
+  assert.deepEqual(rows.map((x: any) => x.action), [{ key: 'move-applicant', body: { application_id: 43 } }, { key: 'move-applicant', body: { application_id: 41 } }]);
+  const move = r.body.actions.find((a: any) => a.key === 'move-applicant');
+  assert.equal(move.kind, 'form');
+  assert.deepEqual(move.form.fields.map((f: any) => f.key), ['application_id', 'stage']);
+  assert.deepEqual(move.form.fields[0].options, [{ value: '41', label: 'Lena Park · Interview' }, { value: '43', label: 'Sol Ito · Offer' }],
+    'only this role’s applicants, so the action also runs from the record’s own action row');
+  assert.deepEqual(move.form.fields[1].options.map((o: any) => o.value), ['applied', 'screen', 'interview', 'offer', 'hired', 'declined']);
+  assert.deepEqual(sectionOf(r, 'pipeline').rows.map((x: any) => x.a), ['Applied', 'Screen', 'Interview', 'Offer', 'Hired', 'Declined']);
+
+  for (const stage of ['screen', 'interview', 'offer', 'hired']) {
+    const done = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+  }
+  const after = await read();
+  const pipeline = Object.fromEntries(sectionOf(after, 'pipeline').rows.map((x: any) => [x.a, x.c]));
+  assert.deepEqual(pipeline, { Applied: '0', Screen: '0', Interview: '0', Offer: '1', Hired: '1', Declined: '0' });
+  const hired = sectionOf(after, 'shortlist').rows.find((x: any) => x.a === 'Lena Park');
+  assert.deepEqual([hired.c, hired.b, hired.href], ['Hired', 'Add to the team roster', '/build/team'], 'Hired links the roster and writes nothing there');
+
+  // The applicant must be on THIS role: Omar applied to posting 33.
+  const wrong = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 42, stage: 'hired' });
+  assert.equal(wrong.status, 404);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 42').get() as any).stage, 'applied');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'nowhere' })).status, 400);
+});
+
+test('#6110 a non-host sees counts only and no Move to…; the move is logged without the applicant’s name', async () => {
+  const db = fixture();
+  // On the role the co-founder hosts (33, Omar), they are the host and are offered Move to….
+  assert.equal(actionKeys(await rec(db, 'team-expansion', 33, { who: COFOUNDER })).includes('move-applicant'), true);
+  const co = await rec(db, 'team-expansion', 31, { who: COFOUNDER });
+  assert.equal(actionKeys(co).includes('move-applicant'), false);
+  assert.deepEqual(sectionOf(co, 'shortlist').rows, [{ a: '1 at interview · 1 at offer', b: 'names are for the role\'s host' }]);
+  const refused = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'hired' }, { who: COFOUNDER });
+  assert.ok([403, 404].includes(refused.status), `refused with ${refused.status}`);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 41').get() as any).stage, 'interview');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'declined' })).status, 200);
+  const log = db.prepare("SELECT details FROM activity_logs WHERE action = 'grow_application_stage' ORDER BY id DESC LIMIT 1").get() as any;
+  assert.ok(log, 'the move is logged');
+  assert.ok(!String(log.details).includes('Lena'), 'the log does not name the applicant');
+  const counts = sectionOf(await rec(db, 'team-expansion', 31, { who: COFOUNDER }), 'shortlist').rows[0].a;
+  assert.equal(counts, '1 at offer · 1 declined');
+});
+
+// ---------------------------------------------------------------------------
+// D6097 (#6097): Add to roadmap, from a feedback record to Build's Add item
+// ---------------------------------------------------------------------------
+
+test('D6097: Add to roadmap links Build\'s Add item with the theme, for writers of a themed row only', async () => {
+  const db = fixture();
+  db.exec("UPDATE product_feedback SET theme = 'Speed & scale' WHERE uid IN ('fba1', 'fba2')");
+  const fb = await rec(db, 'product-improvement', 'fba1');
+  const add = fb.body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  assert.deepEqual({ key: add.key, label: add.label, kind: add.kind, href: add.href }, { key: 'add-to-roadmap', label: 'Add to roadmap', kind: 'link', href: `/build/product-roadmap/new?project_id=${A}&feedback_theme=Speed%20%26%20scale` });
+  assert.equal(new URL(add.href, 'https://axal.test').searchParams.get('feedback_theme'), 'Speed & scale');
+  assert.equal(sectionOf(fb, 'theme').rows[0].action, 'add-to-roadmap', 'the Theme row draws it');
+  // An Open or Planned theme row is the record's next (`nextFor`); it now carries the step it names.
+  assert.deepEqual(fb.body.next, { text: 'Speed & scale · 2 items', action: 'add-to-roadmap' });
+  // The action answers with the address, as every link action does.
+  const run = await act(db, 'product-improvement', 'fba1', 'add-to-roadmap');
+  assert.equal(run.status, 200);
+  assert.deepEqual(run.body, { ok: true, open: { url: add.href } });
+  // A co-founder and an admin write, so they see it.
+  for (const who of [COFOUNDER, ADMIN]) assert.ok(actionKeys(await rec(db, 'product-improvement', 'fba1', { who })).includes('add-to-roadmap'), `user ${who}`);
+  // A reader (an advisor) sees neither the action nor the row's control, and cannot run it.
+  const adv = await rec(db, 'product-improvement', 'fba1', { who: ADVISOR });
+  assert.equal(actionKeys(adv).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(adv, 'theme').rows[0].action, undefined);
+  assert.deepEqual(adv.body.next, { text: 'Speed & scale · 2 items', action: null });
+  assert.equal((await act(db, 'product-improvement', 'fba1', 'add-to-roadmap', {}, { who: ADVISOR })).status, 403);
+  // A row with no theme has none, and the Theme section says why.
+  const none = await rec(db, 'product-improvement', 'fba3');
+  assert.equal(actionKeys(none).includes('add-to-roadmap'), false);
+  assert.equal(sectionOf(none, 'theme').empty, 'No theme yet. Add to roadmap needs a theme.');
+  assert.equal(sectionOf(none, 'theme').action, 'change-theme');
+  assert.equal((await act(db, 'product-improvement', 'fba3', 'add-to-roadmap')).status, 404);
+});
+
+test('D6097: saving the Add item it opens shows the item on the theme\'s open, unlinked rows', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme, status, roadmap_item_ref, roadmap_item_label, created_by) VALUES
+    ('fba4', ${A}, 'Bulk export', 'customer', 'Speed', 'open', '77', 'Earlier item', ${FOUNDER}),
+    ('fba5', ${A}, 'Cheaper plan', 'customer', 'Pricing', 'open', NULL, NULL, ${FOUNDER})`);
+  const add = (await rec(db, 'product-improvement', 'fba2')).body.actions.find((a: any) => a.key === 'add-to-roadmap');
+  const target = new URL(add.href, 'https://axal.test');
+  assert.equal(target.pathname, '/build/product-roadmap/new');
+  // What Build's Add item sends with that theme chosen (`buildItem.toBody`).
+  const saved = await call(db, 'POST', `/api/cycles/build/roadmap?project=${target.searchParams.get('project_id')}`,
+    { body: { title: 'Faster exports', column: 'next', feedback_theme: target.searchParams.get('feedback_theme') } });
+  assert.equal(saved.status, 201, JSON.stringify(saved.body));
+  const item = (uid: string) => db.prepare('SELECT roadmap_item_ref AS ref, roadmap_item_label AS label FROM product_feedback WHERE uid = ?').get(uid) as any;
+  // fba2 is open and unlinked: linked. fba1 is shipped, fba4 already has an item, fba5 is another theme: unchanged.
+  assert.deepEqual({ ...item('fba2') }, { ref: String(saved.body.id), label: 'Faster exports' });
+  assert.deepEqual({ ...item('fba1') }, { ref: null, label: null });
+  assert.deepEqual({ ...item('fba4') }, { ref: '77', label: 'Earlier item' });
+  assert.deepEqual({ ...item('fba5') }, { ref: null, label: null });
+  const fact = (r: any) => r.body.facts.find((f: any) => f.label === 'Roadmap item');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba2')).value, 'Faster exports');
+  assert.equal(fact(await rec(db, 'product-improvement', 'fba1')).value, null);
 });

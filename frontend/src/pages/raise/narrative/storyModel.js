@@ -68,7 +68,7 @@ export const CLAIM_STATES = {
 };
 export const FOUNDERS_FIGURE = "Founder's figure";
 
-/** The section dots (NAR21). Mismatch waits for a per-section check (#2430). */
+/** The section dots (NAR21). Mismatch is the claim store's, for the newest version (D6068). */
 export const DOT_STATES = ['Empty', 'Written', 'Stale', 'Mismatch'];
 
 /** The bound-figure chip's three states (NAR21), from the registry's item. */
@@ -221,11 +221,28 @@ export const claimsIn = (text) => claimSegments(text).filter((x) => x.claim).len
  * Section dots and the rail
  * ------------------------------------------------------------------ */
 
-/** A section's dot: Empty with no words and no figure; Stale when a figure it binds has moved; else Written. */
-export function sectionDot(section, bindings = [], sources = null) {
+/**
+ * A section's dot: Empty with no words and no figure; Mismatch when the claim
+ * store holds an open Mismatch in it (D6068, `mismatchSections`); Stale when a
+ * figure it binds has moved; else Written.
+ */
+export function sectionDot(section, bindings = [], sources = null, mismatched = false) {
   if (!section?.body && !bindings.length) return 'Empty';
+  if (mismatched === true) return 'Mismatch';
   if (bindings.some((b) => ['stale', 'missing'].includes(figureStatus(b, sources)))) return 'Stale';
   return 'Written';
+}
+
+/**
+ * D6068 (#6068): the sections holding an open Mismatch in this version, from
+ * the module read's `parts.narrative.claims` (D1264's claim store). The tally
+ * is the newest version's, so any other version, an unreadable tally or no
+ * read gives none: the dot never claims a Mismatch it was not told of.
+ */
+export function mismatchSections(part, version) {
+  const c = part?.claims;
+  if (c?.state !== 'ok' || version == null || String(c.version) !== String(version) || !Array.isArray(c.mismatch_sections)) return new Set();
+  return new Set(c.mismatch_sections.map(String));
 }
 
 /** Move one section up (-1) or down (+1) in the order; the ends stay put. */
