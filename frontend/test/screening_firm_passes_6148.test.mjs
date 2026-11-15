@@ -68,9 +68,11 @@ test('no passes, no investor licence and an unreadable read are three sentences,
   // No investor licence: the Worker's refusal code, not an outage.
   assert.match(Z, /e\?\.code === 'investor_required' \? NOT_INVESTOR : UNAVAILABLE/);
   assert.match(Z, /data-testid="screening-passes-not-investor"/);
-  // Unreadable: Not recorded, and the tile has no figure.
+  // Unreadable: Not recorded, and the count has no figure. Since #5909 (DE06) the
+  // count sits on the Pass reasons toggle, not in the four-figure summary.
   assert.match(Z, /data-testid="screening-passes-unreadable"/);
-  assert.match(Z, /value=\{passesReady \? String\(passes\.total\) : null\}/);
+  assert.match(Z, /passesReady\s*\?\s*`\$\{passes\.total\} pass/);
+  assert.match(Z, /'Your passes could not be read'/);
   assert.doesNotMatch(Z, /\|\|\s*0\b|\?\?\s*0\b/, 'an absent figure falls back to 0');
 });
 

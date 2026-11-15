@@ -61,6 +61,17 @@ export function day(value) {
   return `${Number(m[3])} ${month} ${m[1]}`;
 }
 
+/**
+ * D6207 (#6207): an ISO instant → `14 Nov 2026, 10:32 UTC`, read in UTC (the
+ * Worker's `read_at`). Null for anything that is not an instant.
+ */
+export function dayTime(value) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(String(value || ''));
+  if (!m || !Number.isFinite(Date.parse(String(value)))) return null;
+  const d = day(m[1]);
+  return d ? `${d}, ${m[2]}:${m[3]} UTC` : null;
+}
+
 /** Whole days from `from` to `to`, both ISO dates; null when either is missing. */
 export function daysBetween(from, to) {
   const a = Date.parse(`${String(from || '').slice(0, 10)}T00:00:00Z`);
@@ -184,10 +195,18 @@ export function performanceOf(analytics, positions) {
     value: String(count),
     note: unmarked == null ? null : `${count - unmarked} marked · ${unmarked} unmarked`,
   };
-  const asOf = a?.as_of ? `As of ${day(a.as_of)}` : 'As of the latest recorded marks';
+  // D6207 (#6207): a read cut at an explicit date says that date. A default
+  // read (`as_of` null) says the Worker's own date (`as_of_default`) and that
+  // it is the latest recorded marks, never the browser clock; an older Worker
+  // that sends neither keeps D4817's words.
+  let asOf = 'As of the latest recorded marks';
+  if (a?.as_of && day(a.as_of)) asOf = `As of ${day(a.as_of)}`;
+  else if (a?.as_of_default && day(a.as_of_default)) asOf = `As of ${day(a.as_of_default)} · latest recorded marks`;
+  const readAt = a ? dayTime(a.read_at) : null;
   const basis = [
     a ? (a.basis === 'gross' || a.basis == null ? 'Gross of fees and carry' : `Basis: ${a.basis}`) : 'Gross of fees and carry',
     asOf,
+    readAt ? `Read at ${readAt}` : null,
     marks?.newest ? `Newest mark ${day(marks.newest)}` : null,
     'Marks: latest per company on or before the as-of date',
     'Unmarked positions carry at cost',
@@ -756,6 +775,43 @@ export function quarterPointOf(date, read) {
     distributed: money(a.distributed) || NOT_RECORDED,
     tvpi: ratio(a.returns?.tvpi, a.tvpi, multiple),
     coverage: count != null && unmarked != null ? `${count - unmarked} of ${count}` : NOT_RECORDED,
+  };
+}
+
+/**
+ * D6207 (#6207): the last completed quarter-end the Overview compares the
+ * hero against — `quarterWindowOf`'s `last`, i.e. the reporting read's
+ * `period_until`, the Worker's date. Null until the window is readable and
+ * holds a quarter-end, so no read is made on a guess.
+ */
+export function lastQuarterEndOf(positions, compliance) {
+  const win = quarterWindowOf(positions, compliance);
+  return win.state === 'ok' ? win.last : null;
+}
+
+/**
+ * D6207 (#6207, reversing the D4817 parts 1 and 3 departure): the change in
+ * NAV from the last completed quarter-end to the latest book (the hero).
+ * `analytics` is the hero's read, `read` the quarter-end's. Null — no line,
+ * no number — unless both answered with a NAV: a failed read, a quarter-end
+ * that holds no book, or an empty hero book draws nothing.
+ *
+ * The words name both ends: the latest book is not a quarter-end, so the line
+ * says which quarter-end it is measured from.
+ */
+export function navChangeOf(analytics, date, read) {
+  if (!date || !analytics || analytics.state !== 'ok') return null;
+  const a = analytics.value;
+  if (!isNum(a.nav) || (isNum(a.position_count) && Number(a.position_count) === 0)) return null;
+  const point = quarterPointOf(date, read);
+  if (point.state !== 'ok') return null;
+  const delta = Number(a.nav) - point.nav;
+  const since = `since ${point.label} (quarter-end)`;
+  return {
+    date,
+    delta,
+    text: delta === 0 ? `NAV unchanged ${since}` : `NAV ${delta > 0 ? 'up' : 'down'} ${money(Math.abs(delta))} ${since}`,
+    note: `Latest book against the book read as of ${point.label}; capital invested since counts in the change.`,
   };
 }
 

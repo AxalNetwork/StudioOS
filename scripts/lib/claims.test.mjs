@@ -75,6 +75,37 @@ test('403 requests explicit label fallback; other API errors propagate', async (
   await assert.rejects(runClaim({ ...identity, command: 'claim', api: async () => { throw new Error('offline'); } }), /offline/);
 });
 
+test('reap reads an unpaginated matching-ref list above 100 and still paginates comments', async () => {
+  const refs = Array.from({ length: 101 }, (_, i) => ({ ref: claimRef(10000 + i), object: { sha: `ref-${i}` } }));
+  const comments = Array.from({ length: 100 }, (_, i) => ({ body: `Existing comment ${i}` }));
+  const writes = [];
+  let refReads = 0;
+  const api = async (method, path, body) => {
+    if (path.startsWith('git/matching-refs/heads/claim/')) {
+      refReads++;
+      // GitHub's matching-refs endpoint ignores page/per_page and returns the complete match list.
+      return refs;
+    }
+    if (path.startsWith('git/commits/')) {
+      const i = Number(path.split('-').at(-1));
+      return { message: claimMessage({ ...identity, issue: 10000 + i, at: i === 100 ? at : '2026-11-12T00:00:00Z' }) };
+    }
+    if (method === 'GET' && path.startsWith('issues/10100/comments')) {
+      const page = Number(new URLSearchParams(path.split('?')[1]).get('page') || 1);
+      return comments.slice((page - 1) * 100, page * 100);
+    }
+    writes.push({ method, path, body });
+    if (method === 'POST' && path === 'issues/10100/comments') { comments.push(body); return {}; }
+    throw new Error('Unexpected write: ' + method + ' ' + path);
+  };
+  for (let i = 0; i < 2; i++) {
+    assert.equal(await runClaim({ ...identity, api, command: 'reap', now: '2026-11-12T00:00:00Z' }), 0);
+  }
+  assert.equal(refReads, 2, 'one complete matching-ref read per run');
+  assert.equal(comments.length, 101, 'the marker on comment page two prevents a duplicate notice');
+  assert.deepEqual(writes.map(({ method, path }) => [method, path]), [['POST', 'issues/10100/comments']]);
+});
+
 test('claim reports WIP, blocks before writes at the cap, and proceeds when unset', async () => {
   const f = fake();
   const output = [];
