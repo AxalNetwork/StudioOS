@@ -133,6 +133,7 @@ and citations by number keep working.
 | `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
 | `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
 | `D6292.md` | Investor Diligence door, recorded member context links and validated Cases list state in the address (#6292). |
+| [D6094](D6094.md) | #6094: frozen sent-report printing and audience-safe light PDF copy. |
 | `D5620.md` | Merge Control policy source: one bundled classifier, injected `policy_version`, fail-closed compare evaluation; four live questions not recorded (#5620). |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6024.md` | Confirmed Build feature removal and must-have demotion, protected references, atomic audit and honest Build Plan history without stale links (#6024). |
@@ -144,3 +145,5 @@ and citations by number keep working.
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
+| `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |

@@ -207,6 +207,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
 | `onboarding_followups_d6135.test.mjs` | D6135: actual investor wizard failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal and role-safe fund handoff. |
 | `diligence_doors_d6292.test.mjs` | D6292: investor sidebar eligibility, scoped recorded context links, shared URL reload, filters/search/history/paging and stale response protection. |
+| `report_print_6094.test.mjs` | #6094: frozen print provenance, zero/absence, literal narrative and reader/private-recipient boundaries. |
 | `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
 | `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
 | `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
