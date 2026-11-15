@@ -421,7 +421,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 6 && (
           <div>
             <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip"
-              deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load} />
+              deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load} licenceUid={d.uid} />
             {domainStrip}
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
