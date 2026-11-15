@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 Feedback · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · Customers › Feedback · #6099 · continues Grow v2 (#4861) from GR-21</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Feedback — what customers keep asking for, the weight behind it, and telling them when it ships</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Feedback tab of Grow › Customers (/grow/customers), the body GR-06 leaves out. It shows the same product_feedback records as /grow/product-improvement, which keeps working and opens this tab. Admins, the founder and co-founders write; an advisor member reads without names, the Customer panel or Closing the loop. Every figure names what it counts and its period, and zero, Not recorded and Unreadable never look alike. Eadwyn only places unthemed items into themes the founder named, and nothing is written until the founder uses a placement. Axal never messages a customer: Mark told records that the founder told them, and Write email opens a draft in their own mail. Violet dashed ◇ marks what needs backend work under #6099: the customer link, the origin, the told state in the list, the theme weight, Save as feedback and Mark told for several people. The three owner questions are drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Lumen Robotics and every person, company and amount are fictional; 41 items, 13 themes, $4,800 recurring revenue are sample figures</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="11">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Feedback Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-21', 'Feedback tab · loaded', 'Customers with Feedback selected and one primary action, Add feedback. Three counts that name their period: 26 open items, 13 themes, and ◇ 5 shipped and not yet told. Source, Theme and Status filters with Newest, Oldest and Theme sorts. Themes ranked by item count with their status split and the ◇ weight line; the selected theme’s feedback with who gave it, the ◇ linked-customer chip, the ◇ origin, status and roadmap item. Eadwyn has placed 4 unthemed items into themes the founder named; each opens the GR-11 review.', [F('GRF21', false, 1120), F('GRF21B', 'Add feedback sheet', 1120), C('GRF21C', 'Review a theme placement (GR-11 dialog) · Use this theme or Discard', 700, 380)]],
+      ['GR-22', 'One feedback item tied to a customer', 'The record view: the quote, status and theme pills, facts with Not recorded words, the Theme section counted by status, and for writers the Customer side panel with the ◇ linked record and Plan (Paid · recurring revenue last 60 days). Closing the loop only when the person asked to be told. Variant: only a typed name, Not linked, with ◇ Link to a customer or prospect. Also the link search sheet and Mark told on a shipped item, which hands back a mail draft.', [F('GRF22', 'Linked to a customer record', 780), F('GRF22B', 'Typed name only · not linked', 780), C('GRF22C', 'Link search sheet · Mark told on a shipped item', 1100, 480)]],
+      ['GR-23', 'A theme’s weight', 'Fleet CSV export opened: items by status, ◇ who asked (5 people, each with their record or Not linked), ◇ $4,800 recurring revenue in the last 60 days from 3 of 5 askers’ companies, with the 2 askers who have no company or no revenue listed under Not recorded, never as $0. The roadmap items it led to. No Eadwyn proposal, and no impact, rank or value score.', [F('GRF23', false, 1000)]],
+      ['GR-24', 'Save as feedback from an Inbox reply', 'The Distribution Inbox keeps its own frame. ◇ Save as feedback on Kai Mori’s inbound reply opens a side sheet pre-filled with the selected words, Source Customer, his name, email and company, the ◇ linked Pipeline record, a theme, Tell them when it ships and ◇ origin Inbox reply. After Save: Saved to Feedback · Open, and the reply carries a Saved as feedback tag.', [F('GRF24', false, 900), F('GRF24B', 'After Save', 900)]],
+      ['GR-25', 'Save as feedback from an interview note', 'A Validate interview with its note, quote consent (Yes) beside the passage and its session marks, two of which have no label. The same sheet, pre-filled from the interviewee, ◇ origin Interview. Hanne Vik matches no customer record, so the sheet says Not linked, offers Link and still lets the founder save.', [F('GRF25', false, 900)]],
+      ['GR-26', 'Close the loop for several customers', 'Route replay shipped on 2 Nov. Everyone who gave feedback, with told state (Told · 3 Nov · call, or Due), email or No email recorded, and a checkbox only where it can be used. Choose how they were told, then ◇ Mark told. Write email opens a pre-filled draft and sends nothing. The result names the one person with no email. On a partly shipped roadmap item, rows say Not shipped yet or Did not ask to be told.', [F('GRF26', false, 820), F('GRF26B', 'Result', 820), C('GRF26C', 'Rows that cannot be selected', 1000, 250)]],
+      ['GR-27', 'Empty state and first save', 'Nothing recorded: one primary action, Add feedback; two quieter ◇ sources; Notion and PostHog under From your tools. After the first save the tab shows one row with no theme, Themes as a measured 0, and Eadwyn says to name a theme by hand first, offering none.', [F('GRF27', false, 820), F('GRF27B', 'After the first save', 820)]],
+      ['GR-28', 'States', 'Loading, Not recorded, the feedback list unreadable while Pipeline and Accounts work, one theme’s weight unreadable in its own card, saving, save failed with the sheet and edits kept, Mark told refused, and zero against Not recorded. Then the read-only view for an advisor member, and the weight board with its revenue card unreadable.', [C('GRF28', false, 1400, 560), F('GRF28B', 'Read-only · advisor member', 980), F('GRF28C', 'Theme weight unreadable', 1000)]],
+      ['GR-29', 'Phone 390', 'A · the tab with the counts strip, themes as a chip row and feedback as cards. B · one theme’s weight as stacked cards. C · Save as feedback as a bottom sheet from an Inbox reply. D · Close the loop with 44px checkboxes and a sticky Mark told bar.', [P('GRF29A', false), P('GRF29B', false), P('GRF29C', false), P('GRF29D', false)]],
+      ['GR-30', 'Dark', 'GR-21 on the dark tokens of GR-17 (#0B1220 / #111827, violet #A78BFA). States keep their words and shapes.', [F('GRF30', false, 1080)]],
+      ['GR-31', 'Handoff', 'What GR-06 already draws and what this adds, what main showed, backend required per item, frontend-only work, handoffs, accessibility and open questions.', [W('GRF31')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
