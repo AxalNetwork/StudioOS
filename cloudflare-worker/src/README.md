@@ -37,6 +37,7 @@ workflow, including queue and startup checks before migrations and publication.
 | `agents/` | D1528 (#3847, E3 of #3742): the agent engine's runtime behind one seam (`runtime.ts`): the `AgentScope` Durable Object per scope, the `AgentTaskWorkflow` per run, the agent queue and the sweep. Off unless `AGENT_ENGINE` is on. |
 | `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
 | `data/` | Seed and reference data. |
+| `probes/` | D4870 part 2 (#4870): entries of throwaway Worker deployments for hosted checks, deployed and deleted by a dispatch-only workflow. Never imported by `index.ts`. |
 | `util/` | Small shared helpers. |
 
 ## Rules that have bitten people
