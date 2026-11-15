@@ -1708,6 +1708,9 @@ async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 app.patch('/risks/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchRisk(c, ctx);
+});
+async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare('SELECT title, severity, mitigation, state, feature_id FROM venture_risks WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Risk not found' }, 404);
@@ -1721,7 +1724,7 @@ app.patch('/risks/:id', async c => {
     logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', existing.feature_id ?? 'project', 'build_risk_changed', `Risk changed: ${severity} severity, ${state}`),
   ]);
   return c.json({ ok: true, id });
-});
+}
 
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
@@ -2224,7 +2227,7 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
-export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
+export { patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
 
 // D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
 // "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.

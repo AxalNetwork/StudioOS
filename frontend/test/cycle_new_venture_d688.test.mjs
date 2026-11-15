@@ -43,7 +43,10 @@ test('D688: the six Build cards render empty links and four figures say Not reco
     assert.ok(card.includes(text), slug);
     assert.ok(card.includes(inAttr(href)), slug);
   }
-  assert.equal((out.match(/nothing recorded yet/g) || []).length, 4);
+  // D6022 (#6022): for a writer, Days to the MVP date's line is the Set link,
+  // so three figures read "nothing recorded yet" and the fourth links to the date.
+  assert.equal((out.match(/nothing recorded yet/g) || []).length, 3);
+  assert.match(out, /data-testid="cycle-figure-days_to_mvp-set"/);
   assert.doesNotMatch(out, /Hidden chart caption|Next:|>0</);
 });
 

@@ -90,6 +90,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `GrowOverview.jsx` | #4862: GR-01/02/13/16 focus-first overview, ranked attention, setup facts and compact domains on desktop and phone. |
 | `growOverviewModel.js` | #4862: canonical Grow labels over existing routes, action gating and focus-value formatting. |
 | `buildEadwyn.js` | D5077 (#5077, BD21 B): each Build module's own Eadwyn asks (`BUILD_ASKS`, `moduleAsks`), which fill Ask's composer and never run on their own, and the rail's sentence per module (`BUILD_RAIL_NOTES`, `moduleRailNote`); `defs/build.jsx` hands both to `CycleRoute`. |
+| `MarketFigureHistory.jsx` | D6011 (#6011): Market intelligence's History part, from the module read's `parts.market_history`: each change to the three figures with its value, method, source, who and when; Unreadable when null, and "No change recorded yet" when empty |
 
 ## Rules
 
