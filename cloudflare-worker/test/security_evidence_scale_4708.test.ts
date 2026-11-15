@@ -82,7 +82,14 @@ const LEDGER: Array<[string, string, Record<string, string>]> = [
 
 /** The tables that grow with history: the five ledger stores. */
 const STORES = ['admin_audit_log', 'activity_logs', 'impersonation_sessions', 'licence_events', 'security_events'];
-const readsStore = (sql: string) => STORES.some((t) => new RegExp(`\\bFROM ${t}\\b`).test(sql));
+// One literal pattern naming the same five stores (kept in step with STORES by the assertion below).
+const STORE_FROM = /\bFROM (admin_audit_log|activity_logs|impersonation_sessions|licence_events|security_events)\b/;
+const readsStore = (sql: string) => STORE_FROM.test(sql);
+test('the store pattern names exactly the five ledger stores', () => {
+  for (const t of STORES) assert.ok(readsStore(`SELECT 1 FROM ${t} WHERE 1`), t);
+  assert.equal(STORE_FROM.source.split('|').length, STORES.length);
+  assert.ok(!readsStore('SELECT 1 FROM admin_audit_logs'), 'a longer table name is not a store');
+});
 const isList = (sql: string) => /^\s*SELECT/i.test(sql) && !/\b(COUNT|SUM|MAX|MIN)\(/i.test(sql.split(/\bFROM\b/i)[0]);
 const planOf = (s: { sql: string; binds: unknown[] }) =>
   (db.prepare(`EXPLAIN QUERY PLAN ${s.sql}`).all(...(s.binds as any[])) as { detail: string }[]).map((r) => r.detail);
