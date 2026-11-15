@@ -63,10 +63,10 @@ test('2. on the local D1 every Build read answers exactly as on node:sqlite, and
  * 100 records after the fix; before it the two pages read 558 and 684 and the overview 1,408.
  */
 const BUDGET: Array<[string, number]> = [
-  // The connector catalogue adds one row per provider: TikTok (#5291), then Facebook (#5292).
+  // The connector catalogue adds one row per provider: TikTok (#5291), then Facebook (#5292), then Search Console (D5839).
   // D6031 (#6031): +2 on each Prototype read for the dominant action's blocked and next-due lookups (each
   // LIMIT 1 on an index), and +1 on the page for the test sessions of its 25 must-haves (none seeded here).
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1311],
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1312],
   [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 310],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
   [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 310],
