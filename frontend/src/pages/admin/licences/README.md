@@ -29,11 +29,14 @@ unchanged when it was split.
 - `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach. D4819 part 11 (#5922) redrew it to
   board L11: account state per row, Add administrator and Remove… with their consequence, offered only where the
   licence's state allows (`../licenceAccessModel.js`).
+- `DeployStep.jsx` — step 6, the branch deployment (D5924: its own Deployment card, with Reconcile on a failure).
+- `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach.
 - `NoticesEditor.jsx` — compliance notices and their review.
 - `BrandKitEditor.jsx` — the brand kit, white-label licences only.
 - `LicenceSyncStrip.jsx` — branch sync (HQ and branch revision, last sync, pending revision and why) and the
   unfinished-termination notice with its resume button (#4686). D4819 part 3 draws the strip on
-  Operations › Branch and domain and the notice above the sections.
+  Operations › Branch and domain and the notice above the sections. D5924 (#5924) redrew the strip to boards
+  L14 and L15: the two Sources, then Synced with HQ or Update pending with the failed attempt and Retry sync.
 - `Coverage.jsx` — the EU coverage grid and the renewal pipeline above the list.
 - `licenceShared.jsx` — what the parts share: tones, seat types, step numbers,
   residency choices, `Chip` and `Field`.

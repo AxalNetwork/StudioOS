@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build v2 Not Drawn · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Build · v2 addendum · #6026 · continues Build v2 (D4846, BD1 to BD24)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Build v2 addendum — risks, findings, history, sharing, the way out, tool owners and the feature brief</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Build records more than Build v2 draws. These boards continue Build v2 as BD25 to BD36, in its frame, Overview · Plan · Progress · Tools tabs, evidence sheet, founder-preview banner, empty-state pattern and Eadwyn rail. The venture’s founder reads and writes; an admin writes through the preview banner and every write asks first; a partner, investor, advisor or explorer opening a module page is Refused and a partner keeps Plan and Progress. States follow Platform States (D5129) with Unavailable on screen; zero, Not recorded and Unavailable never look alike, and severity, state and Blocked always carry a word and a glyph. Eadwyn only proposes. Violet dashed ◇ tags mark a store or read that needs backend work; amber ⚑ tags mark the owner questions Q1 to Q5, drawn as option A. Neither tag is product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · Northline, A. Kaya, Admin A, Paylane and the example.com people, and every figure, are fictional; BD29 uses later sample dates (1 and 4 Dec 2026)</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Build v2 Not Drawn Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['BD25', 'Solution design · Risks', 'Q1 option A, pending the owner: it reverses the 7 Nov decision. A paged list (25 a page) apart from the counts card, with state and feature filters, severity word and glyph, owner or No owner, state, the tied feature or Not tied to a feature, mitigation or No mitigation recorded, From the Build Plan, and Addressed by test as Not recorded yet. Add a risk sets owner and feature; Edit changes title, severity, mitigation and state, with owner and feature read-only. Eadwyn suggests a mitigation that is saved only if used. Reads: risk counts (on main), POST and PATCH /risks. Needs ◇ paged risks read, owner and feature on PATCH, risk-to-test link. Unblocks: [build issue, filed under #4846].', [F('BUX25', false, 1020), C('BUX25B', 'Add a risk', 760, 570), C('BUX25C', 'Edit risk · owner and feature read-only', 760, 595)]],
+      ['BD26', 'Prototype / MVP · findings, launch check, blocked', 'Must-haves done 3 of 7, MVP date 18 Dec 2026 and 34 days left (overview read, on main). ◇ A whole-MVP launch check (0 of 4 met), ◇ findings rolled up by Validate hypothesis (12 findings; each count opens the BD4 evidence sheet), and the must-haves with state, findings and release checks; Card payments is Blocked with its ◇ reason. Eadwyn summarises the findings as a proposal and never marks a check met. Reads: overview figures, prototype-mvp record reads. Needs ◇ findings roll-up, launch check, blocked reason. Unblocks: [build issue, filed under #4846].', [F('BUX26', false, 1300), F('BUX26B', 'Evidence sheet · H2, 4 support', 900)]],
+      ['BD27', 'Module history', 'One record’s history as a side panel, paged with Older (on main: records/:id/activity). A must-have’s history includes its findings and release checks, logged under Solution design. ◇ The whole module’s history from the module header, filterable by person, record and kind, with module-level writes marked Module. Read-only for everyone. Needs ◇ module-wide history read. Unblocks: [build issue, filed under #4846].', [F('BUX27', 'Record · side panel', 960), F('BUX27B', 'Module history · Solution design', 900)]],
+      ['BD28', 'Share Build status', '◇ Compose sheet from Overview: what is included (as of 14 Nov 2026), what is never included, who may open it (Q2 option A: named, signed-in people; a new route), when it ends, and Eadwyn’s covering note. The one page the recipient sees, and the founder’s shares with Revoke. Reads: overview figures, risk counts, formation steps. Needs ◇ share store, link and access. Unblocks: [build issue, filed under #4846].', [F('BUX28', 'Compose', 1000), F('BUX28B', 'What the recipient sees', 900), C('BUX28C', 'Your shares', 1140, 290)]],
+      ['BD29', 'The way out of Build', 'When must-haves are 7 of 7 and the company is filed: Go to Raise, Go to Grow (Q5 option A, skipping Launch) or Stay in Build, then Set stage. Eadwyn proposes Raise with the records it read. The partial version names the open item as the action. Handoff: the Raise overview with the stage set and a From Build note. Reads: overview, company-creation module, GET and PUT /api/progress/lifecycle (all on main). Frontend only. Unblocks: [build issue, filed under #4846].', [F('BUX29', false, 900), C('BUX29B', 'One condition still open', 1040, 310), C('BUX29C', 'Handoff · Raise', 1140, 240)]],
+      ['BD30', 'Tools · a connection another member owns', 'GitHub · Expired since 12 Nov. The owner sees Reconnect; a founder sees Owned by A. Kaya and ◇ Ask A. Kaya to reconnect (Q4 option A: notice plus email), with a confirm that sends no token or error text; then Asked on 14 Nov; an admin who is not a member sees Owned by another member and no action. Reads: operating-systems read owner rule (on main). Needs ◇ reconnect request and notice. Unblocks: [build issue, filed under #4846].', [F('BUX30', 'Confirm the request', 860), C('BUX30B', 'Four viewers', 1240, 530)]],
+      ['BD31', 'Solution design · feature Brief', 'Today the Brief side section is a fixed Not recorded (“No brief is stored for a feature.”). ◇ Q3 option A: a text field with who wrote it and when, Write a brief, and Draft with Eadwyn, which cites the description, pain theme and hypothesis and saves nothing until accepted or edited. Reads: feature record (description, evidence, tied risks on main). Needs ◇ brief store. Unblocks: [build issue, filed under #4846].', [F('BUX31', false, 860), C('BUX31B', 'Today vs after saving', 1140, 225)]],
+      ['BD32', 'Empty states', 'Risks, findings, launch check, history, shares and brief, one action each, and what appears after the first record. An empty list is None; a failed read is Unavailable, never this card. Unblocks: [build issue, filed under #4846].', [C('BUX32', false, 1340, 450)]],
+      ['BD33', 'States', 'Loading in the new shapes; Not recorded for owner, mitigation, MVP date, blocked reason and brief; Unavailable for one read and for one overview figure, with the rest working; Refused for other roles; admin preview; saving and save failed with the edit kept; a revoked or expired share. The page frame shows the risks read Unavailable while counts and features work. Unblocks: [build issue, filed under #4846].', [C('BUX33', false, 1440, 550), F('BUX33B', 'Risks read Unavailable', 620)]],
+      ['BD34', 'Phone 390', 'Risk cards, must-haves with the launch check, findings in collapsible hypothesis sections, history as one list, Share and Add a risk as bottom sheets, the way out as full-width buttons, the Tools owner row and the brief. 44px targets; Plan and Tools reachable from the Build tabs. Unblocks: [build issue, filed under #4846].', [P('BUX34A', 'Risks'), P('BUX34B', 'Prototype / MVP'), P('BUX34C', 'Findings'), P('BUX34D', 'History'), P('BUX34E', 'Share status'), P('BUX34F', 'Add a risk'), P('BUX34G', 'The way out'), P('BUX34H', 'Tools'), P('BUX34I', 'Brief')]],
+      ['BD35', 'Dark', 'BD26 and BD29 on the dark tokens. States keep their words and glyphs. Unblocks: [build issue, filed under #4846].', [F('BUX35', 'Prototype / MVP · dark', 1300), F('BUX35B', 'The way out · dark', 900)]],
+      ['BD36', 'Handoff', 'What was checked on main, each ◇ store and the board it serves, the owner questions Q1 to Q5, what is preserved and what is frontend only, and accessibility.', [W('BUX36')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -48,7 +48,8 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   // the call-ledger handoff opens `/funds/calls` itself rather than a route
   // that only redirects there — and the old path still lands somewhere.
   assert.ok(!page.includes('/funds/capital-calls'), 'the landing links a retired route');
-  assert.match(page, /<Link to="\/funds\/calls" data-testid="link-review-call-ledger">/);
+  // #6232: the handoff carries the chosen fund (`zone()` adds `?fund=`).
+  assert.match(page, /<Link to=\{zone\('\/funds\/calls'\)\} data-testid="link-review-call-ledger">/);
   assert.doesNotMatch(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
   assert.match(app, /function FundCapitalCallsRedirect\(\)[\s\S]{0,200}?pathname: '\/funds\/calls', search: loc\.search, hash: loc\.hash/);
   // D1160: Fund Ops is retired; an investor's Performance is the page itself.

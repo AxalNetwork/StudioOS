@@ -1,7 +1,10 @@
 /**
  * D642 (#1435) — the storage read's records, and the two screens'. The
  * mounted `/api/usage` read is never undocumented, and ROUTE_MAP names the
- * component that draws each Usage screen.
+ * component that draws each Usage screen. The storage-area catalogue (which
+ * keys exist, and that ROUTE_MAP names each) is the contract in
+ * `_storageAreasContract.mjs`, held by storage_areas_contract_5507 (#5507,
+ * D5507); this file no longer parses it out of the service's source.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/usage_records_d642.test.mjs
  */
@@ -15,11 +18,6 @@ const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const index = read('cloudflare-worker/src/index.ts');
 const routesReadme = read('cloudflare-worker/src/routes/README.md');
 const routeMap = readRouteMap();
-const service = read('cloudflare-worker/src/services/storageUsage.ts');
-
-// The area keys, as the service types them: D642's five, then D1169's eight.
-const AREA_KEYS = (service.match(/export type StorageAreaKey =\s*([^;]+);/)?.[1] || '')
-  .split('|').map((k) => k.trim().replace(/'/g, '')).filter(Boolean);
 
 const HEADING = '### Usage page and HQ allowances (D642, #1435)';
 /** The D642 section of ROUTE_MAP, up to the next heading of any level. */
@@ -30,23 +28,17 @@ function d642Section() {
   return next < 0 ? routeMap.slice(at) : routeMap.slice(at, at + HEADING.length + next);
 }
 
-test('the service types every actual storage area without pinning a total', () => {
-  const storedKeys = [...service.matchAll(/\{ key: '([a-z_]+)', kind:/g)].map(match => match[1]);
-  assert.deepEqual(new Set(AREA_KEYS), new Set(storedKeys));
-});
-
 test('/api/usage is mounted, and the routes README lists the mount', () => {
   assert.match(index, /app\.route\('\/api\/usage', usage\);/);
   assert.match(routesReadme, /^\/api\/usage\s+→ usage\.ts\s+\(.*D642\)$/m);
 });
 
-test('ROUTE_MAP records the storage read with every area key', () => {
+test('ROUTE_MAP records the storage read', () => {
   const section = d642Section();
   assert.ok(section, 'the D642 section is missing');
   // The prose names the read and its areas; the table's U1–U6 row reads it.
   const [prose, table = ''] = section.split('| Canvas |');
   assert.match(prose, /`GET \/api\/usage\/storage` \(`usage\.ts`/);
-  for (const key of AREA_KEYS) assert.ok(prose.includes(`\`${key}\``), `ROUTE_MAP does not name ${key}`);
   assert.match(table, /\| `\/account\/usage\/cost` [^\n]*`GET \/api\/usage\/storage`/);
 });
 

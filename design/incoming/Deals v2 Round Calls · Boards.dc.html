@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Round Calls · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Investor · Deals · Round calls · #6159 · Deals v2 addendum (brief CLS16 to CLS22)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · The investor’s round calls — the list, one call, every state, the phone, and the way in from Deal flow</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">What a verified investor sees of the round calls founders send them, on /round-calls and /round-calls/:uid. Both sit under Deals: the Deals sidebar row stays highlighted and the breadcrumb reads “Deals › Round calls”. It is an addendum to Deals v2 (same shell, DE01 for /deals) and draws one call from CLS13 as it landed; the founder side is the Raise v2 Calls follow-through canvas, whose words it reuses. Boards are numbered DCA16 to DCA22 after the brief’s CLS16 to CLS22. An amount is Indicated, never committed, and the word Commit never appears; no other investor is named or counted. Nothing here is a payment or a signed investment. Open, Paused and Closed are words and glyphs on the chip. States follow Platform States (D5129). Eadwyn sits in the one shared rail (#5130) and records nothing. Violet dashed ◇ tags mark backend work (#6159); amber ⚑ tags mark the four owner questions, drawn as option A. Round calls are switched off on Axal today (ROUND_CALLS_ENABLED = "false"), and every board has that state.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Arden Capital], [Kestrel Grid], [Northwind Labs], [Halcyon Bio], [Ferro Analytics], [Ostrava Robotics], [Quayside Pay] and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Deals v2 Round Calls Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['DCA16', 'Round calls · list (CLS16)', 'Breadcrumb “Deals › Round calls”, one sentence, filters Open 3 · Paused 1 · Closed 2 · All 6 and ◇ Needs my answer 2. Each row: ◇ company and New, call name, instrument, ◇ target, status chip with “Closes in 4 days · 18 Nov”, “Closed on 2 Nov” or “Closed” (early, ◇ date), ◇ my response, Open the call. No page-level button. Eadwyn: 2 open calls close in the next 7 days with no indication; Open or Dismiss, nothing recorded.', [F('DCA16', false, 1000), C('DCA16B', 'Needs my answer applied', 1140, 372)]],
+      ['DCA17', 'Round calls · empty (CLS17)', 'No call sent yet: what a round call is in three short lines, one action (Browse Deal flow), and the note that matching investors stay nameless to the founder until they respond.', [F('DCA17', false, 760)]],
+      ['DCA18', 'Entry points on /deals (CLS18)', 'Two additions to Deals v2 DE01, nothing restyled. Needs your attention gains ◇ one item per Open call not indicated, closing within 7 days (at most two, then “and 1 more”), coordinated with #5899. Other deal activity gains ◇ “Round calls · 3 open”, Unreadable when the read fails, absent when switched off.', [C('DCA18', 'In place on Deal flow', 1280, 503), C('DCA18B', 'Every state of both items', 1280, 595)]],
+      ['DCA19', 'One call · CLS13 additions (CLS19)', '[Ferro Analytics] · [Seed] as CLS13 landed, plus: the five-step data room strip (step 4, Asked on 12 Nov), “Indicated · [$50,000] on 12 Nov” with Change amount and ◇ Withdraw, ◇ My activity (only my own), ◇ Open the deal, and Eadwyn’s draft question built only from the recorded terms. Nothing is sent until Ask a question.', [F('DCA19', false, 1260), F('DCA19B', 'Withdraw · review', 1260), C('DCA19C', 'Data room · five steps and none', 1280, 496), C('DCA19D', 'Indicate, hand-off and Paused', 1440, 788)]],
+      ['DCA20', 'States (CLS20)', 'Loading, switched off, verification required (403), not found (404), Unreadable for the list and for one call, a failed evidence read that leaves the rest, Not recorded in words. Refused writes: out of range, closed while open, NDA required, not confirmed; Saving; a failed save keeps what was typed.', [C('DCA20', 'Read states', 1440, 1026), C('DCA20B', 'Refused and saving', 1440, 529)]],
+      ['DCA21', 'Phone 390 (CLS21)', 'The list as a chip row and whole-card targets; one call with the indication on top, folded sections and a sticky bar; the Indicate sheet with the replaces note and the not-a-payment line; switched off.', [P('DCA21a', false), P('DCA21b', false), P('DCA21c', false), P('DCA21d', false)]],
+      ['DCA22', 'Dark (CLS22)', 'DCA16 and DCA19 on the dark tokens. Chips, Indicated, Not recorded and Unreadable keep their words and shapes.', [F('DCA22a', false, 1000), F('DCA22b', false, 1260)]],
+      ['DCA-H', 'Handoff', 'What main does today, the ◇ backend work for #6159, frontend-only work, the four owner questions as option A, handoff paths and accessibility.', [W('DCAH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

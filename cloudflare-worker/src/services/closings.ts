@@ -181,6 +181,8 @@ export async function listClosings(env: Env, user: User) {
  * One closing as the caller may read it. `total_cents` is the round's total
  * (every line not withdrawn), which every reader sees; `lines` are every line
  * for an admin or the founder, and only the caller's own for anyone else.
+ * `for_investor` (D6199) is the caller's own part when they read through a
+ * line of their own, and null for an admin or the founder.
  */
 export async function readClosing(env: Env, user: User, closingUid: string) {
   const { closing, reach } = await readable(env, user, closingUid);
@@ -215,6 +217,18 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     `SELECT ev.event, ev.line_id, ev.actor_user_id, ev.source_ref, ev.created_at FROM closing_events ev WHERE ev.closing_id = ? ORDER BY ev.id`,
   ).bind(closing.id).all<any>()).results || []) : null;
   const all = await env.DB.prepare('SELECT status FROM closing_lines WHERE closing_id = ?').bind(closing.id).all<{ status: string }>();
+  const captable = captableState(closing, (all.results || []).map((r) => r.status));
+  // D6199: the investor's own part (what waits on them, a count of the rest, their summary and duties). Never for reach 'all'.
+  // A failure here costs only this part, which then says Unreadable; the line and the total still answer.
+  let forInvestor: Record<string, unknown> | null = null;
+  if (reach === 'own') {
+    try {
+      forInvestor = await (await import('./closingInvestorRoom')).investorRoom(env, user, closing, lines.results || [], byLine, captable);
+    } catch {
+      console.warn('[closings] the investor’s part of a closing could not be read');
+      forInvestor = { unreadable: true };
+    }
+  }
   return {
     uid: closing.uid,
     deal_id: closing.deal_id,
@@ -231,12 +245,13 @@ export async function readClosing(env: Env, user: User, closingUid: string) {
     reach,
     total_cents: Number(total?.cents ?? 0),
     line_count: Number(total?.n ?? 0),
-    captable: { state: captableState(closing, (all.results || []).map((r) => r.status)), decided_at: closing.captable_decided_at },
+    captable: { state: captable, decided_at: closing.captable_decided_at },
     lines: (lines.results || []).map((l: any) => {
       const { id: _id, ...rest } = l;
       return { ...rest, evidence: byLine.get(Number(l.id)) || [] };
     }),
     events,
+    for_investor: forInvestor,
   };
 }
 
