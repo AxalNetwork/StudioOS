@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import {
-  NOT_AVAILABLE_YET, REFERENCE_ARTEFACTS, REFERENCE_STATUS, STATES, whenLine,
+  REFERENCE_STATUS, REFERENCE_SUMMARY, STATES, SUMMARY_MIN_NOTES, whenLine,
 } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN, INPUT } from './DealRoomKit';
 
@@ -14,11 +14,11 @@ import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN, INPUT } from 
  * Each check: name, email, role, relationship, scheduled time, consent (given
  * or not, and when), status and notes. Schedule, edit and delete.
  *
- * RECORDING, TRANSCRIPT AND SUMMARY READ "NOT AVAILABLE YET". The Worker
- * stubs all three with 501 (`routes/references.ts`), so the tab offers no
- * upload, no transcribe and no summarise button: a control that can only
- * fail is not drawn. `components/ReferenceChecksPanel.jsx`, which drew them,
- * was never mounted.
+ * D6183 (#6183): NOTES, AND EADWYN'S SUMMARY OF THEM. The owner chose
+ * notes-to-summary only, so there is no recording and no transcript, and no
+ * row for either. "Summarise notes" appears once a check has enough notes;
+ * the summary says when the notes changed after it. The never-mounted
+ * `ReferenceChecksPanel.jsx`, which drew upload and transcribe, is deleted.
  */
 export default function DealReferencesTab({ dealId }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
@@ -45,6 +45,13 @@ export function ReferencesView({ dealId, state, onRetry, onChanged }) {
     setRowError('');
     try { await api.deleteReference(r.id); await onChanged?.(); }
     catch (e) { setRowError(e?.message || 'The reference was not deleted. Try again.'); }
+  };
+  const [summarising, setSummarising] = useState(null);
+  const summarise = async (r) => {
+    setRowError(''); setSummarising(r.id);
+    try { await api.summarizeReference(r.id); await onChanged?.(); }
+    catch (e) { setRowError(e?.message || REFERENCE_SUMMARY.failed); }
+    finally { setSummarising(null); }
   };
   const consent = async (r) => {
     setRowError('');
@@ -91,16 +98,22 @@ export function ReferencesView({ dealId, state, onRetry, onChanged }) {
                     ? `Given ${whenLine(r.consent_given_at) || ''}`.trim()
                     : <NotRecorded reason={STATES.references.nrConsent} />}
                 </dd>
-                {REFERENCE_ARTEFACTS.map((a) => (
-                  <React.Fragment key={a}>
-                    <dt className="text-gray-500">{a}</dt>
-                    <dd className="italic text-gray-500" data-testid="dr-reference-artefact">{NOT_AVAILABLE_YET}</dd>
-                  </React.Fragment>
-                ))}
+                <dt className="text-gray-500">Summary</dt>
+                <dd data-testid="dr-reference-summary-state">
+                  {r.summary
+                    ? (r.summary_stale ? REFERENCE_SUMMARY.stale : `Written ${whenLine(r.summarized_at) || ''}`.trim())
+                    : <NotRecorded reason={canSummarise(r) ? REFERENCE_SUMMARY.none : REFERENCE_SUMMARY.needNotes} />}
+                </dd>
               </dl>
             </div>
+            {r.summary && <ReferenceSummary summary={r.summary} />}
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" onClick={() => setEditing(r)} className={BTN.ghost}><Pencil size={13} /> Edit</button>
+              {canSummarise(r) && (!r.summary || r.summary_stale) && (
+                <button type="button" onClick={() => summarise(r)} disabled={summarising === r.id} className={BTN.ghost} data-testid="dr-reference-summarise">
+                  {summarising === r.id ? REFERENCE_SUMMARY.busy : r.summary ? REFERENCE_SUMMARY.again : REFERENCE_SUMMARY.run}
+                </button>
+              )}
               {!r.consent_given && <button type="button" onClick={() => consent(r)} className={BTN.ghost}>Record consent</button>}
               <button type="button" onClick={() => remove(r)} className={BTN.danger}><Trash2 size={13} /> Delete</button>
             </div>
@@ -113,11 +126,30 @@ export function ReferencesView({ dealId, state, onRetry, onChanged }) {
   const hasRows = Boolean(state.rows && state.rows.length);
   return (
     <div>
-      <p className="mb-3 text-xs text-gray-500">Reference checks on the founders. Recording, transcript and summary are not available yet.</p>
+      <p className="mb-3 text-xs text-gray-500">{REFERENCE_SUMMARY.lead}</p>
       {hasRows && !editing && <div className="mb-3 flex justify-end">{cta}</div>}
       {form}
       {rowError && <p className="mb-2 text-sm text-red-700 dark:text-red-300" role="alert">{rowError}</p>}
       {body}
+    </div>
+  );
+}
+
+/** A check whose notes are long enough to summarise (the Worker refuses shorter ones). */
+export function canSummarise(r) {
+  return String(r?.notes ?? '').trim().length >= SUMMARY_MIN_NOTES;
+}
+
+function ReferenceSummary({ summary }) {
+  const list = (items) => (Array.isArray(items) ? items.filter((x) => typeof x === 'string' && x) : []);
+  const strengths = list(summary.strengths);
+  const concerns = list(summary.concerns);
+  return (
+    <div className="mt-2 rounded-lg border border-violet-100 bg-violet-50/40 p-2 text-sm dark:border-violet-900 dark:bg-violet-950/20" data-testid="dr-reference-summary">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">{REFERENCE_SUMMARY.from}</div>
+      <p className="mt-1 text-gray-800 dark:text-gray-200">{summary.summary}</p>
+      {strengths.length > 0 && <><div className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Strengths</div><ul className="list-disc pl-5 text-xs text-gray-700 dark:text-gray-300">{strengths.map((s, i) => <li key={`s${i}`}>{s}</li>)}</ul></>}
+      {concerns.length > 0 && <><div className="mt-1 text-xs font-semibold text-gray-600 dark:text-gray-400">Concerns</div><ul className="list-disc pl-5 text-xs text-amber-800 dark:text-amber-300">{concerns.map((s, i) => <li key={`c${i}`}>{s}</li>)}</ul></>}
     </div>
   );
 }

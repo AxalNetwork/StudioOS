@@ -25,13 +25,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
   JOIN_NOTE, quotaLine, quotaFullLine, transferRefusal, amountToCents, centsMoney,
-  REFERENCE_STATUS, NOT_AVAILABLE_YET, SYNDICATE_CLOSE_CONFIRM,
+  REFERENCE_STATUS, REFERENCE_SUMMARY, SYNDICATE_CLOSE_CONFIRM,
 } from '../src/components/deals/dealRoomCopy.js';
 import { QuotaLine, JoinLeaveButton } from '../src/components/deals/DealRoomJoin.jsx';
 import { DealRoomsList } from '../src/components/deals/DealRoomsPanel.jsx';
 import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx';
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
-import { ReferencesView, editableStatuses } from '../src/components/deals/DealReferencesTab.jsx';
+import { ReferencesView, editableStatuses, canSummarise } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
 import { dealTabsFor } from '../src/pages/dealPageModel.js';
 import { renderedText } from './_renderedText.mjs';
@@ -193,19 +193,32 @@ const REFS = [
   { id: 2, reference_name: 'Rob Recorded', reference_email: null, reference_role: null, relationship: null, scheduled_at: null, consent_given: false, consent_given_at: null, status: 'recorded', notes: null },
 ];
 
-test('sp-references: each check, and its recording, transcript and summary read "Not available yet"', () => {
-  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: REFS } }));
+test('sp-references (D6183): each check with its notes and summary state; no recording or transcript row', () => {
+  const rows = [
+    { ...REFS[0], notes: 'Asked about hiring. Says the founder hires slowly and well, and kept every senior hire.' },
+    REFS[1],
+    { id: 3, reference_name: 'Sam Summarised', reference_email: null, reference_role: null, relationship: null, scheduled_at: null, consent_given: true, consent_given_at: '2026-10-12T09:00:00Z', status: 'summarized',
+      notes: 'Long notes from the call about how the founder handled a hard quarter and a lost customer.', summarized_at: '2026-10-15T10:00:00Z',
+      summary: { summary: 'The founder handled a hard quarter calmly.', strengths: ['Calm under pressure'], concerns: ['Lost a key customer'] }, summary_stale: true },
+  ];
+  const markup = html(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows } }));
   const t = renderedText(markup);
-  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\s*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Recording\s*Not available yet\s*Transcript\s*Not available yet\s*Summary\s*Not available yet/);
-  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\./);
-  assert.equal((markup.match(new RegExp(`>${NOT_AVAILABLE_YET}<`, 'g')) || []).length, 6, 'three per check');
+  assert.match(t, /Rita Reference\s*Scheduled\s*rita@example\.test · CTO · Former manager\s*Asked about hiring\..*Scheduled\s*14 Oct 2026, 15:00\s*Consent\s*Given 12 Oct 2026, 09:00\s*Summary\s*Not recorded: not summarised yet\./);
+  assert.match(t, /Rob Recorded\s*Recorded\s*No email, role or relationship recorded\s*Scheduled\s*Not recorded: no time has been set\.\s*Consent\s*Not recorded: consent is not yet given\.\s*Summary\s*Not recorded: write notes from the call first\./);
+  assert.doesNotMatch(t, /Recording|Transcript|Not available yet/, 'no row for an artefact the owner chose not to build');
+  assert.match(t, new RegExp(REFERENCE_SUMMARY.lead));
+  // The button: where the notes are long enough and there is no summary, or it is out of date.
+  assert.equal((t.match(/Summarise notes/g) || []).length, 1, 'Rita: notes, no summary');
+  assert.equal((t.match(/Summarise again/g) || []).length, 1, 'Sam: the notes changed after the summary');
+  assert.match(t, /Eadwyn’s summary of your notes\s*The founder handled a hard quarter calmly\.\s*Strengths\s*Calm under pressure\s*Concerns\s*Lost a key customer/);
+  assert.match(t, /The notes changed after this summary\./);
   assert.match(t, /Schedule a reference/);
-  assert.match(t, /Record consent/, 'consent can be recorded where it is missing');
   assert.equal((t.match(/Record consent/g) || []).length, 1);
-  assert.equal((t.match(/Delete/g) || []).length, 2);
-  // No control that can only fail: the Worker 501s all three.
+  assert.equal((t.match(/Delete/g) || []).length, 3);
   const code = codeOnly(read('components/deals/DealReferencesTab.jsx'));
-  assert.doesNotMatch(code, /uploadReferenceRecording|transcribeReference|summarizeReference|getReferenceRecordingUrl/);
+  assert.doesNotMatch(code, /uploadReferenceRecording|transcribeReference|getReferenceRecordingUrl/);
+  assert.match(code, /summarizeReference/);
+  assert.equal(canSummarise({ notes: 'short' }), false);
   assert.equal(REFERENCE_STATUS.summarized, 'Summarised');
 });
 

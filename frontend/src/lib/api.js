@@ -4207,14 +4207,7 @@ export const api = {
   deleteReference: (id) => request(`/references/${id}`, { method: 'DELETE' }),
   captureReferenceConsent: (id, data) =>
     request(`/references/${id}/consent`, { method: 'POST', body: JSON.stringify(data) }),
-  uploadReferenceRecording: (id, file) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return request(`/references/${id}/recording`, { method: 'POST', body: fd });
-  },
-  getReferenceRecordingUrl: (id) => request(`/references/${id}/recording-url`),
-  transcribeReference: (id) =>
-    request(`/references/${id}/transcribe`, { method: 'POST' }),
+  // D6183: Eadwyn summarises the typed notes; no recording or transcript route exists.
   summarizeReference: (id) =>
     request(`/references/${id}/summarize`, { method: 'POST' }),
 
