@@ -166,18 +166,45 @@ export function afterRaiseView(base) {
     sub: sourceText('Modelled', target ? `your target ${target}` : 'no target recorded') };
 }
 
+/**
+ * D6081 (#6081): Committed, from the round (UF1, RA-21). The plan read's `committed` block carries
+ * Capital relationships' commitments under that tool's access rules. Only a read figure is a figure:
+ * Unavailable and Refused say so, and Remaining is shown only beside a read Committed, never as $0.
+ */
+export function committedView(block) {
+  const v = block?.state === 'ok' ? block.value : null;
+  if (v) {
+    const value = money(v.counted_cents, v.currency);
+    const target = money(v.target_cents, v.currency);
+    const words = (v.statuses || []).map((x) => x.label).join(', ');
+    const missing = v.amount_not_recorded ? `${v.amount_not_recorded} with no amount` : null;
+    const sub = [target ? `of ${target}` : 'no target recorded', words || 'nothing counted yet', missing, 'from the round'].filter(Boolean).join(' · ');
+    let foot = null;
+    if (typeof v.remaining_cents === 'number') {
+      foot = `Target ${target} · committed ${value} · ${v.remaining_cents >= 0 ? `remaining ${money(v.remaining_cents, v.currency)}` : `over the target by ${money(-v.remaining_cents, v.currency)}`}`;
+    }
+    const footReason = foot ? null : v.amount_not_recorded ? 'Remaining is not shown: a counted commitment has no amount recorded.' : 'Remaining is not shown: the round records no target.';
+    const received = money(v.received_cents, v.currency);
+    return { state: 'ok', value, sub, foot, footReason, tie: `Committed ${value}${received ? ` · received ${received}` : ''}${words ? ` · ${words}` : ''}` };
+  }
+  const reason = block?.reason || 'The commitments could not be read, so Remaining is not shown. It is not $0.';
+  if (block?.state === 'not_recorded') return { state: 'not_recorded', value: null, sub: reason, href: block.href || null, link: 'Capital relationships › Commitments' };
+  if (block?.state === 'refused') return { state: 'refused', value: 'Refused', muted: true, sub: reason };
+  return { state: 'unavailable', value: 'Unavailable', muted: true, sub: reason };
+}
+
 /** The Home tiles (UF1): Raise, Runway today, Runway after the raise, Committed. */
 export function homeTiles(plan) {
   const base = baseOf(plan);
   const raise = raiseView(plan);
   const today = runwayTodayView(plan?.runway_today, plan?.viewer);
   const after = afterRaiseView(base);
+  const committed = committedView(plan?.committed);
   return [
     { key: 'raise', label: 'Raise', value: raise.value, sub: raise.sub },
     { key: 'today', label: 'Runway today', value: today.value, sub: today.sub, muted: today.state === 'founder_only' },
     { key: 'after', label: 'Runway after the raise', value: after.value, sub: after.sub },
-    // No read carries a round's commitments yet, so Committed says so rather than show a figure.
-    { key: 'committed', label: 'Committed', value: null, sub: 'Commitments are not read here yet.' },
+    { key: 'committed', label: 'Committed', value: committed.value, sub: committed.sub, muted: !!committed.muted, href: committed.href, link: committed.link },
   ];
 }
 
@@ -247,7 +274,7 @@ export function tiesRows(plan) {
   const raise = raiseView(plan);
   if (round) {
     rows.push({ key: 'round', eyebrow: 'Round', text: raise.value ? `The plan raises ${raise.value}` : 'No round size is recorded.',
-      sub: raise.value ? raise.sub : round.reason, pill: round.disagreements?.length ? '! Different raise' : raise.value ? '✓ Same raise' : null,
+      sub: committedView(plan?.committed).tie || (raise.value ? raise.sub : round.reason), pill: round.disagreements?.length ? '! Different raise' : raise.value ? '✓ Same raise' : null,
       tone: round.disagreements?.length ? 'amber' : 'green' });
   }
   const cap = plan?.ties?.cap_table;

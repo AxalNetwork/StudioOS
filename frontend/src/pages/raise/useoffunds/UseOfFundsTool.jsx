@@ -7,7 +7,7 @@ import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import MercuryRaiseFeed from '../../cycles/MercuryRaiseFeed';
 import {
-  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, dayText,
+  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, committedView, dayText,
   forecastHref, historyRows, homeTiles, initials, money, monthsText, needsRows, planEmpty, planVsActual, runwayCandidates,
   runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
@@ -129,12 +129,26 @@ function Tile({ tile }) {
         ? <span className={`${tile.muted ? `text-[15px] ${MUTED}` : `${MONO} text-[24px] font-extrabold text-axal-ink max-md:text-[20px] dark:text-gray-100`}`} data-testid={`uof-tile-${tile.key}-value`}>{tile.value}</span>
         : <span className={`text-[15px] ${MUTED}`} data-testid={`uof-tile-${tile.key}-value`}>{NOT_RECORDED}</span>}
       <span className={`text-[11.5px] ${MUTED}`}>{tile.sub}</span>
+      {tile.href ? <Link className={`${LINK} text-[11.5px]`} to={tile.href} data-testid={`uof-tile-${tile.key}-link`}>{tile.link || 'Open'} ›</Link> : null}
     </div>
   );
 }
 
-function Tiles({ plan }) {
-  return <div className="grid gap-3 max-md:grid-cols-2 md:grid-cols-4" data-testid="uof-tiles">{homeTiles(plan).map((t) => <Tile key={t.key} tile={t} />)}</div>;
+/** D6081: the tiles, then Remaining beside a read Committed, or why it is not shown (RA-21). */
+function Tiles({ plan, onRetry }) {
+  const committed = committedView(plan?.committed);
+  return (
+    <>
+      <div className="grid gap-3 max-md:grid-cols-2 md:grid-cols-4" data-testid="uof-tiles">{homeTiles(plan).map((t) => <Tile key={t.key} tile={t} />)}</div>
+      {committed.state === 'unavailable' ? (
+        <BlockError tone="amber" testId="uof-committed-unavailable" onRetry={onRetry}
+          text="Committed is Unavailable. Capital relationships commitments could not be read, so Remaining is not shown. It is not $0." />
+      ) : null}
+      {committed.state === 'ok' ? (
+        <p className={`m-0 -mt-1 text-[11.5px] ${MUTED}`} data-testid="uof-remaining">{committed.foot || committed.footReason}</p>
+      ) : null}
+    </>
+  );
 }
 
 /** The section table (UF1): share, amount, a month over the target, its milestone and its hires. */
@@ -249,7 +263,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
           if (planEmpty(plan)) {
             return (
               <>
-                <Tiles plan={plan} />
+                <Tiles plan={plan} onRetry={read.reload} />
                 <div className="grid gap-3 md:grid-cols-3">
                   <Card title="Where the money goes" className="md:col-span-2"><StackBar rows={rows} /></Card>
                   <Card testId="uof-empty">
@@ -272,7 +286,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                 {plan.viewer?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
-              <Tiles plan={plan} />
+              <Tiles plan={plan} onRetry={read.reload} />
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
                   <Card title="Where the money goes" meta={money(base?.amount_to_raise_cents, base?.currency) ? `${money(base.amount_to_raise_cents, base.currency)} · base scenario` : null} testId="uof-money">
