@@ -354,11 +354,14 @@ export default function CycleModulePage({
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined;
+  // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
+  const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero ? null : action} title={name} sub={owned ? owned.sub : [card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={owned ? owned.sub : [card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
