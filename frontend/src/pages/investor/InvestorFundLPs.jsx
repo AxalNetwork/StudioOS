@@ -97,6 +97,9 @@ export default function InvestorFundLPs() {
     return { onClick: () => { setAddError(''); setAdding(true); }, busy: saving };
   }, [state.fund, state.error, saving]);
 
+  // #6232: the zone row's Comms log op scrolls to the log card on this page.
+  const commsLog = () => document.getElementById('comms-log')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+
   async function submitLp(event) {
     event.preventDefault();
     if (!state.fund?.id) return;
@@ -156,7 +159,7 @@ export default function InvestorFundLPs() {
     <ZoneToolbar
       role="investor"
       filters={investorZoneFilters('funds/lps', { value: filter, onChange: setFilter, dynamic: { types } })}
-      actions={investorZoneActions('funds/lps', { handlers: { addLp }, view: { scope: state.fund?.name, header: ['LP', 'Type', 'Commitment', 'Paid to date', 'State', 'KYC'], rows: visible, cells: (lp) => [lp.name || lp.email, lpTypeLabel(lp) || 'Not recorded', lpCommitment(lp), lpPaid(lp), lp.status, lp.kyc_status || lp.kyc] } })}
+      actions={investorZoneActions('funds/lps', { handlers: { addLp, commsLog }, view: { scope: state.fund?.name, header: ['LP', 'Type', 'Commitment', 'Paid to date', 'State', 'KYC'], rows: visible, cells: (lp) => [lp.name || lp.email, lpTypeLabel(lp) || 'Not recorded', lpCommitment(lp), lpPaid(lp), lp.status, lp.kyc_status || lp.kyc] } })}
       className="mb-3"
     />
     {adding && <form className="ip1-fund-add" onSubmit={submitLp} data-testid="form-add-lp">
@@ -213,7 +216,7 @@ export function LpTypeCell({ lp, onChange }) {
  */
 export function CommsLog({ comms, onRetry }) {
   const items = comms.data?.items || [];
-  return <section className="i6-card ip1-fund-registry" data-testid="card-comms-log"><header><div><h2>Comms log</h2><span>What was logged as sent to each LP, and when. Subjects only: no message body is kept.</span></div><span>{comms.status === 'ready' ? `${items.length} entr${items.length === 1 ? 'y' : 'ies'}` : ''}</span></header>
+  return <section className="i6-card ip1-fund-registry" id="comms-log" data-testid="card-comms-log"><header><div><h2>Comms log</h2><span>What was logged as sent to each LP, and when. Subjects only: no message body is kept.</span></div><span>{comms.status === 'ready' ? `${items.length} entr${items.length === 1 ? 'y' : 'ies'}` : ''}</span></header>
     {comms.status === 'loading' ? <div className="i6-skeleton" /> : comms.status === 'unreadable'
       ? <div className="i6-empty" role="alert" data-testid="status-comms-unreadable"><AlertCircle size={16} /> The comms log could not be read. This is not a claim that nothing was sent. <button type="button" onClick={onRetry}>Retry</button></div>
       : items.length === 0 ? <div className="i6-empty" data-testid="status-comms-empty">Nothing has been logged as sent on this fund.</div>

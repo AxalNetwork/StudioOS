@@ -51,12 +51,13 @@ test('the book reads the log’s MAX, and the cold chip narrows on the shared wi
 
 test('the reminders and the touch log are wired to their stores', () => {
   assert.match(PAGE, /api\.partnerReminderSet\(rel\.id, \{/, 'the reminder form is unwired');
-  assert.match(PAGE, /api\.partnerReminders\(\)/, 'the due reminders are never read');
+  // #6259: read with `all=1`, so the Reminders view can list the done ones.
+  assert.match(PAGE, /api\.partnerReminders\(true\)/, 'the reminders are never read');
   assert.match(PAGE, /api\.partnerReminderDone\(uid, true\)/, 'the done write is gone');
   assert.match(PAGE, /api\.partnerInteractionAdd\(rel\.id, body/, 'the touch log write is gone');
   assert.match(API, /partnerReminderSet: \(id, data\) =>/, 'api.js lost the reminder write');
   assert.match(API, /partnerInteractionAdd: \(id, data\) =>/, 'api.js lost the touch write');
-  // The op is the page's, and it opens on a tie rather than into thin air.
+  // The op is the page's, and (#6259) it opens the Reminders view.
   assert.match(PAGE, /handlers: \{ setReminders: setRemindersOp \}/, 'the Set reminders op is not the page’s');
   // A reminder is a date: the page refuses an empty one before the route is asked.
   assert.match(PAGE, /if \(!reminderDate\)/, 'the page stopped refusing a dateless reminder');

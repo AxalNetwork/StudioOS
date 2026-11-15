@@ -9,6 +9,54 @@ import { roundCallPipelineStatements } from '../routes/contacts';
 import { roundCallRequestStatement } from './dataRoomRequests';
 import { investorEvidence, RaiseEvidenceError } from './raiseEvidence';
 
+import { run as aiRouterRun, type RailContext } from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
+import { formatMinor } from '../../../frontend/src/lib/money.js';
+
+const termMoney = (cents: number) => formatMinor(cents, 'USD', { locale: 'en-US' })!;
+
+// The model writes around opaque markers. Only the Worker renders financial facts.
+export function renderRoundTermsDraft(output: string, fields: Record<string, string>): string | null {
+  const copy = output.trim();
+  if (!copy || copy.length > 1200) return null;
+  const markers = [...copy.matchAll(/\{([A-Z_]+)\}/g)].map(match => match[1]);
+  if (markers.length !== Object.keys(fields).length || new Set(markers).size !== markers.length ||
+      markers.some(marker => !Object.hasOwn(fields, marker))) return null;
+  const prose = copy.replace(/\{[A-Z_]+\}/g, '');
+  if (!/^[a-zA-Z ,.'’–—:;()\n-]+$/.test(prose) ||
+      /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|trillion|half|double|guarantee[ds]?|returns?|profit|interest|dividends?|risk.free)\b/i.test(prose)) return null;
+  return copy.replace(/\{([A-Z_]+)\}/g, (_, key) => fields[key]);
+}
+
+export async function wordRoundTerms(env: Env, project: ProjectFacts, user: User, input: Record<string, unknown>, rail: RailContext) {
+  const terms = await normalizeTerms(env, project, {
+    name: 'Round call', terms: 'Draft wording', amount_cents: input.amount_cents,
+    instrument: input.instrument, minimum_cheque_cents: input.minimum_cheque_cents,
+    target_close: input.target_close, valuation_cap_cents: input.valuation_cap_cents,
+    discount_bps: input.discount_bps, pre_money_cents: input.pre_money_cents,
+  });
+  const fields: Record<string, string> = {
+    INSTRUMENT: ({ safe: 'SAFE', equity: 'equity round', convertible_note: 'convertible note' })[terms.instrument]!,
+    AMOUNT: termMoney(terms.amount_cents), MINIMUM: termMoney(terms.minimum_cheque_cents),
+    CLOSE: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(terms.target_close + 'T00:00:00Z')),
+  };
+  if (terms.valuation_cap_cents != null) fields.CAP = termMoney(terms.valuation_cap_cents);
+  if (terms.discount_bps != null) fields.DISCOUNT = (terms.discount_bps / 100) + '%';
+  if (terms.pre_money_cents != null) fields.PRE_MONEY = termMoney(terms.pre_money_cents);
+  const meanings: Record<string, string> = {
+    INSTRUMENT: 'investment instrument', AMOUNT: 'maximum total raised', MINIMUM: 'minimum cheque per investor',
+    CLOSE: 'target close date', CAP: 'valuation cap', DISCOUNT: 'discount', PRE_MONEY: 'pre-money valuation',
+  };
+  const result = await aiRouterRun(env, {
+    task: 'rail_write', userId: Number(user.id), surface: AI_SURFACE.raiseCapitalRelationships, rail,
+    systemPrompt: 'Write a short plain-language draft for the founder to review. Use each provided marker exactly once, with its given meaning. Keep markers verbatim including braces. Only state the listed facts. Add no amounts, dates, terms, promises, advice, headings, Markdown or other content. Use ordinary words and simple punctuation. Write no digits, number words, currency signs, or financial terms beyond the markers. Return the paragraph alone.',
+    messages: [{ role: 'user', content: Object.keys(fields).map(key => '{'+key+'}: '+meanings[key]).join('\n') }],
+    maxTokens: 220,
+  });
+  return { result, draft: result.ok && result.output ? renderRoundTermsDraft(result.output, fields) : null };
+}
+
 export class RoundCallError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
   code: string;

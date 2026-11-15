@@ -12,7 +12,8 @@ export const FOUNDER_TOOLS = [
   { path: '/raise/capital-relationships/match', cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
-  { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
+  // #6109: Team expansion's door to where headcount and the hiring plan are edited.
+  { path: '/build/team', cycle: 'grow', module: 'team-expansion', label: 'Open team roster and hiring plan', door: true, roles: ['admin', 'founder'] },
   { path: '/grow/partner-network/co-marketing', aliases: ['/comarketing'], cycle: 'grow', module: 'partner-network', label: 'Open co-marketing', door: true, roles: ['admin', 'founder'] },
   // D1180 (#3107) and D1194 (#3128): the capital workspace is gone. The model
   // forwards to Use of funds › Forecast, and the pipeline to Capital relationships.

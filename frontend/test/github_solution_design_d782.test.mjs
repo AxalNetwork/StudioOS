@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { installDocument } from './_contracts_dom.mjs';
 import SolutionDesignFromCode from '../src/pages/cycles/SolutionDesignFromCode.jsx';
+import { partElement } from './_buildParts.mjs'; // #5507: this provider's line only; the full list is build_parts_contract_5507's
 import { fromCodeView, githubHref, languagesText } from '../src/pages/cycles/designFromCode.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
@@ -107,9 +108,11 @@ test('the two calls go to the Worker\'s routes, and Solution design mounts the p
     ['/cycles/build/solution-design/proposals/7/accept?project=101', 'POST'],
     ['/cycles/build/solution-design/proposals/8/dismiss?project=101', 'POST'],
   ]);
-  // D1311: Build's parts live in buildParts.jsx, one line per connector.
-  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
-  assert.match(route, /\['github', \(data, ctx\) => <SolutionDesignFromCode part=\{data\?\.parts\?\.from_code\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector; read through its export (#5507).
+  const ctx = { projectId: 7, reload: () => {} }; const part = { state: 'ok' };
+  const el = partElement('solution-design', 'github', { parts: { from_code: part } }, ctx);
+  assert.equal(el.type, SolutionDesignFromCode);
+  assert.deepEqual(el.props, { part, projectId: 7, reload: ctx.reload });
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/cycle_build.ts', import.meta.url), 'utf8');
   for (const how of ['accept', 'dismiss']) assert.ok(worker.includes(`app.post('/solution-design/proposals/:id/${how}'`), how);
 });

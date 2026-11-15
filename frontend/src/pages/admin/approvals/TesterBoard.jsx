@@ -30,11 +30,12 @@ export const TESTER_READ_PAGES = 10;
 const FACTS = 'Who can apply: Founders, Investors, Advisors, Operating Partners, Explorers · Who decides: any Admin or Super Admin · Admins cannot apply';
 
 /** Every tester, a hundred a page, up to a thousand: what the tiles, chart, counts and table read. */
-export async function readAllTesters(client = approvalBoardsApi) {
+export async function readAllTesters(client = approvalBoardsApi, signal) {
   let rows = [];
   let reply = null;
   for (let page = 1; page <= TESTER_READ_PAGES; page += 1) {
-    reply = await client.testers({ page, pageSize: 100 });
+    signal?.throwIfAborted();
+    reply = await client.testers({ page, pageSize: 100, signal });
     rows = rows.concat(Array.isArray(reply?.rows) ? reply.rows : []);
     if (rows.length >= Number(reply?.matching || 0) || !(reply?.rows || []).length) break;
   }
@@ -311,8 +312,8 @@ export default function TesterBoard({ at }) {
   const b = BOARDS['product-testers'];
   const loc = useLocation();
   const navigate = useNavigate();
-  const all = useLoad(() => readAllTesters(), 'testers', { what: 'approvals:testers' });
-  const inProgram = useLoad(() => approvalBoardsApi.testers({ status: 'active', inProgramme: 'yes', pageSize: 1 }), 'testers-in-program', { what: 'approvals:testers:in-program' });
+  const all = useLoad((signal) => readAllTesters(approvalBoardsApi, signal), 'testers', { what: 'approvals:testers' });
+  const inProgram = useLoad((signal) => approvalBoardsApi.testers({ status: 'active', inProgramme: 'yes', pageSize: 1, signal }), 'testers-in-program', { what: 'approvals:testers:in-program' });
   const f = useTesterFilters();
   const [page, setPage] = useState(0);
   const [done, setDone] = useState(null);

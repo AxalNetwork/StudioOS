@@ -1,4 +1,5 @@
 // D5665: typed metadata-only Slack presentation. Untrusted GitHub labels never choose severity, destination or mention.
+import { workflowHashtag } from './workflow-channels.mjs';
 const roles = ['activity', 'prs', 'health', 'releases', 'security'];
 const classes = ['work', 'ci', 'delivery', 'security', 'unsupported', 'health'];
 const states = ['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', 'action_required', 'stale', 'startup_failure', 'queued', 'waiting', 'requested', 'in_progress', 'pending', 'open', 'closed', 'merged', 'approved', 'changes_requested', 'dismissed', 'commented', 'ready_for_review', 'synchronize', 'pushed', 'unknown', 'recovery'];
@@ -19,9 +20,11 @@ export function registryOf(input) {
   if (input?.schema !== 1 || input.reviewedBy !== 'guillaumelauzier' || !/^T[A-Z0-9]{2,30}$/.test(input.teamId || '') || !Number.isFinite(Date.parse(input.approvedAt)) || !Number.isSafeInteger(input.version) || input.version < 1) throw new Error('registry_unapproved');
   const channels = {};
   for (const [role, value] of Object.entries(input.channels || {})) {
-    if (!roles.includes(role) || !/^[CG][A-Z0-9]{2,30}$/.test(value.id || '') || typeof value.private !== 'boolean' || typeof value.enabled !== 'boolean' || !Number.isInteger(value.retentionDays) || value.retentionDays < 1 || value.retentionDays > 3650 || value.publisher !== 'internal-bot') throw new Error('registry_channel_invalid');
+    const hashtag = workflowHashtag(role);
+    if (!(roles.includes(role) || hashtag) || !/^[CG][A-Z0-9]{2,30}$/.test(value.id || '') || typeof value.private !== 'boolean' || typeof value.enabled !== 'boolean' || !Number.isInteger(value.retentionDays) || value.retentionDays < 1 || value.retentionDays > 3650 || value.publisher !== 'internal-bot') throw new Error('registry_channel_invalid');
     if (role === 'security' && !value.private) throw new Error('security_destination_public');
-    channels[role] = { ...value };
+    if (hashtag && !value.private) throw new Error('workflow_destination_public');
+    channels[role] = { ...value, hashtag };
   }
   if (new Set(Object.values(channels).map(c => c.id)).size !== Object.values(channels).length) throw new Error('duplicate_route_publisher');
   return { ...input, channels };

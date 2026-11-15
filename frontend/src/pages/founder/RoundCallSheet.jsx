@@ -181,12 +181,14 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
   const [matches,setMatches]=useState(null),[page,setPage]=useState(null),[editing,setEditing]=useState(null),[choosing,setChoosing]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[outcome,setOutcome]=useState(null),[note,setNote]=useState(null);
   const [dismissed,setDismissed]=useState(false),[acks,setAcks]=useState([]),[cleared,setCleared]=useState(false),[savedDraft,setSavedDraft]=useState(false);
+  const [wording,setWording]=useState(null);
+  const termsInput=useRef(null);
   const saved=useRef(null),touched=useRef(false),[matchRun,setMatchRun]=useState(0);
   useEffect(()=>{
     if(!context.data||!resume.data)return;
     const p=resume.data.page;
     const seeded=recordedRoundFields(context.data,p?p.call:resume.data.call||null);
-    setFields(seeded);
+    setFields(seeded);setWording(null);
     if(p){
       setUid(p.call.uid);setPage(p);saved.current=seeded;
       const at=resumeStep(p);setStep(at.step);setNote(at.reason);
@@ -203,11 +205,15 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
       e=>{reportError('round-calls:matches',e);if(alive)setMatches({error:e});});
     return()=>{alive=false;};
   },[step,uid,chosen,matchRun]);
-  function change(key,value){setFields(current=>{
-    const next={...current,[key]:value};
-    // A new instrument takes its own seeded terms where none is typed yet.
-    if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
-    return next;});}
+  function change(key,value){
+    if(fields[key]!==value&&(['amount','instrument','minimum','target'].includes(key)||(TERM_KEYS[fields.instrument]||[]).includes(key)))setWording(null);
+    setFields(current=>{
+      const next={...current,[key]:value};
+      // A new instrument takes its own seeded terms where none is typed yet.
+      if(key==='instrument'){const seed=termSeed(context.data,value);for(const k of ['cap','discount','pre_money'])if(!next[k])next[k]=seed[k];}
+      return next;
+    });
+  }
   async function run(action){setBusy(true);setError('');try{await action();}catch(e){reportError('round-calls:action',e);setError(e.code==='counsel_approval_required'?'Counsel has not approved the terms yet.':
       e.code==='nda_required'?'A signed NDA is required first.':e.code==='round_calls_disabled'?'Coming soon. Round calls are not enabled.':
       e.status>=500||!e.status?'The action could not be confirmed. Check the call before retrying.':e.message||'The action was refused. Check the recorded fields.');}finally{setBusy(false);}}
@@ -240,15 +246,30 @@ function RoundCallFlow({projectId,onClose,initialCall}) {
     const gap=firstMissingRow(fields);if(gap){setError('Complete the round name, amounts, instrument, terms and target close to save a draft.');return;}
     await run(async()=>{await persist(ROUND_KEYS);setSavedDraft(true);});
   }
+  async function draftTerms() {
+    const request={uid,projectId,loading:true};
+    setWording(request);
+    const finish=(answer)=>setWording(current=>current===request?{...request,loading:false,...answer}:current);
+    try {
+      const result=await roundCallsApi.termsDraft(uid,{
+        project_id:projectId, amount_cents:dollarsToCents(fields.amount), instrument:fields.instrument,
+        minimum_cheque_cents:dollarsToCents(fields.minimum), target_close:fields.target, ...termsBody(fields),
+      });
+      if(typeof result?.draft!=='string'||!result.draft.trim())throw new Error('No draft was returned.');
+      finish({text:result.draft});
+    } catch (e) {
+      finish({error:e.message||'Eadwyn could not draft these words. Try again.'});
+    }
+  }
   const on={change,next,send,saveDraft,
-    acceptTerms:text=>{setFields(f=>acceptPlainTerms(f,text));},dismissTerms:()=>setDismissed(true),
+    draftTerms, termsInput, acceptTerms:(text, edit)=>{setFields(f=>acceptPlainTerms(f,text));if(edit)termsInput.current?.focus?.();},dismissTerms:()=>setDismissed(true),
     ack:key=>setAcks(list=>list.includes(key)?list.filter(k=>k!==key):[...list,key]),back:()=>setStep(n=>Math.max(0,n-1)),goto:n=>setStep(n),edit:setEditing,choosing:()=>setChoosing(v=>!v),
     recheck:()=>run(async()=>setPage(await roundCallsApi.page(uid))),
     requestCounsel:()=>run(async()=>{await roundCallsApi.requestCounsel(uid,page.call.revision);setCleared(false);setPage(await roundCallsApi.page(uid));}),retryMatches:()=>setMatchRun(n=>n+1),
     includeMatches:value=>{touched.current=true;setIncludeMatches(value);},
     choose:id=>{touched.current=true;setChosen(values=>values.includes(id)?values.filter(value=>value!==id):[...values,id]);}};
   const ready=context.data&&resume.data;
-  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft}} on={on} onClose={onClose}/>;
+  if(ready&&!resume.data.open)return <RoundCallSheetView state={{step,fields,context:context.data,chosen,includeMatches,matches,page,busy,error,outcome,uid,editing,choosing,note,projectId,dismissed,acks,cleared,saved:savedDraft,wording:wording?.uid===uid&&wording?.projectId===projectId?wording:null}} on={on} onClose={onClose}/>;
   return <ActionSheet {...CALL_SHEET} onClose={onClose}><CallReadState read={context}><CallReadState read={resume}>{ready&&<OpenCallNotice call={resume.data.open}/>}</CallReadState></CallReadState></ActionSheet>;
 }
 
@@ -262,7 +283,7 @@ export function OpenCallNotice({call}) {
  * founder typed or a record filled: the amount, the instrument and its key
  * terms, the minimum cheque and the close. It adds no figure of its own, so a
  * money term is never proposed (#2431 `money_term`); null until every one of
- * those fields is set. Eadwyn's own wording waits for a Worker route (D1224 §3).
+ * those fields is set. This fallback uses only recorded fields (D1224 §3).
  */
 export function plainTerms(f) {
   const amount=wholeDollars(f.amount),minimum=wholeDollars(f.minimum),close=longDate(f.target),kind=INSTRUMENT_PHRASE[f.instrument];
@@ -308,7 +329,7 @@ function Field({label,id,chipText,help,children}) {
 }
 
 function RoundStep({s,on}) {
-  const f=s.fields,chips=seedChips(s.context,f),drafted=plainTerms(f);
+  const f=s.fields,chips=seedChips(s.context,f),fallback=plainTerms(f),drafted=s.wording?.text||fallback;
   return <>
     {s.note&&<p role="alert">{s.note}</p>}
     <Field label="Name" id="call-name"><input id="call-name" className={callInput} value={f.name} maxLength={200} onChange={e=>on.change('name',e.target.value)}/></Field>
@@ -324,13 +345,16 @@ function RoundStep({s,on}) {
     {!f.instrument&&<p className="text-xs text-axal-muted">Choose an instrument for its cap, discount or pre-money.</p>}
     <Field label="Minimum cheque" id="call-minimum" help={MINIMUM_HELP}><input id="call-minimum" className={callInput} inputMode="decimal" value={f.minimum} onChange={e=>on.change('minimum',e.target.value)}/></Field>
     <Field label="Target close" id="call-target" chipText={chips.target}><input id="call-target" type="date" className={callInput} value={f.target} onChange={e=>on.change('target',e.target.value)}/></Field>
-    <Field label="Terms in plain words" id="call-terms"><textarea id="call-terms" className={callInput} maxLength={20000} placeholder="Empty" value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></Field>
+    <Field label="Terms in plain words" id="call-terms"><textarea ref={on.termsInput} id="call-terms" className={callInput} maxLength={20000} placeholder="Empty" value={f.terms} onChange={e=>on.change('terms',e.target.value)}/></Field>
     {!f.terms.trim()&&drafted&&!s.dismissed&&<div className="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30" data-testid="call-drafted-terms">
-      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">Drafted from the fields above</p>
+      <p className="text-xs font-bold text-violet-700 dark:text-violet-300">{s.wording?.text?'Proposed by Eadwyn':'Drafted from the fields above'}</p>
+      {s.wording?.error&&<p role="status" className="text-sm">{s.wording.error}</p>}
       <p className="text-sm">{drafted}</p>
       <div className="flex flex-wrap gap-2"><button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted)}>Accept</button>
         <button type="button" className={callButton} onClick={()=>on.acceptTerms(drafted,true)}>Edit</button>
-        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div></div>}
+        {on.draftTerms&&!s.wording?.text&&<button type="button" className={callButton} disabled={s.busy||s.wording?.loading} onClick={on.draftTerms}>{s.wording?.loading?'Drafting…':'Ask Eadwyn to draft'}</button>}
+        <button type="button" className={callButton} onClick={on.dismissTerms}>Dismiss</button></div>
+      {on.draftTerms&&!s.wording?.text&&<p className="text-xs text-axal-muted">AI drafting uses your allowance when the model responds, even if the wording cannot be used.</p>}</div>}
     {s.saved&&<p role="status">Draft saved. <Link className="underline" to={callHref({uid:s.uid,state:'draft'})}>Its address</Link> opens it again.</p>}
   </>;
 }

@@ -13,18 +13,16 @@ const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'
 // D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
 const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
 const DealCompare = lazy(() => import('../../pages/investor/dealflow/DealFlow').then((m) => ({ default: m.DealCompare })));
-const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
 /**
- * ONE ZONE AT A TIME, AS EACH ARTBOARD LANDS.
+ * ONE FILE PER ZONE.
  *
  * `Pages · Investor Deals.dc.html` draws four artboards, ID1–ID4, and each is
  * a full composition: a four-up strip, an instrument with its own columns, the
- * note that carries the finding, and the AI band. The workspace below renders
- * all four zones as one card each, which is what shipped and what the artboards
- * are not. They are replaced one at a time rather than in one commit, so a zone
- * is either its artboard or the card that preceded it — never a half-built
- * page. `ZONES` is the registry; a slug that is not in it falls through to the
- * workspace.
+ * note that carries the finding, and the AI band. They replaced the old
+ * workspace's cards one at a time. ID1 is retired (D1243), and the other three
+ * are built, so every zone slug in the shell config is in `ZONES`. The
+ * fall-through to `InvestorDealsWorkspace` for a slug missing from it could no
+ * longer render, and is gone (#6152).
  */
 // D1243 (#3256): Pipeline (ID1) is retired; `/deals/pipeline` forwards to Deal flow's table.
 const ZONES = {
@@ -137,17 +135,16 @@ export default function InvestorDealsRoutes() {
           stacked on one page; the zones are now one line inside `DealFlow`,
           each linking to its route, and `DealsRoot` below says what else stays.
 
-          `embedded`: the shell above already draws the heading, the zone row and
-          the rail. Without it the workspace drew all three again inside them —
-          two h1s, two pill rows and two Worker AI rails on one page. */}
+          A zone route draws its own file; the root (and any path the shell
+          config does not give a zone) is Deal flow. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
         {isCompare
           ? <DealCompare ids={compareIds(location.search)} />
           : isRooms
           ? <DealRoomsPanel />
-          : isRoot
-          ? <DealsRoot search={location.search} />
-          : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
+          : Zone && !isRoot
+          ? <Zone />
+          : <DealsRoot search={location.search} />}
       </Suspense>
     </WorkspaceShell>
   );

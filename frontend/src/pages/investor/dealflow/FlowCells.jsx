@@ -7,25 +7,15 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
 import { SCORE_TITLES, THESIS_PATH, daysWord, fitCell, moneyText, scopeCell, stripScopes } from './flowModel';
+import { ScopeScore } from './ScopeScore';
+import { scopeLabel } from './dealCardModel';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
-const CONF_DOT = { High: 'bg-violet-600 dark:bg-violet-400', Medium: 'bg-violet-400 dark:bg-violet-500', Low: 'bg-violet-200 dark:bg-violet-800' };
 const FLOW_UNREADABLE = 'Your deal flow could not be read.';
 
-/** A scope's band and its confidence; `words` writes the confidence, else a dot carries it with its label. */
+/** A scope's band and its confidence; `words` writes the confidence, else a dot carries it. D5900: drawn by the shared `ScopeScore`. */
 export function ScopeCell({ scores, scope, words = true, testId }) {
-  const c = scopeCell(scores, scope);
-  if (c.kind !== 'scored') {
-    return <span className={`${MUTED} ${c.kind === 'locked' ? 'font-semibold' : ''}`} title={c.title || undefined} data-testid={testId} data-kind={c.kind}>{c.word}</span>;
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" title={c.title} data-testid={testId} data-kind="scored">
-      {c.word}
-      {c.confidence && (words
-        ? <span className="font-normal text-axal-muted dark:text-gray-400">· {c.confidence}</span>
-        : <span className={`inline-block h-1.5 w-1.5 rounded-full ${CONF_DOT[c.confidence] || CONF_DOT.Low}`} aria-label={`${c.confidence} confidence`} role="img" />)}
-    </span>
-  );
+  return <ScopeScore cell={scopeCell(scores, scope)} label={scopeLabel(scope)} words={words} testId={testId} />;
 }
 
 /** Fit to my thesis (D1239): its own number with confidence, "Set your thesis", or why there is none. */

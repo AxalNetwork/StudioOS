@@ -72,10 +72,14 @@ function jobs(lines) {
 // a job whose need failed is SKIPPED by default, and a skipped required check
 // reports as passed. Both aggregators use `if: always()` so their own steps can report failure.
 const AGGREGATOR = 'test:drift (full suite)';
+const GATE_NAME = "${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'test:drift (draft fast tier)' || 'test:drift (full suite)' }}";
+const DRAFT_SKIP = "github.event_name != 'merge_group' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)";
+const queueName = job => job.id === 'gate' && job.name === GATE_NAME ? AGGREGATOR : job.name;
 
 // The forms of job-level `if:` that skip a job under merge_group.
 const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name != 'merge_group'",
+  DRAFT_SKIP,
   "github.event_name == 'pull_request'",
   "github.event_name == 'push'",
   // D5398: the failure classifier runs only after a PR's suite failed; it is a pull_request-only job, so never in the queue.
@@ -89,7 +93,7 @@ test('every required and shadow check comes from a job in its workflow, which li
   for (const [check, file] of Object.entries({ ...REQUIRED, ...SHADOW })) {
     const lines = code(file);
     assert.ok(events(lines).includes('merge_group'), `${file} gives the required check "${check}" and must listen for merge_group, or every queued PR waits forever`);
-    const matches = FILES.flatMap((f) => jobs(code(f)).filter((j) => j.name === check).map((j) => ({ ...j, file: f })));
+    const matches = FILES.flatMap((f) => jobs(code(f)).filter((j) => queueName(j) === check).map((j) => ({ ...j, file: f })));
     assert.deepEqual(matches.map((j) => j.file), [file], `"${check}" is one job's name, in ${file}`);
     const [job] = matches;
     // A skipped job reports as passed, so a required check that skips in the
@@ -119,9 +123,9 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
     const all = jobs(code(f));
     // What the required checks wait on. Such a job feeds a required check, so
     // it must RUN in the queue; the others already ran on the pull request.
-    const fed = new Set(all.filter((j) => required.has(j.name)).flatMap((j) => j.needs));
+    const fed = new Set(all.filter((j) => required.has(queueName(j))).flatMap((j) => j.needs));
     for (const j of all) {
-      if (required.has(j.name)) continue;
+      if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
@@ -133,12 +137,12 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
 
 test('D4130: the full-suite check passes only when every part passed, and trusts a queue run only on a push to main', () => {
   const all = jobs(code('ci.yml'));
-  const gate = all.find((j) => j.name === AGGREGATOR);
+  const gate = all.find((j) => queueName(j) === AGGREGATOR);
   const body = gate.body.join('\n');
   assert.deepEqual(gate.needs, ['verified', 'plan', 'suite']);
   // The two ways to pass, and nothing else.
   assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
-  assert.match(body, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  assert.match(body, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]; then\n\s+if \[ "\$EVENT" = "pull_request" \] && \[ "\$DRAFT" = "true" \]; then\n\s+echo [^\n]+\n\s+else\n\s+echo [^\n]+\n\s+fi\n\s+exit 0\n\s+fi/);
   assert.match(body, /exit 0\n\s+fi\n\s+echo "::error::[^\n]+"\n\s+exit 1\s*$/, 'anything else fails');
   assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
   assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);

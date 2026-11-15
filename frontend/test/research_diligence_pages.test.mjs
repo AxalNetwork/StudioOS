@@ -113,9 +113,9 @@ test('an activity line never re-serves a name the gate withholds', () => {
   assert.deepEqual(activityLine({ action: 'open_room' }), { verb: 'Opened the room', what: null });
 });
 
-test('the pages are routed for admin and investor, and read through the grant-keyed methods', () => {
-  assert.match(app, /path="\/research\/diligence\/:grantUid" element=\{guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceRoom /);
-  assert.match(app, /path="\/research\/diligence\/:grantUid\/files\/:fileUid" element=\{guard\(labRoles\(\['admin', 'investor'\]\), <DiligenceFile /);
+test('the pages are routed for the investor alone (#6265), and read through the grant-keyed methods', () => {
+  assert.match(app, /path="\/research\/diligence\/:grantUid" element=\{adminToResearch\(guard\(\['investor'\], <DiligenceRoom /);
+  assert.match(app, /path="\/research\/diligence\/:grantUid\/files\/:fileUid" element=\{adminToResearch\(guard\(\['investor'\], <DiligenceFile /);
   assert.match(room, /api\.research\.diligenceRoom\(grantUid\)/);
   assert.match(file, /api\.research\.diligenceFile\(grantUid, fileUid\)/);
   // The download is the data room's own route, which re-checks grant and NDA.

@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deals v2 Deal Page Evidence · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.pgh{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.pgh h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.pgh p{font-size:13px;color:var(--mu);margin-top:3px}
+.pgh .ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.strip4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kc{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.kc .t{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);display:flex;justify-content:space-between;align-items:center;gap:6px}
+.kc .v{font:700 22px var(--mo);letter-spacing:-.02em;line-height:1.1}
+.kc .s{font-size:12.5px;color:var(--ink);line-height:1.45}
+.kc .s span{color:var(--mu)}
+.kc.inc{border-style:dashed;border-color:var(--amE)}
+.cat{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cat .hrow,.cat .row{display:grid;grid-template-columns:minmax(0,2.1fr) 1fr 1fr 1fr 1.1fr 1.1fr 74px;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--hair)}
+.cat .hrow{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);padding-top:8px;padding-bottom:8px}
+.cat .row:last-child{border-bottom:0}
+.cat .row b{font-size:13.5px;display:block}
+.cat .row small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.cat .grp td{}
+.cat .gh{padding:7px 16px;font:700 11px var(--mo);color:var(--ink);background:var(--card);border-bottom:1px solid var(--hair)}
+.dim5{font-size:12px;line-height:1.35;display:flex;flex-direction:column;gap:1px}
+.dim5 b{font-size:12.5px!important;font-weight:700;display:flex!important;align-items:center;gap:5px}
+.dim5 b i{width:8px;height:8px;border-radius:2px;display:inline-block;flex:none}
+.dot-ok{background:var(--pos)}.dot-pt{background:transparent;border:1.5px solid var(--amD)}.dot-no{background:transparent;border:1.5px dashed var(--hair2)}.dot-pr{background:transparent;border:1.5px dashed #a78bfa}.dot-pa{background:var(--mu)}
+.pcard2{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pcard2 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.pcard2 h3{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.pcard2 .cat2{font:600 11px var(--mo);color:var(--mu)}
+.pcard2 .lead{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.pcard2 dl{display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;font-size:12px;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2 dt{color:var(--mu)}
+.pcard2 dd{font-weight:600}
+.pcard2 .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px}
+.pcard2.custom{border-style:dashed}
+.att li{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.att li:first-child{border-top:0}
+.att li .w{font:500 11.5px var(--mo);color:var(--mu)}
+.att .ic2{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font:800 11px var(--sg)}
+.ic2.r{background:var(--negBg);color:var(--neg)}.ic2.a{background:var(--amBg);color:var(--amT)}.ic2.n{background:var(--raised);color:var(--mu)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:110px;padding-top:6px}
+.bars>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.bars i.z{background:var(--hair2)}
+.bars span{font:500 9.5px var(--mo);color:var(--mu)}
+.hbar{display:grid;grid-template-columns:140px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px;padding:4px 0}
+.hbar .tr{height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.hbar .tr i{display:block;height:100%;background:var(--amD)}
+.hbar b{font:700 12px var(--mo);text-align:right}
+.mods{display:flex;gap:8px;flex-wrap:wrap}
+.mods span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;border:1px solid var(--hair);background:var(--raised);font-size:12px;font-weight:600}
+.mods span.off{border-style:dashed;color:var(--mu);background:transparent}
+.spec{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.spec dt,.spec dd{padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.spec dt{color:var(--mu);font-weight:600}
+.lock{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--mo);color:var(--mu);padding:3px 8px;border:1px solid var(--hair);border-radius:6px;background:var(--raised)}
+
+.fah{display:flex;flex-direction:column;gap:10px}
+.fah .r1{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.fah h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.fah p{font-size:13.5px;color:var(--mu);margin-top:3px}
+.fah .r2{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scopec{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1.5px solid var(--ink);border-radius:9px;background:var(--card);font:700 13px var(--sg)}
+.scopec span{font-weight:500;color:var(--mu)}
+.role{font:600 11px var(--mo);color:var(--mu);padding:2px 8px;border:1px solid var(--hair);border-radius:999px}
+.ws6{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.ws6 a{padding:10px 14px 11px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ws6 a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ws6 a .n{font:700 10.5px var(--mo);margin-left:5px;padding:0 6px;border-radius:999px;background:var(--amBg);color:var(--amT);border:1px solid var(--amE)}
+.pos6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.pos6>div{padding:13px 16px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.pos6>div:last-child{border-right:0}
+.pos6 small{font-size:12px;color:var(--mu)}
+.pos6 b{font:700 22px var(--mo);letter-spacing:-.02em}
+.pos6 em{font-style:normal;font:500 11px var(--mo);color:var(--mu)}
+.fhr{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,2fr) auto;gap:16px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.fhr:first-child{border-top:0}
+.fhr b{font-size:14px}
+.fhr small{display:block;font-size:12px;color:var(--mu)}
+.fhr .m{font:600 13px var(--mo)}
+.fhr .q{font-size:12.5px;display:flex;gap:6px;flex-wrap:wrap}
+.att2 li{display:grid;grid-template-columns:110px minmax(0,1.6fr) minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair);font-size:13px}
+.att2 li:first-child{border-top:0}
+.att2 .f{font:600 11.5px var(--mo);color:var(--mu)}
+.att2 .amt{font:700 13px var(--mo);text-align:right}
+.tl li{display:grid;grid-template-columns:86px 120px minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.tl li:first-child{border-top:0}
+.tl .w{font:500 11.5px var(--mo);color:var(--mu)}
+.tl .amt{font:700 12.5px var(--mo);text-align:right}
+.money td.n,.money th.n{text-align:right;font-family:var(--mo)}
+.nrec{color:var(--mu);font-family:var(--sg)!important;font-style:italic;font-weight:500!important}
+.unr{color:var(--neg);font-weight:700!important;font-family:var(--sg)!important}
+.fx2{display:grid;grid-template-columns:200px minmax(0,1fr) 200px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx2 dt,.fx2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+.fx2 dt{color:var(--mu)}
+.fx2 dd{font-weight:600}
+.effect{display:grid;grid-template-columns:200px minmax(0,1fr);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+.effect dt,.effect dd{padding:9px 14px;border-bottom:1px solid var(--hair);font-size:13px}
+.effect dt{color:var(--mu);background:var(--raised)}
+.effect dd{font-weight:700;font-family:var(--mo)}
+.effect .hl{background:var(--amBg)}
+.flow5{display:flex;gap:0;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.flow5 span{flex:1;text-align:center;padding:7px 4px;border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.flow5 span+span{border-left:0}
+.flow5 span:first-child{border-radius:8px 0 0 8px}.flow5 span:last-child{border-radius:0 8px 8px 0}
+.flow5 span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.flow5 span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.rec2{display:grid;grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr);gap:10px;align-items:stretch}
+.rec2 .side{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;background:var(--card);font-size:12.5px;display:flex;flex-direction:column;gap:3px}
+.rec2 .side b.mo{font-size:15px}
+.rec2 .lnk{display:grid;place-items:center;font-size:18px;color:var(--mu)}
+.picker li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.picker li.dis{opacity:.75}
+.picker li.on{background:var(--lav)}
+.att2 .stt,.fhr .stt{justify-self:start}
+.mc>.stt{align-self:flex-start}
+
+.dsh{display:grid;grid-template-columns:212px minmax(0,1fr) 44px}
+.dsh.wr{grid-template-columns:212px minmax(0,1fr) 320px}
+.dsd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.dsd .co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg)}
+.dsd .co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.dsd .co span{margin-left:auto;color:var(--mu);font-weight:500}
+.dsd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.dsd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.dsd .sep{height:1px;background:var(--hair);margin:6px 14px}
+.zn{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.zn a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.zn a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.zn a span{font:600 10.5px var(--mo);color:var(--mu)}
+.fco{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;border:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--card);white-space:nowrap}
+.fco:before{content:"CO";color:var(--mu);font-weight:600;margin-right:2px}
+.fme{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 11px var(--sg);border:1px solid var(--lavE);white-space:nowrap}
+.fme:before{content:"";width:6px;height:6px;border-radius:999px;background:#7c3aed}
+.ftx{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:6px;border:1px solid var(--hair2);border-left:3px solid #0f766e;font:700 11px var(--sg);color:#0f766e;background:var(--card);white-space:nowrap}
+.ftx.w{border-left-color:var(--amD);color:var(--amT)}
+.ab{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);white-space:nowrap}
+.ab.anr{color:var(--mu);font-style:italic}
+.ab.anp{color:var(--mu);text-decoration:underline dashed;text-underline-offset:3px}
+.ab.ane{color:var(--mu);opacity:.8}
+.ab.aur{color:var(--neg)}
+.ab.alk{color:var(--ink)}
+.scs{display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden}
+.scs i{flex:1;background:var(--hair)}
+.scs i.h{background:#7c3aed}.scs i.m{background:#a78bfa}.scs i.l{background:#ddd6fe}.scs i.x{background:repeating-linear-gradient(45deg,var(--hair) 0 3px,transparent 3px 6px)}
+.sc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sc3>div{border:1px solid var(--hair);border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.sc3 small{font-size:10.5px;color:var(--mu)}
+.sc3 b{font:700 15px var(--mo)}
+.sc3 em{font-style:normal;font-size:10.5px;color:var(--mu)}
+.sc3 .dlt{color:var(--pos);font:700 10.5px var(--mo)}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.col{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.col h3{font-size:13px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+.col h3 span{font:500 11px var(--mo);color:var(--mu)}
+.dcard{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+.dcard .t{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.dc b.n{font-size:13.5px;font-weight:800}
+.dcard .mt{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dcard .ft{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:6px}
+.dcard.stale{border-color:var(--amE)}
+.dcard.pass{opacity:.7;border-style:dashed}
+.prog8{display:flex;gap:0}
+.prog8 span{flex:1;text-align:center;padding:7px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.prog8 span+span{border-left:0}
+.prog8 span:first-child{border-radius:8px 0 0 8px}.prog8 span:last-child{border-radius:0 8px 8px 0}
+.prog8 span.dn{color:var(--ink);background:var(--raised)}
+.prog8 span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.fin5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.fin5>div{padding:11px 14px;border-right:1px solid var(--hair)}
+.fin5>div:last-child{border-right:0}
+.fin5 small{display:block;font-size:11.5px;color:var(--mu)}
+.fin5 b{font:700 18px var(--mo)}
+.s11{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:4px}
+.s11>div{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.s11 i{display:block;width:100%;height:30px;border-radius:5px;background:var(--hair);position:relative}
+.s11 i b{position:absolute;inset:auto 0 0 0;border-radius:5px}
+.s11 small{font-size:10px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.s11 span{font:700 12px var(--mo)}
+.cmpb{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--hair)}
+.cmpb .br{height:12px;border-radius:3px}
+.cmpb .bw{display:flex;align-items:center;gap:6px}
+.stk{position:sticky;left:0;background:var(--card)}
+.dv{display:flex;justify-content:space-between;gap:10px}
+.sc3 em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc3 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsd .co{justify-content:flex-start;text-align:left}
+.rz li>.fco,.rz li>.fme,.rz li>.ftx,.rz li>.ab{justify-self:start}
+.dsd .co{background:var(--card);color:var(--ink)}
+.dsh.dpe-nr{grid-template-columns:212px minmax(0,1fr)}
+.dpe-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed var(--amD);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.dpe-ann{align-self:flex-start;display:inline-flex;padding:2px 8px;border:1px dashed var(--hair2);border-radius:6px;font:500 10.5px var(--mo);color:var(--mu);background:transparent}
+.dpe-none{display:inline-flex;align-items:center;gap:4px;font:600 11.5px var(--sg);color:var(--mu);padding:0 7px;border:1px solid var(--hair2);border-radius:999px;max-width:100%}
+.dpe-ref{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--ink);padding:0 7px;border:1.5px solid var(--ink);border-radius:5px;white-space:nowrap}
+.dpe-msk{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);color:var(--vt);padding:0 8px;border-radius:5px;background:var(--lav);border:1px solid var(--lavE);white-space:nowrap}
+.dpe-why{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.dpe-nrw{display:flex;flex-direction:column;gap:2px}
+.dpe-cs{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:6px;font:700 11px var(--sg);white-space:nowrap;border:1px solid var(--hair2);background:var(--card)}
+.dpe-cs i{font-style:normal;font-weight:800}
+.dpe-cs.b{color:var(--pos);border-color:var(--posE);background:var(--posBg)}
+.dpe-cs.f{color:var(--ink);border-style:dashed}
+.dpe-cs.m{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.dpe-cs.n{color:var(--mu);border-style:dotted}
+.dpe-str{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);white-space:nowrap}
+.dpe-str i{font-style:normal;color:var(--vi);font-size:8px;letter-spacing:1px}
+.dpe-shr{display:inline-flex;padding:0 7px;border-radius:999px;font:600 11px var(--sg);white-space:nowrap;border:1px solid var(--hair2)}
+.dpe-shr.a{color:var(--vt);border-color:var(--lavE);background:var(--lav)}
+.dpe-shr.s{color:var(--mu);border-style:dashed}
+.dpe-stl{display:inline-flex;align-items:center;gap:4px;margin-top:3px;padding:0 6px;border-radius:5px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font:700 10.5px var(--sg)}
+.dpe-stl i{font-style:normal}
+.dpe-bd{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);white-space:nowrap}
+.dpe-bd i{font-style:normal;font-size:13px}
+.dpe-bd.c i{color:var(--vi)}.dpe-bd.p i{color:var(--vi)}.dpe-bd.g i{color:var(--mu)}
+.dpe-bd.g{color:var(--mu)}
+.dpe-cl{display:flex;flex-direction:column;gap:10px}
+.dpe-cl.m{grid-template-columns:1fr;gap:8px;border:1px solid var(--hair);border-radius:12px;padding:12px;background:var(--card)}
+.dpe-big{display:block;font-size:19px;font-weight:800;letter-spacing:-.01em}
+.dpe-clc{display:flex;gap:10px;flex-wrap:wrap}
+.dpe-clc>span{display:inline-flex;align-items:center;gap:5px}
+.dpe-chip{min-height:30px!important}
+.dpe-it td{vertical-align:top;font-size:12px}
+.dpe-it th:nth-child(5){width:26%}
+.dpe-it tr.sel td{background:var(--lav)}
+.dpe-kn{font-weight:700;color:var(--ink)}
+.dpe-sum{color:var(--mu);line-height:1.4}
+.dpe-fig .raw{display:block;font-size:10.5px}
+.dpe-fig .dpe-why{max-width:140px}
+.dpe-ar h2 .raw{margin-left:6px}
+.dpe-arc{min-height:44px!important}
+.dpe-arc b{font-size:13px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.dpe-tsk{box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);color:var(--ink);text-align:left}
+.dpe-tsk b{display:block;font-size:13px}
+.dpe-tsk i{font-style:normal;color:var(--mu)}
+.dpe-prop{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--hair);padding-top:12px}
+.dpe-pfd{display:inline-flex;align-self:flex-start;padding:0 7px;border-radius:999px;border:1px dashed var(--vi);color:var(--vt);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;margin-right:4px}
+.dpe-acc{border-color:var(--vi)!important;color:var(--vt)!important}
+.dpe-mc dd{min-width:0}
+.dpe-dim{position:absolute;inset:0;background:var(--dim);z-index:6}
+.dpe-sht{position:absolute;top:0;right:0;bottom:0;width:520px;z-index:7;background:var(--card);border-left:1px solid var(--hair);box-shadow:-20px 0 50px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.dpe-sht .mdh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:20px 22px 14px;border-bottom:1px solid var(--hair)}
+.dpe-shb{padding:16px 22px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.dpe-hero b{font-size:28px}
+.dpe-hero .raw{font-size:11.5px}
+.dpe-ho{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px}
+.dpe-ho>div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--hair)}
+.dpe-ho>div:last-child{border-bottom:0}
+.dpe-ho b{display:block;font-size:13px}
+.dpe-ho small{display:block;font-size:11.5px;color:var(--mu);line-height:1.4}
+.dpe-mini{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:8px 10px;border:1px solid var(--hair);border-radius:8px;background:var(--raised)}
+.dpe-mtab{display:flex;gap:8px;width:100%;font-size:11px;color:var(--mu)}
+.dpe-mtab .on{color:var(--ink);font-weight:800;border-bottom:2px solid #7c3aed}
+.dpe-emp{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.s11 .dpe-on i{box-shadow:0 0 0 2px var(--vi)}
+.s11 .dpe-on small{color:var(--ink);font-weight:700}
+.dpe-ex{padding:0;gap:0;overflow:hidden;border-color:var(--lavE)}
+.dpe-exh{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 18px;background:var(--lav)}
+.dpe-tg{display:inline-flex;align-items:center;gap:8px;border:0;background:none;color:var(--ink);font:800 15px var(--sg);padding:0;min-height:32px}
+.dpe-tg i{font-style:normal;color:var(--vt)}
+.dpe-sr{display:grid;grid-template-columns:200px 150px 80px 100px 90px 70px minmax(0,1fr);gap:10px;align-items:center;padding:9px 18px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.dpe-sr.hd{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 18px}
+.dpe-sr.top{box-shadow:inset 3px 0 0 #7c3aed}
+.dpe-chg{color:var(--pos)}
+.dpe-exb{padding:16px 18px 18px;display:flex;flex-direction:column;gap:16px}
+.dpe-h3{font-size:14px;font-weight:800}
+.dpe-h3 .raw{margin-left:4px;font-weight:500}
+.dpe-pg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.dpe-pc{border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.dpe-pr{display:flex;flex-direction:column;gap:3px;margin-top:4px;font-size:12px}
+.dpe-pr .mo{font-size:11px;color:var(--mu)}
+.dpe-kvs dt,.dpe-kvs dd{font-size:12px}
+.dpe-bl{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px}
+.dpe-bl li{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.dpe-bl li:last-child{border-bottom:0}
+.dpe-bl.m li{grid-template-columns:minmax(0,1fr) auto;min-height:44px}
+.dpe-blk{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;align-items:flex-start;min-width:0}
+.dpe-tls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.dpe-tl{border:1px solid var(--hair);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.dpe-tl>b{font-size:22px}
+.dpe-slot{display:flex;flex-direction:column;gap:4px;margin-top:6px;padding-top:8px;border-top:1px dashed var(--hair2);font-size:11.5px;color:var(--mu);align-items:flex-start}
+.dpe-ser{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:6px;align-items:end;border-bottom:1px solid var(--hair2);padding-bottom:6px}
+.dpe-mo{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.dpe-mo>b{font-size:10.5px;color:var(--mu);white-space:nowrap}
+.dpe-bw{height:150px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.dpe-bw i{display:block;width:70%;background:var(--bar);border-radius:4px 4px 0 0}
+.dpe-bv{font-size:10.5px;font-weight:700}
+.dpe-gap{display:flex;align-items:center;justify-content:center;text-align:center;width:80%;height:100%;border:1.5px dashed var(--hair2);border-radius:6px;font:600 10.5px var(--sg);color:var(--mu);background:repeating-linear-gradient(45deg,transparent 0 6px,var(--raised) 6px 12px)}
+.dpe-lg{display:flex;gap:14px;font-size:11.5px;color:var(--mu)}
+.dpe-lg span{display:inline-flex;gap:6px;align-items:center}
+.dpe-lg i{width:12px;height:12px;border-radius:3px}
+.dpe-lg i.b{background:var(--bar)}.dpe-lg i.g{border:1.5px dashed var(--hair2)}
+.dpe-src{display:inline-flex;padding:0 7px;border-radius:5px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--ink);white-space:nowrap}
+.dpe-src.t{border-style:dashed;color:var(--mu)}
+.dpe-npr td{background:var(--raised)}
+.dpe-g4{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.dpe-np12{display:grid;grid-template-columns:repeat(12,1fr);gap:2px;width:100%;height:22px}
+.dpe-np12 i{border:1px dashed var(--hair2);border-radius:3px}
+.dpe-nt{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-top:1px solid var(--hair)}
+.dpe-nt p{font-size:13px;line-height:1.5}
+.dpe-tag{display:inline-flex;padding:0 6px;border-radius:5px;background:var(--lav);color:var(--vt);font-weight:700;letter-spacing:0;text-transform:none;font-family:var(--sg)}
+.dpe-own{display:flex;gap:4px}
+.btn.dpe-del{color:var(--neg)!important}
+.dpe-cmp{display:flex;flex-direction:column;gap:10px;border:1px solid var(--lavE);border-radius:12px;padding:12px 14px;background:var(--card)}
+.dpe-cmp .chips button.dpe-on{background:var(--lav);border-color:var(--vi);color:var(--vt)}
+.dpe-fsw{display:flex;flex-direction:column;gap:6px}
+.dpe-fsw label{display:flex;gap:8px;align-items:center;min-height:36px;padding:0 10px;border:1px solid var(--hair);border-radius:8px;font-size:12.5px}
+.dpe-menu{display:flex;flex-direction:column;gap:4px;align-self:flex-end;width:380px;padding:10px;border:1px solid var(--hair);border-radius:12px;background:var(--card);box-shadow:0 12px 30px rgba(0,0,0,.12)}
+.dpe-mi{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px;padding:4px 8px;border-radius:8px;font-size:13px;font-weight:700}
+.dpe-mi small{display:block;font-size:11px;font-weight:500;color:var(--mu)}
+.dpe-mi.off{color:var(--mu)}
+.dpe-mi:not(.off){background:var(--lav)}
+.dpe-toast{padding:10px 12px;border-radius:10px;background:var(--ink);color:var(--card);font-size:12.5px;font-weight:600}
+.dpe-nrl{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.dpe-nrl li{display:flex;flex-direction:column;gap:1px;font-size:12px}
+.dpe-zero{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--hair);border-radius:8px}
+.dpe-zero b{font-size:18px}
+.dpe-ptb{overflow:hidden;flex-wrap:nowrap}
+.dpe-ptb a{min-height:44px;white-space:nowrap}
+.dpe-psr{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--lav);border:1px solid var(--lavE);font-size:12.5px}
+.dpe-pml{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px}
+.dpe-pml li{display:grid;grid-template-columns:72px auto minmax(0,1fr);gap:8px;align-items:center;min-height:40px;padding:0 10px;border-bottom:1px solid var(--hair);font-size:12px}
+.dpe-pml li:last-child{border-bottom:0}
+.dpe-pml li.np{background:var(--raised)}
+.dpe-pml li .dpe-src{justify-self:end}
+.cv .tbl td,.cv .tbl td b{color:var(--ink)}
+.cv .tbl td .raw,.cv .tbl td .dpe-why,.cv .tbl td.dpe-sum{color:var(--mu)}
+.dpe-arc{min-height:40px!important}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "DPE20", "options": ["DPE19", "DPE20", "DPE21", "DPE22", "DPE23", "DPE24", "DPE25", "DPE26A", "DPE26B", "DPE27", "DPE27B", "DPE28", "DPE29", "DPE31A", "DPE31B", "DPE32", "DPE30A", "DPE30B", "DPE30C", "DPE30D"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'DPE20';
+    const dark = ['DPE31A', 'DPE31B'].indexOf(B) >= 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', bar: '#a78bfa' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1', bar: '#7c3aed' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const LK = '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12"><rect x="2.5" y="5.5" width="7" height="5" rx="1" fill="currentColor"/><path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+    const PT = (t) => '<span class="ptag" title="Needs backend work">◇ ' + (t || 'Backend required') + '</span>';
+    const FL = (t) => '<span class="dpe-flag" title="Pending the owner">⚑ ' + t + '</span>';
+    const AN = (t) => '<span class="dpe-ann">' + t + '</span>';
+
+    /* ---------- Deals v2 status families + absence (from de.js) ---------- */
+    const co = (s) => '<span class="fco" title="Company stage">' + s + '</span>';
+    const me = (s) => '<span class="fme" title="My investment process">' + s + '</span>';
+    const AB = { nr: ['anr', '— Not recorded'], np: ['anp', 'Not reported'], ne: ['ane', '◌ Not expected yet'], ur: ['aur', '! Unreadable'], lk: ['alk', LK + ' Locked'], ner: ['anr', '— Not enough recorded'] };
+    const ab = (k, extra) => '<span class="ab ' + AB[k][0] + '">' + AB[k][1] + (extra || '') + '</span>';
+    const none = (t) => '<span class="dpe-none">∅ ' + (t || 'None') + '</span>';
+    const refused = (t) => '<span class="dpe-ref">⊘ ' + (t || 'Refused') + '</span>';
+    const masked = (t) => '<span class="dpe-msk">' + LK + ' ' + (t || 'Opens after the NDA') + '</span>';
+    const why = (t) => '<span class="dpe-why">' + t + '</span>';
+    const nrw = (t) => '<div class="dpe-nrw">' + ab('nr') + why(t) + '</div>';
+
+    /* ---------- evidence vocabulary ---------- */
+    const CS = { b: ['b', '✓', 'Backed'], f: ['f', '✎', 'The founder’s own figure'], m: ['m', '≠', 'Does not match'], n: ['n', '○', 'Not backed'] };
+    const cs = (k) => '<span class="dpe-cs ' + CS[k][0] + '"><i aria-hidden="true">' + CS[k][1] + '</i>' + CS[k][2] + '</span>';
+    const STR = { measured: ['●●●', 'Measured'], pattern: ['●●○', 'Pattern'], anecdote: ['●○○', 'Anecdote'] };
+    const str = (k) => '<span class="dpe-str"><i aria-hidden="true">' + STR[k][0] + '</i>' + STR[k][1] + '</span>';
+    const shr = (k) => k === 'after' ? '<span class="dpe-shr a">After the NDA</span>' : '<span class="dpe-shr s">Summary only</span>';
+    const stale = () => '<span class="dpe-stl"><i aria-hidden="true">◷</i>Stale</span>';
+    const BAND = { c: ['c', '■', 'Covered'], p: ['p', '◧', 'Partial'], g: ['g', '□', 'Gap'] };
+    const band = (k) => '<span class="dpe-bd ' + BAND[k][0] + '"><i aria-hidden="true">' + BAND[k][1] + '</i>' + BAND[k][2] + '</span>';
+    const fig = (v, u) => '<b class="mo">' + v + '</b>' + (u ? ' <span class="raw">' + u + '</span>' : '');
+
+    /* ---------- shell (#3704 union sidebar), from de.js ---------- */
+    const NAV = ['Studio', 'Spin-Out Lab', 'Deals', 'Axal VC Fund', 'Fund', 'Trust', 'Network', 'Research'];
+    const collapsed = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about Deals" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const railWrap = (body) => '<aside class="sp eadx" aria-label="Eadwyn" style="width:320px!important;min-width:0;align-items:stretch;padding:0"><div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)"><span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;font-weight:800;font-size:12px">E</span><b style="font-size:13.5px">Eadwyn</b></span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;flex:1">' + body + '</div><div style="padding:12px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px"><div class="inp" style="min-width:0;min-height:38px">Ask about this deal…</div><button type="button" class="disc2" aria-expanded="false">Models and usage ▾</button></div></aside>';
+    const rail20 = () => railWrap('<button type="button" class="dpe-tsk" aria-expanded="false"><span><span class="eye">Deals tasks · DX-R</span><b>Five tasks for this deal</b></span><i aria-hidden="true">▾</i></button>'
+      + '<div class="dpe-prop"><span class="dpe-pfd">Proposed for DX-R</span><b style="font-size:13.5px">Summarise what is backed</b><dl class="kv2" style="grid-template-columns:76px minmax(0,1fr)"><dt>Sources</dt><dd>8 shared claims · 26 items read</dd><dt>Model</dt><dd>Recommended <button type="button" class="lk">Change</button></dd><dt>Estimate</dt><dd class="mo">≈ $0.01</dd></dl></div>'
+      + '<div class="cs2"><span class="eye">Proposal · not saved</span><p style="font-size:12.5px;line-height:1.55">5 of 8 shared claims are backed. MRR of $42K for Oct 2026 and the three paid pilots each have recorded items behind them. 12% monthly growth is the founder’s own figure, the waitlist of 40 does not match the recorded demand signals, and 14 months of runway is not backed.</p><span class="raw">Sources: claims 1–8 · KPI snapshot 31 Oct 2026 · revenue receipt 30 Oct 2026 · demand signal 12 Sep 2026 · model assumption 20 Jul 2026</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn bsm dpe-acc">Accept into Notes</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div></div>'
+      + '<p class="foot">Eadwyn drafts and explains. It never decides, and nothing is saved until you accept it.</p>');
+    const shell = (body, o) => '<div class="dsh' + (o.rail ? ' wr' : '') + (o.norail ? ' dpe-nr' : '') + '" style="min-height:' + (o.h || 900) + 'px">'
+      + '<aside class="dsd"><div class="lg" style="padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="co" aria-label="Company or project: Northwind Ventures"><i aria-hidden="true"></i>Northwind Ventures<span>▾</span></button><nav aria-label="Workspace">' + J(NAV.map(t => (t === 'Trust' ? '<div class="sep"></div>' : '') + '<a href="#"' + (t === 'Deals' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">' + (o.staff ? 'OP' : 'NA') + '</button></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (o.norail ? '' : o.rail ? o.rail : collapsed) + (o.overlay || '') + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';box-sizing:border-box;width:' + (w || 1400) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+    const TABS = ['Overview', 'Scorecard', 'Evidence', 'Diligence', 'Data room', 'Terms', 'Investment', 'Activity'];
+    const FIN = [['Round', '$1.5M'], ['Instrument', 'SAFE'], ['Committed', '$620K'], ['Minimum', '$100K'], ['Closes', '20 Dec 2026']];
+    const dealHead = (tab, o) => {
+      o = o || {};
+      const stage = o.stage || 'Diligence · Step 3 of 8';
+      const ctl = o.ctl != null ? o.ctl : '<button type="button" class="btn">Pass</button><button type="button" class="btn">Continue diligence</button>';
+      return '<a class="btn t bsm" href="#" style="align-self:flex-start;padding:0">‹ Back to Deals</a><header class="pgh" style="align-items:flex-start"><div><div style="display:flex;gap:10px;align-items:center"><h1 style="font-size:28px">Acme Robotics</h1>' + co('Raise') + '<a href="#" class="ib" aria-label="Company website" style="width:28px;height:28px">↗</a></div><p>Robotics · Lisbon</p><div style="margin-top:8px">' + (o.staff ? '<span class="pl">Staff view · Operating Partner</span>' : me(stage)) + '</div></div><div class="ctl">' + ctl + '</div></header>'
+        + '<div class="fin5">' + J(FIN.map(f => '<div><small>' + f[0] + '</small><b>' + f[1] + '</b></div>')) + '</div>'
+        + '<nav class="ptabs" aria-label="Deal">' + J(TABS.map(t => '<a href="#"' + (t === tab ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    };
+
+    /* ---------- DX17 · Evidence data (one fictional venture, consistent across boards) ---------- */
+    const COV = [
+      ['Investor narrative and Pitch deck', 'KPI snapshot', 'Recorded', 4, '31 Oct 2026'],
+      ['Investor narrative and Pitch deck', 'Demand signal', 'Recorded', 3, '12 Sep 2026'],
+      ['Investor narrative and Pitch deck', 'Pain theme', 'Recorded', 2, '2 Jul 2026'],
+      ['Fundraising readiness', 'Revenue receipt', 'Recorded', 6, '30 Oct 2026'],
+      ['Fundraising readiness', 'Founder contributions', 'Connector', 2, '10 Nov 2026'],
+      ['Fundraising readiness', 'Vesting schedule', 'Recorded', 2, '14 Mar 2025'],
+      ['Data room', 'Letter of intent file', 'Document', 1, '18 Aug 2026'],
+      ['Legal', 'Signed document', 'Signed', 2, '2 Jun 2026'],
+      ['Capital model', 'Model assumption', 'Typed', 3, '20 Jul 2026'],
+      ['Capital relationships', 'Round-call response', 'Recorded', 1, '3 Nov 2026']
+    ];
+    const CLAIMS = [
+      ['Pitch deck', 'MRR of $42K, Oct 2026', 'b', '12 Nov 2026', 'KPI snapshot · Revenue receipt'],
+      ['Pitch deck', 'Three paid pilots', 'b', '12 Nov 2026', 'Demand signal · Letter of intent file'],
+      ['Investor narrative', 'Founders vest over four years', 'b', '12 Nov 2026', 'Vesting schedule'],
+      ['Investor narrative', 'Picking cost is the customer’s main pain', 'b', '10 Nov 2026', 'Demand signal'],
+      ['One-pager', 'Company formed, founder equity signed', 'b', '10 Nov 2026', 'Signed document'],
+      ['Pitch deck', '12% monthly growth', 'f', '12 Nov 2026', 'Model assumption'],
+      ['Pitch deck', '40 warehouses on the waitlist', 'm', '12 Nov 2026', 'Demand signal'],
+      ['One-pager', '14 months of runway', 'n', 'Not checked yet', 'Model assumption']
+    ];
+    // area, count shown, rows: [kind, source, provider, strength, observed, stale, summary, figure-html, sharing]
+    const AREAS = [
+      ['Investor narrative and Pitch deck', 7, [
+        ['KPI snapshot', 'Recorded', 'Stripe', 'measured', '31 Oct 2026', false, 'A dated KPI value is recorded.', fig('$42,000', 'USD · MRR, Oct 2026'), 'after'],
+        ['KPI snapshot', 'Recorded', 'Stripe', 'measured', '31 Oct 2026', false, 'A dated KPI value is recorded.', fig('3', 'paying customers, Oct 2026'), 'after'],
+        ['Demand signal', 'Recorded', '', 'measured', '12 Sep 2026', false, 'A confirmed demand signal is recorded.', fig('3', 'paid pilots'), 'after']]],
+      ['Fundraising readiness', 10, [
+        ['Revenue receipt', 'Recorded', '', 'measured', '30 Oct 2026', false, 'A revenue receipt is recorded.', fig('$14,000', 'USD · one receipt'), 'after'],
+        ['Founder contributions', 'Connector', 'GitHub', 'measured', '10 Nov 2026', false, 'Contributions over the recorded ninety-day window are counted.', fig('412', 'contributions, 90 days'), 'after'],
+        ['Vesting schedule', 'Recorded', '', 'measured', '14 Mar 2025', true, 'A vesting schedule is recorded.', why('No figure is recorded for this item.'), 'after']]],
+      ['Capital model', 3, [
+        ['Model assumption', 'Typed', '', 'anecdote', '20 Jul 2026', true, 'A saved model assumption is recorded; it is modelled, not an actual.', fig('12%', 'monthly growth, modelled'), 'after']]],
+      ['Data room', 3, []], ['Legal', 2, []], ['Capital relationships', 1, []]
+    ];
+    const claimLine = () => '<div class="dpe-cl" role="group" aria-label="Claims summary"><div class="ch"><div><span class="eye">Claims the founder shared</span><b class="dpe-big">5 of 8 shared claims are backed</b></div><a class="btn t bsm" href="#">See the 8 claims ›</a></div><div class="dpe-clc">' + J([['b', 5], ['f', 1], ['m', 1], ['n', 1]].map(x => '<span>' + cs(x[0]) + '<b class="mo">' + x[1] + '</b></span>')) + '</div></div>';
+    const filters = () => '<div class="tools" style="justify-content:space-between"><div class="tools"><button type="button" class="dd">Area: All 6 ▾</button><button type="button" class="dd">Source: All ▾</button><div class="chips" role="group" aria-label="Claim state">' + J(['b', 'f', 'm', 'n'].map(k => '<button type="button" aria-pressed="false" class="dpe-chip">' + CS[k][1] + ' ' + CS[k][2] + '</button>')) + '</div></div><button type="button" class="dd">Sort: Checked, newest ▾</button></div>';
+    const partial = () => '<div class="nt a" role="status"><span class="ic" aria-hidden="true">◑</span><div><b>Some items could not be read. The rest are shown.</b><div class="mu" style="font-size:12px">26 items shown. This is a partial read, not the full count.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>';
+    const itemTable = (rows, sel) => '<table class="tbl dpe-it"><thead><tr><th>Kind</th><th>Source</th><th>Strength</th><th>Observed</th><th>Summary</th><th>Figure</th><th>Shared</th><th><span class="sr">Open</span></th></tr></thead><tbody>'
+      + J(rows.map((r, i) => '<tr' + (sel && i === 0 ? ' class="sel"' : '') + '><td><a href="#" class="dpe-kn">' + r[0] + '</a></td><td>' + r[1] + (r[2] ? '<div class="raw">' + r[2] + '</div>' : '') + '</td><td>' + str(r[3]) + '</td><td><span class="mo" style="font-size:11.5px">' + r[4] + '</span>' + (r[5] ? '<div>' + stale() + '</div>' : '') + '</td><td class="dpe-sum">' + r[6] + '</td><td class="dpe-fig">' + r[7] + '</td><td>' + shr(r[8]) + '</td><td><button type="button" class="ib" aria-label="Open ' + r[0] + '" style="width:28px;height:28px">›</button></td></tr>')) + '</tbody></table>';
+    const areaBlock = (a, sel) => a[2].length
+      ? '<section class="cd dpe-ar" aria-label="' + a[0] + '"><div class="ch"><h2 style="font-size:14px">' + a[0] + ' <span class="raw">' + a[1] + ' items</span></h2></div>' + itemTable(a[2], sel) + (a[1] > a[2].length ? '<button type="button" class="btn t bsm" style="align-self:flex-start">Show ' + (a[1] - a[2].length) + ' more in this area</button>' : '') + '</section>'
+      : '<button type="button" class="disc dpe-arc" aria-expanded="false"><b>' + a[0] + ' <span class="raw">' + a[1] + ' item' + (a[1] > 1 ? 's' : '') + '</span></b><i aria-hidden="true">▸</i></button>';
+    const ev20 = () => dealHead('Evidence') + partial() + '<section class="cd" style="gap:12px">' + claimLine() + filters() + '</section>'
+      + areaBlock(AREAS[0], true) + areaBlock(AREAS[1]) + areaBlock(AREAS[2]) + '<section class="cd" style="gap:0;padding:4px 18px">' + areaBlock(AREAS[3]) + areaBlock(AREAS[4]) + areaBlock(AREAS[5]) + '</section>'
+      + '<p class="foot">Figures appear only for items shared after the NDA. Each item opens with its full facts and the claims it backs.</p>';
+
+    /* DE19 · before the NDA */
+    const covTable = () => '<table class="tbl"><thead><tr><th>Area</th><th>Kind</th><th>Source</th><th class="n">Items</th><th>Newest</th></tr></thead><tbody>' + J(COV.map(c => '<tr><td>' + c[0] + '</td><td><b>' + c[1] + '</b></td><td>' + c[2] + '</td><td class="n mo">' + c[3] + '</td><td class="mo">' + c[4] + '</td></tr>')) + '</tbody><tfoot><tr><td colspan="3"><b>10 groups</b></td><td class="n mo"><b>26</b></td><td class="raw">counts only</td></tr></tfoot></table>';
+    const maskCard = (o) => '<section class="cd dpe-mc" aria-label="Acme Robotics, masked"><div class="ch"><span class="eye">What you can see now</span>' + masked('Masked') + '</div><dl class="kv2" style="grid-template-columns:88px minmax(0,1fr)"><dt>Name</dt><dd>Acme Robotics</dd><dt>Sector</dt><dd>Robotics</dd><dt>Stage</dt><dd>' + co('Raise') + '</dd><dt>Headline</dt><dd style="font-weight:500">Warehouse picking robots at a third of incumbent cost.</dd></dl>' + ((o && o.line) || '<p class="foot">Figures, files and quotes open once the NDA is signed.</p>') + '</section>';
+    const ev19 = () => dealHead('Evidence', { stage: 'Reviewing · Step 2 of 8', ctl: '<button type="button" class="btn">Pass</button>' })
+      + '<div class="g"><section class="cd" style="grid-column:span 8"><div class="ch"><div><span class="eye">Before the NDA · counts only</span><h2 style="font-size:17px">Evidence the founder has shared</h2></div></div><div class="nt"><span class="ic" aria-hidden="true">' + LK + '</span><div><b>Figures, files and quotes open once the NDA is signed.</b><div class="mu" style="font-size:12px">Until then you see how much is shared in each area, and how recent it is.</div></div></div>' + covTable() + '<p class="foot">Files the data room opens only after the NDA are not counted here yet.</p><div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn p">Sign the NDA</button><span class="raw">Opens the NDA flow (Data room, DE10 B and C)</span></div></section>'
+      + '<div style="grid-column:span 4;display:flex;flex-direction:column;gap:16px">' + maskCard() + '<section class="cd" style="gap:6px"><span class="eye">After the NDA</span><p style="font-size:12.5px">Each item with its source, strength and date; figures where the founder shared them; and which claims they back.</p></section></div></div>';
+
+    /* DE21 · one item open */
+    const sheet21 = () => '<div class="dpe-dim" aria-hidden="true"></div><aside class="dpe-sht" role="dialog" aria-modal="true" aria-labelledby="it1"><div class="mdh"><div><span class="eye">Investor narrative and Pitch deck · item 1 of 7</span><h2 id="it1" style="font-size:18px">KPI snapshot · MRR, Oct 2026</h2></div><button type="button" class="ib" aria-label="Close and return to the list">✕</button></div>'
+      + '<div class="dpe-shb"><div class="dpe-hero">' + fig('$42,000', 'USD · MRR, Oct 2026') + '</div><dl class="kv2" style="grid-template-columns:110px minmax(0,1fr)"><dt>Area</dt><dd>Investor narrative and Pitch deck</dd><dt>Kind</dt><dd>KPI snapshot</dd><dt>Source</dt><dd>Recorded</dd><dt>Provider</dt><dd>Stripe</dd><dt>Strength</dt><dd>' + str('measured') + '</dd><dt>Observed</dt><dd class="mo">31 Oct 2026 · current</dd><dt>Shared</dt><dd>' + shr('after') + '</dd><dt>Summary</dt><dd style="font-weight:500">A dated KPI value is recorded.</dd><dt>File</dt><dd>' + ab('nr') + ' ' + PT('Item → data-room file · #6163') + '</dd></dl>'
+      + '<span class="eye">Claims it backs</span><ul class="rz">' + '<li><span><b>MRR of $42K, Oct 2026</b><div class="raw">Pitch deck · checked 12 Nov 2026 · with Revenue receipt</div></span>' + cs('b') + '</li></ul>'
+      + '<span class="eye">Next from this item</span><div class="dpe-ho">'
+      + '<div><span><b>Open the data room</b><small>The Data room tab. It cannot yet jump to this item’s own file.</small></span><button type="button" class="btn bsm">Data room</button></div>'
+      + '<div><span><b>Send a request to the founder</b><small>Opens Diligence, in your case on this deal. With no case yet, you open one there.</small></span><button type="button" class="btn bsm">Diligence</button></div>'
+      + '<div><span><b>Add a firm note</b><small>Prefilled with “Re: KPI snapshot · MRR, Oct 2026”. Only Northwind Ventures sees it.</small></span><button type="button" class="btn bsm">Add a note</button></div>'
+      + '<div><span><b>Go to the scorecard scope</b><small>Traction, on the Scorecard tab.</small></span><button type="button" class="btn bsm">Traction scope</button></div>'
+      + '</div></div></aside>';
+
+    /* DE22 · evidence states */
+    const box = (t, inner, span) => '<section class="cd" style="gap:8px' + (span ? ';grid-column:span ' + span : '') + '"><div class="ch"><h2 style="font-size:13.5px">' + t + '</h2></div>' + inner + '</section>';
+    const miniHead = () => '<div class="dpe-mini"><b>Acme Robotics</b> ' + co('Raise') + '<span class="raw">Round $1.5M · SAFE · Committed $620K · Closes 20 Dec 2026</span><nav class="dpe-mtab">' + J(TABS.map(t => '<span' + (t === 'Evidence' ? ' class="on"' : '') + '>' + t + '</span>')) + '</nav></div>';
+    const ev22 = () => crop('<span class="eye">DE22 · Evidence states · each has its own words and shape</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">'
+      + box('A · Empty', '<div class="dpe-emp">' + none('No shared evidence') + '<p style="font-size:13px"><b>The founder has not shared any evidence yet.</b></p><p class="mu" style="font-size:12px">Nothing you do here fills it. You can ask the founder from Diligence.</p><button type="button" class="btn bsm" style="align-self:flex-start">Send a request to the founder</button></div>')
+      + box('B · Unreadable', miniHead() + '<div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The shared evidence could not be read.</b><div>That is not the same as none being shared.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div><p class="foot">The header, the figures strip and the other tabs keep working.</p>')
+      + box('C · Partial', partial() + '<p class="foot">The banner sits above the claims line. Rows that were read are shown as normal; nothing is drawn as 0 for the rows that were not.</p>')
+      + box('D · Staff view', miniHead() + '<div class="nt"><span class="ic" aria-hidden="true">⊘</span><div>' + refused() + '<p style="margin-top:4px"><b>This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.</b></p><p class="mu" style="font-size:12px">An Admin or Operating Partner without an investor licence.</p></div></div>' + PT('Audited staff read · #6163'), 2)
+      + box('E · Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="sk" style="height:14px;width:55%"></span><span class="sk" style="height:34px;width:100%"></span><span class="sk" style="height:12px;width:100%"></span><span class="sk" style="height:12px;width:92%"></span><span class="sk" style="height:12px;width:80%"></span><span class="raw">Reading the shared evidence… header and tabs are already usable</span></div>')
+      + '</div>', 1400);
+
+    /* ---------- DX18 · Scorecard scopes with Team, Market, Traction ---------- */
+    const S11 = [['Team', 78, 'h'], ['Market', 71, 'h'], ['PMF', 63, 'm'], ['Technical', 70, 'h'], ['Traction', 55, 'm'], ['Financial', 46, 'l'], ['Risk', 61, 'm'], ['Geographic', 72, 'h'], ['Political & reg.', 'ne', ''], ['Governance', 66, 'm'], ['Legal & IP', 'nr', '']];
+    const s11 = (open, empty) => '<div class="s11" role="list" aria-label="Scorecard, 11 scopes">' + J(S11.map(s0 => empty ? [s0[0], s0[1] === 'ne' ? 'ne' : 'nr', ''] : s0).map(s => '<div role="listitem" class="' + (open.indexOf(s[0]) >= 0 ? 'dpe-on' : '') + '" aria-label="' + s[0] + (typeof s[1] === 'number' ? ' ' + s[1] : s[1] === 'nr' ? ' not enough recorded' : ' not expected yet') + '"><i>' + (typeof s[1] === 'number' ? '<b style="height:' + s[1] * 0.3 + 'px;background:' + ({ h: '#7c3aed', m: '#a78bfa', l: '#ddd6fe' })[s[2]] + '"></b>' : '') + '</i><span>' + (typeof s[1] === 'number' ? s[1] : '—') + '</span><small>' + s[0] + '</small></div>')) + '</div>';
+    const SR = {
+      Team: [78, 'Strong', 'High', '9 of 10', '▲4', 'Founder CVs, references'],
+      Market: [71, 'Strong', 'Medium', '6 of 9', '—', 'Market sources, company markets'],
+      PMF: [63, 'Fair', 'Low', '4 of 8', '—', 'Pilots, interviews'],
+      Geographic: [72, 'Strong', 'Medium', '5 of 7', '—', 'Company markets'],
+      'Political & regulatory': ['ne', '—', '—', '—', '—', 'Applies from Grow'],
+      Traction: [55, 'Fair', 'Medium', '5 of 8', '▲2', 'Monthly updates, KPI snapshots'],
+      Financial: [46, 'Weak', 'Low', '3 of 8', '—', 'Financial model only']
+    };
+    const scoreCell = (v) => typeof v === 'number' ? '<b class="mo">' + v + '</b>' : ab(v === 'nr' ? 'ner' : v);
+    const srow = (n, top) => { const r = SR[n]; return '<div class="dpe-sr' + (top ? ' top' : '') + '"><b>' + n + '</b><span>' + scoreCell(r[0]) + '</span><span>' + r[1] + '</span><span>' + r[2] + '</span><span class="mo">' + r[3] + '</span><span class="mo' + (r[4].charAt(0) === '▲' ? ' dpe-chg' : '') + '">' + r[4] + '</span><span>' + r[5] + '</span></div>'; };
+    const srHead = () => '<div class="dpe-sr hd"><span>Scope</span><span>Score</span><span>Band</span><span>Confidence</span><span>Coverage</span><span>Change</span><span>Evidence</span></div>';
+    const scopeHead = (title, rows, note) => '<div class="dpe-exh"><button type="button" class="dpe-tg" aria-expanded="true"><i aria-hidden="true">▾</i>' + title + '</button>' + (note || '') + '</div>' + srHead() + J(rows.map((n, i) => srow(n, i === 0)));
+    const others = (skip) => '<section class="cd" style="gap:0;padding:4px 18px"><span class="eye" style="padding:10px 0 4px">Other scopes</span>' + J([['Team', 'Team · 78 · Strong'], ['Market', 'Market, PMF, Geographic, Political and regulatory · 71 · 63 · 72 · ◌'], ['Technical', 'Technical · 70'], ['Traction', 'Traction and Financial · 55 · 46'], ['Risk', 'Risk · 61'], ['Governance', 'Governance · 66'], ['Legal', 'Legal & IP · — Not enough recorded']].filter(x => skip.indexOf(x[0]) < 0).map(x => '<button type="button" class="disc dpe-arc" aria-expanded="false"><b>' + x[1] + '</b><i aria-hidden="true">▸</i></button>')) + '</section>';
+    const strip11 = (open, empty) => '<section class="cd"><div class="ch"><h2>Eleven scopes · no overall score</h2><span class="raw">' + (empty ? 'Every scope: — Not enough recorded, except ◌ Not expected yet' : 'Each scope opens what it is scored on') + '</span></div>' + s11(open, empty) + '</section>';
+
+    /* DE23 · Team */
+    const PEOPLE = [
+      ['Founder A', 'Founder · CEO', [['Head of automation', 'Warehouse Co', '2018–2024'], ['Operations engineer', 'Freight Co', '2014–2018']], 'Builder'],
+      ['Founder B', 'Founder · CTO', [['Robotics lead', 'Lab Co', '2016–2024']], 'The Architect'],
+      ['Member C', 'Head of operations', [], null]
+    ];
+    const person = (p) => '<article class="dpe-pc"><div class="ch"><div><b style="font-size:14px">' + p[0] + '</b><div class="raw">' + p[1] + '</div></div>' + (p[3] ? '<span class="pl">' + p[3] + '</span>' : '<span class="dpe-why">No archetype published</span>') + '</div>'
+      + '<div><span class="eye">Prior roles</span>' + (p[2].length ? '<ul class="dpe-pr">' + J(p[2].map(r => '<li><b>' + r[0] + '</b>, ' + r[1] + ' <span class="mo">' + r[2] + '</span></li>')) + '</ul>' : '<div>' + none('No prior roles published') + '</div>') + '</div>'
+      + '<dl class="kv2 dpe-kvs" style="grid-template-columns:118px minmax(0,1fr)"><dt>Full-time since</dt><dd>' + ab('nr') + '</dd><dt>Founder–market fit</dt><dd>' + ab('nr') + '<div>' + why('No published evidence recorded') + '</div></dd></dl><a class="btn bsm" href="#" style="align-self:flex-start">Open profile</a></article>';
+    const AXES = [['Product', 'c'], ['Engineering', 'c'], ['Design', 'g'], ['GTM / Sales', 'p'], ['Marketing / Brand', 'g'], ['Finance / Ops', 'p'], ['Legal / Compliance', null], ['Capital / Network', 'p']];
+    const bands = () => '<ul class="dpe-bl">' + J(AXES.map(a => '<li><span>' + a[0] + '</span>' + (a[1] ? band(a[1]) : '<span>' + ab('nr') + why('Not recorded for at least two published team members') + '</span>') + '</li>')) + '</ul>';
+    const team = () => dealHead('Scorecard') + AN('Old address /deals/:id/team lands here: Scorecard, scrolled to Team') + strip11(['Team'])
+      + '<section class="cd dpe-ex">' + scopeHead('Team', ['Team'], FL('Placement B pending the owner · #6163'))
+      + '<div class="dpe-exb"><div class="ch"><h3 class="dpe-h3">People, as they published themselves</h3><span class="raw">3 published · anyone with a private profile is not listed</span></div><div class="dpe-pg">' + J(PEOPLE.map(person)) + '</div>'
+      + '<div class="g" style="gap:16px"><div style="grid-column:span 7;display:flex;flex-direction:column;gap:8px"><h3 class="dpe-h3">Team coverage by skill area</h3><p class="foot">A band for the team as a whole, never a person’s number. Shown where at least two published members contribute.</p>' + bands() + '</div>'
+      + '<div style="grid-column:span 5;display:flex;flex-direction:column;gap:12px"><div class="dpe-blk"><h3 class="dpe-h3">Team values band</h3>' + nrw('No consent to share a team values band') + '</div><div class="dpe-blk"><h3 class="dpe-h3">Advisors</h3><p class="mu" style="font-size:12.5px">How many, and their roles.</p>' + PT('Advisors in the team read · #6163') + '</div><div class="dpe-blk"><h3 class="dpe-h3">Eadwyn</h3><p style="font-size:12.5px"><span class="dpe-pfd">Proposed for DX-R</span> What is the team missing? Drafts gaps from the coverage bands only, with sources; accept to Notes, edit or discard.</p></div></div></div></div></section>'
+      + others(['Team']) + '<p class="foot">Next: Diligence, the next step on this deal.</p>';
+
+    /* DE24 · Market */
+    const tile = (k, v, d) => '<div class="dpe-tl"><span class="eye">' + k + '</span>' + (v ? '<b class="mo">' + v + '</b>' : ab('nr')) + '<span class="raw">USD, typed by the founder</span>' + why(v ? 'No source recorded for this figure' : 'Not recorded') + '<div class="dpe-slot"><span>As of · how it was worked out</span>' + PT('Source, date, method · #6163') + '</div></div>';
+    const MKT = [
+      ['Portugal', 'Served', 'Enter', '3 Mar 2026', [['7', 'Interviews'], ['6', 'Typed'], ['5', 'CRM'], ['8', 'Typed']]],
+      ['Spain', 'Entering', 'Enter', '14 Sep 2026', [['6', 'Interviews'], ['5', 'Typed'], ['3', 'CRM'], null]],
+      ['Netherlands', 'Considering', null, null, [['4', 'Typed'], null, null, null]]
+    ];
+    const reading = (x) => x ? '<span><b class="mo">' + x[0] + '</b><span class="raw"> /10 · ' + x[1] + '</span></span>' : ab('nr');
+    const COMP = [['Autostow', 'Same buyer, sells full automation', 'Higher than ours', 'Deeper than ours'], ['Gridline Robotics', 'Picking arms for retail; moving into 3PL', 'About the same', 'About the same'], ['Manual picking', 'What most customers do today', 'Lower than ours', 'Shallower than ours'], ['Pickwell', 'Rents robots by the month', 'Lower than ours', 'Shallower than ours']];
+    const market = (o) => dealHead('Scorecard') + (o && o.dark ? '' : AN('Old address /deals/:id/market lands here: Scorecard, scrolled to Market')) + strip11(['Market', 'PMF', 'Geographic', 'Political & reg.'])
+      + '<section class="cd dpe-ex">' + scopeHead('Market, PMF, Geographic, Political and regulatory', ['Market', 'PMF', 'Geographic', 'Political & regulatory'], FL('Placement B pending the owner · #6163'))
+      + '<div class="dpe-exb"><h3 class="dpe-h3">Market size</h3><div class="dpe-tls">' + tile('TAM', '$4.2B') + tile('SAM', '$610M') + tile('SOM', '$38M') + '</div>'
+      + '<div class="g" style="gap:16px"><div style="grid-column:span 6;display:flex;flex-direction:column;gap:8px"><h3 class="dpe-h3">Market sources <span class="raw">3</span></h3><ul class="rz">' + J([['European warehouse automation outlook 2026', 'example.org', 'Report'], ['3PL labour cost survey', 'example.net', 'Dataset'], ['Picking robots enter mid-size warehouses', 'example.com', 'Article']].map(s => '<li><span><a href="#">' + s[0] + ' ↗</a><div class="raw">' + s[1] + '</div></span><span class="pl">' + s[2] + '</span></li>')) + '</ul></div>'
+      + '<div style="grid-column:span 6;display:flex;flex-direction:column;gap:8px"><h3 class="dpe-h3">Who pays <span class="raw">2 segments</span></h3><ul class="rz">' + J([['Mid-size 3PL warehouses', '20–80 pickers per site; pay per robot per month', 'Interviews'], ['E-commerce fulfilment centres', 'Seasonal peaks; want short contracts', null]].map(s => '<li><span><b>' + s[0] + '</b><div class="mu" style="font-size:12px">' + s[1] + '</div></span>' + (s[2] ? '<span class="raw">Source · ' + s[2] + '</span>' : ab('nr')) + '</li>')) + '</ul></div></div>'
+      + '<h3 class="dpe-h3">Company markets and readiness</h3><table class="tbl"><thead><tr><th>Market</th><th>State</th><th>Decision</th><th>Decided</th><th>Demand</th><th>Regulation</th><th>Partners</th><th>Cost</th></tr></thead><tbody>' + J(MKT.map(m => '<tr><td><b>' + m[0] + '</b></td><td>' + m[1] + '</td><td>' + (m[2] || ab('nr')) + '</td><td class="mo">' + (m[3] || '—') + '</td>' + J(m[4].map(x => '<td>' + reading(x) + '</td>')) + '</tr>')) + '</tbody></table>'
+      + '<div class="ch"><h3 class="dpe-h3">Competitors <span class="raw">4</span></h3><div class="tools"><div class="inp" style="min-width:220px">⌕ Search competitors</div><button type="button" class="dd">Sort: Name A–Z ▾</button></div></div><table class="tbl"><thead><tr><th aria-sort="ascending">Name ▲</th><th>Why it matters</th><th>Price</th><th>Depth</th></tr></thead><tbody>' + J(COMP.map(c => '<tr><td><b>' + c[0] + '</b></td><td>' + c[1] + '</td><td>' + c[2] + '</td><td>' + c[3] + '</td></tr>')) + '</tbody></table>'
+      + '<div class="g" style="gap:16px"><div class="dpe-blk" style="grid-column:span 6"><h3 class="dpe-h3">Customer geography and geographic risk</h3>' + nrw('Company markets are recorded; where customers are and the geographic risk are not') + '</div><div class="dpe-blk" style="grid-column:span 6"><h3 class="dpe-h3">Evidence for this section</h3><p class="mu" style="font-size:12.5px">Shared evidence is not linked from this view yet. It is on the Evidence tab.</p>' + PT('Evidence on the market read · #6163') + '</div></div></div></section>'
+      + others(['Market']);
+
+    /* DE25 · Traction */
+    const MONTHS = [['Dec 2025', 21000, 'Stripe', 2, null], ['Jan 2026'], ['Feb 2026', 24000, 'typed', 2, '14.3%'], ['Mar 2026', 26000, 'Stripe', 2, '8.3%'], ['Apr 2026'], ['May 2026', 29000, 'Stripe', 3, null], ['Jun 2026', 31000, 'Stripe', 3, '6.9%'], ['Jul 2026', 31000, 'Stripe', 3, '0%'], ['Aug 2026'], ['Sep 2026', 38000, 'Stripe', 3, null], ['Oct 2026', 42000, 'Stripe', 3, '10.5%'], ['Nov 2026']];
+    const k = (n) => '$' + (n / 1000) + 'K';
+    const chip = (s) => s === 'typed' ? '<span class="dpe-src t">Typed · the founder’s own figure</span>' : '<span class="dpe-src">From ' + s + '</span>';
+    const series = () => '<div class="dpe-ser" role="table" aria-label="MRR by month, Dec 2025 to Nov 2026">' + J(MONTHS.map(m => '<div class="dpe-mo' + (m[1] ? '' : ' np') + '" role="row"><div class="dpe-bw">' + (m[1] ? '<span class="mo dpe-bv">' + k(m[1]) + '</span><i style="height:' + Math.round(m[1] / 42000 * 120) + 'px"></i>' : '<span class="dpe-gap">Not reported</span>') + '</div><b class="mo">' + m[0].replace(' 20', ' ’') + '</b></div>')) + '</div>';
+    const monthTable = () => '<table class="tbl"><thead><tr><th>Month</th><th class="n">MRR</th><th class="n">Customers</th><th class="n">Growth</th><th>Source</th></tr></thead><tbody>' + J(MONTHS.slice().reverse().map(m => m[1] ? '<tr><td class="mo">' + m[0] + '</td><td class="n mo">$' + m[1].toLocaleString('en-US') + '</td><td class="n mo">' + m[3] + '</td><td class="n mo">' + (m[4] || '<span class="raw">not in this update</span>') + '</td><td>' + chip(m[2]) + '</td></tr>' : '<tr class="dpe-npr"><td class="mo">' + m[0] + '</td><td colspan="3">' + ab('np') + ' <span class="raw">no update shared for this month</span></td><td></td></tr>')) + '</tbody></table>';
+    const traction = () => dealHead('Scorecard') + AN('Old address /deals/:id/traction lands here: Scorecard, scrolled to Traction') + strip11(['Traction', 'Financial'])
+      + '<section class="cd dpe-ex">' + scopeHead('Traction and Financial', ['Traction', 'Financial'], FL('Placement B pending the owner · #6163'))
+      + '<div class="dpe-exb"><div class="ch"><div><h3 class="dpe-h3">MRR, last 12 months</h3><p class="foot">USD, from the monthly updates the founder shared with you. 8 months reported, 4 not reported. A month not reported is a gap, never 0.</p></div><div class="dpe-lg"><span><i class="b"></i>Reported</span><span><i class="g"></i>Not reported</span></div></div>' + series()
+      + '<div class="g" style="gap:16px"><div style="grid-column:span 8">' + monthTable() + '</div><div style="grid-column:span 4;display:flex;flex-direction:column;gap:12px"><div class="dpe-blk"><h3 class="dpe-h3">ARR</h3>' + nrw('No founder-shared ARR. MRR is not annualised') + '</div><div class="dpe-blk"><h3 class="dpe-h3">NRR</h3>' + nrw('No founder-shared NRR recorded') + '</div><div class="dpe-blk"><h3 class="dpe-h3">Evidence for this section</h3><p class="mu" style="font-size:12.5px">Not linked from this view yet.</p>' + PT('Evidence on the traction read · #6163') + '</div></div></div><p class="foot">Jul 2026 growth is a recorded 0%: MRR held at $31K. It is a value, not a gap.</p></div></section>'
+      + others(['Traction']);
+
+    /* DE26 · masked and all Not recorded */
+    const masked26 = () => dealHead('Scorecard', { stage: 'Reviewing · Step 2 of 8', ctl: '<button type="button" class="btn">Pass</button>' }) + strip11([])
+      + '<section class="cd dpe-ex"><div class="dpe-exh"><button type="button" class="dpe-tg" aria-expanded="true"><i aria-hidden="true">▾</i>Team</button><span class="raw">The score row follows its own rule (DX5)</span></div><div class="dpe-exb"><div class="g" style="gap:16px"><div style="grid-column:span 7;display:flex;flex-direction:column;gap:10px"><div class="nt">' + '<span class="ic" aria-hidden="true">' + LK + '</span><div><b>This opens once you sign the NDA.</b><div class="mu" style="font-size:12px">People, market figures and the monthly series are not shown before it. Nothing here is a zero.</div></div></div><ul class="rz">' + J([['People', 'Team'], ['Coverage bands', 'Team'], ['TAM, SAM, SOM', 'Market'], ['Company markets, competitors', 'Market'], ['12 months of figures', 'Traction']].map(x => '<li><span><b>' + x[0] + '</b><span class="raw"> · ' + x[1] + '</span></span>' + masked() + '</li>')) + '</ul><div style="display:flex;gap:10px;align-items:center"><button type="button" class="btn p">Sign the NDA on Data room</button><span class="raw">Opens the NDA flow (DE10 B and C)</span></div></div><div style="grid-column:span 5">' + maskCard({ line: '<p class="foot">Shown before the NDA: name, sector, stage and headline only.</p>' }) + '</div></div></div></section>'
+      + others(['Team']);
+    const blk = (t, inner, sec) => '<div class="dpe-blk"><span class="eye">' + sec + '</span><h3 class="dpe-h3">' + t + '</h3>' + inner + '</div>';
+    const empty26 = () => dealHead('Scorecard') + strip11([], true) + '<section class="cd"><div class="ch"><h2 style="font-size:16px">Open, but nothing recorded yet</h2><span class="raw">Each block keeps its own reason · none shows 0</span></div><div class="dpe-g4">'
+      + blk('People', none('No published team members') + why('Anyone with a private profile is not listed'), 'Team')
+      + blk('Coverage bands', nrw('Not recorded for at least two published team members'), 'Team')
+      + blk('Full-time since · Founder–market fit', nrw('No published evidence recorded'), 'Team')
+      + blk('Team values band', nrw('No consent to share a team values band'), 'Team')
+      + blk('TAM · SAM · SOM', nrw('The founder has not typed these figures'), 'Market')
+      + blk('Market sources · Who pays', none('No sources or segments recorded'), 'Market')
+      + blk('Company markets · Competitors', none('None recorded'), 'Market')
+      + blk('Customer geography', nrw('Where customers are and the geographic risk are not recorded'), 'Market')
+      + blk('12 months of figures', '<div class="dpe-np12">' + J(Array.from({ length: 12 }, () => '<i></i>')) + '</div>' + ab('np') + why('No monthly update has been shared with you'), 'Traction')
+      + blk('ARR · NRR', nrw('MRR is not annualised; no NRR shared'), 'Traction')
+      + '</div><p class="foot">None (∅) means the founder recorded nothing of that kind. Not recorded (—) means the platform has no place or no consent for it yet. Not reported means a month passed with no update.</p></section>';
+
+    /* ---------- DX19 · Notes inside Activity ---------- */
+    const NOTES = [
+      ['You', 'Thesis', 'Evidence summary. 5 of 8 shared claims are backed. MRR of $42K for Oct 2026 and the three paid pilots have recorded items behind them. 12% monthly growth is the founder’s own figure; the waitlist of 40 does not match; 14 months of runway is not backed.', '14 Nov 2026', 'Edited 14 Nov 2026', true],
+      ['Name B · Northwind Ventures', 'Question', 'Re: KPI snapshot · MRR, Oct 2026. Ask for the Stripe export behind the October figure and the churn in Q3.', '13 Nov 2026', null, false],
+      ['You', 'Risk', 'Runway is only in the model. Request bank-backed runway through Diligence before IC.', '12 Nov 2026', null, true],
+      ['Name C · Northwind Ventures', null, 'Met Founder B at the robotics meetup. Strong on hardware cost; less on sales.', '6 Nov 2026', null, false]
+    ];
+    const note = (n) => '<article class="dpe-nt"><div class="ch"><span class="eye">' + n[3] + ' · ' + n[0] + (n[1] ? ' · <span class="dpe-tag">' + n[1] + '</span>' : '') + (n[4] ? ' · ' + n[4] : '') + '</span>' + (n[5] ? '<span class="dpe-own"><button type="button" class="btn t bsm">Edit</button><button type="button" class="btn t bsm dpe-del">Delete</button></span>' : '<span class="raw">Read only · written by a colleague</span>') + '</div><p>' + n[2] + '</p></article>';
+    const actFilter = (cur, staff) => '<div class="seg" role="radiogroup" aria-label="Show">' + J((staff ? ['All', 'Mine'] : ['All', 'Mine', 'Firm notes']).map(t => '<button type="button" role="radio" aria-checked="' + (t === cur) + '">' + t + (t === 'Firm notes' ? ' <span class="mo">4</span>' : '') + '</button>')) + '</div>';
+    const composer = () => '<div class="dpe-cmp" role="group" aria-label="New note"><div class="ch"><b>New note</b><span class="raw">Only Northwind Ventures sees it</span></div><div class="fld"><label>Tag <span>· optional</span></label><div class="chips">' + J(['Thesis', 'Risk', 'Question', 'Decision'].map((t, i) => '<button type="button" aria-pressed="' + (i === 2) + '"' + (i === 2 ? ' class="dpe-on"' : '') + '>' + t + '</button>')) + '</div></div><div class="fld"><label for="nb">Note</label><div class="ta" id="nb" style="min-height:64px;font-size:12.5px">Ask for customer references from two of the three pilots</div><div class="raw" style="text-align:right">58 / 10,000</div></div><div style="display:flex;gap:8px;align-items:center"><button type="button" class="btn p bsm">Save note</button><button type="button" class="btn bsm">Cancel</button><button type="button" class="btn t bsm" style="margin-left:auto">Ask Eadwyn to draft</button></div></div>';
+    const EVENTS = [['14 Nov 2026', 'You added a firm note'], ['12 Nov 2026', 'Founder answered a diligence request'], ['10 Nov 2026', 'You signed the NDA'], ['7 Nov 2026', 'Founder uploaded a financial model'], ['3 Nov 2026', 'Terms changed']];
+    const activity = () => dealHead('Activity') + AN('Old address /deals/:id/notes lands here: Activity, with Firm notes on')
+      + '<div class="g"><section class="cd" style="grid-column:span 8"><div class="ch"><div><h2 style="font-size:16px">Firm notes</h2><p class="foot">Only Northwind Ventures sees these. No other firm and not the founder.</p></div><div class="tools">' + actFilter('Firm notes') + '<button type="button" class="btn">Add a note</button></div></div>' + composer() + J(NOTES.map(note)) + '<div class="ch">' + FL('Notes inside Activity (option A) pending the owner · #6163') + '<span class="raw">4 notes · newest first</span></div></section>'
+      + '<section class="cd" style="grid-column:span 4"><div class="ch"><h2 style="font-size:14px">Activity on this deal</h2></div><p class="foot">Shown with All or Mine. Rows about other investors never name them or their amounts.</p><ul class="hist">' + J(EVENTS.map(e => '<li><span class="mo">' + e[0] + '</span>' + e[1] + '</li>')) + '</ul></section></div>';
+    const notesStates = () => crop('<span class="eye">DE27 · Firm notes variants</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">'
+      + box('Empty', none('No notes') + '<p style="font-size:13px"><b>No notes yet for this deal.</b></p><p class="foot">Only Northwind Ventures will see them.</p><button type="button" class="btn p bsm" style="align-self:flex-start">Add a note</button>')
+      + box('Choose a firm', '<p style="font-size:13px"><b>Choose the firm this deal is for.</b></p><p class="foot">You invest through two firms. Notes belong to one firm; none are listed until you choose.</p><div class="dpe-fsw" role="radiogroup" aria-label="Firm">' + J(['Northwind Ventures', 'Harbor Capital'].map(f => '<label><input type="radio"><span>' + f + '</span></label>')) + '</div>')
+      + box('No firm', '<p style="font-size:13px"><b>Only you see these notes.</b></p><p class="foot">You invest on your own, with no firm. A note is yours alone.</p>' + '<div class="dpe-nt" style="padding:8px 0 0"><span class="eye">12 Nov 2026 · You · <span class="dpe-tag">Risk</span></span><p>Runway is only in the model.</p></div>')
+      + box('Staff view', '<div class="tools">' + actFilter('All', true) + '</div><p style="font-size:12.5px">Admins and Operating Partners see Activity with no Firm notes filter. Notes are an investor’s, with no staff bypass.</p><ul class="hist"><li><span class="mo">12 Nov 2026</span>Founder answered a diligence request</li></ul>')
+      + '</div>', 1400);
+
+    /* ---------- DX20 · Export and share ---------- */
+    const exportBoard = () => crop('<span class="eye">DE28 · Share or download · in the deal header</span><div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start"><section class="cd"><div class="ch"><div style="display:flex;gap:10px;align-items:center"><b style="font-size:20px">Acme Robotics</b>' + co('Raise') + '</div><div class="tools"><button type="button" class="dd" aria-haspopup="menu" aria-expanded="true">Share or download ▾</button><button type="button" class="btn">Pass</button><button type="button" class="btn p">Continue diligence</button></div></div>'
+      + '<div class="dpe-menu" role="menu" aria-label="Share or download"><span class="eye">Download</span>' + J(['Deal summary', 'Scorecard', 'Evidence list'].map(t => '<div role="menuitem" aria-disabled="true" class="dpe-mi off"><span>' + t + '<small>Not offered yet</small></span>' + PT('No download · #6163') + '</div>')) + '<span class="eye" style="margin-top:6px">Share</span><div role="menuitem" class="dpe-mi"><span>Copy link to this deal<small>Only people this deal admits can open it.</small></span><span class="raw">⌘ link</span></div></div>' + FL('Option A, menu with Copy link only, pending the owner · #6163') + '</section>'
+      + '<section class="cd"><span class="eye">After Copy link</span><div class="dpe-toast" role="status">✓ Link copied. Only people this deal admits can open it.</div><p class="foot">Copy link copies the address of this page. It grants nothing: someone the deal does not admit sees “not here”.</p><span class="eye">Option B, not drawn</span><p class="foot">No export at all on the deal page.</p></section></div>', 1400);
+
+    /* ---------- DX21 · states ---------- */
+    const states29 = () => crop('<span class="eye">DE29 · States across Evidence, Team, Market, Traction and Notes</span><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">'
+      + box('Loading', '<div aria-busy="true" style="display:flex;flex-direction:column;gap:8px"><span class="sk" style="height:12px;width:50%"></span><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"><span class="sk" style="height:56px"></span><span class="sk" style="height:56px"></span><span class="sk" style="height:56px"></span></div><span class="sk" style="height:10px;width:90%"></span><span class="raw">Reading… each block fills on its own</span></div>')
+      + box('Not recorded, with reasons', '<ul class="dpe-nrl">' + J([['Full-time since', 'Not in the team read'], ['Founder–market fit', 'No published evidence recorded'], ['Values band', 'No consent to share it'], ['TAM · SAM · SOM source', 'No source recorded for this figure'], ['ARR', 'MRR is not annualised'], ['NRR', 'No founder-shared NRR'], ['Customer geography', 'Where customers are is not recorded']].map(x => '<li><b>' + x[0] + '</b>' + ab('nr') + why(x[1]) + '</li>')) + '</ul>', 2)
+      + box('Zero is a value', '<div class="dpe-zero"><span class="eye">Growth, Jul 2026</span><b class="mo">0%</b><span class="raw">recorded · From Stripe</span></div><div class="dpe-zero"><span class="eye">Aug 2026</span>' + ab('np') + '</div><p class="foot">0 is drawn as a number. A gap is a word with a dashed outline.</p>')
+      + box('Unreadable, one block', '<div class="dpe-blk"><h3 class="dpe-h3">Competitors</h3><div class="nt r"><span class="ic" aria-hidden="true">!</span><div><b>Competitors could not be read.</b><div>Not the same as none.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div></div><p class="foot">Market size, sources, Who pays and company markets above still show. Never Sign the NDA or Request invitation here.</p>')
+      + box('Refused', '<div style="display:flex;flex-direction:column;gap:8px"><div>' + refused('Evidence · staff') + '<p style="font-size:12px;margin-top:4px">This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.</p></div><div>' + refused('Notes · no investor licence') + '<p style="font-size:12px;margin-top:4px">Firm notes are kept by investors.</p></div></div>')
+      + box('Choose a firm', '<p style="font-size:13px"><b>Choose the firm this deal is for.</b></p><button type="button" class="dd" aria-haspopup="listbox">Firm: choose ▾</button><p class="foot">No notes are listed until a firm is chosen.</p>')
+      + box('Masked before the NDA', '<ul class="rz"><li><span>People</span>' + masked() + '</li><li><span>TAM</span>' + masked() + '</li><li><span>Evidence figures</span>' + masked() + '</li></ul><p class="foot">Counts and the masked card only.</p>')
+      + box('Saving a note · save failed', '<div class="dpe-cmp" style="padding:10px"><div class="ta" style="min-height:44px;font-size:12px">Ask for customer references from two of the three pilots</div><span class="raw" aria-live="polite">Saving…</span></div><div class="nt r" role="alert"><span class="ic" aria-hidden="true">!</span><div><b>The note could not be saved. Try again.</b><div>Your text is kept.</div></div><span class="bt"><button type="button" class="btn bsm">Try again</button></span></div>', 2)
+      + '</div>', 1400);
+
+    /* ---------- DX21 · phone 390 ---------- */
+    const phone = (title, body, extra) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative"><div class="pt"><button type="button" class="pi" aria-label="Back to Deals">‹</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Ask Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (extra || '') + '</div></div>';
+    const ptabs = (cur) => '<nav class="zn dpe-ptb" aria-label="Deal">' + J(TABS.map(t => '<a href="#"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const evCard = (r) => '<article class="mc"><div class="ch"><b>' + r[0] + '</b>' + shr(r[8]) + '</div><div class="dpe-fig">' + r[7] + '</div><div class="tools" style="gap:6px">' + str(r[3]) + '<span class="raw">' + r[1] + (r[2] ? ' · ' + r[2] : '') + ' · ' + r[4] + '</span>' + (r[5] ? stale() : '') + '</div></article>';
+    const MOB = {
+      DPE30A: () => phone('Acme Robotics', ptabs('Evidence') + '<div class="dpe-cl m"><b class="dpe-big" style="font-size:16px">5 of 8 shared claims are backed</b><div class="dpe-clc">' + J([['b', 5], ['f', 1], ['m', 1], ['n', 1]].map(x => '<span>' + cs(x[0]) + '<b class="mo">' + x[1] + '</b></span>')) + '</div></div><div class="tools"><button type="button" class="dd" style="min-height:44px">Filters · 0</button><button type="button" class="dd" style="min-height:44px">Sort: Checked ▾</button></div><span class="eye">Investor narrative and Pitch deck · 7</span>' + evCard(AREAS[0][2][0]) + evCard(AREAS[0][2][2]) + '<span class="eye">Fundraising readiness · 10</span>' + evCard(AREAS[1][2][2])),
+      DPE30B: () => phone('Acme Robotics', ptabs('Scorecard') + '<div class="dpe-psr"><b>Team</b><b class="mo">78</b><span>Strong · High</span></div>' + '<article class="mc"><div class="ch"><b>Founder A</b><span class="pl">Builder</span></div><span class="raw">Founder · CEO</span><span style="font-size:12px">Head of automation, Warehouse Co <span class="mo">2018–2024</span></span><div>' + ab('nr') + why(' Full-time since') + '</div><a class="btn" href="#" style="min-height:44px">Open profile</a></article><article class="mc"><div class="ch"><b>Founder B</b><span class="pl">The Architect</span></div><span class="raw">Founder · CTO</span></article><span class="eye">Team coverage</span><ul class="dpe-bl m">' + J(AXES.slice(0, 6).map(a => '<li><span>' + a[0] + '</span>' + band(a[1]) + '</li>')) + '</ul>'),
+      DPE30C: () => phone('Acme Robotics', ptabs('Scorecard') + '<div class="dpe-psr"><b>Market</b><b class="mo">71</b><span>Strong · Medium</span></div>' + J([['TAM', '$4.2B'], ['SAM', '$610M']].map(t => '<div class="dpe-tl"><span class="eye">' + t[0] + '</span><b class="mo">' + t[1] + '</b><span class="raw">USD, typed by the founder</span>' + why('No source recorded for this figure') + '</div>')) + '<span class="eye">Competitors · 4</span><div class="inp" style="min-width:0;min-height:44px">⌕ Search competitors</div><button type="button" class="dd" style="min-height:44px;align-self:flex-start">Sort: Name A–Z ▾</button>' + J(COMP.slice(0, 2).map(c => '<article class="mc"><b>' + c[0] + '</b><span style="font-size:12px">' + c[1] + '</span><span class="raw">Price ' + c[2].toLowerCase() + ' · Depth ' + c[3].toLowerCase() + '</span></article>'))),
+      DPE30D: () => phone('Acme Robotics', ptabs('Activity') + '<span class="eye">MRR, last 12 months · USD</span><ul class="dpe-pml">' + J(MONTHS.slice().reverse().slice(0, 6).map(m => '<li' + (m[1] ? '' : ' class="np"') + '><span class="mo">' + m[0] + '</span>' + (m[1] ? '<b class="mo">$' + m[1].toLocaleString('en-US') + '</b>' + chip(m[2]) : ab('np')) + '</li>')) + '</ul><span class="eye">Firm notes · Northwind Ventures only</span>' + J(NOTES.slice(0, 2).map(n => '<article class="mc"><span class="eye">' + n[3] + ' · ' + n[0].split(' · ')[0] + (n[1] ? ' · ' + n[1] : '') + '</span><p style="font-size:12.5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + n[2] + '</p>' + (n[5] ? '<div class="tools"><button type="button" class="btn" style="min-height:44px">Edit</button><button type="button" class="btn" style="min-height:44px">Delete</button></div>' : '<span class="raw">Read only</span>') + '</article>')), '<div style="position:absolute;left:0;right:0;bottom:0;padding:12px 16px;background:var(--card);border-top:1px solid var(--hair)"><button type="button" class="btn p" style="width:100%;min-height:48px">Add a note</button></div>')
+    };
+
+    /* ---------- handoff ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const handoff = () => dk('<h1>Where Evidence, Team, Market, Traction and Notes live · handoff</h1><p>Continues Deals v2 (D4815): boards DE19 to DE31 in sections DX17 to DX21. The deal header, figures strip, eight tabs, status families and absence states are DE04’s. Placement follows the brief’s picks, pending the owner: Team, Market and Traction inside Scorecard (B); Notes inside Activity (A); a Share or download menu with only Copy link working (A). The deal page’s figures are drawn in USD: the platform records traction figures and new deals in USD, where the first Deals v2 boards drew euros.</p>'
+      + '<h2>Checked on main</h2>' + tbl(['Board', 'What main has', 'Status'], [
+        ['DE19–DE22 Evidence', '<code>GET /api/deals/:id/evidence</code> → <code>investorEvidence</code> (raiseEvidence.ts): coverage groups before the NDA with the fixed line; items, claims and a partial flag after it; 403 for staff with the Raise › Evidence line', 'Built today (InvestorEvidence.jsx, VR8–VR10): items grouped by area. The claims line, filters, sort and item sheet are frontend work'],
+        ['DE23 Team', '<code>GET /api/deals/:id/team</code> (deal_insights.ts): people as published, bands per skill area for at least two members, values band, full-time and founder–market fit always Not recorded', 'Built today as its own tab (DealInsightTabs); moves under Scorecard › Team'],
+        ['DE24 Market', '<code>GET /api/deals/:id/market</code>: TAM/SAM/SOM with no source, sources, segments, company markets with four readings, competitors, geography Not recorded', 'Built today as its own tab; moves under Scorecard › Market. Search and sort are frontend'],
+        ['DE25 Traction', '<code>GET /api/deals/:id/traction</code>: 12 months from shared updates, Not reported gaps; ARR, NRR Not recorded', 'Built today as its own tab; moves under Scorecard › Traction'],
+        ['Score rows', '<code>GET /api/venture-scores/deal/:dealId</code>, five score states', 'DX5'],
+        ['DE27 Notes', '<code>/api/deals/:id/notes</code> (deal_context.ts): firm-scoped, author-only edit and delete, 409 “Choose the firm this deal is for.”, investor only. Tags are a picker of four (Thesis, Risk, Question, Decision); the Worker allows up to 80 characters', 'Built today as a Notes tab beside Activity; moves into Activity as a filter. Edited date is read but not shown today'],
+        ['Old addresses', '<code>dealPageModel.js</code>: investors draw eleven tabs including Team, Market, Traction and Notes, and no Activity tab', 'Frontend: /team, /market, /traction open Scorecard at that scope; /notes opens Activity with Firm notes on']])
+      + '<h2>Backend required (◇)</h2><ul><li>Advisors’ count and roles in the team read.</li><li>Source, as-of date and method for TAM, SAM and SOM.</li><li>An audited staff read of shared evidence.</li><li>Evidence on the Market and Traction reads.</li><li>A link from an evidence item to its data-room file.</li><li>Any download of the deal summary, scorecard or evidence list.</li></ul>'
+      + '<h2>Pending the owner (⚑)</h2><p>The three placements above (#6163). Drawn as the brief’s picks.</p>'
+      + '<h2>Proposed for DX-R (#5918)</h2><p>Summarise what is backed (DE20) and What is the team missing? (DE23). Both draft with sources and end in Accept into Notes, Edit or Discard.</p>'
+      + '<h2>Accessibility</h2><p>Claim states, strength, sharing, Stale and coverage bands each carry a glyph and a word. Month bars are a table for screen readers, and a Not reported month is announced as such. The item sheet traps and returns focus. Firm-note actions exist only on the author’s own notes. Phone targets are 44px and tabs scroll sideways.</p>');
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'DPE19') html = page(ev19(), { h: 1040, norail: true });
+    else if (B === 'DPE20') html = page(ev20(), { h: 1740, rail: rail20() });
+    else if (B === 'DPE21') html = page(ev20(), { h: 1100, overlay: sheet21() });
+    else if (B === 'DPE22') html = ev22();
+    else if (B === 'DPE23') html = page(team(), { h: 1740 });
+    else if (B === 'DPE24') html = page(market(), { h: 2080 });
+    else if (B === 'DPE25') html = page(traction(), { h: 1810 });
+    else if (B === 'DPE26A') html = page(masked26(), { h: 1260 });
+    else if (B === 'DPE26B') html = page(empty26(), { h: 960 });
+    else if (B === 'DPE27') html = page(activity(), { h: 1160 });
+    else if (B === 'DPE27B') html = notesStates();
+    else if (B === 'DPE28') html = exportBoard();
+    else if (B === 'DPE29') html = states29();
+    else if (B === 'DPE31A') html = page(ev20(), { h: 1740, rail: rail20() });
+    else if (B === 'DPE31B') html = page(market({ dark: true }), { h: 2080 });
+    else if (B === 'DPE32') html = handoff();
+    else if (MOB[B]) html = MOB[B]();
+    else html = page(ev20(), { h: 1500, rail: rail20() });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
