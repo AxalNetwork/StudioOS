@@ -168,10 +168,12 @@ test('#6675 operational summary counts distinct queue attempts and links verifie
     steps: [{ name: 'Run node scripts/test-drift-parts.mjs rest', conclusion: 'failure' }] }]);
   summary.observe({ ...candidate, id: 14, conclusion: 'success' }, {}, []);
   summary.observe({ ...candidate, id: 15 }, {}, []);
+  summary.observe({ ...candidate, id: 17 }, {}, [{ conclusion: 'failure',
+    steps: [{ name: 'Run npm run build', conclusion: 'failure' }] }]);
   summary.observe({ id: 16, run_attempt: 2 }, { superseded: true, supersededStage: 'production-ownership' }, []);
   const result = summary.lines().join('\n');
-  assert.match(result, /Verified queue invalidation rate: 1\/4 \(25\.0%\)/);
-  assert.match(result, /Build or test producer failure rate: 1\/4 \(25\.0%\)/);
+  assert.match(result, /Verified queue invalidation rate: 1\/5 \(20\.0%\)/);
+  assert.match(result, /Build or test producer failure rate: 2\/5 \(40\.0%\)/);
   assert.match(result, /Other failed queue attempts: 1/);
   assert.match(result, /actions\/runs\/12\/attempts\/1/);
   assert.match(result, /Release superseded \(production-ownership\).*actions\/runs\/16\/attempts\/2/);

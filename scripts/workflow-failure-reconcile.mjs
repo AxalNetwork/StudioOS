@@ -90,7 +90,10 @@ export function workflowOutcomeSummary() {
       if (run.path === '.github/workflows/ci.yml' && run.event === 'merge_group' &&
           run.head_repository?.full_name === repository && /^gh-readonly-queue\/main\//.test(run.head_branch ?? '')) {
         const producer = jobs.some(job => failure.has(job.conclusion) && (job.steps || []).some(step =>
-          failure.has(step.conclusion) && /^(?:Build the SPA|Run node scripts\/test-drift-parts\.mjs\s)/.test(step.name ?? '')));
+          failure.has(step.conclusion) && (
+            ['Build the SPA', 'Run npm run build', 'TypeScript check', 'Run drift checker'].includes(step.name) ||
+            /^Run node scripts\/test-drift-parts\.mjs\s/.test(step.name ?? '')
+          )));
         const category = evidence.queueInvalidated ? 'invalidated'
           : producer ? 'producer failure' : failure.has(run.conclusion) ? 'other failure' : 'other outcome';
         queue.set(key, { category, link });
