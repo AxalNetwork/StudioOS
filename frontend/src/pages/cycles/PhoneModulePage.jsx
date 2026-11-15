@@ -235,6 +235,7 @@ export default function PhoneModulePage({
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}
       </div>
+      {/* D6043 (#6043): Export from the 'few' stage on, under the list, full width. */}
       {rStatus === 'ready' && count.pages > 1 && (
         <nav aria-label="Pages" className="mt-2 flex items-center justify-between gap-2" data-testid="phone-module-pages">
           <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>

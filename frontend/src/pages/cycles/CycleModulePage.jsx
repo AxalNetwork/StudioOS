@@ -161,6 +161,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           })}
           {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
+          {/* D6043 (#6043): Export from the 'few' stage on (the zero stage returned above), once the list has read. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
         {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
