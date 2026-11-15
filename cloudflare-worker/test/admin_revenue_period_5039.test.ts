@@ -35,7 +35,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async all() { return { success: true, results: db.prepare(sql).all(...b) }; },
         async run() {
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
@@ -149,6 +149,29 @@ test('period-window figures follow the period: token cost and usage coverage', a
   assert.equal(q4.body.usage_coverage.by_licence[0].reported, false, 'Q3\'s report was read as Q4\'s');
 });
 
+test('the summary reads subscription revenue for the requested period without network access', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('unexpected network access'); });
+  const db = freshDb();
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100929_financial_events.sql'), 'utf8')
+    .replaceAll("strftime('%Y-%m-%dT%H:%M:%SZ', 'now')", "'2026-10-01T00:00:00Z'"));
+  db.prepare(
+    `INSERT INTO financial_events (uid, source, source_event_id, source_event_type, kind, livemode,
+       revenue_stream, currency, gross_cents, refund_cents, net_cents, occurred_at)
+     VALUES ('ledger-test', 'stripe', 'evt_test', 'invoice.paid', 'invoice', 1,
+       'tier', 'EUR', 725, 0, 725, '2026-11-01T00:00:00Z')`,
+  ).run();
+  const q3 = await call(db, SUPER, '?period=2026-Q3');
+  const q4 = await call(db, SUPER, '?period=2026-Q4');
+  assert.equal(q3.body.subscriptions.state, 'not_recorded');
+  assert.equal(q4.status, 200);
+  assert.equal(q4.body.subscriptions_available, true);
+  assert.deepEqual(q4.body.subscriptions.by_currency, [
+    { currency: 'EUR', gross_cents: 725, refund_cents: 0, net_cents: 725 },
+  ]);
+  assert.equal(calls, 0);
+});
+
 test('point-in-time figures do not follow the period, and the reply says which is which', async () => {
   const db = freshDb();
   const a = await call(db, SUPER, '?period=2025-Q1');
@@ -161,9 +184,10 @@ test('point-in-time figures do not follow the period, and the reply says which i
   assert.equal(SUMMARY_TEMPORAL.promos, 'as_of_now');
   assert.equal(SUMMARY_TEMPORAL.token_cost, 'period');
   assert.equal(SUMMARY_TEMPORAL.usage_coverage, 'period');
-  assert.equal(SUMMARY_TEMPORAL.subscriptions, 'not_recorded');
-  // Still never one cross-currency figure, and subscriptions still have none.
+  assert.equal(SUMMARY_TEMPORAL.subscriptions, 'period');
+  // The absent ledger fixture must leave just the subscriptions block unreadable.
   assert.equal(a.body.subscriptions_available, false);
+  assert.equal(a.body.subscriptions.state, 'unreadable');
   assert.ok(!/"total_cents"|"platform_revenue/.test(JSON.stringify(a.body)));
 });
 

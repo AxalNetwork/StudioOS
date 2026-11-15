@@ -9,6 +9,7 @@
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
+| `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
@@ -232,6 +233,7 @@ pull.
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
+| `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 | `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |

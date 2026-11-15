@@ -91,7 +91,8 @@ export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
   const { emailTo, onEmail } = useRecordHeader();
   if (phone) {
-    const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
+    // D6101: a `row_only` action (a KPI entry's Remove) runs from its section row alone.
+    const rows = actions.filter((action) => dispatchOf(action) && !action.row_only).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
     // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
@@ -99,7 +100,7 @@ export function RecordActions({ actions = [], ...handlers }) {
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">
-    {actions.map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
+    {actions.filter((action) => !action.row_only).map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
   </div>;
 }
 
