@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network v2 Investor · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Network · #6256 · addendum to #4799 Network workspace (D4799-p1)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Network v2 addendum — the investor variant and the boards the approved canvas left out</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Network (/network, /network/relationships, /network/introductions, /network/organizations) for investors: which ties need a touch, reminders, curated matches decided with introduction credits, and quarterly asks whose cost is shown before sending. It continues the approved Network workspace canvas (#4799): the header “Your network” with one primary and Ask beside it, the four links, the Person Sheet (here the Tie Sheet) and the NW5 state words. New boards use the ids #4799 reserved but did not draw, then NW12 onward for investor-only boards; keys carry the NWI prefix (NWI12_2 = NW12.2). Ties on Axal and contacts you keep are two groups with two counts. Going cold is more than 60 days since the last logged touch; no touch logged is Not recorded, never cold. Eadwyn works only in the shared rail and never sends, accepts, declines, spends or edits. Violet dashed ◇ tags mark backend work; amber ⚑ tags mark the owner picks drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · [Harbor Lane Capital], [Northwind Labs] and every person, company and figure (38 ties, 142 contacts, 6 going cold, 4 credits, 2 of 3 asks) are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="21">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Network v2 Investor Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['NW12', 'Investor Overview', 'Four figures that each link to their records, the asks line for Q4 2026, ties needing attention (cold or a reminder due), reminders (due, then upcoming, with Done), introductions in three labelled groups, and six organizations. Eadwyn in the rail quotes the cost of a follow-up draft for a made introduction; the cold-tie draft is disabled (◇).', [F('NWI12', false, 2200)]],
+      ['NW12.1', 'Investor Overview · empty', 'No ties and no contacts. One action, Add person (partner book, ⚑ Q2), with Import contacts beside it. A tie appears once the other person accepts. Matches, credits and asks still show.', [F('NWI12_1', false, 1000)]],
+      ['NW12.2', 'Relationships with the Tie Sheet', 'Two labelled groups, On Axal and Contacts you keep, each with its own count and pagination (⚑ Q1). Views with LPs disabled (◇), separate Refresh, Import and Add controls, Invite to Axal disabled (◇), tie requests waiting with Accept and Decline. The Tie Sheet: company, context and last touch with Not recorded, touch history with Void (struck through), open and done reminders, the private note with an unsaved notice.', [F('NWI12_2', 'With the Tie Sheet open', 1500), F('NWI12_2P', 'Page without the sheet', 1500)]],
+      ['NW2.2', 'Leads from your pages · founders', 'Landing-page signups and invites from a founder’s projects, kept apart from the book. Investors have no Leads group.', [F('NWI2_2', false, 1000)]],
+      ['NW2.3', 'Imports and duplicate review', 'LinkedIn Connections CSV and a mapped CSV file, each with preview, progress and result. HubSpot and Affinity are deal imports. Duplicates side by side; Merge only when the held record is an imported contact, otherwise the reason (◇).', [F('NWI2_3', false, 1110), C('NWI2_3B', 'Empty, could not be read, import failed', 1100, 260)]],
+      ['NW3', 'Introductions workspace · investor', 'From your team (received and sent: Waiting, Accepted, Made, Not now, Withdrawn), curated matches with the credit line and Stalled view over every match returned, and Your asks: Pending only (◇ #6260, #6261, ⚑ Q3). Founders lose Your asks.', [F('NWI3', false, 1420)]],
+      ['NW3.1', 'Request introduction', 'Three steps: who, who can introduce you (teammates and how they know them, no emails, Eadwyn drafts the reason), review with “No credit is used for a team request”. Then sent, the investor ask branch (2 of 3 asks, “An ask is not consent from the founder”, Use 1 ask and send), and a fund where no ask can be used.', [C('NWI3_1', 'Steps 1 to 3', 1400, 610), C('NWI3_1B', 'Sent · investor ask · ask cannot be used', 1400, 545)]],
+      ['NW3.3', 'Received introduction decision', 'Accept or Not now, each with an optional note the requester can read. After Accept: Write the introduction opens the Email composer; the send records Made. No Made button.', [F('NWI3_3', false, 900), C('NWI3_3B', 'After Accept · Eadwyn introduction draft', 1300, 290)]],
+      ['NW3.5', 'Delivery could not be confirmed', 'record_pending (Record it as made, nothing sent again), unconfirmed (Did it arrive?), not_sent (write it again from the composer) and sending. No Resend when delivery is known.', [C('NWI3_5', false, 1400, 480)]],
+      ['NW4', 'Organizations directory', 'Names with their people and where each name came from, counts, latest touch, open reminders. All and Co-investors live; Portfolio, Passed and LPs disabled (◇). Email domains are never used.', [F('NWI4', false, 900), C('NWI4B', 'Empty and could not be read', 900, 245)]],
+      ['NW4.1', 'Organization detail', 'The name only (◇ no organization record), people with last touch and their Sheet, open reminders, introductions that name it, and who knows them.', [F('NWI4_1', false, 960)]],
+      ['NW6', 'Permission and support-session states', 'Support session banner; From your team and Who knows them refused by the server; imported contacts read-only; ties, touches, reminders, notes and hand-added contacts disabled in the page (◇ the server does not refuse yet); asks refused for a role without an investor licence; a team filter that never confirms a team exists.', [F('NWI6', false, 920)]],
+      ['NW7', 'Credits, quota and Eadwyn unavailable', 'Credits could not be read (Accept off, no 0 drawn), zero credits with the referral link, quota could not be read, quota used up with the tier path, Eadwyn unavailable and out of tokens. Decline and manual actions keep working.', [C('NWI7', false, 1400, 590)]],
+      ['NW5', 'States on the new sections', 'Loading, Not recorded fields, per-section Could not be read with what still works, Stale, Refused, Saving and Save failed with edits kept.', [C('NWI5A', false, 1400, 500)]],
+      ['NW1.1', 'Overview with Ask open', 'Founder overview with the rail open: a question, the sources read, and a follow-up draft for a made introduction with its cost quoted first; Accept into composer, Edit, Discard. The investor rail beside it.', [F('NWI1_1', 'Founder', 1000), C('NWI1_1B', 'Investor rail', 360, 770)]],
+      ['NW8.1', 'Phone introduction flow', 'NW3.1 as full-height sheets, the investor ask confirm, and NW3.3’s decision, then Write the introduction. 44px targets, sticky primary.', [P('NWI8_1A', 'Step 1'), P('NWI8_1B', 'Step 2'), P('NWI8_1C', 'Step 3'), P('NWI8_1D', 'Investor ask'), P('NWI8_1E', 'Decision'), P('NWI8_1F', 'After Accept')]],
+      ['NW12.3', 'Investor phone', 'The overview stacked with the figures as a 2-by-2 grid, Relationships as cards with a section select, and the Tie Sheet full height.', [C('NWI12_3A', 'Overview', 390, 2060), P('NWI12_3B', 'Relationships'), P('NWI12_3C', 'Tie Sheet')]],
+      ['NW9', 'Tablet 768', 'Relationships with the Tie Sheet as an overlay; the rail collapses to the E icon in the top bar.', [C('NWI9', false, 768, 1024)]],
+      ['NW11', 'Admin / HQ Network', 'Read-only view of HQ’s own book (C1, #4799): the banner, overview figures and relationships with no write controls, and no entry into a member’s book.', [F('NWI11', false, 1100)]],
+      ['NW12.4', 'Dark', 'NW12 and NW3 on the dark tokens; states keep their words and shapes.', [F('NWI12_4', 'Overview · dark', 2200), F('NWI12_4B', 'Introductions · dark', 1420)]],
+      ['Handoff', 'Handoff', 'What was checked on main, what was preserved, backend required (◇), owner picks drawn (⚑), frontend-only work, accessibility and what is open.', [W('NWIH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
