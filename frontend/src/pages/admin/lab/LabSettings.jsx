@@ -8,6 +8,8 @@ import { actionGhost } from '../../../ui';
 import { CARD, H2, SUB, LINK, INPUT, useRead, Dialog, Field, Select, useWrite } from './labParts';
 import { ReadState } from './labOperationsParts';
 import { refusalText } from './labDesksModel';
+import { OnRegistry, Settings as MemberAccess } from '../programs/ProgramShellSections';
+import { LAB_KEY } from './labModel';
 import { CALENDAR, MESSAGES, sizeProblem, requireSettings, requireGrants, requirePrograms, labGrantOf } from './labOperationsModel';
 
 function SizeDialog({ field, current, onClose, changed }) {
@@ -82,7 +84,15 @@ function HqGrantTerms() {
   </>;
 }
 
-export default function LabSettings({ superAdmin = false }) {
+/**
+ * D5893 (#5893, D5313 step 3) — the Lab keeps its own Settings, and the shell's
+ * member-access editor (`ProgramShellSections.jsx`) joins it: a Super Admin
+ * sets the registry's `member_access` for spinout-lab, an Admin reads it. It
+ * needs the registry read (`detail`, the page's `useProgramDetail`); a failed
+ * read marks only this section, and the cohort size, grant terms and fixed
+ * rules still draw from their own reads.
+ */
+export default function LabSettings({ superAdmin = false, detail = null }) {
   const [tick, setTick] = useState(0);
   const [field, setField] = useState(null);
   const read = useRead('lab-size', tick, () => labOperationsApi.settings().then(requireSettings));
@@ -98,6 +108,7 @@ export default function LabSettings({ superAdmin = false }) {
     </section>
     <GrantTerms superAdmin={superAdmin} />
     <section className={`${CARD} flex flex-col gap-3 p-4`}><h2 className={H2}>The calendar and time zone · fixed</h2>{CALENDAR.map((t) => <p className={SUB} key={t}>{t}</p>)}</section>
+    {detail ? <div className="min-w-0" data-testid="lab-member-access"><OnRegistry detail={detail}>{(data) => <MemberAccess programKey={LAB_KEY} program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry></div> : null}
     <section className={`${CARD} flex flex-col gap-3 p-4`}><h2 className={H2}>Who can apply and what the Lab sends · fixed</h2>
       <p className={SUB}>Who can apply: Founder and Explorer.</p><p className={SUB}>Messages: {MESSAGES.join(' · ')}.</p>
     </section>

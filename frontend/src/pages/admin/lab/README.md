@@ -3,9 +3,13 @@
 D937 (#2374): the Spin-Out Lab's admin page at `/admin/programs/spinout-lab`,
 built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
-Its tabs are sub-paths: `/applications` (one application at `/applications/:id`, D948), `/cohorts` (and one cohort at
-`/cohorts/YYYY-MM`, D947), `/participants` (one founder at `/participants/:uid`, D949), `/hosts`,
-`/formation`, `/graduation`, `/how-it-runs`, `/settings` and `/activity`; the founder-journey preview is `/preview`.
+Its tabs are sub-paths, in the generic program shell's order since D5893 (#5893, PG03a): Overview, Playbook
+(`/how-it-runs`), Availability & grants (`/availability`), Participation (`/participation`), the three module tabs
+Applications (`/applications`, one application at `/applications/:id`, D948), Cohorts (`/cohorts`, one cohort at
+`/cohorts/YYYY-MM`, D947) and Hosts (`/hosts`), the Lab's own Participants (`/participants`, one founder at
+`/participants/:uid`, D949), Formation (`/formation`) and Graduation (`/graduation`), then History (`/activity`) and
+Settings (`/settings`); the founder-journey preview is `/preview`. `/availability` and `/participation` are registered
+by `../../../routes/adminProgramsSpinoutLab.jsx`; the rest are in `App.jsx`.
 
 Three old doors forward here before any old console mounts, keeping the query
 and hash and adding `?moved=`:
@@ -63,6 +67,12 @@ and hash and adding `?moved=`:
   Overview's tiles and Needs you from the reads, each `ready`,
   `loading` or `unreadable`.
 - `LabRedirect.jsx`, `LabPreviewRedirect.jsx` — the two old paths.
+- `LabParticipation.jsx` — Participation (D5893): founders taking part and this
+  week's standing from D946's read, and founders by cohort from the calendar,
+  each part on its own read; `labModel.js`'s `labParticipation` builds it.
+  Overview's Capability modules, Availability & grants and Settings' member
+  access come from the shell (`../programs/ProgramShellSections.jsx`) on the
+  registry read, which marks only those sections when it fails.
 
 ## Rules
 

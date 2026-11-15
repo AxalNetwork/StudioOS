@@ -230,6 +230,8 @@ function worker(fail = []) {
     if (p === '/api/admin/lab-hosts') return down('hosts') ? json({ detail: 'down' }, 503) : json(HOSTS);
     if (p === '/api/spinout-lab/certificates') return down('certificates') ? json({ detail: 'down' }, 503) : json(CERTS);
     if (p === '/api/admin/cohort/participants') return down('people') ? json({ error: 'lab_participants_unreadable' }, 503) : json({ available: true, items: [], total: 0, standing: { everyone: 22, needs_decision: 7, on_track: 15, at_risk: 3, grace: 2, failed: 2, graduated: 0, not_in_cohort: 0 } });
+    // D5893: the shell's registry read (the header's status, Capability modules, Availability, Settings' member access).
+    if (p === '/api/admin/programs/spinout-lab') return down('registry') ? json({ detail: 'down' }, 503) : json({ program: { key: 'spinout-lab', name: 'Spin-Out Lab', status: 'live', member_access: 'apply', modules: ['applications', 'cohorts', 'hosts'] }, grant: { state: 'hq_held' }, grantable: true });
     if (p === '/api/admin/spinout-participants') return json({ participants: [], catalog: [] });
     if (p === '/api/admin/spinout-applications') return json({ applications: [] });
     return json({});
@@ -274,7 +276,7 @@ test('mounted Overview: each block from its own read, the header\'s counts, and 
     for (const id of ['by-cohort', 'weeks', 'funnel', 'per-week']) assert.doesNotMatch(m.of(`lab-${id}`), new RegExp(NOT_YET), `${id} is drawn now (D947)`);
     assert.ok(!m.has('admin-page-moved'), 'no notice without ?moved=');
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].sort();
-    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/overview', '/api/admin/cohort/participants', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
+    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/overview', '/api/admin/cohort/participants', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/programs/spinout-lab', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
   } finally { await m.unmount(); }
 });
 
