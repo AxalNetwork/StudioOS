@@ -255,8 +255,15 @@ export function cellView(cell) {
   if (typeof cell === 'number') return { text: cell.toLocaleString('en-US') };
   if (typeof cell === 'string') return { text: cell };
   if (cell.text == null || cell.text === '') return { text: 'Not recorded', nr: true };
-  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href) };
+  // #6030: a cell of several links (Solution design's evidence) keeps each one; `text` still reads it whole.
+  const links = Array.isArray(cell.links)
+    ? cell.links.filter((l) => l && l.text != null && l.text !== '').map((l) => ({ text: String(l.text), href: safeHref(l.href) }))
+    : [];
+  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href), ...(links.length ? { links } : {}) };
 }
+
+/** #6030: a filter option with its count when the read sends one ("Pain linked · 4"). */
+export const optionLabel = (o) => (Number.isFinite(o?.count) ? `${o.label} · ${o.count}` : o?.label);
 
 /** Only in-app paths are linked from a read; anything else is drawn as text. */
 export function safeHref(href) {
@@ -313,4 +320,14 @@ export function linkSearch(search) {
  */
 export function isPlainClick(e) {
   return !!e && !e.defaultPrevented && (e.button == null || e.button === 0) && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
+}
+
+/**
+ * #6030 (BD7): a feature with no evidence link offers "Link evidence" in place
+ * of Edit. It opens the same Edit form (the same PATCH), focused on the pain
+ * theme field, which the hypothesis field follows. Any other row: null.
+ */
+export function linkEvidenceAction(row, first, open) {
+  if (row?.keys?.evidence !== 'none' || typeof open !== 'function') return null;
+  return { text: 'Link evidence', label: `Link evidence to ${first && !first.nr ? first.text : 'this feature'}`, onClick: open };
 }

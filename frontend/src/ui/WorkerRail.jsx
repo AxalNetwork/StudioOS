@@ -16,7 +16,7 @@ import { aiBudgetApi } from '../lib/api/aiBudget';
 import { railPrefsApi } from '../lib/api/railPrefs.js';
 import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
-import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
+import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, openAskPanel, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
 import { PageAsk } from './AskButton.jsx';
 import { askDock, askLayout, askServes } from './askPanelModel.js';
@@ -476,6 +476,41 @@ export function RailUsage({ reading, hideHeld = false }) {
  */
 export const RETIRED_RAIL_PROPS = ['stance', 'coverage', 'coverageNote', 'scope', 'scopeBranch', 'unavailable', 'action', 'footer', 'fills'];
 
+/**
+ * D5077 (#5077, BD21 A): the page's asks as the rail's first block. Each one opens Ask with its words in
+ * the composer (`openAskPanel`'s `draft`); nothing is sent until the member sends it. Drawn only where
+ * Ask serves the viewer, so an ask never leads to a panel that cannot open.
+ */
+export function RailAsks({ prompts, label }) {
+  const ask = useAskPanel();
+  const list = Array.isArray(prompts) ? prompts.map((p) => (typeof p === 'string' ? p.trim() : '')).filter(Boolean) : [];
+  if (!ask.available || list.length === 0) return null;
+  return (
+    <section className="fwr-asks" data-testid="worker-rail-asks" aria-label="Suggested asks">
+      <span className="fwr-eyebrow">Suggested for this page</span>
+      <ul className="fwr-ask-list">
+        {list.map((p) => (
+          <li key={p}>
+            <button type="button" className="fwr-ask" onClick={() => openAskPanel(label, p)} data-testid="button-worker-rail-ask">{p}</button>
+          </li>
+        ))}
+      </ul>
+      <p className="fwr-models-note">Each one opens Ask with the question filled in. Nothing runs until you send it.</p>
+    </section>
+  );
+}
+
+/** D5077 (BD21 A): models, the safety line and usage behind one closed "AI settings", or as they were. */
+export function SettingsFold({ on, children }) {
+  if (!on) return children;
+  return (
+    <details className="fwr-settings" data-testid="worker-rail-ai-settings">
+      <summary className="fwr-settings-summary">AI settings</summary>
+      <div className="fwr-settings-body">{children}</div>
+    </details>
+  );
+}
+
 export default function WorkerRail({
   workspace,
   role = 'founder',
@@ -526,6 +561,14 @@ export default function WorkerRail({
    * changes.
    */
   usageAt = null,
+  /**
+   * D5077 (#5077, Build v2 board BD21 A): a page whose work comes first. The page's `prompts` open the
+   * rail as its first block, each filling Ask's composer and sending nothing; the models, the safety
+   * line and the usage (allowance, held, top-up) fold into one closed "AI settings" at the foot of the
+   * rail, still one press away. The rail's structure is #5130's; this only reorders what it already
+   * draws, and draws no second panel. Without it, nothing changes.
+   */
+  foldSettings = false,
   'data-testid': testId = 'worker-rail',
 }) {
   const founderRecord = readOnlyFor === 'founder-record';
@@ -852,6 +895,9 @@ export default function WorkerRail({
       {!aiOn && <p className="fwr-mode-line" data-testid="text-worker-rail-mode">{MANUAL_LINE}</p>}
       {aiOn && note && <p className="fwr-mode-line" data-testid="text-worker-rail-mode">{note}</p>}
 
+      {/* D5077 (BD21 A): this page's own asks first; they never run on their own. */}
+      {foldSettings && aiOn && <RailAsks prompts={prompts} label={askLabel} />}
+      <SettingsFold on={foldSettings}>
       {/* SUGGESTED FOR THIS PAGE (AIR:23-28). */}
       <section className="fwr-sug" data-ai={aiOn ? 'on' : 'off'} data-testid="worker-rail-suggestions">
         {aiOn && groups && <RailGroups groups={groups} page={pageKey} live={live} guardLine={rates.guardOn ? guardSentence(rates) : SAFETY_LINE} />}
@@ -1011,6 +1057,7 @@ export default function WorkerRail({
           </>
         )}
       </section>
+      </SettingsFold>
     </div>
   );
 
