@@ -2,7 +2,7 @@
 /**
  * D6464 (#6464): build the known-flaky test list from recent CI runs.
  *
- *   node scripts/flaky-tests.mjs [--days 7] [--write] [--open-issues] [--json]
+ *   node scripts/flaky-tests.mjs [--days 7] [--write] [--open-issues] [--json] [--why]
  *
  * Reads ci.yml runs of the last --days: failed merge_group runs (their failed
  * `suite (<part>)` job logs and the PR's changed files) and successful runs
@@ -95,6 +95,24 @@ async function collect(days) {
   return { runs, greens, failedCount: failed.length };
 }
 
+/** Each failed test across the runs: in how many, how many were its PR's own file, and how many had no later pass. */
+function explain(runs, greens, found) {
+  const rows = new Map();
+  const listedRuns = new Map(found.map((f) => [`${f.file}\u0000${f.test}`, f.runs.length]));
+  for (const run of runs) {
+    const passed = classify([{ ...run, failures: [{ file: '_', test: '_' }], changedFiles: [] }], greens).length > 0;
+    for (const f of run.failures) {
+      const key = `${f.file}\u0000${f.test}`;
+      const row = rows.get(key) || { file: f.file, test: f.test, runs: 0, ownFile: 0, noLaterPass: 0, counted: listedRuns.get(key) || 0 };
+      row.runs += 1;
+      if ((run.changedFiles || []).includes(f.file)) row.ownFile += 1;
+      else if (!passed) row.noLaterPass += 1;
+      rows.set(key, row);
+    }
+  }
+  return [...rows.values()].sort((a, b) => b.runs - a.runs).slice(0, 40);
+}
+
 function readData() {
   try { return JSON.parse(readFileSync(DATA, 'utf8')); } catch { return { expiryDays: EXPIRY_DAYS, tests: [] }; }
 }
@@ -132,6 +150,8 @@ async function main(argv) {
   const suiteRuns = runs.filter((r) => r.suiteFailed);
   const green = runs.filter((r) => wouldTurnGreen(r, tests)).length;
   const result = { days, failedQueueRuns: failedCount, failedWithSuiteParts: suiteRuns.length, wouldTurnGreen: green, tests };
+  // --why: every failed test before the rules, with how many runs each rule set aside, to check the list by hand.
+  if (flag('--why')) result.why = explain(runs, greens, found);
   if (flag('--json')) console.log(JSON.stringify(result, null, 2));
   else {
     console.log(`Failed merge-queue runs in ${days} days: ${failedCount}; with a failed suite part: ${suiteRuns.length}.`);
