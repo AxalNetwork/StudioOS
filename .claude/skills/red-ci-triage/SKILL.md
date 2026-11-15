@@ -30,6 +30,7 @@ Run every command from the repository root.
    - `main now:` shown only when main has a newer completed run. It tells you whether the repair has landed. It never turns an inherited failure into yours.
    - `alerts:` every open issue titled `[alert] …`, with what each blocking one forbids.
    - `failing:` one entry per failing test, type error, lint error or guard, with its file and line, the error, and a `reproduce:` command. It reads every failed job log of that main run and marks each entry `[also red on main]` or `[not in main's log]`. A test is matched by file and test name across all of main's failed parts, because `test-drift-parts` packs files into parts per run, so the same test can sit in `worker-3-of-6` on main and `worker-2-of-6` on the PR. An unmarked entry means a main log could not be read (`--no-main` skips the reads).
+     When no job failed but jobs were cancelled, it says `this run was cancelled or superseded by a newer push`: a newer push stopped the suite jobs, and `landing gate` or `test:drift (full suite)` is red only because of that. Read the current head's run, not this one.
    - `logs:` the folder holding the raw job logs (`--logs DIR` to choose it). Grep them when an entry says to read the log.
    - `next:` what the rules say to do.
    `--json` prints the same as JSON.

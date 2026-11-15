@@ -643,7 +643,141 @@ export interface ReportSection {
   // D1247 — a flag's state travels into the report: a closed flag leaves the
   // score but stays here, marked closed with its resolution. Absent on a
   // caller that predates migration 621.
-  findings: Array<{ severity: string; title: string; detail: string | null; evidence_url: string | null; state?: string | null; resolution?: string | null }>;
+  findings: ReportFlag[];
+  // D6296 — the section's checklist: each item's status and how much evidence
+  // backs it. Undefined on a caller that predates it (nothing drawn); null
+  // when this reader does not review the section (said so, never guessed).
+  checklist?: ReportChecklistItem[] | null;
+}
+export interface ReportFlag { severity: string; title: string; detail: string | null; evidence_url: string | null; state?: string | null; resolution?: string | null }
+/** D6296 — one checklist item as the report draws it. `evidence_count` is null when the evidence could not be read. */
+export interface ReportChecklistItem { title: string; status: string; severity: string | null; evidence_count: number | null }
+/** D6296 — one request to the subject, with its dates. */
+export interface ReportRequest {
+  title: string; section_title: string | null; state: string; withdrawn_at: string | null;
+  created_at: string | null; due_date: string | null; responded_at: string | null; reviewed_at: string | null;
+}
+export type ReportMemoPart = 'summary' | 'verified' | 'on_trust' | 'conditions';
+/**
+ * D6296 — the case's own parts: the decision, the memo, the requests and the
+ * flags raised against no section. `deal_team` is false for a caller who is
+ * not an Admin, the lead or the opener (a section reviewer): the memo
+ * (`memo_read`), the reason, the requests and the case-wide flags are then
+ * left out, as the case read leaves them out for that reader.
+ */
+export interface ReportExtras {
+  deal_team: boolean;
+  decision: { decision: string | null; reason: string | null; decided_by_name: string | null; decided_at: string | null };
+  memo: Record<ReportMemoPart, string | null>;
+  requests: ReportRequest[];
+  case_wide_flags: ReportFlag[];
+}
+
+/** D6296 — what an empty part reads. Nothing writes a stand-in for it. */
+export const NOT_RECORDED = 'Not recorded';
+/** D6296 — what a part reads when this caller may not read it. */
+export const NOT_IN_THIS_COPY = 'Not in this copy: only an Admin or the case lead or opener reads this part.';
+export const DECISION_WORD: Record<string, string> = {
+  proceed: 'Proceed', proceed_with_conditions: 'Proceed with conditions', do_not_proceed: 'Do not proceed', withdrawn: 'Withdrawn',
+};
+export const ITEM_STATUS_WORD: Record<string, string> = { pending: 'Pending', pass: 'Pass', flag: 'Flag', fail: 'Fail', n_a: 'N/A' };
+export const REQUEST_STATE_WORD: Record<string, string> = { requested: 'Requested', received: 'Received', reviewed: 'Reviewed', withdrawn: 'Withdrawn' };
+/** The memo's four parts, in the Sign-off tab's words (`ddCaseModel.js` MEMO_PARTS). */
+export const REPORT_MEMO_PARTS: ReadonlyArray<readonly [ReportMemoPart, string]> = [
+  ['summary', 'Summary'], ['verified', 'What we verified'], ['on_trust', 'What we take on trust'], ['conditions', 'Conditions to close'],
+];
+
+/** D6296 — an item's status in words, with its severity where it is a flag or a failure. */
+export function itemStatusLine(i: ReportChecklistItem): string {
+  const word = ITEM_STATUS_WORD[i.status] ?? i.status;
+  return (i.status === 'flag' || i.status === 'fail') && i.severity ? `${word} (${i.severity})` : word;
+}
+/** D6296 — how much evidence backs an item. */
+export function evidenceLine(n: number | null): string {
+  if (n == null) return 'Evidence could not be read';
+  return n === 0 ? 'No evidence' : n === 1 ? '1 piece of evidence' : `${n} pieces of evidence`;
+}
+/** D6296 — a request's state and dates, each date only where it was recorded. */
+export function requestLine(r: ReportRequest): string {
+  const state = r.withdrawn_at ? 'withdrawn' : r.state;
+  const parts = [REQUEST_STATE_WORD[state] ?? state];
+  const day = (v: string | null) => String(v).slice(0, 10);
+  if (r.section_title) parts.push(r.section_title); else parts.push('Case-wide');
+  parts.push(r.created_at ? `asked ${day(r.created_at)}` : 'asked: not recorded');
+  if (r.due_date) parts.push(`due ${day(r.due_date)}`);
+  if (r.responded_at) parts.push(`answered ${day(r.responded_at)}`);
+  if (r.reviewed_at) parts.push(`reviewed ${day(r.reviewed_at)}`);
+  if (r.withdrawn_at) parts.push(`withdrawn ${day(r.withdrawn_at)}`);
+  return parts.join(' · ');
+}
+/** D6296 — the decision in words: what, by whom, when. */
+export function decisionLine(d: ReportExtras['decision']): string {
+  if (!d.decision) return NOT_RECORDED;
+  const word = DECISION_WORD[d.decision] ?? d.decision;
+  const by = d.decided_by_name ? ` · recorded by ${d.decided_by_name}` : '';
+  const at = d.decided_at ? ` · ${String(d.decided_at).slice(0, 10)}` : '';
+  return `${word}${by}${at}`;
+}
+
+/**
+ * D6296 — read the case's checklist (with each item's evidence count), the
+ * decision's reason, the memo and the requests for the report. Read only;
+ * nothing here is written, and no model writes any of it. `dealTeam` false
+ * leaves the memo, the reason and the requests unread. The checklist is read
+ * for every section; the route draws only the sections this caller may see.
+ */
+export async function loadReportParts(
+  env: Env, cs: Record<string, unknown>, opts: { dealTeam: boolean },
+): Promise<{ checklistBySection: Map<number, ReportChecklistItem[]>; decision: ReportExtras['decision']; memo: ReportExtras['memo']; requests: ReportRequest[] }> {
+  const caseId = Number(cs.id);
+  const items = (await env.DB.prepare(
+    'SELECT id, section_id, title, status, severity FROM dd_checklist_items WHERE case_id = ? ORDER BY id',
+  ).bind(caseId).all<any>()).results || [];
+  // dd_item_evidence is migration 622's; a failed read says so per item.
+  let evidence: Map<number, number> | null = null;
+  try {
+    const rows = (await env.DB.prepare(
+      'SELECT item_id, COUNT(*) AS n FROM dd_item_evidence WHERE case_id = ? GROUP BY item_id',
+    ).bind(caseId).all<any>()).results || [];
+    evidence = new Map(rows.map((r: any) => [Number(r.item_id), Number(r.n)]));
+  } catch (e) {
+    console.warn('[dd] report evidence read failed:', (e as Error).message);
+  }
+  const checklistBySection = new Map<number, ReportChecklistItem[]>();
+  for (const i of items) {
+    const list = checklistBySection.get(Number(i.section_id)) ?? [];
+    list.push({ title: String(i.title), status: String(i.status), severity: i.severity ?? null, evidence_count: evidence ? (evidence.get(Number(i.id)) ?? 0) : null });
+    checklistBySection.set(Number(i.section_id), list);
+  }
+
+  let decidedBy: string | null = null;
+  if (cs.decided_by != null) {
+    try { decidedBy = (await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(Number(cs.decided_by)).first<{ name: string | null }>())?.name ?? null; } catch { decidedBy = null; }
+  }
+  const decision: ReportExtras['decision'] = {
+    decision: (cs.decision as string | null) ?? null,
+    reason: opts.dealTeam ? await decField(env, 'dd_cases', 'decision_reason', caseId, (cs.decision_reason_enc as string | null) ?? null) : null,
+    decided_by_name: decidedBy,
+    decided_at: (cs.decided_at as string | null) ?? null,
+  };
+
+  const memo: ReportExtras['memo'] = { summary: null, verified: null, on_trust: null, conditions: null };
+  const requests: ReportRequest[] = [];
+  if (opts.dealTeam) {
+    const row = await env.DB.prepare('SELECT * FROM dd_case_memos WHERE case_id = ? LIMIT 1').bind(caseId).first<any>();
+    if (row) for (const [k] of REPORT_MEMO_PARTS) memo[k] = await decField(env, 'dd_case_memos', k, Number(row.id), row[`${k}_enc`] ?? null);
+    const titles = new Map<number, string>();
+    for (const s of (await env.DB.prepare('SELECT id, title FROM dd_sections WHERE case_id = ?').bind(caseId).all<any>()).results || []) titles.set(Number(s.id), String(s.title));
+    const rows = (await env.DB.prepare('SELECT * FROM dd_requests WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<any>()).results || [];
+    for (const r of rows) {
+      requests.push({
+        title: String(r.title), section_title: r.section_id == null ? null : (titles.get(Number(r.section_id)) ?? null),
+        state: String(r.state), withdrawn_at: r.withdrawn_at ?? null, created_at: r.created_at ?? null,
+        due_date: r.due_date ?? null, responded_at: r.responded_at ?? null, reviewed_at: r.reviewed_at ?? null,
+      });
+    }
+  }
+  return { checklistBySection, decision, memo, requests };
 }
 
 /** D1247 — a flag's state in words, for the report. */
@@ -669,11 +803,20 @@ function esc(s: string | null | undefined): string {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
 }
 
-export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): string {
-  const band = cs.risk_band || 'Not recorded';
-  const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : '—';
-  const sectionBlocks = sections.map(sec => {
-    const findings = sec.findings.map(f => `
+/** D6296 — a section's checklist block: undefined draws nothing (a caller before it). */
+function checklistHtml(list: ReportChecklistItem[] | null | undefined): string {
+  if (list === undefined) return '';
+  const head = '<h3 style="margin:0 0 6px;font-size:12px;color:#6b7280;letter-spacing:1px;">CHECKLIST</h3>';
+  if (list === null) return `<div style="margin:0 0 12px;">${head}<p style="color:#9ca3af;font-size:12px;margin:0;">${esc(NOT_IN_THIS_COPY)}</p></div>`;
+  if (list.length === 0) return `<div style="margin:0 0 12px;">${head}<p style="color:#9ca3af;font-size:12px;margin:0;">${NOT_RECORDED}</p></div>`;
+  const rows = list.map((i) => `<tr><td style="padding:4px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;">${esc(i.title)}</td>`
+    + `<td style="padding:4px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;white-space:nowrap;">${esc(itemStatusLine(i))}</td>`
+    + `<td style="padding:4px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;color:#6b7280;white-space:nowrap;">${esc(evidenceLine(i.evidence_count))}</td></tr>`).join('');
+  return `<div style="margin:0 0 12px;">${head}<table style="width:100%;border-collapse:collapse;">${rows}</table></div>`;
+}
+
+function flagRowsHtml(list: ReportFlag[]): string {
+  return list.map(f => `
       <tr>
         <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">
           <span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;color:#fff;background:${SEV_COLOR[f.severity] || '#6b7280'};">${esc(f.severity.toUpperCase())}</span>
@@ -685,6 +828,43 @@ export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): str
           ${f.evidence_url ? `<a href="${esc(f.evidence_url)}" style="color:#7c3aed;font-size:11px;">${esc(f.evidence_url)}</a>` : ''}
         </td>
       </tr>`).join('');
+}
+
+const BOX = 'margin-bottom:24px;padding:16px 20px;border-radius:12px;background:#fff;border:1px solid #e5e7eb;';
+const BOX_H = 'margin:0 0 8px;font-size:14px;color:#6b7280;letter-spacing:1px;';
+const MUTED_P = 'color:#9ca3af;font-size:12px;margin:0;';
+
+/** D6296 — the decision and the memo, drawn under the summary. */
+function caseTopHtml(x: ReportExtras): string {
+  const reason = !x.deal_team ? NOT_IN_THIS_COPY : (x.decision.reason ?? NOT_RECORDED);
+  const decision = `<section style="${BOX}"><h2 style="${BOX_H}">DECISION</h2>
+    <p style="margin:0;font-size:14px;font-weight:600;">${esc(decisionLine(x.decision))}</p>
+    <p style="margin:6px 0 0;font-size:13px;color:#374151;"><strong>Reason:</strong> ${esc(reason)}</p></section>`;
+  const memo = !x.deal_team
+    ? `<p style="${MUTED_P}">${esc(NOT_IN_THIS_COPY)}</p>`
+    : REPORT_MEMO_PARTS.map(([k, label]) => `<h3 style="margin:10px 0 4px;font-size:12px;color:#374151;">${esc(label)}</h3>`
+      + `<p style="margin:0;font-size:13px;line-height:1.6;color:${x.memo[k] ? '#374151' : '#9ca3af'};white-space:pre-wrap;">${esc(x.memo[k] ?? NOT_RECORDED)}</p>`).join('');
+  return `${decision}<section style="${BOX}"><h2 style="${BOX_H}">THE DEAL TEAM'S MEMO</h2>${memo}</section>`;
+}
+
+/** D6296 — the flags raised against no section, and the requests, drawn after the sections. */
+function caseBottomHtml(x: ReportExtras): string {
+  const flags = !x.deal_team ? `<p style="${MUTED_P}">${esc(NOT_IN_THIS_COPY)}</p>`
+    : x.case_wide_flags.length ? `<table style="width:100%;border-collapse:collapse;">${flagRowsHtml(x.case_wide_flags)}</table>` : `<p style="${MUTED_P}">${NOT_RECORDED}</p>`;
+  const requests = !x.deal_team ? `<p style="${MUTED_P}">${esc(NOT_IN_THIS_COPY)}</p>`
+    : x.requests.length ? `<table style="width:100%;border-collapse:collapse;">${x.requests.map((r) => `<tr>`
+      + `<td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;font-weight:600;">${esc(r.title)}</td>`
+      + `<td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;">${esc(requestLine(r))}</td></tr>`).join('')}</table>`
+    : `<p style="${MUTED_P}">${NOT_RECORDED}</p>`;
+  return `<section style="${BOX}"><h2 style="${BOX_H}">CASE-WIDE FLAGS</h2>${flags}</section>
+  <section style="${BOX}"><h2 style="${BOX_H}">REQUESTS TO THE SUBJECT</h2>${requests}</section>`;
+}
+
+export function renderReportHtml(cs: ReportCase, sections: ReportSection[], extras?: ReportExtras): string {
+  const band = cs.risk_band || 'Not recorded';
+  const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : '—';
+  const sectionBlocks = sections.map(sec => {
+    const findings = flagRowsHtml(sec.findings);
     return `
       <section style="margin:24px 0;padding:20px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
         <header style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -697,6 +877,7 @@ export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): str
         </header>
         ${sec.reviewer_notes ? `<p style="font-size:13px;color:#374151;background:#f9fafb;padding:10px;border-radius:8px;margin:0 0 12px;"><strong>Reviewer:</strong> ${esc(sec.reviewer_notes)}</p>` : ''}
         ${sec.verdict ? `<p style="font-size:11px;color:#6b7280;margin:0 0 12px;">${sec.signed_off_by_name ? `Signed off by ${esc(sec.signed_off_by_name)}` : 'Sign-off not recorded'}${sec.completed_at ? ` · ${esc(String(sec.completed_at).slice(0, 10))}` : ''}</p>` : ''}
+        ${checklistHtml(sec.checklist)}
         ${findings ? `<table style="width:100%;border-collapse:collapse;font-family:-apple-system,sans-serif;">${findings}</table>` : '<p style="color:#9ca3af;font-size:12px;margin:0;">No findings recorded.</p>'}
       </section>`;
   }).join('');
@@ -731,7 +912,9 @@ export function renderReportHtml(cs: ReportCase, sections: ReportSection[]): str
       <div style="padding:10px;background:#f9fafb;border-radius:8px;"><div style="color:#6b7280;">Status</div><div style="font-size:14px;font-weight:600;text-transform:uppercase;">${esc(cs.status)}</div></div>
     </div>
   </section>
+  ${extras ? caseTopHtml(extras) : ''}
   ${sectionBlocks}
+  ${extras ? caseBottomHtml(extras) : ''}
   <footer style="margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11px;text-align:center;">
     Confidential — Axal Ventures internal use only · generated ${new Date().toISOString()}
   </footer>
@@ -781,7 +964,7 @@ function wrap(text: string, max: number): string[] {
   return out;
 }
 
-export async function renderReportPdf(cs: ReportCase, sections: ReportSection[]): Promise<Uint8Array> {
+export async function renderReportPdf(cs: ReportCase, sections: ReportSection[], extras?: ReportExtras): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -816,6 +999,39 @@ export async function renderReportPdf(cs: ReportCase, sections: ReportSection[])
   for (const line of wrap(summary, 95)) { ensure(13); page.drawText(line, { x: MARGIN, y, size: 10, font, color: rgb(0.216, 0.255, 0.318) }); y -= 13; }
   y -= 8;
 
+  // D6296 — the same parts the HTML draws, in the same order.
+  const GREY = rgb(0.420, 0.447, 0.502), TEXT = rgb(0.216, 0.255, 0.318);
+  const heading = (t: string) => { ensure(28); y -= 6; page.drawText(t, { x: MARGIN, y, size: 9, font: bold, color: GREY }); y -= 14; };
+  const para = (t: string, opts: { x?: number; size?: number; f?: typeof font; color?: ReturnType<typeof rgb>; max?: number } = {}) => {
+    const size = opts.size ?? 9;
+    for (const line of wrap(t, opts.max ?? 95)) { ensure(size + 3); page.drawText(line, { x: opts.x ?? MARGIN, y, size, font: opts.f ?? font, color: opts.color ?? TEXT }); y -= size + 3; }
+  };
+  const drawFlag = (f: ReportFlag) => {
+    ensure(28);
+    const sevColor = SEV_RGB[f.severity] || SEV_RGB.info;
+    page.drawRectangle({ x: MARGIN, y: y - 2, width: 4, height: 12, color: sevColor });
+    page.drawText(`[${f.severity.toUpperCase()}] ${f.title}`, { x: MARGIN + 10, y, size: 10, font: bold, color: rgb(0.067, 0.094, 0.153) });
+    y -= 13;
+    const stateLine = flagStateLine(f);
+    if (stateLine) {
+      for (const line of wrap(stateLine, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 8, font, color: rgb(0.42, 0.447, 0.502) }); y -= 11; }
+    }
+    if (f.detail) {
+      for (const line of wrap(f.detail, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 11; }
+    }
+    if (f.evidence_url) { ensure(11); page.drawText(f.evidence_url, { x: MARGIN + 10, y, size: 8, font, color: AXAL_PURPLE }); y -= 11; }
+    y -= 4;
+  };
+  if (extras) {
+    heading('DECISION');
+    para(decisionLine(extras.decision), { size: 10, f: bold });
+    para(`Reason: ${!extras.deal_team ? NOT_IN_THIS_COPY : (extras.decision.reason ?? NOT_RECORDED)}`);
+    heading("THE DEAL TEAM'S MEMO");
+    if (!extras.deal_team) para(NOT_IN_THIS_COPY, { color: GREY });
+    else for (const [k, label] of REPORT_MEMO_PARTS) { para(label, { f: bold }); para(extras.memo[k] ?? NOT_RECORDED, { color: extras.memo[k] ? TEXT : GREY }); y -= 4; }
+    y -= 8;
+  }
+
   // Sections
   for (const sec of sections) {
     ensure(40);
@@ -829,27 +1045,33 @@ export async function renderReportPdf(cs: ReportCase, sections: ReportSection[])
       for (const line of wrap(`Reviewer: ${sec.reviewer_notes}`, 95)) { ensure(12); page.drawText(line, { x: MARGIN, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 12; }
       y -= 4;
     }
+    // D466 — the sign-off, as the HTML draws it.
+    if (sec.verdict) para(`${sec.signed_off_by_name ? `Signed off by ${sec.signed_off_by_name}` : 'Sign-off not recorded'}${sec.completed_at ? ` · ${String(sec.completed_at).slice(0, 10)}` : ''}`, { size: 8, color: GREY });
+    // D6296 — the section's checklist.
+    if (sec.checklist !== undefined) {
+      para('Checklist', { size: 8, f: bold, color: GREY });
+      if (sec.checklist === null) para(NOT_IN_THIS_COPY, { x: MARGIN + 6, size: 8, color: GREY });
+      else if (sec.checklist.length === 0) para(NOT_RECORDED, { x: MARGIN + 6, size: 8, color: GREY });
+      else for (const i of sec.checklist) para(`${i.title} — ${itemStatusLine(i)} · ${evidenceLine(i.evidence_count)}`, { x: MARGIN + 6, size: 8, max: 100 });
+      y -= 4;
+    }
     if (sec.findings.length === 0) {
       ensure(12); page.drawText('No findings recorded.', { x: MARGIN + 6, y, size: 9, font, color: rgb(0.612, 0.639, 0.686) }); y -= 14;
     } else {
-      for (const f of sec.findings) {
-        ensure(28);
-        const sevColor = SEV_RGB[f.severity] || SEV_RGB.info;
-        page.drawRectangle({ x: MARGIN, y: y - 2, width: 4, height: 12, color: sevColor });
-        page.drawText(`[${f.severity.toUpperCase()}] ${f.title}`, { x: MARGIN + 10, y, size: 10, font: bold, color: rgb(0.067, 0.094, 0.153) });
-        y -= 13;
-        const stateLine = flagStateLine(f);
-        if (stateLine) {
-          for (const line of wrap(stateLine, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 8, font, color: rgb(0.42, 0.447, 0.502) }); y -= 11; }
-        }
-        if (f.detail) {
-          for (const line of wrap(f.detail, 92)) { ensure(11); page.drawText(line, { x: MARGIN + 10, y, size: 9, font, color: rgb(0.298, 0.337, 0.404) }); y -= 11; }
-        }
-        if (f.evidence_url) { ensure(11); page.drawText(f.evidence_url, { x: MARGIN + 10, y, size: 8, font, color: AXAL_PURPLE }); y -= 11; }
-        y -= 4;
-      }
+      for (const f of sec.findings) drawFlag(f);
     }
     y -= 6;
+  }
+
+  if (extras) {
+    heading('CASE-WIDE FLAGS');
+    if (!extras.deal_team) para(NOT_IN_THIS_COPY, { color: GREY });
+    else if (extras.case_wide_flags.length === 0) para(NOT_RECORDED, { color: GREY });
+    else for (const f of extras.case_wide_flags) drawFlag(f);
+    heading('REQUESTS TO THE SUBJECT');
+    if (!extras.deal_team) para(NOT_IN_THIS_COPY, { color: GREY });
+    else if (extras.requests.length === 0) para(NOT_RECORDED, { color: GREY });
+    else for (const r of extras.requests) { para(r.title, { f: bold }); para(requestLine(r), { size: 8, color: GREY }); y -= 3; }
   }
 
   // Footer on every page
@@ -868,12 +1090,12 @@ export async function renderReportPdf(cs: ReportCase, sections: ReportSection[])
  * The caller MUST surface the actual format used.
  */
 export async function renderReportArtifact(
-  env: Env, cs: ReportCase, sections: ReportSection[],
+  env: Env, cs: ReportCase, sections: ReportSection[], extras?: ReportExtras,
 ): Promise<{ format: 'pdf' | 'html'; bytes: ArrayBuffer; contentType: string }> {
   const browser = (env as unknown as { BROWSER?: BrowserBinding }).BROWSER;
   if (browser) {
     try {
-      const html = renderReportHtml(cs, sections);
+      const html = renderReportHtml(cs, sections, extras);
       const res = await browser.fetch('https://browser/pdf', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -888,11 +1110,11 @@ export async function renderReportArtifact(
     }
   }
   try {
-    const bytes = await renderReportPdf(cs, sections);
+    const bytes = await renderReportPdf(cs, sections, extras);
     return { format: 'pdf', bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, contentType: 'application/pdf' };
   } catch (e) {
     console.warn('[dd] pdf-lib render failed, last-resort HTML:', (e as Error).message);
-    const html = renderReportHtml(cs, sections);
+    const html = renderReportHtml(cs, sections, extras);
     return { format: 'html', bytes: new TextEncoder().encode(html).buffer as ArrayBuffer, contentType: 'text/html; charset=utf-8' };
   }
 }

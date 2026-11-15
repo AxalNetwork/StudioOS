@@ -277,7 +277,7 @@ export default function AdminPageHeader({
         </div>
       ) : null}
       {tabs ? (
-        <nav aria-label={title} className="col-span-2 -mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent)', paddingRight: 20 }} data-testid="admin-page-tabs">
+        <nav aria-label={title} className="relative col-span-2 -mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent)', paddingRight: 20 }} data-testid="admin-page-tabs">
           {tabs}
         </nav>
       ) : null}

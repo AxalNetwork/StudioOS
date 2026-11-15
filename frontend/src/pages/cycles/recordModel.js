@@ -115,7 +115,9 @@ export function recordFormFor(action, record, edit) {
     // through its own `valuesOf`, as a row's `edit`, and draws only the fields
     // those values carry, so a save never blanks a value it did not show.
     if (edit.readsRecord) {
-      const values = edit.valuesOf({ ...row, edit: { ...current, ...row.edit } });
+      // #6111: `record` is the read itself, for a value the record keeps on another of its actions
+      // (a market's decision is its own Change decision form).
+      const values = edit.valuesOf({ ...row, edit: { ...current, ...row.edit }, record });
       return { form: editFieldsFor(edit, values), current: values, id };
     }
     return { form: edit, current, id };

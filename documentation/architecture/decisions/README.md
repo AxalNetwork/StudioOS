@@ -129,3 +129,5 @@ and citations by number keep working.
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+
+| `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
