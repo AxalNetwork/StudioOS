@@ -162,8 +162,11 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * SHL1's More menu: "⋯", then a menu of `HeaderMenuItem`s. Opening it moves
  * focus to the first item; the arrow keys, Home and End move between items;
  * Escape and an outside click close it, Escape returning focus to "⋯".
+ *
+ * Exported for a page that draws its own header (the licence identity header,
+ * D4819 part 4, #5927): `className` then replaces the header-grid placement.
  */
-export function MoreMenu({ children, hasCrumb, className, testId = 'admin-page-more' }) {
+export function MoreMenu({ children, hasCrumb, className = null, testId = 'admin-page-more' }) {
   const [open, setOpen] = useState(false);
   const phone = usePhoneWidth('(max-width: 639px)');
   const wrap = useRef(null);
