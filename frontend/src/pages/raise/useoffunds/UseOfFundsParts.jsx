@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import {
-  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
+  NOT_RECORDED, SECTIONS, centsFromTyped, planViewer, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -438,7 +438,7 @@ export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
         {plan?.round?.disagreements?.length ? (
           <div className="flex flex-wrap items-center gap-2" data-testid="uof-round-differs">
             <Pill tone="amber">! Recorded round sizes differ</Pill>
-            {plan?.viewer?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
+            {planViewer(plan)?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
           </div>
         ) : null}
         {rows.filter((r) => r.key !== 'round').map((r) => (
