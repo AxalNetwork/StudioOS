@@ -1,3 +1,4 @@
+import { FUND_ADMIN_ASK_CHIPS } from './admin.js';
 /**
  * D775 (#2101) — the Super Admin's boards and the options they offer, as the
  * AIRail canvas names them (`design/incoming/airail-every-page-data/canvas.json`,
@@ -111,3 +112,8 @@ export const SUPER_ADMIN_RAIL_OPTIONS = Object.freeze([
   { page: 'Super Admin · Content · Publications', key: 'draft:publication-summary', label: 'Draft with AI', kind: 'write', handler: 'draft',
     source: { file: 'pages/admin/PublicationNew.jsx', match: 'publications.draft(' } },
 ]);
+
+/** D6397: the Fund Admin console has its own page and recorded-read tasks. */
+export const SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS = Object.freeze(FUND_ADMIN_ASK_CHIPS.map(chip => ({
+  ...chip, page: 'Super Admin · Fund Admin', route: '/admin/fund-admin',
+})));

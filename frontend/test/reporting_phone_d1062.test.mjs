@@ -292,10 +292,13 @@ test('RPT21b, RPT21c at 390: Reports as a list; a late period opens full screen 
     assert.equal(v.text('company-sheet-ask'), 'Ask for this report');
     assert.match(v.props('company-sheet-ask').className, /max-sm:min-h-11.*max-sm:flex-1/);
     assert.deepEqual(posted, [], 'opening asks nothing');
+    // D4817 part 9 (#5311) re-aimed: the pinned Ask opens the addendum's Review (PFA04) in place of RPT11's dialog.
     await v.click('company-sheet-ask');
-    assert.ok(v.has('company-ask-dialog') && !v.has('company-period-sheet'));
-    await v.click('company-ask-confirm');
+    assert.ok(v.has('report-review-ask') && !v.has('company-period-sheet'));
+    assert.deepEqual(posted, [], 'the Review asks nothing');
+    await v.click('report-review-confirm');
     assert.deepEqual(posted, ['/reporting/periods/pm9/ask']);
+    await v.click('report-receipt-done');
     // A due period: nothing to ask yet, so Waive alone.
     await v.click('company-period-pq3');
     assert.ok(!v.has('company-sheet-ask') && v.has('company-sheet-waive'));

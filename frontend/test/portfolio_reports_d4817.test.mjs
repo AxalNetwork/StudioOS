@@ -3,8 +3,9 @@
  * and the report detail, in the shared Portfolio frame, mounted against
  * stubbed Worker reads in its populated, Not recorded and Unreadable states,
  * with the detail open, plus the pure model it adds. The two company Reports
- * actions (Ask for this report, Waive this period) wait for #4817's addendum
- * and are checked unchanged, as are the page's chase actions.
+ * actions (Ask for this report, Waive this period) stay off this board; part 9
+ * rebuilt them on the company Reports, and test 5 follows them there. The
+ * page's chase actions are checked unchanged.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/portfolio_reports_d4817.test.mjs
  *
@@ -262,10 +263,10 @@ test('4. Unreadable: each failed source labels its own cells with a Retry for th
   } finally { await chases.close(); }
 });
 
-test('5. the two addendum-gated actions are unchanged: Ask and Waive stay on the company Reports; the chase is today’s', async () => {
+test('5. the two addendum actions stay on the company Reports (rebuilt by part 9); the chase is today’s', async () => {
   const view = await mount(worker());
   try {
-    assert.doesNotMatch(view.text(), /Ask for this report|Waive this period/, 'PF-04 draws neither action while #4817’s addendum waits');
+    assert.doesNotMatch(view.text(), /Ask for this report|Waive this period/, 'PF-04 draws neither action: they live on the company Reports');
     assert.ok(view.hrefs().includes('/portfolio/companies/pelican/reports'), 'the signed-duty row still opens the company Reports');
     await view.click('button-open-report-2');
     assert.equal(view.prop(view.node('link-report-detail-company'), 'href'), '/portfolio/companies/pelican/reports', 'the detail opens the company Reports, where Ask and Waive live');
@@ -291,11 +292,12 @@ test('5. the two addendum-gated actions are unchanged: Ask and Waive stay on the
   });
   try {
     await company.click('company-period-ask-pm9');
-    assert.match(company.text('company-ask-dialog'), /Ask Acme Robotics for the Sep 2026 · Monthly financial statements\?/);
-    await company.click('company-ask-confirm');
+    assert.match(company.text('report-review-ask'), /Ask Acme Robotics for its report.*Sep 2026 · Monthly financial statements/);
+    await company.click('report-review-confirm');
+    await company.click('report-receipt-done');
     await company.click('company-period-waive-pm9');
-    assert.match(company.text('company-waive-dialog'), /Waive Sep 2026 for Acme Robotics\?/);
-    await company.click('company-waive-confirm');
+    assert.match(company.text('report-review-waive'), /Waive this reporting period.*Acme Robotics.*Sep 2026/);
+    await company.click('report-review-confirm');
     assert.deepEqual(company.calls.filter((c) => c.method === 'POST').map((c) => c.path), ['/api/reporting/periods/pm9/ask', '/api/reporting/periods/pm9/waive']);
   } finally { await company.close(); }
 });

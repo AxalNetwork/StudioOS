@@ -14,7 +14,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
-import { TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
+import { TAB_DEFS, WAITS, dealGroupsFor, dealTabsFor, tabHref, tabOf } from '../src/pages/dealPageModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -100,13 +100,16 @@ test('every tab with no read says why, and none says zero or none', () => {
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('an investor at /deals/4: Overview from the deal read, the eleven tabs as links, Overview current', async () => {
+// D4815 part 4 (#5903, DE04): the tab row is the eight tabs, each holding the views above; a
+// view keeps its address, and the tab holding it is the one lit.
+test('an investor at /deals/4: Overview from the deal read, the eight tabs as links, Overview current', async () => {
   const v = await mounted('/deals/4', INVESTOR);
   try {
     assert.ok(v.text().includes('Harbor Ledger'));
-    assert.deepEqual(v.ids().filter((id) => id.startsWith('deal-tab-')), dealTabsFor('investor').map((t) => `deal-tab-${t}`));
+    assert.deepEqual(v.ids().filter((id) => id.startsWith('deal-tab-')), dealGroupsFor('investor').map((g) => `deal-tab-${g.id}`));
+    assert.deepEqual(v.ids().filter((id) => id.startsWith('deal-tab-')).length, 8);
     assert.deepEqual(v.current(), ['deal-tab-overview']);
-    assert.equal(v.hrefOf('deal-tab-traction'), '/deals/4/traction');
+    assert.equal(v.hrefOf('deal-tab-evidence'), '/deals/4/evidence');
     assert.equal(v.ids().filter((id) => id.startsWith('deal-wait-')).length, 0);
   } finally { await v.close(); }
 });
@@ -114,7 +117,7 @@ test('an investor at /deals/4: Overview from the deal read, the eleven tabs as l
 test('D1154: Traction reads its own section and draws no wait card', async () => {
   const v = await mounted('/deals/4/traction', INVESTOR);
   try {
-    assert.deepEqual(v.current(), ['deal-tab-traction']);
+    assert.deepEqual(v.current(), ['deal-tab-evidence', 'deal-subtab-traction'], 'Traction is a view under Evidence, at its old address');
     assert.ok(!v.ids().includes('deal-wait-traction'));
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/traction$/.test(u)), 'Traction reads D1151\'s section');
   } finally { await v.close(); }
@@ -129,15 +132,15 @@ test('Notes reads your firm\'s notes (D1152) and carries the activity beside the
   } finally { await v.close(); }
   v = await mounted('/deals/4/commitment', INVESTOR);
   try {
-    assert.deepEqual(v.current(), ['deal-tab-commitment']);
+    assert.deepEqual(v.current(), ['deal-tab-investment'], 'Commitment opens Investment at its old address');
     assert.ok(v.requests.some((u) => /\/api\/deals\/4\/commitments/.test(u)));
   } finally { await v.close(); }
 });
 
-test('a founder at another role\'s tab sees Overview, with their five tabs', async () => {
+test('a founder at another role\'s tab sees Overview, with the tabs that hold their five views', async () => {
   const v = await mounted('/deals/4/traction', FOUNDER);
   try {
-    assert.deepEqual(v.ids().filter((id) => id.startsWith('deal-tab-')), dealTabsFor('founder').map((t) => `deal-tab-${t}`));
+    assert.deepEqual(v.ids().filter((id) => id.startsWith('deal-tab-')), ['deal-tab-overview', 'deal-tab-dataroom', 'deal-tab-terms', 'deal-tab-investment', 'deal-tab-activity']);
     assert.deepEqual(v.current(), ['deal-tab-overview']);
     assert.ok(!v.ids().includes('deal-wait-traction'));
   } finally { await v.close(); }

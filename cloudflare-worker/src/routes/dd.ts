@@ -26,8 +26,8 @@ import {
   encField, decField,
   DD_DECISIONS, BLOCKING_FLAG_REFUSAL, blockingSectionsWithOpenSevereFlags, seedNewCase,
   TEMPLATE_DEPTHS, DEPTH_RANK, builtInTemplate, checkTemplateBody, latestTemplate, seedFromTemplate, CHECKLIST_CATALOG,
-  renderReportArtifact,
-  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth, type TemplateBody,
+  renderReportArtifact, loadReportParts,
+  type DDSubjectType, type ReportCase, type ReportSection, type ReportFlag, type ReportExtras, type ChecklistDepth, type TemplateBody,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
@@ -236,6 +236,7 @@ const READY_EXPR = "(c.status IN ('open', 'in_review')"
   + ' AND EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id)'
   + ' AND NOT EXISTS (SELECT 1 FROM dd_sections s WHERE s.case_id = c.id AND s.verdict IS NULL))';
 const CASE_FILTER_SQL = ' WHERE (? IS NULL OR c.subject_type = ?)'
+  + ' AND (? IS NULL OR c.subject_id = ?)'
   + ' AND (? IS NULL OR c.status = ?)'
   + " AND (? IS NULL OR (? = 'none' AND c.risk_band IS NULL) OR c.risk_band = ?)"
   + " AND (? IS NULL OR (? = 'ready' AND " + READY_EXPR + ')'
@@ -279,10 +280,22 @@ const LIST_SORTS = new Set(['opened', 'target', 'activity', 'flags', 'name']);
 const LIST_STAGES = new Set(['not_started', 'in_review', 'ready', 'decided', 'archived']);
 const SEVERITY_WORD = ['', 'info', 'low', 'medium', 'high', 'critical'];
 
+/**
+ * D6181 (#6181): `subject_id`, an exact subject (a project's id when
+ * subject_type is `project`). Absent or empty is no filter; anything but a
+ * positive whole number is `undefined`, which the list refuses with a 400
+ * rather than widening an exact lookup to every case the caller may read.
+ */
+function subjectIdParam(v: string | undefined): number | null | undefined {
+  if (v == null || v === '') return null;
+  return /^[1-9][0-9]{0,15}$/.test(v) && Number.isSafeInteger(Number(v)) ? Number(v) : undefined;
+}
+
 /** The binds for CASE_FILTER_SQL, in its order: the query's filters, then who may see which cases. */
 function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): unknown[] {
   const opt = (v: string | undefined) => (v == null || v === '' ? null : v);
   const subjectType = opt(q('subject_type'));
+  const subjectId = subjectIdParam(q('subject_id')) ?? null;
   const status = opt(q('status'));
   const band = opt(q('risk_band'));
   const stage = LIST_STAGES.has(String(q('stage'))) ? String(q('stage')) : null;
@@ -295,6 +308,7 @@ function caseFilterBinds(user: AppUser, q: (k: string) => string | undefined): u
   const everyone = user.role === 'admin' && q('owner_only') !== '1' ? 1 : 0;
   return [
     subjectType, subjectType,
+    subjectId, subjectId,
     status, status,
     band, band, band,
     stage, stage, stage, stage, stage, stage,
@@ -313,6 +327,7 @@ dd.get('/cases', async (c) => {
   const sort = LIST_SORTS.has(String(q('sort'))) ? String(q('sort')) : 'opened';
   const pageSize = Math.min(Math.max(Number.parseInt(String(q('page_size') ?? '200'), 10) || 200, 1), 200);
   const page = Math.max(Number.parseInt(String(q('page') ?? '1'), 10) || 1, 1);
+  if (subjectIdParam(q('subject_id')) === undefined) return c.json({ error: 'subject_id must be a positive whole number.', code: 'invalid_subject_id' }, 400);
   const binds = caseFilterBinds(user, q);
   const counted = await c.env.DB.prepare(LIST_COUNT_SQL).bind(...binds).first<{ n: number }>();
   const rows = await c.env.DB.prepare(LIST_ROWS_SQL)
@@ -1358,10 +1373,10 @@ dd.post('/cases/:uid/requests/:id/withdraw', async (c) => {
 // ---------- subject-facing request surface ----------
 //
 // The ONLY DD endpoints a founder may touch. They expose a request's
-// own fields (title/details/state) plus the case's subject_label — and
-// deliberately nothing else: no case uid, no score/band, no sections,
-// no findings. Auth is subject-resolution, not role: any authenticated
-// user sees exactly the requests addressed to them.
+// own fields (title/details/state), the subject's venture identity, and
+// the requester's display name where already visible on a shared deal.
+// Case identifiers, findings and reviewer details stay on the reviewing side.
+// Any authenticated user sees exactly the requests addressed to them.
 
 dd.get('/requests/mine', async (c) => {
   const user = await requireAuth(c);
@@ -1373,10 +1388,31 @@ dd.get('/requests/mine', async (c) => {
              -- D1252 (DDL15): the subject's own venture, so "Pick a file from your data room" reads that
              -- room (the data-room routes check ownership again), and the names of the files already
              -- matched to the request. Never the case's uid, score or sections.
-             CASE WHEN c.subject_type = 'project' THEN (SELECT p.uid FROM projects p WHERE p.id = c.subject_id) END AS project_uid,
+             p.id AS project_id, p.uid AS project_uid, p.name AS project_name,
+             (SELECT CASE WHEN COUNT(DISTINCT team_name) = 1 THEN MIN(team_name) END FROM (
+                SELECT COALESCE(NULLIF(TRIM(cp.company_name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  JOIN commitments k ON k.deal_id = d.id AND k.investor_user_id = requester.id
+                  LEFT JOIN company_profiles cp ON cp.id = k.company_id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                UNION ALL
+                SELECT NULLIF(TRIM(requester.name), '') AS team_name
+                  FROM deals d
+                  JOIN deal_invitations i ON i.deal_id = d.id AND i.investor_user_id = requester.id
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND NOT EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = requester.id)
+                UNION ALL
+                SELECT COALESCE(NULLIF(TRIM(partner.name), ''), NULLIF(TRIM(requester.name), '')) AS team_name
+                  FROM deals d
+                  LEFT JOIN partners partner ON partner.id = d.partner_id AND LOWER(partner.email) = LOWER(requester.email)
+                 WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
+                   AND (d.lead_partner_id = requester.id OR partner.id IS NOT NULL)
+             )) AS asking_team_name,
              (SELECT json_group_array(f.name) FROM data_room_files f WHERE f.dd_request_id = r.id) AS file_names
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
+        LEFT JOIN projects p ON c.subject_type = 'project' AND p.id = c.subject_id
+        LEFT JOIN users requester ON requester.id = r.created_by_user_id
        WHERE r.withdrawn_at IS NULL AND ((c.subject_type != 'project' AND c.subject_id = ${user.id})
           OR (c.subject_type = 'project' AND c.subject_id IN (
                 SELECT p.id FROM projects p
@@ -1484,21 +1520,40 @@ dd.post('/cases/:uid/report', async (c) => {
       const u = await c.env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(sid).first<{ name: string }>().catch(() => null);
       if (u?.name) signerNames.set(sid, u.name);
     }
+    const flagOf = async (f: any): Promise<ReportFlag> => ({
+      severity: f.severity, title: f.title,
+      detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
+      evidence_url: f.evidence_url,
+      // D1247: a closed flag stays in the report, marked closed.
+      state: f.state ?? null,
+      resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
+    });
+    // D6296 (#6296): the checklist, the decision, the memo and the requests.
+    // The deal team (an Admin, the lead or the opener — `memo_read`) gets
+    // every part. A section reviewer who may generate (a partner) gets the
+    // checklist of the sections they review and the decision without its
+    // reason; the memo, the reason, the requests and the case-wide flags
+    // read "not in this copy", as the case read withholds them from them.
+    const dealTeam = user.role === 'admin' || leadsOrOpened(user, cs);
+    const mineRows: any[] = dealTeam ? [] : await sql`SELECT DISTINCT section_id FROM dd_reviewers WHERE case_id = ${caseId} AND user_id = ${user.id}`;
+    const mySections = new Set(mineRows.map((r) => Number(r.section_id)));
+    const parts = await loadReportParts(c.env, cs, { dealTeam });
     const reportSections: ReportSection[] = await Promise.all(sections.map(async s => ({
       section_key: s.section_key, title: s.title, weight: Number(s.weight),
       status: s.status, verdict: s.verdict,
       signed_off_by_name: Number.isFinite(Number(s.signed_off_by)) ? (signerNames.get(Number(s.signed_off_by)) ?? null) : null,
       completed_at: s.completed_at ?? null,
       reviewer_notes: await decField(c.env, 'dd_sections', 'reviewer_notes', s.id, s.reviewer_notes_enc),
-      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(async f => ({
-        severity: f.severity, title: f.title,
-        detail: await decField(c.env, 'dd_findings', 'detail', f.id, f.detail_enc),
-        evidence_url: f.evidence_url,
-        // D1247: a closed flag stays in the report, marked closed.
-        state: f.state ?? null,
-        resolution: await decField(c.env, 'dd_findings', 'resolution', f.id, f.resolution_enc ?? null),
-      }))),
+      findings: await Promise.all(findings.filter(f => f.section_id === s.id).map(flagOf)),
+      checklist: dealTeam || mySections.has(Number(s.id)) ? (parts.checklistBySection.get(Number(s.id)) ?? []) : null,
     })));
+    const extras: ReportExtras = {
+      deal_team: dealTeam,
+      decision: parts.decision,
+      memo: parts.memo,
+      requests: parts.requests,
+      case_wide_flags: dealTeam ? await Promise.all(findings.filter(f => f.section_id == null).map(flagOf)) : [],
+    };
     const reportCase: ReportCase = {
       uid: String(cs.uid), subject_label: String(cs.subject_label),
       subject_type: String(cs.subject_type),
@@ -1508,7 +1563,7 @@ dd.post('/cases/:uid/report', async (c) => {
       notes: await decField(c.env, 'dd_cases', 'notes', caseId, cs.notes_enc as string | null),
     };
 
-    const artifact = await renderReportArtifact(c.env, reportCase, reportSections);
+    const artifact = await renderReportArtifact(c.env, reportCase, reportSections, extras);
     const ts = Date.now();
     const ext = artifact.format === 'pdf' ? 'pdf' : 'html';
     // Encryption-at-rest: DD reports may contain PII (subject email,

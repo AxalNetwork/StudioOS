@@ -95,6 +95,7 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 | `D5565.md` | Strict portable WorkspaceSpec/ExecutorAdapter and injected-clock atomic lease/fencing protocol; unmounted and no new task/usage ledger. |
 | `D5567.md` | Unmounted workspace security gate: live scoped grants, provider/image eligibility, one-use callbacks and encrypted tenant-bound object access. |
+| `D5568.md` | Tenant/repo-scoped Git cache, private per-attempt worktrees from an exact SHA, encrypted checkpoints committed by a generation-fenced pointer after verified upload, portable restore; unmounted. |
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
@@ -124,6 +125,7 @@ and citations by number keep working.
 | `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
 | `D5039-p3.md` | Governed statement disputes and due dates, actual action history, Stream control and dated branch checkout read-back (#5039). |
 | `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
+| `D5024-p2.md` | Immutable package offers, atomic Program Grants/legal-policy acceptance, source-bound contracts and normal branch-copy delivery. |
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
@@ -131,4 +133,12 @@ and citations by number keep working.
 | `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
 | `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
 | `D6292.md` | Investor Diligence door, recorded member context links and validated Cases list state in the address (#6292). |
+| `D5620.md` | Merge Control policy source: one bundled classifier, injected `policy_version`, fail-closed compare evaluation; four live questions not recorded (#5620). |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
+| `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+| `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
+
+| `D6397.md` | Five recorded Fund Admin tasks in today’s shared Ask panel, with scoped navigation and no models or financial acts (#6397). |
+| `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
+| `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
+| `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
