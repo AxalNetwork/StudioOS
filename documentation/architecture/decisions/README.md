@@ -131,3 +131,4 @@ and citations by number keep working.
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
 
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
+| `D5919.md` | Territory, Renewal window and Attention menus for loaded licence-ledger rows (#5919). |
