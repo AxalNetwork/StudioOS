@@ -1,0 +1,1291 @@
+{
+  "version": 1,
+  "description": "Source-only R2 classification (#6650); no counsel-approved locked-copy class is enabled. A recorded operational period is not a legal retention basis.",
+  "bucket_aliases": {
+    "studioos-files-preview": "studioos-files",
+    "studioos-publications-preview": "studioos-publications",
+    "studioos-company-logos-preview": "studioos-company-logos"
+  },
+  "classes": [
+    {
+      "id": "backups-d1",
+      "bucket": "studioos-backups",
+      "prefix": "d1/",
+      "class": "record",
+      "purpose": "D1 database recovery exports (external workflow)",
+      "retention_period": "365 days (operational recovery policy)",
+      "retention_days": 365,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (D1/KV recovery rows)"
+      ]
+    },
+    {
+      "id": "backups-drill-d1-history",
+      "bucket": "studioos-backups",
+      "prefix": "drill-d1-history/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ]
+    },
+    {
+      "id": "backups-drill-d1-json",
+      "bucket": "studioos-backups",
+      "prefix": "drill-d1.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-d1-independent-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-d1-independent.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "scripts/dr-drill.sh"
+      ],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-d1-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-d1.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [],
+      "match": "object"
+    },
+    {
+      "id": "backups-heartbeat-kv-json",
+      "bucket": "studioos-backups",
+      "prefix": "heartbeat-kv.json",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [],
+      "match": "object"
+    },
+    {
+      "id": "backups-kv",
+      "bucket": "studioos-backups",
+      "prefix": "kv/",
+      "class": "record",
+      "purpose": "Durable KV snapshots; ephemeral namespaces are refused by code",
+      "retention_period": "365 days (operational recovery policy)",
+      "retention_days": 365,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (D1/KV recovery rows)"
+      ]
+    },
+    {
+      "id": "company-logos-companies",
+      "bucket": "studioos-company-logos",
+      "prefix": "companies/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-83b-receipts",
+      "bucket": "studioos-files",
+      "prefix": "83b-receipts/",
+      "class": "record",
+      "purpose": "Filed tax-election receipts",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-advisor-deliverables",
+      "bucket": "studioos-files",
+      "prefix": "advisor-deliverables/",
+      "class": "record",
+      "purpose": "Original advisor deliverables",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-agent-compute",
+      "bucket": "studioos-files",
+      "prefix": "agent-compute/",
+      "class": "record",
+      "purpose": "Original compute inputs/results; operational per-object expires_at, no uniform legal retention period recorded",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-analytics-exports",
+      "bucket": "studioos-files",
+      "prefix": "analytics-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-articles",
+      "bucket": "studioos-files",
+      "prefix": "articles/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-brand-logos",
+      "bucket": "studioos-files",
+      "prefix": "brand-logos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-build-proof",
+      "bucket": "studioos-files",
+      "prefix": "build-proof/",
+      "class": "record",
+      "purpose": "Original formation and milestone proof",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-company-documents",
+      "bucket": "studioos-files",
+      "prefix": "company-documents/",
+      "class": "record",
+      "purpose": "Company document originals",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-contracts-evidence",
+      "bucket": "studioos-files",
+      "prefix": "contracts/evidence/",
+      "class": "record",
+      "purpose": "Contract evidence uploads",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-data-room",
+      "bucket": "studioos-files",
+      "prefix": "data-room/",
+      "class": "record",
+      "purpose": "Original data-room files and versions",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-evidence",
+      "bucket": "studioos-files",
+      "prefix": "dd-evidence/",
+      "class": "record",
+      "purpose": "Diligence evidence uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-ndas",
+      "bucket": "studioos-files",
+      "prefix": "dd-ndas/",
+      "class": "record",
+      "purpose": "Diligence NDA uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-dd-reports",
+      "bucket": "studioos-files",
+      "prefix": "dd-reports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-audio",
+      "bucket": "studioos-files",
+      "prefix": "deck-audio/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-images",
+      "bucket": "studioos-files",
+      "prefix": "deck-images/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-recordings",
+      "bucket": "studioos-files",
+      "prefix": "deck-recordings/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-rehearsals",
+      "bucket": "studioos-files",
+      "prefix": "deck-rehearsals/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-reviews",
+      "bucket": "studioos-files",
+      "prefix": "deck-reviews/",
+      "class": "record",
+      "purpose": "Original pitch files archived for review",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-deck-videos",
+      "bucket": "studioos-files",
+      "prefix": "deck-videos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-esign-signed",
+      "bucket": "studioos-files",
+      "prefix": "esign/signed/",
+      "class": "record",
+      "purpose": "Signed envelopes and certificates",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-events",
+      "bucket": "studioos-files",
+      "prefix": "events/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-fund-notices",
+      "bucket": "studioos-files",
+      "prefix": "fund-notices/",
+      "class": "record",
+      "purpose": "Issued fund notice evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-governance",
+      "bucket": "studioos-files",
+      "prefix": "governance/",
+      "class": "record",
+      "purpose": "Governance versions, resolutions and formation certificates",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-grow-minutes",
+      "bucket": "studioos-files",
+      "prefix": "grow-minutes/",
+      "class": "record",
+      "purpose": "Board and obligation minutes",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-grow-voice",
+      "bucket": "studioos-files",
+      "prefix": "grow-voice/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-headshots",
+      "bucket": "studioos-files",
+      "prefix": "headshots/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-imports",
+      "bucket": "studioos-files",
+      "prefix": "imports/",
+      "class": "record",
+      "purpose": "Imported source CSV evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-insights-exports",
+      "bucket": "studioos-files",
+      "prefix": "insights-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-kyb",
+      "bucket": "studioos-files",
+      "prefix": "kyb/",
+      "class": "record",
+      "purpose": "Business verification documents",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-kyc",
+      "bucket": "studioos-files",
+      "prefix": "kyc/",
+      "class": "record",
+      "purpose": "Member verification documents",
+      "retention_period": "7 years (runbook requirement; legal basis not recorded)",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "documentation/operations/INCIDENT_RESPONSE.md (contracts/KYC retention rows; recovery claim is corrected separately by #6428)"
+      ]
+    },
+    {
+      "id": "files-learning-courses",
+      "bucket": "studioos-files",
+      "prefix": "learning/courses/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-learning-videos",
+      "bucket": "studioos-files",
+      "prefix": "learning/videos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-legal-thumbnails",
+      "bucket": "studioos-files",
+      "prefix": "legal/thumbnails/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-licence-marks",
+      "bucket": "studioos-files",
+      "prefix": "licence-marks/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-meeting-bot-diagnostics",
+      "bucket": "studioos-files",
+      "prefix": "meeting-bot-diagnostics/",
+      "class": "log",
+      "purpose": "Meeting-bot diagnostic metadata and screenshots; access window is not a retention rule",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-mercury-statements",
+      "bucket": "studioos-files",
+      "prefix": "mercury-statements/",
+      "class": "record",
+      "purpose": "Original financial statements",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-network",
+      "bucket": "studioos-files",
+      "prefix": "network/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-news",
+      "bucket": "studioos-files",
+      "prefix": "news/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-program-exports",
+      "bucket": "studioos-files",
+      "prefix": "program-exports/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-publications",
+      "bucket": "studioos-files",
+      "prefix": "publications/",
+      "class": "record",
+      "purpose": "Publication artifacts explicitly archived for audit",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-reports",
+      "bucket": "studioos-files",
+      "prefix": "reports/",
+      "class": "record",
+      "purpose": "Original statement attachments to investor reports",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-research",
+      "bucket": "studioos-files",
+      "prefix": "research/",
+      "class": "record",
+      "purpose": "Original research-room files",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-resumes",
+      "bucket": "studioos-files",
+      "prefix": "resumes/",
+      "class": "record",
+      "purpose": "Candidate application documents",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-taxforms",
+      "bucket": "studioos-files",
+      "prefix": "taxforms/",
+      "class": "record",
+      "purpose": "Tax forms",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-team",
+      "bucket": "studioos-files",
+      "prefix": "team/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-telegram",
+      "bucket": "studioos-files",
+      "prefix": "telegram/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-testing-logos",
+      "bucket": "studioos-files",
+      "prefix": "testing-logos/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-trust-center-reports",
+      "bucket": "studioos-files",
+      "prefix": "trust-center/reports/",
+      "class": "record",
+      "purpose": "Uploaded issued certification and assurance reports; original evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-validate-audio",
+      "bucket": "studioos-files",
+      "prefix": "validate-audio/",
+      "class": "record",
+      "purpose": "Interview audio chunks, including meeting-bot uploads",
+      "retention_period": "Call-session chunks default to 30 days, with member overrides; no uniform period for the entire prefix",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker/src/services/callAudioRetention.ts (D877 default and member choice); legacy/direct uploads share this prefix"
+      ]
+    },
+    {
+      "id": "files-validate-evidence",
+      "bucket": "studioos-files",
+      "prefix": "validate-evidence/",
+      "class": "record",
+      "purpose": "Demand-signal evidence uploads",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wellbeing-credentials",
+      "bucket": "studioos-files",
+      "prefix": "wellbeing/credentials/",
+      "class": "record",
+      "purpose": "Expert credential evidence",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wellbeing-resources",
+      "bucket": "studioos-files",
+      "prefix": "wellbeing/resources/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-wg-v1",
+      "bucket": "studioos-files",
+      "prefix": "wg/v1/",
+      "class": "record",
+      "purpose": "Original work-graph blobs; scope-dependent content/TTL",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "files-x",
+      "bucket": "studioos-files",
+      "prefix": "x/",
+      "class": "replaceable",
+      "purpose": "Replaceable media, branding or generated export",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    },
+    {
+      "id": "logs-undated",
+      "bucket": "studioos-logs",
+      "prefix": "undated/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "2555 days (configured archive policy; legal basis not recorded)",
+      "retention_days": 2555,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker-tail/wrangler.toml (RETENTION_DAYS; setting is not proof of a live lifecycle rule)"
+      ]
+    },
+    {
+      "id": "logs-year",
+      "bucket": "studioos-logs",
+      "prefix": "{year}/",
+      "class": "log",
+      "purpose": "Operational heartbeat or diagnostic log",
+      "retention_period": "2555 days (configured archive policy; legal basis not recorded)",
+      "retention_days": 2555,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": [
+        "cloudflare-worker-tail/wrangler.toml (RETENTION_DAYS; setting is not proof of a live lifecycle rule)"
+      ],
+      "match": "pattern"
+    },
+    {
+      "id": "publications-publications",
+      "bucket": "studioos-publications",
+      "prefix": "publications/",
+      "class": "record",
+      "purpose": "Publication artifacts explicitly archived for audit",
+      "retention_period": "not recorded",
+      "retention_days": null,
+      "retention_basis": "not recorded",
+      "locked_copy": "no",
+      "policy_sources": []
+    }
+  ],
+  "key_references": [
+    {
+      "site": "cloudflare-worker-tail/src/archive.ts | writeArchiveBatch | put | object_key",
+      "classes": [
+        "logs-undated",
+        "logs-year"
+      ],
+      "review_hash": "3ce20df139119478fbe911137757a3f66859bb172c033271b0a96d2436faf082",
+      "evidence": "Writer/prefix provenance: cloudflare-worker-tail/src/archive.ts:42"
+    },
+    {
+      "site": "cloudflare-worker/src/durable-objects/meeting-bot-run.ts | upload | delete | saved.objectPath",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "review_hash": "acf1a008e2d80e7844fddab2330224775754d403509ceccfc38831f00ef21d5b",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_licences_brand.ts | post /:uid/brand/mark | delete | existing.row.mark_r2_key",
+      "classes": [
+        "files-licence-marks"
+      ],
+      "review_hash": "582fc01379dc010383b3b860beeb7aadb4a81a52b32e50e7432693de970173b3",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_licences_brand.ts:171"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_licences_brand.ts | delete /:uid/brand/mark | delete | existing.row.mark_r2_key",
+      "classes": [
+        "files-licence-marks"
+      ],
+      "review_hash": "0adec1cbd236d76ba34f43967c21cd4097e4ed70ee320af10f5bd468d8e2684a",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_licences_brand.ts:171"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_network_profiles.ts | post /:id/photo | delete | oldKey",
+      "classes": [
+        "files-network"
+      ],
+      "review_hash": "165d226508dadb84cdd0b1870ee15276c3f6f621432f748718367ff82fc6c041",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_network_profiles.ts:502"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_team.ts | delete /:id | delete | row.photo_r2_key",
+      "classes": [
+        "files-team"
+      ],
+      "review_hash": "d75a661ed290a1ba0f8f87f1d21ec606957df0acc525ed3867024cb1a6d8eba0",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_team.ts:309"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_team.ts | post /:id/photo | delete | oldKey",
+      "classes": [
+        "files-team"
+      ],
+      "review_hash": "d49445651fcb9440e22eed97255422738fbbe135455733fb0b4098f2cef00395",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_team.ts:309"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_telegram.ts | delete /posts/:id | delete | post.media_r2_key",
+      "classes": [
+        "files-telegram"
+      ],
+      "review_hash": "39e7b9714f60fe58341834caf802c698771676a18161af6c2900a152b786c001",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_telegram.ts:492"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_telegram.ts | post /posts/:id/media | delete | oldKey",
+      "classes": [
+        "files-telegram"
+      ],
+      "review_hash": "7fa63a72cdfe8f510564fb72aff8ed6760ccc62d6f6a0c346c3df1a69f4db7ca",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_telegram.ts:492"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_x.ts | delete /accounts/:id | delete | key",
+      "classes": [
+        "files-x"
+      ],
+      "review_hash": "242bc9b595329d5e8720d127b32a1da317c404d574c7f868d985e9fb31b64503",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_x.ts:715"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/admin_x.ts | delete /posts/:id | delete | k",
+      "classes": [
+        "files-x"
+      ],
+      "review_hash": "65d0d5ba77bac1716b88ccf67627cc407944a1b37b57638fd5e1f0d7a0a81503",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/admin_x.ts:715"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/advisors_deliverables.ts | dropStored | delete | stored.key",
+      "classes": [
+        "files-advisor-deliverables"
+      ],
+      "review_hash": "ddbe2917b3bd0b5e86606a8eaab5e251b05655859410682a22784c5da86b2811",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/advisors_deliverables.ts:183"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/articles.ts | post /:id/cover | delete | row.cover_r2_key",
+      "classes": [
+        "files-articles"
+      ],
+      "review_hash": "5523a21d32ab43e8a683d52ceb0d8849f19907429565af30d04a6f3c7326b3db",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/article_assist.ts:245; cloudflare-worker/src/routes/articles.ts:792; cloudflare-worker/src/routes/articles.ts:822; cloudflare-worker/src/services/articleCovers.ts:66"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/company.ts | dropStoredLogo | delete | key",
+      "classes": [
+        "company-logos-companies"
+      ],
+      "review_hash": "d45fbd6a0ca41e5051d18301ff2182fe90ee464e0261d5a939072a1a94262339",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/company.ts:665; cloudflare-worker/src/routes/company.ts:792"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/data_room.ts | removeDataRoomFile | delete | file.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "review_hash": "2f985048217822cfb88e05a727f3c9182aeb25a25273134838bbd4858f63df8c",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/data_room.ts | removeDataRoomFile | delete | version.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "review_hash": "bea251debd4df2f247d00f6f26a2c301034346eadaa765dd7e181bced201d01b",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/deck_reviewer.ts | delete /:id/raw | delete | String(row.r2_key)",
+      "classes": [
+        "files-deck-reviews"
+      ],
+      "review_hash": "dd82694c6c6c012c3dc4a98d79ec6f5768fdf5d96c0f05d11ff8a373cc6253d8",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/deck_reviewer.ts | delete /:id | delete | String(row.r2_key)",
+      "classes": [
+        "files-deck-reviews"
+      ],
+      "review_hash": "157dfb6c3a502506f879490a6bbb38150a382d17c04d09f0b1933727ff384c44",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | delete /:uid | delete | k.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "review_hash": "a1ee24a54489ecc02dde45169ee9ea3efff85820b4eb73927cb50ed5dd647c8f",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | delete /:uid/steps/:position | delete | st.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "review_hash": "f044bcc0516076a4469ceff78e7230bb7e8f8c4e0afd066f8ae0787b457b50e5",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/grow_sequences.ts | put /:uid/steps/:position/recording | delete | st.recording_asset",
+      "classes": [
+        "files-grow-voice"
+      ],
+      "review_hash": "2d372795bc348b2aa745b6f1bb070fb81a2abffba384c67daeaddbaa596254fe",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/grow_sequences.ts:294"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/kyb_admin.ts | patch /:id/reject | delete | doc.file_key",
+      "classes": [
+        "files-kyb"
+      ],
+      "review_hash": "f022650bea9f5b3941c316dbfcff5214ec06c4c84c8f37a9aae7cbeeb36214c3",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/kyb_admin.ts:426"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | put /items/:uid/video/uploads/part | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "e85bcf9ed3497e145498a6f3b50f23c729b04f05ef6c26b5c62591ccd8ea14ca",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | put /items/:uid/video/uploads/part | uploadPart | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "e85bcf9ed3497e145498a6f3b50f23c729b04f05ef6c26b5c62591ccd8ea14ca",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | complete | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | delete | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | abort | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "fbd73373b98c04de34414121a58a66babf83c76cfa3811ae626fbe1369fe9bba",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | resumeMultipartUpload | ref.key!",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "fbd73373b98c04de34414121a58a66babf83c76cfa3811ae626fbe1369fe9bba",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/news.ts | post /:id/cover | delete | row.cover_r2_key",
+      "classes": [
+        "files-news"
+      ],
+      "review_hash": "012036b139f069e5bd60969461ab5d58b1e15951f068653087b7944f47d52d66",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/news.ts:422"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/research.ts | delete /documents/:uid | delete | row.r2_key",
+      "classes": [
+        "files-research"
+      ],
+      "review_hash": "54ffd1ccfaa2bdba9d99bfac33081b32c6d8fd7f1228b799fbdd3e7f18bcd498",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/research.ts:457"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/settings.ts | post /headshot | delete | oldKey",
+      "classes": [
+        "files-headshots"
+      ],
+      "review_hash": "dc3736293774f7e7ad392633c44be0fffe0a773b843e23673b14c7f9f8636466",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/settings.ts | post /profile/linkedin-import/apply | delete | oldKey",
+      "classes": [
+        "files-headshots"
+      ],
+      "review_hash": "a7f564826f355d308b18f0730d9cff722701bd2bfdad5a464a514df475559e0d",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing_expert_review.ts | delete /experts/me/credentials/files/:fileUid | delete | file.file_key",
+      "classes": [
+        "files-wellbeing-credentials"
+      ],
+      "review_hash": "a35574e99ba7b829d7a693f41564c95c1d54cc5e854e161a2758d56051d31cd3",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing_expert_review.ts:113"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | delete /resources/:id | delete | file.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "review_hash": "8f124c1384de74e5eef754c07644bcd6017193118daf8d6dd0637acdc1da906d",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | put /resources/:id/file | delete | row.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "review_hash": "d2a61a2741010ab0842153278829218e93979d30a55795a0c4dbaf34059311b3",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/wellbeing.ts | delete /resources/:id/file | delete | row.file_key",
+      "classes": [
+        "files-wellbeing-resources"
+      ],
+      "review_hash": "6bbbbe06ada7578f336a6c3ff9cbeb55402c424882a51460689b596af777105e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing.ts:972"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | computeInternal | delete | key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "review_hash": "84fe2c5c191d8ed9a5e744360861845c518b9e46e082327e6d4b0cb088541ff6",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | sweepComputeObjects | delete | row.r2_key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "review_hash": "eca52b441cdb596eda5b8dec25e0c8ce848d002b2aff00320b863413dc5e25e5",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/agents/computeBridge.ts | eraseComputeData | delete | object.r2_key",
+      "classes": [
+        "files-agent-compute"
+      ],
+      "review_hash": "6017bcc9c1a7f68c5daa84fdc5db956bcc5171b9b5acb0cbff23368402a2f8cb",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/agents/computeBridge.ts:105; cloudflare-worker/src/services/agents/computeBridge.ts:253"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/cardAudio.ts | deleteCardAudio | delete | key",
+      "classes": [
+        "files-deck-audio"
+      ],
+      "review_hash": "111c36cfb87be97d8d78f62c59212f468059ae946feca2f85446cdcffb1e79b3",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/cardAudio.ts | sweepOrphanAudio | delete | o.key",
+      "classes": [
+        "files-deck-audio"
+      ],
+      "review_hash": "8c9d94b4e9f04c31046d2f7b4878f1528b9d9beaccfe1c789b89691943693a7a",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/imageSweep.ts | sweepDeckImages | delete | img.r2_key",
+      "classes": [
+        "files-deck-images"
+      ],
+      "review_hash": "abd72f74844b731d68b1761a5bad60cc02f38bde596cf92c9a029e34228fb97d",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/imageTakedown.ts | takeDownImage | delete | marked.r2_key",
+      "classes": [
+        "files-deck-images"
+      ],
+      "review_hash": "3389f1e890cc1e8c330f9c0809e48c7cb6cb92018979e0e01851f7184d15140a",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/recordings.ts | deleteTake | delete | row.media_r2_key",
+      "classes": [
+        "files-deck-recordings"
+      ],
+      "review_hash": "52fc8a232ebd59b6a8e3c3ebceb8fb266e286e79b953de0c4f875532c08631da",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_recordings.ts:156"
+    },
+    {
+      "site": "cloudflare-worker/src/services/decks/recordings.ts | sweepOrphanRecordings | delete | o.key",
+      "classes": [
+        "files-deck-recordings"
+      ],
+      "review_hash": "be3ec94078f0c3cd624dbd4728115611a23d5301134319356c5defc215100d51",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_recordings.ts:156"
+    },
+    {
+      "site": "cloudflare-worker/src/services/google/raise.ts | copyFile | delete | old.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "review_hash": "4d7895ce96db63c0bd640594aa95d18e2750a4dd9b091515d97435cb6d999742",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/services/google/raise.ts | deleteRaiseGoogleCopy | delete | row.r2_key",
+      "classes": [
+        "files-data-room"
+      ],
+      "review_hash": "a8eb36050b40e0399701d30c23c870bb552df2fd6097030b7af80027683f6883",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/captable.ts:1475; cloudflare-worker/src/routes/cycle_use_of_funds.ts:140; cloudflare-worker/src/routes/data_room.ts:1028; cloudflare-worker/src/routes/data_room.ts:971; cloudflare-worker/src/services/google/raise.ts:258; cloudflare-worker/src/services/mercury/raiseFeeds.ts:699"
+    },
+    {
+      "site": "cloudflare-worker/src/services/interviewSessions.ts | deleteSessionAudio | delete | keys.slice(i, i + 1000)",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "review_hash": "836eb4f39b4ccac77751040bc4ea181c9c17fc7401c31af1ca055c89a02e575f",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/services/interviewSessions.ts | deleteSession | delete | keys.slice(i, i + 1000)",
+      "classes": [
+        "files-validate-audio"
+      ],
+      "review_hash": "01c9b19ab26213d4db499b5fef51f697ea6c634372ffa673729ba7a288feca5e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/founder_validate.ts:1235; cloudflare-worker/src/services/interviewSessions.ts:285"
+    },
+    {
+      "site": "cloudflare-worker/src/services/learningVideo.ts | sweepLearningVideos | delete | obj.key",
+      "classes": [
+        "files-learning-videos"
+      ],
+      "review_hash": "b5c59bb2b5c3def9afc76f6d0a3284734eda958da34f4aa9427eaebe0dfa58b7",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+    },
+    {
+      "site": "cloudflare-worker/src/services/projectTrash.ts | purgeDeckImages | delete | page.objects.map(object => object.key)",
+      "classes": [
+        "files-deck-images"
+      ],
+      "review_hash": "1f8638154961c96244debbf91286482bcfdbc04fa3f30cca45538a7e79ef349c",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+    },
+    {
+      "site": "cloudflare-worker/src/services/r2.ts | deleteKycDocument | delete | fileKey",
+      "classes": [
+        "files-kyc"
+      ],
+      "review_hash": "1d8f2cf0a5d28dc75581258d4269c7511d77bd9a7a33c4afdf6fca396e6b5fbe",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:64"
+    },
+    {
+      "site": "cloudflare-worker/src/services/records/build.ts | uploadProof | delete | f.proofKey",
+      "classes": [
+        "files-build-proof"
+      ],
+      "review_hash": "a0f41ce3569de3c4bbc65d3c83b84c268875951662f2b81045ba05250f4b6308",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/records/build.ts:457"
+    },
+    {
+      "site": "cloudflare-worker/src/services/rehearsalAudio.ts | deleteRehearsalAudio | delete | row.audio_r2_key",
+      "classes": [
+        "files-deck-rehearsals"
+      ],
+      "review_hash": "9873f18f64be47b35ae59a9820a930472aea0ae465ca2dfa03d7385e45548e7e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_rehearsals.ts:212"
+    },
+    {
+      "site": "cloudflare-worker/src/services/testingLogo.ts | dropOld | delete | key",
+      "classes": [
+        "files-testing-logos"
+      ],
+      "review_hash": "fbdb5a5512e14fa439be47c4efdc36b83fc468898443d2786fd8d1cce793a2ca",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/testingLogo.ts:146"
+    },
+    {
+      "site": "cloudflare-worker/src/services/validateWriters.ts | attachDemandEvidence | delete | row.evidence_file_key",
+      "classes": [
+        "files-validate-evidence"
+      ],
+      "review_hash": "6b7c47cfe7ba8e83111eec7d12c9020c857dde7530fbe8578eb350fda7ed65bd",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/validateWriters.ts:1281"
+    },
+    {
+      "site": "cloudflare-worker/src/services/workGraphReconcile.ts | reconcileWorkGraph | delete | deleteKeys",
+      "classes": [
+        "files-wg-v1"
+      ],
+      "review_hash": "a1df5ba9897630f23a02d05fcd974eceb0ea646217a355329c1408479109c2f9",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/workGraphBlobs.ts:301"
+    }
+  ],
+  "planned_formation_records": [
+    "Filing packs (#6680)",
+    "Registry evidence (#6680)",
+    "Formation certificates (#6680; current governance/build-proof uploads already classified)",
+    "Structure memos (#6680)"
+  ]
+}

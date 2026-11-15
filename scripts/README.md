@@ -334,3 +334,4 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
+| `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory, classification/provenance guard and generated operations catalogue. |
