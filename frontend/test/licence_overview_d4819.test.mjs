@@ -326,7 +326,7 @@ test('the sections are keyboard tabs in the URL; every earlier tab is reachable 
     assert.deepEqual(sub.map((n) => v.props(n).id), ['licence-tab-deploy', 'licence-tab-notices', 'licence-tab-fee-invoices']);
     assert.equal(v.props(v.byId('licence-subtabs'))['aria-label'], 'Operations views');
     assert.ok(v.has('licence-domain-strip'), 'the domain strip and its Detach stay reachable, on Branch and domain');
-    assert.match(v.text(), /Could not read the deployment registry\./, 'the deploy step mounts there too (its registry is not faked here)');
+    assert.match(v.text(), /The deployment registry could not be read\./, 'the deploy step mounts there too (its registry is not faked here; D5924 draws it Unreadable)');
     await v.key('licence-subtabs', 'ArrowRight');
     assert.equal(v.tabs.at(-1), 'notices');
     await v.key('licence-tabs', 'ArrowRight');

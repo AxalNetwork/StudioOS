@@ -24,6 +24,7 @@ import {
   ANSWERS_UNREADABLE, CLAIMS_WAIT, NEEDS_NONE, NOT_RECORDED, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles,
   needsYou, newVersionLine, nextVersion, readByLine, startFromHref, versionSub,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+import { withNarrativeCapabilities } from './_narrative_capabilities.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -127,7 +128,8 @@ test('NAR12: based-on lines, Read by, why a version cannot be deleted, and the c
  * The Versions tab, mounted
  * ------------------------------------------------------------------ */
 
-const OPTIONS = { versions: [{ value: '1', label: 'v1 · seed fund' }, { value: '3', label: 'v3 · angel' }, { value: '4', label: 'v4 · seed fund' }] };
+// D5074: the versions read carries the founder's capability map, as the Worker sends it.
+const OPTIONS = withNarrativeCapabilities({ versions: [{ value: '1', label: 'v1 · seed fund' }, { value: '3', label: 'v3 · angel' }, { value: '4', label: 'v4 · seed fund' }] });
 const COMPARE = { a: 3, b: 4, pairs: [{ key: 'traction', label: 'Traction', a: { body: null }, b: { body: 'Pilots convert to paid.' }, state: 'changed' }] };
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'x' },
   records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 }, parts: { narrative: PART } };

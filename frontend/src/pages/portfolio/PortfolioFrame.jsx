@@ -20,7 +20,9 @@
  *
  * Props: `tab` (null for the Overview, else a nav slug), `description`,
  * `context` (the basis line beside the heading), `tools` (header buttons),
- * `notice` (a partial-failure line under the nav), `rail`, `children`.
+ * `notice` (a partial-failure line under the nav), `rail`, `children`, and
+ * `banner` (D4817 part 8: the one Admin Investor preview banner, above the
+ * crumb; null otherwise).
  *
  * D4817 part 6 (PF-06) draws one company's workspace in this same frame, so
  * four optional props let a board below Portfolio say where it is: `title`
@@ -63,6 +65,7 @@ export default function PortfolioFrame({
   crumb = null,
   nav,
   docTitle: ownTitle,
+  banner = null,
 }) {
   const docTitle = ownTitle || portfolioTitle(tab);
   useEffect(() => {
@@ -76,6 +79,7 @@ export default function PortfolioFrame({
     <div className="pf-shell">
       <a className="pf-skip" href="#portfolio-content">Skip to Portfolio content</a>
       <section className="pf-frame" id="portfolio-content" tabIndex={-1} aria-labelledby="portfolio-title" data-testid={testid}>
+        {banner}
         <nav className="pf-crumb" aria-label="Breadcrumb">
           <span>Account</span><span aria-hidden="true">›</span>
           {crumb ? <><Link to="/portfolio" className="pf-crumb-link">Portfolio</Link><span aria-hidden="true">›</span><b>{crumb}</b></> : <b>Portfolio</b>}
