@@ -31,7 +31,7 @@ import { refuse } from '../util/refusal';
 import { sourcesFor } from '../services/approvalSources';
 import { inboxSources } from '../services/hqApprovalSources';
 import {
-  INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, inboxItem, personLabel, readHistoryQuery,
+  assignFromBody, assignmentHistory, hqInbox, inboxItem, personLabel, readHistoryQuery,
 } from '../services/approvalAssignments';
 import {
   DECIDED_MAX_PAGE, OUTCOMES, decidedLog, decidedWeekly, decisionLanesFor, type Filters, type Outcome,
@@ -98,8 +98,8 @@ r.post('/assignments', async (c) => {
     const { admin, sources } = await reader(c);
     await requireBranchNotSuspended(c);
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-    // Any item the inbox can show can be assigned: the board is read to the inbox's own cap.
-    const result = await assignFromBody(c.env, admin, body, { sources, boardLimit: INBOX_LANE_CAP });
+    // D5874: any waiting item on a lane this reader sees can be assigned, read by lane and id.
+    const result = await assignFromBody(c.env, admin, body, { sources });
     if (!result.ok) return refuse(c, result.status, { code: result.code, message: result.message, audience: 'member' });
     return c.json({ assigned: result.assigned });
   } catch (e) { return mapError(c, e); }

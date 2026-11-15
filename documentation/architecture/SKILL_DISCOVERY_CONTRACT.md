@@ -2,6 +2,8 @@
 
 This is the request and response a task-to-skill recommendation uses. It describes what the ranker must return, not a built route: no route serves it yet. The decision behind it, and the company-extension model, are in `decisions/D4538.md`. The labelled query set that measures it is in `skill-discovery/queries.v1.json`.
 
+The gate and ranking stages 1 to 3 are built as a pure service, `cloudflare-worker/src/services/agents/skillDiscovery.ts`. Its relevance method and measured numbers are in `decisions/D4538-p4.md`.
+
 Discovery is a **hard eligibility gate first, then ranking**. Eligibility is never a low score: a skill the requesting agent cannot run is never a candidate. Nothing here attaches a skill; attaching stays the existing, separately authorised action (`PUT /api/teams/agents/:uid/skills`, through `attachCheck`).
 
 ## Request

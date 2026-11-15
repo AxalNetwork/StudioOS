@@ -478,7 +478,7 @@ test('mounted, Inbox (APR1): the tiles, the two charts with their sentences, the
   } finally { await v.unmount(); }
 });
 
-test('mounted, Inbox: filters live in the address and reach the Worker; one search character does not filter; the pager', async () => {
+test('mounted, Inbox: filters live in the address and reach the Worker; one search character does not filter; the pager', async ({ mock }) => {
   const v = await mount('/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k', h(AdminApprovals));
   try {
     const sent = v.seen.find((p) => p.startsWith('/api/admin/approvals?'));
@@ -487,7 +487,13 @@ test('mounted, Inbox: filters live in the address and reach the Worker; one sear
     await v.click('approvals-next');
     assert.equal(v.at.path, '/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k&page=2');
     assert.ok(v.seen.includes('/api/admin/approvals?page=2&group=people&age=past&assigned=me&sort=lane'));
-    await v.change('approvals-search', 'ky');
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      await act(async () => v.props('approvals-search').onChange({ target: { value: 'ky' } }));
+      assert.ok(v.at.path.includes('page=2'), 'typing leaves the current page until the debounce fires');
+      await act(async () => mock.timers.tick(300));
+    } finally { mock.timers.reset(); }
+    await v.flush();
     assert.ok(!v.at.path.includes('page='), 'a new search starts at page 1');
     assert.ok(v.seen.includes('/api/admin/approvals?page=1&q=ky&group=people&age=past&assigned=me&sort=lane'));
   } finally { await v.unmount(); }
@@ -495,7 +501,7 @@ test('mounted, Inbox: filters live in the address and reach the Worker; one sear
 
 test('mounted, Inbox: the ⋯ menu copies the item\'s link; the bulk bar assigns the picked items and a refusal is a toast, the list re-read', async () => {
   let refuse = false;
-  const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { id: 7, role: 'admin', is_super_admin: 0 } }), {
+  const v = await mount('/admin/approvals?lane=kyc&page=2', h(ApprovalsPage, { viewer: { id: 7, role: 'admin', is_super_admin: 0 } }), {
     assign: () => (refuse ? json({ code: 'item_not_waiting', message: 'This item is not waiting any more: it was decided, withdrawn or moved.' }, 404) : json({ ok: true, assigned: 2 })),
   });
   try {
@@ -518,6 +524,8 @@ test('mounted, Inbox: the ⋯ menu copies the item\'s link; the bulk bar assigns
     assert.match(v.of('approvals-toast'), /2 items are now assigned to Admin B\./);
     assert.ok(!v.has('approvals-assign'));
     assert.ok(v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length > before, 'the list is read again');
+    assert.equal(v.at.path, '/admin/approvals?lane=kyc&page=2');
+    assert.equal(v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).at(-1), '/api/admin/approvals?page=2&lane=kyc');
     refuse = true;
     await v.click('approvals-menu-due_diligence:9');
     await v.click('approvals-menu-due_diligence:9-assign');

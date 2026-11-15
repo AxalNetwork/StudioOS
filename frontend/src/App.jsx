@@ -990,6 +990,15 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
+// D4817 part 8 (#5311, PF-08): the Portfolio boards that draw their own Investor
+// preview banner. App.jsx's imports are frozen (D5615), so this mirrors
+// `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
+// holds the two to the same addresses.
+const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+function pageOwnsPreviewBanner(pathname, selectedKey) {
+  return selectedKey === 'investor' && PREVIEW_BANNER_BOARDS.test(String(pathname || ''));
+}
+
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
   // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
@@ -1003,6 +1012,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
   const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
   const previewing = selected && home && selected.key !== home.key;
+  // D4817 part 8 (#5311, PF-08): a Portfolio board previewed as Investor draws
+  // the one preview banner itself (read-only, with this same way back), so the
+  // strip, whose note says writes still go out, stands down there.
+  const { pathname } = useLocation();
+  const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
     if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
@@ -1076,7 +1090,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       {/* H38's strip: while a shell other than the viewer's own is previewed,
           the chip, the sentence about whose name the writes carry — "the
           Super Admin" to the holder, "you" to anyone else — and the way back. */}
-      {!isImpersonating && previewing && (
+      {!isImpersonating && previewing && !pageBanner && (
         <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
           <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
           <span className="opacity-90">{previewNote(superAdmin)}</span>
@@ -1312,9 +1326,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   // Memoize the context value so consumers of `useViewMode()` don't re-render
   // on every App render. Stable identity unless one of the three inputs changes.
+  // D4817 part 8 (#5311, PF-08): a page that draws its own preview banner
+  // offers the strip's way back, so the context carries it and the elevation.
+  const viewModeChangeRef = useRef(onViewModeChange);
+  viewModeChangeRef.current = onViewModeChange;
+  const exitPreview = useCallback(() => viewModeChangeRef.current?.('admin', { hq: superAdmin === true }), [superAdmin]);
   const viewModeContextValue = useMemo(
-    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole }),
-    [activeRole, isAdmin, isImpersonating, shellRole],
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole, superAdmin: superAdmin === true, exitPreview }),
+    [activeRole, isAdmin, isImpersonating, shellRole, superAdmin, exitPreview],
   );
 
   // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
@@ -2526,6 +2545,12 @@ function AppInner() {
   // Same rule as researchRole, and the same reason it lives below
   // effectiveRole rather than above it.
   const networkRole = researchRole;
+  // #6265: a Research zone the founder shell does not list (diligence, benchmarking, client prep)
+  // sends an admin who is not previewing back to `/research`. It cannot be done by leaving `admin`
+  // out of `labRoles([...])`, because labRoles adds `viewMode`, which is 'admin' for that admin.
+  // These routes use a plain `guard([...])` inside this, so View as Investor / Advisor / Partner
+  // (effectiveRole = the previewed role) still passes RoleGuard.
+  const adminToResearch = (element) => (effectiveRole === 'admin' ? <Navigate to="/research" replace /> : element);
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
@@ -2924,12 +2949,17 @@ function AppInner() {
       <Route path="/research/funds/catalog/:id" element={guard(labRoles(['admin', 'founder']), <FundCatalogProfile role={researchRole} />)} />
       <Route path="/research/funds/:uid" element={guard(labRoles(['admin', 'founder']), <FundDossier role={researchRole} />)} />
       <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/diligence/:grantUid" element={guard(labRoles(['admin', 'investor']), <DiligenceRoom role={researchRole} />)} />
-      <Route path="/research/diligence/:grantUid/files/:fileUid" element={guard(labRoles(['admin', 'investor']), <DiligenceFile role={researchRole} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      {/* #6265: no `admin` on diligence, benchmarking or client prep. An admin browses Research as
+          the founder shell (`researchRole`), which lists none of the three, so the zone resolved to
+          null and drew "Nothing serves this zone yet"; the diligence reads are keyed to the caller
+          as the investor, so an admin holds no rooms either. `adminToResearch` sends that admin to
+          /research; View as Investor / Advisor / Partner still opens them through RoleGuard. */}
+      <Route path="/research/diligence" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/diligence/:grantUid" element={adminToResearch(guard(['investor'], <DiligenceRoom role={researchRole} />))} />
+      <Route path="/research/diligence/:grantUid/files/:fileUid" element={adminToResearch(guard(['investor'], <DiligenceFile role={researchRole} />))} />
+      <Route path="/research/benchmarking" element={adminToResearch(guard(['investor'], <ResearchWorkspace role={researchRole} user={user} />))} />
+      <Route path="/research/benchmarking/:uid" element={adminToResearch(guard(['investor'], <BenchmarkDetail role={researchRole} />))} />
+      <Route path="/research/client-prep" element={adminToResearch(guard(['advisor', 'partner'], <ResearchWorkspace role={researchRole} user={user} />))} />
       {/* Legacy Customer Discovery lands on Validate · Customer research (#2335). */}
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
@@ -3605,12 +3635,11 @@ function AppInner() {
         holds('investor') ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />)} />
 
       {/* ── Deals · the four stages, as four routes ──────────────────────────
-          The zone slugs are InvestorDealsWorkspace's own anchor ids with the
-          prefix stripped — the canvas took them from there. Four deep-linkable
-          URLs replacing five that never said which stage you were on; the
-          workspace still renders all four sections and the route scrolls to
-          one. Splitting it into four pages is a content decision, not a
-          routing one. */}
+          The zone slugs are InvestorDealsWorkspace's old anchor ids with the
+          prefix stripped — the canvas took them from there. Each zone route
+          renders its own page (`ZONES` in InvestorDealsRoutes); nothing
+          scrolls to a section, and the old workspace is not on these routes
+          (#6152). */}
       {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}

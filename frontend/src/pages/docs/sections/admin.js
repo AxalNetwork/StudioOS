@@ -14,12 +14,16 @@ export default {
       howto: [
         'Open a row of the admin sidebar (admins only); its page lists the tools under it.',
         'Each page has its own header with a breadcrumb back to its row, and its own tabs where it has them.',
+        'On Fund admin, choose a fund and open Ask for outstanding capital, overdue LPs, reconciliation exceptions, capital call preparation or missing fund setup facts.',
+        'Prepare a capital call opens the existing New capital call form for the chosen fund with blank amount and due date. Enter these yourself before previewing.',
         'Use "View as" to step into a user’s view; exit from the violet bar at the top.',
         'If you administer a studio licence, open My Licence → Contract to see program agreement status, what each program is waiting on, and any signed PDFs you can download.',
         'At HQ, use the legal Needs HQ filters in Licences to find agreements that need attention. Open the licence’s Agreement section to prepare an agreement or review it before sending for signature.',
       ],
       tips: [
         'Bookmark the page you use most — every tool has its own address, so a bookmark opens it directly.',
+        'Fund admin answers show their source date. Not recorded is a missing value; Unreadable with Retry means the source could not be read, not that its amount is zero.',
+        'Eadwyn explains and navigates; it never issues, records or moves money. Any Admin can preview a capital call, and a Super Admin issues it through the existing confirmation flow.',
         'An old /admin?tab= link still works: it forwards to the tool’s page, which says once where it now lives.',
       ],
       pitfalls: [

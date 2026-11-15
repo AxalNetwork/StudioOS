@@ -93,6 +93,15 @@ async function fact<T>(name: string, f: () => Promise<T>): Promise<T | typeof UN
  * structured one with nothing pending, never hides older review work.
  */
 async function reviewFact(env: Env, projectId: number): Promise<ReviewFact | null> {
+  return (await reviewQueue(env, projectId, 1)).items[0] ?? null;
+}
+
+/**
+ * D5996 (#5996): the review queue itself, in that order, up to `limit` sessions; `more` says whether
+ * another reviewable session may sit past them. The overview's Needs attention counts it; rule 2 reads its first.
+ */
+export async function reviewQueue(env: Env, projectId: number, limit: number): Promise<{ items: ReviewFact[]; more: boolean }> {
+  const items: ReviewFact[] = [];
   const candidates = (await env.DB.prepare(
     `SELECT s.id, s.interview_id, s.status, COALESCE(s.stopped_at, s.updated_at, s.created_at) AS at, i.interviewee_name
        FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id
@@ -100,23 +109,25 @@ async function reviewFact(env: Env, projectId: number): Promise<ReviewFact | nul
       ORDER BY COALESCE(s.stopped_at, s.updated_at, s.created_at) DESC, s.id DESC`,
   ).bind(projectId).all<{ id: number; interview_id: number; status: string; at: string | null; interviewee_name: string | null }>()).results ?? [];
   for (const s of candidates) {
+    // Past the limit, a further candidate is not inspected (no further read): `more` says one may be waiting.
+    if (items.length >= limit) return { items, more: true };
     const moves = s.status === 'structured' ? await pendingMoves(env, projectId, s.id) : null;
     if (s.status !== 'transcribed' && !(moves && moves.placements > 0)) continue;
     const who = s.interviewee_name?.trim() || 'your interviewee';
     const when = dayMonth(s.at);
     const parts = moves ? [moves.themes && plural(moves.themes, 'pain theme', 'pain themes'), moves.hypotheses && plural(moves.hypotheses, 'hypothesis', 'hypotheses')].filter(Boolean) : [];
-    return {
+    items.push({
       interviewId: Number(s.interview_id), sessionId: Number(s.id),
       headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
       why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
         : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
-    };
+    });
   }
-  return null;
+  return { items, more: false };
 }
 
 /** The open claims with their interview evidence, as the Experiments card computes them. */
-async function claimFacts(env: Env, projectId: number): Promise<ClaimFact[]> {
+export async function claimFacts(env: Env, projectId: number): Promise<ClaimFact[]> {
   const ctx = { env, projectId, today: new Date().toISOString().slice(0, 10) };
   const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(env, projectId, { strict: true })]);
   return claimsOf(hyps, links, interviews, model).map((c) => ({
@@ -125,7 +136,7 @@ async function claimFacts(env: Env, projectId: number): Promise<ClaimFact[]> {
 }
 
 /** Experiments marked done whose observed result is empty, on open claims, oldest first. */
-async function resultFacts(env: Env, projectId: number): Promise<ResultFact[]> {
+export async function resultFacts(env: Env, projectId: number): Promise<ResultFact[]> {
   const rows = await env.DB.prepare(
     `SELECT e.hypothesis_id, h.code, e.title FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id
       WHERE e.project_id = ? AND h.project_id = ? AND h.retired_at IS NULL AND e.status = 'done'

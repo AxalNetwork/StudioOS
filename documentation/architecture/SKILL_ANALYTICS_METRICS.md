@@ -45,9 +45,56 @@ Definitions that matter:
 - **A company skill** is counted by scope and status only. Its slug, roles and tags are not read into the response.
 - **`review_requested`** is a requested review. It is not `lifecycleStatus`'s `in_review`, which also needs the request to be on the current evidence. The per-skill `status` in `skills` stays `lifecycleStatus`.
 
+## Published-version evaluation (served now, D4536-p2)
+
+`GET /api/admin/ai-agents/skills` returns `published_evaluation` next to `coverage` (Super Admin only). It is computed by `publishedEvaluation` in `services/agents/skillCoverage.ts` from three reads, whatever the catalogue's size or the page:
+- the published HQ skills at their current version, with their live cases;
+- the published history;
+- the latest campaign.
+
+Like `coverage`, it is the whole catalogue's on a `?page=` read.
+
+Definitions that matter:
+- **Source.** Every figure reads `agent_skill_version_evals` only, the published history. The draft history (`agent_skill_eval_results`, by draft and evidence hash) is never read here, so no number blends the two.
+- **Scope.** Each published HQ skill (`status = 'published'`, `current_version >= 1`) is read at its **current version**. A retired or draft skill is not in the block.
+- **A unit** is a version, a case key and a model. The latest row per unit counts, by `run_at` and then `id`. A unit run again counts once.
+- **Expected units** are the version's cases times its required models:
+  - the cases are those a run takes (`casesOf`): the starter case unless a live case carries its text, plus each live case;
+  - the models are the version's release manifest (`evidence_json.models.required`), else the skill's declared set, else the default set. `models_source` says which.
+- **Missing and observed.** A unit with no row is missing. A version with no row at all is not evaluated, and its measures read `{ available: false }`, never 0 of 0. A `not_run` row is recorded; it is counted as `not_run` and is never a pass or a fail.
+
+| Metric | Source | Grouping | Window | Denominator | Availability | Scope |
+|---|---|---|---|---|---|---|
+| `history` | — | — | — | — | always `'published'` | HQ |
+| `versions.{published,evaluated,unevaluated}` | `agent_skills`, `agent_skill_version_evals` | current version | now | published HQ skills | always | HQ |
+| `versions.unevaluated_skills` | as above | skill uid | now | — | always | HQ |
+| `results.{pass,fail,not_run}` | latest row per unit, current version | result | all runs on that version | units with a row | `{ available: false }` when no version is evaluated | HQ |
+| `required.{units,recorded,missing,versions_incomplete}` | expected units against latest rows | version, case key, model | now | expected units (cases × required models) | always | HQ |
+| `required.{model_pairs,models_without_result}` | as above | version, model | now | required models summed over versions | always; a model with no row on any expected case | HQ |
+| `regressions.since_previous_run.<outcome>` | latest vs the newest earlier row that ran, same version | case, model | all runs on that version | latest rows, one outcome each (`PairOutcome`) | `{ available: false }` when no version is evaluated | HQ |
+| `regressions.since_previous_version.<outcome>` | previous version's latest rows vs current version's (`compareResults`) | case, model | versions N-1 and N | pairs in either version | `{ available: false }` when no evaluated version has a previous one | HQ |
+| `regressions.time_to_resolve` | — | — | — | — | always `{ available: false }`: needs the fixing version linked to the regression | HQ |
+| `freshness.{newest_run_at,hours_since_newest}` | `run_at` of the latest rows | — | now | evaluated versions | `{ available: false }` when none is evaluated | HQ |
+| `freshness.{oldest_last_run_at,hours_since_oldest}` | the oldest of each version's last run | — | now | evaluated versions | as above | HQ |
+| `identity.{current_evaluator_version,evaluator_versions}` | `evaluator_version` of the latest rows; `EVALUATOR.version` | — | now | latest rows | as above | HQ |
+| `identity.rows_on_current_evaluator`, `rows_on_other_evaluator`, `rows_evaluator_not_recorded`, `rows_case_text_not_recorded` | `evaluator_version`, `case_sha256` | — | now | latest rows | as above | HQ |
+| `campaign.{uid,status,started_at,finished_at}` | the latest `agent_skill_eval_campaigns` row | — | that campaign | — | `{ available: false }` when none started or unreadable | HQ |
+| `campaign.manifest.{total,done,skipped,pending}` | `agent_skill_eval_campaign_skills.state` | state | that campaign | its manifest | as above | HQ |
+| `campaign.published_not_done` | published HQ skills whose current version that campaign did not finish | — | now | published HQ skills | as above | HQ |
+| `campaign.full_coverage` | the three above | — | — | — | true only when the campaign is `complete`, nothing is pending and `published_not_done` is 0; a batch is never full coverage (#4668) | HQ |
+| `skills[].{skill_uid,version,evaluated}` | per published HQ skill | skill, current version | now | — | always | HQ |
+| `skills[].required.{cases,models,models_source,units,recorded,missing[],models_without_result[]}` | expected units | case key, model | now | that version's expected units | always | HQ |
+| `skills[].results`, `by_model.<model>` | latest rows | result; model | all runs on that version | that version's units with a row | `{ available: false }` when the version is not evaluated | HQ |
+| `skills[].cases[].{case_key,model_id,result,run_at,evaluator_version,case_sha256}` | the latest row per unit | case key, model | — | — | `[]` when not evaluated | HQ |
+| `skills[].regressions.{since_previous_run,since_previous_version}` | as the catalogue's, `regressed` only | — | as above | — | `{ available: false }` when not evaluated; `since_previous_version` is null on v1 | HQ |
+| `skills[].{last_run_at,hours_since_last_run}` | `run_at` of the latest rows | — | now | — | null when not evaluated | HQ |
+| `skills[].identity.{evaluator_versions,on_current_evaluator,evaluator_not_recorded,case_text_not_recorded}` | latest rows | — | now | that version's latest rows | `{ available: false }` when not evaluated | HQ |
+
+When the history cannot be read, the whole block is `{ available: false, reason }`. It is never served as zeros. The proposal evaluation board of #3851 is not read: no query names a proposal table.
+
 ## Evaluation quality (defined; served by the existing routes)
 
-These are read where they already exist. They are not repeated in `coverage`, and the two kinds are never blended.
+These are read where they already exist. They are not repeated in `coverage`, and the two kinds are never blended. The published-version figures are also served across the catalogue, in `published_evaluation` above.
 
 | Metric | Source | Grouping | Denominator | Where |
 |---|---|---|---|---|
@@ -57,7 +104,7 @@ These are read where they already exist. They are not repeated in `coverage`, an
 | Evaluation freshness | `last_eval`, `freshness` (D4533) | skill | — | `skills[].last_eval`, `GET /:uid` |
 | Evaluator, model set and case set | `evaluator_version`, `case_sha256`, the required models | result row | — | the compare report's `attribution` |
 
-Not recorded yet: time to resolve a regression (it needs the fixing version linked to the regression), and campaign coverage over the whole catalogue (#4668 progress; one batch is never full coverage).
+Not recorded yet: time to resolve a regression. It needs the fixing version linked to the regression, and `published_evaluation.regressions.time_to_resolve` says so. Campaign coverage over the whole catalogue is served as `published_evaluation.campaign` (#4668 progress; one batch is never full coverage).
 
 ## Execution and usage (deferred)
 

@@ -1,7 +1,8 @@
 /**
  * Research · Markets and · Geographies (D533, issue #1080 step 2).
  *
- *   GET /api/research/markets                the 82 markets, searchable, sortable, paged
+ *   GET /api/research/markets                the 82 markets, searchable, sortable, paged; each with
+ *                                            its countries, source count and newest source date (D6284)
  *   GET /api/research/markets/:slug          one market: its companies, funds, signals, sub-markets
  *   GET /api/research/geographies            countries with company and fund counts
  *   GET /api/research/geographies/:code      one country: companies by market, its largest
@@ -232,6 +233,125 @@ async function marketIndex(env: Env, sector: string | null) {
 
 const MARKET_SORTS = ['name', 'company_count', 'supplied_count'] as const;
 
+// ---------------------------------------------------------------------------
+// Per-market coverage for the Markets filters (D6284, #6284 · RS-03).
+//
+// Three derived fields, read for the page only and in a fixed number of
+// queries whatever the page size (no query per market):
+//   countries         where the directory's companies in this market are based
+//                     (the D533 company-sector and company-country crosswalk);
+//   source_count      distinct live sources: the tracked sector's live
+//                     market-intelligence `source_key`s (D538 predicate) and the
+//                     `source_key`s of the evidence behind active signals whose
+//                     tags name the market;
+//   newest_source_at  the newest of those sources' row dates (`ts`, `observed_at`).
+// Each is `{ status: 'recorded', value }` or `{ status: 'not_recorded', value:
+// null, reason }` — a market no source covers reads null with its reason,
+// never 0. No market size or growth is derived: no store records one.
+// ---------------------------------------------------------------------------
+
+export const NO_COMPANY_REASON = 'No company in the directory is placed in this market';
+export const NO_COUNTRY_REASON = 'No company in this market records a country the crosswalk can place';
+export const NO_SOURCE_REASON =
+  'No live source yet: no live market-intelligence row for its tracked sector and no evidence behind an active signal that names this market';
+export const NO_SOURCE_DATE_REASON = 'No source row for this market records a date';
+/** At most this many sources are listed per market; `source_count` counts them all. */
+export const SOURCES_CAP = 20;
+
+type Recorded<T> = { status: 'recorded'; value: T } | { status: 'not_recorded'; value: null; reason: string };
+const recorded = <T>(value: T): Recorded<T> => ({ status: 'recorded', value });
+const notRecorded = <T>(reason: string): Recorded<T> => ({ status: 'not_recorded', value: null, reason });
+
+interface MarketSource { kind: 'market_intel' | 'signal_evidence'; key: string; rows: number; newest: string | null }
+
+/** `ts` is ISO ('…T…Z'), `observed_at` is SQLite ('… …'); compared on one form. */
+const dateKey = (d: string | null) => String(d ?? '').replace(' ', 'T');
+const maxDate = (a: string | null, b: string | null) => (a == null ? b : b == null ? a : (dateKey(b) > dateKey(a) ? b : a));
+
+async function pageCoverage(
+  env: Env,
+  page: Array<{ slug: string; mi_sector: string | null }>,
+  cos: CompanyRow[],
+  ov: Overrides,
+) {
+  const slugs = new Set(page.map((m) => m.slug));
+  const sectors = [...new Set(page.map((m) => m.mi_sector).filter((s): s is string => !!s))];
+
+  // Countries: the companies already read, through the crosswalk.
+  const inMarket = new Map<string, number>();
+  const byCountry = new Map<string, Map<string, number>>();
+  for (const co of cos) {
+    const m = mapCompanySector(co.sector, ov).targets[0];
+    if (!m || !slugs.has(m)) continue;
+    bump(inMarket, m);
+    const code = mapCompanyCountry(co.country, ov).targets[0];
+    if (!code) continue;
+    const per = byCountry.get(m) ?? new Map<string, number>();
+    bump(per, code);
+    byCountry.set(m, per);
+  }
+
+  // Live market-intelligence sources: one grouped query for the page's tracked
+  // sectors, passed as one bound JSON array (no placeholder list to build).
+  const miBySector = new Map<string, MarketSource[]>();
+  if (sectors.length) {
+    const r = await env.DB.prepare(
+      `SELECT sector, source_key, COUNT(*) AS rows, MAX(ts) AS newest
+         FROM market_intel_rows
+        WHERE sector IN (SELECT value FROM json_each(?)) AND ${liveRowSql()}
+        GROUP BY sector, source_key`,
+    ).bind(JSON.stringify(sectors)).all<{ sector: string; source_key: string; rows: number; newest: string | null }>();
+    for (const row of r.results || []) {
+      const list = miBySector.get(row.sector) ?? [];
+      list.push({ kind: 'market_intel', key: row.source_key, rows: Number(row.rows), newest: row.newest ?? null });
+      miBySector.set(row.sector, list);
+    }
+  }
+
+  // Signal evidence: one grouped query over active signals, mapped by tags here.
+  const ev = await env.DB.prepare(
+    `SELECT s.id AS signal_id, s.tags AS tags, e.source_key AS source_key,
+            COUNT(*) AS rows, MAX(e.observed_at) AS newest
+       FROM signal_evidence e JOIN signals s ON s.id = e.signal_id
+      WHERE s.status <> 'archived'
+      GROUP BY s.id, e.source_key`,
+  ).all<{ signal_id: string; tags: string; source_key: string; rows: number; newest: string | null }>();
+  const evBySlug = new Map<string, Map<string, MarketSource>>();
+  for (const row of ev.results || []) {
+    for (const slug of mapSignalTags(row.tags).targets) {
+      if (!slugs.has(slug)) continue;
+      const per = evBySlug.get(slug) ?? new Map<string, MarketSource>();
+      const prev = per.get(row.source_key);
+      per.set(row.source_key, {
+        kind: 'signal_evidence', key: row.source_key,
+        rows: (prev?.rows ?? 0) + Number(row.rows),
+        newest: maxDate(prev?.newest ?? null, row.newest ?? null),
+      });
+      evBySlug.set(slug, per);
+    }
+  }
+
+  return (m: { slug: string; mi_sector: string | null }) => {
+    const per = byCountry.get(m.slug);
+    const countries: Recorded<Array<{ code: string; count: number }>> = per && per.size
+      ? recorded(countList(per, 'code') as Array<{ code: string; count: number }>)
+      : notRecorded((inMarket.get(m.slug) ?? 0) > 0 ? NO_COUNTRY_REASON : NO_COMPANY_REASON);
+
+    const sources: MarketSource[] = [
+      ...(m.mi_sector ? (miBySector.get(m.mi_sector) ?? []) : []),
+      ...(evBySlug.get(m.slug)?.values() ?? []),
+    ].sort((a, b) => dateKey(b.newest).localeCompare(dateKey(a.newest)) || a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key));
+    const newest = sources.reduce<string | null>((acc, s) => maxDate(acc, s.newest), null);
+    return {
+      countries,
+      source_count: sources.length ? recorded(sources.length) : notRecorded<number>(NO_SOURCE_REASON),
+      newest_source_at: newest ? recorded(newest)
+        : notRecorded<string>(sources.length ? NO_SOURCE_DATE_REASON : NO_SOURCE_REASON),
+      sources: sources.slice(0, SOURCES_CAP),
+    };
+  };
+}
+
 researchMarkets.get('/markets', async (c) => {
   await requireAuth(c);
   const q = String(c.req.query('q') || '').trim().slice(0, 120);
@@ -272,8 +392,10 @@ researchMarkets.get('/markets', async (c) => {
     const d = sort === 'name' ? byName(a, b) : (a[sort] - b[sort]);
     return sign * d || byName(a, b);
   });
+  const page = items.slice(offset, offset + limit);
+  const coverage = await pageCoverage(c.env, page, cos, ov);
   return c.json({
-    items: items.slice(offset, offset + limit),
+    items: page.map((m) => ({ ...m, ...coverage(m) })),
     total: items.length,
     limit, offset, sort, dir,
     companies_unmapped: unmapped,

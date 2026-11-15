@@ -52,6 +52,8 @@ export type ConditionRow = {
   uid: string; body: string; status: string;
   created_by: number; created_at: string;
   resolved_at: string | null; resolved_by: number | null;
+  // D6156: who answers for meeting it — a platform user, a named party, both or neither (null before the migration).
+  owner_user_id: number | null; owner_label: string | null;
 };
 
 function canUseIc(user: User): boolean {
@@ -120,7 +122,7 @@ export async function scopedDecisions(
     // The conditions ride the same read: a condition is visible exactly when
     // its decision is, so no second predicate exists to forget.
     const conditions = await env.DB.prepare(
-      `SELECT uid, body, status, created_by, created_at, resolved_at, resolved_by
+      `SELECT uid, body, status, created_by, created_at, resolved_at, resolved_by, owner_user_id, owner_label
          FROM ic_conditions WHERE ic_decision_id = ? ORDER BY created_at ASC`
     ).bind(d.id).all<ConditionRow>();
     out.push({ ...d, votes: (votes.results || []) as VoteRow[], conditions: (conditions.results || []) as ConditionRow[] });
@@ -207,10 +209,12 @@ async function dto(env: Env, d: DecisionRow, opts: { votes?: boolean } = {}): Pr
     // later stage checks.
     const conditions = await env.DB.prepare(
       `SELECT cond.uid, cond.body, cond.status, cond.created_by, cond.created_at,
-              cond.resolved_at, cond.resolved_by, cu.name AS created_by_name, ru.name AS resolved_by_name
+              cond.resolved_at, cond.resolved_by, cu.name AS created_by_name, ru.name AS resolved_by_name,
+              cond.owner_user_id, ou.name AS owner_name, cond.owner_label
          FROM ic_conditions cond
          LEFT JOIN users cu ON cu.id = cond.created_by
          LEFT JOIN users ru ON ru.id = cond.resolved_by
+         LEFT JOIN users ou ON ou.id = cond.owner_user_id
         WHERE cond.ic_decision_id = ? ORDER BY cond.created_at ASC`
     ).bind(d.id).all<any>();
     base.conditions = conditions.results || [];
@@ -636,11 +640,13 @@ r.get('/conditions', async (c) => {
       `SELECT cond.id, cond.uid, cond.ic_decision_id, cond.body, cond.status,
               cond.created_by, cond.created_at, cond.resolved_at, cond.resolved_by,
               d.title AS decision_title, d.deal_id AS deal_id,
-              cu.name AS created_by_name, ru.name AS resolved_by_name
+              cu.name AS created_by_name, ru.name AS resolved_by_name,
+              cond.owner_user_id, ou.name AS owner_name, cond.owner_label
          FROM ic_conditions cond
          JOIN ic_decisions d ON d.id = cond.ic_decision_id
          LEFT JOIN users cu ON cu.id = cond.created_by
          LEFT JOIN users ru ON ru.id = cond.resolved_by
+         LEFT JOIN users ou ON ou.id = cond.owner_user_id
         WHERE ${where}
         ORDER BY cond.created_at DESC LIMIT 500`
     ).bind(...params).all<any>();
@@ -894,14 +900,32 @@ r.post('/:uid/conditions', async (c) => {
         message: 'A condition is the sentence a later stage checks — write it.',
       }, 400);
     }
+    // D6156: the owner DE07 draws — a platform user, a named party such as
+    // 'Founder', both or neither. Neither sent reads null, never a default.
+    let ownerUserId: number | null = null;
+    if (body?.owner_user_id != null && body.owner_user_id !== '') {
+      const n = Number(body.owner_user_id);
+      const found = Number.isInteger(n) && n > 0
+        ? await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(n).first()
+        : null;
+      if (!found) {
+        return c.json({
+          error: 'condition_owner_unknown',
+          message: 'The owner is a platform user. Name a user who exists, or write the owner as a label.',
+        }, 400);
+      }
+      ownerUserId = n;
+    }
+    const ownerLabel = body?.owner_label != null ? String(body.owner_label).trim().slice(0, 120) || null : null;
     const uid = newUid();
     const ins = await c.env.DB.prepare(
-      `INSERT INTO ic_conditions (uid, ic_decision_id, body, status, created_by, created_at)
-       VALUES (?, ?, ?, 'open', ?, ?)`
-    ).bind(uid, d.id, text, user.id, nowIso()).run();
+      `INSERT INTO ic_conditions (uid, ic_decision_id, body, status, created_by, created_at, owner_user_id, owner_label)
+       VALUES (?, ?, ?, 'open', ?, ?, ?, ?)`
+    ).bind(uid, d.id, text, user.id, nowIso(), ownerUserId, ownerLabel).run();
     const row = await c.env.DB.prepare(
-      `SELECT cond.*, cu.name AS created_by_name FROM ic_conditions cond
-        LEFT JOIN users cu ON cu.id = cond.created_by WHERE cond.id = ?`
+      `SELECT cond.*, cu.name AS created_by_name, ou.name AS owner_name FROM ic_conditions cond
+        LEFT JOIN users cu ON cu.id = cond.created_by
+        LEFT JOIN users ou ON ou.id = cond.owner_user_id WHERE cond.id = ?`
     ).bind((ins as any).meta?.last_row_id).first<any>();
     return c.json({ item: row }, 201);
   } catch (e) { return mapError(c, e); }
@@ -941,8 +965,9 @@ r.patch('/conditions/:uid', async (c) => {
       'UPDATE ic_conditions SET status = ?, resolved_at = ?, resolved_by = ? WHERE id = ?'
     ).bind(status, resolving ? nowIso() : null, resolving ? user.id : null, cond.id).run();
     const row = await c.env.DB.prepare(
-      `SELECT cond.*, cu.name AS created_by_name, ru.name AS resolved_by_name FROM ic_conditions cond
+      `SELECT cond.*, cu.name AS created_by_name, ru.name AS resolved_by_name, ou.name AS owner_name FROM ic_conditions cond
         LEFT JOIN users cu ON cu.id = cond.created_by LEFT JOIN users ru ON ru.id = cond.resolved_by
+        LEFT JOIN users ou ON ou.id = cond.owner_user_id
        WHERE cond.id = ?`
     ).bind(cond.id).first<any>();
     return c.json({ item: row });

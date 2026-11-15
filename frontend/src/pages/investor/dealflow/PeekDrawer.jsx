@@ -7,6 +7,7 @@
  * DLS7b: a click on a score opens SCORING's own breakdown panel
  * (`VentureScorecard`, D1257) for that deal, by its visibility rule: only on a
  * deal the investor may read (`can_open`). Eadwyn never changes a score here.
+ * Its weighting stays on Deal flow's toolbar (#6169), whose sort re-reads it on save.
  */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -17,6 +18,7 @@ import { SCOPE_KEYS, SCOPE_LABEL, STAGE_WORD, enteredWord, moveTargets, stageWor
 import { AskCell, DaysCell, FitCell, ScopeCell } from './FlowCells';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
 import FlowHistory from './FlowHistory.jsx';
+import { passReasonLabel, passReturnWord } from '../../../lib/dealFlow.js';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -86,6 +88,9 @@ export default function PeekDrawer({ row, pass = null, picked = [], onClose, onM
             <dt className={MUTED}>Owner</dt><dd className="m-0">{row.owner?.name || (row.inFlow ? 'Unassigned' : 'Not on your deals')}</dd>
             <dt className={MUTED}>Entered via</dt><dd className="m-0">{row.inFlow ? enteredWord(row.enteredVia) : 'Not on your deals'}</dd>
             <dt className={MUTED}>Days in stage</dt><dd className="m-0"><DaysCell row={row} /></dd>
+            {/* D6148: a passed deal says why, and when it comes back. */}
+            {row.stage === 'passed' && <><dt className={MUTED}>Passed for</dt><dd className="m-0">{passReasonLabel(row.pass?.reason)}</dd></>}
+            {row.stage === 'passed' && <><dt className={MUTED}>Comes back</dt><dd className="m-0" data-testid="dealflow-peek-return">{passReturnWord(row.pass) || 'Not recorded'}</dd></>}
           </dl>
           <p className={MUTED}>Valuation cap, minimum check, closing deadline and what is committed so far are on the deal page.</p>
         </section>
@@ -116,7 +121,7 @@ export default function PeekDrawer({ row, pass = null, picked = [], onClose, onM
       </div>
       {breakdown && (
         <Sheet label="Scoring breakdown panel" title="Scoring breakdown" sub={row.name} onClose={() => setBreakdown(false)} width={760} testId="dealflow-peek-breakdown">
-          <VentureScorecard dealId={row.id} />
+          <VentureScorecard dealId={row.id} weighting={false} />
         </Sheet>
       )}
     </Sheet>

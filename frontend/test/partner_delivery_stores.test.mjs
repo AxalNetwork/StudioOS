@@ -27,7 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { migrationStamp } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationIssue, migrationStamp } from '../../scripts/lib/migrationPlan.mjs';
 
 const ROOT = resolve(process.cwd());
 const DIR = join(ROOT, 'cloudflare-worker', 'sql', 'migrations');
@@ -214,10 +214,14 @@ test('the migration numbers are free and in order', () => {
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
   }
 
-  // Every number is used once, except the recorded collisions above.
+  // Every number is used once, except the recorded collisions above. From
+  // D5398 on, a stamped file also names its issue, and the stamp and the issue
+  // together are its address (`migrationIdentity`), so two issues may share a
+  // minute: `202611150136_5840_…` and `202611150136_5949_…` are two migrations.
+  const keyOf = (f) => (migrationIssue(f) ? `${numberOf(f)}_${migrationIssue(f)}` : numberOf(f));
   const byNumber = new Map();
   for (const f of files) {
-    const k = numberOf(f);
+    const k = keyOf(f);
     if (!byNumber.has(k)) byNumber.set(k, []);
     byNumber.get(k).push(f);
   }
