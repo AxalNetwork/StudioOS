@@ -80,7 +80,7 @@ export function mercuryView(part) {
       cac: cents(c.cac_cents) == null ? (c.cac_reason || 'Not recorded') : money(c.cac_cents) })),
     canDecide: part.can_decide === true,
     proposals: list(part.proposals).filter((p) => Number.isSafeInteger(p.id)).map((p) => ({
-      id: p.id, state: p.state, company: String(p.partner_company || ''), sentence: p.sentence || null, source: p.source || null,
+      id: p.id, uid: p.growth_partner_uid, state: p.state, company: String(p.partner_company || ''), sentence: p.sentence || null, source: p.source || null,
       linked: p.state === 'accepted' ? (p.growth_partner_name ? `Linked to ${p.growth_partner_name}` : 'Linked; that partner was since deleted') : null,
     })),
   };

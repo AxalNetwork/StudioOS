@@ -42,6 +42,7 @@
  * WHAT IS LOGGED. Counts and outcomes only: the venture and integration ids
  * in `activity_logs`, never a project name or anything PostHog sent.
  */
+import { rememberGrowProposal } from '../services/growProposalReceipts';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -426,7 +427,9 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     if (out === 'decided') throw new Refused(409, 'proposal_decided');
     if (out === 'not_ready') throw new Refused(409, 'not_ready');
     await log(c, user, `posthog_proposal_${verb === 'accept' ? 'accepted' : 'dismissed'}`, { project_id: p.id, integration_id: link.integration_id });
-    return c.json({ ok: true, ...(typeof out === 'object' ? { target_ref: out.target_ref } : {}) });
+    const destination=verb==='accept'&&c.req.param('section')==='grow'&&typeof out==='object'&&out.target_ref.startsWith('product_feedback:')
+      ? await rememberGrowProposal(c.env,p.id,user.id,'posthog',id,'feedback',out.target_ref.slice('product_feedback:'.length),true):undefined;
+    return c.json({ ok: true, ...(typeof out === 'object' ? { target_ref: out.target_ref } : {}), ...(destination?{destination}:{}) });
   });
   router.post('/:section/posthog/proposals/:id/accept', decide('accept'));
   router.post('/:section/posthog/proposals/:id/dismiss', decide('dismiss'));

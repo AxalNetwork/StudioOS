@@ -56,6 +56,8 @@ and StudioHome at `/raise/pitch`).
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
 
+| `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
+
 ### Run it
 
 ```
