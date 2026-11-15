@@ -2,6 +2,7 @@ name: Channel Worker contracts
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'cloudflare-worker/src/services/channels/**'
@@ -24,6 +25,8 @@ concurrency:
 jobs:
   contracts:
     name: Channel messaging contracts
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
