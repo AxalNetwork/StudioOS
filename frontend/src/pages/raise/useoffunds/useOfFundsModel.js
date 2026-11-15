@@ -309,3 +309,64 @@ export function historyRows(items = []) {
 
 /** Two letters for an avatar, from a name. */
 export const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '·';
+
+/* ------------------------------------------------------------------ *
+ * D6083 (#6083) — the section sheet (UF4, UF21c) and Add a hire (UF6),
+ * inside the tool. The sheet has its own address: `?section=<key>` on
+ * whichever tab opened it, beside the venture, so it opens from Home,
+ * Allocation and Milestones, survives a reload and closes with Back. A
+ * tab link drops it (`tabSearch` keeps the venture only).
+ * ------------------------------------------------------------------ */
+
+export const SECTION_PARAM = 'section';
+
+/** The open section's key from a query string, or null for none or an unknown key. */
+export function sheetSectionFrom(search = '') {
+  const key = new URLSearchParams(String(search || '').replace(/^\?/, '')).get(SECTION_PARAM);
+  return sectionOf(key) ? key : null;
+}
+
+/** The same query with the section sheet opened on `key`, or closed when `key` is null. Every other part is kept. */
+export function sectionSheetSearch(search = '', key = null) {
+  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  if (key && sectionOf(key)) q.set(SECTION_PARAM, key); else q.delete(SECTION_PARAM);
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+/**
+ * What the section sheet draws: the section's row (share, amount, a month), its
+ * milestones by month, its hires by start, what the hires cost against the
+ * amount, and the planned share against Mercury's measured one. `mercury` is
+ * the module read's Mercury part, the founder's alone (D1174); with none the
+ * actual share is null and the sheet says why.
+ */
+export function sectionSheet(base, key, mercury = null, months = 3) {
+  const s = sectionOf(key);
+  if (!s) return null;
+  const hireItems = base?.hires?.state === 'ok' ? base.hires.items : null;
+  const row = sectionRows(base, hireItems).find((r) => r.key === key);
+  const milestones = (base?.milestones || []).filter((m) => m.category_key === key)
+    .sort((a, b) => String(a.due_on || '9999').localeCompare(String(b.due_on || '9999')));
+  const hires = hireItems ? hireItems.filter((h) => h.category_key === key)
+    .sort((a, b) => String(a.start_month || '9999').localeCompare(String(b.start_month || '9999'))) : null;
+  const actual = mercury ? planVsActual(base, mercury, months).rows.find((r) => r.key === key) : null;
+  return { ...row, milestoneItems: milestones, hireItems: hires, actual: actual?.actual ?? null, asOf: mercury?.as_of || null, months };
+}
+
+/** The Add a hire body (UF6), or the sentence that says what to fix. An empty cost stays missing, never 0. */
+export function hireBody({ role, section, starts, cost, currency = 'usd' }) {
+  const r = String(role ?? '').trim();
+  if (!r) return { error: 'Name the role.' };
+  if (!sectionOf(section)) return { error: 'Choose the section it is paid from.' };
+  const from = String(starts ?? '').trim();
+  if (from && !/^\d{4}-(0[1-9]|1[0-2])$/.test(from)) return { error: 'A month is written like 2027-03.' };
+  const cur = String(currency || 'usd').trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(cur)) return { error: 'A currency is a three-letter code.' };
+  // The cost is read in the chosen currency's own minor units, never through USD's.
+  const typed = String(cost ?? '').trim().replace(/[$€£,\s]/g, '');
+  const parsed = typed === '' ? null : /^\d{1,13}(\.\d{1,3})?$/.test(typed) ? parseMinor(typed, cur.toUpperCase()) : { ok: false };
+  if (parsed && !parsed.ok) return { error: 'Write the cost a year as a number, like 140,000.' };
+  const cents = parsed ? parsed.minor : null;
+  return { body: { role: r, category_key: section, start_month: from || null, annual_cents: cents, currency: cur } };
+}

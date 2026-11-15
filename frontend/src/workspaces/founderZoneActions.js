@@ -140,14 +140,14 @@ export const FOUNDER_ZONE_ACTIONS = {
     // a mounted route a founder may open. The posting surface existed the whole
     // time; this desk just never pointed at it. Task #68 built it.
     { label: 'Post a role', to: '/jobs/new', linkNote: 'A posting is written in the job editor and appears here once it names this startup.' },
-    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE AND THE REAL GAP IS
-    // NARROWER. `job_applications` exists, `jobs.applications(id)` reads it, and
-    // this page already puts those candidates in a table. What is missing is a
-    // WRITER: `routes/jobs.ts` has no endpoint that sets an application's status,
-    // so there is nothing for a reject — bulk or single — to call. A refusal that
-    // denied the records sent the next reader to build a store that is already
-    // there.
-    { label: 'Bulk reject', unbuilt: 'the candidates are stored and read, but no endpoint sets an application status, so a reject has nothing to write', hover: 'Candidates are listed here, but nothing can change an application’s status yet.' },
+    // "NO CANDIDATE RECORDS EXIST TO ACT ON" WAS FALSE, and so, since, was "no
+    // endpoint sets an application status" (#6109). `job_applications` exists,
+    // `jobs.applications(id)` reads it, and this page tabulates it. One
+    // application's stage is set by `PATCH /api/cycles/grow/applications/:id/stage`
+    // (`setApplicationStage`, whose stages include `declined`). What is still
+    // missing is the BULK form: no endpoint declines several applications at
+    // once, so a bulk reject has nothing to call.
+    { label: 'Bulk reject', unbuilt: 'one application’s stage can be set to declined, but no endpoint declines several at once, so a bulk reject has nothing to call', hover: 'Applicants are declined one at a time; nothing declines several at once yet.' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [

@@ -66,7 +66,8 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D6156: the checklist writes go through batch, so the stub runs each statement.
+    async batch(x: any[]) { const out = []; for (const st of x) out.push(await st.run()); return out; },
   };
 }
 
@@ -127,7 +128,7 @@ function freshDb() {
       ic_decision_id INTEGER NOT NULL, body TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', created_by INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      resolved_at TEXT, resolved_by INTEGER
+      resolved_at TEXT, resolved_by INTEGER, owner_user_id INTEGER, owner_label TEXT
     );
     CREATE TABLE deal_transfers (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
@@ -148,7 +149,14 @@ function freshDb() {
       checklist_id INTEGER NOT NULL, label TEXT NOT NULL,
       state TEXT NOT NULL DEFAULT 'pending', note TEXT, sort INTEGER NOT NULL DEFAULT 0,
       done_by INTEGER, done_at TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      owner_user_id INTEGER, owner_label TEXT, due_date TEXT
+    );
+    -- D6156: every checklist write appends one event in the same batch.
+    CREATE TABLE deal_closing_checklist_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, item_id INTEGER NOT NULL,
+      actor_user_id INTEGER NOT NULL, from_state TEXT, to_state TEXT NOT NULL, note TEXT, at TEXT NOT NULL,
+      owner_user_id INTEGER, owner_label TEXT, due_date TEXT
     );
     CREATE TABLE legal_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL,
