@@ -83,6 +83,8 @@ import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { ventureNdaStatus, type VentureNdaStatus } from '../services/dealAccess';
+import { investorRoomRequests, type InvestorRoomRequest } from '../services/dataRoomRequests';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -4646,6 +4648,12 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 // diligence information too." So the response returns both numbers and never
 // the ratio alone.
 
+/** #6267: `{ status: none | out_for_signature | on_file, valid_until }` — the deal page's NDA status, no NDA as `none`. */
+const NDA_NONE = { status: 'none', valid_until: null } as const;
+function ndaView(nda: VentureNdaStatus | null) {
+  return nda ?? NDA_NONE;
+}
+
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
@@ -4683,6 +4691,14 @@ research.get('/diligence', async (c) => {
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
+  // #6267: where each room's NDA stands (none, out for signature, on file until a date), from the
+  // deal page's own status read (`ventureNdaStatus`), once per venture.
+  const ndaStatusByProject = new Map<number, ReturnType<typeof ndaView>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!ndaStatusByProject.has(pid)) ndaStatusByProject.set(pid, ndaView(await ventureNdaStatus(c.env, pid, user.id)));
+  }
+
   const items = (rows.results || []).map((r: any) => {
     const nda = ndaByProject.get(Number(r.project_id)) === true;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
@@ -4691,6 +4707,7 @@ research.get('/diligence', async (c) => {
       project_uid: r.project_uid,
       project_name: r.project_name,
       nda_signed: nda,
+      nda: ndaStatusByProject.get(Number(r.project_id)) ?? NDA_NONE,
       // Two numbers, never one ratio: what is absent from a room is diligence
       // information too, and a percentage hides which rooms are thin.
       file_open: open,
@@ -4702,8 +4719,15 @@ research.get('/diligence', async (c) => {
     };
   });
 
+  // #6267: the caller's own requests that no live grant answers. A failed read is
+  // `requests: null` with `requests_unreadable`, never an empty list.
+  let requests: InvestorRoomRequest[] | null = null;
+  try { requests = await investorRoomRequests(c.env, user.id); } catch (e) { console.error('[research] diligence requests unreadable', e); }
+
   return c.json({
     items,
+    requests,
+    requests_unreadable: requests === null,
     granted_count: items.length,
     // Rooms where the founder staged less than everything they hold. Not a
     // complaint — it is the signal the zone exists to surface.
@@ -4902,6 +4926,7 @@ research.get('/diligence/:grantUid', async (c) => {
     grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
     project: { uid: room.project.uid, name: room.project.name },
     nda_signed: room.nda,
+    nda: ndaView(await ventureNdaStatus(c.env, pid, user.id)),
     file_total: allFiles.length,
     file_open: openFiles.length,
     // A count, never the names — the data room's own rule.

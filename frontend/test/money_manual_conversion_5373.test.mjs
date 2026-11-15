@@ -88,7 +88,7 @@ const ALLOW = [
     "frontend/src/pages/hq/HqFundsPage.jsx": 1,
     "frontend/src/pages/investor/FundLedgerPanel.jsx": 1,
     "frontend/src/pages/investor/InvestorFundLPs.jsx": 2,
-    "frontend/src/pages/investor/InvestorFundLanding.jsx": 3,
+    "frontend/src/pages/investor/InvestorFundLanding.jsx": 2,
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,
     "frontend/src/pages/investor/proofOfFundsModel.js": 3,
