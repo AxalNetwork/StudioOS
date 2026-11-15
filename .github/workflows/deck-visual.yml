@@ -20,6 +20,7 @@ name: deck-visual
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'frontend/src/pages/raise/pitch/**'
@@ -39,6 +40,8 @@ concurrency:
 jobs:
   visual:
     name: Deck editor visual regression and axe (Playwright, pinned container)
+    # #6461: not a required check, so a draft skips it (no runner); marking the PR ready runs it.
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     container:

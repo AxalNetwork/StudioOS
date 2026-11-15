@@ -2940,6 +2940,16 @@ export default {
             else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
           } catch (e) { taskFailed('usage report', e); }
         }
+        // D5949: the same 05:10 run reports what the branch has issued and spent
+        // against its promo ceiling, in its own block so either can fail alone.
+        if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 10) {
+          try {
+            const { pushPromoIssuedReport } = await import('./services/promoIssuedReport');
+            const r = await pushPromoIssuedReport(env, now);
+            if (r.sent) console.info(`[cron] promo issued report ${r.period}=${r.outcome}`);
+            else console.warn(`[cron] promo issued report not sent: ${r.reason}`);
+          } catch (e) { taskFailed('promo issued report', e); }
+        }
         // D1156: each branch reports only program aggregates daily, independent of revenue.
         if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 15) {
           try {
