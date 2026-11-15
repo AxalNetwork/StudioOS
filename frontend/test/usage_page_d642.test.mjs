@@ -298,7 +298,7 @@ test('U4 renders models with "not counted" never as 0 tokens, and the rate card 
   assert.match(ok, /<span title="1,234,567">1\.2M<\/span>/);
   assert.match(ok, /data-testid="usage-model-not-counted"[^>]*>1 run not counted/);
   const whisperRow = ok.slice(ok.lastIndexOf('data-testid="usage-model-row"'));
-  assert.match(whisperRow, /data-testid="usage-model-in"[^>]*><span[^>]*>Not counted</);
+  assert.match(whisperRow, /data-testid="usage-model-in"[^>]*><span[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not counted</); // D5129: the shared chip's aria-hidden glyph precedes its word
   assert.doesNotMatch(whisperRow.slice(0, whisperRow.indexOf('</tr>')), />0<\//, 'no 0 tokens');
   assert.match(ok, /Older model<span[^>]*>Retired</);
   assert.match(ok, /\$0\.0005[\s\S]*per audio minute/);

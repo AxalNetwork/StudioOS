@@ -3,7 +3,7 @@ import { ArrowUpRight, CircleAlert, FileText, LockKeyhole, RefreshCw } from 'luc
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
-import { WorkerRail } from '../../ui';
+import { Unrecorded, Unreadable as SharedUnreadable, WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
@@ -15,9 +15,6 @@ const dollarsToCents = (value) => Math.round((Number(value) || 0) * 100);
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
-function Unrecorded({ children = 'Unrecorded' }) {
-  return <span className="i6-unrecorded">{children}</span>;
-}
 
 function LockedFund() {
   return (
@@ -47,9 +44,8 @@ function LockedFund() {
 // each card now says which of the two it is.
 const UNAVAILABLE = Symbol('unavailable');
 const unread = (value) => value === UNAVAILABLE;
-const Unreadable = ({ what }) => (
-  <p className="i6-load-error"><CircleAlert size={13} />{what} could not be read. This is not a claim that none exist.</p>
-);
+// D5129 (#5129): the shared Unavailable treatment, with this page's claim.
+const Unreadable = ({ what }) => <SharedUnreadable what={what} claim="This is not a claim that none exist." />;
 
 function FundDetail({ fund }) {
   const [detail, setDetail] = useState({ lps: null, calls: null, periods: null });
@@ -87,14 +83,14 @@ function FundDetail({ fund }) {
           <div><dt>Called</dt><dd>{fmtCents(fund.called_cents)}</dd></div>
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
-          <div><dt>RVPI · on NAV</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
+          <div><dt>RVPI · on NAV</dt><dd><Unrecorded /></dd></div>
         </dl>
         <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
       </section>
 
       <div className="i6-grid">
         <section className="i6-card i6-registry" id="lps">
-          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to="/funds/lps" data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count not recorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to="/funds/lps" data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
           {detail.lps === null ? <div className="i6-skeleton" /> : unread(detail.lps) ? <Unreadable what="The LP register" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
             <table><thead><tr><th>LP</th><th className="right">Committed</th><th>KYC / LPA</th></tr></thead><tbody>
               {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{fmtCents(dollarsToCents(lp.commitment_amount))}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
@@ -116,7 +112,7 @@ function FundDetail({ fund }) {
           <header><div><h2>Fund accounting</h2><span>Contracted terms and capital accounts</span></div><Link to="/funds/ledger" data-testid="link-fund-ledger"><ArrowUpRight size={15} /></Link></header>
           <div className="i6-manual"><span>Ledger basis</span><p>Capital accounts and contracted terms are recorded here. Axal offers no period close, reconciliation or journal export.</p></div>
           <dl className="i6-ledger">
-            <div><dt>Commitments</dt><dd>{fmtCents(fund.committed_cents)}</dd></div><div><dt>Contributed</dt><dd>{fmtCents(fund.called_cents)}</dd></div><div><dt>Unfunded</dt><dd>{fmtCents(unfunded)}</dd></div><div><dt>Distributed</dt><dd>{fmtCents(fund.distributed_cents)}</dd></div><div><dt>Management fee</dt><dd>{fmtRate(fund.management_fee) || <Unrecorded />}</dd></div><div><dt>Accrued expenses</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
+            <div><dt>Commitments</dt><dd>{fmtCents(fund.committed_cents)}</dd></div><div><dt>Contributed</dt><dd>{fmtCents(fund.called_cents)}</dd></div><div><dt>Unfunded</dt><dd>{fmtCents(unfunded)}</dd></div><div><dt>Distributed</dt><dd>{fmtCents(fund.distributed_cents)}</dd></div><div><dt>Management fee</dt><dd>{fmtRate(fund.management_fee) || <Unrecorded />}</dd></div><div><dt>Accrued expenses</dt><dd><Unrecorded /></dd></div>
           </dl>
         </section>
 

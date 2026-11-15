@@ -107,7 +107,7 @@ test('dr-pipeline states: loading, empty, and an unreadable list that is never a
   assert.match(st({ loading: true, error: false, deals: null }), /Loading the pipeline…/);
   assert.match(st({ loading: false, error: false, deals: [] }), /No deal is open to join yet\./);
   const unread = st({ loading: false, error: true, deals: null });
-  assert.match(unread, /Unreadable\. The pipeline could not be read just now\. Try again/);
+  assert.match(unread, /UnavailableThe pipeline could not be read just now\. Try again/);  // D5129 (Q2 = A): the shared chip says Unavailable
   assert.doesNotMatch(unread, /No deal is open to join yet/);
 });
 
@@ -125,7 +125,7 @@ test('dr-invites: name, email, status, the message, the email asked for, invited
   assert.match(t, /Pam Passed\s*Passed/);
   assert.match(t, /^Invite an investor/);
   const unread = text(h(InvitationsList, { state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /^Unreadable\. Invitations could not be read just now\. Try again$/);
+  assert.match(unread, /^UnavailableInvitations could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
   assert.match(text(h(InvitationsList, { state: { loading: false, error: false, rows: [] } })), /Nobody has been invited into this room yet\./);
 });
 
@@ -183,7 +183,7 @@ test('dr-transfers: the amount is cents, and a bad amount is refused before it i
   assert.match(code, /if \(!Number\.isFinite\(cents\)\) \{ setRefusal\(transferRefusal\(\{ code: 'transfer_amount_invalid' \}\)\); return; \}/);
   assert.match(code, /amount_cents: cents,/);
   const unread = text(h(TransfersView, { dealId: 1, state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /^Unreadable\. Transfers could not be read just now\. Try again$/);
+  assert.match(unread, /^UnavailableTransfers could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
 });
 
 // ── sp-references ──────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ test('sp-references: an edit cannot claim a recording that cannot exist', () => 
 test('sp-references states', () => {
   assert.match(text(h(ReferencesView, { dealId: 1, state: { loading: false, error: false, rows: [] } })), /No reference has been scheduled\.\s*Schedule a reference/);
   const unread = text(h(ReferencesView, { dealId: 1, state: { loading: false, error: true, rows: null }, onRetry: () => {} }));
-  assert.match(unread, /Unreadable\. References could not be read just now\. Try again$/);
+  assert.match(unread, /UnavailableReferences could not be read just now\. Try again$/);  // D5129 (Q2 = A): the shared chip says Unavailable
   assert.doesNotMatch(unread, /No reference has been scheduled/);
   assert.match(text(h(ReferencesView, { dealId: 1, state: { loading: true, error: false, rows: null } })), /Loading references…/);
 });
