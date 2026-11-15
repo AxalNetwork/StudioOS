@@ -923,7 +923,7 @@ test('form-options: themes, hypotheses, owners, KPIs, feedback themes, items, ki
   const mvp = (await formOptions(db, 'prototype-mvp')).body;
   assert.deepEqual(mvp.owner_user_id.options.map((o: any) => o.value).sort(), [String(FOUNDER), String(TEAMMATE)].sort());
   const road = (await formOptions(db, 'product-roadmap')).body;
-  assert.deepEqual(road.kpi_key.options.map((o: any) => o.value), ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'custom-ownkpi']);
+  assert.deepEqual(road.kpi_key.options.map((o: any) => o.value), ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'arr', 'burn_multiple', 'custom-ownkpi']);
   assert.deepEqual(road.feedback_theme.options, [{ value: 'Onboarding', label: 'Onboarding', open_unlinked: 1 }]);
   assert.deepEqual(road.waits_on_id.options.map((o: any) => o.value), ['6', '7']);
   const cc = (await formOptions(db, 'company-creation')).body;

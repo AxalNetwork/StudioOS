@@ -404,11 +404,13 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
 // ── Revenue and traction — id: the KPI key ──────────────────────────────────
 
 /** Worked out by the platform, never typed (decision 4). */
-const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway']);
+const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
 const DERIVED_REASON: Record<string, string> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export function kpiValueText(value: number | null, unit: string | null): string | null {
@@ -417,6 +419,7 @@ export function kpiValueText(value: number | null, unit: string | null): string 
   if (unit === 'usd_cents') return money(value);
   if (unit === 'pct') return `${Math.round(value * 100) / 100}%`;
   if (unit === 'months') return `${Math.round(value * 10) / 10} months`;
+  if (unit === 'multiple') return `${Math.round(value * 100) / 100}×`;
   return Number(value).toLocaleString('en-US');
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
