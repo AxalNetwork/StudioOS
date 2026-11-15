@@ -590,6 +590,9 @@ test('D6107: the Visit stage says which PostHog connection to make, reads a trac
   const fact = f.db.prepare("INSERT INTO posthog_metric_facts (integration_id, project_id, module, kind, fact_key, period, value, as_of) VALUES (?, ?, 'revenue_and_traction', 'metric', ?, ?, ?, ?)");
   fact.run(PH, GP, `metric:${VUID}`, dayFrom(-9), 1100, dayFrom(-9));
   fact.run(PH, GP, `metric:${VUID}`, dayFrom(-2), 1240, dayFrom(-2));
+  // A second Visits metric read less recently: the stage shows the latest read, never a sum.
+  track.run('c'.repeat(32), 'Ins3', 'Landing visits', 'visits');
+  fact.run(PH, GP, `metric:${'c'.repeat(32)}`, dayFrom(-5), 500, dayFrom(-5));
   v = await visitOf(f);
   assert.deepEqual(v.raw, { stage: 'Visit', value: 1240, apart: true, source: 'From PostHog · Site visits', as_of: dayFrom(-2) });
   assert.equal(v.view.state, 'ok');
@@ -617,14 +620,15 @@ test('D6107: the migration widens the role CHECK to visits and keeps every track
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(migFile('755'));
   db.prepare("INSERT INTO posthog_tracked_metrics (id, uid, integration_id, project_id, insight_short_id, insight_name, role, module, unit, created_by, created_at) VALUES (7, 'u7', 1, 2, 'Ins', 'Weekly sessions', 'sessions', 'revenue_and_traction', 'count', 3, '2026-11-01 10:00:00')").run();
-  const insert = (uid: string, role: string) => db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, role, module, created_by) VALUES (?, 1, 2, ?, ?, 'revenue_and_traction', 3)`).run(uid, uid, role);
+  const insert = (uid: string, role: string, insight = uid) => db.prepare(`INSERT INTO posthog_tracked_metrics (uid, integration_id, project_id, insight_short_id, role, module, created_by) VALUES (?, 1, 2, ?, ?, 'revenue_and_traction', 3)`).run(uid, insight, role);
   assert.throws(() => insert('v0', 'visits'), /CHECK constraint failed/, '755 alone refuses visits');
   db.exec(sqlOf('202611151917_6107_posthog_visits_role.sql'));
   assert.deepEqual({ ...(db.prepare('SELECT * FROM posthog_tracked_metrics WHERE id = 7').get() as any) },
     { id: 7, uid: 'u7', integration_id: 1, project_id: 2, insight_short_id: 'Ins', insight_name: 'Weekly sessions', role: 'sessions', module: 'revenue_and_traction', unit: 'count', created_by: 3, created_at: '2026-11-01 10:00:00' });
   insert('v1', 'visits');
   assert.throws(() => insert('v2', 'pageviews'), /CHECK constraint failed/, 'only the listed roles');
-  assert.throws(() => insert('v1', 'visits'), /UNIQUE constraint failed/, 'the uid stays unique');
+  assert.throws(() => insert('v1', 'visits', 'another-insight'), /UNIQUE constraint failed: posthog_tracked_metrics\.uid/, 'the uid stays unique');
+  assert.throws(() => insert('v3', 'visits', 'v1'), /UNIQUE constraint failed/, 'one row per venture, insight and module');
   assert.ok((db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_posthog_tracked_project'").get()), 'the index is recreated');
   assert.ok(!db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'posthog_tracked_metrics_new'").get());
   assert.deepEqual([...ROLES], ['active_users', 'new_users', 'activation', 'retention', 'conversion', 'sessions', 'visits', 'other'], 'the Worker\'s list is the CHECK\'s');
