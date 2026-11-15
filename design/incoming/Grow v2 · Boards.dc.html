@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grow v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Grow · UX V2 · #4861</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Grow — a decision and action system, not a directory of modules</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Overview answers, in order: what this venture is trying to improve (This month’s focus), the current state (a source-aware snapshot), what changed, what needs attention (a ranked list derived from the venture’s state) and what to do next (a state-aware primary action — Set focus metric for a sparse venture, Review growth for an active one; Share an update stays available). A sparse venture sees a six-step Growth setup instead of a wall of “Not recorded”. Every figure names its source, period and freshness, and zero, no record, not connected, unavailable, stale, restricted, loading and error are eight different states. One taxonomy — Overview · Focus · Customers · Distribution · Talent · Partnerships · Markets · Company, with Reporting as a utility — is mapped onto today’s routes without breaking any. Eadwyn leads with a grounded recommendation, then proposals, recent work and Ask; model and token detail move behind AI settings. Distribution boards summarise only; its pages stay with #3722, #4496 and #4741.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 7 Nov 2026 · founder workspace · venture, figures, channels, partners and people are sample data; the “before” board reflects the live review of 7 Nov</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Grow v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['GR-01', 'Grow Overview · sparse / first-use venture', 'Focus is empty with Set focus metric as the primary action (Share an update stays as a secondary). Needs your attention ranks the baseline first: metric, target, first KPI, first channel. Growth setup shows six honest facts (1 of 6 in place) beside From your tools. Snapshot figures each say why they are empty and offer one action; inactive domains collapse. Eadwyn interprets this venture’s state and proposes the next step.', [F('GR01', false, 1750)]],
+      ['GR-02', 'Grow Overview · active venture', 'Focus with progress (MRR $18,400 of $20,000, on track). Snapshot with change only where both periods come from the same source; NRR is Stale and shows no change. Needs your attention ranks changes first. What is happening summarises eight areas. Tools show Connected, Needs attention and Stale. What changed needs a feed (backend). Eadwyn leads with an evidenced insight, then 2 proposals and recent AI work.', [F('GR02', false, 1700)]],
+      ['GR-03', 'Three directions and the recommendation', 'A · Command brief (one column, the five questions in order). B · Domain lanes (eight columns). C · Setup path first. Recommended: A, with C’s setup block shown only while the baseline is missing.', [C('GR03', false, 1400, 580)]],
+      ['GR-04', 'Audit, IA and route mapping', 'Severity-ranked findings from the 7 Nov review, and the proposed taxonomy mapped onto today’s routes and names. Feedback becomes a Customers tab; Launch sits under Distribution; Brand under Company; Reporting is a utility. No route breaks.', [W('GR04')]],
+      ['GR-05', 'Focus · primary metric and monthly target', 'Choose the primary metric, then set this month’s target with current value, gap and last month. Backed today by metric targets (is_focus). The KPI table shows source, as-of and state per KPI.', [F('GR05', false, 1000)]],
+      ['GR-06', 'Customers', 'Pipeline · Accounts · Feedback. Stage counts and the stalled list (more than 14 days) with Log touch. Prospects pagination is backend work from the #4583 audit.', [F('GR06', false, 820)]],
+      ['GR-07', 'Distribution overview', 'A summary only: channels with state, sign-ups, customers, spend and CAC for one period; CAC shows — when nothing is attributed. Every Distribution sub-page keeps its route and its owners (#3722, #4496, #4741).', [F('GR07', false, 820)]],
+      ['GR-08', 'Talent', 'Headcount against plan, open roles and offers out, each with its source.', [F('GR08', false, 760)]],
+      ['GR-09', 'Partnerships', 'Partners by stage with revenue and terms; a Mercury-sourced proposal sits on top, waiting for the founder.', [F('GR09', false, 760)]],
+      ['GR-10', 'Reporting (utility)', 'Readiness for the next update read from the same figures; Back keeps venture and period. Share an update becomes the Overview’s primary action only when an update is due and the record is current.', [F('GR10', false, 820)]],
+      ['GR-11', 'AI proposal review', 'Evidence, the exact record it would write, its destination and an editable type. Accept lands in Partnerships with Open and Undo; destination handling is backend work from #4583.', [C('GR11', false, 700, 520)]],
+      ['GR-12', 'KPI / source / freshness system', 'Eight states: measured zero, no record, not connected, unavailable, stale, restricted, loading, error. Each has a word, a shape, a reason and (where possible) an action.', [C('GR12', false, 1400, 400)]],
+      ['GR-13', 'Needs your attention', 'Sparse and active rankings, the calm empty state, and the ranking rules with what each reads.', [C('GR13', false, 1300, 800)]],
+      ['GR-14', 'Contextual Eadwyn rail', 'Sparse recommendation, active insight with proposals and recent work, AI off and AI unavailable. Ask stays at the foot; AI settings and usage are one link.', [C('GR14', false, 1420, 700)]],
+      ['GR-15', 'Loading, error, stale, disconnected and restricted', 'Whole-page error, one unreadable card, a failed refresh with last good figures, a disconnected source, reader-only access, a venture switched mid-load, and zero versus no record.', [C('GR15', false, 1400, 420)]],
+      ['GR-16', 'Mobile', 'A · Sparse overview: the primary action and the attention list first. B · Active overview: focus bar, top attention items, figures with sources. C · Set this month’s target in a bottom sheet. D · Proposal review with 48px actions.', [P('GR16a', 'A · Sparse'), P('GR16b', 'B · Active'), P('GR16c', 'C · Target sheet'), P('GR16d', 'D · Proposal')]],
+      ['GR-17', 'Dark mode', 'The active overview on #0B1220 / #111827 with violet #A78BFA; states keep their words and shapes.', [F('GR17', false, 1700)]],
+      ['GR-18', 'Before / after', 'The same sparse venture: twelve passive empty cards and Share an update as the primary action, versus focus and a ranked next step.', [C('GR18', false, 1300, 500)]],
+      ['GR-19', 'Implementation handoff, accessibility and validation', 'What today’s Worker returns, what is frontend-only and what needs backend work; components and the issues they belong to; accessibility notes and what still needs testing; the validation checklist.', [W('GR19')]],
+      ['GR-20', 'Prototype flows', 'The ten journeys from the brief, each as a sequence of boards on this canvas.', [C('GR20', false, 1300, 520)]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -79,6 +79,19 @@ the ledger and read Not recorded with that reason; failed figures (`totals:
 null`) read Unreadable beside the entries that were read. `valueAdd.css` holds
 its figure row, tables, in-place confirmation and Log support form. Decision
 notes: `documentation/architecture/decisions/D4817-p5.md`.
+D4817 part 7 (canvas PF-07) takes the two money writes, a valuation mark and
+a distribution recorded by an admin against one company's position, Prepare →
+Review → Confirm → Receipt. The writes stay where they were, in the admin
+position sheet (`../PortfolioPositionsPage.jsx`, Cap Table), on the same
+routes (`POST /api/positions/:projectUid/marks`, `/distributions`), which now
+audit each act. `WriteFlow.jsx` draws the four steps with the company named in
+each; `writeFlowModel.js` holds the pure parts (fields and their errors, the
+payload, what will be written and its effect before → after, the conflict
+check, the receipt from the stored row); `writeFlow.css` holds its tokens,
+redefined under `.dark`, and its phone layout. Before saving, the company is
+read again; if the history the write lands in moved, nothing is sent and the
+draft is kept. Decision notes:
+`documentation/architecture/decisions/D4817-p7.md`.
 D4817 part 6 (canvas PF-06) draws one company's workspace
 (`../investor/PortfolioCompanyPage.jsx` at `/portfolio/companies/:uid`, with
 `/financials`, `/reports`, `/support` and `/activity`; the old `/terms` lands
@@ -90,3 +103,14 @@ source's own activity); `CompanyPanels.jsx` draws Financials, Support and
 Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
+
+D4817 part 9 (addendum PFA03–PFA05, PFA10) rebuilds the company Reports'
+"Ask for this report" and "Waive this period". `reportAsk.js` holds the pure
+rules (the most pressing open period, its obligation facts, who may act from
+the Worker's `can_act`, the Review, the confirm label, the Receipt from the
+Worker's stored record, and each period's asked or waived record);
+`ReportAsk.jsx` draws the obligation card and the Review and Receipt Sheet;
+`reportAsk.css` holds their styles on the frame's tokens. A failed send keeps
+the Review with the Worker's sentence and code, and a period reads as asked or
+waived only from the company read. Decision notes:
+`documentation/architecture/decisions/D4817-p9.md`.

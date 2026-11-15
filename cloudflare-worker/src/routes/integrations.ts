@@ -240,8 +240,12 @@ function legacyCartaFields() {
 
 /** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
 function linkedinCard(viewer: Viewer) {
-  const page = pageDescriptor({ key: 'linkedin' }, viewer);
-  return { ...FIRST_PARTY_CARDS.linkedin, ...(page ? pageFields(page) : {}) };
+  return firstPartyCard('linkedin', viewer);
+}
+/** A first-party card (LinkedIn; D5810: Microsoft Teams, on Microsoft's connection). No token, tenant or link. */
+function firstPartyCard(key: 'linkedin' | 'teams', viewer: Viewer) {
+  const page = pageDescriptor({ key }, viewer);
+  return { ...FIRST_PARTY_CARDS[key], ...(page ? pageFields(page) : {}) };
 }
 
 function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds: number[] = []) {
@@ -356,7 +360,7 @@ integrations.get('/available', async (c) => {
   // D753 W2: the Discover order (the SPA counts each category itself) and LinkedIn's card.
   return c.json({
     ok: true, items: providers, providers, unreadable_sources: unreadableSources,
-    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer)],
+    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer), firstPartyCard('teams', viewer)],
   });
 });
 
@@ -444,10 +448,10 @@ integrations.get('/directory/:key', async (c) => {
   const viewer = viewerOf(c, user);
   const k = directoryKeyFor(c.req.param('key'));
   if (!k) return c.json({ error: 'unknown_provider' }, 404);
-  if (k.key === 'linkedin') {
-    const page = pageDescriptor({ key: 'linkedin' }, viewer);
+  if (k.key === 'linkedin' || k.key === 'teams') {
+    const page = pageDescriptor({ key: k.key }, viewer);
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
-    return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
+    return c.json({ ok: true, connector: { ...firstPartyCard(k.key, viewer), ...pageBody(page) } });
   }
   // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
   const channel = channelPage(k.key);

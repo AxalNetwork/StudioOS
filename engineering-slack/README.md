@@ -15,3 +15,4 @@ There is no public enqueue endpoint, file upload API or GitHub mutation client.
 
 | `relay-v1.mjs` | D5665: read-only source batches to durable intents, then cursor advancement; injected D5666 policy. |
 | `restricted-transport-5680.mjs` | D5680: send-time private/internal recipient validation for the restricted publisher port. |
+| `workflow-channels.mjs` | D6370: reconcile completed workflow attempts to catalogued private channels with a durable ledger cursor and unmapped-attempt recovery. |

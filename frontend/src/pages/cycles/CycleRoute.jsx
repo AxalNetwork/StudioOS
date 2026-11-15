@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -136,6 +136,9 @@ const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => 
 /** D4484: a module may replace its cycle's primary without changing its neighbours. */
 export function primaryForModule(cycle, slug, search = '', open) {
   const def = Object.hasOwn(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
+  // D5077 (#5077, BD7, BD8): a cycle whose modules lead with their own work keeps its action off the
+  // module's header; the module page offers it in its Sources region instead (`moduleSources`).
+  if (slug && def?.modulePrimary === false) return fnOf(def?.actions, slug)?.(search, open) ?? null;
   return fnOf(def?.actions, slug)?.(search, open) ?? def?.action(search, open);
 }
 
@@ -280,7 +283,8 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
     writing.current = true; setActionError('');
     try {
       const result = action.key === 'edit'
-        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values)
+        // #6111: with the values the Edit opened with, so an untouched field is not sent.
+        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values, formSpec.current)
         : await cyclesApi.recordAction(cycle, projectId, slug, id, action.key, recordActionBody(action, values));
       if (currentKey.current !== key) return result;
       await finishRecordWrite(result, {
@@ -693,10 +697,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
         <FormLightbox key={`edit-${projectId}-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
+          focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
           renderAssistant={uofAssistant}
           fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
-          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values, rowEdit.spec.current)}
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (
@@ -705,6 +710,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${projectId}-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
+        focusField={typeof location.state?.editingFocus === 'string' ? location.state.editingFocus : null}
         renderAssistant={uofAssistant}
         fill={fillFor(edit, edit.idOf(editing))}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -723,6 +729,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
   const action = primaryForModule(cycle, slug, q, openAction);
   const Mount = def.Mount || null;
+  // D5077 (#5077, BD21): a module's own Eadwyn asks (the rail's prompts, with its AI settings folded),
+  // and its own rail sentence in place of the desk's; neither for an admin reading the narrative.
+  const moduleAsks = slug && !narrativeAdmin && def.asks && Object.hasOwn(def.asks, slug) ? def.asks[slug] : null;
+  const moduleNote = slug && def.railNotes && Object.hasOwn(def.railNotes, slug) ? def.railNotes[slug] : undefined;
   const rail = (
     <WorkerRail
       workspace={name}
@@ -731,6 +741,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       stance="Evidence-led view"
       fills
       note={ASSIST_SURFACES.workspace.desks[name]?.fills}
+      {...(moduleNote !== undefined ? { note: moduleNote } : {})}
+      prompts={moduleAsks}
+      foldSettings={Boolean(moduleAsks)}
       coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
       footer="Traceable surface · no unsupported automated actions"
     />
@@ -882,6 +895,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
+    // D6031 (#6031, BD8): a module's own line above its table and its own phone rows, from its cycle's def.
+    const above = moduleStatus === 'ready' && projectId && !narrativeAdmin ? fnOf(def.aboveRecords, slug) : null;
+    const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
+    // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
+    // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
+    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null }) : null;
+    const moduleSources = def.sourcesRegion ? parts : null;
     body = (
       <ModulePage
         cycle={cycle}
@@ -908,6 +928,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
+          // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
+          ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
+            () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
@@ -919,7 +942,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
-          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
+          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+        {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
+        sources={moduleSources}
+        sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
+        asks={moduleAsks}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
@@ -947,7 +975,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             onDiscard={(id) => interviewSessionsApi.discard(id).then(() => setReload((n) => n + 1))}
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
+        {def.sourcesRegion ? null : parts}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>

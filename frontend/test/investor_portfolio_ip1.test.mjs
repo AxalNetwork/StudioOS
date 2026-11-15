@@ -146,7 +146,9 @@ test('the ops row opens it instead of denying it, and the follow-on reason is co
   const create = POSITIONS.slice(POSITIONS.indexOf("r.post('/', async"), POSITIONS.indexOf("r.put('/:uid'"));
   assert.match(create, /requireAdmin\(c\)/, 'creating a position is no longer admin-only');
   assert.match(create, /INSERT INTO portfolio_positions/);
-  assert.match(row, /recording one is an admin write/);
+  // D6205 (#6205): the button that could never be enabled is gone; the
+  // investor's act is a request from the mark-history Sheet.
+  assert.doesNotMatch(row, /label: 'Add follow-on'/, 'Add follow-on is back on the investor’s book');
 });
 
 test('the page supplies the handler in the shape the builder reads', () => {
