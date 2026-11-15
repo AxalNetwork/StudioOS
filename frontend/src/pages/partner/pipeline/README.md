@@ -17,6 +17,7 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `OpportunitySheet.jsx` | D4838 PP08 (#5934): the shared opportunity sheet. It shows one lead, proposal, negotiation and engagement, joined by id, on `frontend/src/ui/Sheet.jsx`. Tabs appear only for records that exist, and Activity comes from D5942's recorded feed. A zone opens it with whichever id it holds. |
 | `usePipelineZone.js` | D4685: the shared read/write loop. A background refresh keeps open editors, and a write resolves `true` only once the server accepted it. An optional `key` (PP08) makes a changed record a first read again. |
 | `PartialRead.jsx` | #4701: the note a zone draws when a list's first page answered and a later one did not. |
+| `retainersModel.js` | D4838 part 6 (#5939): the Retainers zone's pure rules (PP06): the attention band's three sets taken with `commandCentre.js`'s own predicates, utilization in words, health, the monthly equivalent, the KPI strip and the sheet's tabs. |
 
 **Adding to Pipeline.** A zone reads only mounted Worker routes and draws loading, empty, "Not recorded" with its
 reason and "Unreadable" with a retry. It prints a figure only over a population that exists. A rule two surfaces
