@@ -95,6 +95,7 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 | `D5565.md` | Strict portable WorkspaceSpec/ExecutorAdapter and injected-clock atomic lease/fencing protocol; unmounted and no new task/usage ledger. |
 | `D5567.md` | Unmounted workspace security gate: live scoped grants, provider/image eligibility, one-use callbacks and encrypted tenant-bound object access. |
+| `D5568.md` | Tenant/repo-scoped Git cache, private per-attempt worktrees from an exact SHA, encrypted checkpoints committed by a generation-fenced pointer after verified upload, portable restore; unmounted. |
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
@@ -131,7 +132,11 @@ and citations by number keep working.
 | `D5620.md` | Merge Control policy source: one bundled classifier, injected `policy_version`, fail-closed compare evaluation; four live questions not recorded (#5620). |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+| `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
 
+| `D6397.md` | Five recorded Fund Admin tasks in today’s shared Ask panel, with scoped navigation and no models or financial acts (#6397). |
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
+| `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |

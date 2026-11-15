@@ -222,6 +222,8 @@ const SITES: Array<[string, string, string]> = [
   ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
   ['routes/brand.ts', "brand.post('/logo/upload'", 'await files.put(key, logoBytes'],
   ['routes/captable.ts', "captable.post('/register/:projectId/snapshot'", 'await c.env.FILES.put(key, bytes'],
+  // D6084 (#6084): Use of funds' dated PDF filed in the data room, weighed as the cap table's snapshot is.
+  ['routes/cycle_use_of_funds.ts', "r.post('/snapshot'", 'await c.env.FILES.put(key,bytes'],
   ['services/r2.ts', 'export async function putHeadshotFromDataUri', 'await env.FILES.put(fileKey, bytes'],
   ['services/validateWriters.ts', 'export async function attachDemandEvidence', 'await env.FILES.put(key, await input.file.arrayBuffer()'],
   ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],

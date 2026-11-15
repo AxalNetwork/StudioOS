@@ -121,6 +121,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `dataroom_deck_sources_d1602.test.ts` | D1602: migrated data-room source permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal. |
 | `dataroom_deck_sources_d1602.mutations.mjs` | D1602: reproducible isolated-loader mutation proof, with passing original controls before and after; source files are never edited. |
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
+| `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
 ## Conventions
 
@@ -311,6 +312,8 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `_workspace_git_fake_5568.ts` | D5568: synthetic read-only Git remote, revocable repo access, faultable R2-shaped store, atomic memory pointer store and tenant AES-GCM cipher; tests only, no network. |
+| `workspace_git_checkpoint_5568.test.ts` | D5568: 10 parallel worktrees, interrupted-workspace restore on the original and an alternate fake executor, wrong tenant/region/checksum/SHA/generation, mid-upload crash, revoked repo, stale GC, retention, metrics; nine mutations listed in its header. |
 | `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | `byoc_runner_5572.test.ts` | D5572: disabled outbound-only runner protocol; one fail-closed test per acceptance case (rogue, rotated/revoked, duplicate lease, offline, stale callback, escalation, egress, enforcement, cross-border resume, consent) and sixteen mutation journeys; runtime-generated keys. |
 | File | Guarantee |
@@ -335,5 +338,6 @@ catalogue version only in the fixture.
 | `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
 | `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
 
+| `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
 `investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
