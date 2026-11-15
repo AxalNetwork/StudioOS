@@ -44,12 +44,12 @@ export const POSTHOG_MODULES: Readonly<Record<string, { section: Section; label:
 export const SECTIONS: readonly Section[] = Object.freeze(['validate', 'build', 'raise', 'grow']);
 export const modulesOf = (s: Section) => Object.keys(POSTHOG_MODULES).filter((k) => POSTHOG_MODULES[k].section === s);
 
-/** What a tracked insight measures, as the founder says. */
-export const ROLES = Object.freeze(['active_users', 'new_users', 'activation', 'retention', 'conversion', 'sessions', 'other'] as const);
+/** What a tracked insight measures, as the founder says. `visits` (D6107) feeds Distribution's Visit stage; the same list is the role CHECK (migration 202611151917_6107). */
+export const ROLES = Object.freeze(['active_users', 'new_users', 'activation', 'retention', 'conversion', 'sessions', 'visits', 'other'] as const);
 export type Role = (typeof ROLES)[number];
 export const ROLE_WORDS: Readonly<Record<Role, string>> = Object.freeze({
   active_users: 'Active users', new_users: 'New users', activation: 'Activation', retention: 'Retention',
-  conversion: 'Conversion', sessions: 'Sessions', other: 'Other',
+  conversion: 'Conversion', sessions: 'Sessions', visits: 'Visits', other: 'Other',
 });
 /** A rate is a percentage; anything else a count. */
 export const unitOf = (role: Role): 'count' | 'pct' => (role === 'activation' || role === 'retention' || role === 'conversion' ? 'pct' : 'count');
