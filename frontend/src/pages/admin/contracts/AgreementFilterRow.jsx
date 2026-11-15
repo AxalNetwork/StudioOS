@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  AGREEMENT_TYPE_OPTIONS, FILTER_BUTTONS, LEGAL_STATUS_OPTIONS, PACKAGE_OPTIONS, PROGRAM_OPTIONS,
-  activeAgreementChips, checkFilterText, filterButtonValue, toggleType, typesOf, withoutAgreementFilters, withoutChip,
+  AGREEMENT_TYPE_OPTIONS, FILTER_BUTTONS, LEGAL_STATUS_OPTIONS, LICENCE_FAMILY_OPTIONS, LICENCE_TYPE_OPTIONS, PACKAGE_OPTIONS, PROGRAM_OPTIONS,
+  activeAgreementChips, checkFilterText, filterButtonValue, holderLabel, toggleType, typesOf, withoutAgreementFilters, withoutChip,
 } from '../../../lib/contractAgreements';
 
 /**
  * D5050 part 2 (#5050, board CT-17): the Agreements filter row. One button per filter, in the canvas's order
- * (agreement type, legal state, licence / territory, program, Axal VC package, template, signed date); a set
+ * (agreement type, legal state, licence / territory, program, Axal VC package, licence family, licence type, holder,
+ * template, executed date); a set
  * filter reads its value, or its count when several types are chosen, and is drawn "on". One panel opens under
  * the row (a disclosure, not an ARIA menu, as the Library is), so it is never clipped by the row's scroll on a
  * phone. Under it, the active filters as removable chips with Clear all and the count the Worker answered.
@@ -47,7 +48,7 @@ function TextFilters({ fields, filters, onApply, note = null }) {
   </form>;
 }
 
-function Panel({ id, filters, set, close }) {
+function Panel({ id, filters, set, close, holders = [] }) {
   const name = FILTER_BUTTONS.find(([k]) => k === id)?.[1];
   const radios = (key, options) => options.map(([value, label]) => <Choice key={value || 'any'} name={`agreement-filter-${key}`}
     checked={(filters[key] || '') === value} onChange={() => { set({ [key]: value }); close(); }}>{label}</Choice>);
@@ -59,18 +60,28 @@ function Panel({ id, filters, set, close }) {
   } else if (id === 'state') body = radios('agreement_status', LEGAL_STATUS_OPTIONS);
   else if (id === 'program') body = radios('program', PROGRAM_OPTIONS);
   else if (id === 'package') body = radios('package', PACKAGE_OPTIONS);
+  else if (id === 'family') body = radios('licence_family', LICENCE_FAMILY_OPTIONS);
+  else if (id === 'licence_type') body = radios('licence_type', LICENCE_TYPE_OPTIONS);
+  else if (id === 'holder') {
+    // D5060 part 4: the holders the loaded rows name. A holder on another page is reached from its row's name.
+    const options = [['', 'Any holder'], ...holders];
+    if (filters.holder && !holders.some(([v]) => v === filters.holder)) options.push([filters.holder, holderLabel(filters.holder)]);
+    body = <>{radios('holder', options)}
+      <p className="px-2 pb-1 text-[11.5px] text-axal-muted" data-testid="agreement-holder-note">
+        {holders.length ? 'The holders on this page of agreements. Choose a holder’s name on any row to filter to them.' : 'No agreement on this page names a licence holder.'}</p></>;
+  }
   else if (id === 'licence') {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[
       ['licence', 'Licence reference or uid', { maxLength: 64, placeholder: 'AXL-FR-001' }],
       ['territory', 'Territory (country code)', { maxLength: 2, placeholder: 'FR' }]]}
-      note="Territories read as country codes until a country-name source is approved (D5050 §6)." />;
+      note="Type the two-letter country code. Rows and chips show the country name (D5050 part 3)." />;
   } else if (id === 'template') {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[['template', 'Template slug', { maxLength: 100, placeholder: 'program_schedule' }]]}
       note="Agreements made from this template. The template itself lives in Templates, never in this list." />;
   } else if (id === 'signed') {
     body = <TextFilters filters={filters} onApply={(v) => { set(v); close(); }} fields={[
-      ['signed_from', 'Signed on or after', { type: 'date' }], ['signed_to', 'Signed on or before', { type: 'date' }]]}
-      note="By signature date. Effective date is not a filter: no master licence agreement records one, so it would hide them." />;
+      ['signed_from', 'Executed on or after', { type: 'date' }], ['signed_to', 'Executed on or before', { type: 'date' }]]}
+      note="By execution date. Effective date is not a filter: no master licence agreement records one, so it would hide them." />;
   }
   return <div id="agreement-filter-panel" role="group" aria-label={name} data-testid={`agreement-filter-panel-${id}`}
     className="max-w-[420px] rounded-lg border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900">
@@ -80,7 +91,7 @@ function Panel({ id, filters, set, close }) {
   </div>;
 }
 
-export default function AgreementFilterRow({ filters, onFilters, total = null }) {
+export default function AgreementFilterRow({ filters, onFilters, total = null, holders = [] }) {
   const [open, setOpen] = useState(null);
   const opener = useRef({});
   const close = () => { const at = open; setOpen(null); opener.current[at]?.focus?.(); };
@@ -93,18 +104,19 @@ export default function AgreementFilterRow({ filters, onFilters, total = null })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   const set = (patch) => onFilters({ ...filters, ...patch, offset: 0 });
-  const chips = activeAgreementChips(filters);
+  const names = Object.fromEntries(holders);
+  const chips = activeAgreementChips(filters, names);
   return <div className="space-y-2" data-testid="agreement-filters">
     <div role="group" aria-label="Agreement filters" className="-mx-3 flex flex-nowrap gap-2 overflow-x-auto px-3 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
       {FILTER_BUTTONS.map(([id, name, short]) => {
-        const value = filterButtonValue(id, filters);
+        const value = filterButtonValue(id, filters, names);
         return <button key={id} type="button" ref={(n) => { opener.current[id] = n; }} data-testid={`agreement-filter-${id}`}
           aria-expanded={open === id} aria-controls="agreement-filter-panel" aria-label={value ? `${name}: ${value}` : name}
           className={`${dd} ${value ? ddOn : ddOff}`} onClick={() => setOpen((o) => (o === id ? null : id))}>
           <span><span className="md:hidden">{short}</span><span className="hidden md:inline">{name}</span>{value ? `: ${value}` : ''}</span><span aria-hidden="true">▾</span></button>;
       })}
     </div>
-    {open && <Panel key={open} id={open} filters={filters} set={set} close={close} />}
+    {open && <Panel key={open} id={open} filters={filters} set={set} close={close} holders={holders} />}
     {chips.length > 0 && <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60" data-testid="agreement-active-filters">
       <span className="font-mono text-[11px] text-axal-muted">Active filters</span>
       {chips.map((chip) => <span key={`${chip.key}:${chip.value || ''}`} className="inline-flex items-center gap-1 rounded-full border border-violet-300 bg-violet-50 py-0.5 pl-2.5 pr-1 text-[12px] font-semibold text-violet-800 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200">

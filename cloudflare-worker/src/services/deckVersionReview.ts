@@ -18,6 +18,7 @@
 import type { Env } from '../types';
 import { run as aiRun, type RailContext, type RunResult } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { untrustedBlock, withUntrustedRule } from './ai/untrusted';
 import { parseJsonLoose } from './decks/autofill';
 
 /** The four columns PD14 draws, in its order. */
@@ -141,12 +142,13 @@ export function normalizeCardReview(raw: unknown, cards: number): CardReview | n
   return review.summary || any ? review : null;
 }
 
-export const REVIEW_SYSTEM =
+// D6420: the cards' words are outside text (an imported deck fills them), so the rule of D1506 rides here.
+export const REVIEW_SYSTEM = withUntrustedRule(
   'You are a blunt but constructive seed-stage investor reviewing a founder\'s pitch deck. Be candid, specific and useful: no fluff, no flattery, never rude. ' +
   'The deck is given card by card as "## Card N". Every point you make must name the one card it is about by its number. ' +
   'Respond ONLY with JSON of this shape: {"overall_score": number (0-100), "summary": string, "strengths": [{"text": string, "card": number}], ' +
   '"weaknesses": [{"text": string, "card": number}], "red_flags": [{"text": string, "card": number}], "fixes": [{"text": string, "card": number}]}. ' +
-  'Ground every point in the cards\' text. Never invent a figure the cards do not state.';
+  'Ground every point in the cards\' text. Never invent a figure the cards do not state.');
 
 export type VersionReviewRun = {
   /** The review, or null when the run returned none. */
@@ -155,9 +157,12 @@ export type VersionReviewRun = {
   result: RunResult | null;
 };
 
+/** The review's one user message: the cards' text as one `deck_import` block (D1506, D6420). */
+export const reviewMessage = (slides: unknown[]): string =>
+  `Pitch deck, ${slides.length} cards:\n\n${untrustedBlock('deck_import', deckText(slides))}\n\nReturn the review JSON now.`;
+
 /** One review run over a version's cards. Never throws; a failed run returns `review: null`. */
 export async function runVersionReview(env: Env, userId: number, slides: unknown[], rail: RailContext): Promise<VersionReviewRun> {
-  const text = deckText(slides);
   let result: RunResult | null = null;
   try {
     result = await aiRun(env, {
@@ -166,7 +171,7 @@ export async function runVersionReview(env: Env, userId: number, slides: unknown
       surface: AI_SURFACE.raisePitchReview,
       rail,
       systemPrompt: REVIEW_SYSTEM,
-      messages: [{ role: 'user', content: `Pitch deck, ${slides.length} cards:\n\n${text}\n\nReturn the review JSON now.` }],
+      messages: [{ role: 'user', content: reviewMessage(slides) }],
       maxTokens: REVIEW_MAX_TOKENS,
       temperature: 0.4,
     });

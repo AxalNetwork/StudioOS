@@ -104,6 +104,28 @@ export const ATTACH_COPY = {
 };
 
 /**
+ * Licences whose readings have no quote to go onto (#6279). Proposals are the
+ * quotes a partner profile owns, so a founder or an investor reads none. Their
+ * page draws no Proposal tile, pill or card and says in one line what a reading
+ * is for them instead. Partner and advisor keep the attachment card, including
+ * its "No proposal on this account" line, unchanged. A founder or investor read
+ * that does carry a proposal or an attachment still draws the card.
+ */
+export const OWN_RECORD_LINE = {
+  founder: 'On a founder licence, a reading is your own record of what comparable work went for, kept here to weigh a price you are offered.',
+  investor: 'On an investor licence, a reading is your own record of what comparable work went for, kept here for your diligence.',
+};
+
+export function attachesNowhere(role, { attachments, proposals } = {}) {
+  return Object.hasOwn(OWN_RECORD_LINE, role)
+    && !(attachments || []).length
+    && !(proposals || []).length;
+}
+
+/** The plain name of the draft pill (#6279): what it is, not the canvas's token. */
+export const DRAFT_PILL = 'Draft, not saved';
+
+/**
  * The proposals this reading is not on yet. Attaching to the same quote twice
  * writes nothing new (the Worker's `INSERT OR IGNORE`), so "another proposal"
  * offers only these.

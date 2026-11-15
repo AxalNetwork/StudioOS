@@ -102,14 +102,16 @@ test('the canvas\'s seven tabs, and only their words are tabs; a section is stil
  * Mounted
  * ------------------------------------------------------------------ */
 
-test('Allocation draws the module read\'s sections, each opening its record, never a record called "allocation"', async () => {
+test('Allocation draws the module read\'s sections, each opening its section sheet (D6083), never a record called "allocation"', async () => {
   const v = await mounted('/raise/use-of-funds/allocation?project_id=3');
   try {
     assert.ok(v.requests.some((u) => u.includes('/cycles/raise/modules/use-of-funds?project=3')));
     assert.ok(!v.requests.some((u) => /\/records\/allocation/.test(u)), 'a tab word is not a record');
     assert.ok(v.testIds().includes('uof-allocation-page') && v.testIds().includes('uof-tabs'));
     assert.match(v.text(), /Product & engineering[\s\S]*GTM: sales and marketing/);
-    assert.ok(v.hrefs().includes('/raise/use-of-funds/product?project_id=3'));
+    // D6083 (#6083): a section opens its sheet inside the tool, at its own address, not the record page.
+    assert.ok(v.hrefs().includes('/raise/use-of-funds/allocation?project_id=3&section=product'));
+    assert.ok(!v.hrefs().includes('/raise/use-of-funds/product?project_id=3'));
   } finally { await v.close(); }
 });
 

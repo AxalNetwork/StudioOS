@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, readFileSync, renameSync, rmSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createHealthMonitor, safeHealthFacts } from '../../scripts/health-alert-episodes.mjs';
+import { createHealthMonitor, ensureMainRedIssue, runSource, safeHealthFacts } from '../../scripts/health-alert-episodes.mjs';
 import { webhookDelivery } from '../../scripts/health-alert-transport.mjs';
 import { inspectTap, assessFutureClock } from '../../scripts/lib/futureClockEvidence.mjs';
 import { produce } from '../../scripts/future-clock-producer.mjs';
@@ -185,4 +185,60 @@ test('complete TAP can prove a failure even when a different test did not execut
   partial.manifest.bytes = Buffer.byteLength(partial.tap); partial.manifest.sha256 = createHash('sha256').update(partial.tap).digest('hex');
   const result = assessFutureClock(evidence([partial, blob(expected[1])])); assert.equal(result.active, true); assert.equal(result.failed, 1); assert.equal(result.complete, false); assert.equal(result.state, 'incomplete');
   for (const exitCode of [-1, 256]) { const invalid = blob(expected[0], true); invalid.manifest.exitCode = exitCode; assert.equal(assessFutureClock(evidence([invalid, blob(expected[1])])).active, null); }
+});
+
+test('Actions and health checks share the same main incident and deliver one open and recovery in either order', async () => {
+  const run = { id: 45, run_attempt: 2, repository: { full_name: repo }, head_repository: { full_name: repo },
+    path: '.github/workflows/ci.yml', event: 'push', head_branch: 'main', status: 'completed', conclusion: 'failure', head_sha: sha };
+  const mainFacts = { sha, runUrl: `https://github.com/${repo}/actions/runs/45` };
+  for (const issueFirst of [true, false]) {
+    const f = fixture(), monitor = f.make();
+    const openRepair = () => ensureMainRedIssue({ api: f.api, repository: repo, run, labels: ['bug', 'priority:high', 'workflow-failure'] });
+    if (issueFirst) {
+      assert.equal(await openRepair(), 1);
+      assert.equal(f.sent.length, 0);
+      assert.equal(state(f.rows[0]).intents[0].state, 'pending');
+    }
+    await monitor.apply('main-red', true, mainFacts, runSource(45, 2));
+    assert.equal(await openRepair(), 1);
+    assert.ok(f.rows[0].labels.includes('bug') && f.rows[0].labels.includes('priority:high'));
+    await monitor.apply('main-red', false, { ...mainFacts, sha: 'c'.repeat(40) }, runSource(47));
+    assert.equal(f.rows.length, 1); assert.equal(f.rows[0].state, 'closed');
+    assert.deepEqual(f.sent.map(s => s.phase), ['open', 'recovery']);
+    assert.equal(await openRepair(), null, 'stale callback after recovery cannot reopen closed main episode');
+  }
+});
+
+test('a unique SHA-bound operator repair keeps its assignment and stays open after the health episode recovers', async () => {
+  const title = '[alert] main is red: import guard at ' + sha.slice(0, 10);
+  const human = { number: 6381, title, state: 'open', user: { login: 'guillaumelauzier' },
+    labels: ['slot:S39', 'state:review', 'priority:urgent'], body: 'Operator repair details' };
+  const run = { id: 45, run_attempt: 1, repository: { full_name: repo }, head_repository: { full_name: repo },
+    path: '.github/workflows/ci.yml', event: 'push', head_branch: 'main', status: 'completed', conclusion: 'failure', head_sha: sha };
+  const mainFacts = { sha, runUrl: `https://github.com/${repo}/actions/runs/45` };
+  const f = fixture([human]), monitor = f.make();
+  assert.equal(await ensureMainRedIssue({ api: f.api, repository: repo, run, labels: ['slot:S01', 'state:ready', 'priority:high'] }), 6381);
+  assert.deepEqual(f.rows[0].labels.sort(), [...human.labels, 'ci', 'observability'].sort());
+  assert.equal(f.rows[0].title, title); assert.ok(f.rows[0].body.startsWith(human.body));
+  await monitor.apply('main-red', true, mainFacts, runSource(45));
+  f.outcome({ state: 'retry', code: 'rate_limited', retryAfterMs: 5000 });
+  await monitor.apply('main-red', false, { ...mainFacts, sha: 'c'.repeat(40) }, runSource(46));
+  assert.equal(f.rows[0].state, 'open'); assert.equal(state(f.rows[0]).recovered, true);
+  f.tick(5000); f.outcome({ state: 'acknowledged', receipt: { transport: 'webhook', status: 200 } });
+  await monitor.apply('main-red', false, { ...mainFacts, sha: 'c'.repeat(40) }, runSource(46));
+  assert.deepEqual(state(f.rows[0]).intents.map(i => i.state), ['acknowledged', 'acknowledged']);
+  assert.deepEqual(f.sent.map(s => s.phase), ['open', 'recovery', 'recovery']);
+  assert.equal(await ensureMainRedIssue({ api: f.api, repository: repo, run }), null);
+  assert.equal(await ensureMainRedIssue({ api: f.api, repository: repo, run: { ...run, id: 48, head_sha: 'd'.repeat(40) } }), 6382);
+  assert.equal(f.rows[1].title, '[alert] main is red'); assert.equal(f.rows[0].state, 'open');
+  for (const variant of [
+    { title: '[alert] main is red: import guard at ' + 'c'.repeat(10) },
+    { user: { login: 'someone-else' } }, { pull_request: {} },
+  ]) {
+    const other = fixture([{ ...human, ...variant }]);
+    assert.equal(await ensureMainRedIssue({ api: other.api, repository: repo, run }), 6382);
+    assert.equal(other.rows[0].body, human.body);
+  }
+  const ambiguous = fixture([human, { ...human, number: 6382 }]);
+  assert.equal(await ensureMainRedIssue({ api: ambiguous.api, repository: repo, run }), 6383);
 });
