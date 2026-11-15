@@ -241,6 +241,9 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'summarise:session': 'VA5', 'structure:transcript': 'VA5', 'ask:transcript': 'VA6', 'fill:hypothesis': 'VA15',
   // Build
   'draft:build/plan': 'BU1', 'draft:build/roadmap': 'BU2', 'draft:build/this-week': 'BU2', 'draft:build/retro': 'BU2', 'draft:build/kpi': 'BU3',
+  // D6042 (#6042): each runs its page's kind's Build job, so neither moves a model. Founding team's
+  // page is a plan page (nearest: BU2's record-only drafts); Company creation's is BU8's own module.
+  'draft:build/founding': 'BU2', 'draft:build/company': 'BU8',
   // Raise
   'draft:raise/use-of-funds-check': 'RA8', 'draft:raise/use-of-funds-runway': 'RA8',
   'form:uof-milestone-wording': 'BU1', // nearest: plan wording on the 70B
@@ -286,6 +289,9 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:counter': 'IN3',
   'draft:operating-brief': 'CA1', 'draft:board-read': 'CA1', 'draft:capacity-findings': 'CA1',
   'draft:expiry-consequences': 'CA4',
+  // D6397: inventory jobs only; these recorded-read tasks call no model or text job.
+  'explain:fund-outstanding': 'ST1', 'identify:fund-overdue-lps': 'ST1',
+  'summarize:fund-reconciliation': 'ST1', 'prepare:fund-capital-call': 'ST1', 'identify:fund-incomplete-setup': 'ST1',
   // HQ
   'draft:publication-summary': 'AD1',
   // D5084: Revenue's Ask chips put a question in the Ask composer, which Ask Eadwyn answers; the chip runs no model.

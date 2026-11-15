@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkGraph PR Conflicts and Reservations · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+.wgr-m{font-family:var(--mo);font-weight:600}
+.wgr-sha,.wgr-p{font:500 11.5px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:5px;padding:0 5px;white-space:nowrap}
+.wgr-p{white-space:normal;word-break:break-all}
+.wgr-n{font:700 12px var(--mo);color:var(--vt)!important;white-space:nowrap}
+.wgr-ext{font-size:10px;margin-left:2px}
+.wgr-slot{font:600 11.5px var(--mo);color:var(--ink)}
+.wgr-sm{font-size:11.5px;color:var(--mu);line-height:1.45}
+.wgr-why{display:block;font-size:11.5px;color:var(--mu);line-height:1.45;margin-top:2px}
+.wgr-st{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}
+.wgr-it{font-size:13px;line-height:1.4}
+.wgr-it b{font-weight:700}
+.wgr-src{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+/* annotation tags */
+.wgr-eng{display:inline-flex;font:700 10.5px var(--mo);color:var(--tagV);background:var(--tagBg);border:1px dashed var(--tagE);border-radius:6px;padding:1px 6px;white-space:nowrap;vertical-align:middle}
+.wgr-own{display:inline-flex;font:700 10.5px var(--mo);color:#92400e;background:#fffbeb;border:1px dashed #f59e0b;border-radius:6px;padding:1px 6px;white-space:nowrap;vertical-align:middle}
+/* extra state chips beside Platform States */
+.wgr-nck{color:var(--ink);background:transparent;border-color:var(--hair2);border-width:1.5px;border-style:solid}
+.wgr-nms{color:var(--mu);background:var(--raised);border-color:var(--hair2);border-style:dotted;border-width:1.5px;font-style:italic}
+.wgr-unk{color:var(--ink);background:var(--card);border-color:var(--mu);border-style:dashed;border-width:1px}
+.wgr-nread{color:var(--mu);background:var(--raised);border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+/* action chips */
+.wgr-a{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:6px;font:700 11.5px var(--sg);line-height:1.65;white-space:nowrap;border:1px solid}
+.wgr-a b{font-family:var(--mo)}
+.wgr-a-s{background:var(--neg);border-color:var(--neg);color:#fff}
+.wgr-a-w{background:var(--amBg);border-color:var(--amD);color:var(--amT)}
+.wgr-a-c{background:var(--card);border-color:var(--ink);color:var(--ink)}
+.wgr-a-p{background:var(--posBg);border-color:var(--posE);color:var(--pos)}
+/* risk classes */
+.wgr-rc{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair2);color:var(--ink);background:var(--card)}
+.wgr-rc>span{font-family:var(--mo)}
+.wgr-rc-u{border-style:dashed}
+.wgr-rc-o{background:var(--amBg);border-color:var(--amE);color:var(--amT)}
+.wgr-rc-y{background:var(--raised);border-color:var(--ink)}
+.wgr-rc-x{background:var(--neg);border-color:var(--neg);color:#fff}
+.wgr-rk{display:inline-flex;gap:4px;align-items:center;font:600 11.5px var(--sg);color:var(--ink)}
+.wgr-rk>span{font-family:var(--mo);color:var(--mu)}
+.wgr-rk-h>span{color:var(--neg)}
+.wgr-rk-m>span{color:var(--amD)}
+.wgr-tc{display:inline-flex;gap:5px;align-items:center;font:700 11.5px var(--sg);color:var(--ink)}
+.wgr-tc-y{color:var(--neg)}
+.wgr-v{display:inline-flex;gap:5px;align-items:center;font:700 12px var(--sg);color:var(--ink)}
+.wgr-v-x{color:var(--neg)}
+.wgr-v-ok{color:var(--pos)}
+.wgr-v-pd{color:var(--amT)}
+.wgr-q{font-size:12px;color:var(--ink)}
+.wgr-tg{display:inline-flex;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--hair2);border-radius:5px;padding:0 5px;color:var(--mu);background:var(--raised)}
+.wgr-stamp{display:inline-flex;gap:5px;align-items:center;font:700 11px var(--sg);color:var(--ink);border:1.5px solid var(--ink);border-radius:6px;padding:1px 7px;white-space:nowrap}
+.wgr-exp{display:inline-flex;gap:5px;align-items:center;font:700 11.5px var(--sg);color:var(--amT);background:var(--amBg);border:1px dashed var(--amD);border-radius:6px;padding:0 6px}
+.wgr-note{display:inline-flex;gap:6px;align-items:baseline;font-size:11.5px;color:var(--amT);line-height:1.4}
+.wgr-note>span{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:999px;border:1px solid var(--amD);font:800 9px var(--mo);flex:none}
+.wgr-dep{display:inline-flex;gap:3px;align-items:center;font:600 11px var(--mo);color:var(--ink);margin-right:6px}
+.wgr-dep-open>span{color:var(--amD)}
+.wgr-dep-closed>span{color:var(--pos)}
+.wgr-dep-unknown>span{color:var(--mu)}
+.wgr-deps{font-size:11.5px;color:var(--mu)}
+/* header */
+.wgr-hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.wgr-hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.wgr-hd .sub{max-width:560px}
+.wgr-hr{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.wgr-hr .ver{align-items:center;justify-content:flex-end}
+.wgr-tabs{display:flex;gap:4px;align-items:center;border-bottom:1px solid var(--hair)}
+.wgr-tabs a{display:inline-flex;gap:8px;align-items:center;padding:9px 12px;font:700 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.wgr-tabs a span{font:500 11px var(--mo);color:var(--mu)}
+.wgr-tabs a[aria-current]{color:var(--ink)!important;border-bottom-color:var(--ink)}
+.wgr-tabn{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+/* summary */
+.wgr-sum{display:grid;grid-template-columns:1.1fr repeat(4,1fr) 1.1fr 1fr;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.wgr-sum>div{display:flex;flex-direction:column;gap:5px;padding:11px 12px;border-right:1px solid var(--hair);min-width:0}
+.wgr-sum>div:last-child{border-right:0}
+.wgr-sum b{font:700 20px var(--mo);letter-spacing:-.02em}
+.wgr-sum small{font-size:11px;color:var(--mu);line-height:1.35}
+.wgr-sum .eye{display:flex;min-height:22px;align-items:center}
+.wgr-sum-x>div{gap:8px}
+/* tables */
+.wgr-ch{padding:12px 14px;border-bottom:1px solid var(--hair)}
+.wgr-tab{table-layout:fixed}
+.wgr-tab td{padding:10px 12px}
+.wgr-tab tr.wgr-open>td{background:var(--raised);border-bottom:0}
+.wgr-xp>td{background:var(--raised);padding:0 12px 14px!important}
+.wgr-xpi{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px 18px;padding:12px 14px;background:var(--card);border:1px solid var(--hair);border-radius:10px}
+.wgr-xpa{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wgr-ab{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;background:none;border:0;padding:0;text-align:left;min-height:24px}
+.wgr-rs{display:flex;flex-direction:column;margin-top:6px}
+.wgr-rs li{display:grid;grid-template-columns:104px minmax(0,auto) minmax(0,1fr);gap:4px 10px;align-items:center;padding:7px 0;border-top:1px solid var(--hair);font-size:12px}
+.wgr-rs li:first-child{border-top:0}
+.wgr-rs li>:nth-child(4){grid-column:2/-1;justify-self:start}
+.wgr-rule{font-weight:700}
+.wgr-kv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:8px}
+.wgr-kv>div{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 10px;border-top:1px solid var(--hair);font-size:12px;align-items:start}
+.wgr-kv>div:first-child{border-top:0}
+.wgr-kv>div>span:first-child{color:var(--mu)}
+.wgr-kv .wgr-why{display:inline;margin:0 0 0 4px}
+.wgr-kv2>div{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr)}
+.wgr-nrc{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 14px;border-top:1px solid var(--hair);font-size:12px;align-items:center}
+.wgr-grp th{background:var(--raised);text-align:left;padding:8px 12px!important;text-transform:none!important;letter-spacing:0!important;font:600 12px var(--sg)!important;color:var(--ink)!important}
+.wgr-grp th{display:table-cell}
+.wgr-grp th>span{display:inline-flex;gap:6px;align-items:center}
+.wgr-io{float:right;font-weight:600}
+.wgr-ev td{font-size:12px}
+/* panels */
+.wgr-list{display:flex;flex-direction:column}
+.wgr-list li{display:flex;flex-direction:column;gap:3px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.wgr-list li:first-child{border-top:0}
+.wgr-list li>code{margin-top:2px}
+.wgr-nk{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+.wgr-sn{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;font-size:12px;color:var(--mu);padding:8px 12px;border:1px dashed var(--hair2);border-radius:10px}
+.wgr-nx{display:flex;gap:18px;font:700 13px var(--sg)}
+/* pairs */
+.wgr-leg{gap:8px}
+.wgr-lad{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.wgr-lad>div{display:flex;flex-direction:column;gap:5px;align-items:flex-start;padding:8px 10px;border:1px solid var(--hair);border-radius:8px}
+.wgr-lad-h>div{flex-direction:row;align-items:center}
+.wgr-lv{font:700 10px var(--mo);color:var(--mu)}
+.wgr-plain{font-size:12.5px;color:var(--ink);line-height:1.5}
+.wgr-hp{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--hair);border-radius:8px;min-width:0}
+.wgr-hph{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wgr-cls{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);border-radius:5px;padding:0 5px}
+.wgr-hpg{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}
+.wgr-hpg>div{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12px}
+.wgr-hpg>.wgr-sm{grid-column:1/-1}
+.wgr-hpg>.st-c,.wgr-hpg>.wgr-why{grid-column:1/-1;justify-self:start}
+.wgr-bar{position:relative;height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair)}
+.wgr-bar i{position:absolute;top:0;bottom:0;background:var(--ink);opacity:.55;border-radius:2px}
+/* empty, banners, failure */
+.wgr-emb{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:26px 18px}
+.wgr-emb b{font-size:16px}
+.wgr-ban{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 14px;border-radius:10px;border:1px solid var(--hair);background:var(--card);font-size:12.5px;line-height:1.5}
+.wgr-ban b{font-size:13.5px}
+.wgr-ban ul{margin:4px 0;padding-left:16px;list-style:disc}
+.wgr-ban-u{border:1.5px dashed var(--negE)}
+.wgr-ban-u .wgr-bi2{color:var(--neg)}
+.wgr-ban-n{border:1.5px dotted var(--hair2);background:var(--raised)}
+.wgr-ban-s{border:1.5px dashed var(--amE)}
+.wgr-ban-s .wgr-bi2{color:var(--amD)}
+.wgr-ban-p{background:var(--amBg);border-color:var(--amE)}
+.wgr-ban-p .wgr-bi2{color:var(--amT)}
+.wgr-bi2{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);color:var(--mu)}
+.wgr-fail{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:start;padding:22px;border:1.5px dashed var(--negE);border-radius:12px;background:var(--card);font-size:13px;line-height:1.55}
+.wgr-fail h2{font-size:18px;font-weight:800;margin-bottom:4px}
+.wgr-fail .wgr-bi2{color:var(--neg)}
+.wgr-cmp{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--hair)}
+.wgr-sk{display:block;height:10px;border-radius:4px;background:var(--skel)}
+/* eadwyn */
+.wgr-ead{background:var(--card)}
+.wgr-eh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--hair)}
+.wgr-elogo{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--ink);color:var(--card);font-weight:800;font-size:12px}
+.wgr-eb{padding:14px 16px;display:flex;flex-direction:column;gap:10px;font-size:12.5px;line-height:1.55;flex:1}
+.wgr-bl{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:8px}
+.wgr-bl li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:8px 10px;border-top:1px solid var(--hair);font-size:12.5px}
+.wgr-bl li:first-child{border-top:0}
+.wgr-bi{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:var(--raised);border:1px solid var(--hair2);font:700 11px var(--mo)}
+.wgr-ta{display:block;min-height:110px;font:500 12px/1.7 var(--mo);padding:8px 10px;border:1.5px solid var(--ink)}
+.wgr-caret{display:inline-block;width:1.5px;height:14px;background:var(--ink);vertical-align:middle;margin-left:1px}
+/* phone */
+.wgr-ptabs{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden;background:var(--card)}
+.wgr-ptabs a{display:grid;place-items:center;min-height:44px;font:700 13px var(--sg);color:var(--mu)!important;border-right:1px solid var(--hair)}
+.wgr-ptabs a:last-child{border-right:0}
+.wgr-ptabs a[aria-current]{background:var(--ink);color:var(--card)!important}
+.wgr-p22{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wgr-p22>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--card)}
+.wgr-p22 b{font:700 20px var(--mo)}
+.wgr-p22 small{font-size:11px;color:var(--mu)}
+.wgr-pc{display:flex;flex-direction:column;gap:7px;align-items:flex-start;padding:12px 14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.wgr-pc>.btn{min-height:44px}
+.wgr-pch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%}
+.wgr-pch>.wgr-a{margin-left:auto}
+.wgr-pd{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:44px;border:0;border-top:1px solid var(--hair);background:none;font:700 13px var(--sg);color:var(--ink);padding:0}
+.wgr-rsp{margin-top:0;width:100%}
+.wgr-rsp li{grid-template-columns:auto minmax(0,1fr)}
+.wgr-rsp li>:nth-child(3),.wgr-rsp li>:nth-child(4){grid-column:1/-1}
+.wgr-pc .wgr-hp{width:100%}
+.wgr-pc .wgr-hpg{grid-template-columns:1fr}
+.wgr-pdl{display:flex;flex-direction:column;width:100%;border-top:1px solid var(--hair)}
+.wgr-pdl>div{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px;padding:7px 0;border-bottom:1px solid var(--hair);font-size:12px}
+.wgr-pdl dt{color:var(--mu);font-weight:600}
+.wgr-scrim{position:absolute;inset:0;background:var(--dim)}
+.wgr-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:16px 16px 0 0;padding:10px 16px 24px;display:flex;flex-direction:column;gap:10px;font-size:12.5px}
+.wgr-sheet .btn{min-height:44px}
+.wgr-grab{align-self:center;width:40px;height:4px;border-radius:2px;background:var(--hair2)}
+/* docs */
+.wgr-dh{display:flex;gap:14px;align-items:flex-start}
+.wgr-dh h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.wgr-dh p{font-size:13px;color:var(--mu);margin-top:4px;line-height:1.55;max-width:1000px}
+.wgr-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:3px}
+.wgr-rules{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.wgr-rules>div{display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:14px;border:1px solid var(--hair);border-radius:12px;background:var(--card);font-size:12.5px;line-height:1.5}
+.wgr-ds{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.wgr-dl{display:flex;flex-direction:column;gap:6px;padding-left:16px;list-style:disc;font-size:12.5px;line-height:1.55}
+.wgr-hg{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.wgr-hg>.wgr-ds:first-child{grid-row:span 2}
+.cv .btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.wgr-m{white-space:nowrap}
+.wgr-st .st-c{white-space:normal;text-align:left}
+.wgr-sum .eye{text-transform:none;letter-spacing:.02em}
+.wgr-sum .wgr-a{font-size:10.5px;padding:0 6px 0 5px}
+.wgr-lad .wgr-rc{white-space:normal}
+.wgr-stamp{white-space:normal}
+.wgr-cn{font:500 11.5px var(--mo);color:var(--ink)}
+.wgr-sum-x .st-c{align-self:flex-start}
+.cv{color:var(--ink)}
+.cv td,.cv b,.cv p,.cv li,.wgr-rule,.wgr-kv>div>span:last-child{color:inherit}
+.cv .ctab td{color:var(--ink)}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "WGR01", "options": ["WGR07", "WGR01", "WGR02", "WGR03", "WGR04", "WGR05A", "WGR05B", "WGR05C", "WGR05D", "WGR05E", "WGR05F", "WGR05G", "WGR05H", "WGR05I", "WGR05J", "WGR05K", "WGR04B", "WGR06A", "WGR06B", "WGR06C", "WGR06D", "WGR06E", "WGR08", "WGR09"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'WGR01';
+    const dark = B === 'WGR07';
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1a2332', ink: '#e5e7eb', mu: '#9ca3af', hair: '#273244', hair2: '#3b475c', vi: '#34d399', vt: '#6ee7b7', lav: 'rgba(52,211,153,.1)', lavE: 'rgba(52,211,153,.35)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937', skel2: '#273244', tagV: '#a78bfa', tagBg: 'rgba(167,139,250,.12)', tagE: 'rgba(167,139,250,.45)' }
+      : { bg: '#f4f4f3', card: '#ffffff', raised: '#f8f8f7', ink: '#18181b', mu: '#5f6368', hair: '#e7e7e4', hair2: '#d4d4d0', vi: '#047857', vt: '#065f46', lav: '#ecfdf5', lavE: '#a7f3d0', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.38)', skel: '#e7e7e4', skel2: '#f1f1ef', tagV: '#7c3aed', tagBg: '#f4f0fe', tagE: '#c4b5fd' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const pill = (tone, t) => '<span class="pl ' + (tone || '') + '">' + t + '</span>';
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const ext = '<span aria-hidden="true" class="wgr-ext">↗</span>';
+
+    /* ---------- Platform States glyphs + chips (D5129, from Platform States) ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      rf: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2.8 9.2l6.4-6.4" stroke="currentColor" stroke-width="1.6"/>'),
+      stale: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      part: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      nck: SV('<circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="1.6 1.6"/>'),
+      nms: SV('<path d="M1.5 6h9M1.5 3.5v5M10.5 3.5v5" fill="none" stroke="currentColor" stroke-width="1.4"/>'),
+      unk: SV('<path d="M4.2 4.3a1.9 1.9 0 1 1 2.6 1.8c-.6.3-.8.6-.8 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="9.6" r="1" fill="currentColor"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>')
+    };
+    const K = { nr: ['st-nr', 'nr', 'Not recorded'], un: ['st-un', 'un', 'Unreadable'], rf: ['st-rf', 'rf', 'Refused'], stale: ['st-stale', 'stale', 'Stale'], part: ['st-part', 'part', 'Partial'], nck: ['wgr-nck', 'nck', 'Not checked'], nms: ['wgr-nms', 'nms', 'Not measured'], unk: ['wgr-unk', 'unk', 'Unknown'], nread: ['wgr-nread', 'nr', 'Not read'] };
+    const chip = (k, label) => { const x = K[k]; return '<span class="st-c ' + x[0] + '">' + G[x[1]] + (label || x[2]) + '</span>'; };
+    const why = (t) => '<span class="wgr-why">' + t + '</span>';
+    const NR = (w) => chip('nr') + (w ? why(w) : '');
+    const retry = (s) => '<button type="button" class="st-retry">' + G.re + (s || 'Try again') + '</button>';
+    const ENG = (t) => '<span class="wgr-eng">◇ ' + t + '</span>';
+    const OWN = (t) => '<span class="wgr-own">⚑ ' + t + '</span>';
+    const fr = (k, t) => '<span class="fr ' + k + '"><i aria-hidden="true"></i>' + t + '</span>';
+    const scope = (t) => '<span class="scope" title="Scope">◎ ' + t + '</span>';
+    const mo = (t) => '<span class="wgr-m">' + t + '</span>';
+    const sha = (s) => '<code class="wgr-sha">[' + s + ']</code>';
+    const iss = (n) => '<a href="#" class="wgr-n">#[' + n + ']' + ext + '</a>';
+    const pth = (p) => '<code class="wgr-p">' + p + '</code>';
+    const slot = (s) => '<span class="wgr-slot">[' + s + ']</span>';
+
+    /* ---------- advisory vocabulary ---------- */
+    const ACT = { Serialize: ['s', '■'], Wait: ['w', '▲'], Coordinate: ['c', '◆'], Proceed: ['p', '✓'] };
+    const act = (a, n) => '<span class="wgr-a wgr-a-' + ACT[a][0] + '"><span aria-hidden="true">' + ACT[a][1] + '</span>' + a + (n != null ? ' <b>' + n + '</b>' : '') + '</span>';
+    const RC = { disjoint: ['∥', 'Same path, disjoint hunks', 'd'], unknown: ['?', 'Same path, unknown hunks', 'u'], overlap: ['⧉', 'Overlapping hunks', 'o'], dependency: ['↳', 'Dependency', 'y'], critical: ['■', 'Critical', 'x'] };
+    const rc = (k, short) => '<span class="wgr-rc wgr-rc-' + RC[k][2] + '"><span aria-hidden="true">' + RC[k][0] + '</span>' + (short ? RC[k][1].replace('Same path, ', '') : RC[k][1]) + '</span>';
+    const RK = { Low: '▁', Medium: '▃', High: '▅' };
+    const risk = (r) => r ? '<span class="wgr-rk wgr-rk-' + r[0].toLowerCase() + '"><span aria-hidden="true">' + RK[r] + '</span>' + r + '</span>' : chip('nr');
+    const tc = (v, w) => v === 'Yes' ? '<span class="wgr-tc wgr-tc-y"><span aria-hidden="true">✕</span>Conflict: Yes</span>' : v === 'No' ? '<span class="wgr-tc"><span aria-hidden="true">–</span>Conflict: No</span>' : chip('nck') + (w ? why(w) : '');
+    const SRC = { ref: 'Claim ref', status: 'STATUS comment', label: 'Slot label' };
+
+    /* ---------- the scan (sample) ---------- */
+    const SCAN = '14:31 UTC';
+    const inScan = 'in the ' + SCAN + ' scan';
+    // [issue, title, slot, agent, session, source, registered, renewed, ttl, expires, expired, base, prs, paths, pathsSrc, deps, risk, action, notes, reasons]
+    const W = [
+      { n: '5598', t: 'Founder board lane counts', slot: 'S09', ag: 'agent-c', se: '3e8a', src: 'ref', reg: '12 Nov 08:00', ren: '13 Nov 08:00', ttl: 24, exp: '14 Nov 08:00', expd: true, base: { sha: '5c20e91', from: 'claim', age: '30 h', on: true }, prs: ['5805'], paths: 3, ps: 'pr', deps: [], risk: 'Low', act: 'Coordinate', notes: [], rs: [['Coordinate', '5601', 'same module', 'cloudflare-worker/src/routes/', true]] },
+      { n: '5601', t: 'Partner delivery receipts table', slot: 'S14', ag: 'agent-a', se: '7f2c', src: 'ref', reg: '13 Nov 21:30', ren: '14 Nov 09:30', ttl: 12, exp: '14 Nov 21:30', base: { sha: 'a41c9e2', from: 'claim', age: '5 h', on: true }, prs: ['5810'], paths: 6, ps: 'pr', deps: [['5588', 'closed']], risk: 'High', act: 'Serialize', notes: [], rs: [['Serialize', '5603', 'shared migration stamp', 'cloudflare-worker/sql/migrations/[202611141030]_*'], ['Serialize', '5603', 'exclusive resource: D1 schema', 'cloudflare-worker/sql/[schema.sql]'], ['Coordinate', '5598', 'same module', 'cloudflare-worker/src/routes/', true]] },
+      { n: '5603', t: 'Receipt reconciliation job', slot: 'S22', ag: 'agent-b', se: 'c19d', src: 'ref', reg: '14 Nov 11:05', ren: '14 Nov 11:05', ttl: 12, exp: '14 Nov 23:05', base: { sha: 'b7d0f13', from: 'PR merge base', age: '27 h', on: true }, prs: ['5812'], paths: 5, ps: 'pr', deps: [], risk: 'High', act: 'Serialize', notes: [], rs: [['Serialize', '5601', 'shared migration stamp', 'cloudflare-worker/sql/migrations/[202611141030]_*'], ['Serialize', '5601', 'exclusive resource: D1 schema', 'cloudflare-worker/sql/[schema.sql]']] },
+      { n: '5607', t: 'Partner API pagination', slot: 'S05', ag: 'agent-d', se: '41be', src: 'ref', reg: '14 Nov 12:40', ren: '14 Nov 12:40', ttl: 24, exp: '15 Nov 12:40', base: { sha: 'd93e0b4', from: 'PR merge base', age: '81 h', on: true, stale: 'older than 72 h' }, prs: ['5814'], paths: 4, ps: 'pr', deps: [['5603', 'open']], risk: 'Medium', act: 'Wait', notes: [], rs: [['Wait', '5609', 'overlapping hunks', 'frontend/src/pages/[PartnerDelivery.jsx]'], ['Wait', '5603', 'open dependency', null]] },
+      { n: '5609', t: 'Delivery page filters', slot: 'S31', ag: 'agent-e', se: '9a07', src: 'ref', reg: '14 Nov 14:02', ren: '14 Nov 14:02', ttl: 24, exp: '15 Nov 14:02', base: { sha: 'e0b5a77', from: 'claim', age: '0.5 h', on: null }, prs: ['5815'], paths: 7, ps: 'pr', deps: [], risk: 'Medium', act: 'Wait', notes: ['Holder [S31] does not match the issue’s slot label [S30]'], rs: [['Wait', '5607', 'overlapping hunks', 'frontend/src/pages/[PartnerDelivery.jsx]'], ['Coordinate', '5612', 'predicted shared path (STATUS files)', 'frontend/src/components/[DeliveryFilters.jsx]']] },
+      { n: '5594', t: 'Retire legacy delivery export', slot: 'S11', ag: 'agent-f', se: 'd2c4', src: 'ref', reg: '13 Nov 18:00', ren: '14 Nov 06:00', ttl: 36, exp: '15 Nov 18:00', base: { sha: '71fa3c8', from: 'claim', age: '20 h', on: true }, prs: [], paths: null, ps: null, deps: [], risk: null, act: 'Proceed', notes: ['Issue closed, claim still held'], rs: [] },
+      { n: '5612', t: 'Delivery status copy', slot: 'S17', ag: 'agent-g', se: null, src: 'status', reg: '14 Nov 10:52', ren: null, ttl: null, exp: null, base: { sha: null, why: 'a STATUS claim has none' }, prs: [], paths: 4, ps: 'status', deps: [['5590', 'unknown']], risk: 'Low', act: 'Coordinate', notes: [], rs: [['Coordinate', '5609', 'predicted shared path (STATUS files)', 'frontend/src/components/[DeliveryFilters.jsx]'], ['Coordinate', '5590', 'dependency state not read', null]] },
+      { n: '5615', t: 'Investor digest wording', slot: 'S26', ag: null, se: null, src: 'label', reg: null, ren: null, ttl: null, exp: null, base: { sha: null, why: 'a label claim has none' }, prs: [], paths: null, ps: null, deps: [], risk: null, act: 'Proceed', notes: [], rs: [] }];
+    const COUNT = { Serialize: 2, Wait: 2, Coordinate: 2, Proceed: 2 };
+    const REFUSED = [['claim/[5611]', 'Invalid slot', 'slot [S52] has no slot label in this repository'], ['claim/[5613]', 'Invalid claim ref', 'claim metadata unreadable: the ref points at [9c1e04f], which holds no claim file']];
+    const WNOTES = [['Duplicate registration', '#[5603] from [S19] lost to [S22] (the earlier claim ref wins)'], ['Read as history', 'an older registration of #[5601] (12 Nov 09:10) was read as history'], ['PR link dropped', '#[5799] dropped from #[5594]: the PR closed'], ['Issue not read', '#[5590] (a dependency of #[5612]) was not read']];
+    const SNOTES = ['#[5822] head changed during the scan; marked stale, not classified', '2 duplicate PR row(s) from pagination removed'];
+
+    const PAIRS = [
+      { mod: 'cloudflare-worker', a: '5810', b: '5812', rc: 'critical', tc: 'Yes', st: ['202611141030'], paths: [['cloudflare-worker/sql/[schema.sql]', 'schema', 'critical', 'overlap', ['L112–140', 'L118–131'], '118–131']] },
+      { mod: 'cloudflare-worker', a: '5805', b: '5810', rc: 'disjoint', tc: 'No', st: [], paths: [['cloudflare-worker/src/routes/[partner_delivery.ts]', 'path', 'disjoint', 'disjoint', ['L40–58', 'L210–244']]] },
+      { mod: 'cloudflare-worker', a: '5805', b: '5818', rc: 'disjoint', tc: 'No', st: [], paths: [['cloudflare-worker/src/routes/[partner_delivery.ts]', 'path', 'disjoint', 'disjoint', ['L40–58', 'L301–322']]] },
+      { mod: 'cloudflare-worker', a: '5810', b: '5818', rc: 'unknown', tc: 'No', st: [], paths: [['cloudflare-worker/src/routes/[partner_delivery.ts]', 'path', 'unknown', 'unknown', 'base file unreadable at the merge base']] },
+      { mod: 'cloudflare-worker', a: '5812', b: '5818', rc: 'dependency', tc: 'No', st: [], paths: [['cloudflare-worker/src/[index.ts]', 'hub', 'dependency', 'disjoint', ['L3480–3482', 'L3501–3503']]] },
+      { mod: 'frontend', a: '5814', b: '5815', rc: 'overlap', tc: 'Yes', st: [], paths: [['frontend/src/pages/[PartnerDelivery.jsx]', 'path', 'overlap', 'overlap', ['L88–120', 'L101–133'], '101–120']] },
+      { mod: 'frontend', a: '5815', b: '5820', rc: 'disjoint', tc: 'No', st: [], paths: [['frontend/src/components/[DeliveryFilters.jsx]', 'path', 'disjoint', 'disjoint', ['L14–40', 'L77–90']]] }];
+    const EV = [
+      { n: '5805', i: '5598', p: 3, m: ['Clean'], c: ['Passing'], q: [6, 3, 9, 0], b: ['4', '30 h'] },
+      { n: '5810', i: '5601', p: 6, m: ['Conflict'], c: ['Failed', 'worker-tests'], q: [14, 5, 12, 1, 9], b: ['2', '5 h'] },
+      { n: '5812', i: '5603', p: 5, m: ['Conflict'], c: ['Pending', 'd1-migrations · drift (not reported yet)'], q: [11, 4, 10, 0], b: ['11', '27 h'] },
+      { n: '5814', i: '5607', p: 4, m: ['Clean'], c: ['Passing'], q: ['nm', 'Actions runs unreadable'], b: ['38', '81 h'] },
+      { n: '5815', i: '5609', p: 7, m: ['Unknown', 'mergeability not computed yet'], c: ['Unknown', 'check runs unreadable', 'lint'], q: [9, 4, 8, 0], b: ['unk', 'compare unreadable'] },
+      { n: '5818', i: null, p: 3, m: ['Clean'], c: ['Passing'], q: [7, 3, 11, 0], b: ['6', '14 h'] },
+      { n: '5820', i: null, p: 2, draft: true, m: ['Clean'], c: ['None required', 'base release/[2026-11] has no required checks'], q: [null, null, 0, 3, 22], b: ['0', '2 h'] },
+      { n: '5822', i: null, p: 5, stale: true, m: ['Unknown', 'head changed during the scan'], c: ['Unknown', 'head changed during the scan'], q: ['nm', 'head changed during the scan'], b: ['unk', 'head changed during the scan'] }];
+
+    /* ---------- shell (Platform v2 HQ frame) ---------- */
+    const NAV = ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'];
+    const eadHead = (tag) => '<div class="wgr-eh"><span style="display:flex;gap:8px;align-items:center"><span class="wgr-elogo">E</span><b style="font-size:13.5px">Eadwyn</b>' + (tag ? '<span class="pl">' + tag + '</span>' : '') + '</span><button type="button" class="ib" aria-label="Collapse Eadwyn" aria-expanded="true">›</button></div>';
+    const eadFoot = '<div style="padding:12px 16px;border-top:1px solid var(--hair)"><div class="inp" style="min-width:0;min-height:38px">Ask about work in flight…</div><label class="ck" style="margin-top:6px;font-size:12px;color:var(--mu)"><input type="checkbox">Pin open on this page</label></div>';
+    const BATCH = [['5603', '5812', 'first: shares stamp [202611141030] and [schema.sql] with #[5601]; changes fewer files (5 vs 6)'], ['5601', '5810', 'after #[5603] lands and #[5810] rebases on it'], ['5607', '5814', 'after #[5603] closes (open dependency)'], ['5609', '5815', 'after #[5607]: hunks overlap in [PartnerDelivery.jsx]']];
+    const eadBatch = (o) => { o = o || {}; return '<aside class="sp eadx wgr-ead" aria-label="Eadwyn">' + eadHead('Opened for a Serialize insight')
+      + '<div class="wgr-eb"><span class="eye">Proposed integration batch</span><b style="font-size:13.5px">Land the four colliding claims in this order</b>'
+      + '<ol class="wgr-bl">' + J(BATCH.map((r, i) => '<li><span class="wgr-bi">' + (i + 1) + '</span><div><b>#[' + r[0] + ']</b> <span class="mu">via PR #[' + r[1] + ']</span><span class="wgr-why">' + r[2] + '</span></div></li>')) + '</ol>'
+      + '<p class="foot">From the ' + SCAN + ' scan: the Serialize and Wait reasons, and the scan’s own landing order (drafts last, fewer changed files first). A proposal, not a verdict. Nobody is told, nothing is labelled.</p>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn bsm">Accept · copy to clipboard</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div>'
+      + (o.tags === false ? '' : '<div>' + ENG('nothing is stored when accepted; copy only') + '</div>') + '</div>' + eadFoot + '</aside>'; };
+    const eadCluster = () => '<aside class="sp eadx wgr-ead" aria-label="Eadwyn">' + eadHead('Asked')
+      + '<div class="wgr-eb"><span class="eye">Cluster summary · cloudflare-worker</span><b style="font-size:13.5px">3 PRs share [partner_delivery.ts], no hard conflict among them</b>'
+      + '<p>#[5805], #[5810] and #[5818] each edit [partner_delivery.ts]. Hunks are disjoint for #[5805] ↔ #[5810] and #[5805] ↔ #[5818], and unknown for #[5810] ↔ #[5818] (base file unreadable). The scan found no textual conflict in any of the three pairs.</p>'
+      + '<p>The one hard collision in this module is #[5810] ↔ #[5812]: overlapping hunks in [schema.sql] and the shared stamp [202611141030].</p>'
+      + '<p class="foot">Cites pairs 1 to 4 of the ' + SCAN + ' scan. A summary, not a merge verdict.</p>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn bsm">Accept · copy to clipboard</button><button type="button" class="btn bsm">Edit</button><button type="button" class="btn bsm">Discard</button></div></div>' + eadFoot + '</aside>';
+    const eadClosed = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn: Ask about work in flight" aria-expanded="false" style="background:var(--ink);color:var(--card)">E</button><span class="vt" aria-hidden="true">Ask</span></aside>';
+    const shell = (body, h, ead) => '<div class="sh" style="min-height:' + (h || 900) + 'px' + (ead ? ';grid-template-columns:196px minmax(0,1fr) 340px' : '') + '">'
+      + '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><span class="eye grp">HQ</span><nav aria-label="HQ">' + J(NAV.map(t => '<a href="#"' + (t === 'Platform' ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav></aside>'
+      + '<div class="mn"><div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><span class="bdg" style="background:#881337">HQ</span><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><span class="av" role="img" aria-label="Account" style="background:var(--raised);color:var(--ink)">S</span></div></div>'
+      + '<main class="bd" style="gap:16px">' + body + '</main></div>' + (ead || eadClosed) + '</div>';
+    const page = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '">' + shell(body, o.h || 900, o.ead) + '</div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';box-sizing:border-box;width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px">' + inner + '</div>';
+
+    /* ---------- header, tabs, freshness ---------- */
+    const crumbs = (here) => '<nav aria-label="Breadcrumb" class="eye"><a href="#">Platform</a> › <span>Infrastructure</span> › <span style="color:var(--ink)">' + (here || 'WorkGraph · work in flight') + '</span></nav>';
+    const FRESH = { fresh: fr('ok', 'fresh · scanned 14 min ago'), stale: fr('st', 'stale · scanned 3 h 14 min ago'), unknown: fr('un', 'freshness unknown') };
+    const head = (o) => { o = o || {}; const f = o.f || 'fresh';
+      return crumbs(o.crumb) + '<header class="wgr-hd"><div><h1>' + (o.title || 'Work in flight') + '</h1><p class="sub">' + (o.sub || 'Claimed work and overlapping pull requests from the hourly advisory scan. Advice only: nothing here blocks, labels, merges or releases a claim.') + '</p></div>'
+        + '<div class="wgr-hr"><div class="ver">' + (f === 'unknown' ? '<span>Scan <b>not read</b></span>' : '<span>Scan <b>' + (f === 'stale' ? '14 Nov 11:31 UTC' : '14 Nov ' + SCAN) + '</b></span>') + FRESH[f] + (o.partial ? chip('part', 'Partial scan') : '') + '</div><div class="ver"><span>Runs hourly at <b>:31</b></span><span>Fresh within <b>90 min</b></span>' + scope('Super Admin') + (o.ingest ? ENG('needs ingest route') : '') + '</div></div></header>'; };
+    const tabs = (cur, o) => { o = o || {}; const T = [['Work in flight', o.w == null ? '8 claims' : o.w], ['PR pairs', o.p == null ? '7 pairs' : o.p], ['PR evidence', o.e == null ? '8 PRs' : o.e]];
+      return '<nav class="wgr-tabs" aria-label="WorkGraph views">' + J(T.map((t, i) => '<a href="#"' + (i === cur ? ' aria-current="page"' : '') + '>' + t[0] + '<span>' + t[1] + '</span></a>')) + '<span class="wgr-tabn">Counts are from the ' + SCAN + ' scan</span></nav>'; };
+
+    /* ---------- summary strip ---------- */
+    const summ = (o) => { o = o || {}; const al = o.atLeast ? 'at least ' : ''; const inScan = 'in the ' + (o.scan || SCAN) + ' scan';
+      const cell = (lab, v, s, x) => '<div' + (x ? ' class="' + x + '"' : '') + '><span class="eye">' + lab + '</span><b>' + v + '</b><small>' + s + '</small></div>';
+      return '<section class="wgr-sum" aria-label="Summary of the ' + SCAN + ' scan">'
+        + cell('Claims held', (o.atLeast ? '≥ ' : '') + (o.held || 8), al + (o.held || 8) + ' claims held ' + inScan, 'wgr-sum-a')
+        + J(['Serialize', 'Wait', 'Coordinate', 'Proceed'].map(a => cell(act(a), (o.atLeast ? '≥ ' : '') + (o.c ? o.c[a] : COUNT[a]), al + (o.c ? o.c[a] : COUNT[a]) + ' to ' + a.toLowerCase() + ' ' + inScan)))
+        + cell('Expired, still held', (o.atLeast ? '≥ ' : '') + (o.exp == null ? 1 : o.exp), al + (o.exp == null ? 1 : o.exp) + ' past expiry ' + inScan)
+        + cell('Refused', (o.atLeast ? '≥ ' : '') + (o.ref == null ? 2 : o.ref), al + (o.ref == null ? 2 : o.ref) + ' registrations refused ' + inScan) + '</section>'; };
+
+    /* ---------- work in flight table ---------- */
+    const baseCell = (b) => b.sha
+      ? '<div class="wgr-st">' + sha(b.sha) + '<span class="wgr-sm">' + b.from + ' · ' + mo(b.age) + '</span>' + (b.on === null ? '<span>' + chip('nck', 'on main: Not checked') + '</span>' : b.stale ? '<span>' + chip('stale', 'Stale · ' + b.stale) + '</span>' : '<span class="wgr-sm">on main</span>') + '</div>'
+      : '<div class="wgr-st">' + NR(b.why) + '</div>';
+    const regCell = (r) => {
+      if (r.src === 'label') return '<div class="wgr-st"><span class="wgr-src">' + SRC[r.src] + '</span>' + NR('a label claim records no times') + '</div>';
+      if (r.src === 'status') return '<div class="wgr-st"><span class="wgr-src">' + SRC[r.src] + '</span><span class="wgr-sm">registered ' + mo(r.reg) + '</span>' + NR('renewal, TTL, expiry: a STATUS claim has none') + '</div>';
+      return '<div class="wgr-st"><span class="wgr-src">' + SRC[r.src] + '</span><span class="wgr-sm">expires ' + mo(r.exp) + ' · TTL ' + mo(r.ttl + ' h') + '</span>' + (r.expd ? '<span class="wgr-exp"><span aria-hidden="true">◷</span>Expired, still held</span>' : '<span class="wgr-sm">renewed ' + mo(r.ren) + '</span>') + '</div>'; };
+    const depTag = (d) => '<span class="wgr-dep wgr-dep-' + d[1] + '">#[' + d[0] + '] ' + (d[1] === 'unknown' ? '<span aria-hidden="true">?</span>' : d[1] === 'open' ? '<span aria-hidden="true">○</span>' : '<span aria-hidden="true">●</span>') + d[1] + '</span>';
+    const workCell = (r) => '<div class="wgr-st">' + (r.prs.length ? '<span>' + J(r.prs.map(p => 'PR ' + iss(p))) + '</span>' : '<span class="wgr-sm">no linked PR</span>')
+      + (r.paths != null ? '<span class="wgr-sm">' + mo(r.paths) + ' paths · ' + (r.ps === 'pr' ? 'from PR' : 'from STATUS files') + '</span>' : '<span>' + chip('nr', 'Paths: Not recorded') + '</span>')
+      + (r.deps.length ? '<span class="wgr-deps">depends on ' + J(r.deps.map(depTag)) + '</span>' : '') + '</div>';
+    const holder = (r) => slot(r.slot) + ' · ' + (r.ag ? '<span>' + r.ag + '</span>' : chip('nr', 'agent Not recorded')) + ' · ' + (r.se ? mo('session ' + r.se) : chip('nr', 'session Not recorded'));
+    const reasonRow = (x) => '<li>' + act(x[0]) + '<span>with ' + iss(x[1]) + '</span><span class="wgr-rule">' + x[2] + '</span>' + (x[3] ? (x[4] ? '<span class="wgr-sm">module ' + pth(x[3]) + '</span>' : pth(x[3])) : '<span class="wgr-sm">no path</span>') + '</li>';
+    const expanded = (r) => '<tr class="wgr-xp"><td colspan="5"><div class="wgr-xpi"><div><span class="eye">Reasons · highest rule wins</span><ol class="wgr-rs">' + J(r.rs.map(reasonRow)) + '</ol></div>'
+      + '<div class="wgr-kv">' + J([['Registered', mo(r.reg)], ['Renewed', mo(r.ren)], ['TTL', mo(r.ttl + ' h')], ['Expires', mo(r.exp)], ['Base', sha(r.base.sha) + ' · ' + r.base.from + ' · ' + r.base.age], ['Lease', NR('the #5618 lease is not readable by the scan yet')], ['Owner override', NR('no override store yet')], ['Estimated lifespan', NR('claims record only a TTL')]].map(k => '<div><span>' + k[0] + '</span><span>' + k[1] + '</span></div>')) + '</div>'
+      + '<div class="wgr-xpa"><a class="btn p" href="#">Open #[' + r.n + '] on GitHub' + ext + '</a><a class="btn" href="#">Open PR #[' + r.prs[0] + ']' + ext + '</a><span class="wgr-sm">opens in a new tab</span></div></div></td></tr>';
+    const wifRow = (r, open, o) => '<tr' + (open ? ' class="wgr-open"' : '') + '><td><div class="wgr-st"><span class="wgr-it">' + iss(r.n) + ' <b>' + r.t + '</b></span><span class="wgr-sm">' + holder(r) + '</span>' + (r.notes.length ? J(r.notes.map(n => '<span class="wgr-note"><span aria-hidden="true">!</span>' + n + '</span>')) : '') + '</div></td>'
+      + '<td>' + regCell(r) + '</td><td>' + baseCell(r.base) + '</td><td>' + workCell(r) + '</td>'
+      + '<td><div class="wgr-st">' + (r.rs.length ? '<button type="button" class="wgr-ab" aria-expanded="' + !!open + '">' + act(r.act) + '<span class="wgr-sm">' + r.rs.length + ' reason' + (r.rs.length > 1 ? 's' : '') + ' ' + (open ? '▴' : '▾') + '</span></button>' : act(r.act) + '<span class="wgr-sm">no rule matched</span>') + '<span class="wgr-sm">risk ' + risk(r.risk) + '</span></div></td></tr>' + (open ? expanded(r) : '');
+    const wif = (rows, o) => { o = o || {}; return '<section class="qc" aria-labelledby="wif-h"><div class="ch wgr-ch"><h2 id="wif-h">Work in flight</h2><span class="sm">' + (o.sm || '8 claims ' + inScan + ' · sorted by expiry (none last), then issue') + '</span></div>'
+      + '<table class="ctab wgr-tab"><thead><tr><th scope="col" style="width:31%">Issue · holder</th><th scope="col" style="width:19%">Registration</th><th scope="col" style="width:16%">Base</th><th scope="col" style="width:18%">PRs · paths · depends</th><th scope="col">Action · risk</th></tr></thead><tbody>'
+      + J(rows.map(r => wifRow(r, o.open === r.n, o))) + '</tbody></table>'
+      + '<div class="wgr-nrc">' + J([['Lease', 'the #5618 lease is not readable by the scan yet'], ['Owner override', 'no override store yet'], ['Estimated lifespan', 'claims record only a TTL']].map(c => '<span><b>' + c[0] + '</b> ' + chip('nr') + ' <span class="wgr-sm">' + c[1] + '</span></span>')) + '<span class="wgr-sm">These columns read Not recorded on every row; open a row to see them.</span></div></section>'; };
+
+    const refusedPanel = (o) => { o = o || {}; return '<section class="cd" aria-labelledby="rf-h" style="gap:6px"><div class="ch"><h2 id="rf-h">Refused</h2><span class="sm">' + (o.empty ? '0 ' + inScan : '2 registrations ' + inScan) + '</span></div>'
+      + (o.empty ? '<p class="sub">No registration was refused ' + inScan + '.</p>' : '<ul class="wgr-list">' + J(REFUSED.map(r => '<li>' + chip('rf', r[1]) + '<code class="wgr-p">' + r[0] + '</code><span class="wgr-why">' + r[2] + '</span></li>')) + '</ul>') + '<p class="foot">A refused registration is not work in flight. The holder re-registers with a valid slot or claim ref.</p></section>'; };
+    const notesPanel = (o) => { o = o || {}; return '<section class="cd" aria-labelledby="nt-h" style="gap:6px"><div class="ch"><h2 id="nt-h">Notes</h2><span class="sm">' + (o.empty ? '0 ' + inScan : '4 ' + inScan) + '</span></div>'
+      + (o.empty ? '<p class="sub">No duplicates, history, dropped links, unread issues or read caps ' + inScan + '.</p>' : '<ul class="wgr-list">' + J(WNOTES.map(r => '<li><span class="wgr-nk">' + r[0] + '</span><span class="wgr-why" style="margin:0">' + r[1] + '</span></li>')) + '</ul>') + '</section>'; };
+    const scanNotes = () => '<div class="wgr-sn"><span class="eye">Scan notes · 2</span>' + J(SNOTES.map(n => '<span>' + n + '</span>')) + '</div>';
+
+    /* ---------- WG-01 ---------- */
+    const wg01 = (o) => { o = o || {}; return head() + tabs(0) + summ() + wif(W, { open: '5601' })
+      + '<div class="g"><div class="c6">' + refusedPanel() + '</div><div class="c6">' + notesPanel() + '</div></div>' + scanNotes()
+      + '<div class="wgr-nx"><a href="#">PR pairs · 7 pairs ' + inScan + ' →</a><a href="#">PR evidence · 8 open PRs ' + inScan + ' →</a></div>'; };
+
+    /* ---------- WG-02 pairs ---------- */
+    const legend = () => '<section class="cd wgr-leg" aria-labelledby="lg-h"><div class="ch"><h2 id="lg-h">Risk classes</h2><span class="sm">lowest to highest</span></div><div class="wgr-lad">' + J(Object.keys(RC).map((k, i) => '<div><span class="wgr-lv">' + (i + 1) + '</span>' + rc(k) + '<span class="wgr-why">' + ({ disjoint: 'both PRs edit the path; their changed lines do not meet', unknown: 'both edit the path; the line ranges could not be compared', overlap: 'changed line ranges meet or overlap', dependency: 'a shared hub, API, schema, contract, manifest, baseline or generated path, or a migration stamp', critical: 'a shared migration, D1 schema or contract change that alters, drops or renames' })[k] + '</span></div>')) + '</div>'
+      + '<p class="wgr-plain"><b>A class is a risk signal, not a merge verdict.</b> Only “Conflict: Yes” means git found a textual conflict when it merged the two heads.</p></section>';
+    const stampB = (s) => '<span class="wgr-stamp"><span aria-hidden="true">⌗</span>' + mo('[' + s + ']') + ' in both</span>';
+    const hunkProof = (pp, a, b) => '<div class="wgr-hp"><div class="wgr-hph">' + pth(pp[0]) + '<span class="wgr-cls">' + pp[1] + '</span>' + rc(pp[2], true) + '</div>'
+      + (Array.isArray(pp[4]) ? '<div class="wgr-hpg"><div><span class="eye">PR #[' + a + ']</span><span class="wgr-bar"><i style="left:' + (pp[3] === 'overlap' ? 30 : 12) + '%;width:' + (pp[3] === 'overlap' ? 34 : 20) + '%"></i></span>' + mo(pp[4][0]) + '</div><div><span class="eye">PR #[' + b + ']</span><span class="wgr-bar"><i style="left:' + (pp[3] === 'overlap' ? 44 : 62) + '%;width:' + (pp[3] === 'overlap' ? 34 : 24) + '%"></i></span>' + mo(pp[4][1]) + '</div><span class="wgr-sm">' + (pp[3] === 'overlap' ? 'Lines ' + mo(pp[5]) + ' are changed by both.' : 'No changed line is shared.') + '</span></div>'
+        : '<div class="wgr-hpg">' + chip('unk', 'Hunks unknown') + why(pp[4]) + '</div>') + '</div>';
+    const pairRow = (p, i, open) => '<tr' + (open ? ' class="wgr-open"' : '') + '><td>' + mo(i + 1) + '</td><td><span class="wgr-it">PR ' + iss(p.a) + ' <span aria-hidden="true">↔</span><span class="sr">and</span> PR ' + iss(p.b) + '</span></td><td>' + rc(p.rc) + '</td><td>' + tc(p.tc) + '</td><td>' + (p.st.length ? stampB(p.st[0]) : '<span class="wgr-sm">none</span>') + '</td><td><button type="button" class="wgr-ab" aria-expanded="' + !!open + '"><span class="wgr-sm">' + p.paths.length + ' shared path' + (p.paths.length > 1 ? 's' : '') + ' ' + (open ? '▴' : '▾') + '</span></button></td></tr>'
+      + (open ? '<tr class="wgr-xp"><td></td><td colspan="5"><div class="wgr-xpi" style="grid-template-columns:minmax(0,1fr) auto">' + J(p.paths.map(pp => hunkProof(pp, p.a, p.b))) + '<div class="wgr-xpa"><a class="btn p" href="#">Open both PRs' + ext + '</a><span class="wgr-sm">opens #[' + p.a + '] and #[' + p.b + '] in new tabs</span></div></div></td></tr>' : '');
+    const pairsTable = (o) => { o = o || {}; const mods = ['cloudflare-worker', 'frontend']; let i = 0;
+      return '<section class="qc" aria-labelledby="pp-h"><div class="ch wgr-ch"><h2 id="pp-h">PR pairs</h2><span class="sm">7 overlapping pairs among 8 open PRs ' + inScan + ' · grouped by top folder</span></div><table class="ctab wgr-tab"><thead><tr><th scope="col" style="width:40px">#</th><th scope="col" style="width:22%">Pair</th><th scope="col" style="width:25%">Risk class</th><th scope="col" style="width:15%">Textual conflict</th><th scope="col" style="width:20%">Migration stamps</th><th scope="col">Shared paths</th></tr></thead>'
+        + J(mods.map(m => { const rows = PAIRS.filter(p => p.mod === m); return '<tbody><tr class="wgr-grp"><th colspan="6" scope="rowgroup"><span>' + pth(m + '/') + ' · ' + rows.length + ' pairs</span><span class="wgr-io">Integration owner ' + chip('nr') + ' <span class="wgr-sm">integration owners not assigned yet</span></span></th></tr>' + J(rows.map(p => { const r = pairRow(p, i, o.open === i); i++; return r; })) + '</tbody>'; })) + '</table></section>'; };
+    const wg02 = () => head({ title: 'PR pairs', crumb: 'WorkGraph · PR pairs', sub: 'Open pull requests that share a path or a migration stamp, from the hourly advisory scan. Advice only: nothing here blocks or merges.' }) + tabs(1) + legend() + pairsTable({ open: 0 });
+
+    /* ---------- WG-03 evidence ---------- */
+    const mergeC = (m) => m[0] === 'Conflict' ? '<span class="wgr-v wgr-v-x"><span aria-hidden="true">✕</span>Conflict</span>' : m[0] === 'Clean' ? '<span class="wgr-v wgr-v-ok"><span aria-hidden="true">✓</span>Clean</span>' : chip('unk') + why(m[1]);
+    const checkC = (c) => c[0] === 'Failed' ? '<span class="wgr-v wgr-v-x"><span aria-hidden="true">✕</span>Failed</span>' + why('<span class="wgr-cn">' + c[1] + '</span>')
+      : c[0] === 'Pending' ? '<span class="wgr-v wgr-v-pd"><span aria-hidden="true">◷</span>Pending</span>' + why('<span class="wgr-cn">' + c[1] + '</span>')
+      : c[0] === 'Passing' ? '<span class="wgr-v wgr-v-ok"><span aria-hidden="true">✓</span>Passing</span>'
+      : c[0] === 'None required' ? '<span class="wgr-v"><span aria-hidden="true">–</span>None required</span>' + why(c[1])
+      : chip('unk') + why(c[1] + (c[2] ? '; failed before the read stopped: ' + mo(c[2]) : ''));
+    const queueC = (q) => q[0] === 'nm' ? chip('nms') + why(q[1]) : q[0] === null ? '<span class="wgr-q">max — · median —</span>' + why('over ' + mo('0') + ' finished jobs; ' + mo(q[3]) + ' still queued (longest ' + mo(q[4] + ' min') + ')')
+      : '<span class="wgr-q">max ' + mo(q[0] + ' min') + ' · median ' + mo(q[1] + ' min') + '</span>' + why('over ' + mo(q[2]) + ' jobs' + (q[3] ? '; ' + mo(q[3]) + ' still queued (longest ' + mo(q[4] + ' min') + ')' : '; none still queued'));
+    const baseC = (b) => b[0] === 'unk' ? chip('unk') + why(b[1]) : '<span class="wgr-q">' + mo(b[0]) + ' behind</span>' + why('base age ' + mo(b[1]));
+    const evTable = (rows) => '<section class="qc" aria-labelledby="ev-h"><div class="ch wgr-ch"><h2 id="ev-h">PR evidence</h2><span class="sm">8 open PRs ' + inScan + ' · four separate readings, never one score</span></div><table class="ctab wgr-tab wgr-ev"><thead><tr><th scope="col" style="width:20%">PR</th><th scope="col">Merge status</th><th scope="col">Required checks</th><th scope="col">CI queue delay</th><th scope="col">Base</th><th scope="col">Review delay ' + ENG('#5580') + '</th><th scope="col"></th></tr></thead><tbody>'
+      + J(rows.map((e, i) => '<tr><td><div class="wgr-st"><span class="wgr-it">PR ' + iss(e.n) + (e.draft ? ' <span class="wgr-tg">Draft</span>' : '') + (e.stale ? ' ' + chip('stale', 'Stale') : '') + '</span><span class="wgr-sm">' + mo(e.p) + ' changed paths · ' + (e.i ? 'claim #[' + e.i + ']' : 'no claim') + '</span></div></td><td><div class="wgr-st">' + mergeC(e.m) + '</div></td><td><div class="wgr-st">' + checkC(e.c) + '</div></td><td><div class="wgr-st">' + queueC(e.q) + '</div></td><td><div class="wgr-st">' + baseC(e.b) + '</div></td><td><div class="wgr-st">' + chip('nr') + '</div></td><td><a class="btn bsm' + (i === 1 ? ' p' : '') + '" href="#">Checks' + ext + '</a></td></tr>')) + '</tbody></table>'
+      + '<p class="foot" style="padding:10px 14px;border-top:1px solid var(--hair)">Review delay reads Not recorded on every row: review delay is not measured yet. Pending includes required checks that have not reported. Not measured and Unknown each carry the reason the read gave nothing.</p></section>';
+    const wg03 = () => head({ title: 'PR evidence', crumb: 'WorkGraph · PR evidence', sub: 'Merge status, required checks, CI queue delay and base age for every open pull request, as the hourly scan read them.' }) + tabs(2) + evTable(EV);
+
+    /* ---------- WG-04 empty ---------- */
+    const wg04 = () => head() + tabs(0, { w: '0 claims' }) + summ({ held: 0, c: { Serialize: 0, Wait: 0, Coordinate: 0, Proceed: 0 }, exp: 0, ref: 0 })
+      + '<section class="qc wgr-empty" aria-labelledby="em-h"><div class="ch wgr-ch"><h2 id="em-h">Work in flight</h2><span class="sm">claims were read ' + inScan + '</span></div><div class="wgr-emb"><b>No claimed work found in the ' + SCAN + ' scan.</b><p class="sub">The scan read every claim ref, STATUS comment and slot label and found none held. That is a measured zero, not a failed read.</p><a class="btn p" href="#">How work is claimed' + ext + '</a><span class="wgr-sm">AGENTS.md § Task protocol, step 2 (Claim)</span></div></section>'
+      + '<div class="g"><div class="c6">' + refusedPanel({ empty: true }) + '</div><div class="c6">' + notesPanel({ empty: true }) + '</div></div>'
+      + '<div class="wgr-nx"><a href="#">PR pairs · 7 pairs ' + inScan + ' →</a><a href="#">PR evidence · 8 open PRs ' + inScan + ' →</a></div>';
+    const pairsEmpty = () => '<section class="qc wgr-empty" aria-labelledby="pe-h"><div class="ch wgr-ch"><h2 id="pe-h">PR pairs</h2><span class="sm">8 open PRs read ' + inScan + '</span></div><div class="wgr-emb"><b>No overlapping PRs in this scan.</b><p class="sub">None of the 8 open PRs shares a path or a migration stamp with another. Zero pairs, measured.</p><a class="btn" href="#">PR evidence · 8 open PRs →</a></div></section>';
+
+    /* ---------- WG-05 states ---------- */
+    const skelRow = () => '<tr>' + J([31, 19, 16, 18, 16].map(w => '<td><span class="wgr-sk" style="width:' + (w * 3) + 'px"></span><span class="wgr-sk" style="width:' + (w * 2) + 'px;margin-top:6px"></span></td>')).replace(/31%/g, '') + '</tr>';
+    const loading = () => '<section class="qc" aria-busy="true" aria-labelledby="ld-h"><div class="ch wgr-ch"><h2 id="ld-h">Work in flight</h2><span class="sm" aria-live="polite">Reading the latest scan…</span></div><table class="ctab wgr-tab"><thead><tr><th scope="col">Issue · holder</th><th scope="col">Registration</th><th scope="col">Base</th><th scope="col">PRs · paths · depends</th><th scope="col">Action · risk</th></tr></thead><tbody>' + skelRow() + skelRow() + skelRow() + skelRow() + '</tbody></table></section>';
+    const nrCat = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>Not recorded · each with its reason</h2><span class="sm">never drawn as 0 or as an empty list</span></div><div class="wgr-kv wgr-kv2">' + J([
+      ['Lease', 'the #5618 lease is not readable by the scan yet'], ['Owner override', 'no override store yet'], ['Estimated lifespan', 'claims record only a TTL'], ['Integration owner', 'integration owners not assigned yet'], ['Review delay', 'review delay is not measured yet'],
+      ['Registered · renewed · TTL · expires (#[5615])', 'a label claim records no times'], ['Renewed · TTL · expires (#[5612])', 'a STATUS claim records a registration time only'], ['Agent (#[5615])', 'a label claim names no agent'], ['Session (#[5612], #[5615])', 'STATUS and label claims name no session'],
+      ['Base SHA (#[5612])', 'a STATUS claim has none'], ['Base SHA (#[5615])', 'a label claim has none'], ['Risk (#[5594], #[5615])', 'no paths, so no risk'], ['Paths (#[5594], #[5615])', 'no linked PR and no STATUS files']].map(k => '<div><span>' + k[0] + '</span><span>' + chip('nr') + ' <span class="wgr-sm">' + k[1] + '</span></span></div>')) + '</div></section>';
+    const nck = () => '<section class="cd" style="gap:8px"><div class="ch"><h2>Not checked</h2><span class="sm">a value the scan did not test; never Fresh, never No</span></div><div class="wgr-kv wgr-kv2"><div><span>Base ' + sha('e0b5a77') + ' of #[5609]</span><span>' + chip('nck', 'on main: Not checked') + ' <span class="wgr-sm">its place on main was not checked</span></span></div><div><span>PR #[5810] ↔ PR #[5818] textual conflict</span><span>' + tc('nck') + ' <span class="wgr-sm">pair-check cap reached (30 pairs)</span></span></div></div>'
+      + '<div class="wgr-cmp"><span class="eye">Six words, six shapes</span><span><b class="wgr-m">0</b> measured zero</span>' + chip('nr') + chip('nck') + chip('nms') + chip('unk') + chip('un') + '</div></section>';
+    const notReadBanner = (kind) => kind === 'nread'
+      ? '<div class="wgr-ban wgr-ban-n" role="status"><span class="wgr-bi2">' + G.nr + '</span><div><b>Work in flight: not read in this scan.</b><p>The ' + SCAN + ' scan did not read claims this run (reason: claim reading is switched off for this run). This is not “no work”. PR pairs and evidence below are from the same scan.</p></div></div>'
+      : '<div class="wgr-ban wgr-ban-u" role="alert"><span class="wgr-bi2">' + G.un + '</span><div><b>Work in flight: Unreadable — request cap reached before the claim refs were read.</b><p>This is not “no work”. PR pairs and evidence below were read and still show.</p></div>' + retry() + '</div>';
+    const claimsGone = (kind) => head() + tabs(0, { w: kind === 'nread' ? 'not read' : 'unreadable' }) + notReadBanner(kind)
+      + '<section class="wgr-sum wgr-sum-x" aria-label="Summary">' + J(['Claims held', 'Serialize', 'Wait', 'Coordinate', 'Proceed', 'Expired, still held', 'Refused'].map(l => '<div><span class="eye">' + (ACT[l] ? act(l) : l) + '</span>' + (kind === 'nread' ? chip('nread') : chip('un')) + '</div>')) + '</section>'
+      + '<div class="g"><div class="c6"><section class="cd" style="gap:6px"><div class="ch"><h2>PR pairs</h2><span class="sm">7 pairs ' + inScan + '</span></div><p class="sub">' + rc('critical') + ' 1 · ' + rc('overlap') + ' 1 · ' + rc('dependency') + ' 1 · ' + rc('disjoint', true) + ' 3 · ' + rc('unknown', true) + ' 1</p><a href="#" class="btn bsm" style="align-self:flex-start">Open PR pairs →</a></section></div><div class="c6"><section class="cd" style="gap:6px"><div class="ch"><h2>PR evidence</h2><span class="sm">8 open PRs ' + inScan + '</span></div><p class="sub">Merge: 2 Conflict · 4 Clean · 2 Unknown. Checks: 1 Failed · 1 Pending · 3 Passing · 1 None required · 2 Unknown.</p><a href="#" class="btn bsm" style="align-self:flex-start">Open PR evidence →</a></section></div></div>';
+    const snapGone = () => crumbs() + '<header class="wgr-hd"><div><h1>Work in flight</h1><p class="sub">Claimed work and overlapping pull requests from the hourly advisory scan.</p></div><div class="wgr-hr"><div class="ver"><span>Scan <b>not read</b></span>' + FRESH.unknown + '</div></div></header>'
+      + '<section class="wgr-fail" role="alert"><span class="wgr-bi2" style="width:34px;height:34px">' + G.un + '</span><div><h2>The latest scan could not be read</h2><p>Nothing on this page is shown, because the snapshot itself was Unreadable. That is not “no work” and not “no conflicts”.</p><p class="wgr-sm" style="margin-top:6px">Last good scan: ' + mo('14 Nov 13:31 UTC') + ' (8 claims, 7 pairs). It is not shown here, because it is older than the scan that failed.</p></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' + retry() + '<a href="#" class="wgr-sm">Deployments &amp; branches →</a></div></section>';
+    const staleHead = () => head({ f: 'stale' }) + '<div class="wgr-ban wgr-ban-s" role="status"><span class="wgr-bi2">' + G.stale + '</span><div><b>This scan is Stale: taken 14 Nov 11:31 UTC, 3 h 14 min ago.</b><p>Scans run hourly at :31 and are fresh for 90 min. The 12:31, 13:31 and 14:31 runs left no readable snapshot. Every figure below is from 11:31 and may be out of date.</p></div>' + retry() + '</div>' + summ({ scan: '11:31 UTC' });
+    const partial = (cause) => head({ partial: true }) + '<div class="wgr-ban wgr-ban-p" role="status"><span class="wgr-bi2">' + G.part + '</span><div><b>Partial scan ' + inScan + '.</b>' + (cause ? '<ul>' + J(['request cap reached; later claims not read', '#[5824] disappeared during the scan; dropped', '#[5822] head changed during the scan; marked stale, not classified'].map(n => '<li>' + n + '</li>')) + '</ul>' : '<p>Partial: cause not recorded. Some conflict checks were capped and the scan left no note.</p>') + '<p>Every count below is a lower bound and reads “at least”.</p></div></div>' + summ({ atLeast: true, held: 6, c: { Serialize: 2, Wait: 1, Coordinate: 2, Proceed: 1 }, exp: 1, ref: 1 });
+    const refusedPage = () => crumbs() + '<section class="wgr-fail" role="alert" style="border-color:var(--ink)"><span class="wgr-bi2" style="width:34px;height:34px">' + G.rf + '</span><div><h1 style="font-size:20px">Only Super Admins see work in flight</h1><p>This page shows every slot’s claimed work, so it is limited to Super Admins. Nothing about the scan is shown. Ask an existing Super Admin if you need access.</p></div><a class="btn p" href="#">Back to Platform</a></section>';
+    const eadEdit = () => '<aside class="sp eadx wgr-ead" aria-label="Eadwyn" style="border:1px solid var(--hair);border-radius:12px">' + eadHead('Editing your draft')
+      + '<div class="wgr-eb"><span class="eye">Proposed integration batch · your edit</span><div class="inp wgr-ta" role="textbox" aria-multiline="true" aria-label="Batch draft">1. #[5603] via PR #[5812]<br>2. #[5601] via PR #[5810], after a rebase on #[5603]<br>3. #[5609] via PR #[5815] (asked [S31] to go before [S05])<br>4. #[5607] via PR #[5814]<span class="wgr-caret"></span></div>'
+      + '<p class="wgr-sm">Draft kept if this panel closes; it stays in this tab only and is not stored.</p><p class="foot">Your order differs from the scan’s: #[5609] before #[5607]. Their hunks overlap in [PartnerDelivery.jsx], so whichever goes second rebases.</p>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn bsm">Copy edited batch</button><button type="button" class="btn bsm">Discard</button></div>' + ENG('nothing is stored; copy only') + '</div></aside>';
+
+    const STATES = {
+      WGR05A: () => crop(loading(), 1100),
+      WGR05B: () => crop(nrCat(), 1100),
+      WGR05C: () => crop(nck(), 1100),
+      WGR05D: () => page(claimsGone('nread'), { h: 900 }),
+      WGR05E: () => page(claimsGone('un'), { h: 900 }),
+      WGR05F: () => page(snapGone(), { h: 700 }),
+      WGR05G: () => crop(staleHead(), 1100),
+      WGR05H: () => crop(partial(true), 1100),
+      WGR05I: () => crop(partial(false), 1100),
+      WGR05J: () => page(refusedPage(), { h: 600 }),
+      WGR05K: () => crop(eadEdit(), 380),
+      WGR04B: () => crop(pairsEmpty(), 1100)
+    };
+
+    /* ---------- WG-06 phone ---------- */
+    const pTop = () => '<div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><span style="display:flex;align-items:center;gap:7px"><span class="logo" aria-hidden="true"></span><b style="font-size:13px">Axal VC</b><span class="bdg" style="background:#881337">HQ</span></span><button type="button" class="pi" aria-label="Notifications">' + bell + '</button></div>';
+    const pHead = (t) => '<div><nav class="eye" aria-label="Breadcrumb"><a href="#">‹ Platform</a></nav><h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-top:2px">' + (t || 'Work in flight') + '</h1><div class="ver" style="margin-top:4px"><span>Scan <b>14 Nov ' + SCAN + '</b></span>' + FRESH.fresh + '</div></div>'
+      + '<nav class="wgr-ptabs" aria-label="WorkGraph views">' + J([['Work', 'Work in flight'], ['Pairs', 'PR pairs'], ['Evidence', 'PR evidence']].map((x) => '<a href="#"' + (x[1] === (t || 'Work in flight') ? ' aria-current="page"' : '') + '>' + x[0] + '</a>')) + '</nav>';
+    const pCard = (r, open) => '<article class="wgr-pc"><div class="wgr-pch">' + iss(r.n) + slot(r.slot) + act(r.act) + '</div><b style="font-size:14px">' + r.t + '</b><span class="wgr-sm">' + (r.exp ? (r.expd ? '<span class="wgr-exp"><span aria-hidden="true">◷</span>Expired, still held</span>' : 'expires ' + mo(r.exp)) : (r.src === 'status' ? 'STATUS claim · expiry Not recorded' : 'Slot label · expiry Not recorded')) + '</span>'
+      + (r.rs.length ? '<button type="button" class="wgr-pd" aria-expanded="' + !!open + '">Reasons · ' + r.rs.length + '<i aria-hidden="true">' + (open ? '▴' : '▾') + '</i></button>' + (open ? '<ol class="wgr-rs wgr-rsp">' + J(r.rs.map(reasonRow)) + '</ol><a class="btn p" href="#" style="width:100%">Open #[' + r.n + '] on GitHub' + ext + '</a>' : '') : '<span class="wgr-sm">no rule matched</span>') + '</article>';
+    const pSum = () => '<section class="wgr-p22" aria-label="Summary of the ' + SCAN + ' scan">' + J([['Serialize', 2], ['Wait', 2], ['Coordinate', 2], ['Proceed', 2]].map(x => '<div>' + act(x[0]) + '<b>' + x[1] + '</b><small>' + x[1] + ' claims ' + inScan + '</small></div>')) + '</section><p class="wgr-sm">8 claims held · 1 expired, still held · 2 refused · ' + inScan + '</p>';
+    const MOB = {
+      WGR06A: () => '<div class="cv" style="' + VARS + '"><div class="ph" style="min-height:844px">' + pTop() + '<main class="pbd" style="gap:12px">' + pHead() + pSum() + pCard(W[0]) + pCard(W[2]) + '</main></div></div>',
+      WGR06B: () => '<div class="cv" style="' + VARS + '"><div class="ph" style="min-height:844px">' + pTop() + '<main class="pbd" style="gap:12px">' + pCard(W[1], true) + '<section class="cd" style="gap:0;padding-bottom:4px"><button type="button" class="disc" aria-expanded="false"><b>Refused</b><span>2 registrations ' + inScan + '</span><i aria-hidden="true">▾</i></button><button type="button" class="disc" aria-expanded="false"><b>Notes</b><span>4 ' + inScan + '</span><i aria-hidden="true">▾</i></button></section><a class="btn" href="#" style="width:100%">PR pairs · 7 →</a></main></div></div>',
+      WGR06C: () => '<div class="cv" style="' + VARS + '"><div class="ph" style="min-height:844px">' + pTop() + '<main class="pbd" style="gap:12px">' + pHead('PR pairs') + '<p class="wgr-plain" style="font-size:12px">A class is a risk signal, not a merge verdict.</p>'
+        + J(PAIRS.slice(0, 2).map((p, i) => '<article class="wgr-pc"><div class="wgr-pch"><span class="wgr-it">' + iss(p.a) + ' ↔ ' + iss(p.b) + '</span></div><div style="display:flex;gap:6px;flex-wrap:wrap">' + rc(p.rc) + tc(p.tc) + '</div>' + (p.st.length ? stampB(p.st[0]) : '') + '<button type="button" class="wgr-pd" aria-expanded="' + (i === 0) + '">Paths · ' + p.paths.length + '<i aria-hidden="true">' + (i === 0 ? '▴' : '▾') + '</i></button>' + (i === 0 ? hunkProof(p.paths[0], p.a, p.b) + '<a class="btn p" href="#" style="width:100%">Open both PRs' + ext + '</a>' : '') + '</article>')) + '</main></div></div>',
+      WGR06D: () => '<div class="cv" style="' + VARS + '"><div class="ph" style="min-height:844px">' + pTop() + '<main class="pbd" style="gap:12px">' + pHead('PR evidence')
+        + J(EV.slice(1, 3).map(e => '<article class="wgr-pc"><div class="wgr-pch"><span class="wgr-it">PR ' + iss(e.n) + '</span><span class="wgr-sm">' + mo(e.p) + ' paths</span></div><dl class="wgr-pdl"><div><dt>Merge</dt><dd>' + mergeC(e.m) + '</dd></div><div><dt>Checks</dt><dd>' + checkC(e.c) + '</dd></div><div><dt>CI queue</dt><dd>' + queueC(e.q) + '</dd></div><div><dt>Base</dt><dd>' + baseC(e.b) + '</dd></div></dl><a class="btn" href="#" style="width:100%">Checks' + ext + '</a></article>')) + '</main></div></div>',
+      WGR06E: () => '<div class="cv" style="' + VARS + '"><div class="ph" style="min-height:844px;position:relative">' + pTop() + '<main class="pbd" style="gap:12px;filter:none">' + pHead() + pSum() + '</main><div class="wgr-scrim" aria-hidden="true"></div><section class="wgr-sheet" role="dialog" aria-label="Eadwyn"><span class="wgr-grab" aria-hidden="true"></span><div style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;gap:8px;align-items:center"><span class="wgr-elogo">E</span><b>Eadwyn</b></span><button type="button" class="pi" aria-label="Close Eadwyn">✕</button></div><span class="eye">Proposed integration batch</span><b style="font-size:14px">Land the four colliding claims in this order</b><ol class="wgr-bl">' + J(BATCH.map((r, i) => '<li><span class="wgr-bi">' + (i + 1) + '</span><div><b>#[' + r[0] + ']</b> <span class="mu">via #[' + r[1] + ']</span></div></li>')) + '</ol><p class="foot">A proposal from the ' + SCAN + ' scan. Nothing is stored.</p><button type="button" class="btn" style="width:100%">Accept · copy to clipboard</button><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn">Edit</button><button type="button" class="btn">Discard</button></div></section></div></div>'
+    };
+
+    /* ---------- docs: spec + handoff ---------- */
+    const doc = (id, t, sub, inner) => crop('<div class="wgr-dh"><span class="wgr-id">' + id + '</span><div><h1>' + t + '</h1><p>' + sub + '</p></div></div>' + inner, 1200);
+    const dsec = (t, inner) => '<section class="wgr-ds"><h2 class="eye">' + t + '</h2>' + inner + '</section>';
+    const ul = (a) => '<ul class="wgr-dl">' + J(a.map(x => '<li>' + x + '</li>')) + '</ul>';
+    const DOCS = {
+      WGR08: () => doc('WG-08', 'Spec · the four action rules', 'Each claim gets the highest rule any of its reasons reaches. Advice only: no rule blocks, labels or merges. ' + ENG('needs ingest route') + ' ' + ENG('Super Admin read route'),
+        '<div class="wgr-rules">' + J([
+          ['Serialize', 'One after the other. A critical path; a shared migration that alters, drops or renames; or an exclusive resource.', 'Exclusive resources: a migration file or stamp, ' + pth('cloudflare-worker/sql/') + ' (D1 schema), ' + pth('cloudflare-worker/src/contracts/') + ' (API contract) and a release pointer.'],
+          ['Wait', 'Let the other land first. Overlapping hunks; a shared hub, manifest, API, baseline or generated path; or an open dependency.', 'Example: #[5607] waits on #[5609] (overlapping hunks) and on open #[5603].'],
+          ['Coordinate', 'Talk before you merge. The same path with disjoint or unknown hunks; a predicted shared path from STATUS files; the same module; or a dependency whose state was not read.', 'Example: #[5612] and #[5609] predict [DeliveryFilters.jsx].'],
+          ['Proceed', 'None of the above was found in what the scan read.', 'Proceed is not a guarantee: a claim with no recorded paths can only be checked against what was read.']].map(r => '<div>' + act(r[0]) + '<p><b>' + r[1] + '</b></p><p class="wgr-sm">' + r[2] + '</p></div>')) + '</div>'
+        + dsec('Risk-class ladder (pairs)', '<div class="wgr-lad wgr-lad-h">' + J(Object.keys(RC).map((k, i) => '<div><span class="wgr-lv">' + (i + 1) + '</span>' + rc(k) + '</div>')) + '</div><p class="wgr-plain">A class is a risk signal, not a merge verdict. Textual conflict (Yes / No / Not checked) is a separate reading from git.</p>')
+        + dsec('Freshness', ul(['Fresh: within 90 min of the scan (the job runs hourly at :31).', 'Stale: older than 90 min, shown with its time and age.', 'Unknown: the snapshot was not read. Nothing is drawn from it.']))
+        + dsec('Backend required (◇)', ul([ENG('ingest') + ' A Worker route the hourly job posts the snapshot to, and a store for it. Today the snapshot is only a GitHub Actions artifact kept 30 days.', ENG('read') + ' A Super Admin read route, for example GET /api/admin/workgraph/in-flight. Every value on WG-01 to WG-07 waits on these two.', ENG('lease') + ' Reading the #5618 lease and fence.', ENG('override') + ' An owner override with audit.', ENG('owners') + ' Integration owners per cluster.', ENG('lifespan') + ' Estimated lifespan (claims record only a TTL).', ENG('review') + ' Review delay.', ENG('#5821') + ' workInFlight (claims, refused, notes, recommendations) lands with PR #5821, still open. Main writes schema v1 with pairs and evidence only.']))),
+      WGR09: () => doc('WG-09', 'Handoff', 'What was checked on main 6d7712c6d1 (14 Nov 2026), what is reused, what is frontend-only, what needs engineering, and what the owner decides.',
+        '<div class="wgr-hg">'
+        + dsec('Checked on main', ul(['<b>.github/workflows/pr-overlap.yml</b>: cron 31 * * * *, runs scripts/pr-overlap.mjs and uploads pr-overlap-&lt;stamp&gt;.json as an artifact, retention 30 days. Read-only apart from its PR comment.', '<b>scripts/lib/prRisk.mjs</b>: snapshot schema studioos-pr-overlap-snapshot/v1; RISK = disjoint, unknown, overlapping, dependency, critical; merge, checks, queue and base age kept separate.', '<b>scripts/lib/prOverlap.mjs</b>: path classes (hub, migration, contract, schema, api, manifest, baseline, generated); shared migration stamps; landing order: drafts last, fewer changed files first.', '<b>scripts/pr-overlap.mjs</b>: partial on read caps and on any pair not checked; scan notes for duplicates, closed, vanished and moved heads.', '<b>No Worker route, no D1 table</b> for the snapshot. work_graph_revisions and work_graph_lease_events (#5581) do not hold it.', '<b>PR #5821</b> (open, 4f0a922): schema v2 with workInFlight; the canvas draws it as specified there.']))
+        + dsec('Reused', ul(['Platform v2 HQ frame: sidebar, top bar, ink primary, emerald/neutral palette, freshness line, scope chip (PL01 to PL12).', 'Platform States chips: Not recorded, Unreadable, Refused, Stale, Partial (ST-00 to ST-14, D5129).', 'Eadwyn shared rail, collapsed unless asked or carrying a Serialize/Wait insight (#5130, PL12).']))
+        + dsec('Frontend only', ul(['Route /admin/workgraph/in-flight with three tabs; breadcrumb Platform › Infrastructure.', 'Sort by expiry then issue (as the scan orders it); row and pair disclosures; module grouping.', 'All GitHub links open in a new tab; copy-to-clipboard for an accepted batch.', 'Phone cards with 44px targets; Eadwyn as a bottom sheet; dark tokens.']))
+        + dsec('Requires engineering ◇', ul(['Ingest route + store + Super Admin read route (blocks the whole page).', '#5618 lease and fence read; owner override with audit; integration owners; estimated lifespan; review delay.', 'PR #5821 merged, so the snapshot carries workInFlight.']))
+        + dsec('Pending the owner ⚑', ul([OWN('route') + ' A: own route /admin/workgraph/in-flight from Detailed consoles (drawn). B: /admin/platform/workgraph in the Platform strip.', OWN('layout') + ' A: three tabs (drawn). B: one long page.']))
+        + dsec('Accessibility', ul(['Every action, class and state has a glyph and a word; colour never carries meaning alone.', 'Tables use th scope; disclosures use aria-expanded; banners use role status or alert.', 'Figures name the scan they count (“in the 14:31 UTC scan”).', 'Phone: 44px targets, no table wider than the screen.']))
+        + '</div>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'WGR01') html = page(wg01(), { h: 2250, ead: eadBatch() });
+    else if (B === 'WGR02') html = page(wg02(), { h: 1330, ead: eadCluster() });
+    else if (B === 'WGR03') html = page(wg03(), { h: 1160 });
+    else if (B === 'WGR04') html = page(wg04(), { h: 900 });
+    else if (B === 'WGR07') html = page(wg01(), { h: 2250, ead: eadBatch() });
+    else if (STATES[B]) html = STATES[B]();
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = page(wg01(), { h: 2250, ead: eadBatch() });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>

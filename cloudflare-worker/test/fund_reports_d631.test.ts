@@ -8,7 +8,8 @@ import funds from '../src/routes/funds.ts';
 import {FundReportRefusal,reportId} from '../src/services/fundReports.ts';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
 const tables=['users','vc_funds','limited_partners','portfolio_positions','legal_documents','fund_report_periods','activity_logs','user_company_links'];
-const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+`CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);`; // D1137: migration 597's archive flag
+const schema=tables.map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+`CREATE UNIQUE INDEX periods_unique ON fund_report_periods(fund_id,period);CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);` // D1137: migration 597's archive flag
+ +readFileSync(new URL('../sql/migrations/476_fund_report_drafts.sql',import.meta.url),'utf8'); // D6249: an issued period's read looks up its pack
 const secret='d631-local-fixture-signing-secret';
 async function fixture(){
  const {DB,db}=makeD1(schema);
@@ -132,4 +133,37 @@ test('legacy unset report dates stay unset instead of invented dates',async()=>{
  const id=f.db.prepare('SELECT id FROM fund_report_periods').get().id;const result=await f.request(`/10/report-periods/${id}`);
  assert.equal(result.status,200);assert.deepEqual([result.body.period.period_start,result.body.period.period_end],['','']);
  assert.deepEqual(result.body.period.narrative,{letter:[],developments:[],outlook:[],subsequent:[]});
+});
+
+test('draft deletion requires the matching GP and revision, refuses linked packs and issued periods, and audits once', async () => {
+ const f = await fixture();
+ for (const migration of ['476_fund_report_drafts.sql', '522_mercury_investor_feeds.sql']) {
+  f.db.exec(readFileSync(new URL('../sql/migrations/'+migration,import.meta.url),'utf8'));
+ }
+ const { body: { period }} = await f.request('/10/report-periods', 2, 'POST', draft);
+ const path = `/10/report-periods/${period.id}`;
+ const del = (user: number, revision: string) => f.request(path, user, 'DELETE', { revision });
+ assert.equal((await del(4, period.revision)).status, 404);
+ assert.equal((await del(2, 'stale')).status, 409);
+ f.db.prepare(`INSERT INTO mercury_investor_proposals(uid,user_id,integration_id,kind,external_id,mercury_id,target_kind,target_id,fund_id)
+  VALUES('statement',2,1,'statement','ext','doc','fund_report_period',?,10)`).run(period.id);
+ assert.match((await del(2, period.revision)).body.message, /linked bank statement/);
+ f.db.exec("UPDATE mercury_investor_proposals SET state='dismissed'");
+ const pack = await f.request('/10/report-periods', 2, 'POST', {...draft, period:'Pack draft'});
+ f.db.prepare(`INSERT INTO fund_report_drafts(uid,kind,audience,subject_key,fund_id,report_period_id,period_label,period_start,period_end,status,figures_json,figures_sha256)
+  VALUES('pack','lp_quarterly_report','fund_lps','fund:10',10,?,'Pack draft','2026-04-01','2026-06-30','superseded','{}',?)`).run(pack.body.period.id,'0'.repeat(64));
+ const packed = await f.request('/10/report-periods/'+pack.body.period.id, 2, 'DELETE', { revision:pack.body.period.revision });
+ assert.equal(packed.status,409);
+ assert.match(packed.body.message, /linked to a reporting pack and cannot be deleted/);
+ assert.equal((await del(2, period.revision)).status, 200);
+ assert.equal((await del(2, period.revision)).status, 404);
+ assert.deepEqual(receipts(f.db).filter((r: any) => r.action === 'fund_report_draft_deleted'),
+  [{ action: 'fund_report_draft_deleted', actor: '2', user_id: 2 }]);
+ const receipt = f.db.prepare("SELECT details FROM activity_logs WHERE action='fund_report_draft_deleted'").get();
+ assert.deepEqual(JSON.parse(String(receipt?.details)), {
+  fund_id:10, period_id:period.id, period:draft.period, corrects_period_id:null, revision:period.revision,
+ });
+ const issued = await f.request('/10/report-periods', 2, 'POST', {...draft, issue:true});
+ assert.equal(issued.status, 201);
+ assert.equal((await f.request(`/10/report-periods/${issued.body.period.id}`, 2, 'DELETE', { revision: issued.body.period.revision })).status, 409);
 });

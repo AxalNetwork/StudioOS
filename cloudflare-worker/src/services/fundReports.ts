@@ -1,5 +1,7 @@
 /** D631: recorded fund facts and audited, immutable issued report periods. */
 import type { Env } from '../types';
+import { deleteReportWithoutStatement, reportHasStatement } from './mercury/investorFeeds';
+import { effectiveDisplayName } from './profileExpansion';
 const SENTENCES={
  not_found:'Fund or reporting period not found.',
  period:'Record a period label of up to 100 characters.',
@@ -8,6 +10,8 @@ const SENTENCES={
  issued:'This period is issued and cannot be edited. Issue a correcting period instead.',
  conflict:'The period changed or its label is already used. Read it again before saving.',
  correction:'A correcting period must refer to an issued period of this fund.',
+ linked_pack:'This draft is linked to a reporting pack and cannot be deleted.',
+ linked_statement:'This draft has a linked bank statement and cannot be deleted.',
  missing:'This reporting period has not been recorded.',
 } as const;
 export class FundReportRefusal extends Error {
@@ -65,9 +69,61 @@ export async function readFundPage(env:Env,fund:any,canManage:boolean){
 export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean){
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
  if(!row||(!canManage&&row.status!=='issued'))throw new FundReportRefusal('not_found',404);
- const period=shapeFundPeriod(row);
- if(period?.corrects_period_id){const original=await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'").bind(fundId,period.corrects_period_id).first<any>();if(!original)throw new Error('Corrected period unreadable');return {...period,corrects_period:original.period};}
- return period;
+ let period:any=shapeFundPeriod(row);
+ if(period?.corrects_period_id){const original=await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'").bind(fundId,period.corrects_period_id).first<any>();if(!original)throw new Error('Corrected period unreadable');period={...period,corrects_period:original.period};}
+ // D6249: a draft reads as it did. An issued period adds what was frozen at issue, who issued it, and what corrects it.
+ if(period.status!=='issued')return period;
+ return {...period,...await issuedFigures(env,row),...await issuerName(env,row.issued_by),corrected_by_period_id:await correctedBy(env,fundId,row.id)};
+}
+const PACK_SCHEMA='lp_quarterly_report/1';
+/** D6249: a frozen JSON object, or a throw. Unlike `parse`, an empty or absent string is not `{}`. */
+function frozenObject(raw:unknown,what:string):Record<string,any>{
+ try{const value=typeof raw==='string'?JSON.parse(raw):null;if(value&&typeof value==='object'&&!Array.isArray(value))return value;}catch{/* falls through */}
+ throw new Error(`${what} unreadable`);
+}
+const cents=(v:unknown)=>v===null||(Number.isSafeInteger(v)&&(v as number)>=0);
+/**
+ * D6249: the issued pack's fund-level figures when the period was issued
+ * through the reporting queue (the same rows `/lp-portal` reads), never its
+ * statements list. Otherwise the two totals `readFundPage` froze into
+ * `snapshot_json`, picked one by one: the rest of that snapshot is the
+ * manager's page (drafts in its period list, `can_manage: true`). A failed
+ * query or a corrupt record throws, so the route answers Unreadable.
+ */
+async function issuedFigures(env:Env,row:any){
+ const packs=await env.DB.prepare(`SELECT figures_json FROM fund_report_drafts
+   WHERE kind='lp_quarterly_report' AND status='issued' AND fund_id=? AND report_period_id=? ORDER BY id LIMIT 2`).bind(row.fund_id,row.id).all<any>();
+ if(packs.success!==true||!Array.isArray(packs.results)||packs.results.length>1)throw new Error('Report pack unreadable');
+ if(packs.results.length===1){
+  const {statements:_statements,...figures}=frozenObject(packs.results[0].figures_json,'Report pack');
+  if(figures.schema!==PACK_SCHEMA)throw new Error('Report pack unreadable');
+  return {figures:{source:'report_pack',...figures},figures_reason:null};
+ }
+ if(row.snapshot_json===null||row.snapshot_json===undefined)return {figures:null,figures_reason:'Not recorded: no figures were frozen when this period was issued.'};
+ const snapshot=frozenObject(row.snapshot_json,'Report snapshot'),t=snapshot.totals;
+ // A pack-shaped snapshot whose issued pack is missing, or a snapshot of any other shape, fails these checks.
+ if(snapshot.currency!=='USD'||!t||typeof t!=='object'||Array.isArray(t))throw new Error('Report snapshot unreadable');
+ const totals:Record<string,number|string|null>={};
+ for(const key of ['committed','invested']){
+  const value=t[`${key}_cents`],reason=t[`${key}_reason`]??null;
+  if(!cents(value)||(reason!==null&&typeof reason!=='string')||(value===null&&!reason))throw new Error('Report snapshot unreadable');
+  totals[`${key}_cents`]=value;totals[`${key}_reason`]=value===null?reason:null;
+ }
+ return {figures:{source:'issue_snapshot',currency:'USD',totals},figures_reason:null};
+}
+/** D6249: the issuer's display name only, never their email or other account fields. */
+async function issuerName(env:Env,issuedBy:unknown){
+ if(issuedBy===null||issuedBy===undefined)return {issued_by_name:null,issued_by_name_reason:'Not recorded: the issuing account was not recorded.'};
+ const user=await env.DB.prepare('SELECT name,display_name FROM users WHERE id=?').bind(issuedBy).first<any>();
+ if(!user)return {issued_by_name:null,issued_by_name_reason:'Not recorded: the issuing account no longer exists.'};
+ const name=effectiveDisplayName(user);
+ return {issued_by_name:name,issued_by_name_reason:name?null:'Not recorded: the issuing account has no name.'};
+}
+/** D6249: the latest issued period of this fund that names this one as the period it corrects. A draft correction is not one. */
+async function correctedBy(env:Env,fundId:number,periodId:number):Promise<number|null>{
+ const next=await env.DB.prepare(`SELECT id FROM fund_report_periods WHERE fund_id=? AND status='issued' AND id<>?
+   AND CASE WHEN json_valid(notes) THEN json_extract(notes,'$._receipt.corrects_period_id') END=? ORDER BY issued_at DESC,id DESC LIMIT 1`).bind(fundId,periodId,periodId).first<any>();
+ return next?Number(next.id):null;
 }
 export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:any){
  if(!body||!text(body.period,100))throw new FundReportRefusal('period');
@@ -105,4 +161,26 @@ export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:a
  if(Number(results[0].meta.changes)!==1)throw new FundReportRefusal('conflict',409);
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND period=?').bind(fundId,label).first<any>();
  if(!row)throw new Error('Saved report unreadable');return {created:!previous,period:shapeFundPeriod(row)};
+}
+
+
+export async function deleteFundPeriod(env: Env, fundId: number, periodId: number, actorId: number, revision: unknown) {
+ const read = () => env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
+ const row = await read();
+ if(!row)throw new FundReportRefusal('not_found',404);
+ if(row.status!=='draft')throw new FundReportRefusal('issued',409);
+ const current = shapeFundPeriod(row);
+ if(typeof revision!=='string'||revision!==current?.revision)throw new FundReportRefusal('conflict',409);
+ const results = await deleteReportWithoutStatement(env, {
+  fundId, periodId, actorId, notes: row.notes, updatedAt: row.updated_at,
+  details: JSON.stringify({fund_id:fundId,period_id:periodId,period:current.period,corrects_period_id:current.corrects_period_id,revision:current.revision}),
+ });
+ if(results.length!==2||results.some(r=>r.success!==true)||results[0].meta.changes!==results[1].meta.changes)throw new Error('Report transaction unreadable');
+ if(Number(results[1].meta.changes)===1)return;
+ const latest=await read();
+ if(!latest)throw new FundReportRefusal('not_found',404);
+ if(latest.status!=='draft')throw new FundReportRefusal('issued',409);
+ if(await env.DB.prepare('SELECT 1 FROM fund_report_drafts WHERE report_period_id=? LIMIT 1').bind(periodId).first())throw new FundReportRefusal('linked_pack',409);
+ if(await reportHasStatement(env,fundId,periodId))throw new FundReportRefusal('linked_statement',409);
+ throw new FundReportRefusal('conflict',409);
 }

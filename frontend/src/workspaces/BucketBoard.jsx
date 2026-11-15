@@ -82,8 +82,10 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
 
   // D563: the row's working pages outside its zones sit under the board, as
   // they do under BucketOverview's grid.
-  return (
-    <>
+  // #4830 (D4830): a board may name a `lead` component, which decides whether the sections show. The advisor's
+  // Practice board leads with its setup checklist, which takes their place while a setup step is missing.
+  const Lead = board.lead || null;
+  const grid = (
     <div className={`grid gap-3.5 md:grid-cols-2 ${className}`.trim()}>
       {board.sections.map((section) => {
         const zone = zoneBySlug.get(section.slug);
@@ -107,6 +109,10 @@ export default function BucketBoard({ bucket, role = 'founder', board, className
         );
       })}
     </div>
+  );
+  return (
+    <>
+    {Lead ? <Lead fallback={grid} /> : grid}
     <AlsoIn role={role} row={bucket.label} />
     </>
   );

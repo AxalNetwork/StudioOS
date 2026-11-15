@@ -244,5 +244,7 @@ test('no access-control gate compares a bare timestamp column', () => {
   // D4631 keeps the two shared NDA reads by founder and project. D4672 adds the open proof-consent request.
   // D4570-p7 adds six: a share reads only through a live advisor grant (readableDoc, the library list's
   // two columns), the brief draft's and brief notes' grant lookups, and the grant revoke's other-grant guard.
-  assert.equal(wrapped, 25, `expected 25 normalised comparisons across the gated files, found ${wrapped}`);
+  // #6267 adds one: the deal page's NDA status read moved from deal_workroom.ts (not listed) into
+  // services/dealAccess.ts as ventureNdaStatus, normalised as it was.
+  assert.equal(wrapped, 26, `expected 26 normalised comparisons across the gated files, found ${wrapped}`);
 });

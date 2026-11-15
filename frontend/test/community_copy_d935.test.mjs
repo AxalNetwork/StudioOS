@@ -7,8 +7,9 @@ import { hqApprovalsView } from '../src/pages/admin/adminStudioOverview.js';
 
 test('D935: the displayed age basis matches the current Worker queries', () => {
   const source = readFileSync(new URL('../../cloudflare-worker/src/services/approvalSources.ts', import.meta.url), 'utf8');
-  const jobsCount = source.split("key: 'jobs',")[1].split('rowsSql:')[0];
-  const eventsCount = source.split("key: 'events',")[1].split('rowsSql:')[0];
+  // D5879: a source names its lane as `...studioSource('<key>')`.
+  const jobsCount = source.split("...studioSource('jobs'),")[1].split('rowsSql:')[0];
+  const eventsCount = source.split("...studioSource('events'),")[1].split('rowsSql:')[0];
   // #2715 must update the label and this contract when Jobs moves to submission.
   const created = /MIN\(created_at\) AS oldest FROM job_postings/;
   const submitted = /COALESCE\(submitted_at, created_at\)/;

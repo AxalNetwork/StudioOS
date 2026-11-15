@@ -4,20 +4,35 @@
 
 | Command | What it does |
 | --- | --- |
+| `build-workflow-slack-registry.mjs` | Generates the private channel-ID routing configuration from the approved Slack bot's actual memberships. See [workflow Slack rollout](../documentation/operations/WORKFLOW_SLACK_6370.md). |
 | `npm run build` | `build-frontend.mjs` — compiles the SPA into `docs/`, prerenders public routes, and prunes old hashed assets on a retention window. **Always build through this, never a bare `vite build`**: that empties `docs/` and deletes the retained assets and the hand-maintained changelogs living there. |
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
+| `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
 | `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
+| `coordinator.mjs` | D6312: Session 1's audit writes for the `coordinator-audit` skill: `snapshot`, weekly `delta`, `plan` from verified findings, then `apply` (notes, labels, closes) and `file` (new tasks, one list per parent). Dry run unless `--go`; re-reads each issue before changing it and skips one that moved; every write carries a run marker so a re-run never repeats it. |
+| `land-canvas.mjs` | D6312: lands an owner-approved Claude Design canvas for the `land-canvas` skill: checks each file's SHA-256 against the digests on the issue, copies it into `design/incoming/` with the `· Boards` name, prints the board list, and `--waiting N` lists the blocked issues to release. |
+| `red-ci-triage.mjs` | #6326: the `red-ci-triage` skill's reader. `node scripts/red-ci-triage.mjs <pr> [--run <id>] [--logs DIR] [--no-main] [--json]` prints the CI failure digest's verdict (and whether it is stale), `ciClassify`'s verdict now, the open `[alert]` issues with what each forbids, and every failing test, tsc error, eslint error or guard in the failed jobs' logs with the command that reproduces it locally; for a part also red on main it reads main's log and marks each failure as shared or not. GET requests only: never comments, re-runs, merges, pushes or dispatches |
+| `verify-before-push.mjs` | #6326: the local checks before a push for the `verify-before-push` skill. `plan` lists the steps for the changed files in CI's order (generated, build, guards, static checks, migration and LFS gates, affected tests, `test:drift` parts); `run --only/--from` runs them with a timeout per step and one log each, killing the process group on timeout; `summary` prints the results so far, marks those from an older tree STALE, and gives a STATUS `tests:` line. Advisory (D5610); `--full` is everything `test:drift` runs. Never pushes, merges or calls GitHub. |
+| `task-lifecycle.mjs` | #6326: the read side of the slot protocol for the `task-lifecycle` skill, GET only: `next` (the slot's oldest `state:ready` task and who holds its claim ref), `answers` (owner comments after the last STATUS on the slot's `needs-decision` / `state:blocked` issues, plus `S1:` relays), `claims` (the slot's claim refs as ok, renew, expired or release, with the `claim.mjs` command to run) and `status` (the STATUS block in its `text` fence plus the label change). Never claims, labels, comments, pushes or merges. |
+| `add-worker-endpoint.mjs` | #6326: preflight for the `add-worker-endpoint` skill. It reads the branch diff against `origin/main`, reports the endpoint house rules the diff trips and the tests that name each changed file, and prints (or, with `--run`, runs) the guards in order. Its rules are in `lib/addWorkerEndpoint.mjs`, tested by `lib/addWorkerEndpoint.test.mjs`. |
+| `build-screen-to-canvas.mjs` | #6326: the build checklist for a landed canvas, for the `build-screen-to-canvas` skill: one row per board with its frames, widths, phone and dark, then the route-map row, decision files and frontend files that already name it; `--departures` prints the PR's departures table. Reads local files only and never runs the canvas. |
+| `mutation-check.mjs` | #6326: the `mutation-check` skill. `list` prints the test files the branch adds or changes and the command that runs each alone. `run --spec <json>` runs each test unmutated, applies each `{file, find, replace, test, expect?, equivalent?}` mutation alone, expects a failure, restores the file byte for byte (SHA-256 checked) and reruns every test. Ends with the fixed `N mutations, N caught, N equivalent (why)` line. Restores on error, Ctrl-C and exit; `restore` undoes a killed run from its backup outside the repository. Never commits, pushes or calls GitHub. |
+| `land-pr.mjs` | #6326: the `land-pr` skill's reader. `node scripts/land-pr.mjs <pr> [--summary FILE] [--no-classify] [--json]` reads, with GET requests only, the settings behind #5605 rows 3 and 6, #5500, main's merge-queue and required-check rules, the PR's files and check runs, the `landing policy` job log (tier recomputed with the base's `merge-policy.mjs`, or taken from a pasted summary) and the open `[alert]` issues; prints each gate and, only when all hold, the queue commands. Never marks ready, enables auto-merge, merges, approves, pushes or dispatches. |
+| `lib/landPr.mjs` | #6326: the landing gates of AGENTS.md step 5 as pure functions (`decide`, `agentsMayQueue`, `requiredChecks`, `landingReport`) plus parsers for the `landing policy` job log and step summary; tests in `lib/landPr.test.mjs`. |
+| `schema-change.mjs` | #6326: the `schema-change` skill's helper. `name --issue N --slug s` prints the new migration's path by the current UTC minute (D4106, D5398); `preflight [--base origin/main] [--issue N]` checks the branch's new migrations (name, identity, stamp, SQL) and the runtime DDL it adds; `checks` runs every schema guard in `test:guards` order plus `migration-immutability-gate.mjs` and prints pass or FAIL per guard. Reads git and the disk only. |
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
 | `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 | `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
 | `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
+| `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
+| `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
 
 ## The guards
 
@@ -82,6 +97,7 @@ represents a bug that reached production once:
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
 | `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
+| `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
 
 ## The one rule that needed a linter
 
@@ -217,6 +233,7 @@ pull.
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
+| `landing-bot/` | #6467: the landing bot's shared rules (`rules.mjs`: mode, eligibility, breakers, attempts, budgets, the path guard, give-up text) and `workflowGuard.mjs`, the helper each bot workflow's test calls. No workflow; tests in `frontend/test/landing_bot_core_6467.test.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 | `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
 | `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
@@ -284,6 +301,13 @@ binding targets and branch isolation.
 `--write` changes it, after the owner deploys both bot hosts. Its pure helper
 `lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.
 
+`check-meeting-bot-teams.mjs` (D5815, #5815) checks the Teams recorder's
+deployment matrix offline: each environment's site → host binding, run-state
+object, private chunk bucket, callback origin, signing audience, container,
+pinned browser, readiness/egress, revision order and switch values. It prints
+`pass`/`FAIL` per row, never a value. `lib/meetingBotTeamsMatrix.test.mjs` fails
+each row on its own mutation.
+
 ## Review harnesses
 
 | Script | What it does |
@@ -309,3 +333,4 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `build-agent-compute-types.mjs` | D4557: generate ignored module-scoped host binding types. |
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
+| `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |

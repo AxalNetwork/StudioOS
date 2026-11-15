@@ -335,7 +335,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 61 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 63 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Cohorts"`; and 38 more
 
 ### `@cf/deepseek-ai/deepseek-v4-pro-0813`
@@ -344,7 +344,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; and 3 more
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 4 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 5 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 19 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; and 2 more
 - Network: **gap**, `#3721`
@@ -352,7 +352,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 65 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 69 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 42 more
 
 ### `@cf/deepseek-ai/deepseek-v4.1-flash-1017`
@@ -369,7 +369,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 21 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 17 more
 
 ### `@cf/huggingface/distilbert-sst-2-int8`
@@ -541,7 +541,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 10 more
-- Admin consoles: **wired**, `BU8 on "Admin · Contracts · Agreements"`; `BU8 on "Admin · Contracts · Forms"`; `BU8 on "Admin · Contracts · NDAs"`; `BU8 on "Admin · Contracts · Partner deals"`; and 27 more
+- Admin consoles: **wired**, `BU8 on "Admin · Contracts · Agreements"`; `BU8 on "Admin · Contracts · Forms"`; `BU8 on "Admin · Contracts · NDAs"`; `BU8 on "Admin · Contracts · Partner deals"`; and 29 more
 - Investor, Advisor and Partner workspaces: **wired**, `BU8 on "Investor · Deals · Closing"`; `BU8 on "Operating Partner · Pipeline · Negotiations"`; `DK8 on "Investor · Deals · Commit"`; `DK8 on "Investor · Deals · Screening"`; and 12 more
 
 ### `@cf/openai/gpt-oss-20b`
@@ -550,7 +550,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; `DK8 on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 10 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 11 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`; `DK8 on "Founder · Raise · Fundraising readiness"`; `DK8 on "Founder · Raise"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `BU2 on "Founder · Grow · Team expansion"`; and 2 more
 - Network: **gap**, `#3721`
@@ -575,7 +575,7 @@ chat: Short summaries, labels and lightweight record explanations.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 73 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 77 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 71 more
 
 ### `@cf/ai4bharat/indictrans2-en-indic-1B`
@@ -833,7 +833,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 71 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 75 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Cohorts"`; and 48 more
 
 ### `@cf/deepgram/nova-3`
@@ -901,7 +901,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 44 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 48 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 38 more
 
 ### `@cf/qwen/qwen3-embedding-0.6b`
@@ -948,7 +948,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 33 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 37 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 32 more
 
 ### `@cf/microsoft/resnet-50`

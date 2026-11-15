@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import {
+import { patternView,
   ACCEPT_ALL_MAX, PROPOSABLE, activityCsv, activityQuery, commitmentBar, commitmentRows, followUpGroups, followUpMeta, fundSize, mailtoHref,
   matchQuery, pageLine, proposalGroups, proposalLine, roundBody, snoozedDue, sourceGaps, verifiedLine, whenText,
 } from '../src/pages/raise/caprel/capRelTabsModel.js';
@@ -114,6 +114,8 @@ function handlerOf(o = {}) {
     if (/capital-relationships\/proposals/.test(url) && method === 'POST') return response({ proposals: PROPOSALS.proposals });
     if (/capital-relationships\/proposals/.test(url)) return response(o.proposals ?? PROPOSALS);
     if (/capital-relationships\/drafts/.test(url)) return response({ draft: PROPOSALS.drafts[0] }, 201);
+    // CRL11 (#6080): the pattern run's answer, or its refusal.
+    if (/capital-relationships\/feedback-pattern/.test(url)) return o.pattern ? response(o.pattern.body, o.pattern.status ?? 200) : response({ state: 'too_few', feedback: 1, investors: 1, themes: [], detail: 'A pattern needs feedback from at least two investors. Record what each one said on their record first. Nothing was run.' });
     if (/\/ai\/rail\/proposals\/[^/]+\/decide/.test(url)) return response({ proposal: { status: 'discarded' } });
     if (/\/contacts\/raise-round/.test(url) && method === 'GET') return response({ round: { name: 'Seed', target_amount: 1500000, currency: 'USD', close_date: '2026-12-14', notes: null } });
     if (/\/contacts\/raise-round/.test(url)) return response({ id: 1 });
@@ -315,8 +317,8 @@ test('Outreach: Eadwyn’s drafts to send from your own email, each dismissed on
     assert.match(w.url, /\/ai\/rail\/proposals\/00000000-0000-4000-8000-0000000000d1\/decide$/);
     assert.deepEqual(w.body, { decision: 'discard' });
     assert.deepEqual(v.all('caprel-material').map(v.textOf), [
-      'Bluefern Capital Viewed 3× · last 2026-10-10 Opened 4× · last 2026-10-11 Opened Seed extension',
-      'Harbor Seed Fund Not sent Not on Axal Not on Axal',
+      'Investor Bluefern Capital Deck link Viewed 3× · last 2026-10-10 Data room Opened 4× · last 2026-10-11 Call for Capital Opened Seed extension',
+      'Investor Harbor Seed Fund Deck link Not sent Data room Not on Axal Call for Capital Not on Axal',
     ]);
     assert.match(v.text('caprel-outreach-updates'), /September update · shared 2026-10-02 with 9 investors[\s\S]*Recorded on the timeline, never emailed/);
     assert.equal(v.props(v.by('caprel-outreach-share')).href, '/grow/update?project_id=3');
@@ -335,7 +337,7 @@ test('Commitments: the bar against the target, what is not counted, every commit
     assert.match(v.text('caprel-commit-legend'), /Indicated through a call \$200,000 · not counted[\s\S]*Soft \$75,000 · not counted/);
     assert.match(v.text('caprel-commit-no-status'), /Status not recorded: 1 investor is not counted/);
     assert.equal(v.all('caprel-commit-row').length, 4);
-    assert.match(v.textOf(v.all('caprel-commit-row')[3]), /Northwind Angels Not recorded Status not recorded/);
+    assert.match(v.textOf(v.all('caprel-commit-row')[3]), /Northwind Angels Amount Not recorded Status Status not recorded/);
     assert.deepEqual(v.all('caprel-commit-gap').map(v.textOf), ['Deal-room commitments could not be read.', 'Closings are not recorded yet.']);
     assert.match(v.text('caprel-close'), /First close[\s\S]*Target 2026-11-14 · Wired \$150,000 · Signed \$250,000 · Soft \$0 ?, not counted/);
     await v.click('caprel-round-open');
@@ -361,9 +363,9 @@ test('Activity: every change with who, when and its source; a filter is a new re
   const v = await mounted('/raise/capital-relationships/activity?project_id=3');
   try {
     assert.deepEqual(v.all('caprel-activity-row').map(v.textOf), [
-      '21 Oct 2026 09:12 Fixture Founder Founder Investor edited: stage Meeting → Diligence · Bluefern Capital Typed',
-      '21 Oct 2026 08:40 Eadwyn Proposes only Drafted 2 proposals from your note on Bluefern Capital · Bluefern Capital Proposed by Eadwyn',
-      '14 Oct 2026 10:00 Fixture Founder Founder Investor imported at Identified · Fund X, "the" fund Document · CSV',
+      'When 21 Oct 2026 09:12 Who Fixture Founder Founder What Investor edited: stage Meeting → Diligence · Bluefern Capital Source Typed',
+      'When 21 Oct 2026 08:40 Who Eadwyn Proposes only What Drafted 2 proposals from your note on Bluefern Capital · Bluefern Capital Source Proposed by Eadwyn',
+      'When 14 Oct 2026 10:00 Who Fixture Founder Founder What Investor imported at Identified · Fund X, "the" fund Source Document · CSV',
     ]);
     assert.equal(v.text('caprel-activity-count'), '1–3 of 30');
     await v.change('caprel-activity-kind', 'steps');
@@ -384,7 +386,9 @@ test('Eadwyn’s proposals: each beside its words, accepted, edited or dismissed
     assert.equal(sheet['data-width'], 640, 'its own 620, on the Sheet’s list');
     assert.match(v.text('caprel-proposal-group'), /From your note on Bluefern Capital · 2026-10-16[\s\S]*‘ ?Good partner meeting\./);
     assert.match(v.textOf(v.all('caprel-proposal')[0]), /Next step: Send the Q3 metrics pack by 2026-10-23 From: “ ?the Q3 metrics pack by Friday ?”/);
-    assert.match(v.text('caprel-proposals-pattern'), /Not read here yet/);
+    // CRL11 (#6080): the pattern is a run now, offered and saving nothing.
+    assert.match(v.text('caprel-proposals-pattern'), /Find a pattern/);
+    assert.match(v.text('caprel-proposals-pattern'), /Nothing is saved/);
     await v.click('caprel-proposal-accept');
     assert.match(v.text('caprel-proposal-confirm'), /The next step with Bluefern Capital becomes “Send the Q3 metrics pack”, due 2026-10-23\./);
     assert.equal(v.writes().length, 0, 'nothing before the second press');
@@ -434,4 +438,89 @@ test('no browser pop-up, no old write, and every new colour has its dark pair', 
     }
   }
   assert.match(read('frontend/src/pages/raise/caprel/README.md'), /CapRelMatch\.jsx[\s\S]*capRelTabsModel\.js/);
+});
+
+
+test('phone records keep a long fund name and exact amount when switching views', async () => {
+  const name = 'NorthwindInternationalInstitutionalCapital'.repeat(4);
+  const cents = 987654321099;
+  const match = { ...MATCH, items: [{ ...MATCH.items[0], name, fund_size_cents: cents, size_currency: 'EUR' }] };
+  const v = await mounted('/raise/capital-relationships/match?project_id=3', { phone: true, match });
+  try {
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], false);
+    assert.match(v.text('caprel-match-row'), new RegExp(name));
+    assert.match(v.text('caprel-match-size'), /€9,876,543,210\.99/);
+    await v.click('caprel-view-records');
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], true);
+    assert.match(v.text('caprel-match-size'), /€9,876,543,210\.99/);
+    await v.click('caprel-view-records');
+    assert.equal(v.props(v.by('caprel-view-records'))['aria-pressed'], false);
+  } finally { await v.close(); }
+});
+
+// CRL11 (#6080): a pattern across investor feedback, read by one run that writes nothing.
+const PATTERN = { state: 'ok', feedback: 4, investors: 3, dropped: 0, basis: 'Read from the feedback recorded on each investor. Nothing here is saved.', themes: [
+  { title: 'Unclear path to enterprise buyers', summary: 'Several investors could not see who signs the first enterprise contract.',
+    sources: [{ feedback_id: 1, prospect_id: 41, investor: 'Bluefern Capital', words: 'Who buys this inside a bank?' },
+      { feedback_id: 3, prospect_id: 43, investor: 'Northgate Ventures', words: 'The enterprise buyer is not named.' }],
+    objection_keys: ['00112233aabbccdd'] },
+  { title: 'Too early for the round size', summary: 'Two investors felt the company is early for what it asks.',
+    sources: [{ feedback_id: 2, prospect_id: 42, investor: 'Harbour Seed', words: 'Feels early.' }], objection_keys: [] },
+] };
+
+test('CRL11: the pattern view keeps themes with two sources, links the objection, and says when there is too little', () => {
+  const href = (key) => `/raise/investor-narrative/story?project_id=3&objection=${key}`;
+  const v = patternView(PATTERN, href);
+  assert.equal(v.state, 'ok');
+  assert.deepEqual(v.themes.map((t) => t.title), ['Unclear path to enterprise buyers'], 'a one-source theme is not a pattern');
+  assert.deepEqual(v.themes[0].sources.map((s) => `${s.investor}: ${s.words}`), ['Bluefern Capital: Who buys this inside a bank?', 'Northgate Ventures: The enterprise buyer is not named.']);
+  assert.equal(v.themes[0].objection.href, href('00112233aabbccdd'));
+  assert.equal(patternView({ state: 'too_few', detail: 'Too little.' }, href).state, 'too_few');
+  assert.equal(patternView({ state: 'ok', themes: [] }, href).state, 'none');
+  assert.equal(patternView(null, href).state, 'unreadable');
+});
+
+test('CRL11: Find a pattern runs once, draws each theme with its sources and an objection link, and writes nothing else', async () => {
+  // Mutation checked: the panel drawing a theme with one source (the filter in patternView removed) shows two themes here.
+  const v = await mounted('/raise/capital-relationships/pipeline?project_id=3', { pattern: { body: PATTERN } });
+  try {
+    await v.click('caprel-proposals-open');
+    await v.click('caprel-pattern-run');
+    const runs = v.writes().filter((c) => /feedback-pattern/.test(c.url));
+    assert.equal(runs.length, 1, 'one run');
+    assert.match(runs[0].url, /feedback-pattern\?project=3$/);
+    assert.deepEqual(v.writes().map((c) => c.url.replace(/^.*\/api/, '').split('?')[0]), ['/cycles/raise/capital-relationships/feedback-pattern'], 'the run is the only write');
+    assert.equal(v.all('caprel-pattern-theme').length, 1);
+    assert.match(v.text('caprel-pattern-themes'), /Unclear path to enterprise buyers/);
+    // The harness joins text nodes with a space; the words are compared without it.
+    assert.deepEqual(v.all('caprel-pattern-source').map((n) => v.textOf(n).replace(/\s+([:”])/g, '$1').replace(/“\s+/g, '“')),
+      ['Bluefern Capital: “Who buys this inside a bank?”', 'Northgate Ventures: “The enterprise buyer is not named.”']);
+    assert.equal(v.props(v.by('caprel-pattern-objection')).to ?? v.props(v.by('caprel-pattern-objection')).href, '/raise/investor-narrative/story?project_id=3&objection=00112233aabbccdd');
+    assert.match(v.text('caprel-pattern-themes'), /Nothing here is saved/);
+  } finally { await v.close(); }
+});
+
+test('CRL11: too little feedback says so and runs nothing; AI off, out of tokens and a refused run are each drawn', async () => {
+  const few = await mounted('/raise/capital-relationships/pipeline?project_id=3');
+  try {
+    await few.click('caprel-proposals-open');
+    await few.click('caprel-pattern-run');
+    assert.match(few.text('caprel-pattern-too_few'), /at least two investors[\s\S]*Nothing was run/);
+    assert.ok(!few.has('caprel-pattern-themes'));
+  } finally { await few.close(); }
+  for (const [status, body, kind, words] of [
+    [403, { code: 'assist_off', detail: 'AI assistance is off.' }, 'off', /AI/],
+    [402, { code: 'insufficient_tokens', detail: 'Not enough AI tokens.' }, 'tokens', /tokens/i],
+    [422, { code: 'guard_blocked', detail: 'Eadwyn cannot help with that.' }, 'other', /Eadwyn/],
+  ]) {
+    const v = await mounted('/raise/capital-relationships/pipeline?project_id=3', { pattern: { status, body } });
+    try {
+      await v.click('caprel-proposals-open');
+      await v.click('caprel-pattern-run');
+      assert.ok(v.has(`caprel-pattern-refused-${kind}`), `${kind} is drawn`);
+      assert.match(v.text(`caprel-pattern-refused-${kind}`), words);
+      assert.equal(v.has('caprel-pattern-topup'), kind === 'tokens', `${kind}: Top up only when out of tokens`);
+      assert.ok(!v.has('caprel-pattern-themes'));
+    } finally { await v.close(); }
+  }
 });

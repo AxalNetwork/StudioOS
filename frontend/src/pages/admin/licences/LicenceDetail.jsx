@@ -20,12 +20,12 @@ import { reportError } from '../../../lib/log';
 import { useReasonDialog } from '../LicenceReasonDialog';
 import { LICENCE_REASONS } from '../licenceReasonModel';
 import {
-  DEFAULT_TAB, LICENCE_SECTIONS_NAV, sectionOfTab, sectionTabs, stepOfTab, tabKeyMove, tabOfStep,
+  DEFAULT_TAB, LICENCE_SECTIONS_NAV, phoneSectionTabs, phoneStep, sectionOfTab, sectionTabs, stepOfTab, tabKeyMove, tabOfStep,
 } from '../licenceNavModel';
 import { overviewFacts } from '../licenceOverviewModel';
 import { HISTORY_STEP, ADMINS_STEP, NOTICES_STEP, BRAND_STEP, SCHEDULE_STEP, FEE_INVOICES_STEP, OVERVIEW_STEP, Field } from './licenceShared';
 import LicenceIdentity from './LicenceIdentity';
-import LicenceOverview, { AttentionStrip, useOverviewReads } from './LicenceOverview';
+import LicenceOverview, { AttentionStrip, PhoneTriage, useOverviewReads } from './LicenceOverview';
 import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
 import { SeatEditor } from './CommercialTerms';
@@ -40,6 +40,7 @@ import { LicenceSyncStrip } from './LicenceSyncStrip';
 import { TerritoryEditor } from './TerritoryEditor';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError, outcomeOfError } from '../../../lib/mutationOutcome';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 
 /* ------------------------------------------------------------------ *
  * Detail                                                              *
@@ -50,7 +51,12 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   const [reasonDialog, ask] = useReasonDialog();
   const [d, setD] = useState(null);
   // D4707 — the tab lives in the URL (`?tab=`), so a link reopens it.
-  const step = stepOfTab(tab);
+  // D4819 part 20 (#5932), board L20 — below `md` the licence is a triage
+  // view, not the desktop workstation: the triage rows sit above the tabs, the
+  // Terms section is read-only (a terms editor's tab draws the Terms read,
+  // `phoneStep`), and the requests side panel steps aside for the Requests row.
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
+  const step = phone ? phoneStep(stepOfTab(tab)) : stepOfTab(tab);
   const setStep = (n) => onTab?.(tabOfStep(n));
   const [busy, setBusy] = useState(false);
   // D197 — the detach's own reason and its own error. `act` below reports a
@@ -103,8 +109,15 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   if (!d) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const facts = overviewFacts(d, reads);
+  // D801: "Open terms" goes to the term's row or its step; "Grant admin" prefills the appointment.
+  const openTerm = (target) => {
+    const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
+    setHighlight(target.key);
+    setStep(tab);
+  };
+  const grantAdmin = (g) => { setGrant(g); setStep(ADMINS_STEP); };
   const section = sectionOfTab(tabOfStep(step));
-  const subTabs = sectionTabs(section, d.kind);
+  const subTabs = phone ? phoneSectionTabs(section, d.kind) : sectionTabs(section, d.kind);
   const sectionLabel = LICENCE_SECTIONS_NAV.find((x) => x.key === section)?.label || 'Overview';
   const openSection = (key) => {
     const first = sectionTabs(key, d.kind)[0];
@@ -272,6 +285,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
       <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
       <AttentionStrip licence={d} facts={facts} />
+      {phone && step === OVERVIEW_STEP && <PhoneTriage facts={facts} retry={retry} onOpenTab={(key) => onTab?.(key)} />}
 
       {d.status === 'suspended' && (
         <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -311,10 +325,13 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           sideways instead of wrapping into a second row of half-tabs.
           D4819 part 3 — the first row is the canvas's six sections; a section
           that holds more than one of the view's tabs draws them as a second
-          tablist under it, with the same keys. Both live in the URL (`?tab=`). */}
+          tablist under it, with the same keys. Both live in the URL (`?tab=`).
+          D4819 part 20 — below `md` the six sections are a 3 × 2 grid of 44px
+          tabs and the second row wraps, so neither row scrolls the page sideways;
+          the keys are the same. */}
       <div
         role="tablist" aria-label="Licence sections" data-testid="licence-tabs"
-        className="mt-6 -mx-1 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-gray-200 px-1 [scrollbar-width:thin] dark:border-gray-800"
+        className="mt-6 grid grid-cols-3 gap-1 border-b border-gray-200 dark:border-gray-800 md:-mx-1 md:flex md:overflow-x-auto md:whitespace-nowrap md:px-1 md:[scrollbar-width:thin]"
         onKeyDown={(e) => {
           const at = LICENCE_SECTIONS_NAV.findIndex((x) => x.key === section);
           const next = tabKeyMove(e.key, at < 0 ? 0 : at, LICENCE_SECTIONS_NAV.length);
@@ -329,7 +346,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
             key={x.key} id={`licence-section-${x.key}`} type="button" role="tab"
             aria-selected={section === x.key} aria-controls="licence-tabpanel" tabIndex={section === x.key ? 0 : -1}
             data-testid={`licence-section-${x.key}`} onClick={() => openSection(x.key)}
-            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+            className={`-mb-px min-h-[44px] min-w-0 shrink-0 border-b-2 px-1 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 md:min-h-0 md:px-3 ${
               section === x.key ? 'border-indigo-600 font-semibold text-indigo-700 dark:text-indigo-300' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
             }`}
           >
@@ -340,7 +357,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       {subTabs.length > 1 && (
         <div
           role="tablist" aria-label={`${sectionLabel} views`} data-testid="licence-subtabs"
-          className="mt-2 -mx-1 flex gap-1 overflow-x-auto whitespace-nowrap px-1 [scrollbar-width:thin]"
+          className="mt-2 flex flex-wrap gap-1 md:-mx-1 md:flex-nowrap md:overflow-x-auto md:whitespace-nowrap md:px-1 md:[scrollbar-width:thin]"
           onKeyDown={(e) => {
             const at = subTabs.findIndex((t) => t.step === step);
             const next = tabKeyMove(e.key, at < 0 ? 0 : at, subTabs.length);
@@ -355,7 +372,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
               key={t.key} id={`licence-tab-${t.key}`} type="button" role="tab"
               aria-selected={step === t.step} aria-controls="licence-tabpanel" tabIndex={step === t.step ? 0 : -1}
               data-testid={t.testId} onClick={() => setStep(t.step)}
-              className={`shrink-0 rounded-full border px-3 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+              className={`min-h-[44px] shrink-0 rounded-full border px-3 py-1 text-xs md:min-h-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
                 step === t.step ? 'border-indigo-300 bg-indigo-50 font-medium text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' : 'border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
               }`}
             >
@@ -364,8 +381,9 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           ))}
         </div>
       )}
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0" role="tabpanel" id="licence-tabpanel"
+      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside. */}
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${step === NOTICES_STEP ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
+      <div className={`min-w-0 ${step === NOTICES_STEP ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
         aria-labelledby={subTabs.length > 1 ? `licence-tab-${tabOfStep(step)}` : `licence-section-${section}`}>
         {step === OVERVIEW_STEP && (
           <LicenceOverview licence={d} reads={reads} retry={retry} readAt={readAt} onOpenTab={(key) => onTab?.(key)} />
@@ -408,7 +426,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 5 && <LicenceAgreements licence={d} />}
         {step === 6 && (
           <div>
-            <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip" />
+            <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip"
+              deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load} />
             {domainStrip}
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
@@ -416,6 +435,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
           onSaved={() => { setGrant(null); refresh(); }} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
+        {/* D4819 part 12 (#5923): board L12, studio requests then compliance, each failing on its own. */}
+        {step === NOTICES_STEP && <LicenceRequestsPanel licence={d} layout="section" onOpenTerm={openTerm} onGrantAdmin={grantAdmin} />}
         {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
         {step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence={d} />}
         {/* The kind is re-checked here as well as on the tab: the tab is what an
@@ -426,15 +447,13 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           && <BrandKitEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && <LicenceHistory licence={d} />}
       </div>
-      <LicenceRequestsPanel
-        licence={d}
-        onOpenTerm={(target) => {
-          const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
-          setHighlight(target.key);
-          setStep(tab);
-        }}
-        onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
-      />
+      {step !== NOTICES_STEP && !phone && (
+        <LicenceRequestsPanel
+          licence={d}
+          onOpenTerm={openTerm}
+          onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
+        />
+      )}
       </div>
     </div>
   );

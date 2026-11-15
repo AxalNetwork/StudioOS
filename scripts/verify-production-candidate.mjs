@@ -81,6 +81,7 @@ async function main(candidate, mode) {
     await delay(60_000);
   } while (Date.now() < deadline);
   console.log(JSON.stringify(report));
+  if (report.status === 'superseded') console.log('::notice title=StudioOS release admission::superseded');
   if (report.status !== 'verified') process.exitCode = 1;
 }
 

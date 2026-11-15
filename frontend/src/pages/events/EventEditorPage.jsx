@@ -7,6 +7,11 @@ import EventSyndicationPanel from './EventSyndicationPanel';
 // what happens and who is told; the save is the dialog's button.
 // D1036 (#2877): the shared host header (MEV12a) carries that one action, and
 // /events/new has its own (MEV12b); a new event lands on its Details tab.
+// #5868 (D3724 gap 5, NE1): the topics picker, up to five of the Worker's
+// `EVENT_TOPICS`, saved as `topics` on create and edit and read back on edit.
+// #5871 (D3724 gap 13, D5871, NE1): "Create the meeting for me · Google Meet"
+// beside the join link (`EventMeetField`), for Online and Hybrid only. The
+// press asks the next Save for the link; the Worker makes it inside that save.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -20,10 +25,14 @@ import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
 import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
 import EventCoverStep from './EventCoverStep';
+import EventEditorPreview from './EventEditorPreview';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
 import { eventLocalInput, eventTimePayload } from './eventTimeModel';
+import { TOPICS_UNREAD, topicPicker, toggleTopic } from './myEventsTabsModel';
+import EventMeetField from './EventMeetField';
+import { meetPayload, meetRefusal } from './eventMeetModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -45,6 +54,39 @@ const COMMON_TZS = [
 
 const labelCls = 'block text-sm font-medium text-gray-700 dark:text-gray-200';
 const inputCls = 'mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500';
+
+/** NE1's topics: the ten chips, "N of 5", and why a sixth cannot be picked. */
+function TopicsPicker({ topics, onChange }) {
+  if (!Array.isArray(topics)) {
+    return (
+      <div data-testid="event-topics">
+        <span className={labelCls}>Topics</span>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-unread">Unreadable — {TOPICS_UNREAD}</p>
+      </div>
+    );
+  }
+  const picker = topicPicker(topics);
+  return (
+    <div role="group" aria-labelledby="event-topics-label" data-testid="event-topics">
+      <div className="flex items-center justify-between gap-2">
+        <span id="event-topics-label" className={labelCls}>Topics</span>
+        <span className="font-mono text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-count">{picker.count}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {picker.chips.map((t) => (
+          <button key={t.key} type="button" aria-pressed={t.on} disabled={t.disabled}
+            title={t.disabled ? picker.note : undefined}
+            onClick={() => onChange(toggleTopic(topics, t.key))}
+            className={`inline-flex min-h-[32px] items-center whitespace-nowrap rounded-full border px-3 text-[12.5px] ${t.on
+              ? 'border-violet-500 bg-violet-50 font-bold text-violet-800 dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-200'
+              : 'border-gray-300 bg-white font-medium text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'} disabled:cursor-not-allowed disabled:opacity-50`}
+            data-testid={`event-topic-${t.key}`}>{t.on ? '✓ ' : ''}{t.label}</button>
+        ))}
+      </div>
+      {picker.note ? <p role="status" className="mt-1.5 text-xs text-gray-500 dark:text-gray-400" data-testid="event-topics-full">{picker.note}</p> : null}
+    </div>
+  );
+}
 
 export default function EventEditorPage() {
   const { id } = useParams();
@@ -69,6 +111,9 @@ export default function EventEditorPage() {
     cover_alt: '', cover_source: null, cover_focal: null, cover_crops: null,
     capacity: '', waitlist_enabled: true, approval_required: false,
     visibility: 'private',
+    // #5868: the event's topics. `null` is "not read" (the reply carried no
+    // list), which the picker says and the save leaves alone, never [].
+    topics: [],
   });
   const [rules, setRules] = useState({});
   const [status, setStatus] = useState('draft');
@@ -81,6 +126,8 @@ export default function EventEditorPage() {
   const [saved, setSaved] = useState(null);
   const [channelCopy, setChannelCopy] = useState(null);
   const [pending, setPending] = useState(undefined);
+  // #5871: the meeting press — idle, asked (the next Save makes it), made, or refused.
+  const [meet, setMeet] = useState({ state: 'idle' });
   // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Title and
   // Description, for an admin or its host (`canManage`). #4046 (B2): on
   // /events/new too, where the new event hangs under the caller, its host.
@@ -126,6 +173,7 @@ export default function EventEditorPage() {
           waitlist_enabled: ev.waitlist_enabled !== 0 && ev.waitlist_enabled !== false,
           approval_required: ev.approval_required === 1 || ev.approval_required === true,
           visibility: ev.visibility || 'private',
+          topics: Array.isArray(ev.topics) ? ev.topics : null,
         });
         setStatus(ev.status || 'draft');
         setRules(ev.audience_rules || {});
@@ -151,7 +199,9 @@ export default function EventEditorPage() {
     ...eventTimePayload(form, saved),
     location_kind: form.location_kind,
     location_text: form.location_text.trim() || null,
-    location_url: form.location_url.trim() || null,
+    // #5871: an in-person event shows its link to anyone, so a join link the
+    // host can no longer see in the editor is not kept on it.
+    location_url: form.location_kind === 'in_person' ? null : form.location_url.trim() || null,
     cover_url: form.cover_url.trim() || null,
     cover_alt: form.cover_alt.trim() || null,
     cover_source: form.cover_source || null,
@@ -162,7 +212,23 @@ export default function EventEditorPage() {
     approval_required: form.approval_required ? 1 : 0,
     visibility: form.visibility,
     audience_rules_json: JSON.stringify(rules),
+    ...(Array.isArray(form.topics) ? { topics: form.topics } : {}),
   }), [form, rules, saved]);
+
+  // #5871: the Save, with the Meet link when the press asked for one.
+  const withMeet = meetPayload(meet.state, form.location_kind).add_meet === true;
+  const send = (eventId, body) => (withMeet ? eventsApi.saveWithMeet(eventId, body) : eventId ? eventsApi.update(eventId, body) : eventsApi.create(body));
+  // A created link lands in the field; a refusal is said beside it and the typed link stays usable.
+  const afterMeet = (updated) => {
+    if (!withMeet) return;
+    const url = updated?.event?.location_url;
+    if (url) set('location_url', url);
+    setMeet(url ? { state: 'made' } : { state: 'idle' });
+  };
+  const meetFailed = (e) => {
+    const refusal = withMeet ? meetRefusal(e) : null;
+    if (refusal) setMeet({ state: 'refused', refusal });
+  };
 
   const save = async () => {
     if (!form.title.trim()) { showToast({ kind: 'error', msg: 'Add a title first.' }); return; }
@@ -171,12 +237,13 @@ export default function EventEditorPage() {
     try {
       if (isEdit) {
         const body = payload();
-        const updated = await eventsApi.update(id, body);
+        const updated = await send(id, body);
+        afterMeet(updated);
         await fill.afterSave(Number(id));
         setSaved((ev) => updated?.event || (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
-        const created = await eventsApi.create(payload());
+        const created = await send(null, payload());
         const newId = created?.id ?? created?.event?.id;
         // #4046 (B2): what Ask placed and the host kept is filed against the new event.
         await fill.afterSave(newId);
@@ -186,6 +253,7 @@ export default function EventEditorPage() {
         else navigate('/my/events/hosting');
       }
     } catch (e) {
+      meetFailed(e);
       showToast({ kind: 'error', msg: e?.message || 'Could not save the event.' });
     } finally {
       setSaving(false);
@@ -207,7 +275,7 @@ export default function EventEditorPage() {
         // MEV12b: create the draft, submit it, and land on its Details tab.
         if (!form.title.trim()) throw new Error('Add a title first.');
         if (!form.starts_at) throw new Error('Pick a start date and time.');
-        const created = await eventsApi.create(payload());
+        const created = await send(null, payload());
         const newId = created?.id ?? created?.event?.id;
         if (!newId) throw new Error('The reply did not say the new event\'s id.');
         await fill.afterSave(newId);
@@ -218,7 +286,8 @@ export default function EventEditorPage() {
         return;
       }
       const body = payload();
-      const updated = await eventsApi.update(id, body);
+      const updated = await send(id, body);
+      afterMeet(updated);
       const reply = await eventsApi.submitReview(id);
       const next = reply?.event?.status;
       if (!next) throw new Error('The reply did not say the event\'s status.');
@@ -227,6 +296,7 @@ export default function EventEditorPage() {
       setPublishing(null);
       showToast({ kind: 'success', msg: asked.done });
     } catch (e) {
+      meetFailed(e);
       setPublishError(e?.message || (asked.kind === 'review' ? 'Could not send for review.' : 'Could not publish.'));
     } finally {
       setSaving(false);
@@ -242,13 +312,14 @@ export default function EventEditorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       {isEdit
         ? <HostHeader event={{ ...(saved || {}), id, status }} screen="details" pending={pending} publishLabel={action?.label} onPublish={openPublish} busy={saving} />
         : <NewEventHeader primaryLabel={action?.label} onSaveDraft={save} onPrimary={openPublish} busy={saving} />}
       <PageExplainer pageKey="event_editor" />
 
-      <div className="mt-4 space-y-6">
+      <div className="mt-4 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="min-w-0 space-y-6">
         {/* Basics */}
         <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 space-y-4">
           <FillFormBar fill={fill} />
@@ -270,6 +341,7 @@ export default function EventEditorPage() {
               <EventCoverStep id={id} form={form} set={set} coverQuote={coverQuote} coverDraw={coverDraw} onCoverDrawn={onCoverDrawn} />
             </div>
           </div>
+          <TopicsPicker topics={form.topics} onChange={(next) => set('topics', next)} />
           <div>
             <label className={labelCls}>Summary</label>
             <input className={inputCls} value={form.summary} onChange={(e) => set('summary', e.target.value)} placeholder="One-line teaser" />
@@ -321,10 +393,8 @@ export default function EventEditorPage() {
             </div>
           )}
           {form.location_kind !== 'in_person' && (
-            <div>
-              <label className={labelCls}>Join URL</label>
-              <input className={inputCls} value={form.location_url} onChange={(e) => set('location_url', e.target.value)} placeholder="https://meet…" />
-            </div>
+            <EventMeetField locationKind={form.location_kind} value={form.location_url} onChange={(v) => set('location_url', v)}
+              meet={meet} onMeet={setMeet} busy={saving} />
           )}
         </section>
 
@@ -413,6 +483,9 @@ export default function EventEditorPage() {
             <Save size={16} /> {saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Create event')}
           </button>
         </div>
+      </div>
+
+        <EventEditorPreview form={form} saved={saved} />
       </div>
 
       {publishing && (

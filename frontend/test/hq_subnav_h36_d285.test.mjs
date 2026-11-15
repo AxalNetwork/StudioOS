@@ -86,8 +86,8 @@ const DOMAIN_ORDER = ['Overview', 'Monitoring', 'Topology', 'Storage', 'Meeting 
   'AI allowances', 'AI usage', 'Scoring', 'Telegram', 'Switches', 'Product testing', 'Decks'];
 assert.deepEqual([...PLATFORM.map(([l]) => l)].sort(), [...DOMAIN_ORDER].sort(), 'the regrouping added or dropped an item');
 PLATFORM.sort((a, b) => DOMAIN_ORDER.indexOf(a[0]) - DOMAIN_ORDER.indexOf(b[0]));
-// D981 (#2376) — #2375's Licences strip: the ledger and Program grants.
-const LICENCES = [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs']];
+// D981 (#2376) — #2375's Licences strip: the ledger and Program grants; D5896 (#5896) adds L29's packages third.
+const LICENCES = [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs'], ['Axal VC packages', '/admin/licences/packages']];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
 
 /** The literal links inside one `<HqSubNavStrip label="…">` block in the chrome. */

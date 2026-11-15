@@ -19,7 +19,8 @@ import { adminDeploymentAttemptsApi } from '../../../lib/api/adminDeploymentAtte
 import { licenceFeeInvoicesApi } from '../../../lib/api/licenceFeeInvoices';
 import { licenceLedgerApi } from '../../../lib/api/licenceLedger';
 import { reportError } from '../../../lib/log';
-import { attentionItems, overviewFacts, sourcesOf } from '../licenceOverviewModel';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
+import { attentionItems, overviewFacts, phoneTriage, sourcesOf } from '../licenceOverviewModel';
 
 /** Each Overview read, by its key in `OVERVIEW_READS`. */
 const READERS = {
@@ -106,6 +107,7 @@ export function TryAgain({ onClick, what }) {
 
 /** The strip under the header: what needs HQ, and which facts could not be read. Nothing is drawn while all is clear. */
 export function AttentionStrip({ licence, facts }) {
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
   const { items, unknown } = attentionItems(licence, facts);
   if (!items.length && !unknown.length) return null;
   const n = items.length;
@@ -119,8 +121,14 @@ export function AttentionStrip({ licence, facts }) {
         {n > 0 && (
           <>
             <b>{n} {n === 1 ? 'item needs' : 'items need'} HQ</b>
-            {' · '}
-            {items.map((i) => i.text).join(' · ')}
+            {/* D4819 part 20 — on a phone each item is its own line (board L20), not one long sentence. */}
+            {phone ? (
+              <ul className="mt-1 list-disc space-y-0.5 pl-4" data-testid="licence-attention-list">
+                {items.map((i) => <li key={i.key}>{i.text}</li>)}
+              </ul>
+            ) : (
+              <>{' · '}{items.map((i) => i.text).join(' · ')}</>
+            )}
           </>
         )}
         {unknown.length > 0 && (
@@ -138,19 +146,70 @@ export function AttentionStrip({ licence, facts }) {
  * Overview (L03, L04)                                                 *
  * ------------------------------------------------------------------ */
 
-/** Where each fact's detail lives: the tab it opens. Licence and Requests have none: the header and the panel beside hold them. */
-const FACT_TAB = { agreement: 'contract', commercial: 'terms', access: 'admins', branch: 'deploy', billing: 'fee-invoices' };
+/**
+ * Where each fact's detail lives: the tab it opens. Licence has none: the header holds it.
+ * D4819 part 12 (#5923): Requests opens Operations › Requests and compliance (L12), Billing opens Operations › Billing (L13).
+ */
+const FACT_TAB = { agreement: 'contract', commercial: 'terms', access: 'admins', branch: 'deploy', billing: 'fee-invoices', requests: 'notices' };
 // Phone first: identity and status sit in the header; then the agreement and requests, as #4819's responsive notes ask.
 const PHONE_ORDER = { licence: 'order-1', agreement: 'order-2', requests: 'order-3' };
 
+/* ------------------------------------------------------------------ *
+ * Phone triage (L20)                                                  *
+ * ------------------------------------------------------------------ */
+
+/**
+ * D4819 part 20 (#5932) — the phone's rows under the items that need HQ:
+ * requests and decisions, the agreement, history (`phoneTriage`). Each row is
+ * a whole-width button of at least 56px that opens its section; a read that
+ * failed keeps its own Try again beside the row, never inside it.
+ */
+export function PhoneTriage({ facts, retry, onOpenTab }) {
+  const rows = phoneTriage(facts);
+  return (
+    <nav aria-label="Licence triage" className="mt-3 flex flex-col gap-2" data-testid="licence-phone-triage">
+      {rows.map((r) => (r.kind === 'primary' ? (
+        <button
+          key={r.key} type="button" onClick={() => onOpenTab?.(r.tab)} data-testid={`licence-triage-${r.key}`}
+          className="min-h-[48px] w-full rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        >
+          {r.title}
+        </button>
+      ) : (
+        <div key={r.key}>
+          <button
+            type="button" onClick={() => onOpenTab?.(r.tab)} data-testid={`licence-triage-${r.key}`}
+            className="flex min-h-[56px] w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 dark:border-gray-800 dark:bg-gray-900"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">{r.title}</span>
+              <span className="block text-[12px]"><FactState state={r.state}>{r.word}</FactState></span>
+              {r.detail && <span className="block truncate text-[11.5px] text-gray-600 dark:text-gray-400">{r.detail}</span>}
+            </span>
+            <span aria-hidden="true" className="text-gray-500 dark:text-gray-400">›</span>
+          </button>
+          {r.retry && r.state === 'unavailable' && (
+            <div className="mt-1"><TryAgain what={r.title.toLowerCase()} onClick={() => retry?.(r.retry)} /></div>
+          )}
+        </div>
+      )))}
+    </nav>
+  );
+}
+
+/** On a phone these facts are drawn above the tabs (the header's status, then the triage rows), so the Overview does not repeat them. */
+const PHONE_ABOVE = new Set(['licence', 'agreement', 'requests']);
+
 export default function LicenceOverview({ licence, reads, retry, readAt, onOpenTab }) {
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
   const facts = overviewFacts(licence, reads);
+  const shown = phone ? facts.filter((f) => !PHONE_ABOVE.has(f.key)) : facts;
   const sources = sourcesOf(licence, readAt);
   return (
     <div data-testid="licence-overview">
       <h3 className="sr-only">Overview</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-        {facts.map((f) => (
+        {shown.map((f) => (
           <section
             key={f.key} aria-labelledby={`licence-fact-${f.key}`} data-testid={`licence-fact-${f.key}`}
             className={`flex min-w-0 flex-col gap-1 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${PHONE_ORDER[f.key] || 'order-4'} sm:order-none`}

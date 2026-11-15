@@ -39,6 +39,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
+import { COMPANY_INSTRUCTION, FOUNDING_INSTRUCTION, companyMaterial, foundingMaterial } from '../services/buildRecordDrafts';
 import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
@@ -83,6 +84,8 @@ import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { ventureNdaStatus, type VentureNdaStatus } from '../services/dealAccess';
+import { investorRoomRequests, type InvestorRoomRequest } from '../services/dataRoomRequests';
 import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -109,7 +112,10 @@ const EXT_BY_MIME: Record<string, string> = {
   'text/markdown': 'md',
   'text/csv': 'csv',
 };
-const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal']);
+// D6282: `diligence` is the investor's own kind (a memo, a data-room extract,
+// a reference call note). There is deliberately no `benchmark` kind: a
+// benchmark is a row in Benchmarking with its own source and sample size.
+const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'legal', 'diligence']);
 
 /**
  * THE FLOOR BELOW WHICH ASK REFUSES TO ANSWER.
@@ -3154,6 +3160,36 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
+  'build/founding': {
+    // D6042 (#6042): Founding team's band. A check of the split and the
+    // vesting the cap table records for the founders, and a list of what it
+    // does not record. The failure it prevents is the helpful one: a model
+    // asked about vesting supplies "the usual four years with a one-year
+    // cliff", and asked about a split that does not reach 100% it rounds it
+    // off. Neither is in the record, so the material spells each gap as NOT
+    // RECORDED and carries the total it computed (`buildRecordDrafts.ts`).
+    instruction: FOUNDING_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return foundingMaterial(c, pid);
+    },
+  },
+
+  'build/company': {
+    // D6042 (#6042): Company creation's band. A summary of the open filings,
+    // what is due next and where formation stands, from the formation order,
+    // the formation steps and the entity's open obligations — the stores the
+    // module's own table combines. No filing rule, fee or deadline the record
+    // does not carry: the day counts are computed in the material and given.
+    instruction: COMPANY_INSTRUCTION,
+    gather: async (c, userId, scope) => {
+      const pid = await founderProject(c, userId, scope);
+      if (pid == null) return [];
+      return companyMaterial(c, pid);
+    },
+  },
+
   'raise/capital': {
     // A4's band: "At $1.5M on a $12M post with a 12% pool top-up, you and Amara
     // go from 89.5% to 66.1% combined. The pool top-up costs you more dilution
@@ -3570,6 +3606,8 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'build/this-week': 'Founder · Build · Operating systems',
   'build/retro': 'Founder · Build · Operating systems',
   'build/kpi': 'Founder · Build · Operating systems',
+  'build/founding': 'Founder · Build · Founding team',
+  'build/company': 'Founder · Build · Company creation',
   'raise/data-room': 'Founder · Raise · Fundraising readiness',
   'raise/legal': 'Founder · Raise · Fundraising readiness',
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',
@@ -4668,6 +4706,12 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 // diligence information too." So the response returns both numbers and never
 // the ratio alone.
 
+/** #6267: `{ status: none | out_for_signature | on_file, valid_until }` — the deal page's NDA status, no NDA as `none`. */
+const NDA_NONE = { status: 'none', valid_until: null } as const;
+function ndaView(nda: VentureNdaStatus | null) {
+  return nda ?? NDA_NONE;
+}
+
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
@@ -4705,6 +4749,14 @@ research.get('/diligence', async (c) => {
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
+  // #6267: where each room's NDA stands (none, out for signature, on file until a date), from the
+  // deal page's own status read (`ventureNdaStatus`), once per venture.
+  const ndaStatusByProject = new Map<number, ReturnType<typeof ndaView>>();
+  for (const r of rows.results || []) {
+    const pid = Number(r.project_id);
+    if (!ndaStatusByProject.has(pid)) ndaStatusByProject.set(pid, ndaView(await ventureNdaStatus(c.env, pid, user.id)));
+  }
+
   const items = (rows.results || []).map((r: any) => {
     const nda = ndaByProject.get(Number(r.project_id)) === true;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
@@ -4713,6 +4765,7 @@ research.get('/diligence', async (c) => {
       project_uid: r.project_uid,
       project_name: r.project_name,
       nda_signed: nda,
+      nda: ndaStatusByProject.get(Number(r.project_id)) ?? NDA_NONE,
       // Two numbers, never one ratio: what is absent from a room is diligence
       // information too, and a percentage hides which rooms are thin.
       file_open: open,
@@ -4724,8 +4777,15 @@ research.get('/diligence', async (c) => {
     };
   });
 
+  // #6267: the caller's own requests that no live grant answers. A failed read is
+  // `requests: null` with `requests_unreadable`, never an empty list.
+  let requests: InvestorRoomRequest[] | null = null;
+  try { requests = await investorRoomRequests(c.env, user.id); } catch (e) { console.error('[research] diligence requests unreadable', e); }
+
   return c.json({
     items,
+    requests,
+    requests_unreadable: requests === null,
     granted_count: items.length,
     // Rooms where the founder staged less than everything they hold. Not a
     // complaint — it is the signal the zone exists to surface.
@@ -4924,6 +4984,7 @@ research.get('/diligence/:grantUid', async (c) => {
     grant: { uid: room.grant.uid, created_at: room.grant.created_at, expires_at: room.grant.expires_at ?? null },
     project: { uid: room.project.uid, name: room.project.name },
     nda_signed: room.nda,
+    nda: ndaView(await ventureNdaStatus(c.env, pid, user.id)),
     file_total: allFiles.length,
     file_open: openFiles.length,
     // A count, never the names — the data room's own rule.

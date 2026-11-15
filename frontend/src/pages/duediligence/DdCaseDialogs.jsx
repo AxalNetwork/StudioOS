@@ -12,14 +12,17 @@ import { ddDeskApi } from '../../lib/api/ddDesk.js';
 import { ddFlagsApi } from '../../lib/api/ddFlags.js';
 import { ddLifecycleApi } from '../../lib/api/ddLifecycle.js';
 import {
-  FLAG_STATES, FLAG_STATE_WORD, NOT_RECORDED, WHO, bulkPatch, canWorkFlag, caseRefusal, composeBody, decisionBody,
-  decisionChoices, depthWord, flagChange, flagSourceWord, historyLines, peopleOf, personName, raiseBody, widenChoices,
+  FLAG_STATES, FLAG_STATE_WORD, ITEM_SEVERITIES, NOTE_MAX, NOT_RECORDED, NO_REMOVE_LINE, SEVERITY_STATUSES, WHO, bulkPatch, canWorkFlag,
+  caseRefusal, composeBody, decisionBody, decisionChoices, depthWord, evidenceBody, flagChange, flagSourceWord, historyLines,
+  itemEditPatch, peopleOf, personName, raiseBody, widenChoices,
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
+import { priorReviewWords } from './ddDealContextModel.js';
 import { Dialog, Note, Refusal, dangerCls, fieldCls, inputCls, muted, useSend } from './DdUi.jsx';
 
 const useCaseSend = () => useSend(caseRefusal);
 const today = () => new Date().toISOString().slice(0, 10);
+export { default as DealContextDialog } from './DdDealContextDialog.jsx';
 
 /** A change that needs no field: what it does, who is told, then Cancel or the change. */
 export function ConfirmDialog({ title, testId, lines, action, danger, run, fallback, onClose, onDone, done }) {
@@ -238,7 +241,7 @@ export function ReportDialog({ generate, onClose, onDone }) {
   }, 'The report could not be generated.');
   return (
     <Dialog title="Generate a report" testId="dd-report" onClose={onClose} onSubmit={submit} action="Generate report" busy={busy}>
-      <p className={`m-0 text-[13px] ${muted}`}>The report carries every section’s verdict, the flags and the score as they stand now. It opens in a new tab through a link that works once, for five minutes.</p>
+      <p className={`m-0 text-[13px] ${muted}`}>The report carries the decision and its reason, the memo, each section’s checklist with its evidence count, every verdict with who signed it off and when, the flags with their state and resolution, the requests to the subject and the score, as they stand now. The memo, the reason and the requests go only into a report the case lead, its opener or an Admin generates. It opens in a new tab through a link that works once, for five minutes.</p>
       <Note>Your authenticator code is asked for if you have not given one recently. Generating is recorded on the case.</Note>
       <Refusal text={error} testId="dd-report-error" />
     </Dialog>
@@ -336,8 +339,24 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
   const [pick, setPick] = useState(null);
   const [role, setRole] = useState('reviewer');
   const [found, setFound] = useState({ items: null, failed: false });
+  const [suggestions, setSuggestions] = useState({ status: 'idle', items: [] });
   const seq = useRef(0);
   const { busy, error, setError, send } = useCaseSend();
+  const section = (data.sections || []).find((s) => String(s.id) === sid);
+  const sectionKey = section?.section_key;
+  useEffect(() => {
+    let alive = true;
+    setPick(null);
+    if (!sectionKey) { setSuggestions({ status: 'idle', items: [] }); return undefined; }
+    setSuggestions({ status: 'loading', items: [] });
+    dd.experts(sectionKey).then((r) => {
+      if (alive) setSuggestions(Array.isArray(r?.suggestions)
+        ? { status: 'ready', items: r.suggestions.filter((p) => Number.isSafeInteger(Number(p.id)) && Number(p.id) > 0)
+          .map((p) => ({ id: Number(p.id), name: p.name, role: p.role, prior_reviews: p.prior_reviews })) }
+        : { status: 'unreadable', items: [] });
+    }).catch(() => { if (alive) setSuggestions({ status: 'unreadable', items: [] }); });
+    return () => { alive = false; };
+  }, [sectionKey, uid]);
   useEffect(() => {
     const mine = ++seq.current;
     const t = setTimeout(() => {
@@ -346,7 +365,6 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
     }, 200);
     return () => clearTimeout(t);
   }, [q]);
-  const section = (data.sections || []).find((s) => String(s.id) === sid);
   const submit = () => {
     if (!sid) { setError('Choose the section.'); return; }
     if (!pick) { setError('Choose who to assign.'); return; }
@@ -355,11 +373,25 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
   return (
     <Dialog title="Assign to a section" sub="They are told in the bell and by email, with a link to this section that works for 14 days." testId="dd-assign" onClose={onClose} onSubmit={submit} action="Assign" busy={busy}>
       <label className="block"><span className={fieldCls}>Section</span>
-        <select className={inputCls} value={sid} onChange={(e) => setSid(e.target.value)} data-testid="dd-assign-section">
+        <select className={inputCls} value={sid} onChange={(e) => { setSid(e.target.value); setPick(null); setError(''); }} data-testid="dd-assign-section">
           <option value="">Choose…</option>
           {(data.sections || []).map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
         </select>
       </label>
+      <section className="space-y-1.5" data-testid="dd-assign-suggestions">
+        <h3 className="m-0 text-[13px] font-semibold">Suggested reviewers</h3>
+        <p className={`m-0 text-[12px] ${muted}`}>Based on recorded prior reviews for this section. Choose a name, or search below.</p>
+        {suggestions.status === 'loading' ? <p className={`m-0 text-[12px] ${muted}`} aria-busy="true">Reading suggestions…</p> : null}
+        {suggestions.status === 'unreadable' ? <p role="status" className={`m-0 text-[12px] ${muted}`}>Suggested reviewers could not be read. Search by name below.</p> : null}
+        {suggestions.status === 'idle' ? <p className={`m-0 text-[12px] ${muted}`}>{sid ? 'Suggestions are unavailable for this section. Search by name below.' : 'Choose a section to read its suggestions.'}</p> : null}
+        {suggestions.status === 'ready' && !suggestions.items.length ? <p className={`m-0 text-[12px] ${muted}`}>No suggested reviewers are recorded for this section. Search by name below.</p> : null}
+        {suggestions.items.map((p) => <button key={p.id} type="button" aria-pressed={Number(pick?.id) === Number(p.id)} onClick={() => { setPick(p); setError(''); }}
+          className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] ${Number(pick?.id) === Number(p.id) ? 'bg-violet-50 font-semibold dark:bg-violet-950/40' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+          data-testid={`dd-assign-suggestion-${p.id}`}>
+          <span>{p.name || 'Name not recorded'}{p.role ? <span className={`ml-2 text-[12px] ${muted}`}>{p.role}</span> : null}</span>
+          <span className={`text-[12px] ${muted}`}>{priorReviewWords(p.prior_reviews)}</span>
+        </button>)}
+      </section>
       <label className="block"><span className={fieldCls}>Person</span>
         <input className={inputCls} value={q} onChange={(e) => { setQ(e.target.value); setPick(null); }} placeholder="Search by name" data-testid="dd-assign-q" />
       </label>
@@ -377,6 +409,7 @@ export function AssignDialog({ uid, data, sectionId = '', onClose, onDone }) {
         <label className="flex items-start gap-2 text-[13px]"><input type="radio" name="dd-assign-role" checked={role === 'reviewer'} onChange={() => setRole('reviewer')} /><span>Reviewer<span className={`block text-[12px] ${muted}`}>Works the section’s checklist and flags, and records its verdict.</span></span></label>
         <label className="flex items-start gap-2 text-[13px]"><input type="radio" name="dd-assign-role" checked={role === 'observer'} onChange={() => setRole('observer')} data-testid="dd-assign-observer" /><span>Observer<span className={`block text-[12px] ${muted}`}>Reads the section; changes nothing.</span></span></label>
       </fieldset>
+      <Note>The assignment and role are recorded in case Activity.</Note>
       <Refusal text={error} testId="dd-assign-error" />
     </Dialog>
   );
@@ -412,6 +445,94 @@ export function BulkDialog({ uid, data, kind, itemIds, onClose, onDone }) {
       {kind === 'due' && <input type="date" min={today()} className={`${inputCls} font-mono`} value={value} onChange={(e) => setValue(e.target.value)} data-testid="dd-bulk-due" />}
       <p className={`m-0 text-[12.5px] ${muted}`}>{kind === 'n_a' ? 'The items count as worked and leave the score.' : 'Each change is recorded in the case’s activity.'}</p>
       <Refusal text={error} testId="dd-bulk-error" />
+    </Dialog>
+  );
+}
+
+/** DDL4 (#6290): add a file or a link to one item. It shows on the row and on Documents once added. */
+export function EvidenceDialog({ uid, item, onClose, onDone }) {
+  const [f, setF] = useState({ mode: 'link', url: '', label: '', file: null });
+  const { busy, error, setError, send } = useCaseSend();
+  const submit = () => {
+    const r = evidenceBody(f);
+    if (r.error) { setError(r.error); return; }
+    send(async () => {
+      if (r.kind === 'file') await dd.addEvidenceFile(uid, item.id, r.file);
+      else await dd.addEvidenceLink(uid, item.id, r.url, r.label);
+      onDone(`Evidence is added to “${item.title}”.`);
+    }, 'The evidence could not be added.');
+  };
+  const mode = (m) => () => { setF((x) => ({ ...x, mode: m })); setError(null); };
+  return (
+    <Dialog title={`Add evidence · ${item.title}`} sub="It is kept on the item, listed on Documents, and recorded in the case’s activity." testId="dd-evidence" onClose={onClose} onSubmit={submit} action="Add evidence" busy={busy}>
+      <fieldset className="m-0 flex flex-wrap gap-4 border-0 p-0">
+        <legend className={fieldCls}>Evidence</legend>
+        <label className="flex items-center gap-1.5 text-[13px]"><input type="radio" name="dd-evidence-mode" checked={f.mode === 'link'} onChange={mode('link')} data-testid="dd-evidence-mode-link" />A link</label>
+        <label className="flex items-center gap-1.5 text-[13px]"><input type="radio" name="dd-evidence-mode" checked={f.mode === 'file'} onChange={mode('file')} data-testid="dd-evidence-mode-file" />A file</label>
+      </fieldset>
+      {f.mode === 'link' ? (
+        <>
+          <label className="block"><span className={fieldCls}>Link</span>
+            <input className={inputCls} value={f.url} onChange={(e) => setF((x) => ({ ...x, url: e.target.value }))} placeholder="https://" maxLength={2048} data-testid="dd-evidence-url" />
+          </label>
+          <label className="block"><span className={fieldCls}>Label (optional)</span>
+            <input className={inputCls} value={f.label} onChange={(e) => setF((x) => ({ ...x, label: e.target.value }))} maxLength={200} data-testid="dd-evidence-label" />
+          </label>
+        </>
+      ) : (
+        <label className="block"><span className={fieldCls}>File (up to 10 MB)</span>
+          <input type="file" className={inputCls} onChange={(e) => setF((x) => ({ ...x, file: e.target.files?.[0] || null }))} data-testid="dd-evidence-file" />
+          <span className={`text-[12px] ${muted}`}>It is stored on the item’s section and opens through a link issued to whoever asks, for two minutes.</span>
+        </label>
+      )}
+      <Note>{NO_REMOVE_LINE}</Note>
+      <Refusal text={error} testId="dd-evidence-error" />
+    </Dialog>
+  );
+}
+
+/** DDL4 (#6290): one item's note, severity, owner and due date. Only what changed is sent. */
+export function EditItemDialog({ uid, data, item, onClose, onDone }) {
+  const people = peopleOf(data);
+  const [f, setF] = useState({
+    note: item.note || '', severity: item.severity || '', due: item.due_date || '',
+    ownerId: item.owner_user_id == null ? '' : String(item.owner_user_id),
+  });
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const { busy, error, setError, send } = useCaseSend();
+  const severe = SEVERITY_STATUSES.includes(item.status);
+  const submit = () => {
+    const r = itemEditPatch(item, f, today());
+    if (r.error) { setError(r.error); return; }
+    send(async () => { await dd.updateItem(uid, item.id, r.patch); onDone(`“${item.title}” is updated.`); }, 'The item could not be changed.');
+  };
+  return (
+    <Dialog title={`Edit item · ${item.title}`} sub="The section’s progress and the case’s score are worked out again. The change is recorded in the case’s activity." testId="dd-item-edit" onClose={onClose} onSubmit={submit} action="Save item" busy={busy}>
+      <label className="block"><span className={fieldCls}>Note</span>
+        <textarea rows={4} className={inputCls} value={f.note} onChange={set('note')} maxLength={NOTE_MAX} data-testid="dd-item-edit-note" />
+        <span className={`text-[12px] ${muted}`}>Kept encrypted. Whoever reads the section reads it.</span>
+      </label>
+      {severe ? (
+        <label className="block"><span className={fieldCls}>Severity</span>
+          <select className={inputCls} value={f.severity} onChange={set('severity')} data-testid="dd-item-edit-severity">
+            <option value="">Not recorded</option>
+            {ITEM_SEVERITIES.map((s) => <option key={s} value={s}>{SEVERITY_WORD[s]}</option>)}
+          </select>
+        </label>
+      ) : <Note testId="dd-item-edit-no-severity">A severity is kept only on an item marked Flag or Fail.</Note>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block"><span className={fieldCls}>Owner</span>
+          <select className={inputCls} value={f.ownerId} onChange={set('ownerId')} data-testid="dd-item-edit-owner">
+            <option value="">No owner</option>
+            {[...people.entries()].map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            {item.owner_user_id != null && !people.has(Number(item.owner_user_id)) ? <option value={item.owner_user_id}>{personName(people, item.owner_user_id)}</option> : null}
+          </select>
+        </label>
+        <label className="block"><span className={fieldCls}>Due</span>
+          <input type="date" className={`${inputCls} font-mono`} value={f.due} onChange={set('due')} data-testid="dd-item-edit-due" />
+        </label>
+      </div>
+      <Refusal text={error} testId="dd-item-edit-error" />
     </Dialog>
   );
 }

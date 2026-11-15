@@ -16,6 +16,7 @@ import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import {
   caseForDeal, caseCard, requestRows, roomStateOf, roomListing, paperRows, proposedTerms, myCommitment, roundLines, withdrawError, NOTE_READERS,
 } from '../src/pages/deal/dealWorkModel.js';
+import { paperSigning, signedLine } from '../src/pages/deal/dealWorkModel.js';
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
@@ -53,13 +54,14 @@ test('the room\'s three access states; behind an NDA the withheld files are a co
   assert.equal(roomStateOf({ status: 'unreadable' }).state, 'unreadable');
 });
 
-test('Diligence: your case on this company only, its card and requests; a list cut short is not "no case"', () => {
-  // Mutation checked: another company's case taken; an archived case taken; the cap ignored; waiting days miscounted; a withdrawn request waiting.
+test('Diligence: your case on this company only, its card and requests', () => {
+  // Mutation checked: another company's case taken; an archived case taken; waiting days miscounted; a withdrawn request waiting.
+  // D6181 (#6181): the list is read for this company alone, so a large total is no longer "not in the read".
   const read = ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8, status: 'open' }, { uid: 'old', subject_type: 'project', subject_id: 7, status: 'archived' }, { uid: 'dd1', subject_type: 'project', subject_id: 7, status: 'in_review', stage: 'in_review', subject_label: 'Harbor Ledger', checklist_total: 52, checklist_worked: 38, open_flags: 3, risk_band: 'moderate', created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21 }], total: 3 });
   const found = caseForDeal(read, 7);
   assert.equal(found.row.uid, 'dd1');
   assert.equal(caseForDeal(ready({ items: [], total: 0 }), 7).state, 'none');
-  assert.equal(caseForDeal(ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8 }], total: 400 }), 7).state, 'not_in_read');
+  assert.equal(caseForDeal(ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8 }], total: 400 }), 7).state, 'none', 'D6181: no not_in_read state');
   const card = caseCard(found.row, { sections: [{ id: 1, title: 'Financial health', status: 'assigned', assignee_user_id: 21 }, { id: 2, title: 'Legal', status: 'assigned', assignee_user_id: 9 }], reviewers: [] }, 21);
   assert.deepEqual([card.stage, card.risk, card.items.line, card.items.pct, card.flags, card.opened, card.href], ['In review', 'Moderate risk', '38 of 52 items worked', 73, '3 open flags', 'Opened 1 Oct 2026 · led by Ada', '/admin/due-diligence/dd1']);
   assert.deepEqual(card.yours, [{ title: 'Financial health', status: 'Open' }]);
@@ -215,6 +217,56 @@ test('Diligence with no case: DL7n, and Open a diligence case asks before it ope
   } finally { await v.close(); }
 });
 
+// D6181 (#6181) — the tab asks the Worker for this company's cases exactly (`subject_id`), so a caller with 201+
+// cases still finds the one on this company, and Open a diligence case is never offered beside a live case.
+// Mutation checked (each fails a test below):
+//   - DealDiligence's `subject_id: deal.project_id` dropped → the stub answers the newest 200 of 251 other cases, no card,
+//     and Open a diligence case is offered;
+//   - caseForDeal's `c.status !== 'archived'` dropped → the archived case is taken over the live one;
+//   - DealWorkTabs' none card also drawn for a ready case (`found.state === 'none' || found.state === 'ready'`) → Open a
+//     diligence case is offered beside the live case.
+const OTHER_CASES = Array.from({ length: 200 }, (_, i) => ({ uid: `other-${i}`, subject_type: 'project', subject_id: 1000 + i, status: 'open' }));
+const LIVE_CASE = { uid: 'dd-live', subject_type: 'project', subject_id: 7, status: 'open', stage: 'not_started', subject_label: 'Harbor Ledger', checklist_total: 4, checklist_worked: 1, open_flags: 0, created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21 };
+const ARCHIVED_CASE = { ...LIVE_CASE, uid: 'dd-archived', status: 'archived', stage: 'archived' };
+const casesBySubject = (forCompany) => ({
+  'dd/cases\\?': (u, m) => {
+    if (m !== 'GET') return null;
+    const params = new URL(u, 'https://x.test').searchParams;
+    if (params.get('subject_id') === '7') return response({ items: forCompany, total: forCompany.length });
+    return response({ items: OTHER_CASES, total: 251 });
+  },
+  'dd/cases/dd-live': (u, m) => (m === 'GET' ? response({ sections: [], reviewers: [], requests: [] }) : null),
+});
+
+test('D6181: with 251 cases the Diligence tab asks for this company exactly, shows its live case and never offers to open another', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, handlerWith(casesBySubject([ARCHIVED_CASE, LIVE_CASE])));
+  try {
+    const list = v.requests.filter((r) => /^GET .*\/api\/dd\/cases\?/.test(r.line));
+    assert.ok(list.length >= 1, 'the case list was read');
+    for (const r of list) {
+      const params = new URL(r.line.slice(4), 'https://x.test').searchParams;
+      assert.deepEqual([params.get('subject_type'), params.get('subject_id')], ['project', '7'], 'the list is read for this company');
+    }
+    assert.ok(v.has('deal-dd-case'), 'the live case on this company is found');
+    assert.match(v.textOf('deal-dd-case'), /Harbor Ledger/);
+    const door = v.byId('deal-dd-door')[0];
+    assert.ok(door, 'the case door is drawn');
+    const doorProps = Object.entries(door).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+    assert.match(String(doorProps.href ?? ''), /\/admin\/due-diligence\/dd-live$/, 'the live case, not the archived one');
+    assert.equal(v.has('deal-dd-none'), false);
+    assert.equal(v.has('deal-dd-open'), false, 'Open a diligence case is never offered beside a live case');
+  } finally { await v.close(); }
+});
+
+test('D6181: only an archived case on this company is no live case, and the tab offers to open one', async () => {
+  const v = await mounted('/deals/4/diligence', INVESTOR, handlerWith(casesBySubject([ARCHIVED_CASE])));
+  try {
+    assert.ok(v.has('deal-dd-none'));
+    assert.ok(v.has('deal-dd-open'));
+    assert.doesNotMatch(v.textOf('deal-dd-none'), /newest/, 'no "only your newest N cases" line any more');
+  } finally { await v.close(); }
+});
+
 test('Terms: proposed terms with their source, the slots, and How you invest says no preference is recorded', async () => {
   const v = await mounted('/deals/4/terms', INVESTOR);
   try {
@@ -223,4 +275,91 @@ test('Terms: proposed terms with their source, the slots, and How you invest say
     assert.ok(v.has('deal-terms-captable'));
     assert.match(v.textOf('deal-terms-routes'), /No preference is recorded here yet\./);
   } finally { await v.close(); }
+});
+
+// D6184 (#6184) — the Deal paper card: the signed count, Download once fully signed (the Worker's refusal shown),
+// how to sign (the emailed link; no signing URL is built in the browser), declined and unreadable.
+const ENVELOPES = [
+  { id: 31, document_title: 'Subscription agreement', status: 'completed', completed_at: '2026-11-02', recipient_count: 3, signed_count: 3, signed_r2_key: 'esign/signed/31.pdf' },
+  { id: 32, document_title: 'Side letter', status: 'partially_signed', created_at: '2026-11-03', recipient_count: 3, signed_count: 2 },
+  { id: 33, document_title: 'Term sheet', status: 'rejected', created_at: '2026-11-04', recipient_count: 2, signed_count: 0 },
+];
+const DETAIL_32 = { id: 32, status: 'partially_signed', recipients: [
+  { id: 1, recipient_email: 'founder@example.com', status: 'signed', signed_at: '2026-11-03' },
+  { id: 2, recipient_email: 'axal@example.com', status: 'signed', signed_at: '2026-11-03' },
+  { id: 3, recipient_email: 'Ada@Example.com', status: 'pending', signed_at: null, token_expires_at: '2026-11-10' },
+], audit_log: [], can_manage: false };
+const pdf = () => ({ ok: true, status: 200, headers: { get: () => 'application/pdf' }, blob: async () => new Blob(['%PDF-1.4']), json: async () => { throw new Error('not json'); } });
+const paperHandler = (over = {}) => handlerWith({
+  'legal/esign/31/document': over.document || (() => pdf()),
+  'legal/esign/32(\\?|$)': over.detail || (() => response(DETAIL_32)),
+  'legal/esign\\?': over.list || (() => response({ envelopes: ENVELOPES })),
+});
+
+test('D6184 model: the signed count from recipient_count and signed_count, each envelope\'s action, and how to sign by email', () => {
+  // Mutation checked: the count's two fields swapped; a missing count drawn as 0; Download offered on a partly signed
+  // envelope; `rejected` read as open; the viewer matched case-sensitively; a signed viewer told to sign.
+  assert.equal(signedLine({ recipient_count: 3, signed_count: 2 }), '2 of 3 signed');
+  assert.equal(signedLine({ recipient_count: 3 }), 'Signatures not recorded', 'never a guessed 0');
+  assert.equal(signedLine({ recipient_count: 0, signed_count: 0 }), 'No signer is recorded on this envelope');
+  const rows = paperRows(ENVELOPES);
+  assert.deepEqual(rows.map((r) => [r.state, r.signed, r.action, r.tone]), [
+    ['Fully signed 2 Nov 2026', '3 of 3 signed', 'download', 'done'],
+    ['Partly signed · sent 3 Nov 2026', '2 of 3 signed', 'sign', 'wait'],
+    ['Declined · sent 4 Nov 2026', '0 of 2 signed', 'closed', 'off'],
+  ]);
+  const mine = paperSigning(ready(DETAIL_32), 'ada@example.com');
+  assert.equal(mine.state, 'yours');
+  assert.match(mine.line, /^Your signing link was sent by email to Ada@Example\.com\./);
+  assert.doesNotMatch(mine.line, /https?:|\/esign\//, 'no link is built');
+  assert.equal(paperSigning(ready(DETAIL_32), 'founder@example.com').state, 'signed');
+  assert.match(paperSigning(ready(DETAIL_32), 'founder@example.com').line, /^You signed on 3 Nov 2026\./);
+  assert.equal(paperSigning(ready(DETAIL_32), 'other@example.com').state, 'not_signer');
+  assert.equal(paperSigning({ status: 'unreadable' }, 'ada@example.com').state, 'unreadable');
+});
+
+test('D6184: a completed envelope downloads through the Worker; a partly signed one says the link was sent by email; a declined one offers neither', async () => {
+  // Mutation checked: Download drawn for every row; the download not read from /document; the sign line dropped.
+  const made = [];
+  const prev = URL.createObjectURL;
+  URL.createObjectURL = (b) => { made.push(b); return 'blob:x'; };
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler());
+  try {
+    const card = v.textOf('deal-paper');
+    assert.match(card, /Subscription agreement[\s\S]*Fully signed 2 Nov 2026[\s\S]*3 of 3 signed/);
+    assert.match(card, /Side letter[\s\S]*Partly signed[\s\S]*2 of 3 signed[\s\S]*Download opens once the envelope is fully signed\.[\s\S]*Your signing link was sent by email to Ada@Example\.com\./);
+    assert.match(card, /Term sheet[\s\S]*Declined[\s\S]*0 of 2 signed[\s\S]*It can no longer be signed/);
+    assert.equal(v.byId('deal-paper-download').length, 1, 'Download on the completed envelope alone');
+    assert.equal(v.requests.filter((r) => /legal\/esign\/(31|33)(\?|$)/.test(r.line)).length, 0, 'how to sign is read for the open envelope only');
+    assert.equal(v.byId('deal-paper-sign').length, 1);
+    assert.doesNotMatch(v.textOf('deal-paper-sign'), /https?:|\/esign\//, 'no signing URL in the browser');
+    await v.click('deal-paper-download');
+    assert.equal(v.requests.filter((r) => r.line === 'GET /api/legal/esign/31/document').length, 1, 'the signed copy is read from the Worker');
+    assert.equal(made.length, 1, 'the PDF is handed to the browser');
+    assert.equal(v.has('deal-paper-refusal'), false);
+  } finally { URL.createObjectURL = prev; await v.close(); }
+});
+
+test('D6184: when the Worker refuses the download, its refusal shows in the row', async () => {
+  // Mutation checked: the refusal swallowed; the fallback shown over the Worker's words.
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler({ document: () => response({ error: 'Document not yet signed' }, 409) }));
+  try {
+    await v.click('deal-paper-download');
+    assert.equal(v.textOf('deal-paper-refusal'), 'Document not yet signed');
+  } finally { await v.close(); }
+});
+
+test('D6184: an unreadable paper list and an unreadable envelope each say Unreadable, never "nothing sent"', async () => {
+  // Mutation checked: a failed detail read drawn as "not a signer"; a failed list drawn as no envelope.
+  const v = await mounted('/deals/4/documents', INVESTOR, paperHandler({ detail: () => response({ error: 'boom' }, 500) }));
+  try {
+    const card = v.textOf('deal-paper');
+    assert.match(card, /How to sign this envelope/);
+    assert.doesNotMatch(card, /not a signer|signing link was sent/);
+  } finally { await v.close(); }
+  const w = await mounted('/deals/4/documents', INVESTOR, paperHandler({ list: () => response({ error: 'boom' }, 500) }));
+  try {
+    assert.match(w.textOf('deal-paper'), /That is not a claim that nothing was sent\./);
+    assert.doesNotMatch(w.textOf('deal-paper'), /No envelope on this deal has been sent to you yet/);
+  } finally { await w.close(); }
 });

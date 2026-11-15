@@ -16,6 +16,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -26,7 +27,7 @@ const MIGRATION = read('cloudflare-worker/sql/migrations/270_advisor_guardrail_c
 const GUARDRAILS = read('cloudflare-worker/src/services/advisor/guardrails.ts');
 const ADVISOR = read('cloudflare-worker/src/routes/advisor.ts');
 const ROUTER = read('cloudflare-worker/src/services/aiRouter.ts');
-const SECURITY = read('cloudflare-worker/src/routes/admin_security.ts');
+const SECURITY = readAdminSecurity();
 
 /** The table as migration 043 declares it — the shape that predates D158. */
 const PRE_270 = `CREATE TABLE advisor_turn_audit (

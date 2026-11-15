@@ -27,3 +27,32 @@ Read [D5664](../documentation/architecture/decisions/D5664.md) before rollout.
 | `wrangler.cloudflare-5671.jsonc` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
 | `cloudflare-heartbeat-5671.mjs` | D5671: bounded private status reads and missed-schedule/undelivered-age evaluation. |
 | `platform-policy-5672.mjs` | D5672: conservative aggregate policy and observational shared-episode presentation. |
+
+## Actions workflow channels
+
+[`workflow-channels.json`](workflow-channels.json) lists the GitHub registration ID,
+path and Slack hashtag for each workflow. It includes GitHub-managed workflows
+and active registrations whose files no longer appear on the default branch.
+The two managed CodeQL registrations have the same display name and distinct IDs
+and channels. The Slack publisher uses the ID and a separately configured
+private destination. See the [private registry and activation steps](../documentation/operations/WORKFLOW_SLACK_6370.md).
+
+When adding a workflow, include its path and proposed hashtag in the same PR.
+Use `null` for its ID until GitHub registers it. Once it is registered, populate
+the numerical ID from GitHub's Actions API, provision the private Slack channel,
+and configure its verified channel ID with the sender. On rename, retain the
+workflow's established channel where appropriate and check the current GitHub ID.
+Check the API before removing a route for a deleted file. Keep routes for active
+registrations even if their YAML is gone. For a disabled or deleted registration,
+account for the last attempts and outstanding receipts before retiring its route.
+
+The frontend test suite checks new YAML coverage and duplicated names, IDs and
+paths offline. Reconcile against every provider registration after a workflow
+change or when the sender reports an unmapped workflow:
+
+```sh
+gh api --paginate --slurp 'repos/AxalNetwork/StudioOS/actions/workflows?per_page=100' > /tmp/studioos-actions-workflows.json
+STUDIOOS_ACTIONS_WORKFLOW_SNAPSHOT=/tmp/studioos-actions-workflows.json node --test frontend/test/workflow_channel_inventory.test.mjs
+```
+| `workflow-failure-dispatch.mjs` | D6387: signed workflow completion intake and batched main-branch dispatch. |
+| `wrangler.workflow-failures.jsonc` | D6387: independent failure dispatch Worker and queue bindings. |

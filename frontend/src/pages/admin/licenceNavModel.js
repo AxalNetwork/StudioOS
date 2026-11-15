@@ -17,14 +17,15 @@ export const LICENCE_TABS = Object.freeze([
   { key: 'entity', step: 1, label: 'Entity', section: 'overview' },
   { key: 'brand', step: 10, label: 'Brand kit', testId: 'licence-brand-tab', whiteLabelOnly: true, section: 'overview' },
   { key: 'terms', step: 4, label: 'Terms', section: 'terms' },
-  { key: 'territory', step: 2, label: 'Territory', section: 'terms' },
-  { key: 'schedule', step: 11, label: 'Terms schedule', testId: 'licence-schedule-tab', section: 'terms' },
+  { key: 'territory', step: 2, label: 'Territory', section: 'terms', termsEditor: true },
+  { key: 'schedule', step: 11, label: 'Terms schedule', testId: 'licence-schedule-tab', section: 'terms', termsEditor: true },
   { key: 'contract', step: 5, label: 'Contract', section: 'agreement' },
   { key: 'admins', step: 8, label: 'Administrators', section: 'access' },
   { key: 'seats', step: 3, label: 'Seats', section: 'access' },
   { key: 'deploy', step: 6, label: 'Branch and domain', section: 'operations' },
-  { key: 'notices', step: 9, label: 'Notices', section: 'operations' },
-  { key: 'fee-invoices', step: 12, label: 'Annual fee invoices', testId: 'licence-fee-invoices-tab', section: 'operations' },
+  // D4819 part 12 (#5923): boards L12 and L13. The keys stay, so links already made still open them.
+  { key: 'notices', step: 9, label: 'Requests and compliance', section: 'operations' },
+  { key: 'fee-invoices', step: 12, label: 'Billing', testId: 'licence-fee-invoices-tab', section: 'operations' },
   { key: 'history', step: 7, label: 'History', section: 'history' },
 ]);
 
@@ -65,6 +66,22 @@ export const sectionOfTab = (key) => (LICENCE_TABS.find((t) => t.key === key) ||
 /** The tabs of one section a licence of this kind shows; the first is where the section opens. */
 export function sectionTabs(section, kind) {
   return tabsFor(kind).filter((t) => t.section === section);
+}
+
+/**
+ * D4819 part 20 (#5932), board L20 — the phone offers no terms editor. The
+ * Territory picker and the Terms schedule form are editors (`termsEditor`), so
+ * a phone's Terms section is the read-only Terms view alone, which already
+ * reads out the countries and every schedule term with its contract section.
+ */
+export function phoneSectionTabs(section, kind) {
+  return sectionTabs(section, kind).filter((t) => !t.termsEditor);
+}
+
+/** The step a phone draws for a step: a terms editor's step reads as the Terms view instead. */
+export function phoneStep(step) {
+  const t = LICENCE_TABS.find((x) => x.step === step);
+  return t?.termsEditor ? stepOfTab('terms') : step;
 }
 
 export const kindFromParam = (param) => (KIND_KEYS.includes(param) ? param : 'all');
