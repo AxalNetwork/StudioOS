@@ -278,7 +278,18 @@ test('D661: the page lists Raise\'s modules as the Worker does', () => {
 });
 
 test('D661: Raise\'s real read passes through the page untouched, and its seeded cards draw', async () => {
-  for (const db of [raiseFixture(), raiseSeeded()]) {
+  const seededDb = raiseSeeded();
+  const lockedRead = await raiseCall(seededDb, `/overview?project=${P}`);
+  assert.equal(lockedRead.status, 200, JSON.stringify(lockedRead.body));
+  const lockedCard = adaptOverview('raise', lockedRead.body).cards.find((c: any) => c.slug === 'cap-table');
+  assert.equal(lockedCard.state, 'ok', 'the Worker still returns the seeded Cap table data');
+  assert.deepEqual(cardView(lockedCard), {
+    state: 'locked',
+    plan: { locked: true, tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' },
+  });
+
+  seededDb.prepare("UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = ?").run(FOUNDER);
+  for (const db of [raiseFixture(), seededDb]) {
     const r = await raiseCall(db, `/overview?project=${P}`);
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const o = adaptOverview('raise', r.body);
@@ -290,7 +301,7 @@ test('D661: Raise\'s real read passes through the page untouched, and its seeded
     }
     for (const f of o.figures) if (f.state === 'ok') assert.notEqual(figureValue(f), null, `${f.key} has a value the page cannot write`);
   }
-  const seeded = adaptOverview('raise', (await raiseCall(raiseSeeded(), `/overview?project=${P}`)).body);
+  const seeded = adaptOverview('raise', (await raiseCall(seededDb, `/overview?project=${P}`)).body);
   for (const slug of ['cap-table', 'use-of-funds', 'capital-relationships']) {
     const c = seeded.cards.find((x: any) => x.slug === slug);
     assert.equal(c.state, 'ok', `${slug} should be ok when seeded`);
