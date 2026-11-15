@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { cyclesWrite } from '../../../lib/api/cycles.js';
+import { usageApi } from '../../../lib/api/usage.js';
 import { answerChips } from '../../cycles/forms.js';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import StorageRefusal from '../../account/StorageRefusal.jsx';
 import { storageRefusal } from '../../account/storagePageModel.js';
-import { GATES, MAX_UPLOAD_MB, QUEUE_WORDS, folderChoices, queueEntry, storageLine, uploadRefusal } from './filesModel.js';
+import { GATES, MAX_UPLOAD_MB, QUEUE_WORDS, folderChoices, queueEntry, queueStorage, storageLine, uploadRefusal, uploadStorage } from './filesModel.js';
 import { roomCan } from './dataRoomModel.js';
 import { useVenture } from '../../cycles/VentureContext.jsx';
 
@@ -17,12 +19,21 @@ import { useVenture } from '../../cycles/VentureContext.jsx';
  * the gate (who it is for and the NDA, on by default), an end date and what it
  * answers. A co-founder's upload takes its folder's gate (D1103), so a
  * co-founder sets no gate here. DR4s: a file over 20 MB is refused before it is
- * sent; storage left is not recorded, and the sheet says so.
+ * sent.
+ *
+ * D6074 (#6074) — DR4s and DR23: storage used and left, from Usage › Storage's
+ * own read (`usageApi.storage`), with the amber line near the limit. A queue
+ * whose waiting files would pass what is left is refused before anything is
+ * sent, with the doors to Usage › Storage; a file can be taken out of the
+ * queue. An unreadable or unrecorded figure says so and never blocks: the
+ * Worker's refusal at upload (D1170/D1171, `StorageRefusal` under the file)
+ * still stands behind it.
  */
 
 const INPUT = 'min-h-[36px] w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const LABEL = 'text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400';
 const MUTED = 'text-axal-muted dark:text-gray-400';
+const PLAN_TONE = { muted: MUTED, amber: 'font-semibold text-amber-800 dark:text-amber-200', red: 'font-semibold text-red-700 dark:text-red-300' };
 const TONE = { waiting: 'text-axal-muted dark:text-gray-400', sending: 'text-axal-violet dark:text-violet-300', done: 'text-emerald-700 dark:text-emerald-300', refused: 'text-red-700 dark:text-red-300' };
 
 async function dataUri(file) {
@@ -43,6 +54,19 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
   const [until, setUntil] = useState('');
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
+  const [storage, setStorage] = useState({ status: 'loading' });
+  const [storageTick, setStorageTick] = useState(0);
+  const nextKey = useRef(0);
+
+  // D6074: the same read Usage › Storage draws; it fails on its own and never blocks.
+  useEffect(() => {
+    let alive = true;
+    setStorage({ status: 'loading' });
+    usageApi.storage()
+      .then((data) => { if (alive) setStorage({ status: 'ready', data }); })
+      .catch(() => { if (alive) setStorage({ status: 'error' }); });
+    return () => { alive = false; };
+  }, [storageTick]);
 
   // D5074 (#5074): the room's uid is the page's venture context, never looked up here.
   const venture = useVenture(projectId);
@@ -65,12 +89,21 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
   const add = (list) => {
     const picked = Array.from(list || []);
     setFiles((f) => [...f, ...picked]);
-    setQueue((q) => [...q, ...picked.map((file, i) => queueEntry(file, q.length + i))]);
+    const first = nextKey.current;
+    nextKey.current += picked.length;
+    setQueue((q) => [...q, ...picked.map((file, i) => queueEntry(file, first + i))]);
+  };
+  const drop = (i) => {
+    setFiles((f) => f.filter((_, j) => j !== i));
+    setQueue((q) => q.filter((_, j) => j !== i));
   };
   const waiting = queue.filter((x) => x.state === 'waiting').length;
+  const plan = uploadStorage(storage, projectUid);
+  const over = queueStorage(plan, queue);
   const set = (i, patch) => setQueue((q) => q.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
   const send = async () => {
+    if (over) return; // DR4s: a queue that would pass the plan is refused before anything is sent
     setBusy(true);
     let sent = 0;
     for (let i = 0; i < queue.length; i += 1) {
@@ -89,7 +122,7 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
       } catch (e) { set(i, { state: 'refused', why: uploadRefusal(e), storage: storageRefusal(e) }); }
     }
     setBusy(false);
-    if (sent) onSaved();
+    if (sent) { setStorageTick((t) => t + 1); onSaved(); }
   };
 
   const finished = queue.length > 0 && waiting === 0 && !busy;
@@ -98,7 +131,7 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={actionGhost} onClick={onClose} disabled={busy}>{finished ? 'Close' : 'Cancel'}</button>
-          {!finished ? <button type="button" className={actionPrimary} onClick={send} disabled={busy || !waiting || read.status !== 'ready'} data-testid="dataroom-upload-go">{busy ? 'Adding…' : 'Add to the room'}</button> : null}
+          {!finished ? <button type="button" className={actionPrimary} onClick={send} disabled={busy || !waiting || read.status !== 'ready' || !!over} data-testid="dataroom-upload-go">{busy ? 'Adding…' : 'Add to the room'}</button> : null}
         </div>
       )}>
       <div className="flex flex-col gap-3.5 px-5 py-4 text-[13px] text-axal-ink dark:text-gray-100">
@@ -115,19 +148,31 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
           <span className={`text-[12px] ${MUTED}`}>Up to {MAX_UPLOAD_MB} MB a file</span>
           <input type="file" multiple className="sr-only" onChange={(e) => add(e.target.files)} data-testid="dataroom-upload-pick" />
         </label>
+        <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${PLAN_TONE[plan.tone] || MUTED}`} data-testid={`dataroom-upload-plan-${plan.mode}`}>
+          {plan.line}
+          {plan.mode === 'unreadable' ? <button type="button" className="font-semibold underline" onClick={() => setStorageTick((t) => t + 1)} data-testid="dataroom-upload-plan-retry">Try again</button> : null}
+        </p>
+        {plan.near ? (
+          <p role="status" className="m-0 flex flex-wrap items-center gap-2 rounded-[9px] border-[1.5px] border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="dataroom-upload-near">
+            <span aria-hidden="true" className="font-extrabold">!</span>{plan.near.text}
+            <Link to={plan.near.link.to} className="rounded-axal-sm border border-amber-300 bg-white px-2 py-1 text-[12px] font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-gray-900 dark:text-amber-200 dark:hover:bg-amber-950/60" data-testid="dataroom-upload-near-open">{plan.near.link.label}</Link>
+          </p>
+        ) : null}
         <p className={`m-0 text-[12px] ${MUTED}`} data-testid="dataroom-upload-storage">{read.status === 'ready' ? storageLine(read.room) : `Each file can be up to ${MAX_UPLOAD_MB} MB.`}</p>
         <p className={`m-0 text-[12px] ${MUTED}`}>Files from Google Drive or Notion are not added here yet; that comes with the file sources (part 4).</p>
 
         {queue.length ? (
           <section className="flex flex-col gap-1.5" data-testid="dataroom-upload-queue">
             <h3 className={LABEL}>Queue</h3>
-            {queue.map((x) => (
+            {queue.map((x, i) => (
               <div key={x.key} className="flex flex-wrap items-center justify-between gap-2" data-testid="dataroom-upload-entry">
                 <span><strong className="font-bold">{x.name}</strong> <span className={`font-mono text-[11.5px] ${MUTED}`}>{x.size}</span></span>
                 <span className={`text-[12px] font-bold ${TONE[x.state]}`} data-testid={`dataroom-upload-state-${x.state}`}>{x.storage ? '✕ Not added' : x.state === 'refused' ? `✕ ${x.why}` : QUEUE_WORDS[x.state]}</span>
+                {x.state === 'waiting' && !busy ? <button type="button" className={`text-[12px] font-semibold underline ${MUTED}`} onClick={() => drop(i)} data-testid="dataroom-upload-remove">Remove</button> : null}
                 {x.storage ? <div className="basis-full"><StorageRefusal refusal={x.storage} /></div> : null}
               </div>
             ))}
+            {over ? <StorageRefusal refusal={over} testId="dataroom-upload-over" /> : null}
             <p className={`m-0 text-[11.5px] ${MUTED}`}>Each file shows a state. The browser reports no percentage.</p>
           </section>
         ) : null}

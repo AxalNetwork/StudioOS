@@ -179,6 +179,7 @@ jobs:
           SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
           QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
           QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
+          QUEUE_ALERT_IGNORE_BEFORE: ${{ vars.QUEUE_ALERT_IGNORE_BEFORE }}
 
   future-clock-plan:
     name: suite plan

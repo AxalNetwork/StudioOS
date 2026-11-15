@@ -341,6 +341,9 @@ export const TOOL_FILTERS = PROVIDERS.map((p) => [p.id, p.label]);
 export const SORTS = [['last', 'Last change'], ['name', 'Name, A to Z'], ['module', 'Module']];
 export const PROGRESS_FILTERS = { q: '', module: '', stage: '', tool: '' };
 
+/** D4602 (#4602, BD14m A): how many of Module, Stage and Tool are set, for the phone's "Filters (N)". */
+export const filterCount = (f = PROGRESS_FILTERS) => ['module', 'stage', 'tool'].filter((k) => f?.[k]).length;
+
 /** The table's rows after search, the three filters and the sort. */
 export function filterRows(rows, f = PROGRESS_FILTERS, sort = 'last') {
   const q = String(f.q || '').trim().toLowerCase();
