@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portfolio v2 Reporting Settings · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Portfolio · Reports · #6213 · Portfolio v2 addendum, PF-13 to PF-19</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Reporting settings — which figures each fund’s companies must report, how often, by when, and who each rule covers</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A 560px settings sheet over Reports at /portfolio/updates, opened from the toolbar button renamed from “Edit rules” to “Reporting settings”; no new route. It continues Portfolio v2 (PF-01 to PF-12, D4817) with its frame, the PF-04 Reports toolbar and the 640 dialog size of PF-07, and numbers from PF-13. The GP of record edits their fund’s own rule set; a fund with no set inherits the HQ default that admins edit; a licensed investor who runs no fund reads it. Each figure keeps its own cadence, and each cadence is a separate read that can fail on its own. A rule change never rewrites a past period. States follow Platform States (D5129): a measured 0, Not recorded and Unreadable never look alike. Eadwyn is the shared rail (#5130) and only proposes. Violet dashed ◇ tags mark backend work (#6213, built in #6214); amber ⚑ tags mark the owner questions Q1 to Q5, drawn as option A. Tags are annotations, not product copy. Board keys use the PRS prefix (PRS13 = PF-13).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 (brief written on 45e7c55fa6) · [Sample Fund I], [Sample Fund II], [Sample Venture A–F], [Sample GP] and every figure in brackets are fictional sample content</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Portfolio v2 Reporting Settings Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PF-13', 'Reporting settings · editable · GP of [Sample Fund I]', 'Reports dimmed behind the sheet. Fund switcher (two funds), source line “These rules are this fund’s own”, ◇ last changed and by whom. Required figures grouped Monthly then Quarterly, each with its last completed period; rows with unit, cadence, Required or Optional, Applies to, a one-line definition and a drag handle. ◇ Due day, ◇ who this covers (ARR covers the 2 Series A companies, Pilot customers the 4 Seed ones), ◇ applies-from footer, one primary: Save rules. Eadwyn proposes one change from the 2026-Q3 submissions.', [F('PRS13', false, 1360)]],
+      ['PF-13b', 'Edit a figure · dialog 640', 'Name; key read-only once saved; definition; unit; cadence; Required; Applies to (all companies or one stage). Adding a figure whose key is already in the set is refused, naming the figure that holds it.', [C('PRS13B', 'Edit ARR', 720, 700), C('PRS13C', 'Add a figure · duplicate key refused', 720, 680)]],
+      ['PF-14', 'Read-only · licensed investor', 'The same sheet with no inputs, no handles and no Save. “Only the GP of record of [Sample Fund I] or HQ can change these rules.” The source line and dates stay.', [F('PRS14', false, 1360)]],
+      ['PF-15', 'Empty', 'A: [Sample Fund II] has no rules of its own; the HQ set shows greyed, “Inherited from HQ”, and one action, Make these this fund’s rules. B: the HQ set itself is empty (admin view): No figures are required yet.', [F('PRS15', 'A · fund inherits HQ', 1000), F('PRS15B', 'B · HQ set empty · admin', 900)]],
+      ['PF-16', 'States', 'Partial (quarterly read failed, Save waits for it); the state matrix: loading, Not recorded, zero vs Not recorded vs Unreadable, Unreadable, Partial, Refused, Saving, Save failed, ◇ conflict, ◇ saved receipt, read-only and leave with unsaved changes; the conflict compare; and the return to Reports with the Rules chip selected.', [F('PRS16', 'Partial · quarterly rules could not be read', 1120), C('PRS16B', 'State matrix', 1440, 680), C('PRS16C', '◇ Save conflict · compare and choose', 1140, 420), F('PRS16D', 'Saved · back on Reports, Rules chip', 900)]],
+      ['PF-17', 'Phone 390', 'Full-screen page with a back arrow to Reports: header and source line, the Eadwyn proposal collapsed, figures as cards with Move up / Move down, due day, who it covers, a sticky Save. Edit a figure opens as a bottom sheet. 44px targets.', [P('PRS17A', 'Top of the page'), P('PRS17B', 'Scrolled · due day and coverage'), P('PRS17C', 'Edit a figure · bottom sheet')]],
+      ['PF-18', 'Dark', 'PF-13 on the dark tokens; the PF-16 states keep their words and shapes.', [F('PRS18', false, 1360), C('PRS18B', 'States · dark', 1440, 680)]],
+      ['PF-19', 'Backend fit and handoff', 'Each value on these boards, its read, its column and its marker; backend required, frontend only, the owner questions and accessibility.', [W('PRS19')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

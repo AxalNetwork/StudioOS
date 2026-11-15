@@ -58,7 +58,8 @@ test('the client path carries the table\'s search, filters and sort, never a pag
 
 test('only Build names an exporter, and CycleRoute hands it the table\'s query through filterString', async () => {
   const src = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(src, /onExport=\{def\.exportRecords && projectId && !narrativeAdmin\s*\? \(\) => def\.exportRecords\(projectId, slug, \{ q: query\.q, filter: filterString\(query\.filter\), sort: query\.sort \}\) : null\}/);
+  assert.equal((src.match(/onExport=\{/g) || []).length, 1, 'one exporter prop keeps Build and Grow from overriding each other');
+  assert.match(src, /onExport=\{def\.exportRecords && projectId && !narrativeAdmin\s*\? \(\) => def\.exportRecords\(projectId, slug, \{ q: query\.q, filter: filterString\(query\.filter\), sort: query\.sort \}\)\s*: cycle === 'grow'/);
   assert.match(read('frontend/src/pages/cycles/defs/build.jsx'), /exportRecords: \(projectId, slug, query\) => buildModuleExportApi\.exportCsv\(projectId, slug, query\)/);
   for (const c of ['validate', 'raise', 'grow']) assert.doesNotMatch(read(`frontend/src/pages/cycles/defs/${c}.jsx`), /exportRecords/, c);
 });

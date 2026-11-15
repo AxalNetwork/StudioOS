@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help Center v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Help Center · #4957</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Help Center v2 — find the answer, finish the task, reach the right channel</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Help (/help, /help/&lt;section&gt;/&lt;guide&gt;) for every signed-in member and for signed-out visitors, who see six public guides. Search sits under the title and runs on the guides the viewer may read; with more than 25 matches it says “First 25 results” and never shows a total it does not know. Guides keep the 12 recorded areas, one page per guide, an owner and a review status (every guide reads “Verification pending” today) and a Go to button for the page a guide is about. “Did this answer it?” leads to related guides, search or a ticket that carries only the guide link and the member’s own words. An ordinary ticket may be mirrored to a public tracker; a security concern goes privately to HQ and never becomes a ticket. Account v2 shell, Eadwyn as the one right rail, Platform States (D5129). Violet dashed ◇ tags mark backend work; amber ⚑ tags mark owner questions (option A drawn). Replaces H1–H7 of the older Help Center canvas; ticket detail screens stay as drawn there.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sat 14 Nov 2026 · checked against main 6d7712c6d1 · guide titles, areas and counts are the real manifest; Maya Lind, Tidepool Labs, tickets, view counts and answers are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Help Center v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['HC1', 'Help home, signed in (founder)', 'Search directly under the title; Popular with views over the last 7 days; Your tickets; 11 areas a founder can read with guide counts and Applies to; Still stuck? with the status line. Eadwyn suggests guides for the page the member came from.', [F('HCV01', false, 1600)]],
+      ['HC2', 'Help home, signed out', 'Public frame, no member sidebar. Six public guides with Account recovery first, “Sign in to search every guide”, and the signed-out ways to reach Axal VC. No Popular, no tickets, no counts.', [F('HCV02', false, 1100)]],
+      ['HC3', 'Search results', 'More than 25 matches: “First 25 results” and refine, area chips with counts of the results shown, arrow keys and Enter. A question-like search with exactly 12 results, where Eadwyn answers from cited guides only.', [F('HCV03', false, 1100), F('HCV03B', '12 results · Ask Eadwyn about this', 900)]],
+      ['HC4', 'Search · nothing found', 'Broader terms, the areas, and Open a ticket with the search carried into an editable title. Searches that found nothing are not recorded (◇).', [F('HCV04', false, 900), C('HCV04B', 'Signed out', 940, 300)]],
+      ['HC5', 'Guide page', 'Breadcrumb, Applies to, reading time, address, Go to Data Room as the one primary action, steps, tips, pitfalls, related guides, and On this page with search, owner and review. Variants: a guide with no page; owner and review today, and a labelled sample of a verified date.', [F('HCV05', false, 1200), C('HCV05B', 'No Go to · owner and review', 1340, 330)]],
+      ['HC6', 'Did this answer it, and what next', 'After No: the member’s words, then related guides, search again, Open a ticket (guide link and own words only) and Message the team when the plan includes it. Eadwyn’s ticket draft is ◇. Every answer state.', [F('HCV06', false, 1500), C('HCV06B', 'Answer states', 1340, 422)]],
+      ['HC7', 'Open a ticket and Private security report', 'A choice before the form: ordinary ticket (may be mirrored, no attachments) or security concern (private, HQ only, 5 in 24 hours). The ticket form, the security form with the other ways to report, and the results.', [F('HCV07', 'Sheet over the guide', 1000), C('HCV07B', 'Security concern', 720, 633), C('HCV07C', 'Sent and filed', 1040, 214)]],
+      ['HC8', 'Guide directory with role filter', 'All 11 member areas expanded with every guide. The role filter dims guides for other roles and never hides guides for every account; guides without a page are marked.', [F('HCV08', false, 2183)]],
+      ['HC9', 'Account recovery, signed out', 'The recovery guide with Start recovery to /auth/recover, Contact support, the private security advisory and disclosure guidance. No ticket list, no account data.', [F('HCV09', false, 1000)]],
+      ['HC10', 'States', 'Loading, empty, Not recorded, Unreadable, Refused, session expired, offline, save failed and saved-but-not-mirrored. Zero, Not recorded and Unreadable never look alike.', [C('HCV10', false, 1440, 823)]],
+      ['HC11', 'Status line', 'Operational, degraded with the incident, outage, could not be read, loading and signed out. Each carries a word and a glyph.', [C('HCV11', false, 1040, 362)]],
+      ['HC12', 'Admin: guide answers and content review', 'Yes and No totals for all time with no names, guides sorted by No with owner and review, what was missing newest first, and broken-link and stale flags as Not recorded yet (◇). Empty and unreadable.', [F('HCV12', false, 1300), C('HCV12B', 'Empty and unreadable', 1040, 203)]],
+      ['HC13', 'Phone 390', 'Home with search under the title and a sticky Need help?, search results, the guide with steps first, and the ticket sheet as a full-height bottom sheet.', [P('HCV13A', false), P('HCV13B', false), P('HCV13C', false), P('HCV13D', false)]],
+      ['HC14', 'Tablet 768', 'Home with Popular two across and areas in one column; the guide with On this page folded above the content.', [C('HCV14A', 'Home', 768, 1024), C('HCV14B', 'Guide page', 768, 1024)]],
+      ['HC15', 'Dark', 'HC1 on the dark tokens with the Eadwyn rail open.', [F('HCV15', false, 1600)]],
+      ['HC16', 'Accessibility and handoff', 'Focus order, announcements, the sheet, headings and contrast; components mapped to today’s code; what was checked on main, preserved, frontend only, backend required and the owner questions.', [W('HCV16'), W('HCV17')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
