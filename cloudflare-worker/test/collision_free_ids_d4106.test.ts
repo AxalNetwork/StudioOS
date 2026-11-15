@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   BASELINE_CUTOFF, LEDGER_DDL, LEDGER_TABLE, LEGACY_DUPLICATES, LEGACY_DUPLICATE_STAMPS, NUMBERED_CEILING,
-  applyPlan, compareMigrations, listMigrationFiles, migrationDuplicates, migrationNameProblem, migrationNumber, migrationStamp, planActions,
+  applyPlan, compareMigrations, listMigrationFiles, migrationDuplicates, migrationIdentity, migrationNameProblem, migrationNumber, migrationStamp, planActions,
 } from '../../scripts/lib/migrationPlan.mjs';
 import { ISSUE_NUMBERED_FROM, allDecisionProblems, decisionFileProblems, readDecisionFiles } from '../../scripts/check-decision-ids.mjs';
 
@@ -64,9 +64,14 @@ test('duplicates: a shared number or a shared stamp is refused, naming both file
   const third = migrationDuplicates([x, y, '202611072219_a_third.sql']);
   assert.ok(third.length > 0 && third.every((m) => m.includes('202611072219_a_third.sql')), 'a third file in that minute is named');
   for (const pair of LEGACY_DUPLICATE_STAMPS) for (const f of pair) assert.ok(realNames().includes(f), `${f} is on main`);
-  const counts = new Map<number, number>();
-  for (const n of realNames()) counts.set(migrationNumber(n), (counts.get(migrationNumber(n)) ?? 0) + 1);
-  assert.deepEqual([...counts].filter(([, c]) => c > 1).map(([n]) => n).sort((a, b) => a - b), [...LEGACY_DUPLICATES, ...LEGACY_DUPLICATE_STAMPS.map(([f]) => migrationNumber(f))], 'the lists are exactly the pairs on main, no more');
+  // D5398: a stamped file that names its issue is addressed by stamp and issue together, so two issues may share a
+  // minute (`202611150136_5840_…` and `202611150136_5949_…`). Count shared addresses, not shared numbers.
+  const counts = new Map<string, { n: number; c: number }>();
+  for (const f of realNames()) {
+    const k = migrationIdentity(f);
+    counts.set(k, { n: migrationNumber(f), c: (counts.get(k)?.c ?? 0) + 1 });
+  }
+  assert.deepEqual([...counts.values()].filter(({ c }) => c > 1).map(({ n }) => n).sort((a, b) => a - b), [...LEGACY_DUPLICATES, ...LEGACY_DUPLICATE_STAMPS.map(([f]) => migrationNumber(f))], 'the lists are exactly the pairs on main, no more');
 });
 
 test('the ledger runner applies a stamped migration once, after the numbered ones, on a SQLite copy', () => {
