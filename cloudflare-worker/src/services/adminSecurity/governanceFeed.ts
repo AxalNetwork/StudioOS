@@ -9,7 +9,7 @@ import { IMPERSONATION_EXPIRY_MINUTES } from '../../auth';
 import { securityEventIdentity, supportIdentity, userIdentity, type Identity } from '../securityIdentity';
 import { freshnessFor, type SecuritySource } from '../securitySourceFreshness';
 import {
-  FEED_OUTCOMES, FEED_SOURCES, storesFor, timeBinds, actorBinds, likeBinds, trimToSecond, type FeedQuery,
+  FEED_OUTCOMES, FEED_SOURCES, FEED_SKIP_MAX, storesFor, timeBinds, actorBinds, likeBinds, trimToSecond, type FeedQuery,
 } from './feedQuery';
 import {
   IMPERSONATION_UNREADABLE, parseSqlTs, who, actorOf, reasonFrom, clip, impersonationOutcome, type ImpersonationRow,
@@ -255,6 +255,29 @@ const FEED_IMPERSONATIONS_SQL = `SELECT i.id, i.context, i.started_at, i.ended_a
       AND (? IS NULL OR i.context LIKE ? ESCAPE '!' OR a.name LIKE ? ESCAPE '!' OR a.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
     ORDER BY datetime(i.started_at) DESC, i.id DESC LIMIT ?`;
 
+/** A row's whole second (epoch ms), or NaN for a row without a time. */
+const secondOf = (ts: number) => (Number.isNaN(ts) ? NaN : Math.floor(ts / 1000) * 1000);
+/** A key's numeric id, the store's own `id` (every key is `<store>:<id>`). */
+const idOf = (key: string) => Number(key.slice(key.indexOf(':') + 1));
+
+/**
+ * The merged order: newest second first; inside one second, by store (the key's prefix, highest first, as
+ * D4699 set) and then by `id`, highest first. That is each store's own `ORDER BY datetime(...) DESC, id DESC`,
+ * so the merge of the stores' pages is a prefix of the whole ledger in one order, and a page cut inside a
+ * second can be continued by counting the rows shown (D4708 part 2). A row whose time will not parse sorts last.
+ */
+export function feedOrder(a: { ts: number; key: string }, b: { ts: number; key: string }): number {
+  const as = secondOf(a.ts);
+  const bs = secondOf(b.ts);
+  const av = Number.isNaN(as) ? -Infinity : as;
+  const bv = Number.isNaN(bs) ? -Infinity : bs;
+  if (av !== bv) return bv - av;
+  const ap = a.key.slice(0, a.key.indexOf(':'));
+  const bp = b.key.slice(0, b.key.indexOf(':'));
+  if (ap !== bp) return ap < bp ? 1 : -1;
+  return idOf(b.key) - idOf(a.key) || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0);
+}
+
 /** The filter asked for, or the whole feed. */
 export function feedFilterOf(asked: string): string {
   // An unknown filter falls back to the whole feed rather than to nothing: a
@@ -282,7 +305,11 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
    * no row belonging on this page was left behind in a store's tail.
    */
   let more = false;
-  const took = (n: number) => { if (n >= FEED_LIMIT) more = true; return n; };
+  // D4708 part 2 — continuing inside one second, each store also returns the rows of that second the last
+  // page showed (dropped after the merge), so the same argument holds for FEED_LIMIT + skip.
+  const shown = fq.skip ? fq.skip.rows : 0;
+  const storeLimit = FEED_LIMIT + shown;
+  const took = (n: number) => { if (n >= storeLimit) more = true; return n; };
 
   // ── The impersonation sessions, read once ─────────────────────────────
   // The feed uses them when the filter asks; the Data access zone always
@@ -310,7 +337,7 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
     try {
       const res = await env.DB
         .prepare(filter === 'exports' ? FEED_AUDIT_EXPORTS_SQL : FEED_AUDIT_ALL_SQL)
-        .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), storeLimit).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const a of got) {
         const action = String(a.action || '');
@@ -346,7 +373,7 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
       const allow = suspensionsOnly ? SUSPENSION_ACTIVITY_ACTIONS : ACTOR_SIDE_ACTIONS;
       const res = await env.DB
         .prepare(suspensionsOnly ? FEED_ACTIVITY_SUSPENSIONS_SQL : FEED_ACTIVITY_ACTOR_SIDE_SQL)
-        .bind(...allow, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 4), FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...allow, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 4), storeLimit).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const l of got) {
         const action = String(l.action || '');
@@ -379,7 +406,7 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
       const ended = fq.outcome === 'ended' ? 1 : fq.outcome === 'live' || fq.outcome === 'not_closed' ? 0 : null;
       try {
         const res = await env.DB.prepare(FEED_IMPERSONATIONS_SQL)
-          .bind(...timeBinds(fq), ...actorBinds(fq), ended, ended, ended, ...likeBinds(fq, 5), FEED_LIMIT)
+          .bind(...timeBinds(fq), ...actorBinds(fq), ended, ended, ended, ...likeBinds(fq, 5), storeLimit)
           .all<ImpersonationRow>();
         feedImpersonations = res.results || [];
       } catch {
@@ -425,10 +452,10 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
     try {
       const res = filter === 'suspensions'
         ? await env.DB.prepare(FEED_LICENCE_SUSPENSIONS_SQL)
-          .bind(...SUSPENSION_LICENCE_EVENTS, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT)
+          .bind(...SUSPENSION_LICENCE_EVENTS, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), storeLimit)
           .all<Record<string, unknown>>()
         : await env.DB.prepare(FEED_LICENCE_ALL_SQL)
-          .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
+          .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), storeLimit).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const e of got) {
         const event = String(e.event || '');
@@ -460,7 +487,7 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
     try {
       const secOutcome = fq.outcome === 'ok' || fq.outcome === 'refused' ? fq.outcome : null;
       const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL)
-        .bind(...timeBinds(fq), ...actorBinds(fq, 3), secOutcome, secOutcome, ...likeBinds(fq, 7), FEED_LIMIT)
+        .bind(...timeBinds(fq), ...actorBinds(fq, 3), secOutcome, secOutcome, ...likeBinds(fq, 7), storeLimit)
         .all<Record<string, unknown>>();
       const got = res.results || [];
       for (const s of got) {
@@ -504,24 +531,30 @@ export async function loadGovernance(env: Env, filter: string, fq: FeedQuery, no
   // (routes/admin.ts writes new Date().toISOString()), and those two forms do
   // not sort against each other lexically. A timestamp that will not parse
   // sorts LAST rather than to the epoch, which would put it on top.
-  rows.sort((a, b) => {
-    const av = Number.isNaN(a.ts) ? -Infinity : a.ts;
-    const bv = Number.isNaN(b.ts) ? -Infinity : b.ts;
-    // D4699 — rows at the same instant (several stores, or one store in one second) fall back to
-    // their key, so the same rows come back in the same order on every read and every page.
-    return bv - av || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0);
-  });
+  rows.sort(feedOrder);
+  // D4708 part 2 — continuing inside the cursor's second: drop the rows of that second the last page showed.
+  // The order above is each store's own SQL order merged, so they are the first rows here.
+  let dropped = 0;
+  while (fq.skip && dropped < fq.skip.rows && dropped < rows.length && secondOf(rows[dropped].ts) === fq.skip.second) dropped += 1;
+  const rest = dropped ? rows.slice(dropped) : rows;
   // More is held when any store filled its own page, OR when the stores
   // together returned more than one page (two stores of forty each): the rows
   // past FEED_LIMIT are real and Load older has to reach them.
-  if (rows.length > FEED_LIMIT) more = true;
-  const { page: kept, split } = trimToSecond(rows.slice(0, FEED_LIMIT), more);
+  if (rest.length > FEED_LIMIT) more = true;
+  const { page: kept, split } = trimToSecond(rest.slice(0, FEED_LIMIT), more);
   const page = kept.map(({ ts, ...row }) => row);
   // D4803 — Load older: the next read is everything strictly older than the
   // last row kept. No cursor when nothing older is held, or when the last row
   // has no time to continue from.
   const lastAt = more && kept.length ? kept[kept.length - 1].at : null;
-  const cursor = lastAt && !Number.isNaN(parseSqlTs(lastAt)) ? { before: lastAt } : null;
+  let cursor: { before: string; skip?: number } | null = lastAt && !Number.isNaN(parseSqlTs(lastAt)) ? { before: lastAt } : null;
+  // D4708 part 2 — a page wholly inside one second continues inside it: the cursor carries how many of that
+  // second's rows have been shown, counting the earlier pages of the same second, up to FEED_SKIP_MAX.
+  if (cursor && split) {
+    const sameSecond = fq.skip && secondOf(kept[0].ts) === fq.skip.second ? dropped : 0;
+    const total = sameSecond + kept.length;
+    if (total <= FEED_SKIP_MAX) cursor = { ...cursor, skip: total };
+  }
 
   // ── H7's "Data access" zone: who saw data they do not own ─────────────
   // Impersonations and exports side by side, because the question this zone
