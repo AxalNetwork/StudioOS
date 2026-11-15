@@ -360,7 +360,25 @@ export function prepareBody(src, bindings = []) {
   // Every step here preserves length, so no step can invalidate the offsets of
   // a later one. The import statements go because a name imported and never
   // used must not read as used by its own import line.
-  return blankMatches(withoutSafeComments(chars.join('')), /^import\s[\s\S]*?from\s*['"][^'"]+['"];?$/gm);
+  // Match the import clause and module literal, not everything through a
+  // future line ending in a module literal. An import attribute (`with { … }`)
+  // after that literal made the old match consume live code through an import
+  // inside a later test template (#6381). Side-effect imports have no binding
+  // and need no removal. Blank attributes too: their keys/values must not
+  // count as uses of unrelated bindings named `type` or `json`.
+  const body = withoutSafeComments(chars.join(''));
+  const usageChars = body.split('');
+  for (const m of body.matchAll(/^import\s+(?:[\w$]+\s*,\s*)?(?:\{[^}]*\}|\*\s+as\s+[\w$]+|[\w$]+)\s*from\s*['"][^'"\r\n]+['"]/gm)) {
+    let end = m.index + m[0].length;
+    const attributes = /^\s+(?:with|assert)\s*(?=\{)/.exec(body.slice(end));
+    if (attributes) {
+      const close = matchBracket(body, end + attributes[0].length);
+      if (close >= 0) end = close;
+    }
+    const blank = blankMatches(body.slice(m.index, end), /[\s\S]+/g);
+    for (let k = m.index; k < end; k += 1) usageChars[k] = blank[k - m.index];
+  }
+  return usageChars.join('');
 }
 
 /** The characters that can continue a JavaScript identifier. A literal regex. */

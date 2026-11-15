@@ -5,7 +5,7 @@
 // every line; an investor their own lines and the round's total. Writes are an
 // Admin's, except the cap-table decision, which is the founder's. Amounts are
 // integer cents with the closing's currency. Nothing here moves money.
-import { request } from '../api.js';
+import { request, refusalError } from '../api.js';
 
 const at = (uid) => `/closings/${encodeURIComponent(uid)}`;
 const line = (uid, lineUid) => `${at(uid)}/lines/${encodeURIComponent(lineUid)}`;
@@ -29,6 +29,19 @@ export const closingsApi = {
   complete: (uid) => post(`${at(uid)}/complete`),
   /** The admin desk: every open closing with its lines waiting, next actor and owner. */
   desk: () => request('/admin/closings'),
+  /**
+   * D6199: the investor's own signed copy, by the envelope id their closing read gives (`for_investor.summary[].signed_copy`).
+   * routes/esign.ts `GET /api/legal/esign/:id/document`, scoped to the caller's own envelopes. Returns the blob; the caller saves it.
+   */
+  signedCopyBlob: async (envelopeId) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api/legal/esign/${encodeURIComponent(envelopeId)}/document`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'The signed copy could not be downloaded.');
+    return { blob: await res.blob(), filename: `axal-signed-${envelopeId}.pdf` };
+  },
 };
 
 // D1219 (#3216, part 6 of #2424) — D1216's paper signed in order, with Axal's

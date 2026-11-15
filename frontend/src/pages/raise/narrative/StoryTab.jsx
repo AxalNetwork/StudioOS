@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { narrativeApi } from '../../../lib/api/narrative';
 import { api } from '../../../lib/api';
+import { cyclesApi } from '../../../lib/api/cycles';
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { railPressHeaders } from '../../../lib/railPage';
 import { useRailOption } from '../../../ui/railCrumbs';
@@ -13,7 +14,7 @@ import {
   AI_OFF_LINE, AI_OFF_SUB, ASK_FOOT, ASK_MODES, BINDINGS_UNREADABLE, DRAFT_REMOVED, INSERT_FOOT, LIVE_DECK, NOTE_MAX, NOTHING_TO_SAVE, NOT_RECORDED,
   PROPOSAL_NOTE, saveBody, saveFailure, SECTION_COUNT, SECTION_OPTION, STORY_UNREADABLE,
   audienceOf, bindingFromItem, bindingsBySection, boundChip, cannotInsert, draftOf, inlineSegments, insertAt, insertGroups, isLiveDeck,
-  moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
+  mismatchSections, moveSection, runRefusal, saveDialog, savePlan, sectionDot, storySections, unplacedFigures,
 } from './storyModel';
 import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel';
 import { ObjectionsPanel } from './ObjectionsPanel';
@@ -128,8 +129,26 @@ function RunRefused({ refusal }) {
   );
 }
 
+/**
+ * D6068 (#6068): the sections with an open Mismatch, from the module read's
+ * claim tally (the newest version's). A failed read, or any other version,
+ * marks none; the dot then falls back to Written or Stale.
+ */
+function useMismatchSections(projectId, version, reload) {
+  const [part, setPart] = useState(null);
+  useEffect(() => {
+    if (!projectId || version == null) return undefined;
+    let alive = true;
+    cyclesApi.module('raise', projectId, 'investor-narrative')
+      .then((data) => { if (alive) setPart(data?.parts?.narrative ?? null); })
+      .catch(() => { if (alive) setPart(null); });
+    return () => { alive = false; };
+  }, [projectId, version, reload]);
+  return useMemo(() => mismatchSections(part, version), [part, version]);
+}
+
 /** The sections rail: dots and words; Alt + arrow keys move the chosen section. */
-function SectionRail({ order, byKey, sections, bindings, sources, active, onPick, onMove, readOnly }) {
+function SectionRail({ order, byKey, sections, bindings, sources, active, onPick, onMove, readOnly, mismatched = new Set() }) {
   const label = (k) => sections.find((s) => s.key === k)?.label || k;
   const onKey = (e, key) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -150,7 +169,7 @@ function SectionRail({ order, byKey, sections, bindings, sources, active, onPick
       <ol className="m-0 flex list-none flex-col gap-0.5 p-0">
         {order.map((key) => {
           const d = byKey[key];
-          const dot = sectionDot({ body: d.body.trim() || null }, d.bindings, sources);
+          const dot = sectionDot({ body: d.body.trim() || null }, d.bindings, sources, mismatched.has(key));
           const on = key === active;
           return (
             <li key={key}>
@@ -242,6 +261,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useNarrative(projectId, version, reload);
+  const mismatched = useMismatchSections(projectId, version, reload);
   const sources = useDeckSources(projectId);
   const sections = read.status === 'ready' ? storySections(read.data) : null;
   const bindings = read.status === 'ready' ? bindingsBySection(read.data) : null;
@@ -366,7 +386,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   const unplaced = unplacedFigures(cur?.body || '', figures);
 
   const rail = (
-    <SectionRail order={draft.order} byKey={draft.byKey} sections={sections} bindings={bindings} sources={srcState} active={active}
+    <SectionRail order={draft.order} byKey={draft.byKey} sections={sections} bindings={bindings} sources={srcState} active={active} mismatched={mismatched}
       onPick={setActive} onMove={(key, delta) => setDraft((d) => ({ ...d, order: moveSection(d.order, key, delta) }))} readOnly={readOnly} />
   );
 

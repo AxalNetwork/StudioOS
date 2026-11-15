@@ -6,7 +6,9 @@
  * Reads (`requireAuth`; who reads what is decided per closing):
  *   GET  /                                   the closings this caller reads
  *   GET  /:uid                               one closing: every line for an admin or the founder,
- *                                            the caller's own lines and the round's total for anyone else
+ *                                            the caller's own lines and the round's total for anyone else,
+ *                                            with `for_investor` (D6199): what waits on them, a count of the rest,
+ *                                            and after Closed their own summary and reporting duties
  *
  * An Admin (`requireAdmin`; a support session is refused):
  *   POST /                                   {deal_id, round_label?, instrument?, template_slug?, deadline?, owner_user_id?}

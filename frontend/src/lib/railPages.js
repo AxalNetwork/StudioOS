@@ -266,7 +266,7 @@ const ADMIN = [
   // The canvas draws no Admin home; D720 §5's overrides add one.
   off('/admin/commissions', key(AD, 'Home')),
   alias('/branch', key(AD, 'Home'), 'The branch digest, the branch admin’s landing (D720 §5).'),
-  alias('/admin/fund-admin', key(AD, 'Home'), 'Fund admin has no board yet; it takes Admin · Home (D720 §11).'),
+  off('/admin/fund-admin', key(AD, 'Fund Admin')),
   own('/admin/accounts', key(AD, 'Accounts')),
   alias('/branch/accounts', key(AD, 'Accounts'), 'The branch’s Accounts page.'),
   own('/admin/accounts/all', key(AD, 'Accounts', 'Users')),
@@ -352,7 +352,7 @@ const SUPER = [
   alias('/admin/licences/programs', key(SA, 'Licences'), 'Program access by licence (D981’s Program grants, renamed by D4819), the Licences strip’s second item.'),
   alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program access by licence’s History tab (D1126).'),
   own('/admin/funds', key(SA, 'Funds')),
-  alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
+  off('/admin/fund-admin', key(SA, 'Fund Admin')),
   own('/admin/contracts', key(SA, 'Contracts')),
   own('/admin/contracts?tab=agreements', key(SA, 'Contracts', 'Agreements')),
   own('/admin/contracts?tab=ndas', key(SA, 'Contracts', 'NDAs')),

@@ -91,19 +91,25 @@ function withCount(label, count) {
  * rows; the table owns which views the canvas promised and which of them the
  * store can actually tell apart. That is the same split `zoneActionBuilder`
  * uses, where the table owns the labels and the page supplies the payload.
+ *
+ * `locked` (D6231): `{ key: reason }` for live views this reader may not open.
+ * The chip is drawn disabled with the reason as its title, never selectable,
+ * so a view the member cannot read is never offered and never hidden.
  */
 export function makeZoneFilters(TABLE) {
-  return function zoneFilters(zoneKey, { value, onChange, counts = {}, dynamic = {} } = {}) {
+  return function zoneFilters(zoneKey, { value, onChange, counts = {}, dynamic = {}, locked = {} } = {}) {
     const spec = TABLE[zoneKey];
     if (!spec) return [];
     const slug = zoneKey.split('/').pop();
     const id = (label) => `filter-${slug}-${String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-    const chip = (key, label) => ({
-      label: withCount(label, counts[key]),
-      testid: id(label),
-      active: value === key,
-      onSelect: () => onChange?.(key),
-    });
+    const chip = (key, label) => (locked[key]
+      ? { label: withCount(label, counts[key]), testid: id(label), disabled: true, title: locked[key] }
+      : {
+        label: withCount(label, counts[key]),
+        testid: id(label),
+        active: value === key,
+        onSelect: () => onChange?.(key),
+      });
     return spec.flatMap((item) => {
       const first = Array.isArray(item.canvas) ? item.canvas[0] : item.canvas;
       // A dynamic group: the canvas draws one chip per role, segment or stage
