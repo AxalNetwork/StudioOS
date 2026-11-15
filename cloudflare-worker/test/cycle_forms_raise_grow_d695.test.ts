@@ -182,15 +182,16 @@ test('11: New version starts from the live deck with none saved, then from the n
   const form = formFor('raise', 'investor-narrative');
   // D909 (owner question 5 on #2454): the live wording is the Spin-Out deck's, offered to a Spin-Out venture only.
   let { values, fields } = await opened(form, w);
-  assert.deepEqual(choices(fields, 'start_from'), ['blank'], 'not a Spin-Out venture: blank only');
+  // D6069 (#6069): the venture's saved pitch deck v2 offers its words to any venture.
+  assert.deepEqual(choices(fields, 'start_from'), ['deck-2', 'blank'], 'not a Spin-Out venture: the deck\'s words and blank');
   db.prepare("INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (?, 'problem.framing', 'Books close by hand.', 0)").run(P);
   ({ values, fields } = await opened(form, w));
-  assert.deepEqual(choices(fields, 'start_from'), ['live', 'blank']);
+  assert.deepEqual(choices(fields, 'start_from'), ['live', 'deck-2', 'blank']);
   assert.equal(values.start_from, 'live', 'a Spin-Out venture with no saved version: the Spin-Out wording is chosen');
   const first = await form.submit(w, P, { ...values, one_liner: 'Kestrel finds the leak', why_now: 'Rules changed in 2026', ask: '$1.5M for 18 months' });
   assert.equal(first.version, 1);
   ({ values, fields } = await opened(form, w));
-  assert.deepEqual(choices(fields, 'start_from'), ['version-1', 'live', 'blank'], 'saved versions first, newest first');
+  assert.deepEqual(choices(fields, 'start_from'), ['version-1', 'live', 'deck-2', 'blank'], 'saved versions first, newest first');
   assert.equal(values.start_from, 'version-1');
   const second = await form.submit(w, P, { ...values, investor_type: 'angel', check_against: ['metrics'] });
   assert.equal(second.version, 2);

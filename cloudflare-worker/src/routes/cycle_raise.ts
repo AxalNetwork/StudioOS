@@ -21,7 +21,7 @@
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
  *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
- *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
+ *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, deck_version? (D6069, with start_from: deck), one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
  *   GET   /narrative/compare?a=&b=   → { a, b, pairs: [{ key, label, a: { body }, b: { body }, state }] }
@@ -668,7 +668,7 @@ cycleRaise.post('/readiness/rescore', async (c) => {
 });
 
 const narrativeFields = (b: Record<string, unknown>) => ({
-  investorType: b.investor_type, basedOnVersion: b.based_on_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
+  investorType: b.investor_type, basedOnVersion: b.based_on_version, deckVersion: b.deck_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
