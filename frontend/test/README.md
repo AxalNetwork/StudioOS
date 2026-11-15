@@ -209,6 +209,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
 | `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
 | `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
+| `build_feature_removal_6024.test.mjs` | D6024: mounted record confirmation/cancel/refusal/retry and list return for both removal actions; retained plan history suppresses removed/demoted record links. |
 | `unused_imports_attributes_6381.test.mjs` | D6381: attributed and side-effect imports preserve real uses, offsets and newlines; unused bindings still fail, and the unchanged workflow delivery regression stays clean. |
 
 | `fund_admin_prepare_6397.test.mjs` | D6397: consume the scoped call-preparation navigation once, retaining blank amount/date and verified preview permission. |

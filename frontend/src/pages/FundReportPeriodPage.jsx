@@ -11,6 +11,8 @@ import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { readableFund, readablePeriod, useFundReport } from '../hooks/useFundReport';
 import { FundReadState, Recorded } from './FundPage';
+import { fundDraftsApi } from '../lib/api/fundDrafts.js';
+import FundDraftBand from './FundDraftBand';
 import './fundPage.css';
 
 export default function FundReportPeriodPage({ role = 'investor', reading: supplied }) {
@@ -86,6 +88,13 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
     [rows[index], rows[next]] = [rows[next], rows[index]];
     return { ...previous, narrative: { ...previous.narrative, [section]: rows } };
   });
+  // D6252: Accept puts the drafted opening first in the letter, in the unsaved editor; saving and issuing stay the
+  // page's own buttons. A letter already at its 50 paragraphs refuses rather than drops one.
+  const acceptOpening = (text) => {
+    if (form.narrative.letter.length >= 50) return 'The letter already has 50 paragraphs. Remove one before adding the opening.';
+    setForm(previous => ({ ...previous, narrative: { ...previous.narrative, letter: [text, ...previous.narrative.letter] } }));
+    return null;
+  };
   const hasInvalidEntries = Object.entries(form.narrative).some(([section, entries]) => entries.some(entry => reportEntryError(section, entry)));
   const validate = () => {
     setValidated(true);
@@ -128,6 +137,11 @@ export function PeriodEditor({ data, onSaved, onDeleted }) {
     <section className="fd-facts fd-period" aria-label="Reporting period"><article className="fd-card"><label>Period label<input aria-label="Period label" maxLength={100} value={form.period} readOnly={!editable || Boolean(form.id)} disabled={pending} onChange={e => change('period', e.target.value)} /></label></article>
       <article className="fd-card"><label>Start date<input aria-label="Start date" type="date" value={form.period_start} readOnly={!editable} disabled={pending} onChange={e => change('period_start', e.target.value)} /></label>{!form.period_start && <Recorded value={null} reason="The start date has not been set for this period." />}</article>
       <article className="fd-card"><label>End date<input aria-label="End date" type="date" value={form.period_end} readOnly={!editable} disabled={pending} onChange={e => change('period_end', e.target.value)} /></label>{!form.period_end && <Recorded value={null} reason="The end date has not been set for this period." />}</article></section>
+    {editable && <FundDraftBand testId="letter-draft-band" title="Letter draft" run="Draft the opening"
+      body="Draft the letter’s opening paragraph from this period’s recorded capital movements."
+      writes="Accept writes into the draft. Issuing stays a human click."
+      blocked={!form.id ? 'Save the draft first: the opening is drafted from the saved period’s dates.' : dirty && ['period_start', 'period_end'].some(key => form[key] !== (data.period[key] ?? '')) ? 'Save the new dates first: the opening is drafted from the saved period’s dates.' : null}
+      onRun={() => fundDraftsApi.letter(data.fund.id, form.id)} onAccept={acceptOpening} />}
     {Object.keys(SECTIONS).map(section => <article className="fd-card" key={section}>
       <h2>{SECTIONS[section]}</h2>
       {!form.narrative[section].length && <Recorded value={null} reason={`No ${section === 'letter' || section === 'outlook' ? 'paragraphs' : 'entries'} have been recorded in this section.`} />}
