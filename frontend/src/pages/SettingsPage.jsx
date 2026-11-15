@@ -12,7 +12,7 @@ import { loadRecaptcha, invisibleToken } from '../lib/recaptcha';
 import { useToast } from '../components/useToast';
 import {
   User,
-  Camera, Save, AlertTriangle, CheckCircle2, Trash2, Download,
+  Camera, AlertTriangle, CheckCircle2, Trash2, Download,
   Plus, X, KeyRound,
   Sun, Moon, Check, Loader2,
 } from 'lucide-react';

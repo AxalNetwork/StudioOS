@@ -14,7 +14,8 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `NegotiationsZone.jsx` | `/pipeline/negotiations`: stage, ball, the open question and clause-level terms. |
 | `RetainersZone.jsx` | `/pipeline/retainers`: cadence, monthly equivalent, usage against retained hours and renewal. |
 | `AnalyticsZone.jsx` | `/pipeline/analytics`: win rate, cycle, weighted forecast and loss reasons, by window and by shape. |
-| `usePipelineZone.js` | D4685: the shared read/write loop. A background refresh keeps open editors, and a write resolves `true` only once the server accepted it. |
+| `OpportunitySheet.jsx` | D4838 PP08 (#5934): the shared opportunity sheet. It shows one lead, proposal, negotiation and engagement, joined by id, on `frontend/src/ui/Sheet.jsx`. Tabs appear only for records that exist, and Activity comes from D5942's recorded feed. A zone opens it with whichever id it holds. |
+| `usePipelineZone.js` | D4685: the shared read/write loop. A background refresh keeps open editors, and a write resolves `true` only once the server accepted it. An optional `key` (PP08) makes a changed record a first read again. |
 | `PartialRead.jsx` | #4701: the note a zone draws when a list's first page answered and a later one did not. |
 
 **Adding to Pipeline.** A zone reads only mounted Worker routes and draws loading, empty, "Not recorded" with its
