@@ -995,8 +995,11 @@ function UserDropdown({ user, onLogout }) {
 // `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
 // holds the two to the same addresses.
 const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+// D4817 part 10 (#5311): the company workspace and its tabs draw the same one
+// banner (`previewModel.js`' `previewCompanyTabOf`; the part 10 test holds the two together).
+const PREVIEW_BANNER_COMPANY = /^\/portfolio\/companies\/[^/]+(?:\/(?:reports|terms|financials|support|activity))?\/?$/;
 function pageOwnsPreviewBanner(pathname, selectedKey) {
-  return selectedKey === 'investor' && PREVIEW_BANNER_BOARDS.test(String(pathname || ''));
+  return selectedKey === 'investor' && (PREVIEW_BANNER_BOARDS.test(String(pathname || '')) || PREVIEW_BANNER_COMPANY.test(String(pathname || '')));
 }
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
