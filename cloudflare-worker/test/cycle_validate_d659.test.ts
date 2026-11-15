@@ -55,6 +55,8 @@ function fixture() {
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.
   db.exec(sqlOf('464_verdict_decisions.sql'));
+  // D6011 (#6011): the market card reads each figure's source from `market_figures`.
+  db.exec(sqlOf('202611150130_6011_market_figures.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -219,8 +221,8 @@ test('D659: a value the source does not hold is null with its reason — never 0
   db.prepare("INSERT INTO waitlist_signups (project_id, email, audience) VALUES (?, 'a@x.test', 'customer')").run(P);
   const r = await overview(db);
   const m = card(r.body, 'market-intelligence').series;
-  assert.deepEqual(m.tam, { value: 4200000000, source: null, reason: 'No source recorded for this figure' });
-  assert.deepEqual(m.sam, { value: null, source: null, reason: 'No figure entered' });
+  assert.deepEqual(m.tam, { value: 4200000000, source: null, reason: 'No source recorded for this figure', as_of: null, source_url: null, method: null });
+  assert.deepEqual(m.sam, { value: null, source: null, reason: 'No figure entered', as_of: null, source_url: null, method: null });
   const d = card(r.body, 'demand-signals').series;
   assert.equal(d.bar, null);
   assert.equal(d.bar_reason, 'No bar set');

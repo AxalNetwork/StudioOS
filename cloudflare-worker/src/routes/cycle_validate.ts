@@ -46,6 +46,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canReadDecision, canWrite, ownsVenture, type ProjectRef } from './_founder_validate_helpers';
 import { focusOf, indexOf, meterOf } from '../services/validateFocus';
+import { currentMarketFigures, type MarketFigureRow } from '../services/marketFigures';
 import { part } from '../services/cycleFocus';
 import {
   CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
@@ -287,7 +288,10 @@ cycleValidate.get('/market-readiness', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
   try {
-    return c.json(await loadMarketReadiness(ctxOf(c, s.projectId)));
+    // D6011 (#6011): `figures` is each current figure's method and named source, so the sizing page keeps them.
+    const [readiness, { current }] = await Promise.all([loadMarketReadiness(ctxOf(c, s.projectId)), currentMarketFigures(c.env, s.projectId)]);
+    const figure = (r: MarketFigureRow | null) => (r ? { method: r.method, market_source_id: r.market_source_id, set_at: r.set_at } : null);
+    return c.json({ ...readiness, figures: { tam: figure(current.tam), sam: figure(current.sam), som: figure(current.som) } });
   } catch (e) {
     console.warn('[cycle_validate] market readiness unreadable:', (e as Error)?.message);
     return c.json({ detail: 'Market readiness could not be read' }, 503);
