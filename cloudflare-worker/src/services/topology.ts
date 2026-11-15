@@ -221,6 +221,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('segmentSuggestion', true),
       m('licence', true, true),
       m('reportUsage', true, true),
+      // D5949 — a branch's promo issued and spend, on the 05:10 run (promoIssuedReport.ts).
+      m('reportPromoIssued', true, true),
       m('reportProgramUsage', true, true),
     ],
   },
