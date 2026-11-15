@@ -15,6 +15,7 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `AnalyticsZone.jsx` | `/pipeline/analytics`: win rate, cycle, weighted forecast and loss reasons, by window and by shape. |
 | `usePipelineZone.js` | D4685: the shared read/write loop. A background refresh keeps open editors, and a write resolves `true` only once the server accepted it. |
 | `PartialRead.jsx` | #4701: the note a zone draws when a list's first page answered and a later one did not. |
+| `retainersModel.js` | D4838 part 6 (#5939): the Retainers zone's pure rules (PP06): the attention band's three sets taken with `commandCentre.js`'s own predicates, utilization in words, health, the monthly equivalent, the KPI strip and the sheet's tabs. |
 
 **Adding to Pipeline.** A zone reads only mounted Worker routes and draws loading, empty, "Not recorded" with its
 reason and "Unreadable" with a retry. It prints a figure only over a population that exists. A rule two surfaces
