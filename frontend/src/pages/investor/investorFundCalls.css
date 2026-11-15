@@ -21,3 +21,14 @@
 .dark .if2-pill.paid{color:#6ee7b7;background:#062e24;border-color:#065f46}.dark .if2-pill.pending,.dark .if2-pill.part_received{color:#fcd34d;background:#2d2106;border-color:#78350f}.dark .if2-pill.overdue{color:#fca5a5;background:#2f0f0f;border-color:#7f1d1d}
 .dark .if2-receipt p[role=alert],.dark .if2-error{color:#fca5a5}.dark .if2-composer{border-color:#3730a3}
 @media(max-width:640px){.if2-receipt,.if2-composer-fields{flex-direction:column;align-items:stretch}}
+/* D6238 — All calls, one call's page, the chase; phone cards at 390px with 44px targets. */
+.if2-pill.withdrawn{color:var(--muted);background:var(--paper);border-style:dashed}.if2-warn{font-size:10.5px;line-height:1.45;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin:10px 0 0}.if2-kyc-flag{color:#92400e;font-weight:700}
+.if2-sub{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:800;margin:16px 0 8px}.if2-call-stats{margin:12px 0 0}.if2-open-call{margin-top:10px}
+.if2-log{list-style:none;margin:6px 0 10px;padding:0}.if2-log li{border-top:1px solid var(--line);padding:7px 0;font-size:11px}.if2-log li b{display:block;color:var(--ink)}.if2-log li small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.if2-amend{margin-top:10px}.if2-card-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.if2-chase{margin-top:14px;border:1px solid #c7d2fe;border-radius:10px;padding:12px}.if2-chase>header{display:flex;justify-content:space-between;gap:10px}.if2-chase h3{font-size:12px;margin:0;color:var(--ink)}.if2-chase>header span{font-size:10px;color:var(--muted)}
+.if2-chase-list{list-style:none;margin:10px 0;padding:0;display:grid;gap:12px}.if2-chase-list>li{border-top:1px solid var(--line);padding-top:10px}.if2-chase-list>li>p{font-size:11px;margin:0 0 8px;color:var(--ink)}
+.if2-cards{display:none;list-style:none;margin:0;padding:0}.if2-card{border:1px solid var(--line);border-radius:10px;padding:11px;margin-bottom:9px;background:var(--paper)}.if2-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.if2-card dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:8px 0;font-size:11px}.if2-card dt{color:var(--muted)}.if2-card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.dark .if2-warn{color:#fcd34d;background:#2d2106;border-color:#78350f}.dark .if2-kyc-flag{color:#fcd34d}.dark .if2-chase{border-color:#3730a3}
+@media(max-width:640px){.if2-desk{display:none}.if2-cards{display:block}.if2-tap,.if2-chase button,.if2-amend button{min-height:44px;min-width:44px}.if2-card-acts .if2-tap{flex:1}.if2-chase>header{flex-direction:column}}

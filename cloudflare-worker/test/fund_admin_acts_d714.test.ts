@@ -65,6 +65,8 @@ const SCHEMA = [
   read('../sql/migrations/418_fund_ledger.sql'),
   // D709 (#1774): a receipt also settles a fee line linked to its call line.
   read('../sql/migrations/473_fund_management_fees.sql'),
+  // D6238 (#6238): the call list reads each call as corrected.
+  read('../sql/migrations/202611152336_6238_capital_call_amendments.sql'),
 ].join('\n');
 
 const SEED = `
