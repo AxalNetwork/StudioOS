@@ -86,7 +86,8 @@ test('queue hysteresis: open at the thresholds, clear only below half of both', 
   assert.equal(queueState({ queued: 30, oldestCreatedAt: ago(30), now, issueOpen: true }).active, true, 'open: hovering under the line stays open');
   assert.equal(queueState({ queued: 19, oldestCreatedAt: ago(22), now, issueOpen: true }).active, false, 'open: clears below half of both');
   assert.equal(queueState({ queued: 19, oldestCreatedAt: ago(23), now, issueOpen: true }).active, true, 'one figure still high keeps it open');
-  assert.match(read('scripts/github-alerts.mjs'), /issueOpen: Boolean\(await openIssue\('queue'\)\)/);
+  // #6463: the open issue is read once, before the cutoff line is written to it, and that is what queueState hears.
+  assert.match(read('scripts/github-alerts.mjs'), /const open = await openIssue\('queue'\);[\s\S]*issueOpen: Boolean\(open\)/);
 });
 
 test('the red-main and queue protocol is where every agent reads it', () => {

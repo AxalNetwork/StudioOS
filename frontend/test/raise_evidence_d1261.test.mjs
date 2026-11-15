@@ -134,7 +134,7 @@ test('the wiring: three routes before /raise/:slug, the deal page’s Evidence t
     assert.ok(app.indexOf(`path="${p}"`) < app.indexOf('path="/raise/:slug"'), `${p} before the module route`);
   }
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}"));
+  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} role={role} />}"));
   assert.ok(!deal.includes("['evidence', 'team'"), 'Evidence is no longer a wait card');
   for (const f of ['Raise Evidence Page.dc.html', 'Raise evidence · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Raise evidence · Boards.dc.html').includes('name="Raise Evidence Page"'));

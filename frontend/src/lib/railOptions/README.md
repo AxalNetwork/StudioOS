@@ -35,3 +35,5 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
 - **A shared zone passes no literal key.** `AskZone`, `LibraryZone` and
   `DiligenceRoom` pass their own path and control to `railOptionFor`, so
   each profile keeps its own keys.
+
+D6397 registers `ADMIN_ASK_CHIPS` and `SUPER_ADMIN_FUND_ADMIN_ASK_CHIPS` for the dedicated Fund Admin page keys. Their five recorded-read tasks run in the page-owned body of today's Ask panel; every row is noModel, with no model-running control. #5130 owns the future shared structure.

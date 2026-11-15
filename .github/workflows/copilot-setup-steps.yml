@@ -41,6 +41,12 @@ on:
 permissions:
   contents: read
 
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# Every other event gets its own group (the run id), so it is never cancelled.
+concurrency:
+  group: copilot-setup-steps-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
@@ -62,4 +68,4 @@ jobs:
         working-directory: cloudflare-worker
         run: npm ci
       - name: Install root deps
-        run: npm ci || npm install --no-audit --no-fund
+        run: npm ci

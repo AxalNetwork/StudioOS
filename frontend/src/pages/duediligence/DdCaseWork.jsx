@@ -6,6 +6,7 @@
  * `ddCaseModel.js`; the dialogs are `DdCaseDialogs.jsx`.
  */
 import React, { useEffect, useMemo, useState } from 'react';
+import { Lightbox, usePhoneWidth } from '../../ui';
 import { dd } from '../../lib/api';
 import {
   ACTIVITY_CAP, FLAG_STATES, FLAG_STATE_WORD, ITEM_FILTERS, ITEM_STATUS_WORD, NOT_RECORDED, SOURCE_WORD, WHO, activityFilters,
@@ -53,14 +54,33 @@ export function Block({ title, testId, action, children }) {
 
 const thCls = 'px-3 py-2 text-left font-mono text-[10.5px] font-semibold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400';
 const tdCls = 'px-3 py-2 align-top text-[13px] text-gray-800 dark:text-gray-200';
-export const Table = ({ head, children, testId }) => (
-  <div className="overflow-x-auto">
-    <table className="w-full min-w-[560px] border-collapse" data-testid={testId}>
+export function Table({ head, children, testId }) {
+  const phone = usePhoneWidth('(max-width: 767px)');
+  if (phone) {
+    return (
+      <div className="min-w-0 divide-y divide-axal-hairline dark:divide-gray-800" data-testid={testId}>
+        {React.Children.map(children, (row) => (
+          <div className="grid min-w-0 gap-2 py-3" data-testid={row.props['data-testid']}>
+            {React.Children.map(row.props.children, (cell, index) => cell && (
+              <div className={`min-w-0 break-words text-[13px] ${cell.props.className || ''}`}>
+                {head[index] ? <div className={eyebrowCls}>{head[index]}</div> : null}
+                {cell.props.children}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] border-collapse" data-testid={testId}>
       <thead><tr className="border-b border-axal-hairline dark:border-gray-800">{head.map((h) => <th key={h} className={thCls}>{h}</th>)}</tr></thead>
       <tbody>{children}</tbody>
-    </table>
-  </div>
-);
+      </table>
+    </div>
+  );
+}
 export const Td = ({ children, className = '' }) => <td className={`${tdCls} ${className}`}>{children}</td>;
 
 const SEV_CLS = {
@@ -174,14 +194,22 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
 const SEGMENTS = ['pending', 'pass', 'flag', 'fail', 'n_a'];
 
 function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
-  const set = (status) => { if (status !== item.status) open('item', { item, status }); };
+  const [actions, setActions] = useState(false);
+  const set = (status) => {
+    setActions(false);
+    if (status !== item.status) open('item', { item, status });
+  };
   return (
     <li className="flex flex-col gap-1 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800" data-testid={`dd-item-${item.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         {works ? <input type="checkbox" checked={picked} onChange={() => onPick(item.id)} aria-label={`Choose ${item.title}`} data-testid={`dd-item-pick-${item.id}`} /> : null}
         <span className="min-w-0 flex-1 text-[13px]">{item.title}</span>
         {works ? (
-          <div className="flex overflow-hidden rounded-lg border border-axal-hairline dark:border-gray-700" role="group" aria-label={`Status of ${item.title}`}>
+          <>
+          <button type="button" className={`${btnCls} md:hidden`} onClick={() => setActions(true)} data-testid={`dd-item-actions-${item.id}`}>
+            {ITEM_STATUS_WORD[item.status] || NOT_RECORDED} · Actions
+          </button>
+          <div className="hidden overflow-hidden rounded-lg md:flex border border-axal-hairline dark:border-gray-700" role="group" aria-label={`Status of ${item.title}`}>
             {SEGMENTS.map((s) => (
               <button key={s} type="button" aria-pressed={item.status === s} onClick={() => set(s)} data-testid={`dd-item-${item.id}-${s}`}
                 className={`px-2 py-1 text-[11.5px] font-semibold ${item.status === s ? 'bg-violet-600 text-white dark:bg-violet-500' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
@@ -189,6 +217,18 @@ function ItemRow({ item, people, evidence, works, picked, onPick, open }) {
               </button>
             ))}
           </div>
+          {actions ? (
+            <Lightbox label={item.title} title={item.title} phone="sheet" onClose={() => setActions(false)} testId={`dd-item-sheet-${item.id}`}>
+              <div className="grid gap-2 p-4">
+                {SEGMENTS.map((status) => (
+                  <button key={status} type="button" className={btnCls} aria-pressed={item.status === status} onClick={() => set(status)}>
+                    {ITEM_STATUS_WORD[status]}
+                  </button>
+                ))}
+              </div>
+            </Lightbox>
+          ) : null}
+          </>
         ) : <span className="text-[12px] font-semibold" data-testid={`dd-item-status-${item.id}`}>{ITEM_STATUS_WORD[item.status] || NOT_RECORDED}</span>}
       </div>
       <div className={`flex flex-wrap gap-3 text-[12px] ${muted}`}>
@@ -267,10 +307,10 @@ export function FlagsTab({ data, open }) {
   const people = peopleOf(data);
   const raise = (data.sections || []).some((s) => maySection(data, 'work', s.id));
   const sectionTitle = (id) => (data.sections || []).find((s) => Number(s.id) === Number(id))?.title || 'Case-wide';
-  const Row = ({ flag }) => (
-    <tr className="cursor-pointer border-t border-axal-hairline hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50" onClick={() => open('flag', { flag })} data-testid={`dd-flag-row-${flag.kind}-${flag.id ?? flag.checklist_item_id}`}>
+  const renderRow = (flag) => (
+    <tr key={`${flag.kind}-${flag.id ?? flag.checklist_item_id}`} className="cursor-pointer border-t border-axal-hairline hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/50" onClick={() => open('flag', { flag })} data-testid={`dd-flag-row-${flag.kind}-${flag.id ?? flag.checklist_item_id}`}>
       <Td><Severity s={flag.severity} /></Td>
-      <Td><button type="button" className="text-left font-semibold hover:underline" onClick={(e) => { e.stopPropagation(); open('flag', { flag }); }}>{flag.title}</button></Td>
+      <Td><button type="button" className="min-h-11 text-left font-semibold hover:underline md:min-h-0" onClick={(e) => { e.stopPropagation(); open('flag', { flag }); }}>{flag.title}</button></Td>
       <Td>{sectionTitle(flag.section_id)}</Td>
       <Td>{flagSourceWord(flag)}</Td>
       <Td>{personName(people, flag.owner_user_id) || 'No owner'}</Td>
@@ -305,12 +345,12 @@ export function FlagsTab({ data, open }) {
         </select>
       </div>
       <Block title="Open" testId="dd-flags-open">
-        {rows.open.length ? <Table head={head}>{rows.open.map((fl) => <Row key={`${fl.kind}-${fl.id ?? fl.checklist_item_id}`} flag={fl} />)}</Table>
+        {rows.open.length ? <Table head={head}>{rows.open.map(renderRow)}</Table>
           : <p className={`m-0 text-[13px] ${muted}`}>No flag matches.</p>}
       </Block>
       {rows.closed.length ? (
         <Block title="Closed" testId="dd-flags-closed">
-          <Table head={head}>{rows.closed.map((fl) => <Row key={`${fl.kind}-${fl.id}`} flag={fl} />)}</Table>
+          <Table head={head}>{rows.closed.map(renderRow)}</Table>
         </Block>
       ) : null}
     </div>
