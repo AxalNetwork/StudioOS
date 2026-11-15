@@ -15,7 +15,7 @@ The Ops canvas's deal-room screens (`design/canvases/integrated/ops-data.js`:
 | `DealRoomsPanel.jsx` | `/deals/rooms` (D4815): live deals and invitation requests (D1237), viewed as All live deals, You can open or Requested. A name and Open deal link only when the Worker explicitly returns `can_read: true`; requesting a room alone grants no access; unreadable access offers Try again. |
 | `DealInvitationsTab.jsx` | The Invitations tab (admin). |
 | `DealTransfersTab.jsx` | The Transfers tab and "Record a transfer" (admin, partner). |
-| `DealReferencesTab.jsx` | The References tab (admin, investor). |
+| `DealReferencesTab.jsx` | The reference calls card on Diligence (admin, investor): Delete and Record consent confirmed through the shared Lightbox, the deal page's card styling and the canvas's consent and notes pills (D6182). |
 | `DealSyndicates.jsx` | The company's syndicates, and a syndicate's drawer with its confirmed close. |
 
 ## Rules

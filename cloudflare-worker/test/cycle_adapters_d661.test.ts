@@ -64,6 +64,8 @@ function fixture() {
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict, the seventh module, over migration 464's decisions.
   db.exec(sqlOf('464_verdict_decisions.sql'));
+  // D6011 (#6011): the market card reads each figure's source from `market_figures`.
+  db.exec(sqlOf('202611150130_6011_market_figures.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -278,7 +280,18 @@ test('D661: the page lists Raise\'s modules as the Worker does', () => {
 });
 
 test('D661: Raise\'s real read passes through the page untouched, and its seeded cards draw', async () => {
-  for (const db of [raiseFixture(), raiseSeeded()]) {
+  const seededDb = raiseSeeded();
+  const lockedRead = await raiseCall(seededDb, `/overview?project=${P}`);
+  assert.equal(lockedRead.status, 200, JSON.stringify(lockedRead.body));
+  const lockedCard = adaptOverview('raise', lockedRead.body).cards.find((c: any) => c.slug === 'cap-table');
+  assert.equal(lockedCard.state, 'ok', 'the Worker still returns the seeded Cap table data');
+  assert.deepEqual(cardView(lockedCard), {
+    state: 'locked',
+    plan: { locked: true, tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' },
+  });
+
+  seededDb.prepare("UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = ?").run(FOUNDER);
+  for (const db of [raiseFixture(), seededDb]) {
     const r = await raiseCall(db, `/overview?project=${P}`);
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const o = adaptOverview('raise', r.body);
@@ -290,7 +303,7 @@ test('D661: Raise\'s real read passes through the page untouched, and its seeded
     }
     for (const f of o.figures) if (f.state === 'ok') assert.notEqual(figureValue(f), null, `${f.key} has a value the page cannot write`);
   }
-  const seeded = adaptOverview('raise', (await raiseCall(raiseSeeded(), `/overview?project=${P}`)).body);
+  const seeded = adaptOverview('raise', (await raiseCall(seededDb, `/overview?project=${P}`)).body);
   for (const slug of ['cap-table', 'use-of-funds', 'capital-relationships']) {
     const c = seeded.cards.find((x: any) => x.slug === slug);
     assert.equal(c.state, 'ok', `${slug} should be ok when seeded`);
@@ -538,6 +551,8 @@ test('D661: Grow\'s real read, seeded in every module: all seven cards are ok an
 
 test('D661: every Grow table has a value source for each column, and its filter and sorts name real fields', async () => {
   const f = await growSeeded();
+  f.db.exec(tableFromBaseline(BASELINE, 'metric_targets'));
+  f.db.prepare("INSERT INTO metric_targets (project_id, metric_key, target_value, direction) VALUES (?, 'mrr', 4000, 'up')").run(GP);
   for (const m of GROW_MODULES) {
     const r = await growCall(f, 'GET', `/modules/${m.slug}?project=${GP}`);
     assert.equal(r.status, 200, `${m.slug}: ${JSON.stringify(r.body)}`);
@@ -571,7 +586,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual(await rowBy('product-improvement', (c) => c.feedback === 'Onboarding is long'),
     { Feedback: 'Onboarding is long', Source: 'Team', Theme: 'Onboarding', 'Roadmap item': 'Short onboarding', Status: { text: 'Shipped', tone: 'ok' } });
   assert.deepEqual(await rowBy('revenue-and-traction', (c) => c.kpi === 'MRR'),
-    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1) });
+    { KPI: 'MRR', Value: '$3,840', 'Change · 30 d': '▲ $440', Source: 'stripe', 'As of': dayFrom(-1), Target: { text: '$4,000.00', href: `/grow/focus?project_id=${GP}`, separateLink: true }, 'Vs target': 'Below target' });
   assert.deepEqual(await rowBy('team-expansion', (c) => c.team === 'Engineering'),
     { Role: { text: 'Engineer', href: '/jobs/5/manage' }, Team: 'Engineering', Applicants: 3, 'In interview': 1, 'Target start': '2027-01' });
   assert.deepEqual(await rowBy('partner-network', (c) => c.partner === 'Northwind'),

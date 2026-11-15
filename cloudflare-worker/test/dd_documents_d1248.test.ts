@@ -299,6 +299,21 @@ test('item evidence: a link or a file, by a writer of the item\'s section; anoth
   assert.deepEqual(actions(w).filter((a: string) => a === 'item_evidence_added').length, 2);
 });
 
+test('#6290: an observer of the item\'s section is refused evidence in the Worker\'s words; a reviewer is not', async () => {
+  const w = world();
+  w.db.prepare("UPDATE dd_reviewers SET role = 'observer' WHERE section_id = 11 AND user_id = ?").run(REV_A);
+  const refused = await call(w, REV_A, 'POST', '/dd/cases/case-dd/items/21/evidence', { url: 'https://register.example.test/x' });
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error, 'An observer reads this section and does not work its checklist.');
+  assert.equal(refused.body.code, 'observer_reads_only');
+  const fd = new FormData();
+  fd.append('file', new File([new TextEncoder().encode('X')], 'x.pdf', { type: 'application/pdf' }));
+  assert.equal((await call(w, REV_A, 'POST', '/dd/cases/case-dd/items/21/evidence', fd)).status, 403, 'a file is refused too');
+  assert.equal(one(w, 'SELECT COUNT(*) AS n FROM dd_item_evidence').n, 0, 'nothing was written');
+  assert.equal((await call(w, REV_B, 'POST', '/dd/cases/case-dd/items/22/evidence', { url: 'https://ledger.example.test' })).status, 201);
+  assert.equal((await call(w, OWNER, 'POST', '/dd/cases/case-dd/items/21/evidence', { url: 'https://owner.example.test' })).status, 201, 'the case owner adds to any section');
+});
+
 test('a document link: the caller\'s own, once, for two minutes, logged; a reviewer never opens another section\'s NDA', async () => {
   const w = world();
   assert.equal((await call(w, REV_A, 'POST', '/dd/cases/case-dd/documents/download', { kind: 'attachment', id: 32 })).status, 404, 'a reviewer reached another section\'s NDA');

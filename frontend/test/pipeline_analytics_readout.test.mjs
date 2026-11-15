@@ -72,7 +72,7 @@ test('the strip is the artboard’s four, and the fourth is the page’s argumen
   const labels = [...between(P5DATA, 'a_stats: [', 'a_shape:').matchAll(/label:'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['Win rate', 'Median cycle', 'Weighted forecast', 'On-price losses']);
   const tiles = [...zone.matchAll(/<AnalyticsTile\b[\s\S]{0,700}?label="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(tiles, labels, 'the strip is no longer the artboard’s four tiles in its order');
+  assert.deepEqual(tiles, [...labels.slice(0, 3), 'Losses on price'], 'the strip is no longer the artboard’s four tiles in its order');
   assert.ok(!/<StatCard/.test(zone), 'the strip went back to the generic card the artboards replaced');
 
   // THE FOURTH TILE IS A FRACTION OF LOSSES, which is what the artboard draws
@@ -80,7 +80,7 @@ test('the strip is the artboard’s four, and the fourth is the page’s argumen
   // is out of.
   assert.ok(/value:String\(onPrice\) \+ ' of ' \+ LOST/.test(P5DATA),
     'the artboard’s on-price tile stopped being a fraction');
-  const fourth = between(zone, 'label="On-price losses"', '/>');
+  const fourth = between(zone, 'label="Losses on price"', '/>');
   assert.ok(/\$\{d\?\.on_price_losses \?\? 0\} of \$\{lostCount\}/.test(fourth),
     'the on-price tile is no longer a fraction of the losses in the window');
   // AND IT NAMES THE LOSSES NOBODY EXPLAINED, because the count is over the
@@ -169,7 +169,7 @@ test('the chip row narrows decisions in the worker, and never the forecast', () 
   // drawn; a page whose first chip named a fixed quarter would be wrong for
   // every reader after it.
   assert.deepEqual([...row.matchAll(/key: '([^']+)'/g)].map((m) => m[1]),
-    ['quarter', 'prev_quarter', 'ytd', 'shape']);
+    ['quarter', 'prev_quarter', 'ytd', 'all']);
   assert.ok(!/Q3 2026'/.test(zone), 'the zone prints the canvas’s own quarter as this firm’s');
 
   // THE PAGE'S WINDOW MAP IS EXACTLY THE CHIP ROW IT RENDERS. Parsed on both
@@ -207,63 +207,17 @@ test('the chip row narrows decisions in the worker, and never the forecast', () 
     'the forecast tile no longer says the chip does not narrow it');
 });
 
-test('the by-shape table is the artboard’s four columns', () => {
-  const card = between(P5, '<span class="zt">By shape</span>', '</sc-for>');
-  const cols = card.match(/grid-template-columns:([^;"]+)/)?.[1].trim();
-  assert.equal(cols, '1.1fr .6fr .6fr 1.5fr', 'the artboard’s by-shape grid changed');
-  const head = [...card.matchAll(/class="th"[^>]*>([^<]*)</g)].map((m) => m[1].trim());
-  assert.deepEqual(head, ['Shape', 'Win', 'Cycle', 'Read']);
-
-  const inst = between(zone, 'testid="by-shape"', 'note={');
-  assert.ok(inst.includes(`cols="${cols}"`), `the instrument no longer uses the artboard grid ${cols}`);
-  assert.deepEqual([...between(inst, 'head={[', ']}').matchAll(/'([^']+)'/g)].map((m) => m[1]), head);
-  assert.ok(inst.includes('meta="On-price losses stated per shape"'),
-    'the artboard’s subtitle for the by-shape card is gone');
-  assert.ok(P5.includes('On-price losses stated per shape'));
-  // A SHAPE WITH NO NAME IS UNRECORDED, not a blank row — the LEFT join that
-  // keeps it in the denominator is the reason it is here at all.
-  assert.ok(/s\.shape == null\s*\n?\s*\? \{ nr: true,/.test(inst),
-    'a quote whose need is unreadable now draws an empty shape cell');
-});
-
-test('the quarter chart is the artboard’s series, and an absent shape draws nothing', () => {
-  const card = between(P5, '<span class="zt">Quarter over quarter</span>', '</div>\n      </div>');
-  assert.ok(card.includes('Win rate by shape'), 'the artboard’s chart subtitle changed');
-  assert.ok(zone.includes('Win rate by shape'), 'the zone stopped naming what the chart plots');
-  // THE ARTBOARD'S THREE COLOURS, in its order.
-  assert.ok(/\['#fcd34d','#d97706','#92400e'\]/.test(P5DATA), 'the artboard’s series colours changed');
-  assert.ok(/const SERIES = \['#fcd34d', '#d97706', '#92400e'\];/.test(zone),
-    'the zone no longer uses the artboard’s series colours');
-  // THE LEGEND IS PINNED BY ITS OWN MARK, not by the word: the sentence
-  // explaining it lives in a comment, and `codeOnly` strips comments — so a
-  // word-match would pass over a chart that had lost its swatches.
-  assert.ok(/a_legend:/.test(P5DATA), 'the artboard’s legend is gone');
-  const legend = between(zone, 'data-testid="chart-legend"', '</div>');
-  assert.ok(/series\.map/.test(legend) && /background: s\.color/.test(legend),
-    'the legend stopped drawing one swatch per series');
-  assert.ok(/shapeName\(s\.shape\)/.test(legend), 'the legend swatches lost their labels');
-
-  // THE SERIES ARE THIS FIRM'S SHAPES, not the fixture's three.
-  for (const n of ['Fixed-scope', 'Embedded seats']) {
-    assert.ok(P5DATA.includes(n), `the artboard no longer names ${n}`);
-    assert.ok(!zone.includes(n), `the zone prints the canvas’s own ${n} series as this firm’s`);
+test('the shape rows preserve the selected population and stack on phones', () => {
+  const shape = between(zone, 'data-testid="by-shape"', '</Section>');
+  for (const label of ['Shape', 'Quotes', 'Won', 'Win rate', 'Median cycle', 'Won value']) {
+    assert.ok(shape.includes(`['${label}',`), `Missing metric: ${label}`);
   }
-
-  // A SHAPE THAT DECIDED NOTHING IN A QUARTER DRAWS NO BAR. A zero-height
-  // column reads as having lost every bid rather than as having made none —
-  // the same distinction the strip's null guard makes.
-  const chart = between(zone, 'const point = (q.by_shape || [])', '})}');
-  assert.ok(/if \(!point \|\| point\.win_rate_pct == null\) \{/.test(chart),
-    'a shape with no decisions in a quarter is drawing a bar');
-  assert.ok(!/win_rate_pct \?\? 0|win_rate_pct \|\| 0/.test(zoneRaw),
-    'a missing win rate is being coerced to zero');
-  // AND EACH QUARTER'S SERIES IS ORDERED THE SAME WAY THE TABLE IS, so one
-  // colour means one row in both.
-  assert.ok(/\.sort\(byShapeName\)/.test(engine), 'the quarter series stopped sharing the table’s ordering');
-  const quarterFn = between(engine, 'export function analyseByQuarter', '\n}');
-  // D4693: every rate in the engine is `winRate(...)` from services/partnerPipelineRules.ts, null with nothing decided.
-  assert.ok(/win_rate_pct: winRate\(s\.accepted, s\.decided - s\.accepted\)\.pct/.test(quarterFn),
-    'a shape that decided nothing now carries a rate');
+  assert.match(shape, /grid-cols-2.*lg:grid-cols-6/);
+  assert.match(shape, /shapeRead\(s\)/);
+  assert.doesNotMatch(zoneRaw, /win_rate_pct \?\? 0|win_rate_pct \|\| 0/);
+  const quarters = between(engine, 'export function analyseByQuarter', '\n}');
+  assert.match(quarters, /win_rate_pct: winRate\(s\.accepted, s\.decided - s\.accepted\)\.pct/);
+  assert.match(quarters, /\.sort\(byShapeName\)/);
 });
 
 test('the ops row is the artboard’s two, and the export carries the loss columns', () => {

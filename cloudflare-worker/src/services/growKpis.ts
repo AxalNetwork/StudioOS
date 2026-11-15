@@ -19,8 +19,9 @@
  *
  * A hand entry is `source = 'manual'`, one KPI per call, and a second entry
  * for the same KPI on the same day updates that day's manual row. A typed
- * figure is never stored under a connected source's name. MRR and Burn are US
- * dollars, as `project_metrics` keeps them (REAL, migration 249); a custom
+ * figure is never stored under a connected source's name. A hand entry typed
+ * wrong is removed by `removeKpiEntry` (D6101); a connected source's is not.
+ * MRR and Burn are US dollars, as `project_metrics` keeps them (REAL, migration 249); a custom
  * money KPI is stored as whole cents.
  */
 import type { Env } from '../types';
@@ -30,8 +31,10 @@ import { notify } from './notify';
 import { HAND_ENTRY_REFUSED, KPI_PREFIX as POSTHOG_PREFIX, ROLE_WORDS, metricReadings, trackedByUid, trackedOf } from './posthog/metrics';
 
 export class KpiRefused extends Error {
-  status: number; sentence: string; field: string | null;
-  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.sentence = sentence; this.field = field; }
+  status: number; sentence: string; field: string | null; code: string | null;
+  constructor(status: number, sentence: string, field: string | null = null, code: string | null = null) {
+    super(sentence); this.status = status; this.sentence = sentence; this.field = field; this.code = code;
+  }
 }
 
 export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway'] as const;
@@ -330,6 +333,129 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
   ).bind(crypto.randomUUID().replace(/-/g, ''), kpi!.id, asOf, money ? null : value, money ? Math.round(value * 100) : null, note, userId).run();
   await alertsAfterWrite(env, projectId, `${CUSTOM_PREFIX}${kpi!.uid}`);
   return { id: `${CUSTOM_PREFIX}${kpi!.uid}`, as_of: asOf, value, unit: kpi!.unit, source: 'manual', created_kpi: created };
+}
+
+// ── Remove a hand entry (D6101, #6101) ──────────────────────────────────────
+//
+// A figure typed with the wrong value on an earlier day is removed, not
+// overwritten: the KPI then reads the next latest value wherever it is read
+// (the KPI table, the Overview, a report draft), because each of them reads
+// the stores as they are now. A sent report keeps the figures it froze.
+//
+// An entry is one stored row: a `project_metrics` row's id for MRR, Customers,
+// Churn and Burn, a `custom_kpi_values` uid for a custom KPI. Only a hand entry
+// is removed: `source = 'manual'`, or a `project_metrics` row with no source,
+// which migration 249 keeps for a founder's own entry and `sourceOf` reads as
+// manual. A connected source's figure (Stripe, Mercury, a sheet, a CSV import)
+// is refused with 409, and is corrected where it came from.
+
+/** One stored value of a KPI, newest first, as History lists it. */
+export type KpiStoredEntry = { entry: string; day: string; value: number; source: string; manual: boolean };
+export type KpiEntryRemoved = { id: string; entry: string; as_of: string; value: number; removed: true };
+
+/** One literal per KPI, so a key never names a column (decision 4). */
+const ENTRIES_SQL = {
+  mrr: 'SELECT id AS entry, snapshot_date AS day, mrr AS value, source FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  paying_accounts: 'SELECT id AS entry, snapshot_date AS day, paying_accounts AS value, source FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  churn: 'SELECT id AS entry, snapshot_date AS day, monthly_churn_pct AS value, source FROM project_metrics WHERE project_id = ? AND monthly_churn_pct IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  net_burn: 'SELECT id AS entry, snapshot_date AS day, net_burn AS value, source FROM project_metrics WHERE project_id = ? AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+} as const satisfies Record<TypedKey, string>;
+const ENTRY_SQL = {
+  mrr: 'SELECT id AS entry, snapshot_date AS day, mrr AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND mrr IS NOT NULL',
+  paying_accounts: 'SELECT id AS entry, snapshot_date AS day, paying_accounts AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND paying_accounts IS NOT NULL',
+  churn: 'SELECT id AS entry, snapshot_date AS day, monthly_churn_pct AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND monthly_churn_pct IS NOT NULL',
+  net_burn: 'SELECT id AS entry, snapshot_date AS day, net_burn AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND net_burn IS NOT NULL',
+} as const satisfies Record<TypedKey, string>;
+/** The manual test is inside the write, so a row a connector took over meanwhile is never cleared. */
+const CLEAR_SQL = {
+  mrr: `UPDATE project_metrics SET mrr = NULL WHERE id = ? AND project_id = ? AND mrr IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  paying_accounts: `UPDATE project_metrics SET paying_accounts = NULL WHERE id = ? AND project_id = ? AND paying_accounts IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  churn: `UPDATE project_metrics SET monthly_churn_pct = NULL WHERE id = ? AND project_id = ? AND monthly_churn_pct IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  net_burn: `UPDATE project_metrics SET net_burn = NULL WHERE id = ? AND project_id = ? AND net_burn IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+} as const satisfies Record<TypedKey, string>;
+/**
+ * A manual row left holding no figure goes, so no reader counts an empty
+ * snapshot. The four typed columns are tested in the statement too, because a
+ * same-day entry of another KPI could land between the read and the delete.
+ */
+const DROP_EMPTY_SQL = `DELETE FROM project_metrics WHERE id = ? AND project_id = ?
+  AND mrr IS NULL AND paying_accounts IS NULL AND monthly_churn_pct IS NULL AND net_burn IS NULL
+  AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`;
+/** A row's own bookkeeping; any other column holding a value keeps the row. */
+const ROW_META = new Set(['id', 'project_id', 'snapshot_date', 'notes', 'source', 'created_by', 'created_at']);
+
+const ENTRY_NOT_FOUND = 'This entry is not in this KPI\'s history. Reload the page to see it as it is now.';
+const connectedSentence = (source: string) =>
+  `This figure comes from ${source}, a connected source, so it cannot be removed here. Only a figure entered by hand can be; correct this one where it came from.`;
+
+/** Every stored value of a typed or custom KPI, newest first; none for a derived or PostHog KPI. */
+export async function kpiEntries(env: Env, projectId: number, key: string): Promise<KpiStoredEntry[]> {
+  type Raw = { entry: string | number; day: string; value: number | null; source: string | null };
+  let raw: Raw[] = [];
+  if (key in ENTRIES_SQL) {
+    raw = (await env.DB.prepare(ENTRIES_SQL[key as TypedKey]).bind(projectId).all<Raw>()).results || [];
+  } else if (key.startsWith(CUSTOM_PREFIX)) {
+    raw = (await env.DB.prepare(
+      `SELECT v.uid AS entry, v.as_of AS day, COALESCE(v.value_cents, v.value) AS value, v.source FROM custom_kpi_values v
+         JOIN custom_kpis k ON k.id = v.kpi_id WHERE k.uid = ? AND k.project_id = ? ORDER BY v.as_of DESC, v.id DESC`,
+    ).bind(key.slice(CUSTOM_PREFIX.length), projectId).all<Raw>()).results || [];
+  }
+  return raw.filter((r) => r.value != null && Number.isFinite(Number(r.value))).map((r) => ({
+    entry: String(r.entry), day: String(r.day), value: Number(r.value), source: sourceOf(r.source), manual: sourceOf(r.source) === 'manual',
+  }));
+}
+
+/**
+ * Remove one hand entry of one KPI (D6101). The caller has checked the writer
+ * gate and logs the removal on the KPI's record. Alerts on the KPI are checked
+ * again at once, and a Burn entry checks Runway's too, as an entry does.
+ */
+export async function removeKpiEntry(env: Env, projectId: number, key: string, rawEntry: unknown): Promise<KpiEntryRemoved> {
+  if (REFUSED[key as KpiKey]) throw new KpiRefused(400, REFUSED[key as KpiKey]!, 'kpi', 'kpi_not_entered_by_hand');
+  if (key.startsWith(POSTHOG_PREFIX)) throw new KpiRefused(400, HAND_ENTRY_REFUSED, 'kpi', 'kpi_not_entered_by_hand');
+  const entry = typeof rawEntry === 'string' || typeof rawEntry === 'number' ? String(rawEntry).trim() : '';
+  if (!entry) throw new KpiRefused(400, 'Choose the entry to remove: each hand entry in History has its own Remove.', 'entry', 'kpi_entry_required');
+  const notFound = () => new KpiRefused(404, ENTRY_NOT_FOUND, 'entry', 'kpi_entry_not_found');
+
+  let removed: { day: string; value: number };
+  if (key in CLEAR_SQL) {
+    const k = key as TypedKey;
+    if (!/^[1-9][0-9]{0,15}$/.test(entry)) throw notFound();
+    const row = await env.DB.prepare(ENTRY_SQL[k]).bind(Number(entry), projectId)
+      .first<{ entry: number; day: string; value: number; source: string | null }>();
+    if (!row) throw notFound();
+    if (sourceOf(row.source) !== 'manual') throw new KpiRefused(409, connectedSentence(sourceOf(row.source)), 'entry', 'kpi_entry_connected');
+    const cleared = await env.DB.prepare(CLEAR_SQL[k]).bind(row.entry, projectId).run();
+    if (!Number(cleared.meta?.changes ?? 0)) throw notFound();
+    const left = await env.DB.prepare('SELECT * FROM project_metrics WHERE id = ? AND project_id = ?').bind(row.entry, projectId)
+      .first<Record<string, unknown>>();
+    if (left && Object.entries(left).every(([col, v]) => ROW_META.has(col) || v == null)) {
+      await env.DB.prepare(DROP_EMPTY_SQL).bind(row.entry, projectId).run();
+    }
+    removed = { day: row.day, value: Number(row.value) };
+  } else if (key.startsWith(CUSTOM_PREFIX)) {
+    const kpi = await env.DB.prepare('SELECT id, uid, label, unit, currency FROM custom_kpis WHERE uid = ? AND project_id = ?')
+      .bind(key.slice(CUSTOM_PREFIX.length), projectId).first<CustomKpi>();
+    if (!kpi) throw new KpiRefused(404, 'Not found', 'kpi', 'kpi_not_found');
+    const row = await env.DB.prepare('SELECT uid, as_of, COALESCE(value_cents, value) AS value, source FROM custom_kpi_values WHERE uid = ? AND kpi_id = ?')
+      .bind(entry, kpi.id).first<{ uid: string; as_of: string; value: number; source: string }>();
+    if (!row) throw notFound();
+    if (sourceOf(row.source) !== 'manual') throw new KpiRefused(409, connectedSentence(sourceOf(row.source)), 'entry', 'kpi_entry_connected');
+    const del = await env.DB.prepare("DELETE FROM custom_kpi_values WHERE uid = ? AND kpi_id = ? AND source = 'manual'").bind(row.uid, kpi.id).run();
+    if (!Number(del.meta?.changes ?? 0)) throw notFound();
+    removed = { day: row.as_of, value: Number(row.value) };
+  } else {
+    throw new KpiRefused(404, 'Not found', 'kpi', 'kpi_not_found');
+  }
+
+  await alertsAfterWrite(env, projectId, key);
+  // Runway is worked out from cash and burn, so removing a burn entry can cross a Runway alert, or clear one.
+  if (key === 'net_burn') await alertsAfterWrite(env, projectId, 'runway');
+  return { id: key, entry, as_of: removed.day, value: removed.value, removed: true };
 }
 
 // ── Alerts (#1698, decision 3) ──────────────────────────────────────────────
