@@ -9,6 +9,7 @@ can be read to find out what a rule actually is.
 | File | What it decides |
 | --- | --- |
 | `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. |
+| `actionsConcurrency.mjs` | #6462: per-minute executing and queued job levels from job timestamps (a job executes only once a runner took it), effective ceiling (the level held while jobs queue), slot shares, PR draft state at run time and the plan-cap match; `actionsConcurrency.test.mjs` holds the fixture jobs. |
 | `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
 | `probeOutcome.mjs` | #4571 R2-09: the one outcome a sign-in probe run is filed under (EDGE_CHALLENGED, APPLICATION_REFUSED, REFUSED_UNATTRIBUTED, APPLICATION_FAILED, ACCEPTED_NOT_VERIFIED, VERIFIED_END_TO_END). A skipped check is never a pass. Read by `../check-magic-link-insert.mjs` and `../check-magic-link-live.mjs`. |
 | `runtimeDdl.mjs` | #4568 R2-04: the inventory of runtime `ADD COLUMN` in the Worker (file, table, column, whether the file asks the table first, whether a migration declares the column) and the no-growth ratchet over it. Owned by `../check-runtime-ddl.mjs` and `cloudflare-worker/test/runtime_ddl_4568.test.ts`. |
@@ -91,9 +92,14 @@ to spawn something or talk to Cloudflare, that part stays in the script above.
 | `workspaceInvariants.mjs` | D5573: the six workspace invariants (tenant isolation, reviewed deploy, no double effect, checkpoints kept, no stranded compute, revoked/disallowed never execute) over one normalized observation set; an unexercised check fails. `fromReconcileRows` reads #4594's `RECONCILE` rows. Tests in `workspaceInvariants.test.mjs`. |
 | `workspaceReport.mjs` | D5573: the validation report (evidence class, sample size, config, commit, p50/p95, success %, retry amplification, PR and Git counts) as JSON and Markdown; a mock is only ever `local_mocked` and its cost is "not measured", never 0. Tests in `workspaceReport.test.mjs`. |
 | `prRisk.mjs` | D5580: hunk-level risk classes per overlapping PR pair, the four per-PR evidence fields and the dated advisory snapshot; `prRisk.test.mjs` holds the Delivery-cluster fixture. |
+| `workIntent.mjs` | D5580 part 2: the WorkIntent view derived from the #5617 claim ref, STATUS claims and the claimant's open PRs (WorkItem fields it cannot fill are null), the duplicate/stale/disappeared-PR/invalid-slot/expiry rules and the soft proceed/coordinate/wait/serialize recommendation; tested in `workIntent.test.mjs`. |
 | `workflowFailureDispatch.test.mjs` | D6387: signed event admission, dispatch scope and error handling. |
 | `workflowFailureIssues.mjs` | D6387: identify and update actionable workflow repair episodes. |
 | `workflowFailureIssues.test.mjs` | D6387: episode attribution, deduplication and safe evidence. |
 | `workflowFailureHints.mjs` | D6387: match verified failures to existing repairs and release supersession. |
 | `workflowFailureHints.test.mjs` | D6387: verify source constraints for known repair issues. |
 | `workflowFailureReconcile.test.mjs` | D6387: exact attempt dispatch, paginated reconciliation, checkpoints and the trusted Actions job. |
+| `flakyTests.mjs` | D6464: classify flaky tests from queue logs, merge and expire the list, and decide a merge_group retry. |
+| `failedTestsReporter.mjs` | D6464: a node:test reporter writing one JSON line per failed test, read by the suite runner. |
+| `flakyTests.test.mjs` | D6464: classification, expiry, the one-retry rule and the runner's reporter wiring. |
+| `sectionDraftGate.mjs` | D5985 (#5985): whether a reproduced section defect may get one automatic draft fix: section-triage's `cases` as the allowlist, trusted reproduced evidence, #5681's excluded inputs, no self-generated events, existing claims and PRs, the attempt, branch, PR and concurrency budget, and the stop switch. Emits five fixed job fields or one reason code. Tested in `sectionDraftGate.test.mjs`. |

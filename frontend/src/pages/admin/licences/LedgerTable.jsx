@@ -5,6 +5,9 @@
  * cell is one primary state; a value the reads do not give is said as None,
  * Not recorded, Unavailable or Not instrumented (`../licenceLedgerModel.js`),
  * never as 0.
+ *
+ * D4819 part 20 (#5932), board L20 — on a phone each list row is one touch
+ * target of at least 56px: the licence's link covers the whole row.
  */
 import React from 'react';
 import {
@@ -134,12 +137,12 @@ export function LedgerMenus({ menus, territories, onChange }) {
   );
 }
 
-function Identity({ l, onOpen }) {
+function Identity({ l, onOpen, stretch = false }) {
   return (
     <>
       <a
         href={`/admin/licences/${encodeURIComponent(l.uid)}`} onClick={(e) => onOpen(e, l.uid)}
-        className="inline-flex items-center gap-1.5 font-semibold text-gray-900 hover:underline dark:text-gray-100"
+        className={`inline-flex items-center gap-1.5 font-semibold text-gray-900 hover:underline dark:text-gray-100 ${stretch ? "after:absolute after:inset-0 after:content-['']" : ''}`}
         data-testid="licence-row-link"
       >
         {/* D198 / H28 — a white-label row shows the operator's own colour; a subsidiary none. */}
@@ -213,8 +216,8 @@ export function LedgerTable({ rows, reads, onOpen, onRetryRequests, footer }) {
         {rows.map((l) => {
           const read = reads[l.uid];
           return (
-            <li key={l.uid} className="flex items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0"><Identity l={l} onOpen={onOpen} /></div>
+            <li key={l.uid} className="relative flex min-h-[56px] items-start justify-between gap-3 px-4 py-3 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-600" data-testid="licence-list-row">
+              <div className="min-w-0"><Identity l={l} onOpen={onOpen} stretch /></div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-[12px]">
                 <Chip tone={STATUS_TONE[l.status]}>{statusWord(l.status)}</Chip>
                 <StateTag c={attentionCell(l, read)} />

@@ -27,7 +27,7 @@ addresses here with DR24's notice.
 | `DataRoomSearch.jsx` | #3938 part 2: search inside the files, on the room's own index; no model to pick. The founders' Index files for search; `shared` searches as an investor. Mounted at the top of Files. |
 | `DataRoomFile.jsx` | DR3 and DR15, one file's sheet (the shared `Sheet`, D1317) at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
 | `DataRoomFolders.jsx` | DR5: a folder's sheet (`Sheet`, D1317; its NDA switch, Rename, Delete folder) and New folder. |
-| `DataRoomUpload.jsx` | DR4 and DR4s: Upload, the sheet at `/raise/data-room/new`, with its queue in states. |
+| `DataRoomUpload.jsx` | DR4, DR4s and DR23: Upload, the sheet at `/raise/data-room/new`, with its queue in states, storage used and left from Usage › Storage's read, the near-limit line, and a queue that would pass the limit refused before sending (D6074). |
 | `accessModel.js` | Pure (D1107): Access's rows and filters, the matrix (every cell through `grantOn`), Share's candidates and what a new grant opens, the NDA's state and what it unlocks, the requests in words, refusals, DR18's words. |
 | `DataRoomAccess.jsx` | DR6, DR6m, DR7, DR7i, DR7r, DR8 and DR16b: Access by investor and as the matrix, Share, one investor's sheet (`Sheet`, D1317), Change, Revoke, the NDA and its strip, the advisor grant (owner only) and the report shares. |
 | `ReportShares.jsx` | The scoring report's shares (D663), read-only and in every state, drawn on Access. |

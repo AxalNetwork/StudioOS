@@ -17,6 +17,8 @@ export const contactsBookApi = {
   importLinkedinCsv: (file) => request('/contacts/import/linkedin-csv', { method: 'POST', body: fileBody(file) }),
   reviews: () => request('/contacts/import/reviews'),
   decideReview: (uid, decision) => request(`/contacts/import/reviews/${enc(uid)}/${enc(decision)}`, { method: 'POST' }),
+  // #5310 (NW1): overdue open follow-ups on the own book, oldest due first, and their total.
+  followUpsDue: (limit = 5) => request(`/contacts/book/follow-ups-due?limit=${enc(limit)}`),
   notes: (contactId) => request(`/contacts/book/${enc(contactId)}/notes`),
   addNote: (contactId, body) => request(`/contacts/book/${enc(contactId)}/notes`, { method: 'POST', body: JSON.stringify({ body }) }),
   tasks: (contactId) => request(`/contacts/book/${enc(contactId)}/tasks`),

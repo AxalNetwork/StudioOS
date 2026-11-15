@@ -22,6 +22,10 @@
  *   sentence, and the load error keeps the one reason a person can act on.
  * - One write at a time. A second call while one is in flight resolves `false`
  *   without sending anything.
+ * - `key` (D4838 PP08, optional) names WHAT is being read. The opportunity sheet
+ *   is one mounted sheet that can be pointed at another opportunity; a changed
+ *   key is a first read again (the skeleton, not the last record's rows), while
+ *   a reload under the same key stays a background refresh. The zones pass none.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isNoPartnerProfile } from '../kit';
@@ -29,13 +33,14 @@ import { isNoPartnerProfile } from '../kit';
 export const WRITE_FAILED = 'That did not save. What you typed is still here, so try again.';
 export const NO_PROFILE_LINE = 'No partner profile is linked to this account.';
 
-export function usePipelineZone(fetcher, loadFailed) {
+export function usePipelineZone(fetcher, loadFailed, key = null) {
   const [state, setState] = useState({ loading: true, error: '', data: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const gen = useRef(0);
   const hasData = useRef(false);
   const busyRef = useRef(false);
+  const keyRef = useRef(key);
   const alive = useRef(true);
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
@@ -44,7 +49,12 @@ export function usePipelineZone(fetcher, loadFailed) {
   /** Resolves `true` when this call's rows are the ones now on screen. */
   const load = useCallback(async () => {
     const mine = ++gen.current;
-    if (!hasData.current) setState((s) => ({ ...s, loading: true, error: '' }));
+    if (keyRef.current !== key) {
+      // Another record: the last one's rows are not this one's, so they go.
+      keyRef.current = key;
+      hasData.current = false;
+      setState({ loading: true, error: '', data: null });
+    } else if (!hasData.current) setState((s) => ({ ...s, loading: true, error: '' }));
     try {
       const r = await fetchRef.current();
       if (!alive.current || mine !== gen.current) return false;
@@ -62,7 +72,7 @@ export function usePipelineZone(fetcher, loadFailed) {
       });
       return false;
     }
-  }, [loadFailed]);
+  }, [loadFailed, key]);
   useEffect(() => { load(); }, [load]);
 
   /** One write. Resolves `true` only when the server accepted it. */

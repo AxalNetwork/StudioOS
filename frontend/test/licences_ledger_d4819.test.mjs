@@ -446,7 +446,8 @@ test('App routes both deep-link shapes behind the HQ guard, and the static Progr
 // ── navigation ────────────────────────────────────────────────────────────
 
 test('"Program grants" is "Program access by licence", at the same address, and the old address still opens it', () => {
-  assert.deepEqual(HQ_STRIPS.Licences.map((s) => [s.label, s.route]), [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs']]);
+  // D5896 (#5896) adds the Axal VC package catalogue third; the first two are unchanged.
+  assert.deepEqual(HQ_STRIPS.Licences.map((s) => [s.label, s.route]), [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs'], ['Axal VC packages', '/admin/licences/packages']]);
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<StripLink to="\/admin\/licences\/programs">Program access by licence<\/StripLink>/);
   assert.doesNotMatch(app, />Program grants<\/StripLink>/);
