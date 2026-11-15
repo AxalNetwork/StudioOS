@@ -13,7 +13,7 @@
  *     any response; restricted, full and owner bind; unverified is refused.
  *  6. Malformed, not listed and mismatched selections bind nothing.
  *  7. Two ventures, two bindings; a teammate's binding is never replaced.
- *  8. The check: lost access marks the binding `lost`, regained access clears it.
+ *  8. The check: lost access marks the selection `denied` (D5840's state), regained access clears it.
  *  9. A revoked grant asks to sign in again; a refresh is behind the lease.
  * 10. A support session, a non-member and an unswitched company are refused.
  * 11. Disconnect revokes only this client's grant and removes the bindings.
@@ -26,7 +26,7 @@ import { SignJWT } from 'jose';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import integrations from '../src/routes/integrations.ts';
 import searchConsole from '../src/routes/search_console.ts';
-import '../src/integrations/providers/google_search_console.ts';
+import { searchConsoleAccessTokenForUser } from '../src/integrations/providers/google_search_console.ts';
 import { CONNECTOR_METADATA, getDescriptor, getProviderImpl } from '../src/integrations/registry.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
 import { CONNECTOR_PAGES } from '../src/integrations/connectorPages.ts';
@@ -39,7 +39,8 @@ import { personalFixture } from './_mercury_personal_d713.ts';
 
 const COMPANY = 77;
 const KEY = 'google_search_console';
-const MIGRATION = readFileSync('cloudflare-worker/sql/migrations/202611150226_5839_search_console_properties.sql', 'utf8');
+// D5840's tables: the selection this picker writes is the one its sync reads.
+const MIGRATION = readFileSync('cloudflare-worker/sql/migrations/202611150136_5840_search_console_sync.sql', 'utf8');
 const DOMAIN = 'sc-domain:example.test';
 const PREFIX = 'https://shop.example.test/';
 const RESTRICTED = 'https://blog.example.test/';
@@ -249,16 +250,16 @@ test('5. the picker lists what Google lists, marks unusable levels, and binds re
     assert.equal(b.body.binding.permission_level, level);
     assert.equal(b.body.binding.access_state, 'ok');
   }
-  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_properties').get().n, 1, 'one property per venture');
+  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_selections').get().n, 1, 'one property per venture');
   const verified = t.g.calls.filter((c) => c.path === `/webmasters/v3/sites/${encodeURIComponent(DOMAIN)}`);
   assert.equal(verified.length, 1, 'verified with sites.get on the exact id');
   const unv = await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: UNVERIFIED } });
   assert.equal(unv.status, 409);
   assert.equal(unv.body.error, 'property_unusable');
-  assert.equal(t.db.prepare('SELECT site_url FROM search_console_properties WHERE project_id = 1').get().site_url, DOMAIN, 'the refusal changed nothing');
+  assert.equal(t.db.prepare('SELECT site_url FROM search_console_selections WHERE project_id = 1').get().site_url, DOMAIN, 'the refusal changed nothing');
   const off = await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: null } });
   assert.equal(off.status, 200);
-  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_properties').get().n, 0);
+  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_selections').get().n, 0);
   const logged = t.db.prepare("SELECT action, details FROM activity_logs WHERE action LIKE 'search_console_%' ORDER BY id").all() as any[];
   assert.deepEqual(logged.map((l) => l.action), ['search_console_property_bound', 'search_console_property_changed', 'search_console_property_changed', 'search_console_property_unbound']);
   for (const l of logged) assert.doesNotMatch(l.details, /example\.test/, 'no property name is logged');
@@ -281,7 +282,7 @@ test('6. malformed, not listed and mismatched selections bind nothing', async ()
   const mm = await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: PREFIX } });
   assert.equal(mm.status, 502);
   assert.equal(mm.body.error, 'property_mismatch');
-  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_properties').get().n, 0);
+  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_selections').get().n, 0);
 });
 
 test('7. two ventures, two bindings; a teammate never replaces a binding', async () => {
@@ -290,7 +291,7 @@ test('7. two ventures, two bindings; a teammate never replaces a binding', async
   await connected(t, 11);
   assert.equal((await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: DOMAIN } })).status, 200);
   assert.equal((await req(t, 10, BIND, { method: 'PUT', body: { project: 2, site_url: PREFIX } })).status, 200);
-  const rows = t.db.prepare('SELECT project_id, site_url FROM search_console_properties ORDER BY project_id').all() as any[];
+  const rows = t.db.prepare('SELECT project_id, site_url FROM search_console_selections ORDER BY project_id').all() as any[];
   assert.deepEqual(rows.map((r) => [r.project_id, r.site_url]), [[1, DOMAIN], [2, PREFIX]]);
   const theirs = await req(t, 11, BIND, { method: 'PUT', body: { project: 1, site_url: RESTRICTED } });
   assert.equal(theirs.status, 409);
@@ -313,10 +314,10 @@ test('8. the check marks lost access and clears it once access returns', async (
   t.g.sites = t.g.sites.filter((s) => s.siteUrl !== PREFIX);
   const lost = await req(t, 10, CHECK, { method: 'POST', body: { project: 1 } });
   assert.equal(lost.status, 200, lost.text);
-  assert.equal(lost.body.binding.access_state, 'lost');
+  assert.equal(lost.body.binding.access_state, 'denied');
   assert.equal(lost.body.binding.site_url, PREFIX, 'the binding stays, marked');
   t.g.sites.push({ siteUrl: PREFIX, permissionLevel: 'siteUnverifiedUser' });
-  assert.equal((await req(t, 10, CHECK, { method: 'POST', body: { project: 1 } })).body.binding.access_state, 'lost', 'unverified is still lost');
+  assert.equal((await req(t, 10, CHECK, { method: 'POST', body: { project: 1 } })).body.binding.access_state, 'denied', 'unverified is still denied');
   t.g.sites[t.g.sites.length - 1].permissionLevel = 'siteRestrictedUser';
   const back = await req(t, 10, CHECK, { method: 'POST', body: { project: 1 } });
   assert.equal(back.body.binding.access_state, 'ok');
@@ -385,10 +386,25 @@ test('11. disconnect revokes only this grant and removes the bindings', async ()
   assert.equal(revoke.length, 1);
   assert.equal(new URLSearchParams(revoke[0].body!).get('token'), 'fixture-refresh-1', 'the refresh token revokes the whole Search Console grant');
   assert.equal(row(t), undefined);
-  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_properties').get().n, 0);
+  assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM search_console_selections').get().n, 0);
   // A reconnect starts clean: the venture binds again, verified again.
   t.g.revoked = false;
   await connected(t);
   const again = await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: DOMAIN } });
   assert.equal(again.status, 200, again.text);
+});
+
+test('12. the selection D5840\'s sync reads, and the token its accessToken dep gets for that member', async () => {
+  // Mutation checked: writing another table, or keying the selection by anything but the member, fails here.
+  const t = await setup();
+  await connected(t);
+  await req(t, 10, BIND, { method: 'PUT', body: { project: 1, site_url: DOMAIN } });
+  const sel = t.db.prepare('SELECT project_id, user_id, site_url, property_kind, permission_level, access_state FROM search_console_selections').all() as any[];
+  assert.deepEqual(sel.map((r) => ({ ...r })), [{ project_id: 1, user_id: 10, site_url: DOMAIN, property_kind: 'domain', permission_level: 'siteOwner', access_state: 'ok' }]);
+  const real = globalThis.fetch;
+  globalThis.fetch = t.g.fetch;
+  try {
+    assert.equal(await searchConsoleAccessTokenForUser(t.env, 10), 'fixture-access-1');
+    await assert.rejects(searchConsoleAccessTokenForUser(t.env, 11), /search_console_grant_revoked/, 'no connection reads as a revoked grant');
+  } finally { globalThis.fetch = real; }
 });

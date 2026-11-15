@@ -11,7 +11,7 @@
  * connection, switched on for the venture's company. A binding another
  * member's connection holds is never replaced. A property is bound only after
  * `sites.get` on its exact identifier reports a usable permission level for
- * the signed-in principal; the check repeats that and marks the binding `lost`
+ * the signed-in principal; the check repeats that and marks the selection `denied` (D5840's state)
  * when Google no longer grants it. The browser receives the capability, the
  * status and the chosen property's identifier and level: never a token.
  */
@@ -112,16 +112,20 @@ function ownConnection(c: C, user: User): Promise<IntegrationRow | null> {
     .bind(user.id, SEARCH_CONSOLE_KEY).first<IntegrationRow>();
 }
 
+/**
+ * The venture's selection, in D5840's `search_console_selections`: the one table the sync reads
+ * (`services/searchConsoleSync.ts`). The member who bound it (`user_id`) is whose grant the sync uses.
+ */
 interface Binding {
-  integration_id: number; owner_id: number; owner_name: string | null; site_url: string;
-  property_kind: 'domain' | 'url_prefix'; permission_level: string; access_state: 'ok' | 'lost'; checked_at: string;
+  owner_id: number; owner_name: string | null; site_url: string;
+  property_kind: 'domain' | 'url_prefix'; permission_level: string | null; access_state: 'ok' | 'denied' | 'revoked'; checked_at: string;
 }
 
 function bindingOf(env: Env, projectId: number): Promise<Binding | null> {
   return env.DB.prepare(
-    `SELECT b.integration_id, i.user_id AS owner_id, COALESCE(u.display_name, u.name) AS owner_name, b.site_url,
-            b.property_kind, b.permission_level, b.access_state, b.checked_at
-       FROM search_console_properties b JOIN integrations i ON i.id = b.integration_id LEFT JOIN users u ON u.id = i.user_id
+    `SELECT b.user_id AS owner_id, COALESCE(u.display_name, u.name) AS owner_name, b.site_url,
+            b.property_kind, b.permission_level, b.access_state, b.updated_at AS checked_at
+       FROM search_console_selections b LEFT JOIN users u ON u.id = b.user_id
       WHERE b.project_id = ?`,
   ).bind(projectId).first<Binding>();
 }
@@ -145,7 +149,7 @@ r.get('/properties', handle(async (c, user) => {
   const binding = await bindingOf(c.env, venture.id);
   const row = await ownConnection(c, user);
   const enabled = !!row && await projectEnabled(c.env, Number(row.id), venture.id);
-  const own = !!binding && !!row && binding.integration_id === Number(row.id);
+  const own = !!binding && !!row && binding.owner_id === Number(user.id);
   let choices: ReturnType<typeof choiceOf>[] | null = null;
   let choicesError: string | null = null;
   if (venture.writer && row && enabled) {
@@ -177,16 +181,16 @@ async function writerConnection(c: C, user: User, raw: unknown) {
   const row = await ownConnection(c, user);
   if (!row) throw new Refused(409, 'not_connected');
   if (!(await projectEnabled(c.env, Number(row.id), venture.id))) throw new Refused(409, 'company_not_enabled');
-  return { venture, row, mine: Number(row.id) };
+  return { venture, row };
 }
 
 r.put('/property', handle(async (c, user) => {
   const b = await body(c);
-  const { venture, row, mine } = await writerConnection(c, user, b.project);
+  const { venture, row } = await writerConnection(c, user, b.project);
   const existing = await bindingOf(c.env, venture.id);
-  if (existing && existing.integration_id !== mine) throw new Refused(409, 'venture_served');
+  if (existing && existing.owner_id !== Number(user.id)) throw new Refused(409, 'venture_served');
   if (b.site_url === null) {
-    const del = await c.env.DB.prepare('DELETE FROM search_console_properties WHERE project_id = ? AND integration_id = ?').bind(venture.id, mine).run();
+    const del = await c.env.DB.prepare('DELETE FROM search_console_selections WHERE project_id = ? AND user_id = ?').bind(venture.id, user.id).run();
     if (Number(del.meta?.changes ?? 0) > 0) await logBinding(c.env, Number(user.id), 'search_console_property_unbound', venture.id, existing?.property_kind ?? null);
     return c.json({ ok: true, binding: null });
   }
@@ -196,13 +200,13 @@ r.put('/property', handle(async (c, user) => {
   if (!site.usable) throw new Refused(409, 'property_unusable');
   const kind = kindOf(site.site_url);
   const write = await c.env.DB.prepare(
-    `INSERT INTO search_console_properties (uid, integration_id, project_id, site_url, property_kind, permission_level, bound_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO search_console_selections (project_id, user_id, site_url, property_kind, permission_level)
+       VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(project_id) DO UPDATE SET
        site_url = excluded.site_url, property_kind = excluded.property_kind, permission_level = excluded.permission_level,
-       access_state = 'ok', checked_at = datetime('now'), bound_by = excluded.bound_by, bound_at = datetime('now'), updated_at = datetime('now')
-     WHERE search_console_properties.integration_id = excluded.integration_id`,
-  ).bind(crypto.randomUUID(), mine, venture.id, site.site_url, kind, site.permission_level, user.id).run();
+       access_state = 'ok', selected_at = datetime('now'), updated_at = datetime('now')
+     WHERE search_console_selections.user_id = excluded.user_id`,
+  ).bind(venture.id, user.id, site.site_url, kind, site.permission_level).run();
   // A teammate bound it between the read above and this write.
   if (Number(write.meta?.changes ?? 0) === 0) throw new Refused(409, 'venture_served');
   await logBinding(c.env, Number(user.id), existing ? 'search_console_property_changed' : 'search_console_property_bound', venture.id, kind);
@@ -212,10 +216,10 @@ r.put('/property', handle(async (c, user) => {
 
 r.post('/property/check', handle(async (c, user) => {
   const b = await body(c);
-  const { venture, row, mine } = await writerConnection(c, user, b.project);
+  const { venture, row } = await writerConnection(c, user, b.project);
   const binding = await bindingOf(c.env, venture.id);
   if (!binding) throw new Refused(409, 'not_bound');
-  if (binding.integration_id !== mine) throw new Refused(403, 'not_your_binding');
+  if (binding.owner_id !== Number(user.id)) throw new Refused(403, 'not_your_binding');
   let level: string | null = null;
   try {
     const site = await getSearchConsoleSite(await searchConsoleAccessToken(c.env, row), binding.site_url);
@@ -224,13 +228,14 @@ r.post('/property/check', handle(async (c, user) => {
     if (!(e instanceof SearchConsoleError) || e.code !== 'property_not_accessible') throw e;
   }
   if (level) {
-    await c.env.DB.prepare("UPDATE search_console_properties SET permission_level = ?, access_state = 'ok', checked_at = datetime('now'), updated_at = datetime('now') WHERE project_id = ? AND integration_id = ?")
-      .bind(level, venture.id, mine).run();
+    await c.env.DB.prepare("UPDATE search_console_selections SET permission_level = ?, access_state = 'ok', updated_at = datetime('now') WHERE project_id = ? AND user_id = ?")
+      .bind(level, venture.id, user.id).run();
   } else {
     // The binding stays, marked: the founder decides whether to choose another or ask for access back.
-    await c.env.DB.prepare("UPDATE search_console_properties SET access_state = 'lost', checked_at = datetime('now'), updated_at = datetime('now') WHERE project_id = ? AND integration_id = ?")
-      .bind(venture.id, mine).run();
-    if (binding.access_state !== 'lost') await logBinding(c.env, Number(user.id), 'search_console_property_access_lost', venture.id, binding.property_kind);
+    // `denied` is D5840's state for a property the grant no longer reaches; the sync lands nothing for it.
+    await c.env.DB.prepare("UPDATE search_console_selections SET access_state = 'denied', updated_at = datetime('now') WHERE project_id = ? AND user_id = ?")
+      .bind(venture.id, user.id).run();
+    if (binding.access_state !== 'denied') await logBinding(c.env, Number(user.id), 'search_console_property_access_lost', venture.id, binding.property_kind);
   }
   const now = await bindingOf(c.env, venture.id);
   return c.json({ ok: true, binding: now ? { ...publicBinding(now), own: true } : null });

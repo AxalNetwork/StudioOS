@@ -77,6 +77,17 @@ export async function searchConsoleAccessToken(env: Env, row: Pick<IntegrationRo
   }
 }
 
+/**
+ * D5840's sync takes `deps.accessToken(env, userId)`: the selection's member's own active connection, refreshed
+ * as every read here is. No connection reads as a revoked grant, which the sync records as `revoked`.
+ */
+export async function searchConsoleAccessTokenForUser(env: Env, userId: number): Promise<string> {
+  const row = await env.DB.prepare("SELECT id, uid FROM integrations WHERE user_id = ? AND provider_key = ? AND status = 'active' AND auth_type = 'oauth2' LIMIT 1")
+    .bind(userId, SEARCH_CONSOLE_KEY).first<{ id: number; uid: string }>();
+  if (!row) throw new SearchConsoleError('search_console_grant_revoked');
+  return searchConsoleAccessToken(env, row);
+}
+
 /** The grant's own token to revoke: the refresh token revokes the whole grant, else the access token. */
 async function grantToken(env: Env, row: IntegrationRow): Promise<string | null> {
   const current = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?')
@@ -119,8 +130,8 @@ const provider: ProviderImpl = {
   async disconnect(c, _user, row) {
     const token = await grantToken(c.env, row);
     if (token) await revokeSearchConsoleToken(token);
-    // The bindings go with their connection; nothing else at Google is touched.
-    await c.env.DB.prepare('DELETE FROM search_console_properties WHERE integration_id = ?').bind(row.id).run();
+    // The member's selections go with their connection (D5840's table, which the sync reads); nothing else at Google is touched.
+    await c.env.DB.prepare('DELETE FROM search_console_selections WHERE user_id = ?').bind(row.user_id).run();
   },
 };
 
