@@ -141,3 +141,5 @@ and citations by number keep working.
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
+| `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |
