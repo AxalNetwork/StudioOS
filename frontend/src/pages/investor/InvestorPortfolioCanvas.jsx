@@ -14,6 +14,8 @@
  * sorts by health, invested, multiple or last update; its caption states the
  * filters in force. The header's Export writes the rows shown, each with its
  * basis and as-of, through `exportView`.
+ * D6207 (#6207) reverses one D4817 departure: under the hero NAV, the change
+ * since the last completed quarter-end, from one extra quarter-end read.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -31,7 +33,7 @@ import {
 } from '../portfolio/PortfolioParts';
 import {
   HEALTH, NOT_RECORDED, SHAPES, SORTS, attentionOf, companyExportOf, companyRowsOf, filterOptionsOf, filterRows, filterWordsOf,
-  performanceOf, reportingSummaryOf, sortRows, tableCaptionOf, valueAddSummaryOf,
+  lastQuarterEndOf, navChangeOf, performanceOf, quarterShape, reportingSummaryOf, sortRows, tableCaptionOf, valueAddSummaryOf,
 } from '../portfolio/portfolioModel';
 import PortfolioExport from '../portfolio/PortfolioExport';
 
@@ -48,6 +50,21 @@ const SOURCES = {
 };
 
 const SOURCE_NAMES = { analytics: 'Performance', health: 'Health', updates: 'Founder updates', support: 'Support', compliance: 'Reporting' };
+
+/**
+ * D6207 (#6207): one extra read, the book as of the last completed
+ * quarter-end, and the line "NAV up $X since 30 Sep 2026 (quarter-end)" under
+ * the hero. Mounted once that date is known (keyed by it), so a reload that
+ * re-reads the reporting window reads the quarter-end afresh. Draws nothing —
+ * no number, no zero — unless both the hero and this read answered with a NAV.
+ */
+function NavChangeLine({ date, analytics }) {
+  const sources = useMemo(() => ({ [date]: { call: () => api.positionsAnalytics(date), shape: quarterShape(date) } }), [date]);
+  const { reads } = usePortfolioReads(sources);
+  const change = navChangeOf(analytics, date, reads[date]);
+  if (!change) return null;
+  return <span className="pf-sub" data-testid="portfolio-nav-change" title={change.note}>{change.text}</span>;
+}
 
 /** Needs attention: the evidence-backed queue, most urgent first. */
 function NeedsAttention({ attention, reads, retry }) {
@@ -259,6 +276,8 @@ export default function InvestorPortfolioCanvas() {
   const exportPlan = useMemo(() => companyExportOf(reads, rows, shown), [reads, rows, shown]);
   const reporting = useMemo(() => reportingSummaryOf(reads.compliance, reads.updates), [reads.compliance, reads.updates]);
   const support = useMemo(() => valueAddSummaryOf(reads.support), [reads.support]);
+  const quarterEnd = lastQuarterEndOf(reads.positions, reads.compliance);
+  const navChange = quarterEnd ? <NavChangeLine key={quarterEnd} date={quarterEnd} analytics={reads.analytics} /> : null;
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
   const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
 
@@ -299,7 +318,7 @@ export default function InvestorPortfolioCanvas() {
         />
       )}
     >
-      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} />
+      <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} change={navChange} />
       <NeedsAttention attention={attention} reads={reads} retry={retry} />
       <div className="pf-two">
         <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />

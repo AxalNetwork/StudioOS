@@ -300,21 +300,23 @@ export const ADVISOR_ZONE_FILTERS = {
   // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,
   // PX-06), which replaced PR3's `All · Unopened · Opened · Draft · By client`.
   // Each chip narrows on the LATEST version's own stamps (`cardStatus` in
-  // `deliveryTrail.js`): Draft is a latest version with no `sent_at`, Sent has
+  // `deliveryTrail.js`): Draft is a latest version with no `sent_at` and no
+  // Ready mark, Sent has
   // no receipt yet, Opened has `opened_at`, Accepted has `signed_off_at`. The
   // receipts are written by the client's routes, never an advisor's (D72,
   // D4684).
   //
-  // THE CANVAS ALSO DRAWS `Ready`, AND IT IS LEFT OUT, not drawn disabled: the
-  // canvas itself marks it "isn't recorded today" and D4874 lists it as backend
-  // required. `profile_zone_filters.test.mjs` drops it from the canvas row by
-  // name, citing D4874, the way founder's `Cited in deck` is dropped (D549).
+  // `Ready` IS LIVE since #4833 part 2 (D4833-p2): #5316 (D5316) stores the
+  // mark (`ready_at`, `ready_by_user_id` on the version) and the list carries
+  // `ready_version` per work product and `totals.ready`. The chip narrows on
+  // `ready_version` and its count is `totals.ready`, so the two are one set.
   //
   // `By client` left the chip row with the PR3 artboard. Grouping by client is
   // still `?view=by_client` (D571's `/practice/deliverables`), a toggle beside
   // the cards rather than a chip, because it reorders rather than narrows.
   'practice/delivery': [
     { canvas: 'Draft', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Ready', key: 'ready', label: 'Ready {n}' },
     { canvas: 'Sent', key: 'sent', label: 'Sent {n}' },
     { canvas: 'Opened', key: 'opened', label: 'Opened {n}' },
     { canvas: 'Accepted', key: 'accepted', label: 'Accepted {n}' },

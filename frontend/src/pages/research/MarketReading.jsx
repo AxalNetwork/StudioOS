@@ -13,8 +13,11 @@ import {
   ATTACH_COPY,
   STALE_AT,
   ageBand,
+  DRAFT_PILL,
+  OWN_RECORD_LINE,
   ageingAttachmentNote,
   attachState,
+  attachesNowhere,
   catalogLine,
   daysSince,
   freshReadingForm,
@@ -158,6 +161,9 @@ export function MarketReadingView({
   const open = openProposals(proposals, attachments);
   const attachKey = attachState({ stale, attachments, proposals });
   const attach = ATTACH_COPY[attachKey];
+  // A founder or investor with nothing to attach to sees no Proposal tile,
+  // pill or card, only one line saying what a reading is for them (#6279).
+  const ownRecord = attachesNowhere(role, { attachments, proposals });
   const catalog = item ? catalogLine(item.catalog_price_cents) : null;
   const forward = form ? rangeReadsForward(form.low, form.high) : null;
   const draft = item && days != null && band
@@ -246,14 +252,14 @@ export function MarketReadingView({
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <Pill tone={stale ? 'danger' : (band === 'ageing' ? 'warn' : 'ok')}>{ageLabel}</Pill>
-                <Pill tone={attach.tone}>{attach.pill}</Pill>
+                {ownRecord ? null : <Pill tone={attach.tone}>{attach.pill}</Pill>}
                 <span className="font-mono text-[11px] text-axal-muted">
                   ran {item.ran_at} · {days} d old
                 </span>
               </div>
             </Card>
 
-            <div data-testid="market-reading-tiles" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <div data-testid="market-reading-tiles" className={`grid grid-cols-2 gap-3 ${ownRecord ? 'xl:grid-cols-3' : 'xl:grid-cols-4'}`}>
               <Tile
                 k="Comparable range"
                 v={`${usd(item.range_low_cents)} – ${usd(item.range_high_cents)}`}
@@ -268,7 +274,9 @@ export function MarketReadingView({
                 hair={staleHair}
                 sub={`${ageLabel} · stale at ${STALE_AT} days`}
               />
-              <Tile k="Proposal" big v={attach.tile} ink={proposalInk} hair={staleHair} sub={attach.sub} />
+              {ownRecord ? null : (
+                <Tile k="Proposal" big v={attach.tile} ink={proposalInk} hair={staleHair} sub={attach.sub} />
+              )}
             </div>
 
             <Card>
@@ -379,80 +387,94 @@ export function MarketReadingView({
               </p>
             </Card>
 
-            <Card
-              data-testid="market-reading-attachment"
-              className={stale ? 'border-red-200 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30' : ''}
-            >
-              <h2 className="text-sm font-extrabold tracking-tight">Proposal attachment</h2>
-              {stale ? (
-                <>
-                  <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-red-700 dark:text-red-300">
-                    {staleAttachmentSentence(item.ran_at)}
-                  </p>
+            {ownRecord ? (
+              <Card data-testid="market-reading-own-record">
+                <p className="text-[12.5px] leading-relaxed text-axal-muted">{OWN_RECORD_LINE[role]}</p>
+                {stale && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button type="button" className={primaryBtn} onClick={onFresh}>
                       Record a fresh reading
                     </button>
                     <span className="text-[12px] text-axal-muted">Prefills the metric, blanks the dollars, sets the run date to today.</span>
                   </div>
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
-                    The range and its run date travel together onto the quote.
-                  </p>
-                  {/* "Still attachable" only where there is a quote to take it. */}
-                  {band === 'ageing' && attachKey !== 'nowhere' && (
-                    <p className="mt-1 text-[12.5px] text-amber-800 dark:text-amber-300">{ageingAttachmentNote(days)}</p>
-                  )}
-                  {attachments.length > 0 && (
-                    <>
-                      <div className="mt-2.5">
-                        <Pill tone="ok">Attached</Pill>
-                      </div>
-                      <ul className="mt-1.5 space-y-1 text-[12.5px] text-axal-ink dark:text-gray-100">
-                        {attachments.map((a) => (
-                          <li key={a.uid}>
-                            {a.proposal_name
-                              ? `Attached to ${a.proposal_name}.`
-                              : 'This reading is attached. The proposal is not named on the quote.'}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                  {open.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <select
-                        aria-label={attachments.length > 0 ? 'Another proposal' : 'Proposal'}
-                        className={inputClass}
-                        value={quoteId}
-                        onChange={(e) => onQuote(e.target.value)}
-                      >
-                        {open.map((q) => (
-                          <option key={q.id} value={q.id}>
-                            {q.proposal_name || `Quote ${q.id} — proposal not named`}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="button" className={ghostBtn} disabled={busy || !quoteId} onClick={onAttach}>
-                        {attachments.length > 0 ? 'Attach to another proposal' : 'Attach to a proposal'}
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[12px] text-axal-muted">
-                      {attachments.length > 0
-                        ? 'There is no other proposal on this account to attach it to.'
-                        : 'No proposal on this account. A reading attaches to a quote your partner profile owns.'}
+                )}
+              </Card>
+            ) : (
+              <Card
+                data-testid="market-reading-attachment"
+                className={stale ? 'border-red-200 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30' : ''}
+              >
+                <h2 className="text-sm font-extrabold tracking-tight">Proposal attachment</h2>
+                {stale ? (
+                  <>
+                    <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-red-700 dark:text-red-300">
+                      {staleAttachmentSentence(item.ran_at)}
                     </p>
-                  )}
-                </>
-              )}
-            </Card>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button type="button" className={primaryBtn} onClick={onFresh}>
+                        Record a fresh reading
+                      </button>
+                      <span className="text-[12px] text-axal-muted">Prefills the metric, blanks the dollars, sets the run date to today.</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
+                      The range and its run date travel together onto the quote.
+                    </p>
+                    {/* "Still attachable" only where there is a quote to take it. */}
+                    {band === 'ageing' && attachKey !== 'nowhere' && (
+                      <p className="mt-1 text-[12.5px] text-amber-800 dark:text-amber-300">{ageingAttachmentNote(days)}</p>
+                    )}
+                    {attachments.length > 0 && (
+                      <>
+                        <div className="mt-2.5">
+                          <Pill tone="ok">Attached</Pill>
+                        </div>
+                        <ul className="mt-1.5 space-y-1 text-[12.5px] text-axal-ink dark:text-gray-100">
+                          {attachments.map((a) => (
+                            <li key={a.uid}>
+                              {a.proposal_name
+                                ? `Attached to ${a.proposal_name}.`
+                                : 'This reading is attached. The proposal is not named on the quote.'}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {open.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <select
+                          aria-label={attachments.length > 0 ? 'Another proposal' : 'Proposal'}
+                          className={inputClass}
+                          value={quoteId}
+                          onChange={(e) => onQuote(e.target.value)}
+                        >
+                          {open.map((q) => (
+                            <option key={q.id} value={q.id}>
+                              {q.proposal_name || `Quote ${q.id} — proposal not named`}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="button" className={ghostBtn} disabled={busy || !quoteId} onClick={onAttach}>
+                          {attachments.length > 0 ? 'Attach to another proposal' : 'Attach to a proposal'}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[12px] text-axal-muted">
+                        {attachments.length > 0
+                          ? 'There is no other proposal on this account to attach it to.'
+                          : 'No proposal on this account. A reading attaches to a quote your partner profile owns.'}
+                      </p>
+                    )}
+                  </>
+                )}
+              </Card>
+            )}
 
             <div data-testid="market-reading-draft" className={`rounded-[14px] border px-4 py-3.5 ${skin}`}>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-[var(--mr-accent)] px-2 py-0.5 text-[10px] font-extrabold tracking-[.06em] text-white dark:bg-[var(--mr-accent)] dark:text-white">ZONEDRAFT</span>
+                <span className="rounded-full bg-[var(--mr-accent)] px-2 py-0.5 text-[10px] font-extrabold tracking-[.06em] text-white dark:bg-[var(--mr-accent)] dark:text-white">{DRAFT_PILL}</span>
                 <span className="text-[13px] font-extrabold tracking-tight">Reading · demand movement</span>
               </div>
               <p className="mt-2 text-[12px] leading-relaxed text-axal-ink dark:text-gray-100">{draft}</p>
@@ -496,11 +518,14 @@ export function MarketReadingView({
                 A reading is what you found, recorded by you. There is no comparables database, and there is not going to be one this product invents.
               </p>
               <p>
-                A range is refused without the number of comparables and the date you ran it. Both travel onto any proposal.
+                A range is refused without the number of comparables and the date you ran it.
+                {ownRecord ? ' Both are kept with the reading.' : ' Both travel onto any proposal.'}
               </p>
             </StatedLimit>
             <p className="text-[11px] text-axal-faint">
-              Ageing starts after {AGE_AT} days and is still attachable. Stale, past {STALE_AT}, is blocked.
+              {ownRecord
+                ? `Ageing starts after ${AGE_AT} days. Stale, past ${STALE_AT}, needs a fresh reading.`
+                : `Ageing starts after ${AGE_AT} days and is still attachable. Stale, past ${STALE_AT}, is blocked.`}
             </p>
           </>
         )}

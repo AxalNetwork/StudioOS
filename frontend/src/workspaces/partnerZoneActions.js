@@ -171,7 +171,7 @@ export const PARTNER_ZONE_ACTIONS = {
     // edited where they are written and read everywhere they apply; a second
     // form here would be a second place to change one number, and the first
     // time the two disagreed nobody would know which the score used.
-    { label: 'Edit capability weights', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
+    { label: 'Edit capability rules', to: '/offers/audience-fit', linkNote: 'The rules a lead is scored against are your fit rules — edited on Offers · Audience fit, and read here.' },
   ],
   'pipeline/proposals': [
     // `opened_at` is the CLIENT'S column to set and no surface lets them, so
