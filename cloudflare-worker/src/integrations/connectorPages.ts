@@ -214,8 +214,15 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   },
   tiktok: {
     tagline: 'Connect your TikTok account with read-only access.',
-    long_description: ['Sign in with TikTok to grant access to your basic profile, audience counts and public videos. This release connects your account. Grow imports come later.'],
-    tools: [],
+    long_description: [
+      'Sign in with TikTok to grant access to your basic profile, audience counts and public videos. Read-only.',
+      'You press each sync from Grow: your followers, total likes and video count land in Revenue and traction, beside revenue and never as revenue, and each public video’s views, likes, comments and shares land in Distribution, with their date. A figure you delete stays deleted. One TikTok account serves one venture.',
+      'Disconnecting removes every figure your TikTok fed.',
+    ],
+    tools: [
+      tool('audience', 'followers, likes and video count', 'read', 'Reads your follower count, total likes and video count, as a dated snapshot each sync.', 'revenue_and_traction', ['/v2/user/info/']),
+      tool('videos', 'public videos and their figures', 'read', 'Reads your public videos, newest first, each with its views, likes, comments and shares and the first 150 characters of its title.', 'distribution', ['/v2/video/list/']),
+    ],
     never_does: ['StudioOS does not upload videos or post to TikTok.'],
     prompts: [],
     prompts_reason: notRead('TikTok'),

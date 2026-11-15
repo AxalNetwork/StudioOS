@@ -299,6 +299,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `stripeReadiness.ts` | D1433 (#3703): shared key-mode, signing-secret and per-interval plan readiness for checkout, public plans and HQ checks. |
 | `distribution/` | D4485 overview reads and provenance, invoked after the existing Grow project gate. |
 | `beehiiv/` | D2407 (#2407 parts 1–3): a founder's own Beehiiv newsletter through Beehiiv's MCP server, reads plus one draft post when the founder presses Send. `mcp.ts` holds the two frozen tool lists; `reads.ts` reads, aggregates only, every rate a fraction; `drafts.ts` builds and creates the one draft (part 3, never a `status`); `grow.ts` links one publication per venture and lands Grow's figures and posts through the ledger. It never imports Axal VC's own newsletters. Its README has the rules. |
+| `tiktok/` | D5863 (#5863, part 2a of #2401): a founder's own TikTok in Grow. `client.ts` is the only caller of TikTok's Display API (the account's counts and the public videos, field by field); `grow.ts` links one account to one venture, lands the daily snapshot and the videos through the ledger, draws the "From TikTok" parts and purges a connection's figures on disconnect. Its README has the rules. |
 
 ## Rules
 

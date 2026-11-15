@@ -25,7 +25,7 @@ import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
-import { TIKTOK_FEEDS } from './tiktokFeeds';
+import { TIKTOK_BUILT_FEEDS, TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
@@ -653,7 +653,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   facebook: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
-  tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
+  tiktok: { category: 'Social', verified: false, pulls: TIKTOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },

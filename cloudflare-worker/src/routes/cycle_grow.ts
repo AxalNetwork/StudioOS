@@ -56,6 +56,13 @@
  *   DELETE /beehiiv/facts/:id?project=             a writer; it stays deleted
  *   DELETE /beehiiv/posts/:id?project=             a writer; it stays deleted
  *
+ * D5863 (#5863, part 2a of #2401): the founder's own TikTok. Distribution's and
+ * Revenue and traction's reads carry `parts.from_tiktok` (`services/tiktok/grow.ts`),
+ * for anyone who may read the module; a failed read is `unreadable` and the
+ * module still loads. A support session is refused; the logs carry counts only.
+ *   POST   /tiktok/sync                            { project } the member whose TikTok serves the venture (the first sync links it)
+ *   DELETE /tiktok/facts/:id?project=&kind=account|video  a writer; it stays deleted
+ *
  * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
  * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
  * founder, not in a support session, with a place switched on), PUB8's empty
@@ -104,6 +111,8 @@ import {
   BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, NEWSLETTER_UNREADABLE, newsletterByUpdate, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
   dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
 } from '../services/beehiiv/grow';
+import { TikTokReadError, grantedScopes, tiktokReadsFor } from '../services/tiktok/client';
+import { SENTENCES as TIKTOK_SENTENCES, TIKTOK_SLUGS, claimVenture, deleteTikTokRow, linkOf as tiktokLinkOf, syncTikTok, tiktokPart as tiktokModulePart, type TikTokSlug } from '../services/tiktok/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { codeAmount } from '../../../frontend/src/lib/money.js';
@@ -456,6 +465,7 @@ r.get('/modules/:slug', async (c) => {
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
     // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
     const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
+      ...(await tiktokPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
@@ -816,6 +826,88 @@ const deleteBeehiiv = (store: 'beehiiv_grow_facts' | 'beehiiv_post_stats') => be
 });
 r.delete('/beehiiv/facts/:id', deleteBeehiiv('beehiiv_grow_facts'));
 r.delete('/beehiiv/posts/:id', deleteBeehiiv('beehiiv_post_stats'));
+
+/** D5863: Distribution's and Revenue and traction's TikTok part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function tiktokPart(c: C, user: User, pid: number, slug: string): Promise<{ from_tiktok?: unknown }> {
+  if (!(TIKTOK_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_tiktok: await tiktokModulePart(c.env, pid, slug as TikTokSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] tiktok part unreadable:', slug, (e as Error).name);
+    return { from_tiktok: { state: 'unreadable', reason: TIKTOK_SENTENCES.unreadable } };
+  }
+}
+
+// ── D5863 (#5863, part 2a of #2401): the founder's own TikTok ──────────────
+
+class TikTokRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never TikTok's text. */
+export const TIKTOK_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s TikTok.',
+  tiktok_not_connected: 'TikTok is not connected. Sign in with TikTok on your Connectors page first.',
+  company_not_enabled: 'Your TikTok is not switched on for this venture’s company. Switch it on on the TikTok connector page.',
+  venture_served: 'A teammate’s TikTok already serves this venture. Only they can sync it.',
+  serves_other_venture: 'Your TikTok already serves another venture. One TikTok account serves one venture.',
+  sign_in_again: 'TikTok asked you to sign in again.',
+  rate_limited: 'TikTok asked us to wait. Try again in a minute.',
+  tiktok_unreadable: 'TikTok could not be read. Nothing changed; try again.',
+  bad_kind: 'Say which TikTok figure: kind=account or kind=video.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const tiktokReadRefusal = (e: TikTokReadError): TikTokRefused =>
+  e.code === 'unauthorized' ? new TikTokRefused(409, 'sign_in_again')
+    : e.code === 'rate_limited' ? new TikTokRefused(429, 'rate_limited') : new TikTokRefused(502, 'tiktok_unreadable');
+
+const tiktok = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new TikTokRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof TikTokRefused ? e : e instanceof TikTokReadError ? tiktokReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: TIKTOK_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+r.post('/tiktok/sync', tiktok(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'tiktok' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new TikTokRefused(409, 'tiktok_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new TikTokRefused(403, 'company_not_enabled');
+  const claim = await claimVenture(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id });
+  if (claim === 'served') throw new TikTokRefused(409, 'venture_served');
+  if (claim === 'elsewhere') throw new TikTokRefused(409, 'serves_other_venture');
+  const link = await tiktokLinkOf(c.env, pid);
+  const reads = await tiktokReadsFor(c.env, row);
+  const counts = await syncTikTok(c.env, reads, {
+    integrationId: Number(row.id), projectId: pid, today: new Date().toISOString().slice(0, 10), scopes: grantedScopes(row), cursor: link?.video_cursor ?? null,
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_tiktok_synced',
+    summary: `Grow synced from TikTok: ${counts.snapshots} snapshot, ${counts.videos} videos, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+r.delete('/tiktok/facts/:id', tiktok(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const kind = c.req.query('kind');
+  if (kind !== 'account' && kind !== 'video') throw new TikTokRefused(400, 'bad_kind');
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteTikTokRow(c.env, kind, pid, id) : null;
+  if (!slug) throw new TikTokRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: kind === 'account' ? 'grow_tiktok_snapshot_deleted' : 'grow_tiktok_video_deleted',
+    summary: kind === 'account' ? 'TikTok audience snapshot deleted' : 'TikTok video figures deleted' });
+  return c.json({ ok: true, id });
+}));
 
 // ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
 

@@ -121,6 +121,8 @@ const SOURCES: Record<string, string[]> = {
   // D2407 (#2407): Beehiiv's typed reads and provider.
   // D2407 part 3: the draft tool's one call site is drafts.ts.
   beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
+  // D5863: the Display API reads are the client's; the sign-in, refresh and revoke stay in tiktokOAuth.ts (the TOKEN_EXCHANGE side).
+  tiktok: ['services/tiktok/client.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -134,7 +136,9 @@ const linesOf = (file: string) => {
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
 const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
-const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
+const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"],
+  // D5863: TikTok's video list is a POST that reads (UNVERIFIED method, #2401).
+  tiktok: ['/v2/video/list/'] };
 /**
  * D2407 part 3: a write made through an MCP tool, not an HTTP method in the
  * connector's source (the shared client sends it). It counts as a write only
