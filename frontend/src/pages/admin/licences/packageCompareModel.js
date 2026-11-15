@@ -14,6 +14,7 @@
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { formatMinor } from '../../../lib/money.js';
+import { bpsPercent } from '../../../lib/bps.js';
 import { dateWord } from '../licenceRegistryModel.js';
 
 export { NOT_RECORDED };
@@ -41,12 +42,8 @@ export function indexWord(ppm) {
   return (n / 1e6).toFixed(3);
 }
 
-/** 1860 basis points → "18.6%". */
-export function percentWord(bps) {
-  const n = Number(bps);
-  if (bps === null || bps === undefined || !Number.isFinite(n)) return null;
-  return `${(n / 100).toFixed(1)}%`;
-}
+/** Basis points as a percentage: `lib/bps.js`'s one definition (D149), so 1862 reads "18.62%" here as everywhere. */
+export const percentWord = bpsPercent;
 
 /**
  * The compared versions, as columns. With no `only`, the active version of every package key, cheapest base fee

@@ -98,7 +98,7 @@ test('prices are the Worker\'s: Not recorded with its sentence when null, never 
   assert.match(priceCells(CORE, undefined, { licenceChosen: true, priced: false }).saving.note, /no package price/);
 
   const core = priceCells(CORE, recFor(PRICING, CORE), { licenceChosen: true });
-  assert.deepEqual([core.adjusted.text, core.standalone.text, core.saving.text, core.warnings.text], ['€11,800', '€14,500', '€2,700 · 18.6%', 'None']);
+  assert.deepEqual([core.adjusted.text, core.standalone.text, core.saving.text, core.warnings.text], ['€11,800', '€14,500', '€2,700 · 18.62%', 'None']);
 
   const vb = priceCells(VB, recFor(PRICING, VB), { licenceChosen: true });
   assert.equal(vb.adjusted.text, '€44,500');
@@ -181,7 +181,7 @@ test('a chosen licence: Worker prices, provenance, a missing program price, prov
   assert.match(text, /country recommendation of 4 Oct 2026 \(Latest\) · pricing model v3 · country index 1\.180/);
   assert.match(text, /Country-adjusted · Axal VC France · FR-001€11,800€17,700€44,500/);
   assert.match(text, /Standalone sum€14,500€15,000Not recordedNo reference price is recorded for product-testing/);
-  assert.match(text, /Bundle saving€2,700 · 18\.6%No savingThis package costs more than its programs bought one by one, by €2,700/);
+  assert.match(text, /Bundle saving€2,700 · 18\.62%No savingThis package costs more than its programs bought one by one, by €2,700/);
   assert.match(text, /The country index uses provisional market data for FR \(rent\)\./);
   assert.doesNotMatch(text, /€0\b/);
 });
