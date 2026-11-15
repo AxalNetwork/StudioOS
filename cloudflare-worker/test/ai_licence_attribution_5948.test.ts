@@ -142,7 +142,7 @@ test('a replayed hold is the first one, unchanged', async () => {
   const f = fixture();
   try {
     f.db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/525_ai_reservation_idempotency.sql'), 'utf8'));
-    const now = new Date();
+    const now = new Date('2026-11-15T12:00:00Z');
     const one = await reserveAiBudget(f.env, 2, 1000, now, { idempotencyKey: 'k-5948' });
     const two = await reserveAiBudget(f.env, 2, 1000, now, { idempotencyKey: 'k-5948' });
     assert.ok(one.ok && two.ok);
