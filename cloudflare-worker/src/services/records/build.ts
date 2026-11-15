@@ -908,7 +908,6 @@ const productRoadmap: ModuleSpec = {
           : gh?.tag ? { a: 'Shipped', b: shipped ? `${gh.tag} · ${shipped}` : gh.tag, ...(gh.url ? { href: gh.url } : {}) }
             : { a: 'Shipped', b: 'Not shipped: no release names it or closes it.', tone: 'grey' }] };
     } },
-    { key: 'public', title: 'Public roadmap', side: true, async read() { return notRecorded('Ventures have no public roadmap page.'); } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const itemId = numericId(id), item = { id: String(itemId) };
