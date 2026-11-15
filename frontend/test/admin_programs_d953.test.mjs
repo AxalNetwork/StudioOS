@@ -152,7 +152,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     perks: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Perk queue', 'History', 'Settings'],
     learning: ['Overview', 'How it runs', 'People', 'Activity'],
     // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
-    'referral-partners': ['Overview', 'How it runs', 'Queue', 'Activity'],
+    // D5888 (#5888): Referral partners runs in the generic shell (PG03a): its six core sections and the Referral queue module.
+    'referral-partners': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Referral queue', 'History', 'Settings'],
     // D4298 (#4298): Influencers (IN11).
     influencer: ['How it runs', 'Applications', 'Influencers', 'Offers', 'Payouts', 'Activity', 'Settings'],
     'investor-cohorts': ['Overview', 'Activity'],

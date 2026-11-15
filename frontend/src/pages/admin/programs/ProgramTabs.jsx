@@ -102,14 +102,21 @@ export function LearningTabs() {
   );
 }
 
-// D963 (#2796): Referral partners' Queue (terms sent to HQ) and Activity, and Investor cohort access's Activity.
+/**
+ * D963 (#2796): Referral partners' Queue (terms sent to HQ) and Activity. D5888 (#5888): in the generic shell
+ * (PG03a), the six core sections in its order and words, and the Referral queue module between Participation and
+ * History, carrying the count of terms waiting for HQ.
+ */
 export function PartnersTabs({ queue }) {
   return (
     <Strip label="Referral partners">
       <Tab to="/admin/programs/referral-partners" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/referral-partners/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/referral-partners/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
-      <Tab to="/admin/programs/referral-partners/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/referral-partners/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/referral-partners/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/referral-partners/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/referral-partners/queue" count={queue} testId="programs-tab-queue">Referral queue</Tab>
+      <Tab to="/admin/programs/referral-partners/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/referral-partners/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }
