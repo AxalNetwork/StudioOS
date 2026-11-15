@@ -351,3 +351,42 @@ test('#4394 (TM18b): an out move names the runs it stopped, each scope only its 
     assert.deepEqual(back.body.moves[1].stopped_runs.map((r: any) => r.task.uid), [t(300).uid], 'the earlier out move keeps its own');
   } finally { __setEngineRouteDeps(null); w.close(); }
 });
+
+// #6740: the stamps are whole seconds. A run the out move ended in the same second as the project's next move
+// still belongs to the out move, and the next move is the next event by id, so a move in the same second as
+// this one bounds it and a later move's run is never borrowed. The clock is pinned so the case the loaded CI
+// shard hit is the case that runs, every time.
+// Mutation checked: the old `r.ended_at < next` fails the first assertion; the inclusive bound with the next
+// move found by `n.created_at > ?` (not by id) fails the second.
+test('#6740 (TM18b): a move keeps the runs it stopped in its next move\'s second, and never a later move\'s', async () => {
+  const w = moving();
+  try {
+    w.task(300, AGENT);
+    w.task(301, AGENT);
+    const first = await w.runtime.admit(P, { agentId: AGENT, taskId: 300, by: SPONSOR, source: 'person' });
+    assert.ok(first.ok);
+    await move(w, null);
+    assert.equal((await onProjectMoved(w.env, { projectId: PROJECT, from: COMPANY, to: null, actorUserId: SPONSOR }, fakeDeps().deps)).ended, 1);
+    await w.DB.batch(projectMoveStatements(w.env, { projectId: PROJECT, from: null, to: COMPANY, actorUserId: SPONSOR }));
+    const uid = (id: number) => (w.db.prepare('SELECT uid FROM scope_tasks WHERE id = ?').get(id) as any).uid;
+    const events = () => (w.db.prepare("SELECT id FROM company_membership_events WHERE kind = 'project_move' AND project_id = ? ORDER BY id").all(PROJECT) as any[]).map((r) => r.id);
+    const stamp = (id: number, at: string) => w.db.prepare('UPDATE company_membership_events SET created_at = ? WHERE id = ?').run(at, id);
+    const ended = (runUid: string, at: string) => w.db.prepare('UPDATE agent_task_runs SET ended_at = ? WHERE uid = ?').run(at, runUid);
+    const outs = async () => (await movesOf(w.env, P, 5)).filter((m) => m.direction === 'out').map((m) => m.stopped_runs?.map((r) => r.task.uid));
+
+    // 1. Out at :00; the run ended and the project came back in, both at :01.
+    const [out1, in1] = events();
+    stamp(out1, '2026-11-15 10:00:00'); stamp(in1, '2026-11-15 10:00:01'); ended(first.run.uid, '2026-11-15 10:00:01');
+    assert.deepEqual(await outs(), [[uid(300)]], 'a run ended in the next move\'s second is still this move\'s');
+
+    // 2. Out and back in within :00, then out again at :01, stopping another run at :01.
+    const second = await w.runtime.admit(P, { agentId: AGENT, taskId: 301, by: SPONSOR, source: 'person' });
+    assert.ok(second.ok);
+    await move(w, null);
+    assert.equal((await onProjectMoved(w.env, { projectId: PROJECT, from: COMPANY, to: null, actorUserId: SPONSOR }, fakeDeps().deps)).ended, 1);
+    const out2 = events()[2];
+    stamp(out1, '2026-11-15 10:00:00'); stamp(in1, '2026-11-15 10:00:00'); ended(first.run.uid, '2026-11-15 10:00:00');
+    stamp(out2, '2026-11-15 10:00:01'); ended(second.run.uid, '2026-11-15 10:00:01');
+    assert.deepEqual(await outs(), [[uid(301)], [uid(300)]], 'each out move names only its own run, newest first');
+  } finally { w.close(); }
+});
