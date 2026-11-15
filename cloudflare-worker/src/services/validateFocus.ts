@@ -35,6 +35,7 @@ import { INTERVIEWS_TARGET_KEY } from './validateWriters';
 import { canReadDecision, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { currentDecision } from './verdict';
 import { claimsOf, loadHypotheses, loadInterviews } from './cycleValidate';
+import { experimentObserved } from './validateEvidence';
 import { nextAction, UNREAD, type ClaimFact, type ResultFact, type ReviewFact } from './validateNextAction';
 import {
   cardFocus, dayMonth, plural, sentence, usdShort, UNREADABLE,
@@ -126,7 +127,14 @@ export async function reviewQueue(env: Env, projectId: number, limit: number): P
   return { items, more: false };
 }
 
-/** The open claims with their interview evidence, as the Experiments card computes them. */
+/**
+ * The open claims with their interview evidence, as the Experiments card computes them.
+ * D4589 part 2 (#4589): this is already the D4585/D4586 reader. `claimsOf` scores each claim with
+ * `verdictFor`, which is `claimStatusV2` (D4586 part 3), over the population D4585 names as the
+ * status basis: interviews reached through pain links (`status_basis: 'interviews'`). Directly
+ * linked interviews, signals, metrics and experiments stay out of a claim's status until that
+ * policy changes, so the policy and the Experiments list never disagree on a claim.
+ */
 export async function claimFacts(env: Env, projectId: number): Promise<ClaimFact[]> {
   const ctx = { env, projectId, today: new Date().toISOString().slice(0, 10) };
   const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(env, projectId, { strict: true })]);
@@ -135,15 +143,21 @@ export async function claimFacts(env: Env, projectId: number): Promise<ClaimFact
   }));
 }
 
-/** Experiments marked done whose observed result is empty, on open claims, oldest first. */
+/**
+ * Experiments marked done with no observed result, on open claims, oldest first.
+ * D4589 part 2 (#4589): "observed" is D4586 § 4's `experimentObserved`, the one `evidenceFor`
+ * and the decision's evidence bar use, so a result of only whitespace is no result on all three.
+ * The SQL keeps done experiments only (a planned or running one is not an unfinished result);
+ * the result test runs here, not in SQL, so it cannot drift from that definition.
+ */
 export async function resultFacts(env: Env, projectId: number): Promise<ResultFact[]> {
   const rows = await env.DB.prepare(
-    `SELECT e.hypothesis_id, h.code, e.title FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id
+    `SELECT e.hypothesis_id, h.code, e.title, e.result FROM hypothesis_experiments e JOIN hypotheses h ON h.id = e.hypothesis_id
       WHERE e.project_id = ? AND h.project_id = ? AND h.retired_at IS NULL AND e.status = 'done'
-        AND (e.result IS NULL OR TRIM(e.result) = '')
-      ORDER BY e.updated_at, e.id LIMIT 5`,
-  ).bind(projectId, projectId).all<{ hypothesis_id: number; code: string; title: string }>();
-  return (rows.results || []).map((r) => ({ hypothesisId: Number(r.hypothesis_id), code: r.code, title: r.title }));
+      ORDER BY e.updated_at, e.id`,
+  ).bind(projectId, projectId).all<{ hypothesis_id: number; code: string; title: string; result: string | null }>();
+  return (rows.results || []).filter((r) => !experimentObserved(r.result)).slice(0, 5)
+    .map((r) => ({ hypothesisId: Number(r.hypothesis_id), code: r.code, title: r.title }));
 }
 
 /**

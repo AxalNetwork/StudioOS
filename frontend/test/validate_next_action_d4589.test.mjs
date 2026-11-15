@@ -59,6 +59,12 @@ const CASES = [
   ['an admin who is not the founder is not offered Plan the build', base({ ownsVenture: false, decision: { id: 78, decision: 'proceed', decided_at: '2026-10-12' } }),
     'next_interview', `/validate/record?project=${P}`, []],
   ['nothing outstanding: record the next conversation', base(), 'next_interview', `/validate/record?project=${P}`, []],
+  // D4589 part 2: the claim facts are D4586 v2 statuses. A contested claim is not decided, so it asks for a next test;
+  // a missing fit that cannot change the status leaves the claim decided and asks nothing.
+  ['a contested claim (v2) asks for a next test, never a decision', base({ claims: [claim({ status: 'contested', supporting: 5, contradicting: 3 })] }),
+    'next_test', `/validate/experiments/31?project=${P}`, [`/validate/record?project=${P}`]],
+  ['a missing fit that cannot change a supported status (v2) leaves the decision ready', base({ claims: [claim({ status: 'supported', supporting: 6, fit_unrecorded: 1 })] }),
+    'decision_ready', `/validate/verdict/new?project=${P}&for=venture`, [`/validate/record?project=${P}`]],
   ['a reader is never sent to a write', base({ canWrite: false, readerFocus: { rule: 'card', eyebrow: 'Validate · Next', headline: 'Open the pain map.', why: null, cta: { label: 'Open the pain map', href: `/validate/problem-discovery?project=${P}` }, then: null } }),
     'card', `/validate/problem-discovery?project=${P}`, []],
 ];
