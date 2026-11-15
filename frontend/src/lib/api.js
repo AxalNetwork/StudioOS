@@ -5337,6 +5337,10 @@ export const api = {
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    // D6272: Clear history hides the caller's sessions (`cleared_at`); Restore
+    // brings them back. `scope=cleared` on `askSessions` reads them meanwhile.
+    askClearHistory: () => request('/research/ask/history/clear', { method: 'POST', body: JSON.stringify({}) }),
+    askRestoreHistory: () => request('/research/ask/history/restore', { method: 'POST', body: JSON.stringify({}) }),
     askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
     }),
