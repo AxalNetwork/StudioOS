@@ -176,7 +176,7 @@ async function mounted(url, { phone = false, read: p = plan(), slugModule = MODU
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   ))));
-  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
