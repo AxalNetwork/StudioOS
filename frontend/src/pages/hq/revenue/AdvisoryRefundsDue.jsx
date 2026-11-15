@@ -67,8 +67,10 @@ export function AdvisoryRefundsTile({ read }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5" data-testid="hq-advisory-refunds-tile">
       Advisory refunds due <When kind="now" />
-      <Figure figure={refundsDueFigure(read)} />
-      {v && <span>open{v.oldest ? ` · oldest ${v.oldest}` : ''}</span>}
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <Figure figure={refundsDueFigure(read)} />
+        {v && <span>open{v.oldest ? ` · oldest ${v.oldest}` : ''}</span>}
+      </span>
       {read === UNAVAILABLE && <span>· never 0 owed</span>}
     </span>
   );
