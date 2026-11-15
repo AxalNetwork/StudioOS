@@ -97,7 +97,29 @@ export function ZeroState({ copy, add, more = [], lovable = null, testid = 'reco
   );
 }
 
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null }) {
+/**
+ * D6124 (#6124): the table's Export, drawn beside Add only when the page hands
+ * an `onExport` (the Worker said `records.exportable`: a writer, on a module
+ * that has one) and the table has rows. The file is the Worker's, of every row
+ * the search, filters and sort select; a refusal shows the Worker's sentence.
+ */
+export function ExportButton({ onExport, className = 'whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30' }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (typeof onExport !== 'function') return null;
+  const run = async () => {
+    setBusy(true); setError('');
+    try { await onExport(); } catch (cause) { setError(cause?.message || 'The export could not be written.'); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button type="button" onClick={run} disabled={busy} className={className} data-testid="records-export">{busy ? 'Exporting…' : 'Export'}</button>
+      {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="records-export-error">{error}</span>}
+    </>
+  );
+}
+
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null, onExport = undefined }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -136,6 +158,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}
+          {status === 'ready' && rows.length > 0 && <ExportButton onExport={onExport} />}
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
@@ -305,7 +328,7 @@ export function ModuleAsk({ asks }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true, onExport = undefined,
   // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
   // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
   sources = null, sourcesAction = null, asks = null,
@@ -328,11 +351,14 @@ export default function CycleModulePage({
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined;
+  // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
+  const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
@@ -377,6 +403,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             progressive={progressive}
+            onExport={onExport}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />}
           {/* D5077 (BD18 A): before the first record, the module's own asks; the rail carries them after. */}

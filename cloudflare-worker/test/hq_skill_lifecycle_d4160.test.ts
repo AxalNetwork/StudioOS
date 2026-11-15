@@ -13,6 +13,8 @@
 //      version row, pointer or pin; the pins view; a draft save is audited.
 //  10. D4533 A3: a decision whose counted results a published version already counted says so
 //      (`freshness.evaluation.reused`): which version, and how many of the counted cells.
+//  11. D4536-p2 (#5969): `published_evaluation` reads the published history alone, the latest row per unit, current
+//      versions of published skills only, no proposal table, in a fixed number of reads.
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/hq_skill_lifecycle_d4160.test.ts
@@ -820,4 +822,109 @@ test('D4536: the library response carries the catalogue coverage, read from publ
   w.db.prepare("UPDATE team_agents SET status = 'removed' WHERE id = ?").run(agent);
   assert.deepEqual((await call(w, SUPER, 'GET', HQ)).body.coverage.adoption, { links: 0, agents: 0, pinned_behind_current: 0, published_without_links: 1 });
   assert.equal((await call(w, ADMIN, 'GET', HQ)).status, 403, 'HQ analytics are Super Admin only');
+});
+
+// ── D4536-p2 (#5969): the published versions' evaluation on the library read ─────────────────────────────
+
+test('D4536-p2: published_evaluation reads the published history alone, latest per unit, current versions only, in fixed reads', async () => {
+  const w = world();
+  const { EVALUATOR } = await import('../src/services/agents/skillLifecycle.ts');
+  w.db.exec(sql('migrations/202611022313_agent_skill_runs.sql'));
+  w.db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql'));
+  w.db.exec(sql('migrations/202611062149_skill_eval_campaigns.sql'));
+  const M = 'model-one';
+  const SHA = 'c'.repeat(64);
+  const skill = w.db.prepare(`INSERT INTO agent_skills (uid, scope, slug, name, purpose, output_kind, status, current_version, created_by)
+    VALUES (?, 'hq', ?, ?, 'A fixture.', 'brief', ?, ?, ${SUPER})`);
+  const version = w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by, evidence_json)
+    VALUES (?, ?, '---', 'n', 'p', '[]', '[]', 'brief', '[]', '[]', ${SUPER}, ?)`);
+  const manifest = JSON.stringify({ evidence_hash: 'e'.repeat(64), models: { required: [M], source: 'declared' } });
+  const kase = w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by) VALUES (?, ?, ?, ?, ?, ${SUPER})`);
+  const addCase = (skillId: number, uid: string) => {
+    const g = goldenCase(0, 'MRR 41,200');
+    kase.run(uid, skillId, g.name, JSON.stringify(g.input), JSON.stringify(g.expect));
+  };
+  const evalRow = w.db.prepare(`INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, run_by, run_at, evaluator_version, case_sha256)
+    VALUES (?, ?, ?, 'Case', ?, ?, ${SUPER}, ?, ?, ?)`);
+
+  // A: published at v2. v1 passed; on v2 the case passed, then failed (one unit, two rows: the latest counts once).
+  const a = Number(skill.run('s-a', 'fixture-a', 'A', 'published', 2).lastInsertRowid);
+  version.run(a, 1, manifest);
+  version.run(a, 2, manifest);
+  addCase(a, 'case-a');
+  evalRow.run(a, 1, 'case-a', M, 'pass', '2026-11-01 09:00:00', EVALUATOR.version, SHA);
+  evalRow.run(a, 2, 'case-a', M, 'pass', '2026-11-02 09:00:00', EVALUATOR.version, SHA);
+  evalRow.run(a, 2, 'case-a', M, 'fail', '2026-11-03 09:00:00', EVALUATOR.version, SHA);
+  // B: published at v1, with a case and no row: not evaluated, never 0 of 0.
+  const b = Number(skill.run('s-b', 'fixture-b', 'B', 'published', 1).lastInsertRowid);
+  version.run(b, 1, manifest);
+  addCase(b, 'case-b');
+  // R: retired; its rows are history, not a current version's measure.
+  const r = Number(skill.run('s-r', 'fixture-r', 'R', 'retired', 1).lastInsertRowid);
+  version.run(r, 1, manifest);
+  addCase(r, 'case-r');
+  evalRow.run(r, 1, 'case-r', M, 'fail', '2026-11-04 09:00:00', EVALUATOR.version, SHA);
+  // A campaign that finished A's v2 but not B: progress, not full coverage.
+  w.db.prepare(`INSERT INTO agent_skill_eval_campaigns (uid, models_json, status, started_by, started_at, finished_at) VALUES (?, ?, 'complete', ${SUPER}, '2026-11-03 08:00:00', '2026-11-03 10:00:00')`)
+    .run('f'.repeat(32), JSON.stringify([M]));
+  w.db.prepare(`INSERT INTO agent_skill_eval_campaign_skills (campaign_id, skill_id, version, state, finished_at) VALUES (1, ?, 2, 'done', '2026-11-03 10:00:00')`).run(a);
+
+  const read = async (path = HQ) => {
+    const res = await call(w, SUPER, 'GET', path);
+    assert.equal(res.status, 200, res.text);
+    return res.body.published_evaluation;
+  };
+  const e = await read();
+  assert.equal(e.history, 'published');
+  assert.deepEqual(e.versions, { published: 2, evaluated: 1, unevaluated: 1, unevaluated_skills: ['s-b'] });
+  // Mutation checked: the history read's ROW_NUMBER ordered oldest first → A's earlier pass is counted and this fails.
+  assert.deepEqual(e.results, { pass: 0, fail: 1, not_run: 0 }, 'one unit counts once, the latest; the retired skill\'s fail is not here');
+  // Mutation checked: `s.status = 'published'` dropped from both reads → R is measured and these fail.
+  assert.ok(!e.skills.some((s: any) => s.skill_uid === 's-r'));
+  const sa = e.skills.find((s: any) => s.skill_uid === 's-a');
+  assert.deepEqual(sa.cases.map((x: any) => [x.case_key, x.model_id, x.result, x.run_at]), [['case-a', M, 'fail', '2026-11-03 09:00:00']]);
+  assert.deepEqual([sa.required.models, sa.required.models_source, sa.required.missing], [[M], 'version_evidence', []]);
+  assert.deepEqual(sa.regressions, { since_previous_run: 1, since_previous_version: 1 });
+  assert.equal(e.regressions.since_previous_run.regressed, 1);
+  assert.equal(e.regressions.since_previous_version.regressed, 1);
+  assert.equal(e.regressions.time_to_resolve.available, false);
+  assert.deepEqual([sa.identity.evaluator_versions, sa.identity.on_current_evaluator], [[EVALUATOR.version], true]);
+  assert.equal(e.freshness.newest_run_at, '2026-11-03 09:00:00');
+  const sb = e.skills.find((s: any) => s.skill_uid === 's-b');
+  assert.deepEqual([sb.evaluated, sb.results.available, sb.required.missing, sb.required.models_without_result], [false, false, [{ case_key: 'case-b', model_id: M }], [M]]);
+  assert.deepEqual([e.campaign.status, e.campaign.published_not_done, e.campaign.full_coverage], ['complete', 1, false]);
+
+  // The draft history is another table: draft-hash results on every skill move no published figure.
+  const live = w.db.prepare('SELECT id, skill_id FROM agent_skill_cases ORDER BY id').all() as Array<{ id: number; skill_id: number }>;
+  const draftRow = w.db.prepare(`INSERT INTO agent_skill_eval_results (case_id, skill_id, draft_hash, model_id, result, run_by, run_at, evidence_hash)
+    VALUES (?, ?, ?, ?, 'pass', ${SUPER}, '2026-11-05 09:00:00', ?)`);
+  for (const k of live) for (let i = 0; i < 3; i++) draftRow.run(k.id, k.skill_id, 'd'.repeat(64), M, 'e'.repeat(64));
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_eval_results').get() as any).n, 9);
+  const steady = (x: any) => ({ ...x, skills: x.skills.map((s: any) => ({ ...s, hours_since_last_run: null })), freshness: x.freshness.newest_run_at });
+  assert.deepEqual(steady(await read()), steady(e), 'no published figure reads a draft-hash result');
+
+  // A fixed number of reads, whatever the catalogue's size or the page; none of them reaches #3851's proposals.
+  const db = w.env.DB;
+  let seen: string[] = [];
+  w.env.DB = { ...db, prepare: (query: string) => { seen.push(query); return db.prepare(query); } };
+  const reads = async (path: string) => { seen = []; await read(path); return seen; };
+  const small = await reads(HQ);
+  const smallPage = await reads(`${HQ}?page=1`);
+  for (let i = 0; i < 40; i++) {
+    const id = Number(skill.run(`s-x${i}`, `fixture-x${i}`, `X${i}`, 'published', 1).lastInsertRowid);
+    version.run(id, 1, manifest);
+    addCase(id, `case-x${i}`);
+    evalRow.run(id, 1, `case-x${i}`, M, 'pass', '2026-11-02 09:00:00', EVALUATOR.version, SHA);
+  }
+  const large = await reads(HQ);
+  const largePage = await reads(`${HQ}?page=1`);
+  assert.equal(large.length, small.length, 'the catalogue\'s size adds no read');
+  assert.equal(largePage.length, smallPage.length, 'nor on a page');
+  const history = (qs: string[]) => qs.filter((q) => /agent_skill_version_evals|agent_skill_eval_campaign/.test(q)).length;
+  assert.equal(history(large), 2, 'one history read and one campaign read');
+  assert.equal(history(largePage), 2, 'the page changes neither');
+  for (const q of [...large, ...largePage]) assert.doesNotMatch(q, /proposal/i, 'no proposal table is read');
+  assert.equal((await read()).versions.evaluated, 41);
+
+  assert.equal((await call(w, ADMIN, 'GET', HQ)).status, 403, 'Super Admin only');
 });

@@ -3299,7 +3299,7 @@ export const api = {
   // pages render "Not recorded" rather than an invented figure.
   fundsAnalytics: () => request('/funds/analytics'),
   fundAnalytics: (id) => request(`/funds/${id}/analytics`),
-  fundsLpPortal: () => request('/funds/lp-portal'),
+  fundsLpPortal: ({ view } = {}) => request(view === 'studio' ? '/funds/lp-portal?view=studio' : '/funds/lp-portal'),
   // GP-only. Returns ONE limited partner's reporting data in the same shape as
   // fundsLpPortal, so the quarterly-report renderer is a single code path
   // whether the LP downloads their own statement or the GP produces it.
@@ -4059,7 +4059,9 @@ export const api = {
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
-  listIntroductions: () => request('/introductions/'),
+  // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
+  // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
+  listIntroductions: () => request('/introductions'),
   // Task #82 — request a warm intro to a founder/project. Consumes the intro
   // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
   // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
@@ -5451,12 +5453,18 @@ export const api = {
     ),
 
     // Diligence — no store of its own. Room access assembled from the grants
-    // this investor already holds.
+    // this investor already holds. #6267: each room carries `nda: { status:
+    // none | out_for_signature | on_file, valid_until }`, and the read adds
+    // `requests`, the investor's own open and declined room requests no live
+    // grant answers (`project_name` null where the call or deal behind it did
+    // not name the venture); `requests: null` with `requests_unreadable` when
+    // they could not be read, never an empty list.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
     // that does not exist; a document behind an NDA they have not signed is a
     // 403 (`nda_required`) that carries the room and nothing about the file.
+    // #6267: the room carries the same `nda` status object as the list.
     diligenceRoom: (grantUid) => request(`/research/diligence/${encodeURIComponent(grantUid)}`),
     diligenceFile: (grantUid, fileUid) =>
       request(`/research/diligence/${encodeURIComponent(grantUid)}/files/${encodeURIComponent(fileUid)}`),

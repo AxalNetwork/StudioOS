@@ -17,6 +17,11 @@
       "channel": "#axalvc-actions-agent-stage-a"
     },
     {
+      "id": 419009745,
+      "path": ".github/workflows/archive-observer-deploy.yml",
+      "channel": "#axalvc-actions-archive-observer-deploy"
+    },
+    {
       "id": 280437834,
       "path": ".github/workflows/backup-d1.yml",
       "channel": "#axalvc-actions-backup-d1"
@@ -110,6 +115,11 @@
       "id": 385718276,
       "path": ".github/workflows/form-lightbox-contracts.yml",
       "channel": "#axalvc-actions-form-lightbox-contracts"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/gateway-live-check.yml",
+      "channel": "#axalvc-actions-gateway-live-check"
     },
     {
       "id": 412302440,

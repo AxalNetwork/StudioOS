@@ -17,7 +17,8 @@ import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import type { User } from '../types';
-import { getCurrentUser, requireAuth } from '../auth';
+import { getCurrentUser, requireAuth, supportOperatorOf } from '../auth';
+import { adoptEventMeetCopy, makeMeetLink } from '../services/calendar/itemRead';
 import { EVENT_COVER, coverAsk, coverRunOptions, drawCover, quoteCover, readCover } from '../services/coverDraws';
 import {
   COVER_ALT_MAX, MAX_COVER_BYTES, UPLOAD_MESSAGES, VARIANTS_PER_DRAW, brandColours, coverUploadAsk, drawVariants,
@@ -99,7 +100,7 @@ export function canManage(event: any, user: User): boolean {
 // (§1.3) — or the caller must hold a non-revoked invitation. Gate EVERY read
 // surface (detail, agenda, ics, eligibility) with this so a guessed event id
 // can't leak a private/draft/pending event.
-export async function canViewEvent(env: Env, event: any, user: User): Promise<boolean> {
+export async function canViewEvent(env: Env, event: any, user: User, access?: { registered: boolean; invited: boolean }): Promise<boolean> {
   if (canManage(event, user)) return true;
   const published = event.status === 'published' && (
     event.visibility === 'unlisted' ||
@@ -109,6 +110,7 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
   // D1031 (#2872): a member who holds a registration may read the event their
   // notices point at, also once it is cancelled or back to draft. They get no
   // private fields, and the join link still needs a confirmed seat.
+  if (access) return access.registered || access.invited;
   const reg = await env.DB.prepare(
     `SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? LIMIT 1`,
   ).bind(event.id, user.id).first();
@@ -119,6 +121,31 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
          AND status != 'revoked' LIMIT 1`,
   ).bind(event.id, user.id, user.email).first();
   return !!inv;
+}
+
+/** D6413: batch the same visibility grants for one bounded saved-event window. */
+export async function visibleEventIds(env: Env, events: any[], user: User): Promise<number[]> {
+  // The pure fast path shares the ordinary read gate, including host/admin access.
+  const visible = new Set<number>();
+  const restricted = [];
+  for (const event of events) {
+    if (await canViewEvent(env, event, user, { registered: false, invited: false })) visible.add(event.id);
+    else restricted.push(event.id);
+  }
+  if (restricted.length) {
+    const regs = await env.DB.prepare(`SELECT event_id FROM event_registrations WHERE user_id = ? AND event_id IN (SELECT value FROM json_each(?))`).bind(user.id, JSON.stringify(restricted)).all<{ event_id: number }>();
+    if (!Array.isArray(regs.results)) throw new Error('event registrations unreadable');
+    const registered = new Set(regs.results.map(row => row.event_id));
+    const remaining = restricted.filter(id => !registered.has(id));
+    const invited = new Set<number>();
+    if (remaining.length) {
+      const invitations = await env.DB.prepare(`SELECT event_id FROM event_invitations WHERE event_id IN (SELECT value FROM json_each(?)) AND (invited_user_id = ? OR lower(invited_email) = lower(?)) AND status != 'revoked'`).bind(JSON.stringify(remaining), user.id, user.email).all<{ event_id: number }>();
+      if (!Array.isArray(invitations.results)) throw new Error('event invitations unreadable');
+      for (const row of invitations.results) invited.add(row.event_id);
+    }
+    for (const event of events) if (!visible.has(event.id) && await canViewEvent(env, event, user, { registered: registered.has(event.id), invited: invited.has(event.id) })) visible.add(event.id);
+  }
+  return events.filter(event => visible.has(event.id)).map(event => event.id);
 }
 
 // This lookup is always for the authenticated member, never an email supplied
@@ -198,6 +225,55 @@ events.use('*', async (c, next) => {
   await ensureEventsSchema(c.env);
   await next();
 });
+
+// ── #5871 (D3724 gap 13, D5871): "Create the meeting for me" ──────────────
+// The editor's press sends `add_meet: true` with its Save. The Meet event is
+// made inside that save, the way New IC meeting and New check-in make theirs
+// (D1211): on the caller's own Google account, before the row is written,
+// with the event's title, start and length as they are being saved, and
+// undone if the write fails. So a refusal saves nothing and a failed save
+// leaves no Meet event behind. Only the event's host asks; a support session
+// never does; an event held in person has no meeting.
+export const MEET_REFUSALS = {
+  support: 'A support session cannot create a meeting on a member’s Google account.',
+  host_only: 'Only the event’s host can create its meeting, on their own Google account.',
+  in_person: 'An in-person event has no meeting link. Choose Online or Hybrid first.',
+  cancelled: 'A cancelled event takes no new meeting.',
+} as const;
+
+type MeetMade = Extract<Awaited<ReturnType<typeof makeMeetLink>>, { ok: true }>;
+
+/** The meeting's length in minutes: start to end, or an hour when the event records no end. */
+export function meetMinutes(startsAt: unknown, endsAt: unknown): number {
+  const start = Date.parse(String(startsAt ?? ''));
+  const end = Date.parse(String(endsAt ?? ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 60;
+  return Math.min(24 * 60, Math.max(5, Math.round((end - start) / 60_000)));
+}
+
+/** The Meet event for this save, the refusal that stops it, or null when the save asked for none. */
+async function eventMeet(c: any, u: User, want: unknown, ev: {
+  host_user_id: unknown; status?: unknown; title: unknown; starts_at: unknown; ends_at: unknown; location_kind: unknown;
+}): Promise<MeetMade | Response | null> {
+  if (want !== true) return null;
+  if ((await supportOperatorOf(c, Number(u.id))) !== null) return refuse(c, 403, { code: 'support_session_refused', message: MEET_REFUSALS.support });
+  if (Number(ev.host_user_id) !== Number(u.id)) return refuse(c, 403, { code: 'meet_host_only', message: MEET_REFUSALS.host_only });
+  if (ev.status === 'cancelled') return refuse(c, 409, { code: 'meet_event_cancelled', message: MEET_REFUSALS.cancelled });
+  if (isInPersonEvent(ev)) return refuse(c, 400, { code: 'meet_in_person', message: MEET_REFUSALS.in_person });
+  const start = Date.parse(String(ev.starts_at ?? ''));
+  if (!Number.isFinite(start)) return c.json({ error: 'starts_at_required' }, 400);
+  const made = await makeMeetLink(c.env, Number(u.id), {
+    topic: String(ev.title ?? '').trim() || 'Event', startsAt: new Date(start).toISOString(), durationMin: meetMinutes(ev.starts_at, ev.ends_at),
+  });
+  if (!made.ok) return refuse(c, made.refusal.status, { code: made.refusal.code, message: made.refusal.message });
+  return made;
+}
+
+/** The Meet event becomes the host's Google copy of the event, so Cancel removes it. The event stands if this fails. */
+async function keepEventMeet(env: Env, userId: number, eventId: number, meet: MeetMade): Promise<void> {
+  try { await adoptEventMeetCopy(env, userId, eventId, meet.externalRef); }
+  catch { console.warn('[events] meet copy not recorded'); }
+}
 
 // D1032 (#2873): where a free seat came from. D1131 (migration 611): the seat
 // records it (`event_registrations.comp_source`, written with the seat) in the
@@ -406,37 +482,46 @@ events.post('/', async (c) => {
       ? c.json({ error: 'segments_unreadable', detail: 'Segment choices could not be read. Try again.' }, 503)
       : c.json({ error: 'invalid_audience_rules' }, 400); }
 
-  const ins: any = await c.env.DB.prepare(
-    `INSERT INTO events
-       (slug, host_user_id, project_id, type, title, summary, description, cover_url,
-        starts_at, ends_at, timezone, location_kind, location_text, location_url,
-        capacity, waitlist_enabled, approval_required, visibility, status,
-        audience_rules_json, price_cents, currency, topics_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
-  ).bind(
-    slug,
-    u.id,
-    body.project_id ?? null,
-    type,
-    title,
-    body.summary ?? null,
-    body.description ?? null,
-    body.cover_url ?? null,
-    body.starts_at,
-    body.ends_at ?? null,
-    body.timezone ?? 'UTC',
-    locationKind,
-    body.location_text ?? null,
-    body.location_url ?? null,
-    body.capacity != null ? Number(body.capacity) : null,
-    body.waitlist_enabled === false ? 0 : 1,
-    body.approval_required ? 1 : 0,
-    visibility,
-    audienceRules,
-    body.price_cents != null ? Number(body.price_cents) : 0,
-    body.currency || 'usd',
-    JSON.stringify(body.topics ?? []),
-  ).run();
+  const meet = await eventMeet(c, u, body.add_meet, { host_user_id: u.id, title, starts_at: body.starts_at, ends_at: body.ends_at, location_kind: locationKind });
+  if (meet instanceof Response) return meet;
+  let ins: any;
+  try {
+    ins = await c.env.DB.prepare(
+      `INSERT INTO events
+         (slug, host_user_id, project_id, type, title, summary, description, cover_url,
+          starts_at, ends_at, timezone, location_kind, location_text, location_url,
+          capacity, waitlist_enabled, approval_required, visibility, status,
+          audience_rules_json, price_cents, currency, topics_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+    ).bind(
+      slug,
+      u.id,
+      body.project_id ?? null,
+      type,
+      title,
+      body.summary ?? null,
+      body.description ?? null,
+      body.cover_url ?? null,
+      body.starts_at,
+      body.ends_at ?? null,
+      body.timezone ?? 'UTC',
+      locationKind,
+      body.location_text ?? null,
+      meet ? meet.joinUrl : body.location_url ?? null,
+      body.capacity != null ? Number(body.capacity) : null,
+      body.waitlist_enabled === false ? 0 : 1,
+      body.approval_required ? 1 : 0,
+      visibility,
+      audienceRules,
+      body.price_cents != null ? Number(body.price_cents) : 0,
+      body.currency || 'usd',
+      JSON.stringify(body.topics ?? []),
+    ).run();
+  } catch (error) {
+    if (meet) await meet.undo();
+    throw error;
+  }
+  if (meet) await keepEventMeet(c.env, u.id, Number(ins?.meta?.last_row_id), meet);
 
   const created = await loadEvent(c.env, Number(ins?.meta?.last_row_id));
   return c.json({ event: shapeEvent(created, { includePrivate: true }) }, 201);
@@ -724,6 +809,22 @@ events.patch('/:id', async (c) => {
     binds.push(JSON.stringify(rules));
   }
 
+  // #5871: the Meet link, made last, once every field above has been checked.
+  const meet = await eventMeet(c, u, body.add_meet, {
+    host_user_id: event.host_user_id, status: event.status,
+    title: 'title' in body && String(body.title ?? '').trim() ? body.title : event.title,
+    starts_at: 'starts_at' in body ? body.starts_at : event.starts_at,
+    ends_at: 'ends_at' in body ? body.ends_at : event.ends_at,
+    location_kind: 'location_kind' in body && LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : event.location_kind,
+  });
+  if (meet instanceof Response) return meet;
+  if (meet) {
+    const at = sets.indexOf('location_url = ?');
+    if (at >= 0) binds[at] = meet.joinUrl;
+    else { sets.push('location_url = ?'); binds.push(meet.joinUrl); }
+    reviewValues.set('location_url', meet.joinUrl);
+  }
+
   if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
   // D917: material host edits flag an approved event; its status stays as it is.
   const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
@@ -738,7 +839,13 @@ events.patch('/:id', async (c) => {
   }
   sets.push(`updated_at = datetime('now')`);
   binds.push(id);
-  await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+  try {
+    await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
+  } catch (error) {
+    if (meet) await meet.undo();
+    throw error;
+  }
+  if (meet) await keepEventMeet(c.env, u.id, id, meet);
 
   // Switching an already self-published event to `public` must re-enter the
   // admin review queue — it can never sit at status='published' without the

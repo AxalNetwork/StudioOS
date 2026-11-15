@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../../ui';
 import { HBars } from '../../../ui/Charts';
 import { FundActControl } from '../../../lib/fundActs';
@@ -135,6 +135,14 @@ const CALLS_SUB = 'What this fund has called and received, each call with its LP
 export function CallsTab({ apis, access, fund, overview }) {
   const ledger = useRead(() => (fund ? apis.calls.ledger(fund.id) : Promise.resolve(null)), [apis, fund?.id]);
   const [dialog, setDialog] = useState(null);
+  const [params, setParams] = useSearchParams();
+  // D6397: navigation opens the existing preparation flow, with no guessed inputs.
+  useEffect(() => {
+    if (params.get('new') !== '1' || !fund || params.get('fund') !== String(fund.id) || !access?.acts?.some(row => row.act === 'capital_call.preview' && row.allowed)) return;
+    setDialog({ kind: 'new' });
+    const next = new URLSearchParams(params); next.delete('new');
+    setParams(next, { replace: true });
+  }, [params, setParams, fund, access]);
   const [issued, setIssued] = useState(null);
   const data = ledger.status === 'ready' ? ledger.data : null;
   const calls = Array.isArray(data?.calls) ? data.calls : [];
@@ -181,7 +189,7 @@ export function CallsTab({ apis, access, fund, overview }) {
         </>}
       </div>}
       {/* D4812 part 2: the dialog stays open on its Receipt step; the ledger is read again beneath it. */}
-      {dialog?.kind === 'new' && <NewCallDialog apis={apis} access={access} fund={fund} summary={data?.summary ?? null}
+      {dialog?.kind === 'new' && <NewCallDialog key={fund?.id} apis={apis} access={access} fund={fund} summary={data?.summary ?? null}
         onClose={() => setDialog(null)} onIssued={async (preview) => { setIssued({ preview }); await ledger.reload(); }} />}
       {dialog?.kind === 'receipt' && <ReceiptDialog apis={apis} fund={fund} line={dialog.line} call={dialog.call}
         onClose={() => setDialog(null)} onDone={async () => { await ledger.reload(); }} />}

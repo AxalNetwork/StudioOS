@@ -9,6 +9,7 @@
 | `npm run deploy` | Applies pending D1 migrations (`migrate-d1.mjs --remote`) and then deploys the worker. The migration step is a `predeploy` hook, which is why deploying by hand ships the worker ahead of its schema. |
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
+| `actions-concurrency.mjs` | #6462: read-only report of effective Actions concurrency. Rebuilds jobs executing per minute over a window (default 24 h) from every run's job timestamps: the effective ceiling (the level executing sat at while jobs queued), peak, the highest level held for 10 minutes, share of time at the ceiling, queued jobs per minute, slot-minutes per workflow and per event (draft vs ready PRs from each PR's timeline), whether phantom queued runs ever held a slot, and which plan cap (20, 40, 60, 500) the ceiling matches. GET requests only, capped (`--cap`, `--reserve`); prints how much of the window it covered. `--save`/`--load` re-render without the API. Logic in `lib/actionsConcurrency.mjs`. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
@@ -30,6 +31,8 @@
 | `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 | `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
 | `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
+| `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
+| `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
 
 ## The guards
 
@@ -94,6 +97,7 @@ represents a bug that reached production once:
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
 | `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
+| `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
 
 ## The one rule that needed a linter
 

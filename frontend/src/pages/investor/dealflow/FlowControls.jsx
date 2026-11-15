@@ -1,7 +1,8 @@
 /**
  * D1240 (#3253) — Deal flow's controls (DLS1, DLS3–DLS5): search, the filter
- * chips, the Filters drawer, the Sort, Columns and Card scopes popovers, and
- * Saved views with its Save view and Delete dialogs. Every change of settings
+ * chips, the Filters drawer, View settings (D4815 part 3: the saved view,
+ * Sort, and Columns or Card scopes, in one panel) with the Save view and
+ * Delete dialogs. Every change of settings
  * is an address (`settingsHref`), so a link reopens the view; a write (save,
  * delete, add to the flow) opens a dialog in the page that says what it
  * changes, never a browser pop-up.
@@ -25,8 +26,11 @@ const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py
 const CHIP = (on) => `rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`;
 const REFUSED = 'm-0 text-[12.5px] text-red-700 dark:text-red-300';
 
-/** A button with a panel under it; Escape and a second press close it. */
-export function Popover({ label, testId, children, badge = null, wide = false }) {
+/** A toolbar control's 44px target below `md` (D4815 part 3, DX3). */
+export const TAP = 'min-h-[44px] md:min-h-0';
+
+/** A button with a panel under it; Escape and a second press close it. `align="right"` opens it from the button's right edge. */
+export function Popover({ label, testId, children, badge = null, wide = false, align = 'left', tap = false }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return undefined;
@@ -36,12 +40,12 @@ export function Popover({ label, testId, children, badge = null, wide = false })
   }, [open]);
   return (
     <div className="relative">
-      <button type="button" className={TOOL} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid={testId}>
+      <button type="button" className={`${TOOL}${tap ? ` ${TAP}` : ''}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid={testId}>
         {label}{badge != null && <span className="rounded-full bg-violet-600 px-1.5 text-[10.5px] text-white dark:bg-violet-500">{badge}</span>}
       </button>
       {open && (
         <div role="dialog" aria-label={typeof label === 'string' ? label : undefined}
-          className={`absolute left-0 z-30 mt-1 ${wide ? 'w-80' : 'w-64'} rounded-xl border border-axal-hairline bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-900`} data-testid={`${testId}-panel`}>
+          className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} z-30 mt-1 ${wide ? 'w-80' : 'w-64'} max-w-[calc(100vw-2rem)] rounded-xl border border-axal-hairline bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-900`} data-testid={`${testId}-panel`}>
           {typeof children === 'function' ? children(() => setOpen(false)) : children}
         </div>
       )}
@@ -50,57 +54,117 @@ export function Popover({ label, testId, children, badge = null, wide = false })
 }
 
 const Box = ({ checked, onChange, label, disabled = false, testId }) => (
-  <label className={`flex items-center gap-2 py-0.5 text-[13px] ${disabled ? 'opacity-50' : ''}`}>
+  <label className={`flex items-center gap-2 py-0.5 text-[13px] ${TAP} ${disabled ? 'opacity-50' : ''}`}>
     <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} data-testid={testId} />{label}
   </label>
 );
 
 /** DLS3 Sort: by a scope (score or confidence), Your weighting, Fit, days, ask or name; unscored last. */
-export function SortPopover({ sort, onSort }) {
+export function SortFields({ sort, onSort }) {
   return (
-    <Popover label={`Sort: ${sortLabel(sort.by)}`} testId="dealflow-sort" wide>
-      <div className="flex flex-col gap-2">
-        <label className="flex flex-col gap-1"><span className={EYE}>Sort by</span>
-          <select className={FIELD} value={sort.by} onChange={(e) => onSort({ ...sort, by: e.target.value })} data-testid="dealflow-sort-by">
-            {SORT_FIELDS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
-        </label>
-        <div className="flex gap-1.5">
-          {[['desc', 'Highest first'], ['asc', 'Lowest first']].map(([d, w]) => <button key={d} type="button" aria-pressed={sort.dir === d} className={CHIP(sort.dir === d)} onClick={() => onSort({ ...sort, dir: d })} data-testid={`dealflow-sort-${d}`}>{w}</button>)}
-        </div>
-        {SCOPE_KEYS.includes(sort.by) && (
-          <div className="flex gap-1.5">
-            {[['score', 'Sort by score'], ['confidence', 'Sort by confidence']].map(([m, w]) => <button key={m} type="button" aria-pressed={sort.mode === m} className={CHIP(sort.mode === m)} onClick={() => onSort({ ...sort, mode: m })}>{w}</button>)}
-          </div>
-        )}
-        {sort.by === 'weighting' && <p className={MUTED}>Your own weight per scope, set in the scoring weighting dialog. It never changes a score.</p>}
-        <p className={MUTED}>A score here is its band (Strong, Fair, Weak), then its confidence. {SORT_LAST}</p>
+    <div className="flex flex-col gap-2" data-testid="dealflow-sort">
+      <label className="flex flex-col gap-1"><span className={EYE}>Sort by</span>
+        <select className={`${FIELD} ${TAP}`} value={sort.by} onChange={(e) => onSort({ ...sort, by: e.target.value })} data-testid="dealflow-sort-by">
+          {SORT_FIELDS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+        </select>
+      </label>
+      <div className="flex gap-1.5">
+        {[['desc', 'Highest first'], ['asc', 'Lowest first']].map(([d, w]) => <button key={d} type="button" aria-pressed={sort.dir === d} className={`${CHIP(sort.dir === d)} ${TAP}`} onClick={() => onSort({ ...sort, dir: d })} data-testid={`dealflow-sort-${d}`}>{w}</button>)}
       </div>
-    </Popover>
+      {SCOPE_KEYS.includes(sort.by) && (
+        <div className="flex gap-1.5">
+          {[['score', 'Sort by score'], ['confidence', 'Sort by confidence']].map(([m, w]) => <button key={m} type="button" aria-pressed={sort.mode === m} className={`${CHIP(sort.mode === m)} ${TAP}`} onClick={() => onSort({ ...sort, mode: m })}>{w}</button>)}
+        </div>
+      )}
+      {sort.by === 'weighting' && <p className={MUTED}>Your own weight per scope, set in the scoring weighting dialog. It never changes a score.</p>}
+      <p className={MUTED}>A score here is its band (Strong, Fair, Weak), then its confidence. {SORT_LAST}</p>
+    </div>
   );
 }
 
 /** DLS3 Columns: Venture is always shown; Reset puts the canvas's back. */
-export function ColumnsPopover({ columns, onColumns, defaults }) {
+export function ColumnFields({ columns, onColumns, defaults }) {
   return (
-    <Popover label="Columns" testId="dealflow-columns" wide>
-      <div className="flex max-h-80 flex-col overflow-y-auto">
-        <span className={MUTED}>Venture · always shown</span>
-        {COLUMNS.map((c) => <Box key={c.id} checked={columns.includes(c.id)} onChange={() => onColumns(toggleColumn(columns, c.id))} label={c.label} testId={`dealflow-col-${c.id}`} />)}
-        <button type="button" className="mt-2 w-fit text-[12.5px] font-semibold underline" onClick={() => onColumns([...defaults])} data-testid="dealflow-columns-reset">Reset to default</button>
-      </div>
-    </Popover>
+    <div className="flex flex-col" data-testid="dealflow-columns">
+      <span className={MUTED}>Venture · always shown</span>
+      {COLUMNS.map((c) => <Box key={c.id} checked={columns.includes(c.id)} onChange={() => onColumns(toggleColumn(columns, c.id))} label={c.label} testId={`dealflow-col-${c.id}`} />)}
+      <button type="button" className={`mt-2 w-fit text-[12.5px] font-semibold underline ${TAP}`} onClick={() => onColumns([...defaults])} data-testid="dealflow-columns-reset">Reset to default</button>
+    </div>
   );
 }
 
 /** DLS3 Card scopes: up to three scopes on each board card. */
-export function CardScopesPopover({ cards, onCards }) {
+export function CardScopeFields({ cards, onCards }) {
   return (
-    <Popover label="Card scopes" testId="dealflow-cards" wide>
+    <div className="flex flex-col" data-testid="dealflow-cards">
       <p className={MUTED}>Pick up to three scopes for board cards.</p>
       {SCOPE_KEYS.map((k) => <Box key={k} checked={cards.includes(k)} disabled={!cards.includes(k) && cards.length >= MAX_CARD_SCOPES} onChange={() => onCards(toggleCard(cards, k))} label={SCOPE_LABEL[k]} testId={`dealflow-card-${k}`} />)}
       {cards.length >= MAX_CARD_SCOPES && <p className={MUTED} data-testid="dealflow-cards-full">{cards.length} of {MAX_CARD_SCOPES} picked. Untick one to pick another.</p>}
+    </div>
+  );
+}
+
+/** DLS5 A: the saved views: yours, your firm's, and Save view. A view not yours is read-only. */
+export function SavedViewFields({ views, activeUid, onPick, onSave, onDelete, close }) {
+  const mine = (views?.items || []).filter((v) => v.mine);
+  const firm = (views?.items || []).filter((v) => !v.mine);
+  const pickBtn = `text-left hover:underline ${TAP}`;
+  return (
+    <div className="flex flex-col gap-1 text-[13px]" data-testid="dealflow-views">
+      {views === 'failed' && <p className={MUTED} data-testid="dealflow-views-unreadable">Your saved views could not be read. The deals below are current.</p>}
+      <span className={EYE}>Mine</span>
+      <button type="button" className={pickBtn} aria-current={!activeUid ? 'true' : undefined} onClick={() => { close(); onPick(null); }}>All my deals</button>
+      {mine.map((v) => (
+        <span key={v.uid} className="flex items-center justify-between gap-2">
+          <button type="button" className={pickBtn} aria-current={v.uid === activeUid ? 'true' : undefined} onClick={() => { close(); onPick(v); }} data-testid="dealflow-view-item">{v.name}{v.is_default ? ' · Default' : ''}{v.shared_with_firm ? ' · shared' : ''}</button>
+          <button type="button" className={`text-[12px] text-axal-muted underline ${TAP}`} onClick={() => { close(); onDelete(v); }} aria-label={`Delete ${v.name}`}>Delete</button>
+        </span>
+      ))}
+      {firm.length > 0 && <span className={EYE}>My firm</span>}
+      {firm.map((v) => <button key={v.uid} type="button" className={pickBtn} aria-current={v.uid === activeUid ? 'true' : undefined} onClick={() => { close(); onPick(v); }} data-testid="dealflow-view-item">{v.name}</button>)}
+      <button type="button" className={`${TOOL} ${TAP} mt-1 w-fit`} onClick={() => { close(); onSave(); }} data-testid="dealflow-views-save">Save view</button>
+    </div>
+  );
+}
+
+/**
+ * D4815 part 3 (canvas DX1, board DE01): View settings, the one home of the
+ * advanced view options: the saved view, Sort, and Columns (table) or Card
+ * scopes (board). Each change is still the address (`settingsHref`); the
+ * button names the saved view in use.
+ */
+export function ViewSettings({ view, views, activeUid, sort, onSort, columns, onColumns, defaults, cards, onCards, onPick, onSave, onDelete }) {
+  const active = (views?.items || []).find((v) => v.uid === activeUid) || null;
+  return (
+    <Popover label={active ? `View settings · ${active.name}` : 'View settings'} testId="dealflow-view-settings" wide align="right" tap>
+      {(close) => (
+        <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
+          <section className="flex flex-col gap-1" aria-label="Saved view"><span className={EYE}>Saved view</span>
+            <SavedViewFields views={views} activeUid={activeUid} onPick={onPick} onSave={onSave} onDelete={onDelete} close={close} />
+          </section>
+          <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" aria-label="Sort"><span className={EYE}>Sort · {sortLabel(sort.by)}</span>
+            <SortFields sort={sort} onSort={onSort} />
+          </section>
+          <section className="flex flex-col gap-1 border-t border-axal-hairline pt-3 dark:border-gray-800" aria-label={view === 'table' ? 'Columns' : 'Card scopes'}>
+            <span className={EYE}>{view === 'table' ? 'Columns' : 'Card scopes'}</span>
+            {view === 'table' ? <ColumnFields columns={columns} onColumns={onColumns} defaults={defaults} /> : <CardScopeFields cards={cards} onCards={onCards} />}
+          </section>
+        </div>
+      )}
     </Popover>
+  );
+}
+
+/** DLS5 C: a saved view changed on screen: "• edited", with Save changes (yours) and Save as new. */
+export function ViewEdited({ views, activeUid, edited, onSave, onSaveChanges }) {
+  const active = (views?.items || []).find((v) => v.uid === activeUid) || null;
+  if (!active || !edited) return null;
+  return (
+    <span className="flex items-center gap-2 text-[12.5px]" data-testid="dealflow-view-edited">
+      <span className="text-axal-muted dark:text-gray-400">{active.name} • edited</span>
+      {active.mine && <button type="button" className={`font-semibold underline ${TAP}`} onClick={() => onSaveChanges(active)} data-testid="dealflow-view-save-changes">Save changes</button>}
+      <button type="button" className={`font-semibold underline ${TAP}`} onClick={onSave}>Save as new</button>
+    </span>
   );
 }
 
@@ -245,42 +309,6 @@ export function DeleteViewDialog({ view, onClose, onDeleted }) {
       )}>
       <p className="m-0 text-[13px]">The saved settings go{view.shared_with_firm ? ', for your firm too' : ''}. No deal, stage or score changes.</p>
     </Lightbox>
-  );
-}
-
-/** DLS5 A: the saved views menu: yours, your firm's, and Save view. A view not yours is read-only. */
-export function ViewsMenu({ views, current, activeUid, edited, onPick, onSave, onSaveChanges, onDelete }) {
-  const mine = (views?.items || []).filter((v) => v.mine);
-  const firm = (views?.items || []).filter((v) => !v.mine);
-  const active = (views?.items || []).find((v) => v.uid === activeUid) || null;
-  return (
-    <div className="flex items-center gap-2">
-      <Popover label={active ? active.name : 'All my deals'} testId="dealflow-views" wide>
-        {(close) => (
-          <div className="flex flex-col gap-2 text-[13px]">
-            {views === 'failed' && <p className={MUTED} data-testid="dealflow-views-unreadable">Your saved views could not be read. The deals below are current.</p>}
-            <span className={EYE}>Mine</span>
-            <button type="button" className="text-left hover:underline" onClick={() => { close(); onPick(null); }}>All my deals</button>
-            {mine.map((v) => (
-              <span key={v.uid} className="flex items-center justify-between gap-2">
-                <button type="button" className="text-left hover:underline" onClick={() => { close(); onPick(v); }} data-testid="dealflow-view-item">{v.name}{v.is_default ? ' · Default' : ''}{v.shared_with_firm ? ' · shared' : ''}</button>
-                <button type="button" className="text-[12px] text-axal-muted underline" onClick={() => { close(); onDelete(v); }} aria-label={`Delete ${v.name}`}>Delete</button>
-              </span>
-            ))}
-            {firm.length > 0 && <span className={EYE}>My firm</span>}
-            {firm.map((v) => <button key={v.uid} type="button" className="text-left hover:underline" onClick={() => { close(); onPick(v); }} data-testid="dealflow-view-item">{v.name}</button>)}
-            <button type="button" className={`${TOOL} mt-1 w-fit`} onClick={() => { close(); onSave(); }} data-testid="dealflow-views-save">Save view</button>
-          </div>
-        )}
-      </Popover>
-      {active && edited && (
-        <span className="flex items-center gap-2 text-[12.5px]" data-testid="dealflow-view-edited">
-          <span className="text-axal-muted dark:text-gray-400">• edited</span>
-          {active.mine && <button type="button" className="font-semibold underline" onClick={() => onSaveChanges(active)} data-testid="dealflow-view-save-changes">Save changes</button>}
-          <button type="button" className="font-semibold underline" onClick={onSave}>Save as new</button>
-        </span>
-      )}
-    </div>
   );
 }
 
