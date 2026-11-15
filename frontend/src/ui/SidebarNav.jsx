@@ -254,9 +254,15 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                   </button>
                 );
               }
+              // D6029 (#6029, BD23): a row with `children` lists its own pages under it while it is the current row
+              // and the sidebar is expanded, so the sidebar is that area's one page switcher on desktop.
+              const rowIsCurrent = derivedRow !== null ? to === derivedRow : (manualActive ?? navLocation.pathname === to);
+              const kids = !collapsed && !q && rowIsCurrent && Array.isArray(item.children) && item.children.length
+                ? <SubpageList items={item.children} pathname={navLocation.pathname} onNavigate={onNavigate} parent={label} />
+                : null;
               return (
+                <React.Fragment key={to}>
                 <NavLink
-                  key={to}
                   to={to}
                   state={to === '/account' || to === '/trust/me' ? { sectionSidebarShell: role } : undefined}
                   end={manualActive === null}
@@ -305,6 +311,8 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                     </>
                   )}
                 </NavLink>
+                {kids}
+                </React.Fragment>
               );
             })}
           </div>
@@ -315,6 +323,33 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
     </div>
     </div>
+  );
+}
+
+/** D6029: a sub-page lights on its exact path when `end`, else on its subtree too. */
+export function subpageActive(child, pathname) {
+  if (!child?.to) return false;
+  return pathname === child.to || (!child.end && pathname.startsWith(`${child.to}/`));
+}
+
+/** D6029 (#6029, BD23) — a row's own pages, indented under it: links, and a heading where one is drawn ("Modules"). */
+export function SubpageList({ items, pathname, onNavigate, parent }) {
+  return (
+    <ul className="m-0 list-none border-l border-gray-200 py-1 pl-0 ml-8 dark:border-gray-700" aria-label={`${parent} pages`} data-testid="sidebar-subpages">
+      {items.map((c) => (c.heading
+        ? <li key={`h-${c.heading}`} className="px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{c.heading}</li>
+        : (
+          <li key={c.to}>
+            <Link to={c.to} onClick={onNavigate} aria-current={subpageActive(c, pathname) ? 'page' : undefined}
+              className={`block truncate px-3 py-1.5 text-[13px] transition-colors ${subpageActive(c, pathname)
+                ? 'font-semibold text-violet-700 dark:text-violet-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}
+              data-testid={`sidebar-subpage-${c.to}`}>
+              {c.label}
+            </Link>
+          </li>
+        )))}
+    </ul>
   );
 }
 

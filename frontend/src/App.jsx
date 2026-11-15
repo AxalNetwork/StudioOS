@@ -24,6 +24,7 @@ import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 import { resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
 import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
+import { SidebarSubpagesContext, subpageRootsKey, visibleSubpageRoots } from './lib/sidebarSubpages';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import AxalLogo from './components/AxalLogo';
@@ -1249,6 +1250,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const ddRole = isLicence(shellRole) ? (heldLicences.find((l) => DILIGENCE_ROLES.includes(l)) || shellRole) : shellRole;
   const ddInvolved = useDiligenceInvolvement(user, ddRole);
   const sidebarGroups = withDiligenceRow(getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView, heldLicences), ddRole, ddInvolved);
+  // D6029 (#6029): the rows whose own pages the desktop sidebar lists now (none while it is closed or an icon rail).
+  const sidebarSubpages = useMemo(
+    () => visibleSubpageRoots(sidebarGroups, { open: sidebarOpen && isDesktop, collapsed: effectiveCollapsed }),
+    [sidebarOpen, isDesktop, effectiveCollapsed, subpageRootsKey(sidebarGroups)],
+  );
   // D285 / H36 — which sub-navigation strip this location sits under, in the
   // HQ shell only. The strips are written below as LITERAL links rather than
   // mapped from `HQ_STRIPS`, because the reachability guard reads navigation
@@ -1621,6 +1627,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            {/* D6029 (#6029): which sidebar rows list their own pages now, so Build's header drops its desktop module tabs only then. */}
+            <SidebarSubpagesContext.Provider value={sidebarSubpages}>
             <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
@@ -1628,6 +1636,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
+            </SidebarSubpagesContext.Provider>
             {!onboardingCanvas && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
