@@ -1450,6 +1450,53 @@
    "more": []
   },
   {
+   "pageKey": "Founder · Build · Founding team",
+   "optionKey": "draft:build/founding",
+   "optionLabel": "Check the split and vesting",
+   "kind": "plan",
+   "handler": "draft",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Build · Company creation",
+   "optionKey": "draft:build/company",
+   "optionLabel": "Summarise the filings",
+   "kind": "legal",
+   "handler": "draft",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Checks the first reading"
+    }
+   ],
+   "more": []
+  },
+  {
    "pageKey": "Founder · Raise · Use of funds",
    "optionKey": "draft:raise/use-of-funds-check",
    "optionLabel": "Check this plan",
