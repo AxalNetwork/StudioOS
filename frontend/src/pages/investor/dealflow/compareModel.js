@@ -8,6 +8,7 @@
  */
 import { TRACTION_TILES, dateText, figureText, insightState, tractionView } from '../../deal/dealInsightsModel';
 import { SCOPE_KEYS, SCOPE_LABEL, daysWord, fitCell, moneyText, scopeCell, stageWord } from './flowModel';
+import { NOT_RECORDED } from '../../../lib/absence';
 
 /** One colour per venture, in pick order: the swatch, the bar, and their dark-mode pair. */
 export const COMPARE_COLOURS = Object.freeze([
@@ -76,7 +77,6 @@ export function tractionWord(read, key) {
   return (key === 'period' ? read.period : read.figures[key]) || 'Not reported';
 }
 
-const NOT_RECORDED = 'Not recorded';
 const withNote = (word, note) => (note ? `${word} · ${note}` : word);
 const askText = (v) => {
   const m = moneyText(v.ask, v.currency);
