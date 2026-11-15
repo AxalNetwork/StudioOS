@@ -19,6 +19,13 @@ permissions:
 # NOTE: We invoke the gitleaks CLI directly instead of `gitleaks/gitleaks-action`.
 # As of 2024 the Action requires a paid `GITLEAKS_LICENSE` secret for org
 # repos. The CLI is unchanged and remains free + open-source.
+# #6461: one run per pull request; a newer push cancels the superseded run.
+# A push to main and a merge-queue entry each get their own group (the run id),
+# so neither is ever cancelled.
+concurrency:
+  group: gitleaks-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   scan:
     name: scan
