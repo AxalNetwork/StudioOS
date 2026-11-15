@@ -475,11 +475,17 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [overviewStatus, setOverviewStatus] = useState('loading');
   // D1466 (#3714, RO15): a 403 or 404 on the overview is a refusal, drawn as the Worker's sentence.
   const [overviewMessage, setOverviewMessage] = useState('');
-  const [module, setModule] = useState(null);
+  const moduleKey = `${cycle}:${slug}:${projectId}`;
+  const [moduleRead, setModule] = useState(null);
+  // A venture change renders before the read effect runs. Never pair the
+  // previous response with the new venture's action handlers.
+  const currentModule = moduleRead?.key === moduleKey;
+  const module = currentModule ? moduleRead.data : null;
   // #3938 GR17 (D1478 part 9): the Partner network's "Rank by fit" answer, a view of the rows read; any new read puts the list back.
   const [partnerRank, setPartnerRank] = useState(null);
   useEffect(() => { setPartnerRank(null); }, [module, slug]);
-  const [moduleStatus, setModuleStatus] = useState('loading');
+  const [readModuleStatus, setModuleStatus] = useState('loading');
+  const moduleStatus = currentModule ? readModuleStatus : 'loading';
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
   const [moduleMessage, setModuleMessage] = useState('');
   // D693 decision 7: false once a Validate read says the viewer may not read
@@ -598,12 +604,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       .then((data) => {
         if (!alive) return;
         if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
-        setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready');
+        setModule({ key: moduleKey, data: adaptModule(cycle, slug, data) }); setModuleMessage(''); setModuleStatus('ready');
       })
       // A 403 is a refusal, not a failure (D693 decision 7: "Partners do not
       // see decisions."), so it is drawn as the Worker's sentence, with no Retry.
       .catch((error) => {
         if (!alive) return;
+        setModule({ key: moduleKey, data: null });
         if (error?.status === 403) {
           if (slug === 'verdict') setCanReadDecisions(false);
           setModuleMessage(error?.message || ''); setModuleStatus('refused');
