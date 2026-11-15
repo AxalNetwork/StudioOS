@@ -147,6 +147,8 @@ export const STUDIO_MODULES: readonly StudioModule[] = [
   { key: 'quick_stats', profile: 'investor', title: 'Quick stats', group: 'investor', purpose: 'Your flow, watchlist and commitments.', href: null, reads: ['/api/dashboard', '/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   { key: 'portfolio_glance', profile: 'investor', title: 'Portfolio glance', group: 'investor', purpose: 'Companies, invested and returns.', href: null, reads: ['/api/positions/analytics'], default_size: '1/2' },
   { key: 'upcoming_events', profile: 'investor', title: 'Upcoming events', group: 'investor', purpose: 'Events you are going to.', href: null, reads: ['/api/calendar/events'], default_size: '1/2' },
+  { key: 'fund_commitment', profile: 'investor', title: 'Fund', group: 'investor', purpose: 'Your recorded commitments and calls.', href: null, reads: ['/api/funds/lp-portal'], default_size: '1/2' },
+  { key: 'needs_you', profile: 'investor', title: 'Needs you', group: 'investor', purpose: 'Calls, signatures and Trust requirements that need your attention.', href: null, reads: ['/api/funds/lp-portal', '/api/fund-notices/mine', '/api/fund-booklets/mine', '/api/trust/me'], default_size: '1/2' },
   // Advisor — AdvisorStudioHome.jsx
   { key: 'today', profile: 'advisor', title: 'Today', group: 'advisor', purpose: 'Your sessions today, and your open slots.', href: null, reads: ['/api/advisors/me/bookings', '/api/calendar/events'], default_size: '1/2' },
   { key: 'storefront', profile: 'advisor', title: 'Storefront', group: 'advisor', purpose: 'How members find you, and whether you are published.', href: null, reads: ['/api/advisors/me'], default_size: '1/2' },
@@ -184,6 +186,8 @@ export const STUDIO_DEFAULTS: Record<StudioProfile, ReadonlyArray<{ key: string;
     { key: 'quick_stats', size: '1/2' },
     { key: 'portfolio_glance', size: '1/2' },
     { key: 'upcoming_events', size: '1/2' },
+    { key: 'fund_commitment', size: '1/2' },
+    { key: 'needs_you', size: '1/2' },
   ],
   advisor: [
     { key: 'today', size: '1/2' },

@@ -48,6 +48,7 @@ const PORTFOLIO_ROUTES = {
   // D4817 part 4 (#5311): Reports draws in the same frame, headed "Portfolio".
   '/portfolio/updates': 'Portfolio',
   '/portfolio/performance': 'Portfolio',
+  // D4817 part 5 (#5311): Value-add draws in the same frame, headed "Portfolio".
   // D4817 part 8 (#5311, PF-08): in Investor preview every board, Value-add included, is the frame's withheld board, headed "Portfolio".
   '/portfolio/value-add': 'Portfolio',
 };

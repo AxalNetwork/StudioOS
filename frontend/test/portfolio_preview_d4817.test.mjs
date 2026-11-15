@@ -269,3 +269,12 @@ test('6. the model: who previews, which board an address draws, the one banner, 
     assert.equal(strip.test(path), previewBoardOf(path) !== null, `${path}: the strip and the model agree`);
   }
 });
+
+test('7. the withheld Value-add board names what the real board draws: its figures and its sections (PF-05)', async () => {
+  const { PREVIEW_BOARDS } = await import('../src/pages/portfolio/previewModel.js');
+  const { figuresOf } = await import('../src/pages/portfolio/valueAddModel.js');
+  // Mutation checked: the old 'Hours logged' / 'Outstanding' tiles back in PREVIEW_BOARDS → this fails.
+  assert.deepEqual(PREVIEW_BOARDS['value-add'].tiles, figuresOf({ state: 'loading' }).map((f) => f.label), 'every figure PF-05 draws, in its order');
+  const page = readFileSync(new URL('../src/pages/investor/InvestorPortfolioValueAdd.jsx', import.meta.url), 'utf8');
+  for (const s of PREVIEW_BOARDS['value-add'].sections) assert.ok(page.includes(`>${s.title}<`) || page.includes(`'${s.title}'`), `${s.title} is a heading the real board draws`);
+});

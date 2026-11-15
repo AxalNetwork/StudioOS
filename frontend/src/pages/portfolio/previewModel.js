@@ -136,8 +136,12 @@ export const PREVIEW_BOARDS = {
   },
   'value-add': {
     performance: false,
-    tiles: ['Delivered', 'Hours logged', 'Outstanding', 'No support at all'],
-    sections: [{ key: 'ledger', title: 'Support ledger' }],
+    // The figures and sections PF-05 (D4817 part 5) draws on the real board.
+    tiles: ['Open commitments', 'In progress', 'Delivered', 'Introductions made', 'Overdue commitments', 'No support recorded'],
+    sections: [
+      { key: 'commitments', title: 'Commitments' },
+      { key: 'introductions', title: 'Introductions' },
+    ],
     writes: [
       { key: 'log-support', label: 'Log support' },
       { key: 'deliver', label: 'Deliver' },

@@ -121,6 +121,7 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | `dataroom_deck_sources_d1602.test.ts` | D1602: migrated data-room source permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal. |
 | `dataroom_deck_sources_d1602.mutations.mjs` | D1602: reproducible isolated-loader mutation proof, with passing original controls before and after; source files are never edited. |
 | `grow_attention_4862.test.ts` | #4862: real-SQLite focus evidence, action ranking, scoped counters, Mercury visibility and last-touch stalled-customer rules. |
+| `build_overview_6027.test.ts` | #6027: Build overview focus order, material-blocker attention with record links, the private plan preview, part isolation, reader actions and D4603's statement count. |
 
 ## Conventions
 
@@ -324,7 +325,16 @@ D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback,
 | `compute_vm_4557.test.ts` | D4557: native adapter image, scheduling, readiness and stop faults. |
 | `compute_do_4557.test.ts` | D4557: actual DO wrapper teardown and erasure against synthetic transactional storage. |
 | `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
+
+`package_offers_5024.test.ts` exercises real commercial package acceptance over
+the complete SQLite schema and authenticated routers: frozen prices and
+composition, grant conflicts, atomic rollback and competing decisions, policy
+versions and offer-bound agreements, normal branch delivery failure, and
+read-only historical contract values. Seeded HQ-only/unready items are refused
+without weakening Program Grants; successful cases publish a compatible test
+catalogue version only in the fixture.
 | `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
 | `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
 
+`investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
