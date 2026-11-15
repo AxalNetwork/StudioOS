@@ -92,7 +92,7 @@ const ALLOW = [
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,
     "frontend/src/pages/investor/proofOfFundsModel.js": 3,
-    "frontend/src/pages/investor/deals/ClosingZone.jsx": 4,
+    "frontend/src/pages/investor/deals/ClosingZone.jsx": 3,
     "cloudflare-worker/src/routes/_capital_call_writes.ts": 1,
     "cloudflare-worker/src/routes/capital.ts": 1,
     "cloudflare-worker/src/routes/funds.ts": 5,

@@ -24,7 +24,8 @@ band underneath.
 | --- | --- | --- | --- |
 | `ScreeningZone.jsx` | ID2 · Deals · Screening | `/deals/screening` | ANALYTICS. D1260: the deals you can read with each one's venture scorecard strip (`POST /api/venture-scores/batch`), and the pass taxonomy. No Lab score, tier or flag, and no memo |
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
-| `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |
+| `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
+| `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
 
 ## The rule for adding to this folder
 
