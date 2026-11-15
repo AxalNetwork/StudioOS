@@ -283,6 +283,11 @@ const COMPOSED = new Map([
   // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
   [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx', 'frontend/src/pages/admin/kyc/KycBusinesses.jsx']],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D5020 (#5020): the Country pricing pages draw their tabs (catalogue, reviews, models) from the shell beside them.
+  ['frontend/src/pages/admin/licences/PricingCatalogue.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingCountry.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingModels.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
+  ['frontend/src/pages/admin/licences/PricingReviews.jsx', ['frontend/src/pages/admin/licences/PricingShell.jsx']],
   // D1295 (#3391): the Content queue draws Pipeline from contentQueue/, which holds the door to one article.
   ['frontend/src/pages/admin/ArticlesQueuePage.jsx', ['frontend/src/pages/admin/contentQueue/Pipeline.jsx']],
   // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
