@@ -226,7 +226,8 @@ test('the callers run onProjectMoved only after their batch commits', () => {
   const batch = route.indexOf('await c.env.DB.batch(projectMoveStatements(');
   assert.ok(batch > 0 && route.indexOf('await afterMove(') > batch);
   const filing = readFileSync(new URL('../src/services/incorporationFiling.ts', import.meta.url), 'utf8');
-  const fb = filing.indexOf('await env.DB.batch(');
+  // D6686: the filing's batch runs inside the case transition (formationCase.ts), which returns after it commits.
+  const fb = filing.indexOf("await transition(env, c.id, 'registered'");
   assert.ok(fb > 0 && filing.indexOf('await afterMove(') > fb);
   // The live board learns which runs ended.
   const rt = readFileSync(new URL('../src/agents/doRuntime.ts', import.meta.url), 'utf8');
