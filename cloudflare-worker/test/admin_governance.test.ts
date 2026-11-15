@@ -27,6 +27,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -503,9 +504,7 @@ test('the two panels H7 draws with no store behind them say so', async () => {
 });
 
 test('the guardrail rollup is one definition, and the sentence it replaced cannot come back', async () => {
-  const raw = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
-  );
+  const raw = readAdminSecurity();
   // CODE, NOT COMMENTS, AND THE DISTINCTION IS THE WHOLE TEST. D152's header
   // QUOTES the sentence it deleted, because a correction that does not say what
   // it corrected is not a record. A raw scan would therefore fail the file that
@@ -553,9 +552,7 @@ test('each IN-list has exactly as many placeholders as the array that fills it',
   // query TEXT with no binding over it. The cost of writing `IN (?, ?)` by
   // hand is that shortening the array beside it silently unbalances the bind,
   // which D1 answers at RUNTIME. This turns that into a test failure.
-  const src = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
-  );
+  const src = readAdminSecurity();
   /** The array literal's element count, read off the source. */
   const arrayLen = (name: string) => {
     const at = src.indexOf(`const ${name} = [`);
@@ -597,9 +594,7 @@ test('each IN-list has exactly as many placeholders as the array that fills it',
 test('no read in this file interpolates into its own query text', () => {
   // The guard `scripts/check-sql-prepare.mjs` enforces this repo-wide against
   // a baseline; asserted here too so a regression in THIS file names itself.
-  const src = readFileSync(
-    resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8',
-  );
+  const src = readAdminSecurity();
   for (const m of src.matchAll(/\.prepare\(\s*`([^`]*)`/g)) {
     assert.doesNotMatch(m[1], /\$\{/, `a query interpolates: ${m[1].slice(0, 80)}`);
   }

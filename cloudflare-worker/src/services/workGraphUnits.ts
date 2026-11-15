@@ -45,7 +45,7 @@ export interface Unit {
 }
 
 export interface UnitDocument {
-  kind: Extract<AssetKind, 'pitch_deck' | 'legal_template' | 'document' | 'offer' | 'legal_signed'>;
+  kind: Extract<AssetKind, 'pitch_deck' | 'legal_template' | 'document' | 'offer' | 'legal_signed' | 'brand'>;
   source: SourceRef;
   /** In document order. */
   units: Unit[];

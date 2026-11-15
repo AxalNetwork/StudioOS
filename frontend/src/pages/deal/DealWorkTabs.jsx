@@ -16,6 +16,7 @@ import { dealWorkroomApi } from '../../lib/api/dealWorkroom';
 import { reportError } from '../../lib/log';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import DealReferencesTab from '../../components/deals/DealReferencesTab';
+import DealPaperRow from './DealPaper';
 import DealSyndicates from '../../components/deals/DealSyndicates';
 import FromMercury from '../investor/FromMercury';
 import { ProofDoor, useProofTargets } from '../investor/ProofOfFunds';
@@ -256,11 +257,8 @@ export function DealDocuments({ deal }) {
           {paper.status === 'loading' && <Reading />}
           {paper.status === 'unreadable' && <Unreadable what="The deal paper" claim="That is not a claim that nothing was sent." onRetry={reloadPaper} />}
           {paper.status === 'ready' && paperRows(paper.data?.envelopes).length === 0 && <p className={`m-0 ${SUB}`}>No envelope on this deal has been sent to you yet.</p>}
-          {paper.status === 'ready' && paperRows(paper.data?.envelopes).map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
-              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{p.title}</span><Pill tone={p.tone}>{p.state}</Pill>
-            </div>
-          ))}
+          {/* D6184 (#6184): each envelope with its signed count, Download once fully signed, and how to sign. */}
+          {paper.status === 'ready' && paperRows(paper.data?.envelopes).map((p) => <DealPaperRow key={p.id} row={p} />)}
         </Card>
         <Slot slot={DECK_SLOT} testId="deal-docs-deck" />
       </div>
