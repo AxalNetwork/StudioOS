@@ -142,7 +142,7 @@ const targetName = (m) => {
 function MatchPair({ m }) {
   const l = m.ledger;
   const side = 'flex min-w-0 flex-col gap-0.5 rounded-axal-sm border border-axal-hairline px-3 py-2.5 dark:border-gray-800';
-  const eye = 'text-[10.5px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400';
+  const eye = 'text-[11px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400';
   const outcome = matchOutcome(m);
   return (
     <div className="flex flex-col gap-2 px-4 pb-3 sm:px-5" data-testid={`match-pair-${m.uid}`}>
@@ -173,7 +173,7 @@ function MatchPair({ m }) {
   );
 }
 const ERR = 'px-4 pb-2.5 text-[12px] text-red-700 sm:px-5 dark:text-red-300';
-const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
+const LABEL = 'text-[13px] font-semibold text-zinc-700 dark:text-gray-200';
 
 function MatchRow({ m, apis, access, onChanged }) {
   const [rejecting, setRejecting] = useState(false);

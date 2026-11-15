@@ -39,9 +39,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, FileDown, Landmark, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
-import { spinoutLab } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
-import { fundModel, money } from '../lib/spinoutFundModel';
+import { fundModel, lpWorkspaceCallToAction, money } from '../lib/spinoutFundModel';
 import {
   HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO_STATIC,
   COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER, FUND, PROGRAM,
@@ -116,6 +116,22 @@ function FundBriefButton({ className }) {
 /* --------------------------------------------------------------------- page */
 
 export default function SpinoutLabInvestorPage() {
+  const viewerId = useAuth()?.user?.id;
+  const [standing, setStanding] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    if (viewerId != null) {
+      Promise.allSettled([api.fundsLpPortal(), spinoutLab.lpApplication()])
+        .then(([portal, application]) => {
+          if (alive) setStanding({ viewerId, cta: lpWorkspaceCallToAction(portal, application) });
+        });
+    }
+    return () => { alive = false; };
+  }, [viewerId]);
+
+  const cta = standing?.viewerId === viewerId && standing ? standing.cta : lpWorkspaceCallToAction();
+  const workspaceHref = LP_WORKSPACE_PATH + cta.hash;
+
   // Live program/raise overlay — identical merge to the LP workspace: a block
   // is used only when it answers `available: true`; a failed fetch or an
   // unavailable block falls back to the operator-maintained model, and the
@@ -193,7 +209,7 @@ export default function SpinoutLabInvestorPage() {
           </h1>
           <p className="mt-5 max-w-[600px] text-[15px] sm:text-[16px] leading-relaxed text-gray-600 dark:text-gray-300">{HERO.sub}</p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link to={LP_WORKSPACE_PATH} data-testid="link-review-fund-hero" className={btnPrimary}>Review the fund</Link>
+            <Link to={workspaceHref} data-testid="link-review-fund-hero" className={btnPrimary}>{cta.label ?? 'Review the fund'}</Link>
             <FundBriefButton className={btnGhost} />
           </div>
 
@@ -358,8 +374,8 @@ export default function SpinoutLabInvestorPage() {
           <span className="min-w-[260px] flex-1 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
             Fund-level position — committed, called, deployed, portfolio marks, MOIC, and reserve — is maintained in the LP workspace and the quarterly reporting archive.
           </span>
-          <Link to={LP_WORKSPACE_PATH} data-testid="link-fund-position" className="inline-flex flex-none items-center gap-1.5 rounded-lg bg-violet-700 hover:bg-violet-800 px-4 py-2 text-[12.5px] font-bold text-white transition-colors">
-            See fund position <ArrowRight size={13} />
+          <Link to={workspaceHref} data-testid="link-fund-position" className="inline-flex flex-none items-center gap-1.5 rounded-lg bg-violet-700 hover:bg-violet-800 px-4 py-2 text-[12.5px] font-bold text-white transition-colors">
+            {cta.label ?? 'See fund position'} <ArrowRight size={13} />
           </Link>
         </div>
       </section>
@@ -417,8 +433,8 @@ export default function SpinoutLabInvestorPage() {
             <p className="m-0 text-[13.5px] leading-relaxed text-gray-700 dark:text-gray-300">
               This page explains why the pipeline is worth underwriting. Fund terms, the raise status, capital accounts, and the quarterly reporting archive are maintained in the LP workspace — one place, one source of truth.
             </p>
-            <Link to={LP_WORKSPACE_PATH} data-testid="link-open-workspace" className={`${btnPrimary} mt-5 w-full`}>
-              Open the LP workspace <ArrowRight size={14} />
+            <Link to={workspaceHref} data-testid="link-open-workspace" className={`${btnPrimary} mt-5 w-full`}>
+              {cta.label ?? 'Open the LP workspace'} <ArrowRight size={14} />
             </Link>
             <FundBriefButton className={`${btnGhost} mt-2.5 w-full`} />
             <p className="m-0 mt-3.5 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">Full terms and capital account statements are available to approved LPs.</p>
@@ -436,8 +452,8 @@ export default function SpinoutLabInvestorPage() {
             <h2 className="m-0 text-[26px] sm:text-[34px] font-black leading-[1.14] tracking-[-.03em] text-gray-900 dark:text-gray-100">{FINAL_CTA.headline}</h2>
             <p className="mt-4 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">{FINAL_CTA.body}</p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link to={LP_WORKSPACE_PATH} data-testid="link-request-access" className={btnPrimary}>
-                <Landmark size={15} /> Request LP access
+              <Link to={workspaceHref} data-testid="link-request-access" className={btnPrimary}>
+                <Landmark size={15} /> {cta.label ?? 'Request LP access'}
               </Link>
               <FundBriefButton className={btnGhost} />
             </div>

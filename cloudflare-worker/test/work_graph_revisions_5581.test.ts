@@ -33,7 +33,10 @@ import {
   type CreateRevisionInput, type Dependency,
 } from '../src/services/workGraphRevisions.ts';
 
-const MIGRATION = readFileSync(new URL('../sql/migrations/202611140007_5581_work_graph_revisions.sql', import.meta.url), 'utf8');
+// Part 3's migration rides along: the head swap reads `work_graph_revision_flags`, and the tenant-limit refusals write
+// `work_graph_integrity_events` (D5581-p3.md). Production applies every migration, so this matches it.
+const MIGRATION = readFileSync(new URL('../sql/migrations/202611140007_5581_work_graph_revisions.sql', import.meta.url), 'utf8')
+  + readFileSync(new URL('../sql/migrations/202611140924_5581_work_graph_integrity.sql', import.meta.url), 'utf8');
 const NOW = new Date('2026-11-14T00:10:00Z');
 WORK_GRAPH_DEPS.now = () => NOW;
 let n = 0;
@@ -439,7 +442,9 @@ test('13. D5579 decides authority and digest format; every result carries its D1
   assert.deepEqual(v1.cost, { d1Statements: 6, d1Batches: 1 });
   const moved = await head(w, a, null, v1.revisionUid, 'v1');
   assert.ok(moved.ok);
-  // asset read, replay probe, revision read, batch of swap + event, head read.
+  // asset read, replay probe, revision read, batch of swap + event, head read. Unchanged by part 3 (D5581-p3.md):
+  // its flag check sits inside the swap's own UPDATE, and a D1-held revision makes no R2 or lease call, so the
+  // optional `r2ClassB` / `doCalls` counters are absent here.
   assert.deepEqual(moved.cost, { d1Statements: 6, d1Batches: 1 });
   const replay = await head(w, a, null, v1.revisionUid, 'v1');
   assert.ok(replay.ok && replay.replayed);

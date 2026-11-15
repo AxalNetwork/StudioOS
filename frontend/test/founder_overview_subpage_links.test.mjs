@@ -65,7 +65,12 @@ const DESKS = [
  * `/research/companies`, inside its own bucket. An empty set still refuses
  * every out-of-bucket link rather than loosening the rule for a desk.
  */
-const HELD_ELSEWHERE = new Set([]);
+// Each entry is `${file} ${path}` for a card whose action is owned by another bucket, with why.
+const HELD_ELSEWHERE = new Set([
+  // #5310 (NW1.2, D5310): "Import from LinkedIn". The importer is Account › Connectors › LinkedIn
+  // (D1351); Network › Relationships' own contacts card links to the same page.
+  'frontend/src/pages/founder/FounderNetworkDesk.jsx /account/connectors/linkedin',
+]);
 
 /** Every `/bucket/slug` route App.jsx actually mounts. */
 const BUCKET_PATH = {

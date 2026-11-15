@@ -121,6 +121,18 @@ export function phoneMeter(raw, cycle = 'validate') {
 }
 
 /**
+ * #5999: the root's one meter for a read, drawn the same on both widths (the
+ * phone root under its focus, the desktop Validate lead row beside its next
+ * action). None with no focus, nor under Validate's first-conversation focus,
+ * as drawn, nor (D4589) under a Stop or a step that could not be worked out:
+ * neither asks for more recording. Otherwise `phoneMeter`.
+ */
+export function rootMeter(raw, focus, cycle = 'validate') {
+  const first = cycle === 'validate' && focus?.headline === FIRST_FOCUS.headline;
+  return focus && !first && !focus.unavailable && focus.rule !== 'stopped' ? phoneMeter(raw, cycle) : null;
+}
+
+/**
  * "Everything else in <Cycle>": the Worker's rows as sent, each href in-app
  * only. `value: null` draws Not recorded, `''` nothing, any other string
  * (`"Unreadable"` included) is the value. A null index falls back to one
