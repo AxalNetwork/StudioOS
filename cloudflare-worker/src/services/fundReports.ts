@@ -1,5 +1,6 @@
 /** D631: recorded fund facts and audited, immutable issued report periods. */
 import type { Env } from '../types';
+import { sendFundReportNotices, withFundReportDelivery } from './fundReportNotices';
 import { deleteReportWithoutStatement, reportHasStatement } from './mercury/investorFeeds';
 const SENTENCES={
  not_found:'Fund or reporting period not found.',
@@ -68,7 +69,8 @@ export async function readFundPage(env:Env,fund:any,canManage:boolean){
 export async function readFundPeriod(env:Env,fundId:number,periodId:number,canManage:boolean){
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
  if(!row||(!canManage&&row.status!=='issued'))throw new FundReportRefusal('not_found',404);
- const period=shapeFundPeriod(row);
+ const shaped=shapeFundPeriod(row);
+ const period=canManage && shaped ? (await withFundReportDelivery(env,[shaped]))[0] : shaped;
  if(period?.corrects_period_id){const original=await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'").bind(fundId,period.corrects_period_id).first<any>();if(!original)throw new Error('Corrected period unreadable');return {...period,corrects_period:original.period};}
  return period;
 }
@@ -107,7 +109,9 @@ export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:a
  if(results.length!==2||results.some(r=>r.success!==true))throw new Error('Report transaction unreadable');
  if(Number(results[0].meta.changes)!==1)throw new FundReportRefusal('conflict',409);
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND period=?').bind(fundId,label).first<any>();
- if(!row)throw new Error('Saved report unreadable');return {created:!previous,period:shapeFundPeriod(row)};
+ if(!row)throw new Error('Saved report unreadable');
+ if(issue)await sendFundReportNotices(env,fundId,row.id);
+ return {created:!previous,period:shapeFundPeriod(row)};
 }
 
 
