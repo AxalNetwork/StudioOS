@@ -32,6 +32,10 @@
  *   POST  /kpis                    (Enter a KPI, decision 4)
  *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
  *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
+ *   DELETE /partners/:uid  DELETE /markets/:uid  DELETE /obligations/:id   { project }
+ *     D6115 (#6115): Remove, for a record added by mistake. A hard delete; a
+ *     partner with revenue or deals, or a held obligation, is refused (409)
+ *     with what to do instead. The record actions `remove` run the same writers.
  *   POST  /partners/rank           { project, query }  #3938 GR17, the founder's press: rank the venture's
  *                                  partners against a need (bge-m3, the reranker); no line is written
  *   POST  /markets                 PATCH /markets/:uid
@@ -85,8 +89,8 @@ import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
   REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
-  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme,
-  updatePartner, updateRole,
+  logGrowWrite, removeMarket, removeObligation, removePartner, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel,
+  updateFeedback, updateMarket, updateObligation, feedbackThemes, renameFeedbackTheme, updatePartner, updateRole,
 } from '../services/growWriters';
 import { distributionOverview } from '../services/distribution/overview';
 import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
@@ -116,6 +120,7 @@ import {
   CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
   readCalendar, readFromGoogle, syncMetricsSheets,
 } from '../services/google/growFeeds';
+import { withKpiTargets } from '../services/growKpiTargets';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -263,8 +268,8 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
       sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
   }
   if (slug === 'revenue-and-traction') {
-    const rows = await kpiRows(env, projectId, x.now);
-    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of'], rows,
+    const rows = await withKpiTargets(env, projectId, await kpiRows(env, projectId, x.now));
+    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of', 'Target', 'Vs target'], rows,
       filters: [{ key: 'source', label: 'Source', options: present(rows, 'source') }, { key: 'period', label: 'Period', options: present(rows, 'period').reverse() }],
       sorts: [{ key: '-period', label: 'Period' }, { key: 'kpi', label: 'KPI' }] };
   }
@@ -593,6 +598,7 @@ r.patch('/roles/:id', write((c, u, pid, b) => updateRole(c.env, pid, u, intId(pa
 r.patch('/applications/:id/stage', write((c, u, pid, b) => setApplicationStage(c.env, pid, u, intId(param(c, 'id')), b)));
 r.post('/partners', write((c, u, pid, b) => addPartner(c.env, pid, u, b), true));
 r.patch('/partners/:uid', write((c, u, pid, b) => updatePartner(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/partners/:uid', write((c, u, pid) => removePartner(c.env, pid, u, param(c, 'uid'))));
 // #3938 part 3 (D1478 task 4, job GR17): the founder's press orders the venture's
 // partners by fit with a need they type: retrieve (bge-m3), then rank (the
 // reranker), on `services/ai/matchRows.ts`. GR17 is a two-step job, so no line is
@@ -625,8 +631,10 @@ r.post('/partners/rank', async (c) => {
 r.put('/partners/:uid/revenue/:month', write((c, u, pid, b) => setPartnerRevenue(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
 r.post('/markets', write((c, u, pid, b) => addMarket(c.env, pid, u, b), true));
 r.patch('/markets/:uid', write((c, u, pid, b) => updateMarket(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/markets/:uid', write((c, u, pid) => removeMarket(c.env, pid, u, param(c, 'uid'))));
 r.post('/obligations', write((c, u, pid, b) => addObligation(c.env, pid, u, b), true));
 r.patch('/obligations/:id', write((c, u, pid, b) => updateObligation(c.env, pid, u, intId(param(c, 'id')), b)));
+r.delete('/obligations/:id', write((c, u, pid) => removeObligation(c.env, pid, u, intId(param(c, 'id')))));
 r.put('/checklist/:key', write(async (c, u, pid, b) => {
   const key = param(c, 'key');
   if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');

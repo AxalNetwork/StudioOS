@@ -17,8 +17,7 @@ import {
 /**
  * D963 (#2796) — Investor cohort access (PG11) and Give an investor access
  * (PG11d), on part 6's admin reads (D959). Overview draws the NDA template's
- * state, four tiles, How it runs (from part 1's playbook store, through
- * `PlaybookEditor`, which the page passes in as `how`) and the Investors
+ * state, four tiles, and the Investors
  * table; Activity is part 1's activity read. Give access and End access are
  * dialogs; part 6's refusals sit in them, keyed on `code`.
  *
@@ -138,7 +137,7 @@ function InvestorsTable({ reads, tick, open }) {
  * Overview. The banner stands until part 1's registry says the program runs
  * (`running`); the NDA template's line comes from the summary.
  */
-export function InvestorOverview({ reads, running, how, tick, open }) {
+export function InvestorOverview({ reads, running, tick, open }) {
   const tiles = investorTiles(reads.summary);
   const template = isReady(reads.summary) ? reads.summary.data.nda_template : null;
   return (
@@ -148,9 +147,21 @@ export function InvestorOverview({ reads, running, how, tick, open }) {
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((t) => <Tile key={t.key} t={t} onRetry={open.reload} />)}
       </div>
-      {how}
       <InvestorsTable reads={reads} tick={tick} open={open} />
     </div>
+  );
+}
+
+export function InvestorParticipation({ summary, onRetry }) {
+  const [investors, cohorts] = investorTiles(summary);
+  return (
+    <Card title="Participation" testId="programs-investor-participation">
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        <Tile t={investors} onRetry={onRetry} />
+        <Tile t={cohorts} onRetry={onRetry} />
+      </div>
+      <p className={SUB}>Not recorded how many investors viewed cohort materials. View counts are not collected here.</p>
+    </Card>
   );
 }
 
