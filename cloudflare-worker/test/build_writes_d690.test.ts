@@ -1117,3 +1117,41 @@ test('#6041: the records offer Delete, in the danger tone and behind a confirmat
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps WHERE id = 9'), 0);
   db.close();
 });
+
+// #6041 (owner's answer A): remove a founder added by mistake, only with nothing attached.
+test('#6041: a founder with nothing attached is removed through the cap table code; anything attached refuses, naming it', async () => {
+  const db = seeded();
+  db.exec(`UPDATE users SET subscription_tier = 'studio' WHERE id = ${FOUNDER}`);
+  // Ana Wren (8) enters the founding table through updateHolder, as an edit of her split does.
+  assert.equal((await call(db, 'PATCH', '/founders/h-8', { equity_pct: 60 })).status, 200);
+  const added = await call(db, 'POST', '/founders', { name: 'Mis Take', equity_pct: 10 });
+  assert.equal(added.status, 201, JSON.stringify(added.body));
+  const hid = Number(added.body.id.slice(2));
+  const base = () => JSON.parse(String((db.prepare("SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? ORDER BY id DESC LIMIT 1").get(P) as any)?.inputs_json ?? '{}'));
+  assert.ok((base().founders || []).some((f: any) => Number(f.holder_id) === hid), 'the founding table holds the new founder');
+  const r = await call(db, 'DELETE', `/founders/${added.body.id}`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(db.prepare('SELECT 1 FROM cap_table_holders WHERE id = ?').get(hid), undefined, 'the register row is gone');
+  assert.ok(!(base().founders || []).some((f: any) => Number(f.holder_id) === hid), 'and its founding entry with it');
+  const actions = (db.prepare('SELECT action FROM activity_logs ORDER BY id').all() as any[]).map((x) => x.action);
+  assert.ok(actions.includes('build_founder_deleted') && actions.includes('cap_table_holder_removed'), actions.join());
+  assert.equal((await call(db, 'DELETE', `/founders/${added.body.id}`)).status, 404, 'a second delete finds nothing');
+  // The only founder on the cap table stays: it needs one.
+  const only = await call(db, 'DELETE', '/founders/h-8');
+  assert.deepEqual([only.status, /only founder on the cap table/.test(only.body.detail)], [409, true]);
+
+  // Ana Wren (8): each attachment keeps the holder and is named.
+  const refused = async () => (await call(db, 'DELETE', '/founders/h-8'));
+  db.exec(`INSERT INTO founder_contributions (project_id, holder_id, text) VALUES (${P}, 8, 'Built the prototype')`);
+  let x = await refused();
+  assert.equal(x.status, 409);
+  assert.match(x.body.detail, /Ana Wren cannot be removed: they have logged contributions\./);
+  db.exec(`INSERT INTO cap_table_vesting (user_id, project_id, holder_id, start_date, cliff_months, total_months, total_shares, source) VALUES (${FOUNDER}, ${P}, 8, '2026-01-01', 12, 48, 600, 'manual')`);
+  x = await refused();
+  assert.match(x.body.detail, /a vesting schedule and logged contributions/);
+  assert.ok(db.prepare('SELECT 1 FROM cap_table_holders WHERE id = 8').get(), 'nothing was removed');
+  // Another venture's founder reads as missing.
+  db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, founder_role, kind) VALUES (77, ${FOUNDER}, ${P_OTHER}, 'Other Venture Founder', 'CEO', 'founder')`);
+  assert.equal((await call(db, 'DELETE', '/founders/h-77')).status, 404);
+  db.close();
+});

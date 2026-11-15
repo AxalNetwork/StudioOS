@@ -144,6 +144,8 @@ export function makeCycleWrites(request) {
       // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).
       founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
       founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
+      // #6041: remove a founder added by mistake (only one with nothing attached; a 409 names what is).
+      founderDelete: (projectId, id) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body, idempotencyKey) => request(`/cycles/build/formation-steps?${q(projectId)}`, {
         method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey },

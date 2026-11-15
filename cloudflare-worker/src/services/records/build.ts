@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, patchFormationStep, deleteFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, patchFormationStep, deleteFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -1189,6 +1189,10 @@ const foundingTeam: ModuleSpec = {
           { key: 'cliff_months', label: 'Cliff months', kind: 'T', value: h.cliff_months ?? '' },
         ] },
         execute: (c, _id, body) => editFounder(c, h, jsonOf(body)) },
+      // #6041 (A): remove a founder added by mistake. The cap table code refuses one with anything attached, naming it.
+      { key: 'delete', label: 'Remove founder', kind: 'write', tone: 'danger',
+        confirm: { title: `Remove ${h.name}?`, body: 'Only a founder added by mistake, with nothing attached: no vesting, issued shares, co-founder agreement, filing or contributions. They leave the founding team and the cap table. The activity log keeps a line saying so.', cta: 'Remove' },
+        execute: c => viaRoute(c, deleteFounder, { id: `h-${h.id}` }, {}) },
     ];
   },
   /** Decision 14: 100 less every holder's recorded percentage and the base scenario's pool; Not recorded with no percentage. */

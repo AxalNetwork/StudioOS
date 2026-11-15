@@ -20,7 +20,7 @@ import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers
 import type { Card } from '../services/cycleCards';
 import { buildPhone, part } from '../services/cycleFocus';
 import { buildAttention, buildSignals, readPlanPreview, unreadableAttention, unreadablePlan } from '../services/buildAttention';
-import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
+import { addHolder, updateHolder, removeFounderHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { posthogKpiTexts } from '../services/posthog/build';
 import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
@@ -2027,6 +2027,23 @@ async function deleteRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   return c.json({ ok: true, deleted: id });
 }
 
+// #6041 (owner's answer A): remove a founder added by mistake, through the cap table's own code
+// (`removeFounderHolder`): only one with nothing attached; otherwise a 409 naming what is attached.
+app.delete('/founders/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteFounder(c, ctx);
+});
+async function deleteFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
+  const existing = id && await c.env.DB.prepare("SELECT name FROM cap_table_holders WHERE id = ? AND project_id = ? AND (kind = 'founder' OR founder_role IS NOT NULL)")
+    .bind(id, ctx.project.id).first<{ name: string }>();
+  if (!existing) return c.json({ detail: 'Holder not found' }, 404);
+  try { await removeFounderHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, id: `h-${id}` }); }
+  catch (e) { return holderFailed(c, e); }
+  await logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_deleted', `Founder removed: ${existing.name}`).run();
+  return c.json({ ok: true, deleted: `h-${id}` });
+}
+
 // #6041: remove a filing the venture added by mistake. Only the venture's own steps (formation_steps): a Lab
 // order's step and an entity obligation are never in that table, so they cannot be named here. The step's
 // checklist rows go in the same batch; its proof file is removed from storage after the row is gone, best effort,
@@ -2267,7 +2284,7 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
-export { patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
+export { patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
 
 // D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
 // "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.
