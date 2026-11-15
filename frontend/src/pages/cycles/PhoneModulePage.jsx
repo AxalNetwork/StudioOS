@@ -107,6 +107,8 @@ export default function PhoneModulePage({
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
+  owned = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -135,6 +137,12 @@ export default function PhoneModulePage({
     // #1704: the Worker's own sentence (Verdict for a partner), with no chart, no rows and no CTA.
     return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}
       <p role="status" className="m-0 rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300" data-testid="phone-module-refused">{message}</p>
+    </div>;
+  }
+
+  if (owned) {
+    return <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">{bar}{tabs}
+      {Children.toArray(children).length > 0 && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
     </div>;
   }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toMajorString } from '../../../lib/money.js';
 import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
@@ -92,26 +92,8 @@ export function Skeleton({ lines = 3, testId }) {
   );
 }
 
-/** One read, its state and its retry. `read` is called with nothing; a null `key` makes no read. */
-export function useRead(read, key) {
-  const [state, setState] = useState({ status: 'loading', data: null });
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (key == null) return undefined;
-    let alive = true;
-    setState((s) => ({ status: 'loading', data: s.data }));
-    Promise.resolve().then(read)
-      .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: 'unreadable', data: null, code: error?.code || null }); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, n]);
-  const reload = useCallback(() => setN((x) => x + 1), []);
-  return { ...state, reload };
-}
-
-/** The plan read (D1176's `GET /plan`). */
-export const usePlan = (projectId, api = useOfFundsApi) => useRead(() => api.plan(projectId), projectId ? `plan:${projectId}` : null);
+/** The plan read and its hook live in `useOfFundsRead.js` (D5081), so CycleRoute can hold Home's read without this step. */
+export { useRead, usePlan } from './useOfFundsRead.js';
 
 /** The banner an admin or Super Admin works under (UF16): their changes are logged under their name. */
 export function AdminBanner({ viewer }) {

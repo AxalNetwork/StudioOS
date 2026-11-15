@@ -64,7 +64,8 @@ import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/Narr
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
-import { isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
+import { HOME_FRAME as UOF_FRAME, homeAction as uofHomeAction, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
+import { useUseOfFundsHome } from '../raise/useoffunds/useOfFundsRead.js';
 import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
 import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
@@ -528,6 +529,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D1178 (#3105): `/runway/forecast` and `/scenarios/compare` are pages under a tab, given as `uofSub`.
   const uofTab = uofSub && cycle === 'raise' ? UOF_SUB_TAB[uofSub] || null
     : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D5081 (#5081, RA-14): Use of funds' Home owns its page; its plan read and open dialog are shared by the
+  // header's primary action (Set raise & allocation) and Home, so both draw from one read.
+  const uofOwnsHome = cycle === 'raise' && slug === USE_OF_FUNDS && !record && !uofSub && !lightbox;
+  const uofHome = useUseOfFundsHome(uofOwnsHome ? projectId : null);
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
   // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
@@ -727,7 +732,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       navigate(to, to.startsWith('/validate/session/') ? { state: { interview }, replace: true } : { replace: true });
     }
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
-  const action = primaryForModule(cycle, slug, q, openAction);
+  const primary = primaryForModule(cycle, slug, q, openAction);
+  // D5081: on Use of funds' Home the action opens Edit split in place, and only when Home's read allows it.
+  const uofPrimary = uofOwnsHome ? uofHomeAction(uofHome.read) : null;
+  const action = uofOwnsHome ? (uofPrimary ? { label: uofPrimary.label, onClick: () => uofHome.setDialog(uofPrimary.dialog) } : null)
+    : uofTab === 'allocation' ? null : primary;
   const Mount = def.Mount || null;
   // D5077 (#5077, BD21): a module's own Eadwyn asks (the rail's prompts, with its AI settings folded),
   // and its own rail sentence in place of the desk's; neither for an admin reading the narrative.
@@ -915,6 +924,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
+        // D5081 (#5081, RA-14): Use of funds' Home owns the page; no generic "at a glance" or Categories under it.
+        owned={uofOwnsHome ? { sub: UOF_FRAME } : null}
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
@@ -938,7 +949,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
-          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
+          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
