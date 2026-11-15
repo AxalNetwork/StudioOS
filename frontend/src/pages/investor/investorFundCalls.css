@@ -21,3 +21,4 @@
 .dark .if2-pill.paid{color:#6ee7b7;background:#062e24;border-color:#065f46}.dark .if2-pill.pending,.dark .if2-pill.part_received{color:#fcd34d;background:#2d2106;border-color:#78350f}.dark .if2-pill.overdue{color:#fca5a5;background:#2f0f0f;border-color:#7f1d1d}
 .dark .if2-receipt p[role=alert],.dark .if2-error{color:#fca5a5}.dark .if2-composer{border-color:#3730a3}
 @media(max-width:640px){.if2-receipt,.if2-composer-fields{flex-direction:column;align-items:stretch}}
+.if2-lp-link{color:inherit;text-decoration:none}.if2-lp-link:hover strong{text-decoration:underline}
