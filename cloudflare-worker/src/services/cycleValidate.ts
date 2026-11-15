@@ -181,6 +181,18 @@ export type Theme = {
   last_30d: number;
   prior_30d: number;
   supports: string[];
+  /** D6006: the hypothesis codes this theme contradicts, beside `supports`. */
+  contradicts: string[];
+  /** D6006: each wording an interview said that lands here, once per interview and wording (`mentions` counts interviews). */
+  phrases: number;
+  /**
+   * D6006: who said it, among the interviews counted in `mentions`. Distinct interviewee names and companies,
+   * and how many of those interviews recorded none. `null` when not one of them recorded a name (or a company).
+   */
+  people: number | null;
+  organisations: number | null;
+  people_unrecorded: number;
+  organisations_unrecorded: number;
 };
 
 /**
@@ -194,15 +206,19 @@ export function themesOf(
   severities: Array<{ interview_id: number; phrase_norm: string; severity: string }>,
   today: string,
   supportsByGroup: Map<number, string[]> = new Map(),
+  contradictsByGroup: Map<number, string[]> = new Map(),
 ): Theme[] {
   const sevBy = new Map<string, string>();
   for (const r of severities) sevBy.set(`${r.interview_id}\u0000${r.phrase_norm}`, r.severity);
   const cut30 = daysBefore(today, 30);
   const cut60 = daysBefore(today, 60);
-  type Acc = { key: string; title: string; groupId: number | null; ivs: Set<number>; lv: Record<PainSeverityLevel, Set<number>>; first: string | null; recent: Set<number>; prior: Set<number> };
+  type Acc = { key: string; title: string; groupId: number | null; ivs: Set<number>; lv: Record<PainSeverityLevel, Set<number>>; first: string | null; recent: Set<number>; prior: Set<number>;
+    phrases: number; people: Set<string>; orgs: Set<string>; noPerson: number; noOrg: number };
+  const who = (v: string | null | undefined) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   const acc = new Map<string, Acc>();
   for (const iv of interviews) {
     const seen = new Set<string>();
+    const said = new Set<string>();
     const d = heldDate(iv);
     for (const phrase of safeParseStrings(iv.pains_json)) {
       const display = phrase.trim();
@@ -211,12 +227,17 @@ export function themesOf(
       const r = resolvePhrase(norm, display, model);
       let a = acc.get(r.key);
       if (!a) {
-        a = { key: r.key, title: r.title, groupId: r.groupId, ivs: new Set(), lv: { severe: new Set(), real: new Set(), mild: new Set() }, first: null, recent: new Set(), prior: new Set() };
+        a = { key: r.key, title: r.title, groupId: r.groupId, ivs: new Set(), lv: { severe: new Set(), real: new Set(), mild: new Set() }, first: null, recent: new Set(), prior: new Set(),
+          phrases: 0, people: new Set(), orgs: new Set(), noPerson: 0, noOrg: 0 };
         acc.set(r.key, a);
       }
+      if (!said.has(norm)) { said.add(norm); a.phrases += 1; }
       if (!seen.has(r.key)) {
         seen.add(r.key);
         a.ivs.add(iv.id);
+        const person = who(iv.interviewee_name), org = who(iv.interviewee_company);
+        if (person) a.people.add(person); else a.noPerson += 1;
+        if (org) a.orgs.add(org); else a.noOrg += 1;
         if (d) {
           if (a.first == null || d < a.first) a.first = d;
           if (d > cut30 && d <= today) a.recent.add(iv.id);
@@ -236,6 +257,12 @@ export function themesOf(
       severe, real, mild, severity, first_mention: a.first,
       last_30d: a.recent.size, prior_30d: a.prior.size,
       supports: a.groupId != null ? (supportsByGroup.get(a.groupId) || []) : [],
+      contradicts: a.groupId != null ? (contradictsByGroup.get(a.groupId) || []) : [],
+      phrases: a.phrases,
+      people: a.people.size ? a.people.size : null,
+      organisations: a.orgs.size ? a.orgs.size : null,
+      people_unrecorded: a.noPerson,
+      organisations_unrecorded: a.noOrg,
     };
   }).sort((x, y) => y.mentions - x.mentions || x.title.localeCompare(y.title));
 }
@@ -606,11 +633,14 @@ export async function problemDiscoveryCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-export function supportsByGroup(hyps: HypRow[], links: LinkRow[]): Map<number, string[]> {
+/** D6006: the open hypotheses each theme contradicts, by code. */
+export const contradictsByGroup = (hyps: HypRow[], links: LinkRow[]) => supportsByGroup(hyps, links, 'contradicts');
+
+export function supportsByGroup(hyps: HypRow[], links: LinkRow[], direction: 'supports' | 'contradicts' = 'supports'): Map<number, string[]> {
   const code = new Map(hyps.map((h) => [Number(h.id), h.code]));
   const out = new Map<number, string[]>();
   for (const l of links) {
-    if (l.direction !== 'supports' || !code.has(Number(l.hypothesis_id))) continue;
+    if (l.direction !== direction || !code.has(Number(l.hypothesis_id))) continue;
     if (!out.has(l.pain_group_id)) out.set(l.pain_group_id, []);
     out.get(l.pain_group_id)!.push(code.get(Number(l.hypothesis_id))!);
   }
@@ -1156,6 +1186,27 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
 
 const listOf = (slug: ModuleSlug) => ({ filters: LISTS[slug].filters, sorts: LISTS[slug].sorts });
 
+const SEVERITY_WORD: Record<PainSeverityLevel, string> = { severe: 'Severe', real: 'Real', mild: 'Mild' };
+
+/**
+ * D6006 (V17): why the theme at `i` ranks where it does, in the default order `themesOf` returns (most
+ * interviews, then by name). Built from counts only, never from a quote, so it reads the same for every reader.
+ * A tie names the name order that breaks it rather than implying the interviews decided it.
+ */
+export function rankReason(themes: Theme[], i: number, icpCount: number): string {
+  const t = themes[i];
+  const n = t.mentions;
+  const tied = (i > 0 && themes[i - 1].mentions === n) || (i + 1 < themes.length && themes[i + 1].mentions === n);
+  const parts: string[] = [];
+  if (n === 0) parts.push('Named in no held interview');
+  else if (i === 0 && !tied) parts.push('Most mentions');
+  else parts.push(`${n} ${n === 1 ? 'mention' : 'mentions'}${n > 1 && t.last_30d === n ? `, ${n === 2 ? 'both' : 'all'} in the last 30 days` : ''}`);
+  if (icpCount > 0) parts.push(`${icpCount} from ICP`);
+  if (t.severity) parts.push(`mostly ${SEVERITY_WORD[t.severity]}`);
+  if (tied && n > 0) parts.push('tied on mentions, ordered by name');
+  return parts.join(' · ');
+}
+
 /** Decision 2's Quotes rule: what a non-writer reads in place of a phrase said without consent. */
 export const QUOTE_WITHHELD = 'Quote withheld (no consent to quote)';
 
@@ -1186,7 +1237,11 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       wordings: g ? g.phrases.map((p) => wording(p.display_phrase)) : [wording(t.title)],
     };
   };
-  let rows = themesOf(interviews, model, sev, ctx.today, supportsByGroup(hyps, links))
+  // D6006: the rank is the theme's place in the whole venture's default order (most interviews first, then by
+  // name), fixed before any search, filter or sort, so a filtered list keeps each theme's number.
+  const ranked = themesOf(interviews, model, sev, ctx.today, supportsByGroup(hyps, links), contradictsByGroup(hyps, links));
+  const rankOf = new Map(ranked.map((t, i) => [t.key, { rank: i + 1, reason: rankReason(ranked, i, counted(t).icp_count) }]));
+  let rows = ranked
     .filter((t) => has(rq.q, t.title))
     .map((t) => ({ t, c: counted(t) }));
   const f = rq.filter;
@@ -1221,6 +1276,20 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     id: t.group_id, theme: t.title, mentions: t.mentions, severity: t.severity,
     trend: t.last_30d - t.prior_30d, supports: t.supports.length ? t.supports : null,
     ...c,
+    // D6006 (V17): a phrase in no theme still ranks, as its own row that opens no record.
+    grouped: t.group_id != null,
+    rank: rankOf.get(t.key)!.rank,
+    rank_reason: rankOf.get(t.key)!.reason,
+    // Sources beside mentions: who said it, and each wording said, once per interview.
+    sources: {
+      interviews: t.mentions, people: t.people, organisations: t.organisations,
+      people_unrecorded: t.people_unrecorded, organisations_unrecorded: t.organisations_unrecorded,
+    },
+    phrases: t.phrases,
+    // Open hypotheses this theme is linked to, by direction (a theme in no group links to none).
+    supporting: t.supports.length,
+    contradicting: t.contradicts.length,
+    contradicts: t.contradicts.length ? t.contradicts : null,
   })), rq.page, {
     ...listOf('problem-discovery'),
     parts: {
