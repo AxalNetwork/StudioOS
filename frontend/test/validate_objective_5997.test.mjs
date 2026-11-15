@@ -58,6 +58,8 @@ const FOCUS = { rule: 'next_interview', eyebrow: 'Validate · Next', headline: '
 const part = (o = {}) => ({ state: 'ok', text: QUESTION, updated_at: '2026-11-14 10:00:00', updated_by_name: 'Fay Founder', restate: false, ...o });
 const read = (o = {}) => ({ can_write: true, focus: FOCUS, meter: null, index: [], figures: [], cards: [], objective: part(), ...o });
 const desk = (raw, props = {}) => renderToStaticMarkup(h(MemoryRouter, null, h(ValidateLead, { raw, search: Q, projectId: P, ...props })));
+/** Every RegExp metacharacter escaped, so a literal string matches as itself. */
+const reEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const line = (out) => {
   const at = out.lastIndexOf('<', out.indexOf('data-testid="validate-objective"'));
   return renderedText(out.slice(at, out.lastIndexOf('<', out.indexOf('data-testid="validate-next-action"')))).trim();
@@ -68,7 +70,7 @@ const line = (out) => {
 test('1: "Trying to learn:" with the stored text; empty reads Not recorded, and "Write it" only for a writer', () => {
   const out = desk(read());
   assert.ok(out.indexOf('data-testid="validate-objective"') < out.indexOf('data-testid="validate-next-action"'), 'above the next action');
-  assert.match(line(out), new RegExp(`Trying to learn:\\s*${QUESTION.replace(/[?]/g, '\\?')}\\s*Change`));
+  assert.match(line(out), new RegExp(`Trying to learn:\\s*${reEscape(QUESTION)}\\s*Change`));
   assert.doesNotMatch(out, /Write it/);
   const empty = desk(read({ objective: part({ text: null }) }));
   assert.match(line(empty), /Trying to learn:\s*Not recorded\s*Write it/);
@@ -91,7 +93,7 @@ test('2: a reader, a partner included, sees the line and nothing to press', () =
       assert.doesNotMatch(out, /validate-objective-(open|form|update|restate)|Write it|Change<|Update the objective/, `${who}: and no control`);
     }
   }
-  assert.match(line(desk(read({ can_write: false }))), new RegExp(`^Trying to learn:\\s*${QUESTION.replace(/[?]/g, '\\?')}$`));
+  assert.match(line(desk(read({ can_write: false }))), new RegExp(`^Trying to learn:\\s*${reEscape(QUESTION)}$`));
 });
 
 // ── 3. Write, change, clear ───────────────────────────────────────────────
