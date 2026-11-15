@@ -34,6 +34,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
@@ -48,7 +49,7 @@ const E = codeOnly(EVENTS);
 const SECURITY_V2 = raw('design/incoming/Security v2 Page.dc.html');
 /** Long `*_reason` strings are wrapped across `+`-joined literals. */
 const joined = (src) => src.replace(/'\s*\n\s*\+ '/g, '');
-const ROUTE = joined(raw('cloudflare-worker/src/routes/admin_security.ts'));
+const ROUTE = joined(readAdminSecurity());
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 
 /**

@@ -259,3 +259,29 @@ export function activityCsv(items = []) {
   const head = ['When (UTC)', 'Who', 'What', 'Investor', 'Source'];
   return [head, ...items.map((i) => [i.at, i.who, i.what, i.investor?.name ?? '', i.source_label])].map((r) => r.map(cell).join(',')).join('\n');
 }
+
+/**
+ * CRL11 (#6080): the feedback-pattern run's answer, for the panel. `too_few` says how much is recorded; `ok` lists up
+ * to three themes, each with its sources (the investor and the words) and the Investor narrative objection its words
+ * already are, as a link (read only). A theme with fewer than two sources is not drawn: the Worker keeps none, and the
+ * page never shows one as a pattern.
+ */
+export function patternView(answer, objectionHref) {
+  if (!answer || typeof answer !== 'object') return { state: 'unreadable', themes: [] };
+  if (answer.state === 'too_few') {
+    return { state: 'too_few', themes: [], line: answer.detail || 'A pattern needs feedback from at least two investors. Nothing was run.' };
+  }
+  const themes = (Array.isArray(answer.themes) ? answer.themes : [])
+    .filter((t) => t && typeof t.title === 'string' && Array.isArray(t.sources) && t.sources.length >= 2)
+    .slice(0, 3)
+    .map((t, i) => ({
+      key: `${i}:${t.title}`,
+      title: t.title,
+      summary: typeof t.summary === 'string' ? t.summary : '',
+      sources: t.sources.map((s) => ({ key: String(s.feedback_id), investor: s.investor || 'An investor', words: String(s.words || '') })),
+      objection: Array.isArray(t.objection_keys) && t.objection_keys.length ? { href: objectionHref(t.objection_keys[0]), count: t.objection_keys.length } : null,
+    }));
+  return { state: themes.length ? 'ok' : 'none', themes,
+    line: themes.length ? (answer.basis || 'Read from the feedback recorded on each investor. Nothing here is saved.')
+      : 'Eadwyn found nothing several investors said in common. Each investor’s feedback is on their record.' };
+}
