@@ -151,6 +151,7 @@ async function mounted(url, user, handler = handlerWith()) {
     textOf: (id) => text(byId(id)[0]),
     tag: (t) => nodes().filter((n) => n.tagName === t),
     async click(id) { const n = byId(id)[0]; assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async clickText(t) { const n = nodes().find((x) => x.tagName === 'BUTTON' && text(x).trim() === t); assert.ok(n, `no button ${t}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
     async type(id, value) { const n = byId(id)[0]; await act(async () => { props(n).onChange?.({ target: { value } }); }); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); localStorage.removeItem('user'); restore(); },
   };
@@ -327,4 +328,68 @@ test('no browser pop-up and no raw colour anywhere in the frame', () => {
       assert.doesNotMatch(src, /\b(bg|text|border)-\[#/, `${f} carries an arbitrary colour class`);
     }
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * #6192: every note is reachable, each names its author, tags filter
+ * ------------------------------------------------------------------ */
+
+const note = (i, over = {}) => ({ uid: `p${i}`, author_user_id: 99, author_name: 'Grace Example', tag: i % 2 ? 'Risk' : 'Thesis', body: `Note ${i}`, created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over });
+
+// Mutation checked: noteAuthor ignoring author_name (fails); noteEdited true when equal (fails); notesHaveMore ignoring total (fails).
+test('#6192 byline: the colleague\'s name or You, and edited only when it was changed', async () => {
+  const { noteAuthor, noteEdited, noteByline, notesHaveMore } = await import('../src/pages/deal/dealNotesModel.js');
+  assert.equal(noteAuthor(note(1), 21), 'Grace Example');
+  assert.equal(noteAuthor(note(1, { author_user_id: 21 }), 21), 'You');
+  assert.equal(noteAuthor(note(1, { author_name: null }), 21), 'Your firm', 'an account with no name');
+  assert.equal(noteEdited(note(1)), null);
+  assert.equal(noteEdited(note(1, { updated_at: '2026-10-03T10:00:00.000Z' })), 'edited 2026-10-03');
+  assert.equal(noteByline(note(1, { updated_at: '2026-10-03T10:00:00.000Z' }), 21), '2026-10-01 · Grace Example · Risk · edited 2026-10-03');
+  assert.equal(noteByline(note(2, { tag: '' }), 21), '2026-10-01 · Grace Example');
+  assert.deepEqual([notesHaveMore([1, 2], 3), notesHaveMore([1, 2, 3], 3), notesHaveMore([1], undefined)], [true, false, false]);
+});
+
+// Mutation checked: Show more reading offset 0 again (fails); a failed page dropping the loaded rows (fails);
+// the chip not sending ?tag= (fails); the count not following the filter (fails).
+test('#6192 Notes: Show more reaches every note; a failed page says so and keeps what was loaded; a tag chip filters with its count', async () => {
+  const all = Array.from({ length: 60 }, (_, i) => note(i + 1));
+  let failNext = false;
+  const v = await mounted('/deals/4/notes', INVESTOR, handlerWith({
+    '/api/deals/4/notes': (u, m) => {
+      if (m !== 'GET') return null;
+      const q = new URL(u, 'https://x.test').searchParams;
+      if (failNext && Number(q.get('offset')) > 0) return response({ error: 'notes_unreadable' }, 503);
+      const tag = q.get('tag');
+      const rows = tag ? all.filter((n) => n.tag === tag) : all;
+      const off = Number(q.get('offset')); const lim = Number(q.get('limit'));
+      return response({ items: rows.slice(off, off + lim), total: rows.length, tag: tag || null });
+    },
+  }));
+  try {
+    assert.equal(v.byId('deal-note-byline-p1').length, 1);
+    assert.match(v.textOf('deal-note-byline-p1'), /Grace Example · Risk/);
+    assert.ok(!v.has('deal-note-p26'), 'the first page is 25');
+    assert.match(v.textOf('deal-notes-more'), /Show more \(25 of 60\)/);
+    failNext = true;
+    await v.click('deal-notes-more');
+    assert.match(v.text(), /The older notes could not be read/);
+    assert.ok(v.has('deal-note-p25'), 'the loaded notes stay');
+    failNext = false;
+    await v.clickText('Retry');
+    assert.ok(v.has('deal-note-p50') && !v.has('deal-note-p51'));
+    assert.match(v.textOf('deal-notes-more'), /Show more \(50 of 60\)/);
+    await v.click('deal-notes-more');
+    assert.ok(v.has('deal-note-p60'), 'the last note is reached');
+    assert.ok(!v.has('deal-notes-more'), 'nothing left to show');
+    assert.ok(v.requests.some((r) => /notes\?limit=25&offset=25/.test(r)), 'the next page starts after the loaded rows');
+    await v.click('deal-notes-filter-Risk');
+    assert.ok(v.requests.some((r) => /notes\?limit=25&offset=0&tag=Risk/.test(r)), 'the filter is the Worker\'s');
+    assert.equal(v.textOf('deal-notes-count'), '30 tagged Risk', 'the count follows the filter');
+    assert.ok(v.has('deal-note-p1') && !v.has('deal-note-p2'), 'only Risk notes');
+    assert.match(v.textOf('deal-notes-more'), /Show more \(25 of 30\)/);
+    await v.click('deal-notes-filter-Decision');
+    assert.match(v.textOf('deal-notes-empty'), /No note is tagged Decision/);
+    await v.click('deal-notes-filter-all');
+    assert.equal(v.textOf('deal-notes-count'), '60');
+  } finally { await v.close(); }
 });
