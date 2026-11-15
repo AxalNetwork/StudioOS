@@ -8,7 +8,8 @@ import { propositionDestination } from '../services/introDestination';
  *                                       402 with code:'quota_intros_exhausted'
  *                                       when at cap.
  *   GET  /api/introductions/quota     — caller's current usage / cap.
- *   GET  /api/introductions/          — caller's intro history.
+ *   GET  /api/introductions/          — caller's intro history, each ask's
+ *                                       target named only where visible (D6260).
  *
  * The 3-way Founder/Investor/Axal NDA flow is owned by /api/trust/intro/*
  * (T3 Trust Center). This route only enforces the *paid quota* on top.
@@ -44,6 +45,7 @@ import {
   acceptIntroProposition,
 } from '../services/introductions';
 import { hashEmail } from '../util/hashEmail';
+import { askTargets, type AskRow } from '../services/introAskTargets';
 
 const introductions = new Hono<{ Bindings: Env }>();
 
@@ -79,8 +81,16 @@ introductions.get('/', async (c) => {
      FROM investor_introductions
      WHERE investor_user_id = ?
      ORDER BY created_at DESC LIMIT 200`
-  ).bind(user.id).all();
-  return c.json({ introductions: rows.results || [] });
+  ).bind(user.id).all<AskRow & Record<string, unknown>>();
+  const asks = rows.results || [];
+  // D6260: each ask names its target only when the caller may already see
+  // that founder or project (D702's rules, services/introAskTargets.ts);
+  // otherwise `target.available` is false and no name is sent.
+  const named = await askTargets(c.env, user, asks);
+  return c.json({
+    introductions: asks.map((a, i) => ({ ...a, target: named.unreadable ? null : named.targets[i] })),
+    ...(named.unreadable ? { targets_unreadable: true } : {}),
+  });
 });
 
 introductions.post('/request', async (c) => {

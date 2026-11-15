@@ -4059,7 +4059,9 @@ export const api = {
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
-  listIntroductions: () => request('/introductions/'),
+  // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
+  // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
+  listIntroductions: () => request('/introductions'),
   // Task #82 — request a warm intro to a founder/project. Consumes the intro
   // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
   // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the

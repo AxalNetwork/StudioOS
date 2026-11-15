@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, patchFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, patchFounder, patchFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -42,6 +42,7 @@ const MUST_LABEL: Record<string, string> = { blocked: 'Blocked', in_progress: 'I
 const MUST_TONE: Record<string, string> = { blocked: 'bad', in_progress: 'vio', not_started: 'grey', done: 'ok' };
 const COLUMN_LABEL: Record<string, string> = { now: 'Now', next: 'Next', later: 'Later', done: 'Done' };
 const SEVERITY_TONE: Record<string, string> = { high: 'bad', medium: 'amb', low: 'grey' };
+const RISK_STATE: Record<string, string> = { open: 'Open', mitigating: 'Mitigating', closed: 'Closed' };
 const FEEDS_LABEL: Record<string, string> = { use_of_funds: 'Use of funds', kpis: 'KPIs', team: 'Team' };
 const SYNC_LABEL: Record<string, string> = { live: 'Live', hourly: 'Hourly', daily: 'Daily', manual: 'Manual' };
 const FILING_KIND: Record<string, string> = {
@@ -526,6 +527,31 @@ function featureLevels(f: Any): { impact: string | null; effort: string | null; 
   return { impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null, outOfScope };
 }
 
+/** D6023 (#6023): the feature's risks, the ones its Edit, Close and Reopen offer. */
+async function featureRisks(ctx: RecordContext, featureId: number): Promise<Any[]> {
+  return rowsOf(await ctx.env.DB.prepare('SELECT id, title, state FROM venture_risks WHERE feature_id = ? AND project_id = ? ORDER BY id')
+    .bind(featureId, ctx.projectId).all<Any>());
+}
+/** A risk choice; a feature with one such risk opens with it chosen. */
+function riskField(risks: Any[]): RecordField {
+  return { key: 'risk_id', label: 'Risk', kind: 'CH', required: true, options: risks.map(r => ({ value: String(r.id), label: r.title })),
+    ...(risks.length === 1 ? { value: String(risks[0].id) } : {}) };
+}
+/**
+ * D6023: a risk action runs `patchRisk` on a risk of this feature only. The
+ * route has proven the risk is the venture's (`venture_risks` in `ownedRow`);
+ * another feature's risk is a 404 here, so nothing is written.
+ */
+async function riskWrite(ctx: RecordContext, featureId: number, body: Body, change: (state: string) => Body): Promise<ActionResult> {
+  const riskId = idIn(body.risk_id, 'risk');
+  if (riskId == null) refuse(400, 'Choose a risk');
+  const risk = await ctx.env.DB.prepare('SELECT state FROM venture_risks WHERE id = ? AND project_id = ? AND feature_id = ?')
+    .bind(riskId, ctx.projectId, featureId).first<{ state: string }>();
+  if (!risk) refuse(404, 'Risk not found');
+  return viaRoute(ctx, patchRisk, { id: String(riskId) }, change(risk.state));
+}
+const riskRefs = (body: Body | FormData) => references(body, [['risk_id', 'venture_risks']]);
+
 const solutionDesign: ModuleSpec = {
   read: 'read', write: 'write', store: 'mvp_features',
   oldRows: { actions: ['build_feature_details_changed'] },
@@ -559,10 +585,16 @@ const solutionDesign: ModuleSpec = {
     } },
     { key: 'risks', title: 'Risks', async read(ctx, id) {
       const risks = rowsOf(await ctx.env.DB.prepare(
-        `SELECT r.title, r.severity, u.name AS owner FROM venture_risks r LEFT JOIN users u ON u.id = r.owner_user_id
+        `SELECT r.id, r.title, r.severity, r.state, r.mitigation, u.name AS owner FROM venture_risks r LEFT JOIN users u ON u.id = r.owner_user_id
           WHERE r.feature_id = ? AND r.project_id = ? ORDER BY r.id`,
       ).bind(numericId(id), ctx.projectId).all<Any>());
-      return { rows: risks.map(r => ({ a: r.title, b: r.owner ?? 'No owner', c: LEVEL[r.severity] ?? r.severity ?? 'Not recorded', tone: SEVERITY_TONE[r.severity] ?? 'grey' })),
+      // D6023 (#6023): owner, state and mitigation beside the severity, each Not recorded when empty.
+      // A row carries one action today, Edit a risk; Close and Reopen are the record's own actions.
+      const said = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : 'Not recorded');
+      return { rows: risks.map(r => ({ a: r.title,
+        b: `Owner: ${said(r.owner)} · State: ${known(RISK_STATE, r.state) ?? 'Not recorded'} · Mitigation: ${said(r.mitigation)}`,
+        c: LEVEL[r.severity] ?? r.severity ?? 'Not recorded', tone: SEVERITY_TONE[r.severity] ?? 'grey',
+        action: { key: 'edit-risk', body: { risk_id: Number(r.id) } } })),
         empty: 'No risks tied to this feature.' };
     } },
     { key: 'appears_in', title: 'Appears in', side: true, async read(ctx, id) {
@@ -581,6 +613,7 @@ const solutionDesign: ModuleSpec = {
     const f = await featureFields(ctx, id), featureId = numericId(id), feature = { id: String(featureId) };
     const { outOfScope } = featureLevels(f);
     const people = await owners(ctx);
+    const risks = await featureRisks(ctx, featureId);
     const actions: RecordAction[] = [
       { key: 'add-risk', label: 'Add a risk', kind: 'form',
         form: { title: 'Add a risk', cta: 'Add', fields: [
@@ -590,6 +623,8 @@ const solutionDesign: ModuleSpec = {
           { key: 'mitigation', label: 'Mitigation', kind: 'T' },
         ] },
         execute: (c, _id, body) => viaRoute(c, postRisk, {}, { ...formBody(jsonOf(body), ['title', 'severity', 'owner_user_id', 'mitigation'], ['owner_user_id', 'mitigation']), feature_id: featureId }) },
+      // D6023 (#6023): Edit, Close and Reopen a risk run PATCH /risks/:id's own `patchRisk`.
+      ...riskActions(risks, featureId),
       // Decision 12: a description and Appears in could never fill without these.
       { key: 'edit-description', label: 'Edit description', kind: 'form',
         form: { title: 'Edit description', cta: 'Save', fields: [{ key: 'description', label: 'Description', kind: 'T', value: f.description ?? '' }] },
@@ -625,6 +660,45 @@ const solutionDesign: ModuleSpec = {
       impact: { options: IMPACT_OPTIONS }, effort: { options: EFFORT_OPTIONS }, scope: { options: SCOPE_OPTIONS } };
   },
 };
+
+/**
+ * D6023: Edit a risk opens blank (a row's body names the risk, not its values),
+ * so a blank field keeps what is stored and a mitigation is never cleared by
+ * an untouched form. Close offers the risks not closed, Reopen the closed ones.
+ */
+function riskActions(risks: Any[], featureId: number): RecordAction[] {
+  if (!risks.length) return [];
+  const closed = risks.filter(r => r.state === 'closed'), live = risks.filter(r => r.state !== 'closed');
+  const KEEP = 'Leave blank to keep what is recorded.';
+  const actions: RecordAction[] = [{ key: 'edit-risk', label: 'Edit a risk', kind: 'form',
+    form: { title: 'Edit a risk', cta: 'Save', fields: [
+      riskField(risks),
+      { key: 'title', label: 'Risk', kind: 'T', note: KEEP },
+      { key: 'severity', label: 'Severity', kind: 'CH', options: SEVERITY_OPTIONS, note: KEEP },
+      { key: 'mitigation', label: 'Mitigation', kind: 'T', note: KEEP },
+    ] },
+    references: riskRefs,
+    execute: (c, _id, body) => riskWrite(c, featureId, jsonOf(body), () => {
+      const change = formBody(jsonOf(body), ['title', 'severity', 'mitigation']);
+      if (!Object.keys(change).length) refuse(400, 'Change the risk, its severity or its mitigation');
+      return change;
+    }) }];
+  if (live.length) actions.push({ key: 'close-risk', label: 'Close a risk', kind: 'form',
+    form: { title: 'Close a risk', cta: 'Close', foot: 'A closed risk stays on the feature and in the module’s counts.', fields: [riskField(live)] },
+    references: riskRefs,
+    execute: (c, _id, body) => riskWrite(c, featureId, jsonOf(body), state => {
+      if (state === 'closed') refuse(409, 'That risk is already closed');
+      return { state: 'closed' };
+    }) });
+  if (closed.length) actions.push({ key: 'reopen-risk', label: 'Reopen a risk', kind: 'form',
+    form: { title: 'Reopen a risk', cta: 'Reopen', fields: [riskField(closed)] },
+    references: riskRefs,
+    execute: (c, _id, body) => riskWrite(c, featureId, jsonOf(body), state => {
+      if (state !== 'closed') refuse(409, 'That risk is not closed');
+      return { state: 'open' };
+    }) });
+  return actions;
+}
 
 /** Decision 7's "#<n>" of a GitHub ledger key, `issue:<owner>/<repo>#<n>` or `pull:...`. */
 function ledgerLabel(ref: string): string | null {
