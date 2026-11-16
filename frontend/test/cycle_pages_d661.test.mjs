@@ -204,9 +204,10 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
     { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
   ] }));
   assert.match(text(list), /Durability checklist 2 of 3 done/);
-  assert.match(text(list), /Tax ID \(EIN\) received Done · Spin-Out Lab · 2026-09-01/);
-  assert.match(text(list), /Key-person cover set up Done · typed/);
-  assert.match(text(list), /Board meeting cadence agreed Not done/);
+  // D6122 (GR-24): how each item was ticked, or how it will be.
+  assert.match(text(list), /Tax ID \(EIN\) received , done Spin-Out Lab · 1 Sept? 2026/);
+  assert.match(text(list), /Key-person cover set up , done By hand/);
+  assert.match(text(list), /Board meeting cadence agreed , open Open · Tick by hand/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
   const route = cycleRouteText();
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
@@ -394,7 +395,8 @@ test('the five card states (variant=states and variant=new), each with its sente
   const fresh = text(html(h(FigureTile, { fig: figure('p', 'Pain themes', null, 'count', { delta_30d: null }) })));
   assert.match(fresh, /Pain themes Not recorded nothing recorded yet/);
   assert.doesNotMatch(html(h(FigureTile, { fig: figure('p', 'Pain themes', 2, 'count', { spark: [1, 2] }) })), /<svg/, 'a two-point sparkline is not drawn');
-  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Stripe could not be read/);
+  // D4846 part 2 (#6032): the failed source says Unavailable (D5129's chip) before naming it, in muted ink, not red.
+  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Unavailable Stripe could not be read/);
 });
 
 test('the overview while loading and when the whole read fails', () => {

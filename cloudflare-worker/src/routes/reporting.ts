@@ -41,6 +41,12 @@
  * Each period in the investor reads says so (`can_waive`, `waive_refusal`).
  * Ask is unchanged.
  *
+ * D6223 (#6223): each duty in both investor reads carries
+ * `source.signed_copy` = `{ state, envelope_id }`: `available` with the
+ * envelope id `GET /api/legal/esign/:id/document` takes, only when the caller
+ * signed that envelope and the read's scope admits them; `not_signed` for a
+ * template duty; `not_available` otherwise; `unreadable` when the lookup fails.
+ *
  * AN INVESTOR NEVER SEES ANOTHER INVESTOR. Every investor read and write is
  * scoped by `holder_user_id = caller`; another investor's duty or period is
  * the same 404 as one that does not exist, and the investor's rows carry no
@@ -55,6 +61,7 @@ import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
 import { SUPPORT_SESSION_REFUSED_CODE, isSupportSession } from '../services/fundAdminAccess';
 import { canAccessProject } from '../services/projectAccess';
+import { esignEnvelopeScope } from '../services/tenancyScope';
 import { notify } from '../services/notify';
 import {
   KIND_WORDS, type Cadence, type DueRule, type Kind, cleanReminders, founderTeam, isDay, nextPeriod, periodState, reminderSettings,
@@ -249,8 +256,49 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
   ).bind(userId, projectId, projectId).all<DutyRow & { project_uid: string; project_name: string }>()).results || []);
 }
 
-async function companies(env: Env, userId: number, projectId: number | null) {
+/**
+ * D6223 (#6223): the signed copy behind each of the caller's own duties, as the
+ * envelope id `GET /api/legal/esign/:id/document` already takes (D6199's
+ * `signed_copy.envelope_id`). The id is handed over only when the caller is a
+ * signer of that envelope (`esign_recipients.user_id` = the caller, signed),
+ * the envelope is completed with a stored signed file, AND the read's own
+ * scope (`esignEnvelopeScope`) admits the caller, so the link never names an
+ * envelope the read would refuse. A template duty has no signed copy; a signed
+ * duty the caller did not sign reads `not_available`, the same as one not yet
+ * stored; a failed lookup reads `unreadable`, and the rest of the read answers.
+ */
+type SignedCopy = { state: 'available'; envelope_id: number } | { state: 'not_signed' | 'not_available' | 'unreadable'; envelope_id: null };
+async function signedCopies(env: Env, user: { id: number; role: string }, duties: DutyRow[]): Promise<Map<string, SignedCopy>> {
+  const out = new Map<string, SignedCopy>();
+  const signed = duties.filter((d) => d.source_kind === 'signed_envelope' && d.source_envelope_id != null);
+  for (const d of duties) out.set(d.uid, { state: signed.includes(d) ? 'not_available' : 'not_signed', envelope_id: null });
+  if (!signed.length) return out;
+  let mine: Set<number>;
+  try {
+    const scope = esignEnvelopeScope(user);
+    const rows = (await env.DB.prepare(
+      `SELECT e.id FROM esign_envelopes e
+        WHERE e.id IN (SELECT value FROM json_each(?)) AND e.status = 'completed' AND substr(e.signed_r2_key, 1, 13) = 'esign/signed/'
+          AND EXISTS (SELECT 1 FROM esign_recipients r WHERE r.envelope_id = e.id AND r.user_id = ? AND r.status = 'signed')
+          AND ${scope.sql}`,
+    ).bind(JSON.stringify([...new Set(signed.map((d) => Number(d.source_envelope_id)))]), user.id, ...scope.binds).all<{ id: number }>()).results || [];
+    mine = new Set(rows.map((x) => Number(x.id)));
+  } catch {
+    console.warn('[reporting] the signed copies behind the investor’s duties could not be read');
+    for (const d of signed) out.set(d.uid, { state: 'unreadable', envelope_id: null });
+    return out;
+  }
+  for (const d of signed) {
+    const id = Number(d.source_envelope_id);
+    if (mine.has(id)) out.set(d.uid, { state: 'available', envelope_id: id });
+  }
+  return out;
+}
+
+async function companies(env: Env, user: { id: number; role: string }, projectId: number | null) {
+  const userId = Number(user.id);
   const duties = await ownDuties(env, userId, projectId);
+  const copies = await signedCopies(env, user, duties);
   const day = today();
   const raw = await periodsOf(env, duties.map((d) => d.id));
   const periods = periodsWithState(duties, raw, day);
@@ -265,7 +313,8 @@ async function companies(env: Env, userId: number, projectId: number | null) {
   const byProject = new Map<number, any>();
   for (const d of duties) {
     const co = byProject.get(d.project_id) || { uid: d.project_uid, name: d.project_name, duties: [], periods: [] };
-    co.duties.push({ ...dutyDto(d, false), record: rec[d.uid] || { sent: 0, late: 0, missing: 0, waived: 0 } });
+    const dto = dutyDto(d, false);
+    co.duties.push({ ...dto, source: { ...dto.source, signed_copy: copies.get(d.uid) }, record: rec[d.uid] || { sent: 0, late: 0, missing: 0, waived: 0 } });
     byProject.set(d.project_id, co);
   }
   for (const p of periods) {
@@ -299,7 +348,7 @@ async function actAs(c: any) {
 r.get('/portfolio', async (c) => {
   const user = await requireAuth(c);
   c.header('Cache-Control', 'no-store');
-  return c.json({ ok: true, ...(await actAs(c)), ...(await companies(c.env, Number(user.id), null)) });
+  return c.json({ ok: true, ...(await actAs(c)), ...(await companies(c.env, { id: Number(user.id), role: String(user.role ?? '') }, null)) });
 });
 
 r.get('/companies/:projectUid', async (c) => {
@@ -308,7 +357,7 @@ r.get('/companies/:projectUid', async (c) => {
   const uid = c.req.param('projectUid');
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(uid)) throw new Refusal(404, 'not_found', 'No such company.');
   const p = await c.env.DB.prepare('SELECT id FROM projects WHERE uid = ?').bind(uid).first<{ id: number }>();
-  const out = p ? await companies(c.env, Number(user.id), Number(p.id)) : null;
+  const out = p ? await companies(c.env, { id: Number(user.id), role: String(user.role ?? '') }, Number(p.id)) : null;
   if (!out || !out.companies.length) throw new Refusal(404, 'not_found', 'No such company.');
   return c.json({ ok: true, today: out.today, ...(await actAs(c)), company: out.companies[0] });
 });
