@@ -52,10 +52,10 @@ import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
 import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
-import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -64,16 +64,17 @@ import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/Narr
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
-import { isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
+import { HOME_FRAME as UOF_FRAME, homeAction as uofHomeAction, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
 import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
-import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
+import { LINE as CAP_REL_LINE, capRelStanding, homeAction as capRelHomeAction, isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 import { lazyStep } from './lazyStep.jsx';
 import validateDef from './defs/validate.jsx';
 import raiseDef from './defs/raise.jsx';
+import { useCapRelHome, useUseOfFundsHome } from './defs/raise.jsx';
 import growDef from './defs/grow.jsx';
 import buildDef from './defs/build.jsx';
 
@@ -268,7 +269,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   const data = raw ? availableRecord(raw, edit) : null;
   const selected = raw && typeof location.state?.editing === 'string'
     ? rowAction(location.state.editingPayload?.record === key
-      ? { key: location.state.editing, body: location.state.editingPayload.body } : location.state.editing, declarations) : null;
+      ? { key: location.state.editing, body: location.state.editingPayload.body, values: location.state.editingValues } : location.state.editing, declarations) : null;
   const formSpec = selected ? recordFormFor(selected, raw, edit) : null;
   const closeForm = () => {
     if (currentKey.current !== key) return;
@@ -303,7 +304,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   return {
     status: state?.status ?? 'loading', data, error: state?.error, activity: state?.activity, actionError,
     link: action => { if (action.href?.startsWith('mailto:')) window.location.href = action.href; else navigate(action.href); },
-    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body } } }),
+    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body }, editingValues: action.values } }),
     write,
     client: action => { Promise.resolve().then(() => CLIENT_ACTIONS.get(action.key)?.(raw)).catch(error => {
       if (currentKey.current === key) setActionError(error?.message || 'The export could not be created.');
@@ -436,7 +437,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
   const formOpen = adding && forms.length && !capTableAdding ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
   const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
-  const phone = usePhoneWidth();
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) draws its desktop pages, laid
+  // out for 768px to 1023px, in place of the phone page there; below 768px it is the phone page, as every
+  // other cycle is below 1024px.
+  const tablet = useTabletWidth(def?.tabletPages === true);
+  const phone = usePhoneWidth() && !tablet;
   // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
   // URL becomes `/new`, the rest of the query kept. A module with no form, and
   // the overview, ignore it (D688).
@@ -480,11 +485,17 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [overviewStatus, setOverviewStatus] = useState('loading');
   // D1466 (#3714, RO15): a 403 or 404 on the overview is a refusal, drawn as the Worker's sentence.
   const [overviewMessage, setOverviewMessage] = useState('');
-  const [module, setModule] = useState(null);
+  const moduleKey = `${cycle}:${slug}:${projectId}`;
+  const [moduleRead, setModule] = useState(null);
+  // A venture change renders before the read effect runs. Never pair the
+  // previous response with the new venture's action handlers.
+  const currentModule = moduleRead?.key === moduleKey;
+  const module = currentModule ? moduleRead.data : null;
   // #3938 GR17 (D1478 part 9): the Partner network's "Rank by fit" answer, a view of the rows read; any new read puts the list back.
   const [partnerRank, setPartnerRank] = useState(null);
   useEffect(() => { setPartnerRank(null); }, [module, slug]);
-  const [moduleStatus, setModuleStatus] = useState('loading');
+  const [readModuleStatus, setModuleStatus] = useState('loading');
+  const moduleStatus = currentModule ? readModuleStatus : 'loading';
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
   const [moduleMessage, setModuleMessage] = useState('');
   // D693 decision 7: false once a Validate read says the viewer may not read
@@ -492,7 +503,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [canReadDecisions, setCanReadDecisions] = useState(true);
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
 
-  const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
+  // D6001 (#6001): a next link's `?filter=` opens the table filtered to the rows it names.
+  const [query, setQuery] = useState(() => queryFromSearch(location.search));
   const [reload, setReload] = useState(0);
   const partRefresh = useRef(null);
   const reloadPart = (options) => {
@@ -538,8 +550,16 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D1178 (#3105): `/runway/forecast` and `/scenarios/compare` are pages under a tab, given as `uofSub`.
   const uofTab = uofSub && cycle === 'raise' ? UOF_SUB_TAB[uofSub] || null
     : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D5081 (#5081, RA-14): Use of funds' Home owns its page; its plan read and open dialog are shared by the
+  // header's primary action (Set raise & allocation) and Home, so both draw from one read.
+  const uofOwnsHome = cycle === 'raise' && slug === USE_OF_FUNDS && !record && !uofSub && !lightbox;
+  const uofHome = useUseOfFundsHome(uofOwnsHome ? projectId : null);
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
+  // D5081 part 2 (#5081, RA-22): Capital relationships' Overview owns its page, and its prospects and commitments
+  // reads are held here, so the header's primary action and Overview draw from one pair of reads.
+  const capRelOwnsHome = cycle === 'raise' && slug === CAP_REL && !record && !lightbox;
+  const capRelHome = useCapRelHome(capRelOwnsHome ? projectId : null);
   // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
   // waiting row's Edit (AF16), which opens its Add form with the row's values.
   // #3740 part 1: an Edit form passes its row id, so the sheet reads the saved row (`record`).
@@ -571,7 +591,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
   // read below (its dependency is `query`), so every module page read its module twice when it opened.
   useEffect(() => {
-    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+    const opening = queryFromSearch(location.search);
+    setQuery((cur) => (cur.q === '' && !cur.sort && cur.page === 1 && JSON.stringify(cur.filter || {}) === JSON.stringify(opening.filter) ? cur : opening));
+    // The address is read as the module opens; the table's own controls change the query after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
@@ -614,12 +637,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       .then((data) => {
         if (!alive) return;
         if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
-        setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready');
+        setModule({ key: moduleKey, data: adaptModule(cycle, slug, data) }); setModuleMessage(''); setModuleStatus('ready');
       })
       // A 403 is a refusal, not a failure (D693 decision 7: "Partners do not
       // see decisions."), so it is drawn as the Worker's sentence, with no Retry.
       .catch((error) => {
         if (!alive) return;
+        setModule({ key: moduleKey, data: null });
         if (error?.status === 403) {
           if (slug === 'verdict') setCanReadDecisions(false);
           setModuleMessage(error?.message || ''); setModuleStatus('refused');
@@ -743,7 +767,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       navigate(to, to.startsWith('/validate/session/') ? { state: { interview }, replace: true } : { replace: true });
     }
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
-  const action = primaryForModule(cycle, slug, q, openAction);
+  const primary = primaryForModule(cycle, slug, q, openAction);
+  // D5081: on Use of funds' Home the action opens Edit split in place, and only when Home's read allows it.
+  const uofPrimary = uofOwnsHome ? uofHomeAction(uofHome.read) : null;
+  // D5081 part 2: on Capital relationships' Overview it is Follow up, Find investors or Add investor, from the
+  // prospects read and only for a viewer who works the tool; on Pipeline the tab's own Add investor is the action.
+  const capRelWorks = capRelOwnsHome && capRelStanding(module?.capabilities).works;
+  const action = uofOwnsHome ? (uofPrimary ? { label: uofPrimary.label, onClick: () => uofHome.setDialog(uofPrimary.dialog) } : null)
+    : capRelOwnsHome ? capRelHomeAction(capRelHome, { works: capRelWorks, search: q })
+      : uofTab === 'allocation' || capRelTab === 'pipeline' ? null : primary;
   const Mount = def.Mount || null;
   // D5077 (#5077, BD21): a module's own Eadwyn asks (the rail's prompts, with its AI settings folded),
   // and its own rail sentence in place of the desk's; neither for an admin reading the narrative.
@@ -874,6 +906,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
     body = def?.Overview ? <>
       <def.Overview raw={rawOverview} data={overview} status={overviewState} search={q} action={action} message={overviewMessage} readOnly={Boolean(narrativeAdmin || supportOpen)} onRetry={() => setReload((n) => n + 1)}
+        // D6028 (#6028): Build's overview also draws the phone root, retries one card and opens Connect a tool over itself.
+        phone={phone} projectId={projectId} openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetryCard={retryCard}
         more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null} />
       {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
     </> : phone ? (
@@ -919,6 +953,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
     const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
+    // D6001 (#6001): what a def's own Add and row control are handed: the venture, the page's one dialog, a re-read, and whether this viewer writes.
+    const defCtx = { projectId, openDialog, reload: () => setReload((n) => n + 1), canWrite: module?.parts?.can_write === true };
+    const defRowAction = fnOf(def.rowActions, slug);
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
     const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
@@ -936,21 +973,26 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
+        // D5081 (#5081, RA-14): Use of funds' Home owns the page; no generic "at a glance" or Categories under it.
+        // D5081 part 2 (RA-22): so does Capital relationships' Overview; no generic "at a glance", This venture or stage counts.
+        owned={uofOwnsHome ? { sub: UOF_FRAME } : capRelOwnsHome ? { sub: CAP_REL_LINE } : null}
         // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
         action={action}
+        // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
-          : fnOf(def.add, slug)?.(q, openAction)}
+          : fnOf(def.add, slug)?.(q, openAction, defCtx)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
         onExport={def.exportRecords && projectId && !narrativeAdmin
           ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort })
           : cycle === 'grow' && projectId && read?.exportable === true
             ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
+        // D6001 (#6001): a module with no Edit may name its own row control (Customer research's Move stage).
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -958,19 +1000,19 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
           ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
             () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
-        }) : undefined}
+        }) : !narrativeAdmin && !edit && projectId && defRowAction ? (row) => defRowAction(row, defCtx) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
-          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
+          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capRelOwnsHome ? capRelHome : null} works={capRelWorks} action={action} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}

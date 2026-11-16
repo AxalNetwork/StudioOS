@@ -1,5 +1,5 @@
 import { ConnectorMark } from '../../ui/FillMark.jsx';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { mercurySyncSentence, mercuryView, monthLabel } from './growFromMercury';
 import ConnectMercury from './ConnectMercury';
@@ -22,7 +22,17 @@ import ConnectMercury from './ConnectMercury';
  * figure, and the next sync leaves it deleted. Anyone outside the founder's
  * company sees only the sentence that the figures are the team's.
  */
-export default function GrowFromMercury({ slug, part, projectId, reload }) {
+export default function GrowFromMercury(props) {
+  return <VentureMercury key={props.projectId} {...props} />;
+}
+
+function VentureMercury({ slug, part, projectId, reload: onReload }) {
+  const alive = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const reload = (...args) => { if (alive.current) onReload?.(...args); };
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
   const [syncNotice, setSyncNotice] = useState('');

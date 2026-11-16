@@ -10,6 +10,7 @@ import DataReady from './DataReady';
 import DecksTile from './DecksTile';
 import OneClickBuild from './OneClickBuild';
 import { BrandKitSheet, VersionsSheet } from './DeckSheets';
+import DeckPreview from './DeckPreview';
 import { useDeckChecks } from './DeckVersions';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import { SpinoutReadiness } from './StudioActions';
@@ -133,7 +134,6 @@ export default function StudioHome({ reads, readOnly, q }) {
   // One sources read for the deck card's coverage and Data ready.
   const sources = useDeckSources(projectId);
   const [sheet, setSheet] = useState(null);
-  const [compare, setCompare] = useState(null);
   // PD-9: with AI paused the one-click and Ask wait; the rest of home works.
   const [aiOn] = useAssistMode('raise');
 
@@ -177,15 +177,22 @@ export default function StudioHome({ reads, readOnly, q }) {
       {/* D898 group E: the builder's Spin-Out readiness, now the studio's. */}
       {reads.deck.status === 'ok' ? <SpinoutReadiness projectId={projectId} deck={reads.deck.data} /> : null}
 
-      {sheet === 'versions' && current ? (
-        <VersionsSheet projectId={projectId} versions={versions} readOnly={readOnly} dirty={false} phone={phone}
-          compare={compare} onCompare={setCompare} onRestored={() => { setCompare(null); setSheet(null); reads.reload(); }}
-          onClose={() => { setCompare(null); setSheet(null); }} />
-      ) : null}
-      {sheet === 'export' && current && !readOnly ? <ExportDialog versions={versions} current={current} onClose={() => setSheet(null)} /> : null}
-      {sheet === 'brand' && projectId != null ? <HomeBrandKit projectId={projectId} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
+      <DeckHomeSheets sheet={sheet} projectId={projectId} versions={versions} current={current} readOnly={readOnly} phone={phone}
+        onClose={() => setSheet(null)} onRestored={reads.reload} />
     </div>
   );
+}
+
+export function DeckHomeSheets({ sheet, projectId, versions, current, readOnly, phone, onClose, onRestored }) {
+  const [compare, setCompare] = useState(null);
+  const close = () => { setCompare(null); onClose(); };
+  if (sheet === 'versions' && current) {
+    return <VersionsSheet projectId={projectId} versions={versions} readOnly={readOnly} dirty={false} phone={phone}
+      compare={compare} onCompare={setCompare} onRestored={() => { close(); onRestored(); }} onClose={close} />;
+  }
+  if (sheet === 'export' && current && !readOnly) return <ExportDialog versions={versions} current={current} onClose={close} />;
+  if (sheet === 'brand' && projectId != null) return <HomeBrandKit projectId={projectId} readOnly={readOnly} onClose={close} />;
+  return null;
 }
 
 /** ⋯ › Brand kit from the home: the kit read when the sheet opens. */
@@ -239,7 +246,7 @@ function Fact({ k, children, testId }) {
   );
 }
 
-export function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu, wide = false }) {
+export function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu, wide = false, overview = false, children }) {
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const name = String(project?.name || '').trim() || 'Your venture';
   const row = versionRows([current])[0];
@@ -248,10 +255,12 @@ export function DeckCard({ project, current, deck, engagement, sources, q, phone
   // D1577 (#3824, pd1): who is editing this deck now, read once (no socket here); nothing while presence is off.
   const editing = avatarsOf(useDeckPresence(current?.id ?? null).editors, null);
   return (
-    <section className={`${CARD} flex flex-col gap-3 p-4 ${wide ? 'lg:col-span-3' : 'lg:col-span-2'} ${phone ? '' : 'sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start'}`} data-testid="pitch-studio-current">
-      <div className="flex aspect-video flex-col justify-end gap-1 rounded-[8px] border border-axal-hairline bg-axal-ground p-3.5 dark:border-gray-700 dark:bg-gray-800" data-testid="pitch-studio-cover">
+    <section className={`${CARD} flex flex-col gap-3 p-4 ${overview ? '' : wide ? 'lg:col-span-3' : 'lg:col-span-2'} ${phone || overview ? '' : 'sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start'}`} data-testid="pitch-studio-current">
+      {overview && deck.status === 'ok' && deck.data?.slides?.length ? (
+        <DeckPreview deck={deck.data} cacheKey={current.id} />
+      ) : <div className="flex aspect-video flex-col justify-end gap-1 rounded-[8px] border border-axal-hairline bg-axal-ground p-3.5 dark:border-gray-700 dark:bg-gray-800" data-testid="pitch-studio-cover">
         {deck.status === 'loading' ? <Skeleton h="h-full" /> : deck.status === 'error' ? (
-          <span className={MUTED}>The cover could not be read.</span>
+          <span className={MUTED}>{overview ? 'Unavailable' : 'The cover could not be read.'}</span>
         ) : cover ? (
           <>
             <span className="text-[9px] font-bold uppercase tracking-[.14em] text-axal-violet dark:text-violet-300">{String(project?.name || '').trim()}</span>
@@ -259,12 +268,12 @@ export function DeckCard({ project, current, deck, engagement, sources, q, phone
             {cover.sub ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{cover.sub}</span> : null}
           </>
         ) : null}
-      </div>
+      </div>}
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-[15px] font-extrabold ${INK}`}>{`${name} · ${versionLabel(current)}`}</span>
-          {current.is_current ? <span className={PILL_VIO}>Current</span> : null}
-          <DeckNotDone deckId={current.id} />
+          <span className={`text-[15px] font-extrabold ${INK}`}>{overview ? current.title || `${name} deck` : `${name} · ${versionLabel(current)}`}</span>
+          {!overview && current.is_current ? <span className={PILL_VIO}>Current</span> : null}
+          {!overview && <DeckNotDone deckId={current.id} />}
           {editing ? (
             <span className="flex -space-x-1.5" data-testid="pitch-studio-editors">
               {editing.shown.map((a) => (
@@ -280,16 +289,17 @@ export function DeckCard({ project, current, deck, engagement, sources, q, phone
         <dl className="m-0 flex flex-col" data-testid="pitch-studio-deck-facts">
           <Fact k="Audience" testId="pitch-studio-deck-audience">{row.audience}</Fact>
           <Fact k="Round" testId="pitch-studio-deck-round">{row.round}</Fact>
-          <Fact k="Saved">{`${dayLabel(current.created_at)}${cover?.slides ? ` · ${cover.slides} card${cover.slides === 1 ? '' : 's'}` : ''}`}</Fact>
+          {!overview && <Fact k="Saved">{`${dayLabel(current.created_at)}${cover?.slides ? ` · ${cover.slides} card${cover.slides === 1 ? '' : 's'}` : ''}`}</Fact>}
           <Fact k="Views" testId="pitch-studio-deck-views">{views}</Fact>
         </dl>
         {/* D896 (#2675): the coverage meter, from the sources read; loading and error draw no counts. */}
-        {sources.status !== 'idle' ? (
+        {!overview && sources.status !== 'idle' ? (
           <div data-testid="pitch-studio-coverage">
             <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="M" onRetry={sources.retry} />
           </div>
         ) : null}
-        <CheckPills checks={checks} current={current} q={q} />
+        {!overview && <CheckPills checks={checks} current={current} q={q} />}
+        {children}
         <div className="mt-auto flex flex-wrap items-center gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
           {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21). */}

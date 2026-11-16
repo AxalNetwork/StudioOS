@@ -14,20 +14,23 @@
  * `GET /api/portfolio-support`: every row was written by a member recording
  * their own work. Introductions requested through the quota, dealroom
  * membership and calendar activity are access, not support, and none of them
- * is read into this page. The ledger records Promised, Delivered and
- * Withdrawn (D4642 added amendments and their history); In progress,
- * Cancelled, a due date and the meetings resulting are not recorded, and read
- * Not recorded with that reason, never 0.
+ * is read into this page. D4642 added amendments and their history; D6202
+ * (#6202) added In progress, Cancelled, a due date and an introduction's
+ * meeting, and D6203 (#6203) draws them: In progress and Overdue as counted
+ * figures, each row's due date with the Worker's own Overdue (never the
+ * browser's clock), and an introduction's meeting as Yes with its date, No, or
+ * Not recorded. Start, Mark delivered, Withdraw and Cancel each confirm in
+ * place, naming the entry and its company.
  *
  * Every read stands alone (`usePortfolioReads`): the ledger, its figures (their
  * own aggregate read on the Worker, `totals: null` when it fails), a filtered
  * or later page of the commitments, and one entry's history. A failed one
  * reads Unreadable with a Retry for that source, and never as an empty ledger.
- * Writes (Log support, Mark delivered, Withdraw) report against the one entry
+ * Writes (Log support, the moves, Record meeting) report against the one entry
  * or form they touched, and leave the ledger's read standing.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -43,8 +46,8 @@ import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { FinancialMetric, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import {
-  HISTORY_LABEL, KINDS, NOT_IN_LEDGER, NOT_RECORDED, commitmentsOf, companySupportOf, figuresOf, hoursOf,
-  inView, introductionsOf, ledgerParams, ledgerShape, totalsOf,
+  HISTORY_LABEL, KINDS, MOVE_LABEL, NOT_IN_LEDGER, NOT_RECORDED, commitmentsOf, companySupportOf, figuresOf, hoursOf,
+  inView, introductionsOf, ledgerParams, ledgerShape, totalsOf, validDay,
 } from '../portfolio/valueAddModel';
 import { day } from '../portfolio/portfolioModel';
 import '../portfolio/valueAdd.css';
@@ -64,7 +67,13 @@ export default function InvestorPortfolioValueAdd() {
   const [filter, setFilter] = useState('all');
   const [offset, setOffset] = useState(0);
   const [pageKey, setPageKey] = useState(0);
-  const [form, setForm] = useState(null);
+  const location = useLocation();
+  const [form, setForm] = useState(() => {
+    const ask = location.state?.founderAsk;
+    return ask ? { ask_uid: ask.uid, askLabel: ask.label, askUpdate: ask.updateUid, reportKey: ask.reportKey, project_uid: ask.projectUid, kind: ask.kind,
+      state: 'promised', due_date: '', hours: '', summary: ask.text, outcome: '', promised_at: '', error: '', invalid: null } : null;
+  });
+  const [promiseReceipt, setPromiseReceipt] = useState(null);
   const [busy, setBusy] = useState('');
   // D4642: the outcome of a write against ONE entry, named. It is kept apart
   // from the ledger's read: a refused Deliver says nothing about whether the
@@ -87,7 +96,7 @@ export default function InvestorPortfolioValueAdd() {
   const reload = useCallback(() => { retry('ledger'); setPageKey((n) => n + 1); }, [retry]);
 
   const logSupport = useCallback(() => {
-    setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', summary: '', outcome: '', error: '', invalid: null }));
+    setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', due_date: '', summary: '', outcome: '', error: '', invalid: null }));
   }, []);
   const changeFilter = useCallback((next) => { setOffset(0); setFilter(next); setConfirming(null); }, []);
   const byCompanyView = useCallback(() => { changeFilter('company'); }, [changeFilter]);
@@ -97,7 +106,7 @@ export default function InvestorPortfolioValueAdd() {
   // until one is chosen. Outcome and hours are never filled.
   const parentId = form?.project_uid ? Number(companies.find((x) => x.project_uid === form.project_uid)?.project_id) || null : null;
   const fill = useScopedFill({
-    scope: SCOPED_FORMS.support, parent: parentId, enabled: !!parentId,
+    scope: SCOPED_FORMS.support, parent: parentId, enabled: !!parentId && !form?.ask_uid,
     values: { summary: form?.summary || '' },
     onValues: (v) => setForm((current) => (current ? { ...current, ...v, error: '' } : current)),
   });
@@ -105,6 +114,11 @@ export default function InvestorPortfolioValueAdd() {
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return; // D4642: one pending save per card; a second submit waits
+    // D6203: a due date is optional, and a typed one must be a real day; it is checked before anything is sent.
+    if (form?.state !== 'delivered' && form?.due_date && !validDay(form.due_date)) {
+      setForm((current) => ({ ...current, invalid: 'due', error: 'Enter the due date as a full date, or leave it blank.' }));
+      return;
+    }
     if (!form?.project_uid || !form.summary.trim()) {
       setForm((current) => ({
         ...current,
@@ -122,18 +136,25 @@ export default function InvestorPortfolioValueAdd() {
       }));
       return;
     }
+    if (form.ask_uid && !form.confirmed) {
+      setForm((current) => ({ ...current, confirmed: true }));
+      return;
+    }
     setBusy('log');
     try {
       const created = await api.portfolioSupportLog({
         project_uid: form.project_uid,
         kind: form.kind,
         state: form.state,
+        ...(form.ask_uid ? { ask_uid: form.ask_uid, promised_at: form.promised_at || undefined } : {}),
         // An empty field is sent as absent, never as 0 — the store keeps
         // "nobody timed this" apart from "it took no time".
         ...(form.hours === '' ? {} : { hours: Number(form.hours) }),
+        ...(form.due_date && form.state !== 'delivered' ? { due_date: form.due_date } : {}),
         summary: form.summary.trim(),
         ...(form.outcome.trim() ? { outcome: form.outcome.trim() } : {}),
       });
+      if (form.ask_uid) setPromiseReceipt({ reportKey: form.reportKey });
       setForm(null);
       await fill.afterSave(created?.item?.id);
       reload();
@@ -146,13 +167,14 @@ export default function InvestorPortfolioValueAdd() {
   // D4642: one entry's transition, sent with the record and the revision the
   // page read, so the server refuses a stale edit instead of overwriting a
   // newer one. The outcome is reported against THAT entry.
+  // D6203: `next` is a state (a move) or `{ meeting_outcome, meeting_at }` (Record meeting); both go the same way.
   const move = async (row, next) => {
     if (busy) return; // a pending save owns the ledger until it settles
     setBusy(row.uid);
     setNotice(null);
     try {
       await api.portfolioSupportUpdate(row.uid, {
-        state: next,
+        ...(typeof next === 'string' ? { state: next } : next),
         project_uid: row.project_uid ?? undefined,
         ...(row.revision == null ? {} : { expected_revision: Number(row.revision) }),
       });
@@ -171,7 +193,7 @@ export default function InvestorPortfolioValueAdd() {
         reload();
         return;
       }
-      if (error?.code === 'state_is_terminal') {
+      if (error?.code === 'state_is_terminal' || error?.code === 'cannot_reopen') {
         setConfirming(null);
         setNotice({ entryUid: row.uid, kind: 'blocked', message: `${company ? `${company}: ` : ''}${error?.message || 'this entry is already closed.'}` });
         return;
@@ -227,6 +249,11 @@ export default function InvestorPortfolioValueAdd() {
       rail={<ValueAddRail ledger={ledger} />}
     >
       {/* D4642: ONE entry's write outcome, naming its company and the next action. */}
+      {promiseReceipt ? <section className="pf-card va-form" role="status" data-testid="va-founder-ask-receipt">
+        <h2>Support recorded</h2>
+        <Link className="pf-btn" to="/portfolio/updates" state={{ founderAskReportKey: promiseReceipt.reportKey }}>Back to the report</Link>
+        <button className="pf-btn" type="button" onClick={() => setPromiseReceipt(null)}>View in Value-add</button>
+      </section> : null}
       {notice ? (
         <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} role="status" data-testid={`status-va-support-${notice.kind}`}>
           <span>{notice.message}</span>
@@ -245,8 +272,8 @@ export default function InvestorPortfolioValueAdd() {
         <p className="pf-foot" data-testid="va-hours">
           Hours recorded: <b>{hours.state === 'loading' ? 'Reading…' : hours.text}</b>{hours.note ? ` · ${hours.note}` : ''}
         </p>
-        <p className="pf-foot" data-testid="va-not-in-ledger">
-          The ledger records Promised, Delivered and Withdrawn. In progress, Cancelled, a due date for a commitment and the meetings that came of an introduction are not recorded by it, so they read {NOT_RECORDED}.
+        <p className="pf-foot" data-testid="va-ledger-records">
+          The ledger records Promised, In progress, Delivered, Withdrawn and Cancelled, a due date, and whether an introduction’s meeting happened. Overdue is counted by the Worker’s date (UTC), never this device’s clock; an entry with no due date is never overdue.
         </p>
       </section>
 
@@ -256,7 +283,7 @@ export default function InvestorPortfolioValueAdd() {
         <div className="pf-card-head">
           <div>
             <h2 id="va-commitments-title">{byCompany ? 'Per-company support' : 'Commitments'}</h2>
-            <p className="pf-sm">{byCompany ? 'Every company in the book, including those with nothing recorded' : filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : 'Promised, delivered and withdrawn, newest first'}</p>
+            <p className="pf-sm">{byCompany ? 'Every company in the book, including those with nothing recorded' : filter === 'outstanding' ? 'Promised or in progress, still open' : filter === 'delivered' ? 'Delivered entries' : 'Every entry, newest first'}</p>
           </div>
         </div>
         <ZoneToolbar
@@ -323,7 +350,7 @@ function Commitments({ read, onRetry, filter, me, busy, history, confirming, not
   if (!rows.length) {
     return (
       <p className="pf-note va-pad-note" data-testid="va-commitments-empty">
-        <b>{filter === 'outstanding' ? 'No promise is outstanding.' : filter === 'delivered' ? 'No entry is recorded as delivered.' : 'No support entry is recorded yet.'}</b>{' '}
+        <b>{filter === 'outstanding' ? 'No entry is outstanding.' : filter === 'delivered' ? 'No entry is recorded as delivered.' : 'No support entry is recorded yet.'}</b>{' '}
         {filter === 'all' ? 'The ledger is empty because nothing has been logged, not because nothing was done. Log support records the first entry.' : 'Every recorded entry sits under another state.'}
       </p>
     );
@@ -366,47 +393,58 @@ function CommitmentRow({ c, busy, history, confirming, contested, onAsk, onCance
           {c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}
           <small>{c.kind}</small>
         </th>
-        <td data-label="Support item">{c.summary}<small>Hours: {c.hours}</small></td>
+        <td data-label="Support item">{c.summary}{c.row.ask_uid ? <span className="pf-muted"> · Answers a founder ask</span> : null}<small>Hours: {c.hours}</small></td>
         <td data-label="Owner"><span title={c.owner.note || undefined}>{c.owner.text}</span></td>
         <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
-        <td data-label="Recorded" className="va-date">{c.recorded || 'Date not recorded'}{c.promised ? <small>promised {c.promised}</small> : null}</td>
+        <td data-label="Recorded" className="va-date">
+          {c.recorded || 'Date not recorded'}{c.promised ? <small>promised {c.promised}</small> : null}
+          <small data-testid={`va-due-${c.uid}`}>
+            {c.due ? <>due {c.due}</> : <span className="pf-not-recorded" title={NOT_IN_LEDGER.due}>No due date</span>}
+            {c.overdue ? <> <span className="pf-chip va-overdue" data-testid={`va-overdue-${c.uid}`}>Overdue</span></> : null}
+          </small>
+        </td>
         <td data-label="Delivered" className="va-date">
-          {c.closed.date ? (c.state === 'withdrawn' ? `Withdrawn ${c.closed.date}` : c.closed.date) : <span className="pf-not-recorded">{c.closed.missing}</span>}
+          {c.closed.date ? (c.state === 'withdrawn' || c.state === 'cancelled' ? `${c.closed.label} ${c.closed.date}` : c.closed.date) : <span className="pf-not-recorded">{c.closed.missing}</span>}
         </td>
         <td data-label="Next / linked">
           {c.outcome ? <>Outcome: {c.outcome}</> : <span className="pf-not-recorded">No outcome recorded yet</span>}
-          {c.isIntro ? <small data-testid={`va-meeting-${c.uid}`}>Meeting resulting: <span className="pf-not-recorded" title={NOT_IN_LEDGER.meeting}>{NOT_RECORDED}</span></small> : null}
+          {c.meeting ? <small data-testid={`va-meeting-${c.uid}`}>Meeting resulting: <MeetingText meeting={c.meeting} /></small> : null}
         </td>
         <td data-label="Act" className="va-act">
-          {c.state === 'promised' ? (
+          {c.moves.length ? (
             <span className="va-moves">
-              <button type="button" className="pf-btn" disabled={!!busy} onClick={() => onAsk(c.row, 'delivered')} data-testid={`button-va-deliver-${c.uid}`}>Mark delivered…</button>
-              <button type="button" className="pf-btn is-quiet" disabled={!!busy} onClick={() => onAsk(c.row, 'withdrawn')} data-testid={`button-va-withdraw-${c.uid}`}>Withdraw…</button>
+              {c.moves.map((next) => (
+                <button key={next} type="button" className={`pf-btn${next === 'delivered' || next === 'in_progress' ? '' : ' is-quiet'}`} disabled={!!busy}
+                  onClick={() => onAsk(c.row, next)} data-testid={`button-va-${MOVE_TESTID[next]}-${c.uid}`}>{MOVE_LABEL[next]}…</button>
+              ))}
             </span>
+          ) : null}
+          {c.isIntro && c.state !== 'withdrawn' && c.state !== 'cancelled' ? (
+            <button type="button" className="pf-btn is-quiet" disabled={!!busy} onClick={() => onAsk(c.row, 'meeting')} data-testid={`button-va-meeting-${c.uid}`}>Record meeting…</button>
           ) : null}
           {c.revision > 1 ? (
             <button type="button" className="pf-btn is-quiet" onClick={() => onHistory(c.row)} aria-expanded={!!open} data-testid={`button-va-history-${c.uid}`}>
               {open ? 'Hide history' : `History · amended ${c.revision - 1} ${c.revision === 2 ? 'time' : 'times'}`}
             </button>
-          ) : c.state !== 'promised' ? <small>Not amended since it was recorded</small> : null}
+          ) : !c.open ? <small>Not amended since it was recorded</small> : null}
         </td>
       </tr>
       {asking ? (
         <tr className="va-sub"><td colSpan={8}>
-          <div className="va-confirm" role="group" aria-label={`Confirm for ${c.company}`} data-testid={`va-confirm-${c.uid}`}>
-            <p>
-              {asking.next === 'delivered'
-                ? <>Mark “{c.summary}” for <b>{c.company}</b> as delivered? Today’s date is recorded as the delivery date, and a delivered entry cannot be reopened.</>
-                : <>Withdraw “{c.summary}” for <b>{c.company}</b>? The entry stays in the ledger as withdrawn and cannot be reopened.</>}
-            </p>
-            {asking.error ? <p className="va-error" role="alert" data-testid={`va-confirm-error-${c.uid}`}>{asking.error}</p> : null}
-            <div className="pf-tools">
-              <button type="button" className="pf-btn is-primary" disabled={!!busy} onClick={() => onConfirm(c.row, asking.next)} data-testid={`button-va-confirm-${c.uid}`}>
-                {busy === c.uid ? 'Saving…' : asking.error ? 'Try saving again' : asking.next === 'delivered' ? 'Mark delivered' : 'Withdraw entry'}
-              </button>
-              <button type="button" className="pf-btn" disabled={busy === c.uid} onClick={onCancel}>Cancel</button>
+          {asking.next === 'meeting' ? (
+            <MeetingForm c={c} asking={asking} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
+          ) : (
+            <div className="va-confirm" role="group" aria-label={`Confirm for ${c.company}`} data-testid={`va-confirm-${c.uid}`}>
+              <p>{confirmText(asking.next, c)}</p>
+              {asking.error ? <p className="va-error" role="alert" data-testid={`va-confirm-error-${c.uid}`}>{asking.error}</p> : null}
+              <div className="pf-tools">
+                <button type="button" className="pf-btn is-primary" disabled={!!busy} onClick={() => onConfirm(c.row, asking.next)} data-testid={`button-va-confirm-${c.uid}`}>
+                  {busy === c.uid ? 'Saving…' : asking.error ? 'Try saving again' : CONFIRM_LABEL[asking.next]}
+                </button>
+                <button type="button" className="pf-btn" disabled={busy === c.uid} onClick={onCancel}>{asking.next === 'cancelled' ? 'Keep entry' : 'Cancel'}</button>
+              </div>
             </div>
-          </div>
+          )}
         </td></tr>
       ) : null}
       {open ? (
@@ -431,7 +469,67 @@ function CommitmentRow({ c, busy, history, confirming, contested, onAsk, onCance
   );
 }
 
-/** The introductions the ledger records, each with its meeting Not recorded and why. */
+const MOVE_TESTID = { in_progress: 'start', delivered: 'deliver', withdrawn: 'withdraw', cancelled: 'cancel' };
+const CONFIRM_LABEL = { in_progress: 'Start', delivered: 'Mark delivered', withdrawn: 'Withdraw entry', cancelled: 'Cancel entry' };
+
+/** PFA08: each move names the entry and its company, and says what cannot be undone. */
+function confirmText(next, c) {
+  const what = <>“{c.summary}” for <b>{c.company}</b></>;
+  if (next === 'in_progress') return <>Start {what}? It moves to In progress, and work that has started cannot move back to Promised.</>;
+  if (next === 'delivered') return <>Mark {what} as delivered? Today’s date is recorded as the delivery date, and a delivered entry cannot be reopened.</>;
+  if (next === 'cancelled') return <>Cancel {what}? The entry stays in the ledger as cancelled, with today’s date, and cannot be reopened.</>;
+  return <>Withdraw {what}? The entry stays in the ledger as withdrawn and cannot be reopened.</>;
+}
+
+/** D6203: an introduction's meeting: Yes with its date, No, or Not recorded with why. */
+function MeetingText({ meeting }) {
+  if (meeting.state === 'held') return <>Yes{meeting.date ? ` · ${meeting.date}` : <span className="pf-not-recorded"> · date not recorded</span>}</>;
+  if (meeting.state === 'not_held') return <>No</>;
+  return <span className="pf-not-recorded" title={meeting.note}>{NOT_RECORDED}</span>;
+}
+
+/**
+ * D6203: Record meeting, in place on an introduction row. Held asks for its date (blank is "date not recorded");
+ * Not held carries none. It moves no state, as D6202 records it.
+ */
+function MeetingForm({ c, asking, busy, onConfirm, onCancel }) {
+  const [outcome, setOutcome] = useState(c.meeting?.state === 'not_held' ? 'not_held' : 'held');
+  const [date, setDate] = useState(c.row.meeting_at || '');
+  const [invalid, setInvalid] = useState('');
+  const save = () => {
+    if (outcome === 'held' && date && !validDay(date)) { setInvalid('Enter the meeting date as a full date, or leave it blank.'); return; }
+    setInvalid('');
+    onConfirm(c.row, { meeting_outcome: outcome, meeting_at: outcome === 'held' && date ? date : null });
+  };
+  const errorId = `va-meeting-error-${c.uid}`;
+  return (
+    <div className="va-confirm" role="group" aria-label={`Record the meeting for ${c.company}`} data-testid={`va-meeting-form-${c.uid}`}>
+      <p>Did the introduction “{c.summary}” for <b>{c.company}</b> lead to a meeting? This records it on the entry and moves no state.</p>
+      <fieldset className="va-fields">
+        <legend className="pf-sr">Meeting resulting</legend>
+        <label><input type="radio" name={`va-meeting-${c.uid}`} value="held" checked={outcome === 'held'} onChange={() => setOutcome('held')} /> Yes, a meeting was held</label>
+        <label><input type="radio" name={`va-meeting-${c.uid}`} value="not_held" checked={outcome === 'not_held'} onChange={() => setOutcome('not_held')} /> No meeting</label>
+        {outcome === 'held' ? (
+          <>
+            <label htmlFor={`va-meeting-at-${c.uid}`}>Meeting date <em>(optional)</em></label>
+            <input id={`va-meeting-at-${c.uid}`} type="date" value={date} onChange={(e) => { setDate(e.target.value); setInvalid(''); }}
+              aria-invalid={invalid ? true : undefined} aria-describedby={invalid ? errorId : undefined} />
+          </>
+        ) : null}
+      </fieldset>
+      {invalid ? <p id={errorId} className="va-error" role="alert">{invalid}</p> : null}
+      {asking.error ? <p className="va-error" role="alert" data-testid={`va-confirm-error-${c.uid}`}>{asking.error}</p> : null}
+      <div className="pf-tools">
+        <button type="button" className="pf-btn is-primary" disabled={!!busy} onClick={save} data-testid={`button-va-meeting-save-${c.uid}`}>
+          {busy === c.uid ? 'Saving…' : asking.error ? 'Try saving again' : 'Record meeting'}
+        </button>
+        <button type="button" className="pf-btn" disabled={busy === c.uid} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/** The introductions the ledger records, each with its meeting. */
 function Introductions({ intros, onRetry }) {
   let body;
   if (intros.state === 'loading') body = <Skeleton rows={2} />;
@@ -454,11 +552,11 @@ function Introductions({ intros, onRetry }) {
             {intros.rows.map((c) => (
               <tr key={c.uid} data-testid={`row-va-intro-${c.uid}`} data-state={c.state}>
                 <th scope="row" data-label="Company">{c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}</th>
-                <td data-label="Introduction">{c.summary}{c.outcome ? <small>Outcome: {c.outcome}</small> : null}</td>
+                <td data-label="Introduction">{c.summary}{c.row.ask_uid ? <span className="pf-muted"> · Answers a founder ask</span> : null}{c.outcome ? <small>Outcome: {c.outcome}</small> : null}</td>
                 <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
                 <td data-label="Recorded" className="va-date">{c.recorded || 'Date not recorded'}</td>
                 <td data-label="Delivered" className="va-date">{c.closed.date || <span className="pf-not-recorded">{c.closed.missing}</span>}</td>
-                <td data-label="Meeting resulting"><span className="pf-not-recorded">{NOT_RECORDED}</span></td>
+                <td data-label="Meeting resulting" data-testid={`va-intro-meeting-${c.uid}`}><MeetingText meeting={c.meeting} /></td>
               </tr>
             ))}
           </tbody>
@@ -470,16 +568,23 @@ function Introductions({ intros, onRetry }) {
     <section className="pf-card" aria-labelledby="va-intros-title" data-testid="va-intros">
       <div className="pf-card-head">
         <h2 id="va-intros-title">Introductions</h2>
-        {intros.state === 'ok' && intros.complete ? <span className="pf-sm">{intros.delivered} delivered · {intros.promised} promised</span> : null}
+        {intros.state === 'ok' && intros.counts ? (
+          <span className="pf-sm" data-testid="va-intros-counts">
+            {countText(intros.counts.made)} made · {countText(intros.counts.open)} open · {countText(intros.counts.meetings)} {intros.counts.meetings === 1 ? 'meeting' : 'meetings'} resulting
+          </span>
+        ) : intros.state === 'ok' && intros.complete ? <span className="pf-sm">{intros.delivered} delivered · {intros.promised} open</span> : null}
       </div>
       {intros.state === 'ok' && !intros.complete ? <p className="pf-partial" data-testid="va-intros-partial">{intros.reason}</p> : null}
       {body}
       <p className="pf-foot">
-        These are the introduction entries members recorded in the support ledger. Meetings resulting: <span className="pf-not-recorded">{NOT_RECORDED}</span> — {NOT_IN_LEDGER.meeting.charAt(0).toLowerCase()}{NOT_IN_LEDGER.meeting.slice(1)} An introduction requested through the quarterly quota is access to a company, not support given to one, and is not counted here.
+        These are the introduction entries members recorded in the support ledger. A meeting reads Yes or No only where a member recorded it; one nobody recorded reads {NOT_RECORDED}, never No. An introduction requested through the quarterly quota is access to a company, not support given to one, and is not counted here.
       </p>
     </section>
   );
 }
+
+/** A counted figure, or Unreadable when the Worker sent none. */
+const countText = (n) => (n == null ? 'Unreadable' : String(n));
 
 /**
  * The per-company rollup — the `By company` chip and the `Per-company view`
@@ -527,27 +632,40 @@ function PerCompany({ read, onRetry }) {
  * its field, and a failed save that keeps every entry.
  */
 function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = null }) {
-  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, error: '', invalid: null, failed: false }));
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, confirmed: false, error: '', invalid: null, failed: false }));
   const companyError = form.invalid === 'company';
   const summaryError = form.invalid === 'summary';
+  const dueError = form.invalid === 'due';
   return (
     <form className="pf-card va-form" onSubmit={onSubmit} data-testid="va-log-support" noValidate>
       <div className="pf-card-head">
         <div><h2>Log support</h2><p className="pf-sm">One entry, against one company in this book. Owner: you.</p></div>
         <button type="button" className="pf-btn" onClick={onCancel}>Cancel</button>
       </div>
+      {form.ask_uid ? <p className="pf-note">Answers a founder ask{form.askLabel ? ` · ${form.askLabel}` : ''}.
+        {form.askUpdate ? <> <Link to={`/updates/${encodeURIComponent(form.askUpdate)}`}>Open the update</Link></> : null}
+      </p> : null}
       <div className="va-fields">
         <label htmlFor="va-company">Company</label>
-        <select id="va-company" value={form.project_uid} onChange={set('project_uid')} aria-invalid={companyError || undefined} aria-describedby={companyError ? 'va-form-error' : undefined}>
+        <select id="va-company" disabled={!!form.ask_uid} value={form.project_uid} onChange={set('project_uid')} aria-invalid={companyError || undefined} aria-describedby={companyError ? 'va-form-error' : undefined}>
           <option value="">Choose a company</option>
           {companies.filter((x) => x.project_uid).map((x) => <option key={x.project_id} value={x.project_uid}>{x.name}</option>)}
         </select>
         <label htmlFor="va-kind">Support type</label>
         <select id="va-kind" value={form.kind} onChange={set('kind')}>{KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         <label htmlFor="va-state">State</label>
-        <select id="va-state" value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="delivered">Delivered</option></select>
+        <select id="va-state" disabled={!!form.ask_uid} value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="in_progress">In progress</option><option value="delivered">Delivered</option></select>
+        {/* D6203: a due date, optional; a closed entry is never overdue, so it is asked only while the entry is open. */}
+        {form.state !== 'delivered' ? (
+          <>
+            <label htmlFor="va-due">Due date <em>(optional)</em></label>
+            <input id="va-due" type="date" value={form.due_date} onChange={set('due_date')}
+              aria-invalid={dueError || undefined} aria-describedby={dueError ? 'va-form-error' : undefined} />
+          </>
+        ) : null}
         {/* Blank is sent as absent. An hours box that defaulted to 0 would put
             a measured zero in the ledger for every entry nobody timed. */}
+        {form.ask_uid ? <><label htmlFor="va-promised">Promised date</label><input id="va-promised" type="date" value={form.promised_at} onChange={set('promised_at')} /></> : null}
         <label htmlFor="va-hours">Hours</label>
         <input id="va-hours" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} placeholder="Leave blank if untimed" />
       </div>
@@ -562,8 +680,9 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         <textarea id="va-outcome" rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" />
       </div>
       {form.error ? <p id="va-form-error" className="va-error" role="alert" data-testid="va-form-error">{form.error}</p> : null}
+      {form.ask_uid && form.confirmed ? <p role="status">Confirm this promise against the founder’s ask.</p> : null}
       <div className="pf-tools">
-        <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : 'Record entry'}</button>
+        <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : form.ask_uid ? (form.confirmed ? 'Confirm promise' : 'Review promise') : 'Record entry'}</button>
       </div>
     </form>
   );

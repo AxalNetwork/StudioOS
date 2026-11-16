@@ -22,6 +22,7 @@
  * domains; no address, title or description is stored, returned or logged.
  * Logs hold counts and codes only.
  */
+import { liveFiles, trashReady } from '../dataRoomTrash';
 import type { Env, User } from '../../types';
 import { loadRefreshTokenExport, refreshGoogleAccessToken, reencryptRefreshTokenExport } from '../calendar';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
@@ -231,6 +232,12 @@ async function copyFile(env: Env, a: { integrationId: number; projectId: number;
   const ledger = await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
     .bind(a.integrationId, ext).first<{ local_id: number | null }>();
   if (ledger && ledger.local_id == null) return 'kept_deleted';
+  // D6073 — a copy in the room's Trash stays as it is, even when Google's file changes, until it is restored.
+  if (ledger?.local_id != null && await trashReady(env.DB)) {
+    const held = await env.DB.prepare('SELECT removed_at FROM data_room_files WHERE id = ? AND project_id = ?')
+      .bind(ledger.local_id, a.projectId).first<{ removed_at: string | null }>();
+    if (held?.removed_at != null) return 'kept_deleted';
+  }
   const meta = await a.read('files.get', f.drive_file_id);
   if (meta?.trashed === true) throw new WorkspaceError('file_not_shared', 403);
   const modified = typeof meta?.modifiedTime === 'string' ? meta.modifiedTime : null;
@@ -453,7 +460,7 @@ export async function raiseGooglePart(env: Env, a: { integrationId: number; user
        FROM connector_fed_items l JOIN data_room_files f ON f.id = l.local_id AND l.local_table = 'data_room_files'
        LEFT JOIN google_workspace_files g ON g.integration_id = l.integration_id AND g.project_id = l.project_id AND g.module = 'data_room'
             AND l.external_id = g.drive_file_id || ':copy:' || g.project_id
-      WHERE l.integration_id = ? AND l.project_id = ? AND l.module = 'data_room' ORDER BY f.id`,
+      WHERE l.integration_id = ? AND l.project_id = ? AND l.module = 'data_room'${await liveFiles(env.DB, 'f')} ORDER BY f.id`,
   ).bind(a.integrationId, a.projectId).all<any>()).results || []).map((r: any) => ({ id: r.id, uid: r.uid, name: r.name, size_bytes: r.size_bytes, as_of: r.modified_time ?? null }));
   const deleted = module !== 'data_room' ? 0 : Number((await env.DB.prepare(
     // "Stop using" unlinks a copy too (D1091) but keeps it; only a deletion of a file still chosen counts.
