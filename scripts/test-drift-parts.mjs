@@ -22,15 +22,6 @@ import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.
 import { buildGenerated } from './build-generated.mjs';
 import { retryDecision } from './lib/flakyTests.mjs';
 
-// D5612 (#5612): a part runs `node --test` and `tsc` directly, so no npm
-// `pretest:*` hook builds the generated modules first; this does, once.
-// `--list` and `--plan` only name parts and files, and CI reads their stdout,
-// so they skip it (the generators print to stdout).
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && !['--list', '--plan'].includes(process.argv[2])) {
-  const generated = buildGenerated();
-  if (generated !== 0) process.exit(generated);
-}
-
 /** How many shards each long test script is cut into. */
 export const SHARDS = Object.freeze({
   'test:frontend': 2,
@@ -187,7 +178,14 @@ function main(argv) {
   if (argv[0] === '--main-artifact') {
     const artifacts = JSON.parse(readFileSync(argv[1], 'utf8')).artifacts;
     const commits = JSON.parse(readFileSync(argv[2], 'utf8'));
-    console.log(newestMainArtifact(artifacts, commits)?.id || '');
+    if (!Array.isArray(artifacts) || !Array.isArray(commits) ||
+        !artifacts.every(row => row && typeof row.name === 'string' && typeof row.created_at === 'string' &&
+          typeof row.expired === 'boolean' && Number.isSafeInteger(row.id) && row.id > 0) ||
+        !commits.every(row => row && typeof row.sha === 'string' && row.sha.length > 0)) {
+      throw new Error('invalid timing artifact or main commit inventory');
+    }
+    const artifact = newestMainArtifact(artifacts, commits);
+    if (artifact) console.log(artifact.id);
     return 0;
   }
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -220,6 +218,10 @@ function main(argv) {
     console.error(`test-drift-parts: unknown part "${arg}". Parts: ${parts.map((p) => p.name).join(', ')}`);
     return 2;
   }
+  // Direct test commands have no npm pretest hook (D5612). Read-only
+  // planner modes keep stdout reserved for their machine-readable result.
+  const generated = buildGenerated();
+  if (generated !== 0) return generated;
   const env = { ...process.env };
   if (env.TEST_TRACE_DIR) {
     const tracer = pathToFileURL(resolve(root, 'scripts/ci/test-tracer.mjs')).href;

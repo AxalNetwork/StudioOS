@@ -4,7 +4,26 @@ After this change lands on `main`, the existing **GitHub alerts** workflow check
 
 New repair issues enter the S01 triage queue with `bug`, `ci`, `workflow-failure` and `state:ready`. Main-branch and startup failures receive `priority:high`; other failures receive `priority:medium`. Repeated failures are recorded in compact, dated comments on the open issue.
 
-A failure, timeout, startup failure or action-required conclusion is eligible. For a known operational failure, the reporter adds evidence to the matching open repair issue. A positively identified superseded release is ignored. Older releases without the trusted marker remain available for triage. A failed admission check without that evidence remains actionable. Normal skips, cancellations, successes and neutral results generate no bug. Security finding details stay with the existing security-reporting path. An operator who confirms critical production impact can promote the repair to `priority:P0`.
+A failure, timeout, startup failure or action-required conclusion is eligible. For a known operational failure, the reporter adds evidence to the matching open repair issue. A verified queue invalidation or superseded release does not open a repair. Older attempts without the required evidence remain available for triage. Any other failing producer or an inconclusive lookup keeps the attempt actionable. Normal skips, cancellations, successes and neutral results generate no bug. Security finding details stay with the existing security-reporting path. An operator who confirms critical production impact can promote the repair to `priority:P0`.
+
+## Verified workflow outcomes
+
+A queue-ref loss notice identifies the run, attempt, candidate and ref. The
+reporter corroborates it with the exact queue ref lookup and the workflow and
+probe blobs on the verified main base. A failed build or test in the same
+attempt still reaches triage.
+
+The production admission and ownership checks identify the stage, run, attempt
+and candidate in their supersession notice. A failed source-map or publication
+step still reaches triage. Historical notices that lack the required identity
+remain actionable. Before changing an existing repair issue, review every
+recorded attempt in its body and recurrence comments.
+
+The reporting job summary links verified benign attempts and gives separate
+queue invalidation and build or test producer-failure rates. Its denominator
+is the distinct terminal queue attempts observed in that pass. A dispatched
+batch usually contains failures only, so use a scheduled sweep for rates across
+observed successes and failures.
 
 ## Enable the signed event path
 

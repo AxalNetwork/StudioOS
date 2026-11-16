@@ -22,7 +22,8 @@ export function FundLedgerView({items=[],loading=false,error=null,reload=()=>{},
   const fund=items.find(f=>String(f.id)===String(fundId)) || (scoped ? null : items[0]);
   if (!fund && scoped) return <EmptyState>{`Not recorded: no operational ledger for ${scopeName || 'this fund'} is readable with your access.`}</EmptyState>;
   if (!fund) return <EmptyState>Not recorded: no accessible fund ledger is recorded.</EmptyState>;
-  const full=fund.can_manage, selectedView=full ? view : 'summary', summary=fund.summary || {};
+  // D6241: the GP of record reads Journal and Fees (`full_read`) without the write controls (`can_manage`).
+  const full=fund.full_read ?? fund.can_manage, selectedView=full ? view : 'summary', summary=fund.summary || {};
   const period=fund.period;
   return <div className="space-y-4" data-testid="fund-ledger-recorded">
     {!scoped && <FilterChips options={items.map(f=>({id:String(f.id),label:f.name}))} value={String(fund.id)} onChange={onFundChange} />}
@@ -30,7 +31,7 @@ export function FundLedgerView({items=[],loading=false,error=null,reload=()=>{},
     {full && !scoped && <FilterChips options={[{id:'summary',label:'Summary'},{id:'journal',label:'Journal'},{id:'fees',label:'Fees'}]} value={selectedView} onChange={onViewChange} />}
     <p className="text-xs text-gray-500 dark:text-gray-400">Operational fund ledger; not the fund’s statutory books. No opening balances are inferred.</p>
     <Section title={`${fund.name}${period ? ` · ${period.label}` : ''}`}>
-      {period && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{period.start_date} to {period.end_date} · {period.closed ? 'Closed' : 'Open'}{full ? ' · Administrator read' : ' · LP summary only'}</p>}
+      {period && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{period.start_date} to {period.end_date} · {period.closed ? 'Closed' : 'Open'}{full ? (fund.can_manage ? ' · Administrator read' : ' · GP of record read · only the fund administrator writes') : ' · LP summary only'}</p>}
       {fund.reason ? <EmptyState>{fund.reason}</EmptyState> : selectedView==='fees' ?
         <LedgerTable rows={[
           ['Management fee accrued',summary.fee_cents,summary.fee_cents==null?'Not recorded':'Posted','Accrual from explicitly recorded fee terms'],

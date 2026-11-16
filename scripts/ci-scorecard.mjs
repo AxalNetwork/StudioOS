@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
-import { report } from './lib/ciScorecard.mjs';
+import { greenAt, readyAt, report } from './lib/ciScorecard.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 const token = process.env.GITHUB_TOKEN;
 const tracker = 5600;
 const marker = '<!-- studioos-ci-scorecard-5603 -->';
-const cap = 150;
+// D6678: room for the merge-queue run listing and one head-SHA run listing per merged PR.
+const cap = 320;
+const budget = { jobs: 120, prs: 280 };
 let requests = 0;
 
 async function request(path, init = {}) {
@@ -52,23 +54,32 @@ function queueEntries(events) {
 
 function evenlySpaced(rows, size) {
   if (rows.length <= size) return rows;
+  if (size < 2) return rows.slice(0, Math.max(0, size));
   return Array.from({ length: size }, (_, i) => rows[Math.round(i * (rows.length - 1) / (size - 1))]);
 }
 
-async function collectJobs(runs) {
+async function collectJobs(runs, queueRuns) {
+  const byId = new Map(runs.map(r => [r.id, r]));
   const candidates = ['merge_group', 'pull_request', 'push', 'other'].flatMap(event => {
+    // Merge-queue CI is sampled from its own full-day listing, not the capped all-workflow one. The queue
+    // runs the capped listing also holds come first: "Queue stalled" needs a job sample for each of them.
+    if (event === 'merge_group') {
+      const listed = queueRuns.filter(r => byId.has(r.id)).slice(0, 74);
+      return [...listed, ...evenlySpaced(queueRuns.filter(r => !byId.has(r.id)), 74 - listed.length)];
+    }
     const group = runs.filter(r => event === 'other'
       ? !['pull_request', 'push'].includes(r.event) && !(r.event === 'merge_group' && r.path === '.github/workflows/ci.yml')
       : r.event === event && (event !== 'merge_group' || r.path === '.github/workflows/ci.yml'));
-    return evenlySpaced(group, event === 'merge_group' ? 74 : 12);
+    return evenlySpaced(group, 12);
   });
   for (const run of candidates) {
-    if (requests >= 105 || !Number.isSafeInteger(run.id)) break;
+    if (requests >= budget.jobs || !Number.isSafeInteger(run.id)) break;
     try {
       const jobs = await get(`actions/runs/${run.id}/jobs?filter=latest&per_page=100`);
       if (jobs.total_count > jobs.jobs.length) continue;
       run.jobs = jobs.jobs;
-      if (Number.isSafeInteger(run.run_attempt) && run.run_attempt > 1 && requests < 105) {
+      if (byId.has(run.id)) byId.get(run.id).jobs = jobs.jobs;
+      if (Number.isSafeInteger(run.run_attempt) && run.run_attempt > 1 && requests < budget.jobs) {
         const earlier = await get(`actions/runs/${run.id}/attempts/${run.run_attempt - 1}/jobs?per_page=100`);
         if (earlier.total_count <= earlier.jobs.length) runs.push({ ...run, jobs: earlier.jobs, laterJobs: run.jobs, priorAttempt: true });
       }
@@ -84,16 +95,27 @@ async function collectPrs(runs, start, now) {
   const merged = rows.filter(p => Date.parse(p.merged_at) >= start && Date.parse(p.merged_at) <= now);
   const candidates = [...new Set([...merged.map(p => p.number), ...fromRuns])];
   const prs = [];
+  let skipped = 0;
   for (const number of candidates) {
-    if (requests >= 135 || !Number.isSafeInteger(number)) break;
-    const { rows: events, complete } = await pages(`issues/${number}/timeline`, 1);
-    if (!complete) continue;
-    const mergedAt = merged.find(p => p.number === number)?.merged_at
-      || events.findLast(e => e.event === 'merged')?.created_at;
-    prs.push({ number, mergedAt: Date.parse(mergedAt) >= start && Date.parse(mergedAt) <= now ? mergedAt : null,
-      entries: queueEntries(events).filter(e => Date.parse(e.start) <= now && (!e.end || Date.parse(e.end) >= start)) });
+    if (requests >= budget.prs || !Number.isSafeInteger(number)) break;
+    const { rows: events, complete } = await pages(`issues/${number}/timeline`, 3);
+    if (!complete) { skipped++; continue; }
+    const row = merged.find(p => p.number === number);
+    const at = row?.merged_at || events.findLast(e => e.event === 'merged')?.created_at;
+    const mergedAt = Date.parse(at) >= start && Date.parse(at) <= now ? at : null;
+    const allEntries = queueEntries(events);
+    const pr = { number, mergedAt, allEntries,
+      entries: allEntries.filter(e => Date.parse(e.start) <= now && (!e.end || Date.parse(e.end) >= start)),
+      readyAt: mergedAt ? readyAt(events, { createdAt: row?.created_at, mergedAt }) : null, greenAt: null };
+    // One read per merged PR: the pull_request runs on its merged head, for the time it went green.
+    const sha = row?.head?.sha;
+    if (mergedAt && /^[0-9a-f]{40}$/.test(sha || '')) {
+      try { pr.greenAt = greenAt((await get(`actions/runs?head_sha=${sha}&event=pull_request&per_page=100`)).workflow_runs, sha); }
+      catch { console.log('::notice::One head-SHA run listing could not be read.'); }
+    }
+    prs.push(pr);
   }
-  return prs;
+  return { prs, read: prs.length, skipped, candidates: candidates.length };
 }
 
 /** The sole write path. GitHub Actions owns one comment marked with this identifier. */
@@ -114,9 +136,15 @@ async function main() {
   const start = now - 86_400_000;
   const created = encodeURIComponent(`${new Date(start).toISOString()}..${new Date(now).toISOString()}`);
   const { rows: runs, complete } = await pages(`actions/runs?created=${created}`, 10, value => value.workflow_runs);
-  await collectJobs(runs);
-  const prs = await collectPrs(runs, start, now);
-  const markdown = report({ runs, prs, start, now, requests }) + (complete ? '' : '\n\nRun listing reached the page limit.');
+  // D6678: merge-queue CI on its own listing; the all-workflow one above stops at 1000 runs, a few hours of a busy day.
+  const queue = await pages(`actions/workflows/ci.yml/runs?event=merge_group&created=${created}`, 5, value => value.workflow_runs);
+  await collectJobs(runs, queue.rows);
+  const { prs, read, skipped, candidates } = await collectPrs([...runs, ...queue.rows], start, now);
+  const notes = [complete ? '' : 'Run listing reached the page limit.',
+    read + skipped < candidates ? `PR timelines stopped at the request budget: ${read} of ${candidates} read.` : '',
+    skipped ? `${skipped} PR timelines over 300 events were skipped.` : ''].filter(Boolean);
+  const markdown = report({ runs, queueRuns: queue.rows, prs, start, now, requests, queueListingComplete: queue.complete })
+    + (notes.length ? `\n\n${notes.join('\n')}` : '');
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
   console.log(markdown);
   await publishComment(markdown);

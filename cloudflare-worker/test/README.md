@@ -351,3 +351,4 @@ catalogue version only in the fixture.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 
 | `file_recovery_6428.test.mjs` | D6428: runs synthetic-only Python recovery regressions through the standard Worker test suite. |
+| `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |

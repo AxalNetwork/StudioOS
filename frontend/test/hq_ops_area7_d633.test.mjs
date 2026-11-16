@@ -13,6 +13,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createElement as h } from 'react';
@@ -203,7 +204,7 @@ test('the routes are the Super Admin\'s, each has its door, and the client calls
   const admin = codeOnly(adminConsoleSource());
   assert.match(admin, /\{showCredits && \(\s*<Link to=\{`\/admin\/accounts\/credits\/\$\{u\.id\}`\}/);
   assert.match(admin, /showCredits=\{isSuperAdminUser\(viewer\)\}/);
-  assert.match(codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx')), /<Link to="\/admin\/security\/obligations"/);
+  assert.match(codeOnly(securityRaw()), /<Link to="\/admin\/security\/obligations"/);
   assert.match(codeOnly(read('frontend/src/pages/hq/MemberCreditsPage.jsx')), /<Link to="\/admin\/credit-rules"/, 'a member\'s credits link to the reward rules (#1384, #1412)');
   globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
   globalThis.document ??= { cookie: '' };

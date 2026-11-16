@@ -32,7 +32,7 @@ import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
   addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
-  latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setLinkStrength,
+  INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme,
 } from '../validateWriters';
@@ -427,6 +427,18 @@ type InterviewData = {
 };
 const interviewMemo = memo<InterviewData>('interview');
 
+const STAGE_WORD: Record<string, string> = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+const STAGE_AT: Record<string, string> = { invited: 'invited_at', booked: 'booked_at', done: 'done_at' };
+/** D6001: Move stage's four choices, the one it is at now marked "current", with the date it was reached when stored. */
+export function stageOptions(iv: Any): Array<{ value: string; label: string }> {
+  const now = iv.stage == null || iv.stage === '' ? null : String(iv.stage);
+  return INTERVIEW_STAGES.map((st) => {
+    const at = STAGE_AT[st] ? dMon(iv[STAGE_AT[st]]) : null;
+    const current = now === st ? joined('current', at) : now == null && st === 'done' ? 'current · no stage recorded' : null;
+    return { value: st, label: current ? `${STAGE_WORD[st]} · ${current}` : STAGE_WORD[st] };
+  });
+}
+
 function loadInterview(ctx: RecordContext, id: string): Promise<InterviewData> {
   return interviewMemo(ctx, id, async () => {
     const iv = await ctx.env.DB.prepare(
@@ -707,6 +719,21 @@ const customerResearch: ModuleSpec = {
           interviewee_name: field(body, 'interviewee_name'), interviewee_company: field(body, 'interviewee_company'),
         }) })),
       },
+      // D6001 (#6001): Move stage, through the writer `PUT /interviews/:id/stage`
+      // calls, which logs the move on this record's activity. Nothing is
+      // preselected: a row with no stage reads as Done, and saving that
+      // reading would write a stage nobody chose.
+      {
+        key: 'set-stage', label: 'Move stage', kind: 'form',
+        form: { title: `Move ${d.iv.interviewee_name ?? 'this interview'}`, cta: 'Move', fields: [
+          { key: 'stage', label: 'Stage', kind: 'CH', required: true, options: stageOptions(d.iv) },
+          { key: 'at', label: 'Date reached · optional', kind: 'T', input: 'date', note: 'Today when left empty. A stage keeps the first date it was reached.' },
+        ] },
+        execute: (c, _id, body) => refusing(async () => {
+          await setInterviewStage(c.env, { projectId: c.projectId, userId: userId(c), interviewId, stage: field(body, 'stage'), at: field(body, 'at') || undefined });
+          return { ok: true };
+        }),
+      },
       {
         key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
         confirm: { title: 'Delete this interview?', body: 'Its sessions, audio and transcript go with it.', cta: 'Delete' },
@@ -934,6 +961,8 @@ function fundingToDate(signals: Any[]): { value: string | null; reason: string }
   return { value: money(funded.reduce((a, s) => a + Number(s.amount_cents), 0), funded[0].currency), reason: '' };
 }
 
+const WATCH_NOTE = 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.';
+
 const market: ModuleSpec = {
   read: 'read', write: 'write', store: 'competitor_candidates',
   activityType: 'validate.market-intelligence',
@@ -946,11 +975,10 @@ const market: ModuleSpec = {
     return {
       title: String(c.name),
       sub: joined(`${kind} competitor`, monYear(tracking?.created_at ?? c.created_at) ? `tracked since ${monYear(tracking?.created_at ?? c.created_at)}` : null),
-      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Watching', tone: 'vio' }],
+      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Tracked', tone: 'vio' }],
       facts: [
         fact('Latest signal', latest ? joined(latest.label || SIGNAL_TYPE[latest.signal_type] || latest.signal_type, dMon(latest.on_day)) : null, 'No signal recorded'),
         fact('Funding to date', funding.value, funding.reason),
-        { label: 'Headcount', value: null, reason: 'No public figure found' },
         fact('Source', latest?.source_url ?? latest?.source_kind ?? c.url ?? null, 'No source recorded'),
       ],
       createdBy: tracking?.created_by ?? null, createdAt: c.created_at ?? null,
@@ -1000,7 +1028,7 @@ const market: ModuleSpec = {
       },
     },
     {
-      key: 'watching', title: 'Watching for', side: true,
+      key: 'watching', title: 'Signal filters', note: WATCH_NOTE, side: true,
       read: async (ctx, id) => {
         const { watch } = await loadCompetitor(ctx, id);
         return { rows: [
@@ -1033,7 +1061,7 @@ const market: ModuleSpec = {
           { key: 'kind', label: 'Kind', kind: 'CH', options: opts([['direct', 'Direct'], ['adjacent', 'Adjacent']]), value: c.category === 'adjacent' ? 'adjacent' : 'direct',
             note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' },
           { key: 'watch', label: 'Watch for', kind: 'CK', options: opts([['funding', 'Funding'], ['launch', 'Launches'], ['hiring', 'Hires']]),
-            value: WATCH_KEYS.filter((k) => watch[k]) },
+            value: WATCH_KEYS.filter((k) => watch[k]), note: WATCH_NOTE },
           { key: 'price_position', label: 'Price', kind: 'CH', options: opts([['lower', 'Lower than ours'], ['similar', 'About the same'], ['higher', 'Higher than ours']]), value: tracking?.price_position ?? undefined },
           { key: 'depth_position', label: 'Depth', kind: 'CH', options: opts([['narrower', 'Narrower'], ['similar', 'About the same'], ['broader', 'Broader']]), value: tracking?.depth_position ?? undefined },
           { key: 'why', label: 'Why it matters', kind: 'T', value: tracking?.why_it_matters ?? '', placeholder: '[One line, optional]' },
