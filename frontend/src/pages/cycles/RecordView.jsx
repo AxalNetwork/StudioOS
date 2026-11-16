@@ -153,8 +153,13 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
       const right = row.c === '' ? {} : tone ? { pill: { label: text(row.c), tone: PILL_TONE[tone] || 'neutral' } } : { value: text(row.c) };
       const go = row.href ? (handlers.onLink ? { onClick: () => handlers.onLink({ kind: 'link', href: row.href }) } : { href: row.href })
         : own ? runOf(own, handlers) : {};
-      return { key: index, title: text(row.a), description: text(row.b) || undefined, ...right, ...go };
-    });
+      const main = { key: index, title: text(row.a), description: text(row.b) || undefined, ...right, ...go };
+      // D6113 (#6113): a row's further actions as their own rows beneath it, the row's text as their description.
+      const more = (row.actions ?? []).map((ref) => rowAction(ref, declarations)).filter(Boolean).map((extra, n) => ({
+        key: `${index}-${n}`, title: extra.tone === 'danger' ? danger(extra.label) : extra.label, description: text(row.a) || undefined, ...runOf(extra, handlers),
+      }));
+      return [main, ...more];
+    }).flat();
     if (!rows.length) phoneRows.push({ key: 'empty', title: section.empty ? section.empty : 'Nothing recorded here yet.', chevron: false });
     if (action) phoneRows.push({ key: 'action', title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers) });
     // D1082 (LV8a): an experiment's Build in Lovable below its group on the phone; the dialog is a full-height sheet there.
@@ -173,6 +178,9 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     {rows.length === 0 ? <p className="px-4 py-3 text-[12.5px] text-axal-muted dark:text-gray-400">{section.empty || 'Nothing recorded here yet.'}</p> : rows.map((raw, index) => {
       const row = rowView(raw);
       const ownAction = rowAction(row.action, declarations);
+      // D6113 (#6113): the row's further actions, after its own.
+      const more = (row.actions ?? []).map((ref) => rowAction(ref, declarations)).filter(Boolean)
+        .map((extra) => <RecordAction key={extra.key} action={extra} quiet {...handlers} />);
       return <div key={index} className={side
         ? 'flex items-center justify-between gap-2.5 border-b border-axal-ground px-4 py-[9px] text-[12.5px] last:border-b-0 dark:border-gray-800'
         : 'grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto] items-center gap-3 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 dark:border-gray-800'}>
@@ -183,8 +191,9 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
           {text(row.b)}
           {side && row.c !== '' && <span className="ml-2"><Status value={row.c} tone={row.tone} /></span>}
           {side && ownAction && <span className="ml-2"><RecordAction action={ownAction} quiet {...handlers} /></span>}
+          {side && more.map((node) => <span key={node.key} className="ml-2">{node}</span>)}
         </div>
-        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}
+        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}{more}
           {row.lovable && <BuildInLovable lovable={row.lovable} />}</div>}
       </div>;
     })}
@@ -224,6 +233,7 @@ function RecordNext({ next, declarations, handlers }) {
       : run.href ? <a href={run.href} className={className} data-testid="record-next-cta">{action.label}</a> : null}
   </section>;
 }
+
 
 export default function RecordView({ record, activity, cycleName, moduleName, ...handlers }) {
   const declarations = declaredActions(record);

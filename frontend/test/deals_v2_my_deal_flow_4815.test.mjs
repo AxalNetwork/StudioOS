@@ -82,14 +82,15 @@ test('a deal room whose access could not be read offers Try again, never Request
     quotaState: { loading: false, error: false, quota: { used: 0, cap: 5, full: false, tier: 'professional' } },
     onRetryDeals: () => {},
   }));
-  const rows = out.split('data-testid="dr-pipeline-row"').slice(1);
+  // D6151: each table row ends at its </tr>; the phone cards follow the table.
+  const rows = out.split('data-testid="dr-pipeline-row"').slice(1).map((r) => r.split('</tr>')[0]);
   assert.equal(rows.length, 2);
   // Mutation checked: rendering JoinLeaveButton for every row → the Unknown row carries dr-join and this fails.
   assert.match(rows[0], /data-testid="dr-join"/);
   assert.doesNotMatch(rows[0], /dr-access-retry/);
   assert.match(rows[1], /data-testid="dr-access-retry"[^>]*>Try again</);
   assert.doesNotMatch(rows[1], /dr-join/);
-  assert.match(rows[1], /Deal access could not be confirmed\./);
+  assert.match(rows[1], /! Access unreadable/);  // D6151 (DE19): the access words
 });
 
 test('each Deals route names itself in the browser tab', () => {

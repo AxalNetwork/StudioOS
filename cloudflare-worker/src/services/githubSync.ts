@@ -446,8 +446,17 @@ export async function listRunJobs(env: Env, runId: string | number): Promise<GhR
   return { ...res, data: Array.isArray(res.data?.jobs) ? res.data.jobs : [] };
 }
 
-export async function createIssue(env: Env, args: { title: string; body: string; labels: string[] }): Promise<GhResult> {
-  return ghFetch(env, '/issues', { method: 'POST', body: JSON.stringify(args) });
+/**
+ * `retry: false` (D5984) sends the POST once: a create that timed out or
+ * answered 5xx may still have opened the issue, so its caller settles it from
+ * a durable intent instead of sending it again.
+ */
+export async function createIssue(
+  env: Env,
+  args: { title: string; body: string; labels: string[]; assignees?: string[] },
+  opts: { retry?: boolean } = {},
+): Promise<GhResult> {
+  return ghFetch(env, '/issues', { method: 'POST', body: JSON.stringify(args) }, opts);
 }
 
 export async function updateIssue(env: Env, issueNumber: number, patch: {
@@ -456,8 +465,8 @@ export async function updateIssue(env: Env, issueNumber: number, patch: {
   return ghFetch(env, `/issues/${issueNumber}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
 
-export async function addComment(env: Env, issueNumber: number, body: string): Promise<GhResult> {
-  return ghFetch(env, `/issues/${issueNumber}/comments`, { method: 'POST', body: JSON.stringify({ body }) });
+export async function addComment(env: Env, issueNumber: number, body: string, opts: { retry?: boolean } = {}): Promise<GhResult> {
+  return ghFetch(env, `/issues/${issueNumber}/comments`, { method: 'POST', body: JSON.stringify({ body }) }, opts);
 }
 
 export async function setLabels(env: Env, issueNumber: number, labels: string[]): Promise<GhResult> {

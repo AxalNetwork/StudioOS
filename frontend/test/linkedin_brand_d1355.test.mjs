@@ -94,7 +94,7 @@ test('D1355: every LinkedIn surface goes through the registry; only actual OAuth
   }
   const referral=read('frontend/src/pages/ReferralsPage.jsx');
   assert.ok(referral.includes('Import from LinkedIn') && referral.includes("const importLinkedin = () => setLinkedinSheet(true)") && !referral.includes('LinkedInSignInButton'));
-  assert.match(read('frontend/src/pages/SettingsPage.jsx'), /Import from connected account/);
+  assert.match(read('frontend/src/pages/account/ProfileSections.jsx'), /Import from connected account/);
 });
 
 test('D1355: real footer and share links reserve space, and the footer stays blue on its white backing', () => {

@@ -255,14 +255,14 @@ r.get('/:projectUid/activity', async (c) => {
         const [entries, events] = await Promise.all([
           DB.prepare(
             `SELECT uid, summary, promised_at, delivered_at, withdrawn_at, created_at
-               FROM portfolio_support_entries WHERE project_id = ?`,
-          ).bind(pid).all<any>(),
+               FROM portfolio_support_entries WHERE project_id = ? AND (ask_uid IS NULL OR recorded_by = ?)`,
+          ).bind(pid, user.id).all<any>(),
           DB.prepare(
             `SELECT e.uid, e.changed_json, e.created_at, s.summary
                FROM portfolio_support_entry_events e
                JOIN portfolio_support_entries s ON s.id = e.entry_id
-              WHERE s.project_id = ? AND e.action = 'amended'`,
-          ).bind(pid).all<any>(),
+              WHERE s.project_id = ? AND e.action = 'amended' AND (s.ask_uid IS NULL OR s.recorded_by = ?)`,
+          ).bind(pid, user.id).all<any>(),
         ]);
         const out: Item[] = [];
         const push = (kind: string, uid: string, when: unknown, label: string) => {
