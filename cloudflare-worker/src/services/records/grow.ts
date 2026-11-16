@@ -1006,6 +1006,7 @@ const OBLIGATION_EDIT = ['title', 'kind', 'due_at', 'owner_name', 'repeats', 'st
 const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_ROWS['durable-company-building'], async (rc, id) => {
   const e = await rc.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ? AND project_id = ?').bind(Number(id), rc.projectId).first<Any>();
   if (!e) throw vanished();
+  const hasResolutions = e.event_type === 'board_meeting' || !!await rc.env.DB.prepare('SELECT 1 FROM board_resolutions WHERE event_id = ? LIMIT 1').bind(Number(id)).first();
   const kind = obligationKind(e);
   const state = obligationState(e.completion_status, kind, String(e.due_date), new Date().toISOString().slice(0, 10));
   const repeats = REPEATS_OF[String(e.recurrence)] ?? null;
@@ -1020,7 +1021,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       fact('Repeats', repeats ? label(repeats) : null, 'Repeat not recorded'),
     ],
     createdBy: e.created_by_user_id, createdAt: e.created_at,
-  }, { e, kind, state, repeats });
+  }, { e, kind, state, repeats, hasResolutions });
 }, [
   section('agenda', 'Agenda', async (rc, id) => {
     const res = await rc.env.DB.prepare('SELECT text, owner_name FROM obligation_agenda_items WHERE event_id = ? ORDER BY id LIMIT 30').bind(Number(id)).all<Any>();
@@ -1035,6 +1036,19 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       ...(o.minutes_file_key ? { action: { key: 'open-minutes', body: { occurrence: o.id } } } : {}),
     })), empty: 'Not held yet.' };
   }),
+  section('resolutions', 'Resolutions', async (rc, id) => {
+    // D6788: LEFT JOIN keeps held meetings with none. No minutes object key leaves the Worker.
+    const result = await rc.env.DB.prepare(`SELECT o.id AS occurrence_id, o.held_on, r.text, r.passed_on,
+        r.minutes_file_key IS NOT NULL AS cites_minutes, u.name AS recorded_by
+      FROM obligation_occurrences o LEFT JOIN board_resolutions r ON r.occurrence_uid = o.uid AND r.event_id = o.event_id
+      LEFT JOIN users u ON u.id = r.recorded_by
+      WHERE o.event_id = ? ORDER BY o.held_on DESC, o.id DESC, r.passed_on DESC, r.id DESC`)
+      .bind(Number(id)).all<{ occurrence_id: number; held_on: string; text: string | null; passed_on: string | null; cites_minutes: number; recorded_by: string | null }>();
+    return { rows: (result.results ?? []).map(r => r.text == null
+      ? { a: `Meeting held ${r.held_on}`, b: 'None recorded' }
+      : { a: r.text, b: `Held ${r.held_on} · Passed ${r.passed_on} · Recorded by ${r.recorded_by ?? 'Not recorded'}`, c: r.cites_minutes ? 'Minutes cited' : '',
+        ...(r.cites_minutes ? { action: { key: 'open-minutes', body: { occurrence: r.occurrence_id } } } : {}) }), empty: 'None recorded' };
+  }, { when: (_id, record) => loadedOf(record).hasResolutions, note: 'By held meeting, newest first.' }),
   section('reminders', 'Reminders', async (_rc, _id, record) => {
     const { e } = loadedOf(record);
     const sent = dayList(e.reminders_sent_json);
@@ -1044,8 +1058,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   section('documents', 'Documents', async (rc, id) => {
     const minutes = await rc.env.DB.prepare('SELECT COUNT(*) AS n FROM obligation_occurrences WHERE event_id = ? AND minutes_file_key IS NOT NULL')
       .bind(Number(id)).first<{ n: number }>();
-    // No resolution store (decision 10): minutes count the occurrences with a stored file.
-    return { rows: [{ a: 'Minutes', b: `${Number(minutes?.n ?? 0)} stored` }, notRecorded('Resolutions', 'No resolution store')] };
+    return { rows: [{ a: 'Minutes', b: `${Number(minutes?.n ?? 0)} stored` }] };
   }, { side: true }),
 ], async (rc, id, record): Promise<RecordAction[]> => {
   const { e, kind, repeats } = loadedOf(record);
@@ -1058,9 +1071,15 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
         { key: 'held_on', label: 'Held on', kind: 'T', input: 'date', required: true },
         { key: 'notes', label: 'Notes', kind: 'T' },
         { key: 'minutes', label: 'Minutes', kind: 'T', input: 'file', note: 'PDF or DOCX, up to 20 MB.' },
+        ...(e.event_type === 'board_meeting' ? [
+          { key: 'resolutions', label: 'Resolutions', kind: 'T' as const, input: 'textarea' as const, max: 40019, note: 'One resolution per line, up to 20. Each can have up to 2000 characters. Leave blank when none were passed.' },
+          { key: 'resolutions_passed_on', label: 'Resolutions passed on', kind: 'T' as const, input: 'date' as const, note: 'Defaults to Held on when left blank.' },
+          { key: 'cite_minutes', label: 'Cite uploaded minutes for these resolutions', kind: 'CH' as const, value: 'no', options: [{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }] },
+        ] : []),
       ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await markHeld(c.env, c.projectId, userOf(c), Number(id), {
       held_on: field(body, 'held_on'), notes: field(body, 'notes'), minutes: field(body, 'minutes'),
+      resolutions: field(body, 'resolutions'), resolutions_passed_on: field(body, 'resolutions_passed_on'), cite_minutes: field(body, 'cite_minutes'),
     }) })),
   }, {
     key: 'add-agenda', label: 'Add agenda item', kind: 'form',

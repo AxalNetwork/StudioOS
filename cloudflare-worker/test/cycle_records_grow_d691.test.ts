@@ -169,7 +169,7 @@ const CANVAS: Array<[string, string, string[], string[], string[]]> = [
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
   ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
-  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
+  ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings', 'Resolutions'], ['Reminders', 'Documents']],
 ];
 
 test('6: each of the seven reads is in the canvas shape', async () => {
@@ -200,7 +200,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   const ob = await rec(db, 'durable-company-building', 51);
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
-  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null], ['Resolutions', 'Not recorded']]);
+  assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null]]);
   // A custom KPI is a record too; another venture's is not.
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpa1')).body.title, 'NPS');
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpb1')).status, 404);

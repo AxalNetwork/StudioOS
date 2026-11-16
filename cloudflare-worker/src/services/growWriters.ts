@@ -1031,12 +1031,31 @@ export const minutesPrefix = (pid: number) => `grow-minutes/${pid}/`;
  * obligation is completed instead. A clash with another obligation of the
  * same kind on the new date answers 409 and writes nothing.
  */
+/** D6788: plain-text lines in the form, or explicit text/passed_on entries in JSON; never truncate a resolution. */
+export function boardResolutions(raw: unknown, heldOn: string, passedOn: unknown = undefined): Array<{ text: string; passed_on: string }> {
+  if (raw == null || raw === '') return [];
+  const entries = typeof raw === 'string' ? raw.replace(/\r\n?/g, '\n').split('\n').map(text => text.trim()).filter(Boolean) : raw;
+  if (!Array.isArray(entries) || entries.length > 20) throw new Refused(400, 'Record up to 20 resolutions, one per line.', 'resolutions');
+  const defaultDate = day(passedOn, 'resolutions_passed_on') ?? heldOn;
+  return entries.map(entry => {
+    const item = typeof entry === 'string' ? { text: entry, passed_on: defaultDate } : entry;
+    if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.text !== 'string' || !item.text.trim() || item.text.trim().length > 2000) {
+      throw new Refused(400, 'Each resolution is 1 to 2000 characters of text.', 'resolutions');
+    }
+    return { text: item.text.trim(), passed_on: day(item.passed_on, 'resolutions_passed_on') ?? defaultDate };
+  });
+}
+
 export async function markHeld(env: Env, pid: number, user: User, eventId: number, b: Body & { minutes?: unknown }) {
   const e = await owned<Row & { id: number; due_date: string; recurrence: string }>(env,
     'SELECT id, kind, event_type, due_date, recurrence FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
   const heldOn = day(b.held_on, 'held_on');
   if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
+  const resolutions = boardResolutions(b.resolutions, heldOn, b.resolutions_passed_on);
+  if (resolutions.length && e.event_type !== 'board_meeting') throw new Refused(400, 'Resolutions belong to a board meeting.', 'resolutions');
+  const citation = oneOf(b.cite_minutes, ['yes', 'no'] as const, 'cite_minutes') === 'yes';
   const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
+  if (citation && resolutions.length && !file) throw new Refused(400, 'Upload the minutes to cite them, or choose No.', 'cite_minutes');
   let key: string | null = null;
   let storage: StorageTicket | null = null;
   if (file) {
@@ -1056,6 +1075,10 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   const statements = [
     env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, size_bytes, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .bind(occurrence, e.id, heldOn, key, key ? file!.size : null, str(b.notes, 2000), user.id),
+    // D6788: occurrence, resolutions, schedule and activity commit in the same D1 transaction.
+    ...resolutions.map(resolution => env.DB.prepare(`INSERT INTO board_resolutions
+      (uid, event_id, occurrence_uid, held_on, text, passed_on, recorded_by, minutes_file_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(newUid(), e.id, occurrence, heldOn, resolution.text, resolution.passed_on, user.id, citation ? key : null)),
     months
       ? env.DB.prepare("UPDATE compliance_events SET due_date = ?, reminders_sent_json = '[]', updated_at = ? WHERE id = ?").bind(next, at, e.id)
       : env.DB.prepare("UPDATE compliance_events SET completion_status = 'completed', completed_at = ?, completed_by_user_id = ?, updated_at = ? WHERE id = ?")
@@ -1068,7 +1091,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     obligationClash(error, obligationKind(e), next);
   }
   if (storage) await noteStorageLanded(env, storage);
-  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed' };
+  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed', resolutions_recorded: resolutions.length };
 }
 
 /** Open minutes: one signed download, for a key under this venture's own prefix only; anything else is a 404. */
