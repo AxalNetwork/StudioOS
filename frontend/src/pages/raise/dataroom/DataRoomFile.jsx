@@ -21,7 +21,9 @@ import DataRoomDeckSource from './DataRoomDeckSource.jsx';
  *   - its record (`/cycles/raise/modules/data-room/records/:id`): what it
  *     answers, and the links issued and refusals, never a view.
  * Download is the founder's own copy and is not an investor event. Every change
- * opens a dialog first; the owner alone changes a gate or removes.
+ * opens a dialog first; the owner alone changes a gate or removes. D6073 —
+ * Remove moves the file to Trash for 30 days; the dialog names its folder and
+ * the day it can be restored until.
  */
 
 const SEC = 'flex flex-col gap-2 border-t border-axal-hairline pt-3.5 first:border-t-0 first:pt-0 dark:border-gray-700';
@@ -77,7 +79,7 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
     return (
       <Sheet label="File" title="This file is not in the room" onClose={onClose} testId="dataroom-file-gone"
         footer={<div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose}>Close</button></div>}>
-        <p className={`m-0 px-5 py-4 text-[13px] ${INK}`}>It may have been removed, or the address names another venture’s file.</p>
+        <p className={`m-0 px-5 py-4 text-[13px] ${INK}`}>It may have been moved to Trash (Files › Trash), or the address names another venture’s file.</p>
       </Sheet>
     );
   }
@@ -132,11 +134,14 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
     const copy = makeCurrentCopy(file, ask.version);
     dialog = <DataRoomDialog copy={copy} onClose={() => setAsk(null)} refusalOf={roomRefusal} testId="dataroom-file-current" onConfirm={async () => { await dataRoomApi.makeCurrent(projectUid, file.uid, ask.version); changed(`Version ${ask.version} is current.`); }} />;
   } else if (ask?.kind === 'remove') {
-    const copy = removeCopy([file], versions.status === 'ready' ? Math.max(0, vrows.length - 1) : null);
+    const copy = removeCopy([file], versions.status === 'ready' ? Math.max(0, vrows.length - 1) : null, { room });
     dialog = (
       <DataRoomDialog copy={copy} danger onClose={() => setAsk(null)} refusalOf={roomRefusal} testId="dataroom-file-remove"
         onConfirm={async () => { await api.dataRoomDeleteFile(projectUid, file.uid); setAsk(null); onChanged(); onClose(); }}>
-        <p className={`m-0 rounded-[8px] border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-700`}>{copy.trash}</p>
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]" data-testid="dataroom-file-remove-facts">
+          {copy.facts.map((f) => <React.Fragment key={f.k}><dt className={`font-bold ${MUTED}`}>{f.k}</dt><dd className={`m-0 ${INK}`}>{f.v}</dd></React.Fragment>)}
+        </dl>
+        <p className={`m-0 rounded-[8px] border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-700`} data-testid="dataroom-file-remove-trash">{copy.trash}</p>
       </DataRoomDialog>
     );
   }

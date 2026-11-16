@@ -10,6 +10,7 @@ import { request } from '../api.js';
 //                                  → { job: 'NE1', steps, rows: [{ ref, position, line }] } (#3938; a model run)
 //   requestIntro(body)             POST /relationships/intro-request { teammate, ref, note?, context_note? } → 201 { request }
 //   introRequests({ team, status }) GET /relationships/intro-requests[?team=&status=] → { sent, received, follow_ups_due } (D4329)
+//   introRequest(uid)             GET  /relationships/intro-requests/:uid → { request } (#5310: the asker or the teammate only)
 //   decideIntro(uid, decision, note) POST /relationships/intro-requests/:uid/decide { decision: accepted | declined, note? } → { request }
 //   withdrawIntro(uid)             POST /relationships/intro-requests/:uid/withdraw → { request } (the asker, while pending)
 //   recordIntroOutcome(uid, outcome, note) POST /relationships/intro-requests/:uid/outcome { outcome, note? } → { request }
@@ -48,6 +49,7 @@ export const relationshipsApi = {
     const q = new URLSearchParams(Object.entries(filter || {}).filter(([k, v]) => ['team', 'status'].includes(k) && v));
     return request(`/relationships/intro-requests${q.size ? `?${q}` : ''}`);
   },
+  introRequest: (uid) => request(`/relationships/intro-requests/${id(uid)}`),
   decideIntro: (uid, decision, note) => send('POST', `/relationships/intro-requests/${id(uid)}/decide`, { decision, ...(note ? { note } : {}) }),
   withdrawIntro: (uid) => send('POST', `/relationships/intro-requests/${id(uid)}/withdraw`),
   recordIntroOutcome: (uid, outcome, note) => send('POST', `/relationships/intro-requests/${id(uid)}/outcome`, { outcome, ...(note ? { note } : {}) }),

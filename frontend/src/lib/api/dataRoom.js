@@ -47,6 +47,12 @@ import { api, request } from '../api.js';
 //   acceptProposal(p, uid)    POST /data-room/:p/proposals/:uid/accept → { proposal, change }; 409 not_open | proposal_stale | would_change_access
 //   dismissProposal(p, uid)   POST /data-room/:p/proposals/:uid/dismiss → { proposal }
 //   undoProposal(p, uid)      POST /data-room/:p/proposals/:uid/undo → { proposal, change }; 409 not_undoable | proposal_stale
+// D6073 (#6073) — the room's 30-day Trash. Remove (`api.dataRoomDeleteFile`) now moves a file there.
+//   trash(p)                  GET    /data-room/:p/trash → { trash_days: 30, can_delete_now, items: [{ uid, name, size_bytes, content_type, folder,
+//                                    folder_uid, folder_gone, removed_at, removed_by_name, days_left, purge_at, earlier_versions, source_kind, source_ref }] };
+//                                    the owner and a co-founder; 503 trash_unreadable
+//   restore(p, uid)           POST   /data-room/:p/trash/:uid/restore → { ok, uid, folder_uid, returned_to_top_level }; 404 not_in_trash
+//   deleteNow(p, uid)         DELETE /data-room/:p/trash/:uid → { ok, deleted_versions, trash_count }; the owner only (403 owner_only); 503 delete_incomplete
 const seg = (v) => encodeURIComponent(String(v));
 const activityQuery = (q = {}) => {
   const p = new URLSearchParams();
@@ -83,5 +89,8 @@ export const dataRoomApi = {
   searchIndex: (projectUid) => request(`/data-room/${seg(projectUid)}/search/index`, { method: 'POST' }),
   sharedSearch: (projectUid, q) => request(`/data-room/shared/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
   supportRead: (projectUid, reason) => request(`/data-room/${seg(projectUid)}/support-read`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  trash: (projectUid) => request(`/data-room/${seg(projectUid)}/trash`),
+  restore: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/trash/${seg(uid)}/restore`, { method: 'POST' }),
+  deleteNow: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/trash/${seg(uid)}`, { method: 'DELETE' }),
   supportReads: (projectUid, page = 1) => request(`/data-room/${seg(projectUid)}/support-reads?page=${encodeURIComponent(String(page))}`),
 };
