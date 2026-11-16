@@ -925,9 +925,9 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
         {!trimmedQuery && user && (
           <div className="grid items-stretch gap-4 lg:grid-cols-2">
             <section className={`${CARD} px-5 py-[18px]`}>
-              {!trimmedQuery && user && <PopularGuides sections={visibleSections} />}
+              <PopularGuides sections={visibleSections} />
             </section>
-            {user && <YourTicketsCard isAdmin={role === 'admin'} />}
+            <YourTicketsCard isAdmin={role === 'admin'} />
           </div>
         )}
         {!trimmedQuery && (user ? <BrowseByTask sections={visibleSections} /> : <PublicGuideList sections={visibleSections} />)}
