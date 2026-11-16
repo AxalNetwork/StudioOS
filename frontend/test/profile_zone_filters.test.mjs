@@ -105,8 +105,10 @@ const RESEARCH_BODIES = {
   // WAS `pages/SignalsPage.jsx`, AND THE ZONE'S OBJECT IS WHY IT MOVED. That
   // page is the `market_intel_rows` sector feed and keeps its own route at
   // `/signals`; the `pr3` artboard is about comparable RANGES for the firm's
-  // own service lines, which is what `MarketZone` reads.
-  'research/markets': 'frontend/src/pages/research/MarketZone.jsx',
+  // own service lines. D6285: this named `MarketZone.jsx`, a body nothing had
+  // mounted since D593, so the mount checks below read a page no one saw. The
+  // body `ResearchWorkspace` mounts at this slug is the market directory.
+  'research/markets': 'frontend/src/pages/research/MarketDirectoryZone.jsx',
   'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
   'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
   'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',
@@ -278,6 +280,11 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4826 (D4826 part 2): Thinking is redrawn to the Expertise v2 canvas
+      // (EX-11), whose chips are literal radio buttons in the `thinking`
+      // section builder — `All · Needs you · With editors · Published` — read
+      // by `row: 'radios'`. It overrides AX4's `All · Published · Drafts · Essays`.
+      ['expertise/thinking', 'design/incoming/Expertise v2 Page.dc.html', 'thinking', { row: 'radios' }],
     ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
