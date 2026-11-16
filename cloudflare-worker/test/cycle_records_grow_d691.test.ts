@@ -211,7 +211,7 @@ test('6: each of the seven reads is in the canvas shape', async () => {
 test('6: Visits and Shared are Not recorded, with the reason', async () => {
   const db = fixture();
   const ch = await rec(db, 'distribution', 'cha1');
-  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No page-visit store', c: 'Not recorded', tone: 'grey' });
+  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No per-channel visit count', c: 'Not recorded', tone: 'grey' });
   assert.equal(sectionOf(ch, 'funnel').rows[2].c, '1');
   const kpi = await rec(db, 'revenue-and-traction', 'mrr');
   assert.deepEqual(sectionOf(kpi, 'shared').rows[0], { a: 'Metrics page', b: 'There is no public metrics page', c: 'Not recorded', tone: 'grey' });

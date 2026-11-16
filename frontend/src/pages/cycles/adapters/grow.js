@@ -101,13 +101,27 @@ function distribution(s) {
   // The funnel is drawn from its first recorded step: a funnel's bars are
   // shares of that step. A step before it that no store records (visits, as
   // D664 says) is listed with the read's own reason rather than drawn as an
-  // empty bar.
-  const steps = list(d.funnel).map((x) => ({ label: String(x?.stage ?? ''), value: num(x?.value) ? x.value : null, reason: x?.reason }));
+  // empty bar. A step the Worker marks `apart` (D6107: PostHog visits) is its
+  // own sourced value from another store: listed with its source and date,
+  // never a bar the sign-ups are a share of.
+  const all = list(d.funnel).map((x) => ({ label: String(x?.stage ?? ''), value: num(x?.value) ? x.value : null, reason: x?.reason, apart: x?.apart === true, source: x?.source, as_of: x?.as_of }));
+  const apart = all.filter((x) => x.apart && x.value != null);
+  const steps = all.filter((x) => !(x.apart && x.value != null));
   const first = steps.findIndex((x) => x.value != null);
   const before = first === -1 ? steps : steps.slice(0, first);
   if (first !== -1) out.push({ kind: 'funnel', steps: steps.slice(first).map(({ label, value }) => ({ label, value })) });
-  if (before.length) out.push({ kind: 'rows', items: before.map((x) => ({ label: x.label, value: typeof x.reason === 'string' && x.reason ? x.reason : 'Not recorded' })) });
+  const rows = [...apart.map((x) => ({ label: x.label, value: sourcedText(x) })),
+    ...before.map((x) => ({ label: x.label, value: typeof x.reason === 'string' && x.reason ? x.reason : 'Not recorded' }))];
+  if (rows.length) out.push({ kind: 'rows', items: rows });
   return out;
+}
+
+/** "1,240 · From PostHog · Site visits, as of 2026-11-14": the value with the source and date the Worker gave. */
+function sourcedText(x) {
+  const day = typeof x.as_of === 'string' && /^\d{4}-\d{2}-\d{2}/.test(x.as_of) ? x.as_of.slice(0, 10) : null;
+  const source = typeof x.source === 'string' && x.source ? x.source : null;
+  return [Math.round(x.value).toLocaleString('en-US'), source && day ? `${source}, as of ${day}` : source ?? (day ? `as of ${day}` : null)]
+    .filter(Boolean).join(' · ');
 }
 
 /** The cohorts the heat map draws, newest last, and the months each spans. */
