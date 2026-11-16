@@ -29,7 +29,7 @@ export default function PortfolioWorkspace({ activeRole }) {
   // The Admin preview keeps the withheld board at its existing addresses.
   const previewBoard = viewer === 'investor' && isInvestorPreview(view) ? previewBoardOf(pathname) : null;
   if (previewBoard) return <PortfolioPreview board={previewBoard} />;
-  if (viewer === 'investor' && /^\/portfolio\/health\/*$/i.test(pathname)) {
+  if (viewer === 'investor' && pathname.replace(/\/+$/, '').toLowerCase() === '/portfolio/health') {
     return <Navigate replace to={{ pathname: '/portfolio', search, hash }} />;
   }
   const active = pathname.includes('/updates')

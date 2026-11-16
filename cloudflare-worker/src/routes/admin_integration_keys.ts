@@ -91,6 +91,7 @@ import { redirectUri as hubspotCallback } from '../integrations/providers/hubspo
 import { redirectUri as calendlyCallback } from '../integrations/providers/calendly';
 import { redirectUri as cartaCallback } from '../integrations/providers/carta';
 import { redirectUri as tiktokCallback } from '../integrations/providers/tiktok';
+import { redirectUri as searchConsoleCallback } from '../integrations/providers/google_search_console';
 import { redirectUri as docusignCallback } from '../integrations/providers/docusign';
 import { redirectUri as stripeCallback } from '../integrations/providers/stripe';
 import { redirectUri as salesforceCallback } from '../integrations/providers/salesforce';
@@ -152,6 +153,7 @@ const CALLBACK_URL: Record<ManagedProviderKey, ((env: Env) => string) | null> = 
   stripe: stripeCallback,
   carta: cartaCallback,
   tiktok: tiktokCallback,
+  google_search_console: searchConsoleCallback,
   github: githubCallback,
   vercel: vercelCallback,
   crunchbase: null,
