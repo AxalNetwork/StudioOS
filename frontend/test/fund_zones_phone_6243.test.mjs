@@ -97,6 +97,6 @@ test('Accounting and Reporting: their cells name their columns', () => {
   assert.match(acc, /CAPITAL_LABELS = \{ called_cents: 'Called', collected_cents: 'Collected', outstanding_cents: 'Outstanding' \}/);
   assert.ok(acc.includes('data-label={CAPITAL_LABELS[field]}'));
   const rep = read(DIR + 'InvestorFundReporting.jsx');
-  for (const label of ['State', 'Delivered', 'Contents']) assert.ok(rep.includes(`<td data-label="${label}">`), label);
+  for (const label of ['State', 'Issued', 'Contents']) assert.ok(rep.includes(`<td data-label="${label}">`), label);
   assert.ok(phoneBlock(read(DIR + 'investorFundAccounting.css')).includes('.if3-ledger{overflow:visible!important}'), 'the old sideways scroller is switched off');
 });

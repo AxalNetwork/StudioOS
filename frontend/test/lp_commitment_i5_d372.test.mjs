@@ -167,7 +167,8 @@ test('the section draws each fund\'s committed, called, due and uncalled, and it
   assert.match(html, /data-testid="commitment-totals"/, 'two funds, no totals row');
   assert.match(html, /data-testid="button-sign-lpa-101"/, 'an unsigned LPA offers a signature action');
   assert.doesNotMatch(html, /data-testid="button-sign-lpa-100"/, 'a signed LPA is offered for signing again');
-  assert.match(html, /Co-invest offers/);
+  // D6140 (#6140): the owner took co-invest offers and Ask the report out of the page.
+  assert.doesNotMatch(html, /Co-invest offers|Ask the report|commitment-not-built/);
 });
 
 test('a failed portal read is Unreadable, and a failed calls read is too', () => {
@@ -209,7 +210,9 @@ test('the artboard\'s My-commitment elements are on the section', () => {
     assert.ok(art.includes(el), `the artboard no longer draws ${el}`);
   }
   const src = read('frontend/src/pages/SpinoutLabLpCommitment.jsx');
-  for (const el of ['My commitment', ' called', ' due', ' uncalled', 'commitment-call-', 'Co-invest offers', 'Ask the report']) {
+  for (const el of ['My commitment', ' called', ' due', ' uncalled', 'commitment-call-']) {
     assert.ok(src.includes(el), `the section does not draw ${el}`);
   }
+  // D6140: the artboard still draws these two; the owner decided the page names neither.
+  for (const el of ['Co-invest offers', 'Ask the report']) assert.ok(!src.includes(el), `the section still names ${el}`);
 });

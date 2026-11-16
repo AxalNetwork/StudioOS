@@ -117,7 +117,7 @@ test('Q2: the balance and ledger draw their states; a failed read is never a zer
   assert.doesNotMatch(lbad, /<table/);
   assert.match(text(h(LedgerTable, { read: ready({ ledger: [] }), onRetry: noop })), /No credit has been granted or spent yet/);
   const rows = html(h(LedgerTable, { read: ready({ ledger: LEDGER }), onRetry: noop }));
-  assert.match(rows, /data-testid="ledger-row-3"[^]*?title="This entry was recorded without a note to the member\.">Not recorded</);
+  assert.match(rows, /data-testid="ledger-row-3"[^]*?title="This entry was recorded without a note to the member\.">(?:<svg[\s\S]*?<\/svg>)?Not recorded</); // D5129: the chip's dash glyph
   assert.match(rows, /data-testid="ledger-row-1"[^]*?Bug bounty<span[^>]*>\(taken back\)/);
   assert.match(text(h(LedgerTable, { read: ready({ ledger: LEDGER }), onRetry: noop })), /1–4 of 4/);
 });
@@ -181,7 +181,7 @@ test('Q3: a role reads from trustMatrix, and a failed read is Unreadable with Tr
   const ok = html(h(RoleCard, { role, read: ready(FOUNDER), onRetry: noop }));
   assert.match(ok, /data-testid="obligation-founder-kyb_v1"[^]*?>Optional</);
   assert.match(ok, /data-testid="obligation-founder-founder_nda_v1"[^]*?>Required<[^]*?24 months/);
-  assert.match(ok, /title="This obligation does not expire, so no period is recorded\.">Not recorded</);
+  assert.match(ok, /title="This obligation does not expire, so no period is recorded\.">(?:<svg[\s\S]*?<\/svg>)?Not recorded</); // D5129: the chip's dash glyph
   const bad = html(h(RoleCard, { role, read: { status: 'unreadable', data: null }, onRetry: noop }));
   assert.match(bad, /Unreadable\./);
   assert.match(bad, /Try again/);

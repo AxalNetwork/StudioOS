@@ -1,3 +1,5 @@
+import { LICENCE_CHARGE, LICENCE_SCOPE, ADDITIONAL_LICENCE, USAGE_SCOPE, INTRODUCTION_SCOPE, SERVICE_SCOPE, RESEARCH_SCOPE, MATCHING_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE } from '../../../lib/pricingEntitlements.js';
+
 export default {
   id: 'account',
   title: 'Account & Billing',
@@ -41,6 +43,14 @@ export default {
       overview:
         'Founder plans are Free, Validate + Build, and Raise + Grow. The public Pricing page reads current offers from the subscription catalogue; a technical tier key is not a separate plan name.',
       howto: [
+        `${LICENCE_CHARGE} ${LICENCE_SCOPE}`,
+        ADDITIONAL_LICENCE,
+        SERVICE_SCOPE,
+        SUPPORT_SCOPE,
+        AVAILABILITY_SCOPE,
+        RESEARCH_SCOPE,
+        MATCHING_SCOPE,
+        'For Investor room, quarterly request and colleague-seat defaults, open /pricing?for=investor. The comparison and Checkout read the same catalogue defaults; they are not research search/export allowances.',
         'Open /pricing?for=founder to compare the currently offered founder plans and any trial terms.',
         'Free supports starting validation on one idea; Validate + Build covers the founder build workflow; Raise + Grow adds the fundraising and growth features shown in the current catalogue.',
         'Before upgrading, open /pricing/products to confirm the live plan name, billing interval, included items and AI allowance. A member with more than one licence should check which licence owns the feature.',
@@ -66,6 +76,8 @@ export default {
       overview:
         'Your subscription, included AI allowance, purchased AI tokens, introduction allowance and Perks are different entitlements. They cannot be treated as one spendable balance.',
       howto: [
+        USAGE_SCOPE,
+        INTRODUCTION_SCOPE,
         'Subscription/licence — the active plan controls paid features and eligibility. Compare the authoritative plan catalogue at /pricing/products and your purchased licence in Account → Billing.',
         'Included AI allowance — shown in Account → Usage → AI tokens (/account/usage/ai-tokens); it is calculated from the current paid-plan read. Without a paid plan there is no included monthly AI balance. An unreadable balance is not zero.',
         'Purchased AI tokens — the separate token balance on Account → Usage → AI tokens. A run uses eligible included allowance first and then tokens; purchased tokens do not expire. See /pricing?for=models for the currently offered packs, if configured.',

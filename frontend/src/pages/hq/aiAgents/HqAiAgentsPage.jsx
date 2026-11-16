@@ -5,8 +5,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Overview, Runs, Spend, Audit, Policies } from './Operations.jsx';
 import { adminCompanySkillsApi } from '../../../lib/api/adminCompanySkills';
 import { adminHqSkillsApi } from '../../../lib/api/adminHqSkills';
-import { RefreshCw } from 'lucide-react';
-import { Card } from '../../../ui';
+import { Card, DataState } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
@@ -379,13 +378,9 @@ function SubTabs({ view }) {
   return null;
 }
 
+/** D5129 (#5129): the shared Unavailable treatment, keeping this page's test id and claim. */
 function Unreadable({ onRetry, what }) {
-  return (
-    <p role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-red-700 dark:text-red-300" data-testid="ai-agents-unreadable">
-      <span><strong>Could not be read.</strong> {what} could not be read just now. That is not the same as having none.</span>
-      <button type="button" onClick={onRetry} className="inline-flex items-center gap-1 font-semibold underline"><RefreshCw size={12} aria-hidden="true" /> Try again</button>
-    </p>
-  );
+  return <DataState state="unavailable" as="p" reason={`${what} could not be read just now. That is not the same as having none.`} onRetry={onRetry} retryLabel="Try again" announce="always" data-testid="ai-agents-unreadable" />;
 }
 
 const SELECT = 'h-9 rounded-lg border border-axal-hairline bg-white px-2 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';

@@ -1473,7 +1473,8 @@ const WATCH = [
   { value: 'hiring', label: 'Hires', meta: 'roles and team size', checked: false },
 ];
 const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, def: 0, note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' };
-const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
+const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH,
+  note: 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.' };
 const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
 const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
 /**
