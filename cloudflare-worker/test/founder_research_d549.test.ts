@@ -22,6 +22,7 @@ function fixture() {
   db.exec(baseline.match(/CREATE TABLE activity_logs \([\s\S]*?;/)![0]);
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
+  db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec("INSERT INTO users (id,email,name,role) VALUES (701,'owner@example.test','Owner','founder'),(702,'other@example.test','Other','founder')");
   db.exec("INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state) VALUES (1,'own-doc',701,'Interview','r/own','indexed'),(2,'other-doc',702,'Other file','r/other','indexed')");

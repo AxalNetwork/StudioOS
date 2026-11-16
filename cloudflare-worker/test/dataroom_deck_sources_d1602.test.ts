@@ -204,7 +204,11 @@ test('replacing and making a version current invalidate and enqueue atomically; 
     assert.deepEqual(f.values(), []); await extractDataroomFile(f.env, f.payload());
     assert.equal((f.values().find((v: any) => v.slot === 'dataroom.revenue_plan') as any).value, 1200000);
     assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_source_revision, 3);
+    // D6073: Remove moves it to Trash (the values stay for a Restore); the purge clears the rows with FKs off.
     await removeDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 1, uid: 'file-a' });
+    assert.ok((await sourceFile(f.env, 7, 'file-a') as any)?.removed_at, 'in Trash');
+    const { purgeFile } = await import('../src/services/dataRoomTrash.ts');
+    assert.ok(await purgeFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 1, uid: 'file-a', reason: 'delete_now' }));
     assert.deepEqual(f.values(), []);
     assert.equal(await sourceFile(f.env, 7, 'file-a'), null);
   } finally { f.db.close(); }

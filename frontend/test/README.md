@@ -45,6 +45,7 @@ also exercises a `project_id` deep link.
 | `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
 | `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
 | `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
+| `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
 
 ## Conventions
 
@@ -205,6 +206,9 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+| `shared_arr_retention_6178.test.mjs` | #6178: canonical ARR/retention tiles, typed provenance, as-of, zero/absence and the existing founder Metrics step. |
+| `onboarding_followups_d6135.test.mjs` | D6135: actual investor wizard failure/retry/continuation, retained progress and legacy steps, consent, unused-slider removal and role-safe fund handoff. |
+| `diligence_doors_d6292.test.mjs` | D6292: investor sidebar eligibility, scoped recorded context links, shared URL reload, filters/search/history/paging and stale response protection. |
 | `report_print_6094.test.mjs` | #6094: frozen print provenance, zero/absence, literal narrative and reader/private-recipient boundaries. |
 | `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
 | `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
@@ -218,4 +222,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
 
 | `deal_flow_attention_6424.test.mjs` | D6424: recorded stale/new/waiting badges, unset rule, firm setting and failed attention-source rendering. |
+| `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
+| `build_states_bd14_6032.test.mjs` | D4846 part 2 (#6032): every Build state word maps to one state and no unknown to a negative; the "N of M modules read" notice and its Retry; each state's chip on the overview, the module table, the phone rows and a part's boundary; the tablet tier and its layout; dark pairs. |

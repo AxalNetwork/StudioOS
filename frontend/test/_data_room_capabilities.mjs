@@ -5,9 +5,9 @@
  * unless `services/dataRoomCapabilities.ts` builds exactly these.
  */
 const KEYS = ['upload', 'edit', 'delete_folder', 'set_gate', 'delete', 'share', 'answer_requests',
-  'send_nda', 'deck_source', 'download', 'make_current', 'export', 'search_index', 'admin_reason_required'];
+  'send_nda', 'deck_source', 'download', 'make_current', 'export', 'search_index', 'restore', 'admin_reason_required'];
 const map = (allowed) => Object.freeze(Object.fromEntries(KEYS.map((k) => [k, allowed.includes(k)])));
-const MEMBER = ['upload', 'edit', 'delete_folder', 'download', 'make_current', 'export', 'search_index'];
+const MEMBER = ['upload', 'edit', 'delete_folder', 'download', 'make_current', 'export', 'search_index', 'restore'];
 
 export const ROOM_CAPS = Object.freeze({
   owner: map([...MEMBER, 'set_gate', 'delete', 'share', 'answer_requests', 'send_nda', 'deck_source']),

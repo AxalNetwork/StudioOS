@@ -317,7 +317,7 @@ export const SORT_LAST = 'Unscored and locked deals sort last, whichever directi
 export const COLUMNS = Object.freeze([
   { id: 'stage', label: 'My stage' }, { id: 'round', label: 'Round' }, { id: 'ask', label: 'Ask' }, { id: 'scorecard', label: 'Scorecard' },
   ...SCOPE_KEYS.map((k) => ({ id: k, label: SCOPE_LABEL[k], scope: true })),
-  { id: 'fit', label: 'Fit to my thesis' }, { id: 'days', label: 'Days in stage' }, { id: 'owner', label: 'Owner' }, { id: 'entered', label: 'Entered' },
+  { id: 'fit', label: 'Fit to my thesis' }, { id: 'days', label: 'Days in stage' }, { id: 'owner', label: 'Owner' }, { id: 'entered', label: 'Entered via' },
 ]);
 export const DEFAULT_COLUMNS = Object.freeze(COLUMNS.map((c) => c.id));
 export const MAX_CARD_SCOPES = 3;
@@ -338,6 +338,50 @@ export const THESIS_PATH = '/account/security-privacy?from=deal-flow#my-thesis';
 export const PAGE_SIZE = 25;
 export const pageOf = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 export const pagesFor = (n) => Math.max(1, Math.ceil(n / PAGE_SIZE));
+
+/**
+ * D4815 DX2 (#5901, board DE02) — the footer's page numbers: every page when
+ * there are seven or fewer, else the first, the last, and the current one with
+ * its neighbours, a gap ('…') standing for the pages between.
+ */
+export function pageNumbers(page, pages) {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages));
+  const out = [];
+  [...keep].sort((a, b) => a - b).forEach((n, i, all) => {
+    if (i && n - all[i - 1] > 1) out.push('…');
+    out.push(n);
+  });
+  return out;
+}
+
+/**
+ * D4815 DX2 (#5901, board DE02) — the table's quick preview of one row: only
+ * what the deal flow and the deal list already carry. DE02 also draws "what
+ * changed" and open diligence requests; no read the table holds carries them
+ * (#6173 owns the change-since-last-visit read), so the preview says so rather
+ * than inventing either. Each line is `{ label, text, muted }`.
+ */
+export const PREVIEW_NO_CHANGES = 'Not recorded yet: Deal flow does not read what changed since your last visit.';
+export function previewOf(row) {
+  const lines = [];
+  if (!row.inFlow) {
+    lines.push({ label: 'My stage', text: 'Not on your deals. Add it to your deal flow to track it here.', muted: true });
+  } else {
+    const days = daysWord(row.daysInStage);
+    lines.push({ label: 'My stage', text: days ? `${stageWord(row.stage)} · ${days} in this stage` : `${stageWord(row.stage)} · the stage’s start is not recorded`, muted: false });
+    lines.push(row.owner
+      ? { label: 'Owner', text: row.owner.name || 'Owner not named', muted: !row.owner.name }
+      : { label: 'Owner', text: 'Unassigned', muted: true });
+    if (row.enteredVia) {
+      const day = shortDayOf(row.enteredAt);
+      lines.push({ label: 'Entered via', text: day ? `${enteredWord(row.enteredVia)} · ${day}` : enteredWord(row.enteredVia), muted: false });
+    }
+    if (row.note) lines.push({ label: 'Your note', text: String(row.note), muted: false });
+  }
+  lines.push({ label: 'What changed', text: PREVIEW_NO_CHANGES, muted: true });
+  return lines;
+}
 
 // ---------------------------------------------------------------- settings: the address and a saved view
 

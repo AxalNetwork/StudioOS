@@ -14,7 +14,7 @@ const LINKS = [
   ['pages/ProjectDetail.jsx', 'crunchbase', /Connect it in Account → Connectors/],
   // D1029: the old cap table page is gone; the tool's Import and export tab holds Connect Carta.
   ['pages/raise/captable/ImportExportTab.jsx', 'carta', /Connect Carta/],
-  ['pages/SettingsPage.jsx', 'slack', /Slack joins this table once it is connected in/],
+  ['pages/account/NotificationSections.jsx', 'slack', /Slack joins this table once it is connected in/],
   ['pages/admin/profiles/ProfileRecord.jsx', 'docusign', /connect DocuSign/],
   ['components/MercuryMatch.jsx', 'mercury', /Open Connectors/],
   ['components/spinout/MercuryCreditImport.jsx', 'mercury', /Open Connectors/],
