@@ -221,6 +221,23 @@ export function moduleQuery({ project, q = '', filter = {}, sort = '', page = 1 
   return s ? `?${s}` : '';
 }
 
+/**
+ * D6001 (#6001): the table query an address opens with. A card's next link
+ * names its rows as `?filter=key:value,…` (the Worker's own form), so the list
+ * lands filtered to them; each part is charset-checked as the Worker checks it.
+ * An address with no filter opens the default query.
+ */
+export function queryFromSearch(search) {
+  const raw = new URLSearchParams(String(search ?? '')).get('filter') || '';
+  const filter = {};
+  for (const part of raw.split(',')) {
+    const [k, v, ...rest] = part.split(':');
+    if (rest.length || !k || v == null) continue;
+    if (/^[a-z_]{1,32}$/.test(k) && /^[A-Za-z0-9_ .-]{1,60}$/.test(v)) filter[k] = v;
+  }
+  return { q: '', filter, sort: '', page: 1 };
+}
+
 /** "1–25 of 112" and the pages around the current one. */
 export function recordsCount(records) {
   const total = num(records?.total) ? records.total : null;

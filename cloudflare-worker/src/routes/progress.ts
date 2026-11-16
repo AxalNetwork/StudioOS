@@ -311,6 +311,9 @@ function asQuoteConsent(raw: unknown): number | null {
   return 0;
 }
 
+/** D6001: the channels a lead may name, as the interview stores them (`video` is "Call", `manual` typed notes). */
+const LEAD_CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
+
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
@@ -401,7 +404,19 @@ progress.post('/discovery/:projectId', async (c) => {
     return c.json({ detail: 'interviewee_name is required' }, 400);
   }
   const intervieweeRole = asStringOrNull(body.interviewee_role);
-  const interviewDate = asStringOrNull(body.interview_date) || todayIso();
+  // D6001 (#6001): Add a lead makes the interview at stage `lead`, the only
+  // stage a create takes (a later stage is a move, which stamps its date). A
+  // lead has not been held, so it gets no interview date unless one is typed.
+  // With no stage the row is stored as before: no stage, which reads as Done.
+  const lead = body.stage === 'lead';
+  if (body.stage != null && body.stage !== '' && !lead) {
+    return c.json({ detail: 'A new interview takes stage lead, or no stage.' }, 400);
+  }
+  const channel = body.channel == null || body.channel === '' ? null : String(body.channel);
+  if (channel != null && !(LEAD_CHANNELS as readonly string[]).includes(channel)) {
+    return c.json({ detail: `channel must be one of ${LEAD_CHANNELS.join(', ')}` }, 400);
+  }
+  const interviewDate = asStringOrNull(body.interview_date) || (lead ? null : todayIso());
   const notes = asStringOrNull(body.notes) ?? '';
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
@@ -420,20 +435,34 @@ progress.post('/discovery/:projectId', async (c) => {
   // 215's columns are named in INTERVIEW_SELECT, so a database without them
   // fails the whole read rather than degrading. Bootstrapped beside 211's.
   await ensureDiscoveryRecordingColumns(c.env);
-  const res = await c.env.DB.prepare(
-    `INSERT INTO discovery_interviews
-       (project_id, interviewee_name, interviewee_role, interview_date,
-        notes, hypotheses_json, pains_json, featured,
-        validation_rating, validation_comment, icp_fit,
-        quote_consent, interviewee_company,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  const values = [
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
     featured, validationRating, validationComment, icpFit,
     quoteConsent, intervieweeCompany,
     nowIso, nowIso,
+  ];
+  // One statement either way, so a lead is never stored without its stage.
+  // The stage and channel columns (migration 440) are named only when sent.
+  const res = await (lead || channel != null
+    ? c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at, stage, channel)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, lead ? 'lead' : null, channel)
+    : c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values)
   ).run();
 
   const newId = lastInsertId(res);

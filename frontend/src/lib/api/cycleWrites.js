@@ -38,6 +38,8 @@ export function makeCycleWrites(request) {
       signalUpdate: (projectId, id, body) => request(`/cycles/validate/demand-signals/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       hypothesis: (projectId, body) => request(`/cycles/validate/hypotheses?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       hypothesisUpdate: (projectId, id, body) => request(`/cycles/validate/hypotheses/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // D6001 (#6001): Add a lead, an interview at stage `lead`, through the interview create route.
+      lead: (projectId, body) => request(`/progress/discovery/${seg(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
     },
     // D695 (#1657, PR 2): Raise's Adds and Edits, through #1700's routes. The
     // venture goes in the query; the data room's routes take its uid in the

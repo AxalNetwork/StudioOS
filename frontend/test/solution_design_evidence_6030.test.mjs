@@ -89,7 +89,8 @@ test('BD7: Link evidence opens the existing Edit form, focused on the link field
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   const at = route.indexOf('...linkEvidenceAction(row, ');
   assert.ok(at > 0, 'the Edit row action spreads Link evidence');
-  const tail = route.slice(at, route.indexOf(': undefined}', at));
+  // D6001 (#6001): a def's own row control follows the Edit's branch, so the literal ends at its `}) :`.
+  const tail = route.slice(at, route.indexOf('}) :', at) + 3);
   assert.match(tail, /editing: String\(row\.id\), editingFocus: 'pain_group_id'/, 'Link evidence opens Edit focused on the link fields');
   assert.match(tail, /\)\),\s*\}\) $/, 'Link evidence is last in the literal, so it overrides the Edit');
   assert.equal((route.match(/focusField=\{typeof location\.state\?\.editingFocus === 'string' \? location\.state\.editingFocus : null\}/g) || []).length, 2, 'both Edit forms take the focus');

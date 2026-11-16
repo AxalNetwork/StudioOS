@@ -1582,6 +1582,61 @@ const hypothesis = {
   submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
 };
 
+// ---------- Customer research's recruiting pipeline (D6001, #6001) ----------
+//
+// Neither form is a `FORMS.validate` entry: Customer research's Add and its
+// `/new` stay Record a session (D695), so these open as dialogs over the
+// table. Add a lead writes `POST /progress/discovery/:projectId` at stage
+// `lead`; Move stage is the interview record's `set-stage` action, so the
+// move lands in the record's activity.
+
+/** A lead's channel, as the interview stores it: "Call" is `video`, typed notes `manual`. */
+export const LEAD_CHANNELS = [
+  { value: 'in_person', label: 'In person' }, { value: 'video', label: 'Call' },
+  { value: 'text', label: 'Text chat' }, { value: 'manual', label: 'Typed notes' },
+];
+export const addLead = {
+  key: 'lead', cta: 'Add a lead', button: 'Add lead',
+  title: 'Add a lead',
+  sub: 'Someone to talk to. They start at stage Lead.',
+  foot: 'Move them to Invited, Booked and Done from the list.',
+  fields: [
+    { kind: 'T', name: 'interviewee_name', k: 'Name', ph: 'Who you will talk to', required: true, max: 200 },
+    { kind: 'T', name: 'interviewee_company', k: 'Company', ph: 'Optional', max: 200 },
+    { kind: 'T', name: 'interviewee_role', k: 'Role', ph: 'Optional', max: 200 },
+    // No chip is chosen until the founder picks one: an unknown channel stays Not recorded.
+    { kind: 'CH', name: 'channel', k: 'Channel', opts: LEAD_CHANNELS, note: 'Optional. How you plan to talk.' },
+  ],
+  toBody: (v) => ({
+    interviewee_name: str(v.interviewee_name), interviewee_company: str(v.interviewee_company),
+    interviewee_role: str(v.interviewee_role), channel: v.channel || null, stage: 'lead',
+  }),
+  submit: (w, projectId, v) => w.validate.lead(projectId, addLead.toBody(v)),
+};
+
+export const STAGE_WORDS = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+/**
+ * Move stage for one row (`{ name, stage }`, the Worker's `stage`): the four
+ * stages, the current one marked. None is chosen: a row with no stage reads
+ * as Done, and saving that reading would write a stage nobody picked.
+ */
+export function moveStageForm(row) {
+  const now = Object.hasOwn(STAGE_WORDS, row?.stage) ? row.stage : null;
+  const name = str(row?.name) || 'this interview';
+  return {
+    key: 'set-stage', cta: 'Move', button: 'Move',
+    title: `Move ${name}`,
+    sub: 'Its stage now, with the date it got there.',
+    foot: 'The move is logged on the interview.',
+    fields: [
+      { kind: 'CH', name: 'stage', k: 'Stage', required: true,
+        opts: Object.entries(STAGE_WORDS).map(([value, label]) => ({ value, label, ...(value === now ? { meta: 'current' } : {}) })) },
+      { kind: 'T', name: 'at', k: 'Date reached · optional', input: 'date', note: 'Today when left empty.' },
+    ],
+    toBody: (v) => ({ stage: v.stage || null, ...(str(v.at) ? { at: str(v.at) } : {}) }),
+  };
+}
+
 /** Validate's Add forms, by module slug, registered as `FORMS.validate`. */
 export const VALIDATE_FORMS = {
   'problem-discovery': [theme],
