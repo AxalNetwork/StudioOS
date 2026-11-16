@@ -114,7 +114,7 @@
 .a6-activity-mark.is-ok{border-color:#cce9d6;background:#f0faf3;color:#17703f}
 .a6-activity-mark.is-off{border-color:#f0d3cf;background:#fff4f2;color:#9b3d42}
 .a6-activity-detail{font-weight:600;color:#6f6877}
-.a6-activity-at{flex:none;margin-left:auto;color:#7a7383;font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px}
+.a6-activity-at{flex:none;margin-left:auto;color:#7a7383;font-family:var(--font-mono);font-size:11px}
 .a6-card .a6-unread+.a6-rows,.a6-card .a6-unread+.a6-empty{margin-top:10px}
 .dark .a6-activity-mark{border-color:#4b4353;color:#d6cfdc}
 .dark .a6-activity-mark.is-ok{background:#1f3328;border-color:#2f5a40;color:#86efac}
