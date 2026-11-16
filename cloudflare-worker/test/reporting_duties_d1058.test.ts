@@ -66,6 +66,7 @@ function freshDb() {
     '410_safe_issuances.sql', '599_deal_currency.sql', '337_portfolio_update_chases.sql']) db.exec(MIG(f));
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount_cents INTEGER');
   db.exec(MIG('612_closings.sql'));
+  db.exec(MIG('202611151545_6198_closing_sender_declarations.sql')); // D6198: the line status reads the sender's declarations
   db.exec(MIG('579_reporting_duties.sql'));
   db.exec(`
     INSERT INTO founders (id, name, email) VALUES (31, 'Fay Founder', 'fay@example.test'), (32, 'Otis Other', 'otis@example.test');

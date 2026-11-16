@@ -55,6 +55,9 @@ and StudioHome at `/raise/pitch`).
 | `_fund_admin_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as HQ Security's Super Admin: one fund with three LPs, an overdue call line, fee periods, a prepared pack and two bank matches. Made-up names |
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
+| `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
+
+| `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
 
 | `grow_proposal_undo_6315.spec.mjs` | #6315: built SPA Mercury confirmation, destination and undo at desktop/phone widths with synthetic source responses; no bank account is accessed. |
 

@@ -84,6 +84,7 @@ function freshDb() {
       (104, 'cm-o', 42, 8, 70000, 'confirmed');
   `);
   db.exec(MIG('612_closings.sql'));
+  db.exec(MIG('202611151545_6198_closing_sender_declarations.sql')); // D6198: the line status reads the sender's declarations
   return db;
 }
 

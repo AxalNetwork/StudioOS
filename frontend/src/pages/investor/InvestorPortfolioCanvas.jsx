@@ -20,6 +20,7 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import AlsoIn from '../../workspaces/AlsoIn';
+import ZoneDraft from '../../workspaces/ZoneDraft';
 import { titleCase } from '../../lib/absence';
 import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
@@ -284,6 +285,17 @@ export default function InvestorPortfolioCanvas() {
         <ValueAddCard summary={support} onRetry={() => retry('support')} />
       </div>
       <CompanyTable rows={rows || []} positionsState={reads.positions.state} onRetry={() => retry('positions')} />
+      {/* D6212 (#6212): a departure from D4817's PFA17, which draws no band here. */}
+      <ZoneDraft
+        surface="portfolio/overview"
+        railOption="draft:portfolio-read"
+        label="Proposal · what moved since the last quarter-end"
+        accept="Accept note"
+        run="Draft the note"
+        foot="Built from the last two quarter-end reads and the marks, distributions and cheques dated between them. Accepting keeps the note here; nothing is sent."
+        empty="A short note on what moved, each figure with the date it comes from. A quarter with nothing recorded is named as a gap, never as a flat quarter."
+        nothingToDraft="No position is recorded at a completed quarter-end, so there is nothing to explain."
+      />
       <AlsoIn role="investor" row="Portfolio" />
       <p className="pf-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</p>
     </PortfolioFrame>
