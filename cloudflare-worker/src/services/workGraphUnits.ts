@@ -112,24 +112,31 @@ export function deckUnits(row: DeckVersionRow): UnitDocument {
     });
     const blocks: any[] = Array.isArray(card.blocks) ? card.blocks : [];
     const loose: any[] = [];
+    // The card's block order, so `slidesFromUnits` rebuilds it exactly: `#<id>` for an addressed block, `~<n>` for
+    // the n-th loose one. A block added or removed changes it, so two writers adding blocks to one card overlap.
+    const order: string[] = [];
     for (const b of blocks) {
-      if (b && (typeof b.id === 'string' || typeof b.id === 'number') && String(b.id).length) {
-        const text = blockText(b);
-        units.push({
-          id: `${card.uid}/${String(b.id)}`, kind: 'card_area', value: stable(b), text,
-          textMergeable: TEXT_BLOCKS.has(b.kind),
-          sensitive: uniq([...(CLAIM_BLOCKS.has(b.kind) ? ['investor_claim' as const] : []), ...sensitiveIn(text)]),
-        });
-      } else {
+      if (!(b && (typeof b.id === 'string' || typeof b.id === 'number') && String(b.id).length)) {
+        order.push(`~${loose.length}`);
         loose.push(b);
+        continue;
       }
+      order.push(`#${String(b.id)}`);
+      const text = blockText(b);
+      units.push({
+        id: `${card.uid}/${String(b.id)}`, kind: 'card_area', value: stable(b), text,
+        textMergeable: TEXT_BLOCKS.has(b.kind),
+        sensitive: uniq([...(CLAIM_BLOCKS.has(b.kind) ? ['investor_claim' as const] : []), ...sensitiveIn(text)]),
+      });
     }
-    // Everything on the card that is not an addressed area: layout, theme, loose blocks, notes. One unit, so an
-    // edit there overlaps any other edit there and is never merged field by field.
+    // Everything on the card that is not an addressed area: layout, theme, loose blocks, notes, the block order, and
+    // whether the card carried a title and a blocks list at all. One unit, so an edit there overlaps any other edit
+    // there and is never merged field by field.
     const { title: _t, blocks: _b, uid: _u, ...rest } = card as any;
     const layoutText = loose.map(blockText).join('\n');
+    const shape = { titled: typeof card.title === 'string', listed: Array.isArray(card.blocks), order };
     units.push({
-      id: `${card.uid}/__layout`, kind: 'card_layout', value: stable({ ...rest, loose }), text: layoutText,
+      id: `${card.uid}/__layout`, kind: 'card_layout', value: stable({ rest, loose, shape }), text: layoutText,
       textMergeable: false,
       sensitive: uniq([...(loose.some((b) => CLAIM_BLOCKS.has(b?.kind)) ? ['investor_claim' as const] : []), ...sensitiveIn(layoutText)]),
     });
@@ -258,5 +265,69 @@ export function signedEnvelopeUnits(row: SignedEnvelopeRow): UnitDocument {
  * to any unit's value, or to their order, changes it, so an approval of the old units is stale (D5579 `stale_approval`).
  */
 export async function unitsDigest(units: Unit[]): Promise<string> {
-  return sha256Hex(new TextEncoder().encode(canonicalJson(units.map((u) => [u.id, u.value]))));
+  return sha256Hex(unitsBytes(units));
+}
+
+/** The exact bytes `unitsDigest` hashes: what a WorkGraph revision of these units describes (its `byteLength`). */
+export function unitsBytes(units: Unit[]): Uint8Array {
+  return new TextEncoder().encode(canonicalJson(units.map((u) => [u.id, u.value])));
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Back to the domain's own form (D5582 part 2): a merged candidate is written by the domain's draft writer.
+// ---------------------------------------------------------------------------------------------------------------
+
+function parse(value: string): any {
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+/**
+ * The cards a set of deck units describes, in the units' card order, each card's blocks in its recorded order (an
+ * addressed block a side added, not yet in the order, follows the card's other blocks). `deckUnits` of the result
+ * reads the same units back.
+ */
+export function slidesFromUnits(units: Unit[]): any[] {
+  const cards = new Map<string, { title?: Unit; layout?: Unit; blocks: Unit[] }>();
+  for (const u of units) {
+    const cut = u.id.indexOf('/');
+    if (cut < 1) continue;
+    const uid = u.id.slice(0, cut), area = u.id.slice(cut + 1);
+    if (!cards.has(uid)) cards.set(uid, { blocks: [] });
+    const c = cards.get(uid)!;
+    if (area === AREA_TITLE) c.title = u;
+    else if (area === '__layout') c.layout = u;
+    else c.blocks.push(u);
+  }
+  const out: any[] = [];
+  for (const [uid, c] of cards) {
+    const layout = c.layout ? parse(c.layout.value) : null;
+    const rest = layout?.rest && typeof layout.rest === 'object' ? layout.rest : {};
+    const loose: any[] = Array.isArray(layout?.loose) ? layout.loose : [];
+    const shape = layout?.shape ?? { titled: true, listed: true, order: [] };
+    const byId = new Map(c.blocks.map((u) => [u.id.slice(uid.length + 1), parse(u.value)]));
+    const placed = new Set<string>();
+    const blocks: any[] = [];
+    for (const tok of Array.isArray(shape.order) ? shape.order : []) {
+      if (typeof tok !== 'string') continue;
+      if (tok.startsWith('#')) {
+        const id = tok.slice(1);
+        if (byId.has(id)) { blocks.push(byId.get(id)); placed.add(id); }
+      } else if (tok.startsWith('~')) {
+        const b = loose[Number(tok.slice(1))];
+        if (b !== undefined) blocks.push(b);
+      }
+    }
+    for (const [id, b] of byId) if (!placed.has(id)) blocks.push(b);
+    const title = c.title ? parse(c.title.value) : null;
+    const card: any = { ...rest, uid };
+    if (shape.titled || (typeof title === 'string' && title)) card.title = typeof title === 'string' ? title : '';
+    if (shape.listed || blocks.length) card.blocks = blocks;
+    out.push(card);
+  }
+  return out;
+}
+
+/** The markdown a set of clauses or sections describes: their texts, in order. `clausesOf` reads them back. */
+export function markdownFromUnits(units: Unit[]): string {
+  return units.map((u) => u.text).join('\n');
 }

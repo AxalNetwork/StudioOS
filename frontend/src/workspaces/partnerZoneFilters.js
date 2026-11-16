@@ -243,20 +243,18 @@ export const PARTNER_ZONE_FILTERS = {
     },
   ],
 
-  // THE ONE OFFERS ZONE WHERE EVERY LABEL RUNS, out of one array rather than
-  // one column: each item carries `consents[]`, and the row already draws the
-  // same three states per consenter — `Agreed`, `Withdrawn`, `Not answered`.
-  //
-  // THERE IS A FOURTH REAL STATE THE CANVAS HAS NO WORD FOR: an unpublished
-  // item with NO consent row at all, where nobody has been asked. It falls
-  // under `All` and only `All`. Sweeping it into `Awaiting consent` would be
-  // the zone claiming a request was made, which is the same class of untruth
-  // as a filter that returns an empty set and calls it an answer.
+  // D4842 (#4842): OF-03's five chips (Offers v2), which replace the po4
+  // artboard's All, Published, Awaiting consent and Blocked. Each selects on
+  // the card's own consent label (`proofCards.js`), and each carries the
+  // page's own count. Superseded and never-asked items count under
+  // Self-stated, which is what they are until a client approves the wording;
+  // a client who declined counts under Withdrawn.
   'offers/proof': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Awaiting consent', key: 'awaiting' },
-    { canvas: 'Blocked', key: 'blocked' },
+    { canvas: 'All', label: 'All {n}', key: 'all' },
+    { canvas: 'Client approved', label: 'Client approved {n}', key: 'approved' },
+    { canvas: 'Approval requested', label: 'Approval requested {n}', key: 'requested' },
+    { canvas: 'Self-stated', label: 'Self-stated {n}', key: 'self_stated' },
+    { canvas: 'Withdrawn', label: 'Withdrawn {n}', key: 'withdrawn' },
   ],
 
   // ALL FOUR RUN, AND THE TWO REASONS THAT STOOD HERE MISREAD THEIR OWN

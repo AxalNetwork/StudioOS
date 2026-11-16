@@ -32,7 +32,8 @@ export type ManagedProviderKey =
   | 'affinity'
   | 'telegram'
   | 'gcip'
-  | 'tiktok';
+  | 'tiktok'
+  | 'google_search_console';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'slack',
@@ -50,6 +51,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'telegram',
   'gcip',
   'tiktok',
+  'google_search_console',
 ];
 
 export interface ProviderEnvVarPair {
@@ -65,6 +67,8 @@ export interface ProviderEnvVarPair {
  */
 export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
   tiktok:     { id: 'TIKTOK_CLIENT_KEY', secret: 'TIKTOK_CLIENT_SECRET' },
+  // D5839 — Search Console's own Google OAuth client, never the Workspace or Calendar one.
+  google_search_console: { id: 'GOOGLE_SEARCH_CONSOLE_CLIENT_ID', secret: 'GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET' },
   slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },
   hubspot:    { id: 'HUBSPOT_CLIENT_ID',       secret: 'HUBSPOT_CLIENT_SECRET' },
   salesforce: { id: 'SF_CLIENT_ID',            secret: 'SF_CLIENT_SECRET' },

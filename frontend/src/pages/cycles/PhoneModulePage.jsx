@@ -55,9 +55,12 @@ export function phoneRow(cols, row) {
   const title = cells[0] ? cells[0].text : 'Not recorded';
   const second = cells[1];
   const toned = cells.find((v) => !v.nr && v.tone);
+  const target = row?.cells?.target;
+  const comparison = row?.cells?.vs_target;
+  const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: second ? second.text : undefined,
+    description: [second?.text, targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }
@@ -107,6 +110,9 @@ export default function PhoneModulePage({
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
+  // D6049 (#6049, RA-16): a module that owns its page (Fundraising readiness) draws `home(...)` in place of
+  // One next thing, the chart and the rows, with the bar's line (`sub`) its own; the same props as the desktop page.
+  home = null, sub = undefined,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -119,7 +125,7 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -157,6 +163,23 @@ export default function PhoneModulePage({
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
   const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
+  if (typeof home === 'function') {
+    const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+    return (
+      <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
+        {bar}
+        {tabs}
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true })}
+        {toolLinks.map((item) => (
+          <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
+            {item.label || `Open ${name}`}
+          </Link>
+        ))}
+        {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+        {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+      </div>
+    );
+  }
 
   const group = {
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
@@ -232,6 +255,7 @@ export default function PhoneModulePage({
           <p className="m-0 px-[22px] text-[13px] text-gray-600 dark:text-gray-400" data-testid="phone-module-empty">{searching ? 'Nothing matches this search.' : 'No records yet.'}</p>
         )}
       </div>
+      {/* D6043 (#6043): Export from the 'few' stage on, under the list, full width. */}
       {rStatus === 'ready' && count.pages > 1 && (
         <nav aria-label="Pages" className="mt-2 flex items-center justify-between gap-2" data-testid="phone-module-pages">
           <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>
@@ -247,7 +271,7 @@ export default function PhoneModulePage({
       ))}
       {zero && <PhoneAskEntry asks={asks} />}
       {zero
-        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
         : <>
           {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
           {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}

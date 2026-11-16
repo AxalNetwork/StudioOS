@@ -13,6 +13,8 @@
  *                        Every active admin gets an in-app notice.
  *   GET    /             the caller's own requests; an admin reads every one,
  *                        with who asked. Anyone without the licence is 403.
+ *                        `?project_uid=` narrows to one company (part 2: the
+ *                        admin position sheet), never past the caller's scope.
  *   PATCH  /:uid         an admin answers an open request: `resolved`, linking
  *                        the mark recorded (a mark of the same company; for a
  *                        follow-on, a note instead), or `declined` with a
@@ -52,14 +54,14 @@ const BY_UID = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolve
        JOIN projects p ON p.id = q.project_id
        LEFT JOIN users u ON u.id = q.requester_user_id
       WHERE q.uid = ?`;
-/** `?1` a requester id or NULL (every requester), `?2` a state or NULL. */
+/** `?1` a requester id or NULL (every requester), `?2` a state or NULL, `?3` a company uid or NULL (D6205 part 2: the admin position sheet reads one company's). */
 const LIST = `SELECT q.uid, q.kind, q.reason, q.state, q.created_at, q.resolved_at, q.resolved_mark_uid,
             q.resolution_note, q.requester_user_id, p.uid AS project_uid, p.name AS project_name,
             u.name AS requester_name
        FROM portfolio_mark_requests q
        JOIN projects p ON p.id = q.project_id
        LEFT JOIN users u ON u.id = q.requester_user_id
-      WHERE (?1 IS NULL OR q.requester_user_id = ?1) AND (?2 IS NULL OR q.state = ?2)
+      WHERE (?1 IS NULL OR q.requester_user_id = ?1) AND (?2 IS NULL OR q.state = ?2) AND (?3 IS NULL OR p.uid = ?3)
       ORDER BY q.created_at DESC, q.id DESC LIMIT 500`;
 
 function project(row: any, admin: boolean) {
@@ -135,7 +137,8 @@ r.post('/', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// GET /api/mark-requests[?state=open|resolved|declined] — own requests; an admin reads all.
+// GET /api/mark-requests[?state=open|resolved|declined][&project_uid=…] — own requests; an admin reads all.
+// `project_uid` narrows to one company; for an investor it still narrows their own only.
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -143,7 +146,8 @@ r.get('/', async (c) => {
     const admin = isAdminUser(user);
     const state = c.req.query('state');
     const stateOk = state === 'open' || state === 'resolved' || state === 'declined';
-    const rows = await c.env.DB.prepare(LIST).bind(admin ? null : user.id, stateOk ? state : null).all<any>();
+    const projectUid = c.req.query('project_uid') || null;
+    const rows = await c.env.DB.prepare(LIST).bind(admin ? null : user.id, stateOk ? state : null, projectUid).all<any>();
     return c.json({ items: (rows.results || []).map((x) => project(x, admin)), scope: admin ? 'all_requests' : 'own_requests' });
   } catch (e) { return mapError(c, e); }
 });

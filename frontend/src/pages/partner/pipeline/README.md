@@ -9,8 +9,9 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `PipelineCommandCentre.jsx` | `/pipeline` itself since D4838: the first-run setup path (PP01) or the command centre (PP02): Needs attention, four metrics with their basis, the lifecycle strip, Recent movement (Not recorded) and Risks. It also hands the Eadwyn rail its next steps. |
 | `commandCentre.js` | D4838: the pure rules the root reads. They cover setup steps from the record, when first run applies, metrics that print a zero only over a population, attention and risks from recorded fields, the lifecycle strip and the rail's steps. |
 | `LeadsZone.jsx` | `/pipeline/leads` to boards PP03, PP03b and PP03m (#5935): five views, a strip whose zeros carry a population, cards with the fit reasons before the score and Why this score?, and a pass dialog with a required reason. |
+| `ProposalsZone.jsx` | `/pipeline/proposals` since D4838 PP04: a follow-up list (client, value, state, last activity, next action), a phone card per proposal, and a sheet with each quote's versions and its outcome with a loss reason. |
+| `proposalsFollowUp.js` | D4838 PP04: the pure rules the Proposals list reads. They cover last activity, next action, the sheet's tabs and the strip, and they never count an open. |
 | `leadsModel.js` | #5935: the pure rules Leads draws by: fit state, reasons, Why this score?, Recent, the strip, the pass reasons (the Worker's `PASS_REASONS`). |
-| `ProposalsZone.jsx` | `/pipeline/proposals`: every quote, its versions and its outcome with a loss reason. |
 | `NegotiationsZone.jsx` | `/pipeline/negotiations` since D5938: the board of recorded stages (PP05), a stage selector over one list on a phone (PP05m), a card moved by buttons, and the Eadwyn counter drawn "Not sent" only while a draft exists. |
 | `NegotiationTermsSheet.jsx` | D5938: one negotiation's terms sheet (PP05b): We proposed, They proposed and Current position, a difference marked with ≠ and words, and the stage, ball and open question. |
 | `RetainersZone.jsx` | `/pipeline/retainers`: cadence, monthly equivalent, usage against retained hours and renewal. |

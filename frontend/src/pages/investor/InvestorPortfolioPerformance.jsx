@@ -25,6 +25,7 @@ import { ArrowUpRight, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
+import ZoneDraft from '../../workspaces/ZoneDraft';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { PerformanceSummary, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
@@ -226,6 +227,17 @@ export default function InvestorPortfolioPerformance() {
         <Methodology />
       </div>
       <Cohorts cohorts={cohorts} onRetry={() => retry('positions')} />
+      {/* D6212 (#6212): a departure from D4817's PFA17, which draws no band here. */}
+      <ZoneDraft
+        surface="portfolio/performance"
+        railOption="draft:performance-note"
+        label="Proposal · what moved across the quarter-ends"
+        accept="Accept note"
+        run="Draft the note"
+        foot="Built from the quarter-end reads above and the marks, distributions and cheques dated in each quarter. Accepting keeps the note here; nothing is sent."
+        empty="A short note on what moved, citing each quarter-end and event by its date. A quarter-end with no recorded book, or a quarter with nothing recorded, is named as a gap."
+        nothingToDraft="No position is recorded at a completed quarter-end, so there is nothing to explain."
+      />
       <section className="pf-card" aria-labelledby="pf-tools-title">
         <div className="pf-card-head"><h2 id="pf-tools-title">Company history and other tools</h2></div>
         <p className="pf-foot">A company’s marks, with their dates and basis, are on Positions. Exit Waterfall models proceeds at an exit value you choose.</p>
