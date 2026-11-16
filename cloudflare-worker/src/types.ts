@@ -324,6 +324,9 @@ export interface Env {
   // When any of the three is unset, /api/linkedin/oauth/start returns 503
   // and the UI hides the OAuth tab while still allowing the CSV-export
   // walkthrough to function.
+  /** #3725: Axal's Eventbrite app. Both unset keeps the Eventbrite syndication channel switched off. */
+  EVENTBRITE_CLIENT_ID?: string;
+  EVENTBRITE_CLIENT_SECRET?: string;
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   LINKEDIN_REDIRECT_URI?: string;
