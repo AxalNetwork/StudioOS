@@ -19,7 +19,7 @@ import { STRUCTURES } from '../../src/pages/raise/pitch/gridModel.js';
 import { manifest, openEditor, prepare, showCard } from './_editor.mjs';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
-const SCOPES = ['[data-testid="pitch-editor"]', '[data-testid="pitch-studio-home"]', '[role="dialog"]', '[role="menu"]', '[data-testid="pitch-areas-layer"]'];
+const SCOPES = ['[data-testid="pitch-editor"]', '[data-testid="pitch-studio-home"]', '[data-testid="pitch-overview"]', '[role="dialog"]', '[role="menu"]', '[data-testid="pitch-areas-layer"]'];
 
 /** Serious and critical violations in the editor's scopes that are on the page, as one readable line each. */
 async function blocking(page) {
@@ -113,6 +113,23 @@ test.describe('axe: zero serious or critical violations', () => {
     await expect(page.getByTestId('pitch-editor')).toBeVisible();
     await page.waitForLoadState('networkidle');
     expect(await blocking(page)).toEqual([]);
+  });
+
+  test('Pitch opens the focused editor at its toolbar after scrolling on a phone', async ({ page, request }) => {
+    const m = await prepare(page, request);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/raise/pitch?project_id=${m.oneClick.projectId}`);
+    await expect(page.getByTestId('pitch-overview-next').getByRole('link')).toHaveCount(1);
+    await expect(page.getByTestId('deck-choice-preview').getByTestId('pitch-present-card')).toBeVisible();
+    expect(await blocking(page)).toEqual([]);
+
+    await page.getByTestId('pitch-studio-open').click();
+    await expect(page.getByTestId('pitch-editor-phone')).toBeVisible();
+    await expect(page.getByTestId('pitch-deck-bar')).toBeInViewport();
+    await expect(page.getByRole('navigation', { name: 'Pitch', exact: true })).toHaveCount(0);
+
+    await page.getByTestId('pitch-back').click();
+    await expect(page.getByTestId('pitch-studio-tab-overview')).toHaveAttribute('aria-current', 'page');
   });
 
   test.describe('pd3-d: dark', () => {

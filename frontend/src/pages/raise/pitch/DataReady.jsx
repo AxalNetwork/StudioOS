@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { GradeDot } from './SourcesBoards';
+import { pitchReadFailure } from './pitchHomeModel';
 import { NOT_RECORDED } from './pitchStudioModel';
 import { UNREADABLE_SHARE, readiness } from './sourcesModel';
 
@@ -29,12 +30,13 @@ export const DATA_READY = 'Data ready';
 export const SOURCES_FAILED = 'Your sources could not be read.';
 export const NOTHING_YET = 'StudioOS has nothing a deck can draw on yet. Start with Validate › Customer research or connect Stripe.';
 
-export default function DataReady({ sources }) {
+export default function DataReady({ sources, overview = false }) {
   const status = sources?.status || 'loading';
+  const refused = overview && pitchReadFailure(sources?.error?.status) === 'refused';
   const rows = status === 'ok' ? readiness(sources.data?.items) : [];
   return (
     <section className={`${CARD} flex flex-col gap-3 p-4`} aria-busy={status === 'loading' ? 'true' : undefined} data-testid="pitch-studio-data-ready">
-      <span className={EYE}>{DATA_READY}</span>
+      <span className={EYE}>{overview ? 'What your data can fill' : DATA_READY}</span>
       {status === 'loading' || status === 'idle' ? (
         <div className="flex flex-col gap-2" data-testid="pitch-studio-data-ready-loading">
           <span className={MUTED}>Reading…</span>
@@ -42,8 +44,8 @@ export default function DataReady({ sources }) {
         </div>
       ) : status === 'error' ? (
         <div role="alert" className="flex flex-col gap-2" data-testid="pitch-studio-data-ready-error">
-          <span className={`text-[13px] font-bold ${INK}`}>{SOURCES_FAILED}</span>
-          {sources.retry ? <button type="button" className={GHOST} onClick={sources.retry}><RefreshCw size={14} aria-hidden="true" /> Try again</button> : null}
+          <span className={`text-[13px] font-bold ${INK}`}>{overview ? (refused ? 'Refused' : 'Unavailable · Your sources could not be read.') : SOURCES_FAILED}</span>
+          {sources.retry && !refused ? <button type="button" className={GHOST} onClick={sources.retry}><RefreshCw size={14} aria-hidden="true" /> Try again</button> : null}
         </div>
       ) : !rows.length ? (
         <span className={MUTED} data-testid="pitch-studio-data-ready-empty">{NOTHING_YET}</span>

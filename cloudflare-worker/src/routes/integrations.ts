@@ -1506,6 +1506,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // so we never trust the query string at callback time.
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
   if (provider === 'carta') extra.carta_audience = cartaAudience(user.role);
+  // D5827: the member's Typeform data center; `connect` reads it from the state, never the callback's query.
+  if (provider === 'typeform') extra.typeform_region = c.req.query('region') === 'eu' ? 'eu' : 'us';
   if (c.req.query('return_to') === 'build') {
     extra.return_to = 'build';
     // The venture rides in the state, not in per-origin storage: the callback is
