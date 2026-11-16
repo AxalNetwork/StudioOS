@@ -56,6 +56,21 @@ async function call(env: any, id: number | null, path: string, method = 'GET', b
 }
 const rows = (db: any) => db.prepare('SELECT COUNT(*) n FROM studio_layouts').get().n;
 
+test('#6133: a saved investor layout still reads with the retired score tile omitted', async () => {
+  const w = world();
+  try {
+    const keep = { key: 'quick_stats', size: 'full' };
+    const layout = JSON.stringify([{ key: 'scored_opportunities', size: '1/2' }, keep]);
+    w.db.prepare("INSERT INTO studio_layouts(user_id,profile,layout) VALUES(2,'investor',?)").run(layout);
+    const r = await call(w.env, 2, '/layout');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.source, 'saved');
+    assert.deepEqual(r.body.layout, [keep]);
+    assert.deepEqual(r.body.dropped, []);
+    assert.equal(w.db.prepare('SELECT layout FROM studio_layouts WHERE user_id=2').get()?.layout, layout);
+  } finally { w.db.close(); }
+});
+
 test('every route needs a session; an account with no Studio is refused; a Lab member is a founder', async () => {
   const w = world();
   try {

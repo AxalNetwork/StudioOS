@@ -83,7 +83,7 @@ const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'Clipboar
 // ── 1. Every key is classified ──────────────────────────────────────────────
 
 test('1. every key the app draws is classified, exactly once', () => {
-  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'facebook', 'tiktok', 'beehiiv'], 'the Worker registry\'s 22 keys, figma\'s one-line entry included (D1385 adds PostHog, #5291 TikTok, #5292 Facebook, D2407 Beehiiv)');
+  assert.deepEqual(SOURCES.registry, ['lovable', 'figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'vercel', 'zoom', 'google_workspace', 'google_calendar', 'microsoft_365', 'mercury', 'notion', 'posthog', 'facebook', 'tiktok', 'google_search_console', 'beehiiv'], 'the Worker registry\'s 23 keys, figma\'s one-line entry included (D1385 adds PostHog, #5291 TikTok, #5292 Facebook, D2407 Beehiiv, D5839 Search Console)');
   for (const key of ALL_KEYS) {
     const c = canon(key);
     const homes = Object.entries(TABLES).filter(([, t]) => Object.hasOwn(t, c)).map(([n]) => n);
@@ -92,7 +92,7 @@ test('1. every key the app draws is classified, exactly once', () => {
   const classified = [...new Set(ALL_KEYS.map(canon))].sort();
   assert.equal(classified.length, 41);
   assert.deepEqual(classified, [...SIMPLE_ICONS_KEYS, ...VENDOR_OR_MONOGRAM, ...Object.keys(GENERIC)].sort());
-  assert.deepEqual(BRAND_ALIAS, { google_calendar: 'google', google_workspace: 'google', microsoft_365: 'microsoft', twitter: 'x', gcip: 'google' });
+  assert.deepEqual(BRAND_ALIAS, { google_calendar: 'google', google_workspace: 'google', google_search_console: 'google', microsoft_365: 'microsoft', twitter: 'x', gcip: 'google' });
   assert.deepEqual(Object.keys(BRAND_MARKS).sort(), [...SIMPLE_ICONS_KEYS, ...Object.keys(VENDOR_MARKS)].sort(), 'Simple Icons and the recorded vendor artwork');
   for (const k of VENDOR_OR_MONOGRAM) assert.ok(Object.hasOwn(BRAND_MARKS, k) || Object.hasOwn(BRAND_MONOGRAM, k), `${k}: the vendor's mark or a monogram`);
   for (const [k, icon] of Object.entries(GENERIC)) assert.equal(BRAND_GENERIC[k].Icon.displayName, icon, `${k} draws lucide ${icon}`);

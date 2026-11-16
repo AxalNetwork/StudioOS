@@ -71,9 +71,12 @@ test('the chip says "the Super Admin" to the holder and "you" to anyone else', (
   assert.equal(writesAs(undefined), 'you');
   assert.equal(previewNote(true), 'This changes this browser’s chrome only. Every write still goes out as the Super Admin.');
   assert.equal(previewNote(false), 'This changes this browser’s chrome only. Every write still goes out as you.');
+  assert.match(previewNote(true, 'investor'), /Return to HQ/);
+  assert.equal(previewNote(false, 'investor'), previewNote(false));
+  assert.equal(previewNote(true, 'founder'), previewNote(true));
   // The strip renders the note by the elevation, and no literal "Super Admin"
   // sits in the preview strip or menu for a non-holder to read.
-  assert.match(SWITCHER, /\{previewNote\(superAdmin\)\}/, 'the strip does not word the note by the elevation');
+  assert.match(SWITCHER, /\{previewNote\(superAdmin, selectedKey\)\}/, 'the strip does not word the note by the elevation');
   const strip = SWITCHER.slice(SWITCHER.indexOf('data-testid="preview-shell-strip"'));
   assert.doesNotMatch(strip.slice(0, strip.indexOf('</div>')), /Super Admin/, 'the strip names the Super Admin unconditionally');
 });

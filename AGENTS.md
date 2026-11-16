@@ -346,8 +346,9 @@ documents it indexes.
   give a number up to 799. Never edit an applied migration, and never create a
   trigger by hand.
 - **Honesty.** Where no store exists, the screen says "Not recorded" and gives
-  the reason. Where a read fails, it says "Unreadable", never zero. Never
-  invent a figure the platform does not record.
+  the reason. Where a read fails, the screen says "Unavailable" (in code the
+  state stays `unreadable` and the component `Unreadable`; D5129), never zero,
+  never "Not recorded". Never invent a figure the platform does not record.
 - **Voice.** The AI is called Eadwyn. Its own product copy never says advisor,
   advice, recommendation or fiduciary. Human advisors are fine.
 - **Security.**

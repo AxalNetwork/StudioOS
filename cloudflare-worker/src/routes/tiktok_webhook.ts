@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { loadOauthCreds } from '../services/providerOauthKeys';
+import { purgeByOpenIdStatements } from '../services/tiktok/grow';
 
 const router = new Hono<{ Bindings: Env }>();
 
@@ -34,8 +35,11 @@ router.post('/', async c => {
     return c.json({ error: 'invalid_event' }, 400);
   }
   const cutoff = event.create_time;
-  // The same three conditions in both statements, written out: no interpolation in the query text.
+  // The same three conditions in every statement, written out: no interpolation in the query text.
+  // D5863: this route deletes the connection row (it does not mark it revoked), so the connection's Grow facts, their
+  // ledger rows and its venture link are deleted first, in the same batch.
   await c.env.DB.batch([
+    ...purgeByOpenIdStatements(c.env, event.user_openid, cutoff),
     c.env.DB.prepare(`DELETE FROM integration_companies WHERE integration_id IN (SELECT id FROM integrations
                        WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`)
       .bind(event.user_openid, cutoff),

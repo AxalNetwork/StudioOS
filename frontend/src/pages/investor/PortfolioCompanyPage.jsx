@@ -18,6 +18,9 @@ import {
   COMPANY_SHAPES, COMPANY_TABS, OWNERSHIP_ANCHOR, companyDocTitle, companyHealthOf, companyTabHref, companyTabOfPath, evidenceOf,
   holdingRouteOf, identityOf, keyFactsOf, nextActionsOf,
 } from '../portfolio/companyModel';
+import CompanyPreview from '../portfolio/CompanyPreview';
+import { isInvestorPreview } from '../portfolio/previewModel';
+import { useViewMode } from '../../contexts/ViewModeContext';
 import '../portfolio/company.css';
 
 /**
@@ -45,6 +48,9 @@ import '../portfolio/company.css';
  * Each read stands alone (`usePortfolioReads`): a failed one says Unreadable
  * with a Retry for that source, and its neighbours stay. The company's name
  * is drawn only once a read that the caller is authorised for has named it.
+ *
+ * D4817 part 10 (#5311): in an Admin Investor preview the page draws
+ * `CompanyPreview` instead, which reads nothing and withholds every record.
  */
 
 const RAIL_NOTE = 'Figures come from your recorded position, its marks, the reports this company sent you and the support ledger. Nothing here changes a mark, a duty or a support entry, and no figure is filled in by a model.';
@@ -314,5 +320,10 @@ export default function PortfolioCompanyPage() {
   const { uid } = useParams();
   const location = useLocation();
   const tab = companyTabOfPath(location.pathname);
+  const view = useViewMode();
+  // D4817 part 10 (#5311): an administrator previewing the Investor shell sees
+  // the workspace's layout with every investor record withheld, reading none.
+  // A support session (View As) and a real investor draw the workspace below.
+  if (isInvestorPreview(view)) return <CompanyPreview key={uid} uid={uid} tab={tab} />;
   return <CompanyWorkspace key={uid} uid={uid} tab={tab} />;
 }

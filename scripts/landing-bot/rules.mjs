@@ -17,6 +17,7 @@ import { classify as classifyPaths } from '../merge-policy.mjs';
 
 /** The six automations. `push` writes a commit, `model` calls a model, `requeue` re-adds to the queue. */
 export const KINDS = Object.freeze({
+  feeder: Object.freeze({ push: false, model: false, requeue: false, bulk: false }),
   keeper: Object.freeze({ push: true, model: false, requeue: false, bulk: false }),
   conflict: Object.freeze({ push: true, model: true, requeue: false, bulk: false }),
   ejection: Object.freeze({ push: false, model: false, requeue: true, bulk: false }),
@@ -51,7 +52,8 @@ export const REPAIR_BRANCH_PREFIX = 'repair/';
 export const STICKY_MARKER = '<!-- landing-bot -->';
 
 /** The only bot workflow files that may ever be dispatched, one per kind. None exists yet; later issues add them. */
-export const dispatchable = Object.freeze(Object.keys(KINDS).map((k) => `.github/workflows/landing-bot-${k}.yml`));
+export const dispatchable = Object.freeze(Object.keys(KINDS).map((k) =>
+  k === 'feeder' ? '.github/workflows/landing-feeder.yml' : `.github/workflows/landing-bot-${k}.yml`));
 
 const isInt = (v) => Number.isSafeInteger(v);
 const time = (v) => {
