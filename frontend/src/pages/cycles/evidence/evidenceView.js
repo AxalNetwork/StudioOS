@@ -57,6 +57,8 @@ export const ITEM_KIND = Object.freeze({
   'loi-file': 'Letter of intent', 'revenue-proof': 'Revenue proof', 'accepted-safe': 'Accepted SAFE', 'filed-83b': '83(b) election',
   'signed-founder-equity': 'Founder equity document', 'confirmed-receipt': 'Received from an investor',
   'round-call-response': 'Round-call response', 'typed-commitment': 'Commitment, as entered', 'model-assumption': 'Model assumption',
+  // D6864 (RA-32): evidence the founder added by hand.
+  'stated-by-founder': 'Stated by you',
 });
 export const itemTitle = (i) => ITEM_KIND[i?.kind] || 'Evidence';
 
