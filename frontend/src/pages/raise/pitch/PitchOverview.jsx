@@ -98,43 +98,43 @@ export default function PitchOverview({ reads, readOnly, q }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="pitch-overview">
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="min-w-0 xl:col-start-2 xl:row-start-1">
-          {next && (
-            <section aria-label="Next step" className="flex flex-wrap items-center gap-3 rounded-xl border border-axal-violet bg-axal-lavender p-4 dark:border-violet-700 dark:bg-violet-950/40" data-testid="pitch-overview-next">
-              <div className="min-w-0 flex-1 basis-[12rem]">
-                <span className={EYEBROW}>Next step</span>
-                <h2 className={`m-0 text-[16px] font-extrabold ${INK}`}>{next.title}</h2>
-                <p className={`m-0 ${MUTED}`}>{next.line}</p>
-              </div>
-              <Link className={PRIMARY} to={next.kind === 'draft' ? `${next.path}${q}` : pitchVersionHref(next.path, q, current.id)}>{next.label}</Link>
-            </section>
-          )}
-          <div className={`grid gap-3 sm:grid-cols-3 ${next ? 'mt-3' : ''}`}>
-            <Metric title={`Readiness · ${versionName(current)}`}>
-              {readiness.line ? <><strong>{readiness.line}</strong><span className={MUTED}>Figure check</span></> : <ReadState kind={readiness.kind} retry={reads.reload} />}
-            </Metric>
-            <Metric title="Evidence coverage">
-              {cover ? <><strong>{cover.linked} of {cover.total}</strong><span className={MUTED}>Cards with at least one figure, all linked</span></>
-                : <ReadState kind={coverageStatus} retry={retryCoverage} />}
-            </Metric>
-            <Metric title="Cards not Done">
-              {statuses.status === 'ok'
-                ? statuses.data?.tracked && Number.isInteger(statuses.data?.not_done?.count)
-                  ? <><strong>{statuses.data.not_done.count}{Number.isInteger(statuses.data.total) ? ` of ${statuses.data.total}` : ''}</strong>
-                    {statuses.data.not_done.cards?.length ? <span className={MUTED}>{statuses.data.not_done.cards.map((card) => card.title).filter(Boolean).join(', ')}</span> : null}</>
-                  : <span className={MUTED}>Not recorded</span>
-                : <ReadState kind={statuses.status} retry={statuses.retry} />}
-            </Metric>
-          </div>
-        </div>
-        <div className="min-w-0 xl:row-span-2 xl:row-start-1">
+      <div className={`grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)] ${next ? "xl:grid-rows-[auto_auto_minmax(0,1fr)]" : "xl:grid-rows-[auto_minmax(0,1fr)]"}`}>
+        {next && (
+          <section aria-label="Next step" className="flex flex-wrap items-center gap-3 rounded-xl xl:col-start-2 xl:row-start-1 border border-axal-violet bg-axal-lavender p-4 dark:border-violet-700 dark:bg-violet-950/40" data-testid="pitch-overview-next">
+            <div className="min-w-0 flex-1 basis-[12rem]">
+              <span className={EYEBROW}>Next step</span>
+              <h2 className={`m-0 text-[16px] font-extrabold ${INK}`}>{next.title}</h2>
+              <p className={`m-0 ${MUTED}`}>{next.line}</p>
+            </div>
+            <Link className={PRIMARY} to={next.kind === 'draft' ? `${next.path}${q}` : pitchVersionHref(next.path, q, current.id)}>{next.label}</Link>
+          </section>
+        )}
+        <div className={`min-w-0 xl:col-start-1 xl:row-start-1 ${next ? 'xl:row-span-3' : 'xl:row-span-2'}`}>
           <DeckCard project={reads.project} current={current} deck={reads.deck} engagement={reads.engagement}
             q={q} phone={phone} readOnly={readOnly} onMenu={setSheet} overview>
             <VersionPair current={current} working={working} retry={draft.retry} readOnly={readOnly} />
           </DeckCard>
         </div>
-        <InvestorActivity read={links} previousRead={previous ? previousLinks : null} q={q} projectId={projectId} readOnly={readOnly} />
+        <div className={`grid gap-3 sm:grid-cols-3 xl:col-start-2 ${next ? 'xl:row-start-2' : 'xl:row-start-1'}`}>
+          <Metric title={`Readiness · ${versionName(current)}`}>
+            {readiness.line ? <><strong>{readiness.line}</strong><span className={MUTED}>Figure check</span></> : <ReadState kind={readiness.kind} retry={reads.reload} />}
+          </Metric>
+          <Metric title="Evidence coverage">
+            {cover ? <><strong>{cover.linked} of {cover.total}</strong><span className={MUTED}>Cards with at least one figure, all linked</span></>
+              : <ReadState kind={coverageStatus} retry={retryCoverage} />}
+          </Metric>
+          <Metric title="Cards not Done">
+            {statuses.status === 'ok'
+              ? statuses.data?.tracked && Number.isInteger(statuses.data?.not_done?.count)
+                ? <><strong>{statuses.data.not_done.count}{Number.isInteger(statuses.data.total) ? ` of ${statuses.data.total}` : ''}</strong>
+                  {statuses.data.not_done.cards?.length ? <span className={MUTED}>{statuses.data.not_done.cards.map((card) => card.title).filter(Boolean).join(', ')}</span> : null}</>
+                : <span className={MUTED}>Not recorded</span>
+              : <ReadState kind={statuses.status} retry={statuses.retry} />}
+          </Metric>
+        </div>
+        <div className={`min-w-0 xl:col-start-2 ${next ? 'xl:row-start-3' : 'xl:row-start-2'}`}>
+          <InvestorActivity read={links} previousRead={previous ? previousLinks : null} q={q} projectId={projectId} readOnly={readOnly} />
+        </div>
       </div>
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4" data-testid="pitch-overview-status">
         <Status title="Script & rehearsal" testId="pitch-overview-script" to={`${SCRIPT_PATH}${q}`} action="Open Script & rehearsal">

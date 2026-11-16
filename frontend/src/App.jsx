@@ -1216,7 +1216,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
   const pitchFocused = pitchFocusMode(location.pathname);
-  const fullBleedSurface = pitchFocused || (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+  const appScroll = useRef(null);
+  useLayoutEffect(() => {
+    if (pitchFocused && appScroll.current) appScroll.current.scrollTop = 0;
+  }, [pitchFocused, location.pathname]);
+  const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+    || pitchFocused
     || SHARED_FULL_BLEED.includes(location.pathname)
     // D631's two fund child pages carry WorkspaceShell's own inset and rail.
     || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
@@ -1609,10 +1614,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               at the end of the scroll. */}
           <main
             data-app-scroll
+            ref={appScroll}
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
-            {pitchFocused || stripInFrame ? null : hqStripNav}
+            {stripInFrame ? null : hqStripNav}
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
