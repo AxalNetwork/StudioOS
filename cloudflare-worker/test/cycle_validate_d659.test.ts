@@ -326,7 +326,8 @@ test('D659: next names the number it counted — the invited leads with no slot'
   db.prepare("INSERT INTO waitlist_signups (project_id, email, audience, crm_status) VALUES (?, 'n@x.test', 'customer', 'new'), (?, 'i@x.test', 'customer', 'invited')").run(P, P);
   const r = await overview(db);
   const cr = card(r.body, 'customer-research');
-  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}` });
+  // D6001 (#6001): the link lands on the list filtered to the two rows it names.
+  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}&filter=stage:invited_no_slot` });
   assert.deepEqual(cr.series.funnel, { lead: 7, invited: 5, booked: 1, done: 1 });
 });
 
@@ -588,9 +589,16 @@ test('D659: problem discovery records filter by severity and say what links to a
   assert.deepEqual(m.body.records.rows, [
     // One mention in the last 30 days, one in the 30 before: no change.
     { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'],
-      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'] },
+      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'],
+      // D6006 (#6006, V17): the rank and why, sources beside mentions, and the claims it supports and contradicts.
+      grouped: true, rank: 1, rank_reason: 'Most mentions · mostly Severe',
+      sources: { interviews: 2, people: 2, organisations: null, people_unrecorded: 0, organisations_unrecorded: 2 },
+      phrases: 2, supporting: 1, contradicting: 0, contradicts: null },
     { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null,
-      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'] },
+      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'],
+      grouped: false, rank: 2, rank_reason: '1 mention',
+      sources: { interviews: 1, people: 1, organisations: null, people_unrecorded: 0, organisations_unrecorded: 1 },
+      phrases: 1, supporting: 0, contradicting: 0, contradicts: null },
   ]);
   m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}&filter=severity:not_recorded`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.theme), ['Paper forms']);
@@ -779,6 +787,29 @@ test('D685 §5.12: the interviews target shares metric_targets but never reaches
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.deepEqual(body.items.map((t: any) => t.metric_key), ['mrr']);
   } finally { [console.warn, console.error] = saved; }
+});
+
+
+test('demand commits keep currency and period separate and exclude interest and unconfirmed terms', async () => {
+  const db = fixture();
+  for (const [kind, amount_cents, currency, period, status] of [
+    ['loi', 12500, 'eur', 'month', 'confirmed'],
+    ['pre_sale', 2500, 'eur', 'month', 'confirmed'],
+    ['loi', 30000, 'eur', 'year', 'confirmed'],
+    ['pre_sale', 10000, 'usd', 'month', 'confirmed'],
+    ['would_pay', 50000, 'eur', 'month', 'confirmed'],
+    ['loi', 60000, 'eur', 'month', 'to_confirm'],
+  ]) {
+    const result = await call(db, FOUNDER, 'POST', `/demand-signals?project=${P}`, { kind, amount_cents, currency, period, status });
+    assert.equal(result.status, 201);
+  }
+  const data = card((await overview(db)).body, 'demand-signals').series;
+  assert.equal(data.signals.would_pay, 1);
+  assert.deepEqual(data.committed, [
+    { currency: 'EUR', period: 'month', amount_cents: 15000 },
+    { currency: 'EUR', period: 'year', amount_cents: 30000 },
+    { currency: 'USD', period: 'month', amount_cents: 10000 },
+  ]);
 });
 
 // #5999: the overview says whether the viewer may write, by the gate the target's writer uses.

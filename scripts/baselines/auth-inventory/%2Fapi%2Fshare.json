@@ -1,0 +1,9 @@
+{
+  "GET /api/share/evidence/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/raise_evidence_share_6864.test.ts",
+    "note": "A capability link a founder made for a reader outside Axal: no sign-in by design. The token is 32 random bytes stored only as a SHA-256 digest; one conditional UPDATE consumes a view only while the link is unrevoked, unexpired, under its view limit and its venture exists. Unknown, malformed, expired, used-up and revoked tokens are refused 404/410 with a page that names no venture and consumes nothing; the body is the pack frozen at creation from the founder's own preview projection. Only the venture's founders make, list or revoke links."
+  }
+}

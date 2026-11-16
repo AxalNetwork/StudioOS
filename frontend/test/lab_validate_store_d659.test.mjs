@@ -67,7 +67,8 @@ test('D659: the client names the project on every call and the routes the Worker
   assert.deepEqual(Object.keys(cycleValidateApi).sort(), [
     // D6020 (#6020): six writes no page called are gone; the record actions and forms make them.
     'addMarketSource', 'marketReadiness', 'module', 'overview', 'removeMarketSource', 'setEvidenceStrength',
-    'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setWaitlistTarget',
+    // D5997 (#5997): the venture's "Trying to learn:" line, called by `ValidateObjective.jsx`.
+    'setInterviewSegment', 'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setObjective', 'setWaitlistTarget',
   ]);
   const src = raw('frontend/src/lib/api/cycleValidate.js');
   for (const line of src.split('\n').filter((l) => l.includes('request(`'))) {

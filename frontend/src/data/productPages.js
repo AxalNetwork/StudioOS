@@ -479,7 +479,7 @@ export const PRODUCT_PAGES = {
         price: '$99',
         period: '/ month',
         highlight: true,
-        tagline: 'Inbound demand on tap',
+        tagline: 'Manage client work from proposal to delivery',
         badge: 'More reach & insight',
         blurb: 'For partners who want inbound demand on tap.',
         cta: { label: 'Start 14-day trial', to: '/register?lane=partner&plan=pro' },

@@ -1,5 +1,13 @@
 export interface Env {
   TIKTOK_APP_APPROVED?: string;
+  /** D5839: '1' once the owner's Google Cloud project serves Search Console sign-in. */
+  GOOGLE_SEARCH_CONSOLE_APPROVED?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
+  /** D5827: '1' once the owner's Typeform app is registered and a callback verified. */
+  TYPEFORM_APP_APPROVED?: string;
+  TYPEFORM_CLIENT_ID?: string;
+  TYPEFORM_CLIENT_SECRET?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
@@ -47,6 +55,8 @@ export interface Env {
   TELEGRAM_CHANNEL_BOT_USERNAME?: string;
   /** setWebhook's secret_token; Telegram echoes it in X-Telegram-Bot-Api-Secret-Token. */
   TELEGRAM_CHANNEL_WEBHOOK_SECRET?: string;
+  /** D5580 part 4: the bearer token the hourly pr-overlap job posts its WorkGraph snapshot with. Unset, the ingest refuses. */
+  WORKGRAPH_INGEST_TOKEN?: string;
   /** Meta app (Tech Provider) for WhatsApp Embedded Signup and the Cloud API webhook. */
   WHATSAPP_APP_ID?: string;
   /** Signs X-Hub-Signature-256 on every webhook delivery; exchanges signup codes. */
@@ -678,6 +688,9 @@ export interface Env {
   AXAL_SECTION_SLACK_CHANNELS?: string;
   // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
   AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
+  // D5984: exactly 'enabled' lets section incidents file GitHub bugs through
+  // the ticket mirror's token and repository. Unset: no GitHub call is made.
+  AXAL_SECTION_INCIDENT_GITHUB?: string;
   // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
   // mirror the constants in services/slackBus.ts.
   SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub

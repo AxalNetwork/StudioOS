@@ -1,3 +1,4 @@
+import { announceInvestorPreviewRefusal, investorPreviewHeaders } from './investorPreview';
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
@@ -216,6 +217,8 @@ export function isPublicPath(pathname) {
     // D1564 (#3811): a published deck framed on a site its founder listed.
     || currentPath.startsWith('/embed/')
     || currentPath.startsWith('/share/captable/')
+    // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/evidence/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*
@@ -534,7 +537,12 @@ export async function refusalError(res, fallback) {
   const e = new Error(message || res.statusText || fallback);
   e.status = res.status;
   if (code) e.code = code;
+  announceInvestorPreviewRefusal(res.status, code);
   return e;
+}
+
+function getInvestorPreviewHeader(method) {
+  return MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
 }
 
 /**
@@ -545,7 +553,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...getInvestorPreviewHeader(method) };
 }
 
 /**
@@ -586,9 +594,10 @@ export async function request(path, options = {}) {
     const companyHeader = getActiveCompanyHeader();
     // D765: the rail's page (and option), so the Worker records and switches each run by it.
     const railHeader = railPageHeaders();
+    const previewHeader = getInvestorPreviewHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -676,6 +685,7 @@ export async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       if (refusal.code) e.code = refusal.code;
+      announceInvestorPreviewRefusal(res.status, refusal.code);
       e.data = detailObj || errorObj || err || null;
       // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
       // so form components can highlight the offending input.
@@ -4210,14 +4220,7 @@ export const api = {
   deleteReference: (id) => request(`/references/${id}`, { method: 'DELETE' }),
   captureReferenceConsent: (id, data) =>
     request(`/references/${id}/consent`, { method: 'POST', body: JSON.stringify(data) }),
-  uploadReferenceRecording: (id, file) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return request(`/references/${id}/recording`, { method: 'POST', body: fd });
-  },
-  getReferenceRecordingUrl: (id) => request(`/references/${id}/recording-url`),
-  transcribeReference: (id) =>
-    request(`/references/${id}/transcribe`, { method: 'POST' }),
+  // D6183: Eadwyn summarises the typed notes; no recording or transcript route exists.
   summarizeReference: (id) =>
     request(`/references/${id}/summarize`, { method: 'POST' }),
 
@@ -5337,6 +5340,10 @@ export const api = {
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
+    // D6272: Clear history hides the caller's sessions (`cleared_at`); Restore
+    // brings them back. `scope=cleared` on `askSessions` reads them meanwhile.
+    askClearHistory: () => request('/research/ask/history/clear', { method: 'POST', body: JSON.stringify({}) }),
+    askRestoreHistory: () => request('/research/ask/history/restore', { method: 'POST', body: JSON.stringify({}) }),
     askSaveAnswer: (uid, saved) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify({ saved: !!saved }),
     }),

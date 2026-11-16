@@ -11,6 +11,7 @@
  *        read answers against what the member needs; each row is { ref, position, line }
  *   POST /intro-request                    { teammate, ref, note?, context_note? } — asks the teammate; sends nothing to the contact
  *   GET  /intro-requests[?team=&status=]   the requests I sent and received, and my follow-ups due (D4329)
+ *   GET  /intro-requests/:uid              #5310: one request's record, to the asker or the teammate only
  *   POST /intro-requests/:uid/decide       { decision: accepted | declined, note? } — the teammate's answer, once
  *   POST /intro-requests/:uid/withdraw     the asker withdraws a request not yet answered
  *   POST /intro-requests/:uid/outcome      { outcome, note? } — either side, once it is made
@@ -31,11 +32,12 @@
  * Private by default: the access rule is in each statement (`services/relationships.ts`).
  * A support session is refused: what a member shares is theirs to choose.
  */
+import { networkActivity } from '../services/networkActivity';
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import {
-  decideIntro, followUpDone, followUpsDueList, introRequests, myTeams, reconcileIntroDelivery, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare,
+  decideIntro, followUpDone, followUpsDueList, introRequest, introRequests, myTeams, reconcileIntroDelivery, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare,
   snoozeFollowUp, relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
 } from '../services/relationships';
 import { refuse } from '../util/refusal';
@@ -80,6 +82,18 @@ relationships.get('/summary', async (c) => {
     if (unreadable) return refuse(c, 503, { code: 'relationships_unreadable', message: 'Relationships could not be read. Try again.', extra: summary });
     return c.json(summary);
   } catch (e) { return failure(c, e); }
+});
+
+// D6557: partial activity remains usable, with each failed source explicitly unreadable.
+relationships.get('/activity', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const raw = c.req.query('limit');
+  const limit = raw === undefined ? 10 : Number(raw);
+  if (!raw && raw !== undefined || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+    return refuse(c, 400, { code: 'invalid_limit', message: 'Choose an activity limit from 1 to 50.' });
+  }
+  return c.json(await networkActivity(c.env, user.id, limit));
 });
 
 relationships.get('/sharing', async (c) => {
@@ -174,6 +188,13 @@ relationships.get('/intro-requests/follow-ups-due', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
   try { return c.json(await followUpsDueList(c.env, user, undefined, Number(c.req.query('limit')) || undefined)); } catch (e) { return failure(c, e); }
+});
+
+// #5310 (NW3.2): one request's record, to the asker or the teammate only; anyone else is 404.
+relationships.get('/intro-requests/:uid', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await introRequest(c.env, user, c.req.param('uid')) }); } catch (e) { return failure(c, e); }
 });
 
 relationships.post('/intro-requests/:uid/decide', async (c) => {

@@ -3,6 +3,7 @@ import { isPlainClick } from './cycleModel';
 import CycleMeter from './CycleMeter';
 import { cycleValidateApi } from '../../lib/api/cycleValidate';
 import { phoneFocus, rootMeter } from './validatePhone';
+import ValidateObjective from './ValidateObjective';
 
 /**
  * D4589 (#4589) — Validate's next action on the desktop overview: the same
@@ -73,15 +74,26 @@ const METER_CARD = 'rounded-xl border border-axal-hairline bg-white px-[18px] py
  *   projectId  the venture a writer saves to, as the phone root takes it; the control
  *              is drawn only where the read says `can_write`, as on the phone
  *   onChanged  a saved target re-reads the overview
+ *
+ * D5997 (#5997): above the row, "Trying to learn:" (`ValidateObjective.jsx`,
+ * board V1's header line, here until the V2 header is built), from the read's
+ * `objective` under the same `can_write`. A read without `objective` draws the
+ * row exactly as before.
  */
 export function ValidateLead({ raw, search = '', openAction, projectId = null, api = cycleValidateApi, onChanged }) {
   const meter = rootMeter(raw, phoneFocus(raw, search, 'validate'), 'validate');
   const next = <ValidateNextAction raw={raw} search={search} openAction={openAction} />;
-  if (!meter) return next;
-  return (
+  const row = !meter ? next : (
     <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" data-testid="validate-lead">
       {next}
       <CycleMeter meter={meter} cycle="validate" canWrite={raw?.can_write === true} projectId={projectId} api={api} onChanged={onChanged} ids="validate" className={METER_CARD} />
+    </div>
+  );
+  if (raw?.objective == null) return row;
+  return (
+    <div className="flex min-w-0 flex-col gap-3" data-testid="validate-lead-stack">
+      <ValidateObjective part={raw.objective} canWrite={raw?.can_write === true} projectId={projectId} api={api} onChanged={onChanged} />
+      {row}
     </div>
   );
 }
