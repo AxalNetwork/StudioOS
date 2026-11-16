@@ -46,6 +46,9 @@ const build = {
   // records, and that region carries Connect a tool as "Connect or manage tools".
   modulePrimary: false,
   sourcesRegion: true,
+  // D4846 part 2 (#6032, BD14 B): from 768px to 1023px Build draws its desktop pages laid out for a tablet,
+  // not the phone page (`ui/phone/tabletTier.js`).
+  tabletPages: true,
   // D5077 (BD21): each module's own Eadwyn asks and rail sentence (buildEadwyn.js).
   asks: BUILD_ASKS,
   railNotes: BUILD_RAIL_NOTES,

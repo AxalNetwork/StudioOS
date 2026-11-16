@@ -52,8 +52,9 @@ import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
  * `'founder'` for every role on this route — no advisor ordering, no advisor
  * strip, no `advisor_note`. That was fixed, and then the zone turned out to be
  * about a different object altogether: the `pr3` artboard's comparable RANGES
- * for the firm's own service lines, not sector signals. `MarketZone` is that
- * page; the feed kept `/signals` until D670 retired it. `CompetitorAnalysisPage` had the same
+ * for the firm's own service lines, not sector signals. `MarketDirectoryZone`'s
+ * readings card is that page now (D593; the older `MarketZone` body, unmounted,
+ * was deleted by D6285); the feed kept `/signals` until D670 retired it. `CompetitorAnalysisPage` had the same
  * swallowed-props defect and keeps its fix — `Companies` takes a `chromeless`
  * flag that is deliberately not `embedded` (see `components/CompetitorAnalysis.jsx`).
  *
@@ -370,7 +371,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   // D392 — AN ENTRY MAY NAME THE LICENCES IT IS TRUE FOR. `markets` is: the
   // saved deep-dive it names is what the founder canvas draws, while the
   // partner and advisor canvases draw comparable readings, which is what
-  // `MarketZone` is. D495 — the investor canvas draws theses, so the investor
+  // `MarketDirectoryZone`'s readings card holds. D495 — the investor canvas draws theses, so the investor
   // has an entry of its own (`markets:investor`).
   const gap = !isRoot && slug ? storeGapFor(slug, role) : null;
 
