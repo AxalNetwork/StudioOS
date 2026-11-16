@@ -330,18 +330,30 @@ export function DealDocuments({ deal }) {
       if (r?.url && typeof window !== 'undefined') window.location.assign(r.url);
     } catch (e) { setDl((m) => ({ ...m, [f.uid]: { err: e?.message || 'The file did not open. Try again.' } })); }
   };
-  const tone = { not_opened: 'off', behind_nda: 'wait', nda_on_file: 'done', open: 'done' }[st.state];
+  const tone = { not_opened: 'off', behind_nda: 'wait', nda_pending: 'wait', nda_on_file: 'done', open: 'done' }[st.state];
+  // D4815 DX10 (#5907): each state's label, so no two read alike.
+  const pill = { not_opened: 'Not opened to you', behind_nda: 'NDA required', nda_pending: 'Waiting for signatures', nda_on_file: 'Open to you', open: 'Open to you' }[st.state];
   return (
     <div className="flex flex-col gap-3.5" data-testid="deal-documents">
       {st.state === 'loading' && <Card><Reading /></Card>}
-      {st.state === 'unreadable' && <Unreadable what={st.what} claim="That is not a claim that the room is closed to you." onRetry={access.status === 'unreadable' ? reloadAccess : loadRoom} />}
+      {/* D4815 DX10 (#5907) E: access that could not be confirmed is its own card, with Try again and never Ask
+          for access. A room that could not be read after access was confirmed keeps the shared Unreadable. */}
+      {st.state === 'unreadable' && access.status === 'unreadable' && (
+        <section role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 p-4`} data-testid="deal-room-state-unreadable">
+          <Pill tone="off">Unreadable</Pill>
+          <p className="m-0 flex-1 text-[14px] font-bold text-axal-ink dark:text-gray-100">{st.line}</p>
+          <button type="button" className={BTN_S} onClick={reloadAccess} data-testid="deal-room-retry">Try again</button>
+          <span className={`${SUB} w-full`}>That is not a claim that the room is closed to you.</span>
+        </section>
+      )}
+      {st.state === 'unreadable' && access.status !== 'unreadable' && <Unreadable what={st.what} claim="That is not a claim that the room is closed to you." onRetry={loadRoom} />}
       {tone && (
         <section className={`${CARD} flex flex-wrap items-center gap-2.5 p-4`} data-testid={`deal-room-state-${st.state}`}>
-          <Pill tone={tone}>{st.state === 'not_opened' ? 'Not opened to you' : st.state === 'behind_nda' ? 'Behind an NDA' : 'Open to you'}</Pill>
+          <Pill tone={tone}>{pill}</Pill>
           <p className="m-0 flex-1 text-[14px] font-bold text-axal-ink dark:text-gray-100">{st.line}</p>
           {st.state === 'not_opened' && st.canAsk && <button type="button" className={BTN_S} onClick={() => setDialog('ask')} data-testid="deal-room-ask">Ask for access</button>}
-          {st.state === 'behind_nda' && st.canSign && <button type="button" className={BTN_S} onClick={() => setDialog('nda')} data-testid="deal-room-nda">Sign the NDA</button>}
-          {st.state === 'behind_nda' && st.ndaPending && <span className={SUB}>The NDA is out for signature. The files open once every party has signed.</span>}
+          {st.state === 'behind_nda' && st.canSign && <button type="button" className={BTN_S} onClick={() => setDialog('nda')} data-testid="deal-room-nda">Sign NDA</button>}
+          {st.state === 'nda_pending' && st.sub && <span className={`${SUB} w-full`} data-testid="deal-room-nda-pending">{st.sub}</span>}
         </section>
       )}
       {listing && <SharedRoomFiles key={projectUid} projectUid={projectUid} listing={listing} rawFiles={room.data?.files || []} withheld={st.withheld || 0} onDownload={download} downloads={dl} />}

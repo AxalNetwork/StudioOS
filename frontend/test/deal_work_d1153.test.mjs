@@ -43,7 +43,7 @@ test('the room\'s three access states; behind an NDA the withheld files are a co
   assert.match(roomStateOf({ status: 'ready', data: { granted: null, request: { state: 'declined', decided_at: '2026-10-21', decline_reason: 'Not yet.' } } }).line, /declined your request on 21 Oct 2026: Not yet\./);
   const access = { status: 'ready', data: { granted: { expires_at: null }, founder_user_id: 9, nda: null } };
   const nda = roomStateOf(access, ready(ROOM));
-  assert.deepEqual([nda.state, nda.withheld, nda.canSign, nda.line], ['behind_nda', 6, true, 'You have access. 6 files are behind an NDA.']);
+  assert.deepEqual([nda.state, nda.withheld, nda.canSign, nda.line], ['behind_nda', 6, true, 'You have access. 6 files require an NDA.']);
   assert.equal(roomStateOf({ ...access, data: { ...access.data, nda: { status: 'out_for_signature' } } }, ready(ROOM)).canSign, false, 'an NDA out for signature is not asked for twice');
   const on = roomStateOf({ status: 'ready', data: { granted: { expires_at: null }, nda: { status: 'on_file', valid_until: '2027-10-09 00:00:00' } } }, ready({ ...ROOM, nda_signed: true, withheld_behind_nda: 0 }));
   assert.deepEqual([on.state, on.line], ['nda_on_file', 'You have access and an NDA on file until 9 Oct 2027.']);
