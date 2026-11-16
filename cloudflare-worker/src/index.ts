@@ -177,7 +177,6 @@ import eadwynRoutes from './routes/eadwyn';
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
 // layer in routes/integrations.ts can dispatch to it.
 import { syncAllHubspotIntegrations } from './integrations/providers/hubspot';
-import { syncAllTiktokIntegrations } from './services/tiktok/daily';
 // Task #3 — Calendly provider. Side-effect import so registerProvider() runs at boot.
 import { syncAllCalendlyIntegrations } from './integrations/providers/calendly';
 // Task #4 — Salesforce provider. Side-effect import so registerProvider() runs at boot.
@@ -3270,6 +3269,7 @@ export default {
         // Totals only in the log: no figure, title or open_id.
         if (now.getUTCMinutes() === 41) {
           try {
+            const { syncAllTiktokIntegrations } = await import('./services/tiktok/daily');
             const r = await syncAllTiktokIntegrations(env, now.getTime());
             if (r.scanned > 0) {
               console.info(`[cron] tiktok sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed} skipped=${r.skipped} snapshots=${r.snapshots} videos=${r.videos} kept_deleted=${r.kept_deleted}`);
