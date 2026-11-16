@@ -70,11 +70,11 @@ import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
-import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
+import { LINE as CAP_REL_LINE, capRelStanding, homeAction as capRelHomeAction, isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 import { lazyStep } from './lazyStep.jsx';
 import validateDef from './defs/validate.jsx';
 import raiseDef from './defs/raise.jsx';
-import { useUseOfFundsHome } from './defs/raise.jsx';
+import { useCapRelHome, useUseOfFundsHome } from './defs/raise.jsx';
 import growDef from './defs/grow.jsx';
 import buildDef from './defs/build.jsx';
 
@@ -545,6 +545,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const uofHome = useUseOfFundsHome(uofOwnsHome ? projectId : null);
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
+  // D5081 part 2 (#5081, RA-22): Capital relationships' Overview owns its page, and its prospects and commitments
+  // reads are held here, so the header's primary action and Overview draw from one pair of reads.
+  const capRelOwnsHome = cycle === 'raise' && slug === CAP_REL && !record && !lightbox;
+  const capRelHome = useCapRelHome(capRelOwnsHome ? projectId : null);
   // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
   // waiting row's Edit (AF16), which opens its Add form with the row's values.
   // #3740 part 1: an Edit form passes its row id, so the sheet reads the saved row (`record`).
@@ -751,8 +755,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const primary = primaryForModule(cycle, slug, q, openAction);
   // D5081: on Use of funds' Home the action opens Edit split in place, and only when Home's read allows it.
   const uofPrimary = uofOwnsHome ? uofHomeAction(uofHome.read) : null;
+  // D5081 part 2: on Capital relationships' Overview it is Follow up, Find investors or Add investor, from the
+  // prospects read and only for a viewer who works the tool; on Pipeline the tab's own Add investor is the action.
+  const capRelWorks = capRelOwnsHome && capRelStanding(module?.capabilities).works;
   const action = uofOwnsHome ? (uofPrimary ? { label: uofPrimary.label, onClick: () => uofHome.setDialog(uofPrimary.dialog) } : null)
-    : uofTab === 'allocation' ? null : primary;
+    : capRelOwnsHome ? capRelHomeAction(capRelHome, { works: capRelWorks, search: q })
+      : uofTab === 'allocation' || capRelTab === 'pipeline' ? null : primary;
   const Mount = def.Mount || null;
   // D5077 (#5077, BD21): a module's own Eadwyn asks (the rail's prompts, with its AI settings folded),
   // and its own rail sentence in place of the desk's; neither for an admin reading the narrative.
@@ -946,7 +954,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         records={recs}
         showRecords={!distribution}
         // D5081 (#5081, RA-14): Use of funds' Home owns the page; no generic "at a glance" or Categories under it.
-        owned={uofOwnsHome ? { sub: UOF_FRAME } : null}
+        // D5081 part 2 (RA-22): so does Capital relationships' Overview; no generic "at a glance", This venture or stage counts.
+        owned={uofOwnsHome ? { sub: UOF_FRAME } : capRelOwnsHome ? { sub: CAP_REL_LINE } : null}
         // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
@@ -977,7 +986,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} home={uofOwnsHome ? uofHome : null} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} home={capRelOwnsHome ? capRelHome : null} works={capRelWorks} action={action} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
