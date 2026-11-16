@@ -20,7 +20,7 @@ import ZoneDraft, { pressHeaders } from '../src/workspaces/ZoneDraft.jsx';
 
 const h = React.createElement;
 const PART3 = [
-  'build/roadmap', 'build/this-week', 'build/retro', 'build/kpi',
+  'build/roadmap', 'build/this-week', 'build/retro', 'build/kpi', 'build/founding', 'build/company',
   'raise/data-room', 'raise/legal', 'raise/narrative-fix', 'raise/capital', 'raise/liquidity',
   'grow/talent', 'network/re-engagement', 'network/intro-email', 'research/funds',
 ];

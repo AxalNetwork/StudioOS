@@ -156,7 +156,7 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     'referral-partners': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Referral queue', 'History', 'Settings'],
     // D4298 (#4298): Influencers (IN11).
     influencer: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Applications', 'Influencers', 'Offers', 'Payouts', 'History', 'Settings'],
-    'investor-cohorts': ['Overview', 'Activity'],
+    'investor-cohorts': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
     'ai-native-venture': [],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');

@@ -39,6 +39,7 @@ import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
 } from '../lib/sitePricing';
 import './pricing.css';
+import { entitlementQuestions, investorCapacityGroup } from '../lib/pricingEntitlements';
 
 /**
  * The display face for lines that are not headings (a card's name, a price):
@@ -158,10 +159,10 @@ function GroupHead({ t, meta }) {
 /** D1172: "Best suited for" is a sentence, set in words rather than figures. */
 const cellClass = (meta, label) => (meta?.fresh && label === STORAGE_COMPARE.best ? 'axp-cell axp-cell-words' : 'axp-cell');
 
-function Compare({ tab, cards, storage = null }) {
+function Compare({ tab, cards, storage = null, capacity = null }) {
   const D = useContext(Face);
   // D1172 (#3085, STG18–STG19): the Storage group comes last, from the public read.
-  const groups = [...(COMPARE[tab] || []), ...(storage ? [storage] : [])];
+  const groups = [...(COMPARE[tab] || []), ...(capacity ? [capacity] : []), ...(storage ? [storage] : [])];
   // The phone shows one plan: the member's own, else the second (the canvas's default).
   const [pick, setPick] = useState(() => {
     const own = cards.findIndex((c) => c.current);
@@ -459,8 +460,8 @@ function Packs({ read, onRetry, signedIn, onBuy }) {
   );
 }
 
-function Faq({ tab }) {
-  const items = tab === 'investor' ? [...FAQ_INVESTOR, ...FAQ] : FAQ;
+function Faq({ tab, catalogue }) {
+  const items = [...(tab === 'investor' ? [...FAQ_INVESTOR, ...FAQ] : FAQ), ...entitlementQuestions(tab, catalogue)];
   const [open, setOpen] = useState(0);
   return (
     <section className="axp-sec axp-faq" aria-labelledby="axp-faq-h">
@@ -646,7 +647,7 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} />}
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} capacity={investorCapacityGroup(tab, plans.body?.catalogue)} />}
 
       {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} onAdd={(uid) => setPackSheet({ pack: uid })} />}
       {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} onBuy={(uid) => setPackSheet({ pack: uid })} />}
@@ -657,7 +658,7 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      <Faq key={`faq-${tab}`} tab={tab} />
+      <Faq key={`faq-${tab}`} tab={tab} catalogue={plans.status === 'ready' ? plans.body?.catalogue : null} />
       </div>
 
       {!user && (

@@ -359,15 +359,17 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
 }, async (rc) => {
   // Investor types, saved versions to start from, and the two check sources (decision 7).
   // D909: the live wording is the Spin-Out deck's, offered to Spin-Out ventures only (owner question 5 on #2454).
+  // D6069: any venture with a saved deck version may start from that deck's words; `deck` names the current deck version.
   const versions = await loadVersions(ctxOf(rc));
-  const { spinout } = await deckReaders(rc.env, rc.projectId);
+  const { spinout, deck } = await deckReaders(rc.env, rc.projectId);
   return {
     investor_types: INVESTOR_TYPES.map((t) => ({ value: t, label: typeLabel(t) })),
-    start_from: START_FROM.filter((k) => spinout || k !== 'live')
-      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : 'Blank' })),
+    start_from: START_FROM.filter((k) => (k === 'live' ? spinout : k === 'deck' ? deck != null : true))
+      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : k === 'deck' ? `Pitch deck v${deck!.version}'s words` : 'Blank' })),
     versions: versions.map((x) => ({ value: String(x.version), label: `v${x.version} · ${typeLabel(x.investor_type).toLowerCase()}` })),
     check_against: opts([['deck', 'Pitch deck'], ['metrics', 'Metrics']]),
     spinout,
+    deck: deck ? { version: deck.version } : null,
   };
 });
 
