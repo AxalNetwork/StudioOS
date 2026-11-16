@@ -70,6 +70,12 @@ export type Ctx = { env: Env; projectId: number; today: string; canWrite?: boole
 const href = (ctx: Ctx, slug: string) => `/validate/${slug}?project=${ctx.projectId}`;
 /** D685 §5.4 — the setup modal's own route. */
 const recordHref = (ctx: Ctx) => `/validate/record?project=${ctx.projectId}`;
+/**
+ * D6010 (#6010) — the market sizing tool, opened from Market intelligence for
+ * this venture. Every step the market card names (a figure, a competitor, the
+ * positioning map) is done there; the module page itself has no control for them.
+ */
+const sizingHref = (ctx: Ctx) => `/validate/market-intelligence/sizing?project=${ctx.projectId}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** `YYYY-MM-DD` `n` days before `today`. */
@@ -740,7 +746,7 @@ export type SegmentSummary = {
  * payment to a segment yet. Saying Measured from interview counts alone would
  * be the overclaim the canvas's own legend exists to prevent.
  */
-export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): { segments: SegmentSummary[]; unassigned: number } {
+export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]) {
   const held = interviews.filter(isHeld);
   const summary = (id: number | null, name: string, source: string | null, updated: string | null): SegmentSummary => {
     const ivs = held.filter((i) => (i.segment_id ?? null) === id);
@@ -756,9 +762,11 @@ export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): 
     };
   };
   const known = new Set(segments.map((s) => Number(s.id)));
+  const unassignedInterviews = held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id)));
   return {
     segments: segments.map((s) => summary(Number(s.id), s.name, s.source, s.updated_at)),
-    unassigned: held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id))).length,
+    unassigned: unassignedInterviews.length,
+    unassignedInterviews,
   };
 }
 
@@ -875,15 +883,15 @@ export async function marketCard(ctx: Ctx): Promise<Card> {
     const [market, tracked, readiness] = await Promise.all([loadMarket(ctx), loadTracked(ctx), loadMarketReadiness(ctx)]);
     const defined = [market.tam, market.sam, market.som].filter((f) => f.value != null).length;
     if (defined === 0 && tracked.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: href(ctx, 'market-intelligence') }, reason: 'No market size yet.' };
+      return { state: 'empty', series: null, next: { text: 'Add the total market, with its source', href: sizingHref(ctx) }, reason: 'No market size yet.' };
     }
     const missing = market.tam.value == null ? 'total' : market.sam.value == null ? 'serviceable' : market.som.value == null ? 'obtainable' : null;
     const next = missing
-      ? { text: `Add the ${missing} market`, href: href(ctx, 'market-intelligence') }
+      ? { text: `Add the ${missing} market`, href: sizingHref(ctx) }
       : tracked.length < 3
-        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: href(ctx, 'market-intelligence') }
+        ? { text: `Track ${3 - tracked.length} more ${3 - tracked.length === 1 ? 'competitor' : 'competitors'}`, href: sizingHref(ctx) }
         : !readiness.positioning_map
-          ? { text: 'Complete the positioning map', href: href(ctx, 'market-intelligence') }
+          ? { text: 'Complete the positioning map', href: sizingHref(ctx) }
           : null;
     return {
       state: 'ok',
@@ -1479,7 +1487,8 @@ const EVIDENCE_RANK: Record<string, number> = { measured: 3, pattern: 2, anecdot
 
 async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const [segments, interviews] = await Promise.all([loadSegments(ctx), loadInterviews(ctx)]);
-  let rows = segmentsOf(segments, interviews).segments.filter((s) => has(rq.q, s.name));
+  const summary = segmentsOf(segments, interviews);
+  let rows = summary.segments.filter((s) => has(rq.q, s.name));
   if (rq.filter.evidence) rows = rows.filter((s) => (rq.filter.evidence === 'not_recorded' ? s.evidence == null : s.evidence === rq.filter.evidence));
   if (rq.filter.fit === 'strong') rows = rows.filter((s) => s.strong > 0);
   if (rq.filter.fit === 'none') rows = rows.filter((s) => s.strong === 0);
@@ -1490,7 +1499,16 @@ async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   else rows.sort((a, b) => (EVIDENCE_RANK[b.evidence ?? ''] ?? 0) - (EVIDENCE_RANK[a.evidence ?? ''] ?? 0) || b.interviews - a.interviews);
   return paged(LISTS['ideal-customer-profile'].cols, rows.map((s) => ({
     id: s.id, segment: s.name, interviews: s.interviews, strong_fit: s.strong, evidence: s.evidence, updated: s.updated_at,
-  })), rq.page, listOf('ideal-customer-profile'));
+  })), rq.page, {
+    ...listOf('ideal-customer-profile'),
+    ...(ctx.canWrite === true ? { parts: {
+      segments: segments.map(({ id, name }) => ({ id, name })),
+      unassigned_total: summary.unassigned,
+      unassigned: summary.unassignedInterviews.slice().sort((a, b) =>
+        (heldDate(b) ?? '').localeCompare(heldDate(a) ?? '') || b.id - a.id,
+      ).slice(0, PAGE_SIZE).map((i) => ({ id: i.id, interviewee: i.interviewee_name, date: heldDate(i), fit: i.icp_fit })),
+    } } : {}),
+  });
 }
 
 async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
