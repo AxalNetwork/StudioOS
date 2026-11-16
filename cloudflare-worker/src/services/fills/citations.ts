@@ -35,6 +35,7 @@
  */
 import type { Env } from '../../types';
 import { searchSemantic, researchNamespace } from '../vectorize';
+import { reconcileRoomRefs } from '../roomLibrary';
 import { run as runAI } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
 import type { Citation } from './types';
@@ -80,6 +81,8 @@ export async function citeFromLibrary(
   const q = tidy(query);
   if (!q) return null;
   let hits;
+  // D6869: a data-room reference whose grant no longer reaches its file is lapsed, and unindexed, before any search.
+  await reconcileRoomRefs(env, userId).catch(() => 0);
   try {
     hits = await searchSemantic(env, q, {
       topK: 5,

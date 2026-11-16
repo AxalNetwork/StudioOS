@@ -83,7 +83,8 @@ test('“in Ask” is computed by the worker, and a shared document is never in 
   // D4605: answerable is `indexed` or `partial`, one list the worker keeps.
   assert.match(WORKER, /in_ask: source === 'own' && ANSWERABLE_STATES\.includes\(r\.index_state\),/,
     'the reach is no longer computed from BOTH the provenance and the index state');
-  assert.match(WORKER, /read_only: source === 'client',/,
+  // D6869: a data-room reference is read only too.
+  assert.match(WORKER, /read_only: source === 'client' \|\| Boolean\(room\),/,
     'the read-only flag is gone from the payload');
   // D3701: the page reads the reach through `answerabilityOf`, which reads only `in_ask`.
   assert.match(LIBRARY, /answerabilityOf\(d\)/, 'the page no longer reads the computed reach');
