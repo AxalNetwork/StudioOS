@@ -27,8 +27,9 @@ export const STORAGE_PLANS = Object.freeze({
   'investor:free': FREE,
   'investor:plus': ACTIVE,
   'investor:professional': PROFESSIONAL,
+  // D6883 (#6883): the owner's word for the cell, as the Storage cell beside it reads (#5957).
   'investor:institutional': Object.freeze({ allowance_bytes: null, allowance_reason: 'Negotiated',
-    best_suited: null, best_suited_reason: 'Best suited for is negotiated with the plan.' }),
+    best_suited: 'Negotiated', best_suited_reason: null }),
   'advisor:free': FREE,
   'advisor:pro': START,
   'partner:free': FREE,
