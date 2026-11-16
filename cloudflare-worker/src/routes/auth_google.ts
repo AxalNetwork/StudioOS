@@ -300,7 +300,7 @@ export function decideUnlinkAllowed(opts: {
 
 export const __testing = { signState, verifyState };
 
-function sanitizeRedirect(raw: unknown): string {
+export function sanitizeRedirect(raw: unknown): string {
   // Only allow absolute paths on app.axal.vc; never a full URL (open-redirect
   // class bug). Default to /dashboard.
   if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';

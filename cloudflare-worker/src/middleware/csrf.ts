@@ -54,6 +54,10 @@ const CSRF_PATH_EXEMPT = new Set([
   // the same reasons: the single-use or signed token is the authorisation.
   '/api/public/trust/subprocessors/confirm',
   '/api/public/trust/subprocessors/unsubscribe',
+  // D6957: Apple's form_post return, a cross-site POST that cannot carry the
+  // CSRF header. Its binding is the signed state, the SameSite=None nonce
+  // cookie and the id_token's nonce, all checked before any write.
+  '/api/auth/apple/callback',
 ]);
 
 function readCookie(cookieHeader: string, name: string): string | null {
