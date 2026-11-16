@@ -59,7 +59,7 @@ export function waitlistRow(s) {
   };
 }
 
-const BTN = 'inline-flex min-h-11 items-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300';
+const BTN = 'inline-flex min-h-11 items-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-violet-deep hover:bg-axal-lavender disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-violet-300 dark:hover:bg-violet-900/30';
 
 /**
  * The customer waitlist's sign-ups, each with Invite or Follow up (the routes
