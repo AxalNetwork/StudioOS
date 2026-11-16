@@ -19,6 +19,8 @@ throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.
 
+`adminSecurity/` (D4708, #4708) builds HQ › Security's two reads (`/overview` and the `/governance` ledger) for `../routes/admin_security.ts`, and is the Worker's door to the desk's shared contract (`frontend/src/lib/securityContract.js`). See its README.
+
 `eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
 
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
@@ -299,7 +301,9 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `stripeReadiness.ts` | D1433 (#3703): shared key-mode, signing-secret and per-interval plan readiness for checkout, public plans and HQ checks. |
 | `distribution/` | D4485 overview reads and provenance, invoked after the existing Grow project gate. |
 | `beehiiv/` | D2407 (#2407 parts 1–3): a founder's own Beehiiv newsletter through Beehiiv's MCP server, reads plus one draft post when the founder presses Send. `mcp.ts` holds the two frozen tool lists; `reads.ts` reads, aggregates only, every rate a fraction; `drafts.ts` builds and creates the one draft (part 3, never a `status`); `grow.ts` links one publication per venture and lands Grow's figures and posts through the ledger. It never imports Axal VC's own newsletters. Its README has the rules. |
+| `tiktok/` | D5863 (#5863, part 2a of #2401): a founder's own TikTok in Grow. `client.ts` is the only caller of TikTok's Display API (the account's counts and the public videos, field by field); `grow.ts` links one account to one venture, lands the daily snapshot and the videos through the ledger, draws the "From TikTok" parts and purges a connection's figures on disconnect. Its README has the rules. |
 | `typeform/` | D5828 (#5828): Typeform's incremental response importer for one connection, venture and form. `api.ts` builds the two GET reads by validated region; `mappings.ts` holds what may be mapped and when an answer qualifies; `importer.ts` pages, dedupes through the `connector_fed_items` ledger, checkpoints after durable writes, reconciles provider deletions and keeps withdrawn items withdrawn. No respondent identity is read or stored. Its README has the rules. |
+| `facebook/` | D5859 (#5859, part 2a of #2399): a linked Facebook Page in Grow. `insights.ts` is the only reader of Page figures (followers, daily views, unique viewers and engagements), through the provider's bounded Graph call; `grow.ts` links one Page per venture and lands the figures through the ledger, never as a KPI. Its README has the rules. |
 
 ## Rules
 

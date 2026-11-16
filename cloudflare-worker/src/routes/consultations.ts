@@ -14,6 +14,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { buildBestFitReport, persistBestFitReport } from '../services/bestFit';
 import { ensureAxalFitSchema } from '../services/axalFitSchema';
+import { notify } from '../services/notify';
 
 const CONSULTATION_STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'] as const;
 type ConsultationStatus = typeof CONSULTATION_STATUSES[number];
@@ -23,6 +24,60 @@ export const CONSULTATION_TRANSITIONS: Readonly<Record<ConsultationStatus, reado
   completed: [],
   cancelled: [],
 });
+
+/**
+ * D5886 (#5886) — the owner chose B, in app only: the member is told when an
+ * admin confirms (with the slot time) or cancels their consultation. A
+ * completed consultation is not announced, and nothing is emailed.
+ */
+export const MEMBER_NOTICE_STATUSES: readonly ConsultationStatus[] = Object.freeze(['confirmed', 'cancelled']);
+
+function slotText(slotAt: unknown): string | null {
+  if (typeof slotAt !== 'string' || !slotAt) return null;
+  const at = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(slotAt) ? slotAt : `${slotAt.replace(' ', 'T')}Z`);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }).format(at)} UTC`;
+}
+
+/**
+ * The member's in-app notice for a committed transition. Runs only after the
+ * status and its event committed (D5300 §3): a failed notice never undoes or
+ * fails the decision; the route reports `notified: false` instead.
+ */
+export async function noticeMember(env: Env, row: Record<string, unknown>): Promise<boolean | null> {
+  const status = String(row.status) as ConsultationStatus;
+  if (!MEMBER_NOTICE_STATUSES.includes(status)) return null;
+  const topic = typeof row.topic === 'string' && row.topic.trim() ? row.topic.trim().slice(0, 120) : null;
+  const slot = slotText(row.slot_at);
+  const confirmed = status === 'confirmed';
+  try {
+    const id = await notify(env, {
+      userId: Number(row.user_id),
+      type: confirmed ? 'consultation_confirmed' : 'consultation_cancelled',
+      title: confirmed ? 'Your Best-Fit consultation is confirmed' : 'Your Best-Fit consultation was cancelled',
+      body: confirmed
+        ? (slot ? `It is booked for ${slot}.` : 'The time has not been set yet; you will see it on your Studio home.')
+          + (topic ? ` Topic: ${topic}.` : '')
+        : `The consultation${topic ? ` about ${topic}` : ''} will not take place. You can request another from your Studio home.`,
+      link: '/studio',
+      payload: { booking_id: Number(row.id), status, slot_at: typeof row.slot_at === 'string' ? row.slot_at : null },
+      channels: ['in_app'],
+      category: 'calendar',
+    });
+    return id !== null;
+  } catch (e) {
+    console.warn('[consultations] member notice failed', (e as Error)?.name ?? 'error');
+    return false;
+  }
+}
+
+/** #6394: accept an ISO date-time (including datetime-local), never a rolled-over calendar date. */
+function validSlotAt(value: string): boolean {
+  const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?$/.exec(value);
+  if (!parts || Number(parts[2]) > 23 || Number(parts[3]) > 59 || Number(parts[4] || 0) > 59 || !Number.isFinite(Date.parse(value))) return false;
+  const day = new Date(`${parts[1]}T00:00:00Z`);
+  return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === parts[1];
+}
 
 const ADMIN_BOOKING_SELECT = `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
   b.topic, b.notes, b.report_id, b.created_at, b.version,
@@ -124,7 +179,10 @@ adminConsultations.post('/:id/status', async (c) => {
   if (!(typeof expectedVersion === 'number' && Number.isSafeInteger(expectedVersion) && expectedVersion >= 1)) {
     return c.json({ code: 'expected_version_required', message: 'Name the version you read in expected_version.' }, 400);
   }
-  const slotAt = typeof body.slot_at === 'string' ? body.slot_at : null;
+  const slotAt = typeof body.slot_at === 'string' ? body.slot_at.trim() || null : null;
+  if ((body.slot_at != null && typeof body.slot_at !== 'string') || (slotAt && !validSlotAt(slotAt))) {
+    return c.json({ code: 'invalid_slot_at', message: 'slot_at must be a valid date-time or left blank to keep the booked time.' }, 400);
+  }
 
   const read = () => c.env.DB.prepare(`${ADMIN_BOOKING_SELECT} WHERE b.id = ?`).bind(id).first<Record<string, unknown>>();
   const before = await read();
@@ -157,5 +215,6 @@ adminConsultations.post('/:id/status', async (c) => {
   if (Number(updated.meta?.changes ?? 0) !== 1) {
     return c.json({ code: 'version_conflict', message: 'This consultation changed after you read it.', current: row }, 409);
   }
-  return c.json({ booking: row });
+  // D5886: after commit only. `null` for a status the member is not told about.
+  return c.json({ booking: row, notified: await noticeMember(c.env, row) });
 });

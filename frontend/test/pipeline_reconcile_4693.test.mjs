@@ -55,7 +55,8 @@ test('"Send counter" is gone: the draft is saved, and the page says nothing is s
   // Mutations checked: the old label restored; the foot sentence dropped.
   const zone = read('../src/pages/partner/pipeline/NegotiationsZone.jsx');
   assert.doesNotMatch(zone, /Send counter/);
-  assert.match(zone, /accept="Save counter draft"/);
+  // D5938: PP05b names the accept "Accept counter draft"; it still sends nothing.
+  assert.match(zone, /accept="Accept counter draft"/);
   assert.match(zone, /nothing is sent to the client/);
   const draft = read('../src/workspaces/ZoneDraft.jsx');
   assert.match(draft, /nothing is sent/, 'the component\'s own contract is that accepting sends nothing');
@@ -68,9 +69,13 @@ test('the zones follow the Worker\'s rules for open and active, and the studio b
   const neg = read('../src/pages/partner/pipeline/NegotiationsZone.jsx');
   assert.match(neg, /r\.negotiation\.open \?\? r\.negotiation\.stage !== 'closed'/);
   assert.equal([...neg.matchAll(/negotiation\.open \?\?/g)].length, 3, 'the open list, the stalled count and the ball-with-us count');
+  // #5939: the active rule is the command centre's one copy, which the Retainers zone imports.
+  const rules = read('../src/pages/partner/pipeline/commandCentre.js');
+  assert.match(rules, /r\.retainer\.active \?\? !r\.retainer\.ended_at/);
   const ret = read('../src/pages/partner/pipeline/RetainersZone.jsx');
-  assert.match(ret, /r\.retainer\.active \?\? !r\.retainer\.ended_at/);
-  assert.match(ret, /r\.retainer\?\.active === false \? null : r\.retainer\?\.monthly_amount_cents/);
+  assert.match(ret, /import \{[^}]*\bretainerActive\b[^}]*\} from '\.\/commandCentre'/);
+  const model = read('../src/pages/partner/pipeline/retainersModel.js');
+  assert.match(model, /if \(!retainerActive\(r\)\) return \{ cents: null[^}]*\};\s*const cents = num\(t\.monthly_amount_cents\);/);
   const page = read('../src/pages/PipelinePage.jsx');
   assert.equal([...page.matchAll(/filter\(\(\[k\]\) => !k\.startsWith\('_'\)\)/g)].length, 2, 'both metric chip lists skip the formula key');
 });

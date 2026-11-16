@@ -84,7 +84,7 @@ export function httpUrlOrNull(v: unknown): string | null {
  * an id some record could own (S1's ruling on #1736).
  */
 async function recordActor(env: Env, userId: number | null, projectId: number,
-  module: ModuleSlug, entityId: string | number | null, action: string, summary: string) {
+  module: ModuleSlug | 'objective', entityId: string | number | null, action: string, summary: string) {
   await logCycleWrite(env, { projectId, userId, cycle: 'validate', module, entityId, action, summary });
 }
 
@@ -437,6 +437,45 @@ export async function setWaitlistTarget(
      DO UPDATE SET target_value = excluded.target_value, updated_at = datetime('now')`,
   ).bind(input.projectId, WAITLIST_TARGET_KEY, n, input.userId).run();
   await recordActor(env, input.userId, input.projectId, 'demand-signals', null, 'waitlist_target_set', `Waitlist target ${n}`);
+}
+
+// ---------------------------------------------------------------------------
+// The validation objective (D5997, #5997)
+// ---------------------------------------------------------------------------
+
+/** "Trying to learn:" is one header line (board V1): one question, not a brief. */
+export const OBJECTIVE_MAX = 280;
+
+/**
+ * Write, change or clear the venture's objective ("Trying to learn:").
+ * Whitespace collapses to single spaces, so the header stays one line; an
+ * empty value or `null` clears it. A clear keeps the row with `objective`
+ * NULL, so who cleared it and when stay recorded. Logged under
+ * `validate.objective` with no record id, as a module-level write is (S1's
+ * ruling on #1736), in the same batch as the write.
+ */
+export async function setValidationObjective(
+  env: Env,
+  input: { projectId: number; userId: number | null; value: unknown },
+): Promise<{ text: string | null }> {
+  if (input.value !== null && typeof input.value !== 'string') throw new WriterError(400, 'What you are trying to learn is text');
+  const text = input.value === null ? '' : input.value.replace(/\s+/g, ' ').trim();
+  if ([...text].length > OBJECTIVE_MAX) throw new WriterError(400, `Keep what you are trying to learn to ${OBJECTIVE_MAX} characters`);
+  const value = text || null;
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO validation_objectives (project_id, objective, updated_by)
+       VALUES (?, ?, ?)
+       ON CONFLICT(project_id)
+       DO UPDATE SET objective = excluded.objective, updated_by = excluded.updated_by, updated_at = datetime('now')`,
+    ).bind(input.projectId, value, input.userId),
+    logCycleWriteStatement(env, {
+      projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'objective', entityId: null,
+      action: value ? 'objective_set' : 'objective_cleared',
+      summary: value ? `Trying to learn: ${value}` : 'Trying to learn cleared',
+    }),
+  ]);
+  return { text: value };
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +895,43 @@ export async function updateTheme(
     entityId: input.themeId, action: 'theme_edited', summary: `Theme ${title} edited`,
   }));
   await env.DB.batch(stmts);
+  return { id: input.themeId };
+}
+
+/** D6006: the longest a problem statement field may be. */
+export const MAX_STATEMENT_FIELD = 1000;
+
+/**
+ * D6006 (V19): write a theme's problem statement, the three fields together. A field sent empty clears it
+ * (NULL, Not recorded); a field left out keeps what it holds. One batch with its activity row.
+ */
+export async function updateThemeStatement(
+  env: Env,
+  input: { projectId: number; userId: number | null; themeId: number; who?: unknown; cope?: unknown; cost?: unknown },
+): Promise<{ id: number }> {
+  const g = await themeRow(env, input.projectId, input.themeId);
+  const current = await env.DB.prepare('SELECT statement_who, statement_cope, statement_cost FROM pain_groups WHERE id = ? AND project_id = ?')
+    .bind(input.themeId, input.projectId).first<{ statement_who: string | null; statement_cope: string | null; statement_cost: string | null }>();
+  const next = (raw: unknown, was: string | null) => {
+    if (raw === undefined || raw === null) return raw === null ? null : was;
+    if (typeof raw !== 'string') throw new WriterError(400, 'A problem statement field is text');
+    if (raw.trim().length > MAX_STATEMENT_FIELD) throw new WriterError(400, `A problem statement field holds at most ${MAX_STATEMENT_FIELD} characters`);
+    return raw.trim() || null;
+  };
+  const who = next(input.who, current?.statement_who ?? null);
+  const cope = next(input.cope, current?.statement_cope ?? null);
+  const cost = next(input.cost, current?.statement_cost ?? null);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE pain_groups SET statement_who = ?, statement_cope = ?, statement_cost = ?,
+              statement_updated_at = datetime('now'), statement_updated_by = ?, updated_at = datetime('now')
+        WHERE id = ? AND project_id = ?`,
+    ).bind(who, cope, cost, input.userId, input.themeId, input.projectId),
+    logCycleWriteStatement(env, {
+      projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'problem-discovery',
+      entityId: input.themeId, action: 'theme_statement_edited', summary: `Problem statement for ${g.title} edited`,
+    }),
+  ]);
   return { id: input.themeId };
 }
 

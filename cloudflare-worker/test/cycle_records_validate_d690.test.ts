@@ -49,6 +49,7 @@ function fixture() {
   db.exec(migration('489_interview_findings.sql'));
   db.exec(migration('228_research_company_directory.sql'));
   db.exec(migration('249_project_metrics.sql'));
+  db.exec(migration('202611152333_6006_theme_problem_statement.sql')); // D6006: the theme's problem statement
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
     [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {
@@ -386,11 +387,11 @@ function seeded() {
 }
 
 const RECORDS: Record<string, { a: string; b: string; main: string[]; side: string[] }> = {
-  'problem-discovery': { a: '11', b: '22', main: ['Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
+  'problem-discovery': { a: '11', b: '22', main: ['Problem statement', 'Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
   // D757 (#1924) adds Summary after the placements.
   'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'From this conversation', 'Cost', 'Session'] },
   'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
-  'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Watching for', 'From interviews'] },
+  'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Signal filters', 'From interviews'] },
   'demand-signals': { a: 'signal-7', b: 'signal-22', main: ['Evidence', 'Feeds'], side: ['Who', 'From the interview'] },
   experiments: { a: '5', b: '22', main: ['Evidence', 'Experiments'], side: ['Pain themes', 'What would prove this wrong'] },
 };
@@ -452,7 +453,8 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   assert.equal(JSON.stringify(partner.body).includes('We miss jobs'), false);
   assert.equal(founder.body.main[0].rows[0].b, '"We miss jobs every week."');
   assert.equal(founder.body.main[0].rows[0].c, '→ Theme One');
-  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main[0].rows.map((r: any) => r.a);
+  // D6006: the Problem statement leads the record; Quotes follow it.
+  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main.find((x: any) => x.key === 'quotes').rows.map((r: any) => r.a);
   assert.deepEqual((await quotes(10)).sort(), ['"Theme One"', '"Theme One"']);
   assert.deepEqual((await quotes(40)).sort(), ['"Theme One"', QUOTE_WITHHELD].sort());
   for (const slug of Object.keys(RECORDS)) {
@@ -461,12 +463,13 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   }
 });
 
-test('#1692 test 5: each record has its title, four facts, its sections in the canvas\'s order, and a next step', async () => {
+test('#1692 test 5: each record has its title, facts, its sections in the canvas\'s order, and a next step', async () => {
   const db = seeded();
+  const factCounts: Record<string, number> = { 'customer-research': 5, 'market-intelligence': 3 };
   for (const [slug, r] of Object.entries(RECORDS)) {
     const { body } = await real(db, 10, 'GET', rec(slug, r.a));
     assert.ok(body.title, slug);
-    assert.equal(body.facts.length, slug === 'customer-research' ? 5 : 4, slug);
+    assert.equal(body.facts.length, factCounts[slug] ?? 4, slug);
     for (const f of body.facts) assert.ok(f.value != null || f.reason, `${slug} ${f.label} is a value or a reason`);
     assert.deepEqual(body.main.map((s: any) => s.title), r.main, slug);
     assert.deepEqual(body.side.map((s: any) => s.title), r.side, slug);
@@ -484,7 +487,14 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   // The next step is the row and its status (nextFor, CO:263-269).
   assert.deepEqual(seg.next, { text: 'Context · Not written yet', action: null });
   const comp = (await real(db, 10, 'GET', rec('market-intelligence', 'candidate1'))).body;
-  assert.deepEqual(comp.facts.map((f: any) => f.value ?? f.reason), ['Raised a seed round · 1 Oct', '1,200,000 USD', 'No public figure found', 'No source recorded']);
+  assert.deepEqual(comp.facts.map((f: any) => f.value ?? f.reason), ['Raised a seed round · 1 Oct', '1,200,000 USD', 'No source recorded']);
+  assert.deepEqual(comp.facts.map((f: any) => f.label), ['Latest signal', 'Funding to date', 'Source']);
+  assert.equal(comp.pills[1].text, 'Tracked');
+  const watchNote = 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.';
+  const filters = comp.side.find((s: any) => s.key === 'watching');
+  assert.equal(filters.note, watchNote);
+  assert.deepEqual(filters.rows.map((r: any) => r.b), ['on', 'on', 'off']);
+  assert.equal(comp.actions.find((a: any) => a.key === 'edit').form.fields.find((f: any) => f.key === 'watch').note, watchNote);
   assert.deepEqual(comp.main[0].rows.map((r: any) => r.c), ['Funding'], 'Hires is off by default, so its signal is not drawn');
   db.exec("INSERT INTO competitor_signals (id, analysis_id, candidate_id, signal_type, label, project_id, amount_cents, currency, observed_on) VALUES ('sig-3', 'analysis1', 'candidate1', 'funding', 'Grant', 1, 5000000, 'eur', '2026-09-01')");
   const mixed = (await real(db, 10, 'GET', rec('market-intelligence', 'candidate1'))).body;

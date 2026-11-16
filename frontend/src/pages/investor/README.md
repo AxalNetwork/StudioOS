@@ -83,6 +83,9 @@ the generic route wrapper once a canvas has graduated.
   registry and the rule for adding to it; a zone with no file there still falls
   through to the workspace, which serves the bucket root at `/deals` either
   way.
+- `FundOverviewParts.jsx`, `FundQuarterChart.jsx` and `fundOverviewModel.js`
+  (D6234, #6234) are the Fund overview's tiles, quarterly chart and pack gaps;
+  `FundHistoryPage.jsx` is a fund's quarterly history at `/funds/history`.
 
 `/network` and `/research` are role-branched on one route rather than
 split into two — see the comment above each `<Route>` in `App.jsx` before
@@ -236,3 +239,5 @@ The owner removed the AI side rail from `/spinout-lab/investor-workspace`
 (2026-10-21). Its LP content, refresh control and access gates remain. The
 zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
 other Investor boards retain their existing rails.
+
+`introCreditModel.js` (D6262) uses the introduction service's spendable balance and counterpart answer, preserving unknown versus recorded zero and preventing acceptance against an unread balance.

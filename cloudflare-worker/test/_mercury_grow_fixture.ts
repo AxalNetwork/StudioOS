@@ -61,6 +61,7 @@ export async function growDb() {
   db.exec(file('443'));
   db.exec(file('462'));
   db.exec(file('507'));
+  db.exec(file('580'));
   db.exec(file('445'));
   db.exec(file('477'));
   db.exec(file('490'));

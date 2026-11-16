@@ -158,6 +158,8 @@ export function sizingView(block) {
         value: value == null ? null : usd0.format(value),
         source: sourceText(f.source),
         reason: value == null ? (f.reason || NOT_RECORDED) : (f.source ? null : f.reason || 'No source recorded for this figure'),
+        // D6171 (#6171): the day the figure was set, when `market_figures` holds one.
+        asOf: value != null && dateText(f.as_of) ? `As of ${dateText(f.as_of)}` : null,
       };
     }),
   };
@@ -170,10 +172,26 @@ export function safeUrl(u) {
 
 const DECISIONS = { go: 'Entering', enter: 'Entering', entering: 'Entering', served: 'Served', serve: 'Served', hold: 'On hold', no_go: 'Not entering', exit: 'Leaving' };
 
-/** A company market: its name, where it stands, and when it was decided. */
+/** D6171 (#6171): the four readiness parts the read returns for each market (Grow MG6), in the canvas's order. */
+export const READINESS = [['demand', 'Demand'], ['regulation', 'Regulation'], ['partners', 'Partners'], ['cost', 'Cost']];
+
+/** One readiness part: its score out of 10 with its source, or Not recorded. A recorded 0 stays 0. */
+export function readinessPart(m, key, label) {
+  const n = m?.[`${key}_score`];
+  const score = typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 10 ? n : null;
+  if (score == null) return { key, label, score: null, source: null, text: `${label} ${NOT_RECORDED}` };
+  const source = sourceText(m?.[`${key}_source`]);
+  return { key, label, score, source, text: `${label} ${score}/10${source ? ` · ${source}` : ''}` };
+}
+
+/** A company market: its name, where it stands, when it was decided, and its readiness. */
 export function marketRow(m) {
   const where = DECISIONS[String(m.decision ?? '').toLowerCase()] || (m.state ? String(m.state).replace(/_/g, ' ') : null);
-  return { name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null };
+  const readiness = READINESS.map(([key, label]) => readinessPart(m, key, label));
+  return {
+    name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null,
+    readiness, readinessText: readiness.map((p) => p.text).join(' · '),
+  };
 }
 
 // ---------------------------------------------------------------- DL6 Traction
@@ -224,6 +242,7 @@ export function tractionView(read) {
     state: history ? 'recorded' : b.state,
     months,
     reported: history ? history.filter((m) => m.state === 'reported').length : 0,
+    lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
     series,
     tiles: [...tiles, ...extra],
   };
@@ -260,3 +279,35 @@ export function slotOf(slot, block) {
 
 /** Words for the team values band, advisors and geography the read holds no figure for. */
 export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
+
+
+/** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
+export function tractionSources(points) {
+  const sources = new Map();
+  for (const point of points) {
+    if (point.value == null) continue;
+    const source = sourceText(point.source) || NOT_RECORDED;
+    const asOf = dateText(point.as_of) ? point.as_of : null;
+    if (!sources.has(source) || (asOf && (!sources.get(source) || asOf > sources.get(source)))) sources.set(source, asOf);
+  }
+  return [...sources].map(([source, asOf]) => `${source} · As of ${dateText(asOf) || NOT_RECORDED}`);
+}
+
+/** D6177: RFC 4180 cells; source text cannot become a spreadsheet formula. Numeric values stay numeric. */
+function tractionCsvCell(value) {
+  let text = String(value ?? '');
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
+
+/** Export only the axis and figures already read, including every successful gap as Not reported. */
+export function tractionCsv(view) {
+  const rows = [['month', 'figure', 'value', 'unit', 'source']];
+  for (const figure of TRACTION_TILES) {
+    const points = view.series[figure.key] || [];
+    const unit = points.find(p => p.unit)?.unit || '';
+    for (const point of points) rows.push([point.month, figure.label, point.value == null ? NOT_REPORTED : point.value,
+      point.unit || unit, point.value == null ? '' : point.source || NOT_RECORDED]);
+  }
+  return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
+}

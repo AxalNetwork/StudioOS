@@ -24,8 +24,8 @@ D631 (#1389), Ops area 6:
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
-| `integrated/ops-data.js` · `fd-page` (F1) | `/funds/:fundId` · admin/GP or own LP | `FundPage.jsx`; `GET /api/funds/:id/page`, whitelist facts, live LP totals, scoped report summaries | CURRENT |
-| `integrated/ops-data.js` · `fd-report` (F2) | `/funds/:fundId/reporting/:periodId` · admin/GP; own LP issued-only | `FundReportPeriodPage.jsx`; scoped period GET and existing report-period POST; `new` draft, explicit issue confirmation, immutable issued report and separate correction | CURRENT |
+| `integrated/ops-data.js` · `fd-page` (F1) | `/funds/:fundId` · admin/GP or own LP | `FundPage.jsx`; `GET /api/funds/:id/page`, whitelist facts, live LP totals, scoped report summaries. D6252 (#6252): the rail's Fund brief as a GP-only page band (`FundDraftBand.jsx`, `POST /api/funds/:id/drafts/brief`), its sources listed; Accept keeps it as a fund note (`POST`/`GET /api/funds/:id/notes/brief`, `fund_notes`), and the page shows the newest kept brief to whoever can manage the fund | CURRENT |
+| `integrated/ops-data.js` · `fd-report` (F2) | `/funds/:fundId/reporting/:periodId` · admin/GP; own LP issued-only | `FundReportPeriodPage.jsx`; scoped period GET and existing report-period POST; `new` draft, explicit issue confirmation, immutable issued report and separate correction. D6252 (#6252): the rail's Letter draft as a band on an editable saved period (`POST /api/funds/:id/report-periods/:periodId/drafts/letter`), from its recorded calls and paid distributions; Accept puts the opening first in the unsaved letter and never saves or issues | CURRENT |
 
 | Status | Meaning |
 | --- | --- |

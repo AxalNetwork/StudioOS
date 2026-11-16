@@ -1,5 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
+import { openCheckout } from '../../components/checkout/checkoutEntry.js';
+import { cardView } from './cycleModel';
 import { cycleValidateApi } from '../../lib/api/cycleValidate';
 import { alsoInFor } from '../../lib/adminPlacement.js';
 import { EadwynButton, PhoneRows, Unreadable } from '../../ui';
@@ -28,7 +31,9 @@ import { CYCLE_NAMES, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, rootMeter, then
 /** A plain tap on the cycle's own action route opens it through `openAction`, as the desktop button does. */
 const plainTap = (e) => !e.defaultPrevented && (e.button ?? 0) === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '' }) {
+// D6028 (#6028, BD2): `after` is drawn between the focus and the index (Build's Needs attention), and
+// `planLine` replaces the plan row's line with the plan's own counts.
+export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '', after = null, planLine = null }) {
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
   // D4602 (#4602, BD2): Build's tabs sit above every state, so the plan is reachable while the overview loads or fails.
@@ -70,21 +75,28 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   const actionHref = ROOT_ACTION_PATHS[cycle] ? `/${cycle}/${ROOT_ACTION_PATHS[cycle]}` : null;
   const opensAction = !!(openAction && actionHref && focus?.href && focus.href.split(/[?#]/)[0] === actionHref);
   const rows = phoneIndex(raw, search, cycle);
+  const capTable = cycle === 'raise' && Array.isArray(raw.cards) ? raw.cards.find((card) => card?.slug === 'cap-table') : null;
+  const capTableView = cardView(capTable);
   const also = alsoInFor('founder', name);
 
   // D4602 (#4602, BD2): Build's phone root names its plan, one tap away, with the venture.
   const planRow = cycle === 'build'
-    ? [{ key: 'build-plan', title: 'Build Plan', description: DOOR_LINE, to: planHref('plan', search), testid: 'phone-index-build-plan' }]
+    ? [{ key: 'build-plan', title: 'Build Plan', description: planLine || DOOR_LINE, to: planHref('plan', search), testid: 'phone-index-build-plan' }]
     : [];
   const groups = [{
     label: `Everything else in ${name}`,
     testid: 'phone-index',
     // With no focus the page's Eadwyn button sits beside the index label (D703.md records it).
     action: focus ? undefined : <EadwynButton label={overview} />,
-    rows: [...planRow, ...rows.map((r) => ({
-      key: r.key, title: r.title, description: r.detail || undefined, to: r.href || undefined,
-      notRecorded: r.value == null, value: r.value || undefined, testid: `phone-index-${r.key}`,
-    }))],
+    rows: [...planRow, ...rows.map((r) => {
+      const entry = { key: r.key, title: r.title, testid: `phone-index-${r.key}` };
+      if (r.key === 'cap-table' && capTableView.state === 'locked') {
+        return { ...entry, icon: Lock, description: `On the ${capTableView.plan.name} plan`, value: 'See plans',
+          onClick: () => openCheckout({ plan_key: capTableView.plan.plan_key }) };
+      }
+      return { ...entry, description: r.detail || undefined, to: r.href || undefined,
+        notRecorded: r.value == null, value: r.value || undefined };
+    })],
   }];
   if (also.length) {
     groups.push({
@@ -132,8 +144,9 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
           )}
         </section>
       )}
+      {after}
       {/* PhoneRows draws its own 22px gutter; the body already has one. */}
-      <div className={`-mx-[22px] ${focus ? 'mt-[26px]' : ''}`.trim()}>
+      <div className={`-mx-[22px] ${focus || after ? 'mt-[26px]' : ''}`.trim()}>
         <PhoneRows groups={groups} />
       </div>
     </div>

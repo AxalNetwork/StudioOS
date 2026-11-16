@@ -58,12 +58,12 @@ export const PLAN_CARDS = Object.freeze({
     {
       id: 'plus', name: 'Investor Plus', kick: 'Research subscription', match: 'investor:plus', storage: 'investor:plus', lane: 'investor', cta: 'Get Investor Plus',
       tag: 'For angel investors, independent investors and investment professionals.',
-      feats: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+      feats: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'AI usage from your plan allowance and AI tokens'],
     },
     {
       id: 'professional', name: 'Investor Pro', kick: 'Research subscription', match: 'investor:professional', storage: 'investor:professional', lane: 'investor', cta: 'Get Investor Pro', highlight: true,
       tag: 'For professional angels, investment analysts and smaller firms.',
-      feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+      feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'AI usage from your plan allowance and AI tokens', 'More advanced investment workflows'],
     },
     {
       id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, storage: 'investor:institutional', cta: 'Contact Axal VC',
@@ -92,7 +92,7 @@ export const PLAN_CARDS = Object.freeze({
     {
       // The owner's ruling (2026-10-20): the plan is "Operating Partner Pro".
       id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', storage: 'partner:pro', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
-      tag: 'Inbound demand on tap.',
+      tag: 'Manage client work from proposal to delivery.',
       feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
     },
   ],
@@ -138,7 +138,7 @@ export const COMPARE = Object.freeze({
   ],
   investor: [
     ['Browse', [['Public deal index', 1, 1, 1, 1], ['Market pulses', 'Read-only', 1, 1, 1]]],
-    ['Research', [['Research workspace', 0, 1, 1, 1], ['Watchlists and opportunity tracking', 1, 1, 1, 1], ['AI-assisted research', 0, 'Standard limits', 'Higher limits', 'Negotiated'], ['Personal notes and deal comparisons', 0, 1, 1, 1], ['Advanced research and screening', 0, 0, 1, 1], ['Portfolio tracking and analytics', 0, 0, 1, 1], ['Investment memo generation', 0, 0, 1, 1], ['Data exports and integrations', 0, 0, 1, 1]]],
+    ['Research', [['Research workspace', 0, 1, 1, 1], ['Watchlists and opportunity tracking', 1, 1, 1, 1], ['AI-assisted research', 0, 'Plan allowance + AI tokens', 'Plan allowance + AI tokens', 'Negotiated'], ['Personal notes and deal comparisons', 0, 1, 1, 1], ['Advanced research and screening', 0, 0, 1, 1], ['Portfolio tracking and analytics', 0, 0, 1, 1], ['Investment memo generation', 0, 0, 1, 1], ['Data exports and integrations', 0, 0, 1, 1]]],
     ['Teams', [['Shared research workspaces', 0, 0, 0, 1], ['Team access controls and permissions', 0, 0, 0, 1], ['Advanced reporting and analytics', 0, 0, 0, 1], ['Custom integrations and workflows', 0, 0, 0, 1], ['Organization-wide administration', 0, 0, 0, 1]]],
   ],
   advisor: [

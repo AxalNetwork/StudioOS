@@ -19,7 +19,7 @@ import { sessionPlacementRows } from '../../routes/founder_validate_structure';
 import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews, recordingConsentText,
-  loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
+  contradictsByGroup, loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
@@ -32,9 +32,9 @@ import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
   addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
-  latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setLinkStrength,
+  INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
-  updateTheme,
+  updateTheme, updateThemeStatement,
 } from '../validateWriters';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
 import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
@@ -143,8 +143,16 @@ async function claimOptions(ctx: RecordContext) {
 
 // ── Problem discovery: one pain group ────────────────────────────────────────
 
+/** D6006 (V19 "Used on slide"): the deck stores the Problem slide's text, never which themes fed it. */
+export const USED_ON_SLIDE_UNAVAILABLE = 'Not tracked per theme yet. The deck reads the themes as a whole.';
+
 type ThemeData = {
-  group: { id: number; title: string; created_by: number | null; created_at: string | null };
+  group: {
+    id: number; title: string; created_by: number | null; created_at: string | null;
+    // D6006: the problem statement (migration 202611152333_6006); NULL until written.
+    statement_who: string | null; statement_cope: string | null; statement_cost: string | null;
+    statement_updated_at: string | null; statement_updated_by: number | null;
+  };
   theme: ReturnType<typeof themesOf>[number] | null;
   interviews: InterviewRow[];
   held: number;
@@ -157,7 +165,9 @@ const themeMemo = memo<ThemeData>('theme');
 function loadTheme(ctx: RecordContext, id: string): Promise<ThemeData> {
   return themeMemo(ctx, id, async () => {
     const c = vctx(ctx);
-    const group = await ctx.env.DB.prepare('SELECT id, title, created_by, created_at FROM pain_groups WHERE id = ? AND project_id = ?')
+    const group = await ctx.env.DB.prepare(
+      `SELECT id, title, created_by, created_at, statement_who, statement_cope, statement_cost, statement_updated_at, statement_updated_by
+         FROM pain_groups WHERE id = ? AND project_id = ?`)
       .bind(Number(id), ctx.projectId).first<ThemeData['group']>();
     if (!group) throw vanished();
     const [interviews, model, sev, hypRes, linkRes] = await Promise.all([
@@ -174,7 +184,7 @@ function loadTheme(ctx: RecordContext, id: string): Promise<ThemeData> {
     ]);
     const hyps = hypRes.results || [];
     const links = linkRes.results || [];
-    const theme = themesOf(interviews, model, sev, c.today, supportsByGroup(hyps, links))
+    const theme = themesOf(interviews, model, sev, c.today, supportsByGroup(hyps, links), contradictsByGroup(hyps, links))
       .find((t) => t.group_id != null && Number(t.group_id) === Number(group.id)) ?? null;
     return { group, theme, interviews, held: interviews.filter(isHeld).length, model, hyps, links };
   });
@@ -257,9 +267,35 @@ const problemDiscovery: ModuleSpec = {
         fact('First heard', dMon(t?.first_mention), 'No dated mention'),
       ],
       createdBy: d.group.created_by, createdAt: d.group.created_at,
+      parts: {
+        // D6006 (V19): the founder's own words, not a quote, so every reader of the record reads them.
+        problem_statement: {
+          who: d.group.statement_who, cope: d.group.statement_cope, cost: d.group.statement_cost,
+          updated_at: d.group.statement_updated_at, updated_by: d.group.statement_updated_by,
+        },
+        sources: t ? {
+          interviews: t.mentions, people: t.people, organisations: t.organisations,
+          people_unrecorded: t.people_unrecorded, organisations_unrecorded: t.organisations_unrecorded, phrases: t.phrases,
+        } : { interviews: 0, people: null, organisations: null, people_unrecorded: 0, organisations_unrecorded: 0, phrases: 0 },
+        supporting: t?.supports.length ?? 0,
+        contradicting: t?.contradicts.length ?? 0,
+        // The deck store keeps the Problem slide's text, not which themes it drew on, so this cannot be answered.
+        used_on_slide: { state: 'unavailable', reason: USED_ON_SLIDE_UNAVAILABLE, slide: 'problem' },
+      },
     };
   },
   sections: [
+    {
+      key: 'statement', title: 'Problem statement',
+      read: async (ctx, id) => {
+        const d = await loadTheme(ctx, id);
+        const row = (a: string, v: string | null) => (v ? { a, b: v } : { a, b: 'Not recorded', tone: 'grey' });
+        return {
+          rows: [row('Who has it', d.group.statement_who), row('How they cope today', d.group.statement_cope), row('What it costs', d.group.statement_cost)],
+          action: 'statement',
+        };
+      },
+    },
     {
       key: 'quotes', title: 'Quotes',
       read: async (ctx, id) => {
@@ -364,6 +400,18 @@ const problemDiscovery: ModuleSpec = {
         }) })),
       },
       {
+        key: 'statement', label: 'Write the problem statement', kind: 'form',
+        form: { title: 'Problem statement', cta: 'Save', foot: 'Your words, not a quote. Leave a field empty to clear it.',
+          fields: [
+            { key: 'who', label: 'Who has it', kind: 'T', value: d.group.statement_who ?? undefined },
+            { key: 'cope', label: 'How they cope today', kind: 'T', value: d.group.statement_cope ?? undefined },
+            { key: 'cost', label: 'What it costs', kind: 'T', value: d.group.statement_cost ?? undefined },
+          ] },
+        execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateThemeStatement(c.env, {
+          projectId: c.projectId, userId: userId(c), themeId, who: field(body, 'who'), cope: field(body, 'cope'), cost: field(body, 'cost'),
+        }) })),
+      },
+      {
         key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
         confirm: { title: 'Delete this theme?', body: 'Its quotes stay on their interviews, unthemed. Its links to hypotheses go.', cta: 'Delete' },
         execute: (c) => refusing(async () => { await deleteTheme(c.env, { projectId: c.projectId, userId: userId(c), themeId }); return { ok: true }; }),
@@ -426,6 +474,18 @@ type InterviewData = {
   chunks: number;
 };
 const interviewMemo = memo<InterviewData>('interview');
+
+const STAGE_WORD: Record<string, string> = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+const STAGE_AT: Record<string, string> = { invited: 'invited_at', booked: 'booked_at', done: 'done_at' };
+/** D6001: Move stage's four choices, the one it is at now marked "current", with the date it was reached when stored. */
+export function stageOptions(iv: Any): Array<{ value: string; label: string }> {
+  const now = iv.stage == null || iv.stage === '' ? null : String(iv.stage);
+  return INTERVIEW_STAGES.map((st) => {
+    const at = STAGE_AT[st] ? dMon(iv[STAGE_AT[st]]) : null;
+    const current = now === st ? joined('current', at) : now == null && st === 'done' ? 'current · no stage recorded' : null;
+    return { value: st, label: current ? `${STAGE_WORD[st]} · ${current}` : STAGE_WORD[st] };
+  });
+}
 
 function loadInterview(ctx: RecordContext, id: string): Promise<InterviewData> {
   return interviewMemo(ctx, id, async () => {
@@ -707,6 +767,21 @@ const customerResearch: ModuleSpec = {
           interviewee_name: field(body, 'interviewee_name'), interviewee_company: field(body, 'interviewee_company'),
         }) })),
       },
+      // D6001 (#6001): Move stage, through the writer `PUT /interviews/:id/stage`
+      // calls, which logs the move on this record's activity. Nothing is
+      // preselected: a row with no stage reads as Done, and saving that
+      // reading would write a stage nobody chose.
+      {
+        key: 'set-stage', label: 'Move stage', kind: 'form',
+        form: { title: `Move ${d.iv.interviewee_name ?? 'this interview'}`, cta: 'Move', fields: [
+          { key: 'stage', label: 'Stage', kind: 'CH', required: true, options: stageOptions(d.iv) },
+          { key: 'at', label: 'Date reached · optional', kind: 'T', input: 'date', note: 'Today when left empty. A stage keeps the first date it was reached.' },
+        ] },
+        execute: (c, _id, body) => refusing(async () => {
+          await setInterviewStage(c.env, { projectId: c.projectId, userId: userId(c), interviewId, stage: field(body, 'stage'), at: field(body, 'at') || undefined });
+          return { ok: true };
+        }),
+      },
       {
         key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
         confirm: { title: 'Delete this interview?', body: 'Its sessions, audio and transcript go with it.', cta: 'Delete' },
@@ -934,6 +1009,8 @@ function fundingToDate(signals: Any[]): { value: string | null; reason: string }
   return { value: money(funded.reduce((a, s) => a + Number(s.amount_cents), 0), funded[0].currency), reason: '' };
 }
 
+const WATCH_NOTE = 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.';
+
 const market: ModuleSpec = {
   read: 'read', write: 'write', store: 'competitor_candidates',
   activityType: 'validate.market-intelligence',
@@ -946,11 +1023,10 @@ const market: ModuleSpec = {
     return {
       title: String(c.name),
       sub: joined(`${kind} competitor`, monYear(tracking?.created_at ?? c.created_at) ? `tracked since ${monYear(tracking?.created_at ?? c.created_at)}` : null),
-      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Watching', tone: 'vio' }],
+      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Tracked', tone: 'vio' }],
       facts: [
         fact('Latest signal', latest ? joined(latest.label || SIGNAL_TYPE[latest.signal_type] || latest.signal_type, dMon(latest.on_day)) : null, 'No signal recorded'),
         fact('Funding to date', funding.value, funding.reason),
-        { label: 'Headcount', value: null, reason: 'No public figure found' },
         fact('Source', latest?.source_url ?? latest?.source_kind ?? c.url ?? null, 'No source recorded'),
       ],
       createdBy: tracking?.created_by ?? null, createdAt: c.created_at ?? null,
@@ -1000,7 +1076,7 @@ const market: ModuleSpec = {
       },
     },
     {
-      key: 'watching', title: 'Watching for', side: true,
+      key: 'watching', title: 'Signal filters', note: WATCH_NOTE, side: true,
       read: async (ctx, id) => {
         const { watch } = await loadCompetitor(ctx, id);
         return { rows: [
@@ -1033,7 +1109,7 @@ const market: ModuleSpec = {
           { key: 'kind', label: 'Kind', kind: 'CH', options: opts([['direct', 'Direct'], ['adjacent', 'Adjacent']]), value: c.category === 'adjacent' ? 'adjacent' : 'direct',
             note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' },
           { key: 'watch', label: 'Watch for', kind: 'CK', options: opts([['funding', 'Funding'], ['launch', 'Launches'], ['hiring', 'Hires']]),
-            value: WATCH_KEYS.filter((k) => watch[k]) },
+            value: WATCH_KEYS.filter((k) => watch[k]), note: WATCH_NOTE },
           { key: 'price_position', label: 'Price', kind: 'CH', options: opts([['lower', 'Lower than ours'], ['similar', 'About the same'], ['higher', 'Higher than ours']]), value: tracking?.price_position ?? undefined },
           { key: 'depth_position', label: 'Depth', kind: 'CH', options: opts([['narrower', 'Narrower'], ['similar', 'About the same'], ['broader', 'Broader']]), value: tracking?.depth_position ?? undefined },
           { key: 'why', label: 'Why it matters', kind: 'T', value: tracking?.why_it_matters ?? '', placeholder: '[One line, optional]' },
