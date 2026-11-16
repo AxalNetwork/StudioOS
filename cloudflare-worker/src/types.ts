@@ -682,6 +682,9 @@ export interface Env {
   AXAL_SECTION_SLACK_CHANNELS?: string;
   // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
   AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
+  // D5984: exactly 'enabled' lets section incidents file GitHub bugs through
+  // the ticket mirror's token and repository. Unset: no GitHub call is made.
+  AXAL_SECTION_INCIDENT_GITHUB?: string;
   // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
   // mirror the constants in services/slackBus.ts.
   SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub
