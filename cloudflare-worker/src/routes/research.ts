@@ -610,6 +610,8 @@ research.delete('/documents/:uid', async (c) => {
 interface AskSessionRow {
   id: number; uid: string; owner_user_id: number;
   last_asked_at: string | null; created_at: string;
+  /** D6272: set by Clear history, NULL again on Restore. Missing before the migration. */
+  cleared_at?: string | null;
 }
 
 interface AskAnswerRow {
@@ -695,7 +697,10 @@ async function scopeTotals(env: Env, userId: number, scope: string, sessionId: n
   } else if (scope === 'discarded') {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
   } else if (scope === 'all') {
-    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+    // D6272: All is the history that is not cleared; Cleared is the rest.
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
+  } else if (scope === 'cleared') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL)`).bind(userId, userId).first<Row>();
   } else if (sessionId != null) {
     row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
   } else {
@@ -765,10 +770,12 @@ async function askSession(c: { env: Env }, userId: number, uid: string) {
 async function resolveAskSession(c: { env: Env }, userId: number, wanted: string) {
   if (wanted) {
     const named = await askSession(c, userId, wanted);
-    if (named) return named;
+    // D6272: a cleared thread is not appended to. A question sent from a
+    // session that was cleared in another tab starts in the newest open one.
+    if (named && !named.cleared_at) return named;
   }
   const latest = await c.env.DB.prepare(
-    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+    `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
   ).bind(userId).first<AskSessionRow>();
   if (latest) return latest;
   const uid = newUid();
@@ -838,7 +845,7 @@ research.get('/ask/sessions', async (c) => {
     session = await askSession(c, user.id, wanted);
   } else {
     session = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+      `SELECT * FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
     ).bind(user.id).first<AskSessionRow>();
   }
 
@@ -877,7 +884,7 @@ research.get('/ask/sessions', async (c) => {
    * appears after submission" is then true of the first page by construction,
    * rather than true only while the history is short.
    */
-  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded', 'cleared'].includes(scope)) ? 'asc' : 'desc';
   const limit = listLimit(c.req.query('limit'));
   // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
   // `index.ts` turns into that response. This handler answers it itself rather
@@ -909,13 +916,23 @@ research.get('/ask/sessions', async (c) => {
         `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
       ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (scope === 'all') {
+    // D6272: everything except the sessions Clear history hid.
     rows = from == null
       ? await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
       : await c.env.DB.prepare(
-        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
-      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id NOT IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'cleared') {
+    // D6272: `Show cleared` — the answers of the sessions Clear history hid.
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND session_id IN (SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NOT NULL) AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (session) {
     rows = from == null
       ? await c.env.DB.prepare(
@@ -993,6 +1010,39 @@ research.patch('/ask/answers/:uid', async (c) => {
     'SELECT * FROM research_ask_answers WHERE uid = ? AND owner_user_id = ?'
   ).bind(uid, user.id).first<AskAnswerRow>();
   return c.json({ item: row ? answerDto(row) : null });
+});
+
+/**
+ * D6272 — CLEAR HISTORY HIDES; RESTORE BRINGS IT BACK.
+ *
+ * The owner's answer on #6274 (question 4, B). Clearing stamps `cleared_at` on
+ * every one of the caller's sessions not already cleared; nothing is deleted,
+ * so a cited answer stays traceable and `scope=cleared` reads the hidden
+ * history back. The next question starts a fresh thread, because every
+ * "latest session" read skips a cleared one. Saved and Archived are the
+ * reader's own dispositions and stay where they are.
+ *
+ * Owner-scoped like every write here: the statement names the caller, so no
+ * id from the request reaches it. The counts are the only thing logged.
+ */
+research.post('/ask/history/clear', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = datetime('now') WHERE owner_user_id = ? AND cleared_at IS NULL`
+  ).bind(user.id).run();
+  const cleared = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_cleared', { sessions: cleared });
+  return c.json({ cleared });
+});
+
+research.post('/ask/history/restore', async (c) => {
+  const user = await requireAuth(c);
+  const r = await c.env.DB.prepare(
+    `UPDATE research_ask_sessions SET cleared_at = NULL WHERE owner_user_id = ? AND cleared_at IS NOT NULL`
+  ).bind(user.id).run();
+  const restored = Number(r?.meta?.changes ?? 0);
+  await logAdminAction(c.env, user.id, user.email, 'research_ask_history_restored', { sessions: restored });
+  return c.json({ restored });
 });
 
 /**
@@ -1445,7 +1495,7 @@ const DRAFT_SURFACES: Record<string, {
             `SELECT id FROM research_ask_sessions WHERE uid = ? AND owner_user_id = ?`
           ).bind(scope, userId).first<{ id: number }>()
         : await c.env.DB.prepare(
-            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? ORDER BY id DESC LIMIT 1`
+            `SELECT id FROM research_ask_sessions WHERE owner_user_id = ? AND cleared_at IS NULL ORDER BY id DESC LIMIT 1`
           ).bind(userId).first<{ id: number }>();
       if (!session) return [];
       const rows = await c.env.DB.prepare(
