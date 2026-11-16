@@ -10,6 +10,9 @@ its data, passes it in, and does only what these functions allow.
 | File | What it holds |
 | --- | --- |
 | `rules.mjs` | `mode()` (`LANDING_BOT_ENABLED`: `true`, `dispatch`, otherwise off), `eligible()`, `breakers()`, `verdictFor()` (wraps `../lib/ciClassify.mjs`), `attempts()`, `budget()`, `pathGuard()` (imports `../merge-policy.mjs`'s T2 rating), `giveUp()`, `order()`, the `dispatchable` workflow list, the sticky comment helpers and the label names. |
+| `keeper-plan.mjs` | The branch keeper's plan (#6474): which conflicted PRs a sweep may merge main into, and today's reserved pushes. Pure. |
+| `keeper-merge.mjs` | The branch keeper's merge: git with hooks, filters and LFS off, main's merge rules only, the plain-versus-union comparison and the README duplicate check. |
+| `keeper.mjs` | The branch keeper's entry point (`plan`, `apply`): reads, re-reads, merges, pushes, labels and comments. |
 | `workflowGuard.mjs` | The test helper every bot workflow's test calls: `assertWorkflow(path)` fails when the workflow passes the App token to a dispatch call, dispatches a workflow outside `dispatchable`, or names an App or model secret outside the `landing-bot` and `repair` environments. |
 
 The tests are `frontend/test/landing_bot_core_6467.test.mjs`. They live there because `npm run test:frontend`
@@ -54,3 +57,37 @@ Configure the GitHub Actions environment `landing-bot` to accept deployments fro
 Run the named T0 rehearsal with `gh workflow run landing-feeder.yml --ref main -f pr=NUMBER`, after #6469 is on main and the admission checks are satisfied. Check the job summary and link the native queue entry and its successful combined-commit CI run to #6481. To pause future admissions, unset `LANDING_BOT_ENABLED`.
 
 The workflow uploads the exact selected PR numbers and SHAs before requesting the write token, rechecks each candidate, and requests normal queue entry with GitHub's expected-head guard. An uncertain response stops the sweep. Check the PR timeline before taking any action on that entry.
+
+## The branch keeper
+
+`.github/workflows/landing-bot-keeper.yml` (#6474) runs on every push to `main`, every 15 minutes, or by dispatch
+with one PR. A PR is merged only when it is all of:
+- `CONFLICTING`;
+- not in the merge queue: the queue reports its own conflicts, and #6476 handles them;
+- quiet for `LANDING_BOT_QUIET_MIN` minutes (default 30);
+- not handed back since its last push;
+- passing `eligible()`, `attempts()` and `budget()`.
+
+A PR that is only behind is left to the queue.
+
+**The merge.** It runs on a partial clone with hooks, filters, LFS and submodules off. `$GIT_DIR/info/attributes`
+sets `merge=text` on every path, then repeats main's merge rules, so a PR cannot add a merge rule. The merge runs
+twice, with and without the rules. Only `README.md` files may differ between the two runs, and each one must pass
+`../lib/readmeUnion.mjs`.
+
+**What happens next:**
+- A clean merge is pushed as a normal merge commit with a `Landing-Bot-Kind: keeper` trailer. If the head moved,
+  the push fails, which is intended.
+- If GitHub refuses the push because main's changes include a workflow file, the keeper tries the update-branch
+  API. If that fails too, it hands the PR back. Each run's summary counts these refusals.
+- A real conflict is labelled `conflict` and listed in the sticky comment, and the resolver is asked.
+- A conflict in a file `pathGuard()` refuses, or a refused union, is handed back with `needs-session`.
+
+**Daily pushes.** The plan uploads a reservation artifact before any push, and pushes only if the upload
+succeeded. The next run counts today's reservations against `LANDING_BOT_DAILY_PUSHES`.
+
+| Actions repository variable | Meaning |
+| --- | --- |
+| `LANDING_BOT_KEEPER_PER_SWEEP` | PRs merged per run. Unset is 0. Dispatch mode always takes the one named PR. |
+| `LANDING_BOT_DAILY_PUSHES` | Bot pushes per UTC day across all kinds. Unset is 0. |
+| `LANDING_BOT_QUIET_MIN` | Minutes a head must stay unchanged first; unset is 30. |
