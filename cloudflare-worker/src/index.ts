@@ -3134,6 +3134,16 @@ export default {
           } catch (e) {
             taskFailed('project trash sweep', e);
           }
+          // D6073 (#6073) — a data-room file thirty days in Trash: its objects, then its rows.
+          try {
+            const { purgeExpiredTrash } = await import('./services/dataRoomTrash');
+            const r = await purgeExpiredTrash(env, now);
+            if (r.scanned || r.purged || r.failed) {
+              console.info(`[cron] data room trash purge scanned=${r.scanned} purged=${r.purged} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('data room trash purge', e);
+          }
         }
         // Task #5 (AV) — hourly Vectorize re-embed for axal-search.
         // Walks every entity table, finds rows with id > last watermark

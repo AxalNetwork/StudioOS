@@ -29,12 +29,13 @@
  * one predicate still decides.
  */
 import type { Env } from '../types';
+import { liveFiles } from './dataRoomTrash';
 
 export const ACCESS_TIERS = ['invited', 'committed', 'nobody'] as const;
 export type AccessTier = typeof ACCESS_TIERS[number];
 export const isAccessTier = (v: unknown): v is AccessTier => typeof v === 'string' && (ACCESS_TIERS as readonly string[]).includes(v);
 
-export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null; folder_id?: number | null };
+export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null; folder_id?: number | null; removed_at?: string | null };
 
 /** The folders a grant opens: their ids, subfolders included, or null for every folder. */
 export type FolderScope = ReadonlySet<number> | null;
@@ -55,6 +56,8 @@ export function expiryMs(v: string | null | undefined): number | null {
  * nobody can check is not a promise to keep showing it.
  */
 export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date.now(), folders: FolderScope = null): boolean {
+  // D6073 — a file in Trash admits no one, whichever reader selected it (`SELECT *` carries the stamp).
+  if (f.removed_at != null) return false;
   const tier = f.access_tier == null || f.access_tier === '' ? 'invited' : f.access_tier;
   // `nobody`, and any value this code does not know, admits no one.
   if (tier !== 'invited' && tier !== 'committed') return false;
@@ -133,7 +136,7 @@ export async function admittedCounts(
   env: Env, projectId: number, committed: boolean, nda: boolean, folders: FolderScope = null,
 ): Promise<{ total: number; open: number }> {
   const res = await env.DB.prepare(
-    'SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?',
+    `SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}`,
   ).bind(projectId).all<{ visibility: string; access_tier: string | null; access_expires_at: string | null; folder_id: number | null }>();
   const now = Date.now();
   const admitted = (res.results || []).filter((f) => tierAdmits(f, committed, now, folders));

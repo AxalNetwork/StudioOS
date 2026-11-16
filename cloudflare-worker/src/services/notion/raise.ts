@@ -23,6 +23,7 @@
  *
  * Registered on import (`routes/notion.ts`). Logs hold ids and counts only.
  */
+import { liveFiles } from '../dataRoomTrash';
 import type { Env } from '../../types';
 import { addProspect, updateProspect } from '../raiseWriters';
 import { WriterError } from '../validateWriters';
@@ -108,7 +109,8 @@ async function snapshotOf(env: Env, ctx: SyncContext, key: string) {
   const l = await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
     .bind(ctx.integrationId, `notion:${ctx.projectId}:data_room:${key}`).first<{ local_id: number | null }>();
   if (!l?.local_id) return null;
-  return env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(l.local_id, ctx.projectId).first<{ id: number }>();
+  // D6073 — a snapshot in Trash is not in the room: a new one is added beside it.
+  return env.DB.prepare(`SELECT id FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(env.DB)}`).bind(l.local_id, ctx.projectId).first<{ id: number }>();
 }
 
 registerAcceptor({
