@@ -145,7 +145,7 @@ Served now (D5970, #5970). `GET /api/admin/ai-agents/skills` takes optional quer
 | `tag` | a taxonomy skill slug | the active rows of `skills` | yes | yes |
 | `role` | a catalogue role key (`ROLES`) | the catalogue | yes | yes |
 | `model` | a model id | the model catalogue's chat models, a deprecated one included | no (coverage has no model) | yes |
-| `from`, `to` | `YYYY-MM-DD`, UTC, both or neither | real calendar dates, `from` ≤ `to`, at most **92 days** counting both ends | no (coverage is now, not a period) | yes |
+| `from`, `to` | `YYYY-MM-DD`, UTC, both or neither | real calendar dates, `from` ≤ `to`, at most **366 days** counting both ends | no (coverage is now, not a period) | yes |
 
 How each one matches:
 - **Skill terms** (`scope`, `status`, `uid`, `version`, `category`, `tag`, `role`) keep the HQ skills they match. Role, tag and category read the skill's **current published version**, the one coverage counts: a skill matches a role or tag its current version lists, and a category when any tag of that version is in it. A skill with no published version matches none of the three.
@@ -170,7 +170,7 @@ Refusals are `400` with the code in `error` and a sentence in `message`. None fa
 - `window_incomplete`: only one of `from` and `to`.
 - `window_malformed`: not a calendar date.
 - `window_reversed`: `to` before `from`.
-- `window_too_long`: over 92 days.
+- `window_too_long`: over 366 days.
 
 The number of reads stays fixed: the filters are matched in memory over rows the five reads already return, and the model and window are bound parameters of the history read. No filter adds a read or a per-skill query.
 

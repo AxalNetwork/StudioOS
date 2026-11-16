@@ -371,7 +371,7 @@ export type PublishedEvaluation = ReturnType<typeof publishedEvaluation>;
 // parameters of the history read, so a filter adds no read and no per-skill query.
 
 /** The longest window on evaluation `run_at`, in whole UTC days counting both ends. */
-export const FILTER_WINDOW_MAX_DAYS = 92;
+export const FILTER_WINDOW_MAX_DAYS = 366;
 export const FILTER_KEYS = ['scope', 'status', 'uid', 'version', 'category', 'tag', 'role', 'model', 'from', 'to'] as const;
 export type FilterKey = typeof FILTER_KEYS[number];
 /** Which filter narrows which block. `coverage` is the catalogue as it is now: it has no run time and no model. */

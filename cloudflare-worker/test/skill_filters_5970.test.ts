@@ -146,13 +146,13 @@ test('D5970: each bad filter is refused with its own code; none is read as "all"
 });
 
 test('D5970: the window is at most FILTER_WINDOW_MAX_DAYS days, both ends counted; its bounds are the days\' midnights (UTC)', () => {
-  assert.equal(FILTER_WINDOW_MAX_DAYS, 92);
-  // 2026-08-01 .. 2026-10-31 is 92 days; one more is refused.
-  // Mutation checked: `days > MAX` → `days >= MAX` refuses the 92-day window and this fails.
-  const longest = parseSkillFilters(q({ from: '2026-08-01', to: '2026-10-31' }), CTX);
+  assert.equal(FILTER_WINDOW_MAX_DAYS, 366);
+  // 2026-01-01 .. 2027-01-01 is 366 days; 2025-12-31 .. 2027-01-01 (367) is refused.
+  // Mutation checked: `days > MAX` → `days >= MAX` refuses the 366-day window and this fails.
+  const longest = parseSkillFilters(q({ from: '2026-01-01', to: '2027-01-01' }), CTX);
   assert.ok(longest.ok && longest.filters);
-  assert.deepEqual(longest.filters!.window, { from: '2026-08-01', to: '2026-10-31', days: 92, since: '2026-08-01 00:00:00', until: '2026-11-01 00:00:00' });
-  assert.equal((parseSkillFilters(q({ from: '2026-07-31', to: '2026-10-31' }), CTX) as any).code, 'window_too_long');
+  assert.deepEqual(longest.filters!.window, { from: '2026-01-01', to: '2027-01-01', days: 366, since: '2026-01-01 00:00:00', until: '2027-01-02 00:00:00' });
+  assert.equal((parseSkillFilters(q({ from: '2025-12-31', to: '2027-01-01' }), CTX) as any).code, 'window_too_long');
   const one = parseSkillFilters(q({ from: '2026-12-31', to: '2026-12-31' }), CTX);
   assert.ok(one.ok);
   assert.deepEqual([one.filters!.window!.days, one.filters!.window!.since, one.filters!.window!.until], [1, '2026-12-31 00:00:00', '2027-01-01 00:00:00']);
@@ -189,7 +189,7 @@ test('D5970: the route refuses each bad filter with a 400 and its code, and stay
   for (const [query, code] of [
     ['?categry=x', 'filter_unknown'], ['?scope=company', 'scope_not_served'], ['?category=cooking', 'category_unknown'],
     ['?tag=not_a_tag', 'tag_unknown'], ['?role=chef', 'role_unknown'], ['?status=live', 'status_unknown'], ['?model=not-a-model', 'model_unknown'],
-    ['?uid=s-a', 'uid_malformed'], ['?version=v2', 'version_malformed'], ['?from=2026-07-31&to=2026-10-31', 'window_too_long'],
+    ['?uid=s-a', 'uid_malformed'], ['?version=v2', 'version_malformed'], ['?from=2025-12-31&to=2027-01-01', 'window_too_long'],
   ]) {
     const r = await get(w, `${HQ}${query}`);
     assert.equal(r.status, 400, query);
@@ -270,12 +270,27 @@ test('D5970: the window keeps a row exactly at `from` 00:00:00 and at `to` 23:59
   // Mutation checked: `>=` → `>` on `since` drops k-start; `<` → `<=` on `until` keeps k-after and the later k-start fail.
   assert.deepEqual(a.cases.map((c: any) => [c.case_key, c.result, c.run_at]), [['k-end', 'pass', '2026-11-30 23:59:59'], ['k-start', 'pass', '2026-11-01 00:00:00']]);
   assert.deepEqual(r.published_evaluation.results, { pass: 2, fail: 0, not_run: 0 });
-  assert.deepEqual(r.filters.window, { since: '2026-11-01 00:00:00', until: '2026-12-01 00:00:00', days: 30, max_days: 92 });
+  assert.deepEqual(r.filters.window, { since: '2026-11-01 00:00:00', until: '2026-12-01 00:00:00', days: 30, max_days: 366 });
   assert.deepEqual(r.filters.coverage, { applied: [], not_applicable: ['from', 'to'] });
   assert.deepEqual(r.filters.published_evaluation, { applied: ['from', 'to'], not_applicable: [] });
   // Unfiltered, the latest k-start is the fail after the window.
   const all = (await ok(w, '')).published_evaluation.skills.find((s: any) => s.skill_uid === UID_A);
   assert.equal(all.cases.find((c: any) => c.case_key === 'k-start').result, 'fail');
+});
+
+test('D5970: the longest window (366 days) keeps a row exactly at each bound and drops one a second outside either; 367 days is refused', async () => {
+  const w = world();
+  const A = w.ids.a;
+  w.run(A, 2, 'k-before', M1, 'fail', '2025-12-31 23:59:59');
+  w.run(A, 2, 'k-start', M1, 'pass', '2026-01-01 00:00:00');
+  w.run(A, 2, 'k-end', M1, 'pass', '2027-01-01 23:59:59');
+  w.run(A, 2, 'k-after', M1, 'fail', '2027-01-02 00:00:00');
+  const r = await ok(w, '?from=2026-01-01&to=2027-01-01');
+  const a = r.published_evaluation.skills.find((s: any) => s.skill_uid === UID_A);
+  assert.deepEqual(a.cases.map((c: any) => c.case_key), ['k-end', 'k-start']);
+  assert.deepEqual(r.filters.window, { since: '2026-01-01 00:00:00', until: '2027-01-02 00:00:00', days: 366, max_days: 366 });
+  const refused = await get(w, `${HQ}?from=2025-12-31&to=2027-01-01`);
+  assert.deepEqual([refused.status, refused.body.error], [400, 'window_too_long']);
 });
 
 test('D5970: a model filter keeps that model\'s rows and narrows the required models to it', async () => {

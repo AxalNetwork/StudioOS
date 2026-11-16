@@ -9,7 +9,7 @@
  *                                    D4536-p2: `published_evaluation`, each published skill's current version's
  *                                    results from the published history only (`agent_skill_version_evals`)
  *                                    D5970: optional filters on those two blocks (never on `skills`): scope=hq, status,
- *                                    uid, version, category, tag, role; model and from/to (YYYY-MM-DD, at most 92 days)
+ *                                    uid, version, category, tag, role; model and from/to (YYYY-MM-DD, at most 366 days)
  *                                    on `published_evaluation` only; the response's `filters` says what each block applied.
  *                                    400 filter_unknown, filter_repeated, scope_not_served, status_unknown, uid_malformed,
  *                                    version_malformed, category_unknown, tag_unknown, role_unknown, model_unknown,
