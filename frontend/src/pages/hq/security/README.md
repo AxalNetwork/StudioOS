@@ -3,10 +3,12 @@
 The pieces of HQ › Security v2 at `/admin/security`, from the landed canvas
 (`design/incoming/Security v2 Page.dc.html` and `Security v2 · Boards.dc.html`,
 boards SE01 to SE12, spec boards SEA to SEE; D4803). `../SecurityPage.jsx` is
-the host: it makes the page's three reads once, draws the shell and holds the
-`workspaces` map. Each of the seven workspaces has its own file here (D4803
-slices 1 to 4); the zones each one replaced stay whole inside it, behind
-"How this is measured".
+the host: it makes the page's three reads once, holds the session acts and
+re-exports the names below for its importers. The view it renders,
+`SecurityConsole.jsx`, draws the shell and holds the `workspaces` map (split
+out of the host unchanged, D4708 part 3). Each of the seven workspaces has its
+own file here (D4803 slices 1 to 4); the zones each one replaced stay whole
+inside it, behind "How this is measured", and live in the `*Zone(s).jsx` files.
 
 | File | What it is |
 | --- | --- |
@@ -36,17 +38,27 @@ slices 1 to 4); the zones each one replaced stay whole inside it, behind
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 | `mfaPolicyModel.js` | D5249, pure. "Require MFA for admins" in words: `mfaPolicyView` (On, Off, Unavailable — a failed or partial read is never Off), `withoutMfaLine`, `mfaPolicyRefusal` (409 `actor_without_mfa`, 503, step-up), and `changeMfaPolicy`, the page's change that moves the state only to the server's reply. |
 | `MfaPolicyControl.jsx` | D5249. The control on the Overview's MFA finding (or its own small section when no gap is open), Super Admin only: the server's state, and Turn on… / Turn off… in the `ActionDialog` shell with a reason, Review, then only the server's answer. |
+| `SecurityConsole.jsx` | D4708 part 3. The page's view, moved out of `../SecurityPage.jsx` unchanged: the rail, the header and freshness line, the tabs, the page-level unreadable banner and the `workspaces` map; `securityEventsBar` (the bar's three states). It takes the reads and the acts as props and makes no request. |
+| `securityShared.js` | D4708 part 3. `UNAVAILABLE`, `EMPTY_CONTROLS`, the absent-is-not-zero formatters (`day`, `num`, `titleCase`), `IDENTITY_KIND_LABEL`, `identityLine` and `impersonationNote`, moved unchanged. |
+| `SecurityParts.jsx` | D4708 part 3. The parts the zones share, moved unchanged: `Zone` (the card), `Stat` (a tile, Unavailable when `unread`) and `NotRecordedList`. |
+| `AccessZones.jsx` | D4708 part 3. The Access workspace's zones from the page's reads, moved unchanged: `AccessSummaryZone` (the four tiles) and `DataAccessZone` (impersonations and exports, each half on its own). |
+| `PrivacyZones.jsx` | D4708 part 3. The previous data-subject-request zone, moved unchanged: `DsrZone`, `DsrSubject`, `DsrKindsNotRecorded`, `dsrBranchesSentence`. |
+| `TrustZones.jsx` | D4708 part 3. The previous Trust zones, moved unchanged: `Sanctions` (H23's card from the store's own runs) and `KycZone`. |
+| `AiSafetyZone.jsx` | D4708 part 3. The previous AI safety zone, moved unchanged: `AiSafety` (verdicts, enforcement, what tripped the guard, router enforcement) and `TokenAnomalies`. |
+| `ResilienceZones.jsx` | D4708 part 3. H23's Backup / DR card, moved unchanged: `BackupDr`, `backupSentence`, `drillSentence`. |
 | `securityPrompts.js` | D4803 (SE12). Eadwyn's prompts on this page, in the canvas's order (security work first), and `SECURITY_USAGE_AT`, the one link that replaces the rail's models, usage and top-up here. |
 
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/security_overview_recent_4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs`, `frontend/test/security_trust_4803.test.mjs` and `frontend/test/security_ledger_races_4699.test.mjs`; the zones that stay
-in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
-`hq_governance_h7.test.mjs`).
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/security_overview_recent_4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs`, `frontend/test/security_trust_4803.test.mjs` and `frontend/test/security_ledger_races_4699.test.mjs`; the zones moved
+out of `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
+`hq_governance_h7.test.mjs`), which import them from the host's path and read
+the host and its parts together through `frontend/test/_securitySource.mjs`
+(`security_page_split_4708.test.mjs` holds that list to the files).
 
 ## Rules
 
 - **Every status uses the vocabulary.** Draw state with `StatusBadge` and a key from `securityStates.js`; never a colour alone, never a new word. "Not recorded" is retired for new work: say Unavailable, Not instrumented, Unsupported, Measured zero or No data yet.
 - **An unread value is never 0.** Use `readFigure` or `ReadValue`. A count of `null` is not a zero, and a failed read is not Healthy.
-- **A workspace is a registry entry.** Add or rename a workspace in `securityTabs.js` only; replace its body in `SecurityConsole`'s `workspaces` map (Access is D4801's). Never add a second switch.
+- **A workspace is a registry entry.** Add or rename a workspace in `securityTabs.js` only; replace its body in `SecurityConsole.jsx`'s `workspaces` map (Access is D4801's). Never add a second switch.
 - **Every destructive act is an `ActionDialog`.** Scope (exact reach, whether you are affected, its own reason) → Review → Result, and Result only from the server's answer. Use `accessModel.js`'s `RESULTS` words; never a page-level reason field, never `window.confirm`.
 - **No figure the Worker does not return.** Where the canvas needs one that no read has, draw Not instrumented or Unavailable and say so in the decision file.
 - **No request from these files.** The reads stay in `../SecurityPage.jsx`, so moving between workspaces never re-reads; the writes leave by its `runSessionAct`, passed down as `onAct`.
