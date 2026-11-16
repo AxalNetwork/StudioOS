@@ -204,8 +204,16 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   facebook: {
     tagline: 'Connect the Facebook Pages you manage.',
-    long_description: ['Sign in with Facebook and choose the Pages for this company. Grow imports are planned separately.'],
-    tools: [], prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
+    long_description: [
+      'Sign in with Facebook and choose the Pages for this company. Read-only.',
+      'Each venture names one of those Pages. You press each sync from Grow: the Page’s followers land in Revenue and traction, beside revenue and never as revenue, and its daily views, unique viewers and engagements land in Distribution, up to 12 months back. A figure you delete stays deleted.',
+      'Disconnecting removes every figure your Facebook fed.',
+    ],
+    tools: [
+      tool('followers', 'Page followers', 'read', 'Reads the linked Page’s follower count, as a dated snapshot each sync.', 'revenue_and_traction', ['?fields=${FOLLOWER_FIELD}']),
+      tool('insights', 'Page views, viewers and engagements', 'read', 'Reads the linked Page’s daily views, unique viewers and engagements.', 'distribution', ['/insights?']),
+    ],
+    prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
     never_does: ['StudioOS does not publish or comment on Facebook.'],
     service: { name: 'Facebook', href: 'https://www.facebook.com' },
     sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },

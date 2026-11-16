@@ -107,6 +107,15 @@ test('Ads merges monthly spend with Mercury precedence, absent months, and no cr
   assert.equal((await readAdsRoute(f,7,'campaign-b')).status,404);
   assert.equal((await readAdsRoute(f,8,'campaign-b')).status,403);
 });
+test('D6317: Ads spend and budget use the linked channel’s dates', async () => {
+  const f = await adsFixture();
+  f.db.exec("UPDATE grow_campaign_channels SET starts_on='2026-10-01' WHERE campaign_id=1");
+  const partial = (await readAdsRoute(f)).body.channels[0];
+  assert.deepEqual(partial.months, [{ month: '2026-11', spend_cents: 12000, source: 'mercury' }]);
+  f.db.exec("UPDATE grow_campaign_channels SET starts_on='2026-12-01' WHERE campaign_id=1");
+  const empty = (await readAdsRoute(f)).body.channels[0];
+  assert.deepEqual([empty.spend_cents, empty.budget_reached, empty.spend_reason], [null, false, 'Not recorded: this channel has no months in this campaign']);
+});
 test('non-team advisor sees manual spend only and has no write authority',async()=>{
   const f=await adsFixture(),r=await readAdsRoute(f,7,'campaign-a',ADVISOR);
   assert.equal(r.status,200);assert.equal(r.body.can_write,false);assert.equal(r.body.mercury_visible,false);

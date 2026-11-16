@@ -49,6 +49,7 @@ function fixture() {
   db.exec(migration('489_interview_findings.sql'));
   db.exec(migration('228_research_company_directory.sql'));
   db.exec(migration('249_project_metrics.sql'));
+  db.exec(migration('202611152333_6006_theme_problem_statement.sql')); // D6006: the theme's problem statement
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
     [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {
@@ -386,7 +387,7 @@ function seeded() {
 }
 
 const RECORDS: Record<string, { a: string; b: string; main: string[]; side: string[] }> = {
-  'problem-discovery': { a: '11', b: '22', main: ['Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
+  'problem-discovery': { a: '11', b: '22', main: ['Problem statement', 'Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
   // D757 (#1924) adds Summary after the placements.
   'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'From this conversation', 'Cost', 'Session'] },
   'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
@@ -397,6 +398,39 @@ const RECORDS: Record<string, { a: string; b: string; main: string[]; side: stri
 const real = (db: DatabaseSync, who: number, method: string, path: string, body?: unknown) =>
   call(db, who, method, path, body, RECORD_SPECS);
 const rec = (slug: string, id: string, suffix = '') => `/validate/modules/${slug}/records/${id}${suffix}?project=1`;
+
+test('D6002: only writers can assign held interviews to active segments on their venture', async () => {
+  const db = seeded();
+  db.exec(`INSERT INTO customer_segments (id, project_id, name, name_norm, source, archived_at)
+    VALUES (4, 1, 'New segment', 'new segment', 'manual', NULL), (8, 1, 'Archived', 'archived', 'manual', '2026-10-12')`);
+  const read = async (who: number) => (await call(db, who, 'GET', '/validate/modules/ideal-customer-profile?project=1')).body;
+  const getAction = async (who: number) => (await real(db, who, 'GET', rec('customer-research', '2'))).body.actions
+    .find((action: any) => action.key === 'set-segment');
+  const edit = (who: number, segment_id: unknown) => real(db, who, 'POST', rec('customer-research', '2', '/actions/set-segment'), { segment_id });
+  const before = await read(10);
+  assert.deepEqual(before.parts.unassigned, [{ id: 2, interviewee: 'Jon Example', date: '2026-10-09', fit: null }]);
+  assert.equal(before.parts.unassigned_total, 1);
+  assert.deepEqual(before.parts.segments.map((s: { id: number }) => s.id), [3, 4]);
+  assert.equal('unassigned' in (await read(40)).parts, false);
+  assert.equal(await getAction(40), undefined);
+  assert.equal((await edit(40, 3)).status, 403);
+  assert.deepEqual((await getAction(10)).form.fields[0].options.map((o: { value: string }) => o.value), ['', '3', '4']);
+  assert.equal((await edit(10, 22)).status, 404);
+  assert.equal((await edit(10, 8)).status, 404);
+  assert.equal((await edit(10, false)).status, 400);
+  assert.equal((await edit(10, 3)).status, 200);
+  const after = await read(10);
+  assert.equal(after.parts.unassigned_total, 0);
+  assert.equal(after.records.rows.find((row: any) => row.id === 3).interviews, 2);
+  assert.equal((await getAction(10)).form.fields[0].value, '3');
+  assert.equal((await edit(10, 4)).status, 200);
+  for (const [id, operation] of [['3', 'interview_segment_unlinked'], ['4', 'interview_segment_linked']]) {
+    const activity = await real(db, 10, 'GET', rec('ideal-customer-profile', id, '/activity'));
+    assert.ok(activity.body.items.some((item: any) => item.action === operation));
+  }
+  assert.equal((await edit(10, '')).status, 200);
+  assert.equal((await read(10)).parts.unassigned_total, 1);
+});
 
 test('#1692 test 2: another venture\'s record answers 404 on the read, the activity, every action, PATCH and DELETE', async () => {
   const db = seeded();
@@ -452,7 +486,8 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   assert.equal(JSON.stringify(partner.body).includes('We miss jobs'), false);
   assert.equal(founder.body.main[0].rows[0].b, '"We miss jobs every week."');
   assert.equal(founder.body.main[0].rows[0].c, '→ Theme One');
-  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main[0].rows.map((r: any) => r.a);
+  // D6006: the Problem statement leads the record; Quotes follow it.
+  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main.find((x: any) => x.key === 'quotes').rows.map((r: any) => r.a);
   assert.deepEqual((await quotes(10)).sort(), ['"Theme One"', '"Theme One"']);
   assert.deepEqual((await quotes(40)).sort(), ['"Theme One"', QUOTE_WITHHELD].sort());
   for (const slug of Object.keys(RECORDS)) {
