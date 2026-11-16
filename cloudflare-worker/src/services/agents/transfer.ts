@@ -169,7 +169,7 @@ export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: numb
   // One query for both: a project matches its own id; a company matches either side of the move.
   const [projectId, companyId] = scope.kind === 'project' ? [scope.id, null] : [null, scope.id];
   const rows = (await env.DB.prepare(
-    `SELECT e.project_id, p.name AS project_name, e.created_at,
+    `SELECT e.id AS event_id, e.project_id, p.name AS project_name, e.created_at,
             json_extract(e.before_json, '$.company_id') AS from_id, json_extract(e.after_json, '$.company_id') AS to_id,
             cf.uid AS from_uid, cf.company_name AS from_name, ct.uid AS to_uid, ct.company_name AS to_name,
             u.uid AS by_uid, u.name AS by_name,
@@ -199,7 +199,7 @@ export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: numb
     by: r.by_uid ? { uid: String(r.by_uid), name: String(r.by_name ?? '') } : null,
     at: String(r.created_at),
     blocked_tasks: Number(r.blocked_tasks ?? 0),
-    ...(direction === 'out' ? { stopped_runs: await stoppedRuns(env, scope, Number(r.project_id), String(r.created_at)) } : {}),
+    ...(direction === 'out' ? { stopped_runs: await stoppedRuns(env, scope, Number(r.project_id), String(r.created_at), Number(r.event_id)) } : {}),
     });
   }
   return out;
@@ -209,20 +209,23 @@ export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: numb
  * #4394 (TM18b): the runs a move stopped, as this scope sees them: only its
  * OWN agents' runs (a project reads its agents; the company it left reads its
  * agents whose tasks the move blocked), never the other side's. A run counts
- * when it ended `scope_moved` after this move and before the project's next
- * move. A person is never named here; an agent by its persona (D4117).
+ * when it ended `scope_moved` at or after this move and no later than the
+ * project's next move. #6740: the next move is the next event by id, not by
+ * second, and the bound is inclusive. Both stamps are whole seconds, so a run
+ * the move ended in the same second as the next move still belongs to this
+ * one. A person is never named here; an agent by its persona (D4117).
  */
-async function stoppedRuns(env: Pick<Env, 'DB'>, scope: ScopeRef, projectId: number, at: string): Promise<StoppedRun[]> {
+async function stoppedRuns(env: Pick<Env, 'DB'>, scope: ScopeRef, projectId: number, at: string, eventId: number): Promise<StoppedRun[]> {
   const rows = (await env.DB.prepare(
     `SELECT a.uid AS agent_uid, a.persona_key, t.uid AS task_uid, t.title AS task_title
        FROM agent_task_runs r JOIN team_agents a ON a.id = r.agent_id JOIN scope_tasks t ON t.id = r.task_id
       WHERE r.status = 'scope_moved' AND r.ended_at >= ?
-        AND r.ended_at < COALESCE((SELECT MIN(n.created_at) FROM company_membership_events n
-                                    WHERE n.kind = 'project_move' AND n.project_id = ? AND n.created_at > ?), '9999-12-31')
+        AND r.ended_at <= COALESCE((SELECT MIN(n.created_at) FROM company_membership_events n
+                                     WHERE n.kind = 'project_move' AND n.project_id = ? AND n.id > ?), '9999-12-31')
         AND ((? = 'project' AND a.scope_kind = 'project' AND a.project_id = ?)
           OR (? = 'company' AND a.scope_kind = 'company' AND a.company_id = ? AND t.blocked_reason = 'project_left'))
       ORDER BY r.ended_at, r.id LIMIT 50`,
-  ).bind(at, projectId, at, scope.kind, projectId, scope.kind, scope.id).all<{ agent_uid: string; persona_key: string | null; task_uid: string; task_title: string }>()).results ?? [];
+  ).bind(at, projectId, eventId, scope.kind, projectId, scope.kind, scope.id).all<{ agent_uid: string; persona_key: string | null; task_uid: string; task_title: string }>()).results ?? [];
   return rows.map((r) => {
     const p = personaOf(r.persona_key);
     return { agent: { uid: r.agent_uid, persona: p ? { key: p.key, name: p.name } : null }, task: { uid: r.task_uid, title: r.task_title } };

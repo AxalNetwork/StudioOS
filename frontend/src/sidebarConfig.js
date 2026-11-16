@@ -548,8 +548,9 @@ export const SIDEBAR_GROUPS = {
       // renders the sections. A row aimed at a zone skips the overview, which
       // is precisely how the founder overviews were lost the first time.
       // D1226: a round call sent to an investor (/round-calls/:uid) sits under Deals.
+      // #6155: so do the IC decision pages (/ic, /ic/:uid), which lit no row.
       { to: '/deals', icon: Handshake, label: 'Deals',
-        match: ['/deals', '/pipeline', '/raise/data-room', '/round-calls'] },
+        match: ['/deals', '/pipeline', '/raise/data-room', '/round-calls', '/ic'] },
       // Positions is the canvas's word for the holdings view. /portfolio is the
       // overview; /portfolio/positions is the book; /portfolio/health is the
       // legacy alias that still renders the overview, and the generic tab bar

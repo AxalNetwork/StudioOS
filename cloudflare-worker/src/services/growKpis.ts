@@ -13,6 +13,9 @@
  *                                                       else the latest churn rate, Stripe first
  *   net_burn          project_metrics.net_burn          the latest row
  *   runway            refused (cash and burn)           runwayMonths(latest cash_balance, latest net_burn)
+ *   arr               refused (12 × MRR)                12 × the MRR row above (D6104)
+ *   burn_multiple     refused (burn ÷ net new ARR)      the latest month's net burn ÷ 12 × that month's net new
+ *                                                       MRR from the ledger (new + expansion + unsplit − churned)
  *   custom-<uid>      custom_kpi_values                 the latest value
  *   posthog-<uid>     refused ("This figure comes from    the latest PostHog fact of a tracked metric
  *                     PostHog.")                          (D1609, services/posthog/metrics.ts)
@@ -37,12 +40,12 @@ export class KpiRefused extends Error {
   }
 }
 
-export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway'] as const;
+export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'arr', 'burn_multiple'] as const;
 export type KpiKey = typeof KPI_KEYS[number];
 
 export const KPI_LABEL: Record<KpiKey, string> = {
   mrr: 'MRR', paying_accounts: 'Customers', new_mrr: 'New MRR', expansion_mrr: 'Expansion MRR',
-  churn: 'Churn', net_burn: 'Burn', runway: 'Runway',
+  churn: 'Churn', net_burn: 'Burn', runway: 'Runway', arr: 'ARR', burn_multiple: 'Burn multiple',
 };
 
 /**
@@ -65,6 +68,8 @@ const REFUSED: Partial<Record<KpiKey, string>> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export const CUSTOM_UNITS = ['count', 'pct', 'money'] as const;
@@ -170,7 +175,44 @@ function connectedFirst(rows: Metric[], col: MetricCol, now: number): Metric[] {
   return stripe.some((r) => r.snapshot_date >= since) ? stripe : rows.filter((r) => !isStripe(r));
 }
 
-/** Revenue and traction's rows, in the list's order: the seven, then each custom KPI. */
+/**
+ * D6104 (#6104): ARR is 12 × the MRR row, from the same source and date. With no
+ * MRR it reads Not recorded and names the input; it is never typed.
+ */
+export function arrOf(mrr: KpiRow): KpiRow {
+  if (mrr.value == null) return notRecorded('arr', KPI_LABEL.arr, 'Not recorded: needs MRR');
+  return { id: 'arr', kpi: KPI_LABEL.arr, value: mrr.value * 12, unit: mrr.unit, change_30d: mrr.change_30d == null ? null : mrr.change_30d * 12,
+    source: `Derived from MRR (12 × MRR)${mrr.source ? ` · ${mrr.source}` : ''}`, as_of: mrr.as_of, period: mrr.period, reason: null };
+}
+
+type MovementAt = (kind: string) => { amount_cents: number; as_of: string } | null;
+
+/**
+ * D6104: burn multiple = the month's net burn ÷ its net new ARR, where net new
+ * ARR is 12 × (new + expansion + unsplit − churned MRR) from the revenue
+ * ledger for the ledger's latest month. It needs burn recorded in that same
+ * month and a positive net new ARR; with any input missing it reads Not
+ * recorded and says which. Burn is US dollars (project_metrics); the ledger is
+ * cents.
+ */
+export function burnMultipleOf(burn: KpiRow, twoBillings: boolean, gap: string | null, month: string | null, at: MovementAt): KpiRow {
+  const no = (why: string) => notRecorded('burn_multiple', KPI_LABEL.burn_multiple, `Not recorded: ${why}`);
+  if (!twoBillings) return no('needs 2 billings in the revenue ledger');
+  if (gap) return no(gap.replace(/^Not recorded: /, ''));
+  if (!month) return no('needs the ledger\'s net new ARR');
+  if (burn.value == null) return no('needs burn');
+  if (burn.period !== month) return no(`needs burn recorded for ${month}`);
+  if (!(burn.value > 0)) return no('burn is zero or negative');
+  const cents = (k: string) => at(k)?.amount_cents ?? 0;
+  const netNewMrrCents = cents('new') + cents('expansion') + cents('unsplit') - cents('churned');
+  if (!(netNewMrrCents > 0)) return no(`net new ARR for ${month} is zero or negative`);
+  const netNewArr = (netNewMrrCents * 12) / 100;
+  const asOf = [burn.as_of!, at('new')?.as_of ?? at('unsplit')?.as_of ?? at('churned')?.as_of ?? burn.as_of!].sort().at(-1)!;
+  return { id: 'burn_multiple', kpi: KPI_LABEL.burn_multiple, value: Math.round((burn.value / netNewArr) * 100) / 100, unit: 'multiple',
+    change_30d: null, source: 'Derived from burn and the revenue ledger', as_of: asOf, period: month, reason: null };
+}
+
+/** Revenue and traction's rows, in the list's order: the nine, then each custom KPI. */
 export async function kpiRows(env: Env, projectId: number, now: number): Promise<KpiRow[]> {
   const metrics = await readMetrics(env, projectId);
   const ledger = await readRecurring(env, projectId);
@@ -212,6 +254,10 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
           source: 'Derived from cash and burn', as_of: asOf, period: asOf.slice(0, 7), reason: null };
   }
 
+  const mrr = latest('mrr', KPI_LABEL.mrr, connectedFirst(metrics, 'mrr', now), 'mrr', 'usd', metrics);
+  const arr = arrOf(mrr);
+  const burnMultiple = burnMultipleOf(burn, twoBillings, gap, latestMonth, at);
+
   const custom = await customKpis(env, projectId);
   const values = custom.length ? await env.DB.prepare(
     `SELECT v.kpi_id, v.as_of, v.value, v.value_cents, v.source FROM custom_kpi_values v
@@ -230,13 +276,15 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
   });
 
   return [
-    latest('mrr', KPI_LABEL.mrr, connectedFirst(metrics, 'mrr', now), 'mrr', 'usd', metrics),
+    mrr,
     latest('paying_accounts', KPI_LABEL.paying_accounts, metrics, 'paying_accounts', 'count'),
     movement('new_mrr', 'new'),
     movement('expansion_mrr', 'expansion'),
     churn,
     burn,
     runway,
+    arr,
+    burnMultiple,
     ...customRows,
     // D1609: each tracked PostHog metric, read only from PostHog facts; never written here.
     ...(await posthogRead(() => metricReadings(env, projectId), [])).map(({ metric: m, reading: r }): KpiRow => ({

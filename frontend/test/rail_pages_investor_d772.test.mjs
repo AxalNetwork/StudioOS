@@ -95,7 +95,7 @@ test('Portfolio: each board draws exactly one rail of its own', () => {
 
 test('Portfolio: every option of the section names itself on its band', () => {
   const rows = rowsOf('Portfolio');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:multiple-narrative', 'draft:updates-read', 'draft:support-summary']);
+  assert.deepEqual(rows.map((o) => o.key), ['draft:portfolio-read', 'draft:performance-note', 'draft:multiple-narrative', 'draft:updates-read', 'draft:support-summary']);
   assertBandsNamed(rows);
 });
 

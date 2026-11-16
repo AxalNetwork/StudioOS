@@ -59,12 +59,13 @@ import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, WorkerRail } from '../../ui';
 import { DEFAULT_TAB, LICENCE_TABS, kindFromParam, ledgerSelection, tabFromParam } from './licenceNavModel';
 import {
-  LEDGER_STATUSES, countsLine, filterByNeeds, ledgerIsEmpty, needsFromParam, needsSummary, needsToParam, statusFromParam, tabForSection,
+  LEDGER_STATUSES, countsLine, filterByMenus, filterByNeeds, ledgerIsEmpty, menusChosen, menusFromParams, needsFromParam, needsSummary,
+  needsToParam, statusFromParam, tabForSection, territoryOptions,
 } from './licenceLedgerModel';
 import { UNAVAILABLE } from './licences/licenceShared';
 import { Coverage } from './licences/Coverage';
 import { Detail } from './licences/LicenceDetail';
-import { CountsAndNeeds, LedgerTable } from './licences/LedgerTable';
+import { CountsAndNeeds, LedgerMenus, LedgerTable } from './licences/LedgerTable';
 import { CoverageLine, LedgerZero, SeatUtilisation } from './licences/LedgerZero';
 import { FamilyChips, RegistryLedger } from './licences/RegistryLedger';
 import { familyFromParam, familyToParam } from './licenceRegistryModel';
@@ -136,6 +137,8 @@ export default function AdminLicences() {
   const statusFilter = statusFromParam(params.get('status'));
   const needs = needsFromParam(params.get('needs'));
   const toggleNeed = (k) => setParam({ needs: needsToParam(needs.includes(k) ? needs.filter((x) => x !== k) : [...needs, k]) });
+  // D5919 — the Territory, Renewal window and Attention menus filter the loaded rows; their choice is in the URL too.
+  const menus = menusFromParams((k) => params.get(k));
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
   // D4819 part 20 — the phone's search over an open licence: typed here, sent to the ledger on submit.
@@ -367,7 +370,7 @@ export default function AdminLicences() {
   const empty = ledgerIsEmpty({ total, filtered, summaryTotal: summaryOk ? Number(summaryOk.counts?.total) : null });
   const counts = summaryOk ? countsLine(summaryOk.counts) : null;
   const needItems = needsSummary(filteredItems, reads);
-  const rows = filterByNeeds(filteredItems, reads, needs);
+  const rows = filterByMenus(filterByNeeds(filteredItems, reads, needs), reads, menus);
   const coverageGrid = (withRenewals) => (summaryOk
     ? (withRenewals
       ? <Coverage items={summary.coverage} renewals={summary.renewals} onOpen={setSel} />
@@ -578,7 +581,13 @@ export default function AdminLicences() {
           <option value="">Every status</option>
           {LEDGER_STATUSES.map(([k, word]) => <option key={k} value={k}>{word.replace(/^./, (c) => c.toUpperCase())}</option>)}
         </select>
+        <LedgerMenus menus={menus} territories={territoryOptions(filteredItems, menus.territory)} onChange={setParam} />
       </div>
+      {menusChosen(menus) && more ? (
+        <p className="mt-2 text-xs text-gray-600 dark:text-gray-400" data-testid="licence-menus-scope">
+          {`These filters apply to the ${filteredItems.length} loaded of ${total ?? '?'} licences. Show more to filter the rest.`}
+        </p>
+      ) : null}
 
       {heldUnreadable && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -589,9 +598,11 @@ export default function AdminLicences() {
       {rows.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-6 text-center dark:border-gray-700" data-testid="licence-no-match">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {needs.length
-              ? 'No loaded licence matches the Needs HQ items chosen. Clear them to see every row.'
-              : 'No licences match this search, kind or status. Clear the search and switch to All to see every row in the ledger.'}
+            {menusChosen(menus)
+              ? 'No loaded licence matches the Territory, Renewal window and Attention chosen. Set them back to Every or Any to see every row.'
+              : needs.length
+                ? 'No loaded licence matches the Needs HQ items chosen. Clear them to see every row.'
+                : 'No licences match this search, kind or status. Clear the search and switch to All to see every row in the ledger.'}
           </p>
         </div>
       ) : (
@@ -600,7 +611,9 @@ export default function AdminLicences() {
           footer={(
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 font-mono text-[12px] text-gray-500 dark:border-gray-800 dark:text-gray-400">
               <span data-testid="licence-list-count">
-                {needs.length
+                {menusChosen(menus)
+                  ? `${rows.length} of ${filteredItems.length} loaded match`
+                  : needs.length
                   ? `${rows.length} of ${filteredItems.length} loaded need HQ`
                   : total !== null ? `Showing ${filteredItems.length} of ${total}` : `Showing ${filteredItems.length}`}
               </span>
