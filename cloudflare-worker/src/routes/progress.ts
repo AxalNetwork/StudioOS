@@ -1332,11 +1332,26 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
-  await c.env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ?').bind(id).run();
-  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
-    entityId: id, action: 'roadmap_deleted', summary: `${existing.objective} deleted` });
+  await deleteRoadmapItem(c.env, { projectId: existing.project_id, id, objective: existing.objective, userId: user.id });
   return c.json({ deleted: id });
 });
+
+/**
+ * #6041: remove one roadmap item and what hangs on it, then log it. The one delete both routes call
+ * (`DELETE /api/progress/roadmap/okr/:id` and Build's `DELETE /api/cycles/build/roadmap/:id`), each after its own
+ * ownership and write gate. The item's dependency edges go with it, in either direction, in the same batch, so the
+ * Dependencies view never draws an edge to an item that is gone. The table is migration 254's; a database that
+ * never created it has no edges to remove.
+ */
+export async function deleteRoadmapItem(env: Env, a: { projectId: number; id: number; objective: string; userId: number }): Promise<void> {
+  const edges = await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'okr_dependencies'").first();
+  await env.DB.batch([
+    ...(edges ? [env.DB.prepare('DELETE FROM okr_dependencies WHERE project_id = ? AND (okr_id = ? OR blocks_okr_id = ?)').bind(a.projectId, a.id, a.id)] : []),
+    env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(a.id, a.projectId),
+  ]);
+  await logCycleWrite(env, { projectId: a.projectId, userId: a.userId, cycle: 'build', module: 'product-roadmap',
+    entityId: a.id, action: 'roadmap_deleted', summary: `${a.objective} deleted` });
+}
 
 /**
  * Migration 252's log, bootstrapped at runtime like its siblings.

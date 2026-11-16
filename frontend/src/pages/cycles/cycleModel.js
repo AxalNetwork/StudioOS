@@ -54,6 +54,7 @@ export function cycleOf(key) {
  */
 export function cardView(card) {
   if (!card) return { state: 'loading' };
+  if (card.plan?.locked === true) return { state: 'locked', plan: card.plan };
   const state = CARD_STATES.includes(card.state) ? card.state : 'unreadable';
   if (state === 'ok') {
     const charts = drawableSeries(card.series);

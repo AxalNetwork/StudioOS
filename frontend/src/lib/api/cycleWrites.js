@@ -141,14 +141,20 @@ export function makeCycleWrites(request) {
       mvpTarget: (projectId, date) => request(`/cycles/build/project/target?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify({ mvp_target_date: date }) }),
       roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // #6041: remove an item added by mistake, with its dependency edges.
+      roadmapItemDelete: (projectId, id) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).
       founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
       founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
+      // #6041: remove a founder added by mistake (only one with nothing attached; a 409 names what is).
+      founderDelete: (projectId, id) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body, idempotencyKey) => request(`/cycles/build/formation-steps?${q(projectId)}`, {
         method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey },
       }),
       formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // #6041: remove the venture's own filing added by mistake, with its checklist and proof file.
+      formationStepDelete: (projectId, id) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       // A feature's must-have mark and due date (D662). The feature itself is
       // MVP scope's row: `mvpFeature` adds one, with the project in the path.
       feature: (projectId, id, body) => request(`/cycles/build/features/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
