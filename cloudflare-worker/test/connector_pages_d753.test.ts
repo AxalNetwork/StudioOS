@@ -312,6 +312,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   facebook: '2026-11',
   tiktok: '2026-11',
+  google_search_console: '2026-11', // D5839
   teams: '2026-11', // D5810
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
@@ -355,6 +356,8 @@ const constant = (src: string, name: string) => {
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   facebook: { file: 'integrations/providers/facebook.ts', sign_in: ['AUTHORIZE', ''], api: 'GRAPH' },
   tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
+  // D5839: Search Console's own client; the page names the property list it reads.
+  google_search_console: { file: 'integrations/searchConsoleOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'SITES' },
   hubspot: { file: 'integrations/providers/hubspot.ts', sign_in: ['HS_AUTH', '/oauth/authorize'], api: 'HS_API' },
   calendly: { file: 'integrations/providers/calendly.ts', sign_in: ['CL_AUTH', '/oauth/authorize'], api: 'CL_API' },
   salesforce: { file: 'integrations/providers/salesforce.ts', sign_in: ['PROD_HOST', '/services/oauth2/authorize'], api: null },

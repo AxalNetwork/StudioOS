@@ -71,8 +71,12 @@ export async function readFundPeriod(env:Env,fundId:number,periodId:number,canMa
  const row=await env.DB.prepare('SELECT * FROM fund_report_periods WHERE fund_id=? AND id=?').bind(fundId,periodId).first<any>();
  if(!row||(!canManage&&row.status!=='issued'))throw new FundReportRefusal('not_found',404);
  const shaped=shapeFundPeriod(row);
- let period=canManage && shaped ? (await withFundReportDelivery(env,[shaped]))[0] : shaped;
- if(period?.corrects_period_id){const original=await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'").bind(fundId,period.corrects_period_id).first<any>();if(!original)throw new Error('Corrected period unreadable');period={...period,corrects_period:original.period};}
+ const withDelivery=canManage && shaped ? (await withFundReportDelivery(env,[shaped]))[0] : shaped;
+ const correctionId=withDelivery?.corrects_period_id;
+ const original=correctionId ? await env.DB.prepare("SELECT period FROM fund_report_periods WHERE fund_id=? AND id=? AND status='issued'")
+   .bind(fundId,correctionId).first<{period:string}>() : null;
+ if(correctionId&&!original)throw new Error('Corrected period unreadable');
+ const period=withDelivery&&original ? {...withDelivery,corrects_period:original.period} : withDelivery;
  // D6249: a draft reads as it did. An issued period adds what was frozen at issue, who issued it, and what corrects it.
  if(period?.status!=='issued')return period;
  return {...period,...await issuedFigures(env,row),...await issuerName(env,row.issued_by),corrected_by_period_id:await correctedBy(env,fundId,row.id)};
