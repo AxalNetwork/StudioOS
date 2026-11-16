@@ -244,7 +244,10 @@ const PROFILES = {
     // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
     // D6637: the network picker is now supplied by its page.
-    handlers: 19,
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
+    // and `Show cleared` reads it back.
+    handlers: 20,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
