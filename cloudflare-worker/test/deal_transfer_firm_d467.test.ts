@@ -112,6 +112,7 @@ function freshDb(withColumn = true) {
   `);
   runMigration(db, '335_deal_transfers_and_closing_checklists.sql');
   if (withColumn) runMigration(db, '340_deal_transfer_company.sql');
+  runMigration(db, '202611161150_6889_deal_transfer_phone_verifier.sql'); // D6889: the reads name the phone verifier
   const u = db.prepare('INSERT INTO users (id, role, name) VALUES (?, ?, ?)');
   u.run(SOLO, 'admin', 'Sol Solo'); u.run(MULTI, 'admin', 'Mia Multi');
   u.run(LONE, 'admin', 'Lou Lone'); u.run(RIVAL, 'admin', 'Rex Rival');
