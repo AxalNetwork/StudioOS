@@ -2,6 +2,7 @@ import type { Env } from '../types';
 import { enqueueJob } from './queue';
 import { bindingKey } from '../util/schemaBootstrap';
 import { syncIncorporationMilestoneForOrder } from './labIncorporationMilestone';
+import { ensureCaseForOrder, transition } from './formationCase';
 
 const MIGRATED = new WeakMap<object, boolean>();
 
@@ -26,6 +27,73 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
       paid_at                TIMESTAMP
     )`,
     `CREATE INDEX IF NOT EXISTS idx_incorporations_user_status ON incorporations(user_id, status)`,
+    // D6686 (#6686) — the formation case store. Declared by migration
+    // 202611151733_6686_formation_cases.sql; these are the D235 safety net and
+    // declare the same columns.
+    `CREATE TABLE IF NOT EXISTS formation_cases (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid                   TEXT NOT NULL UNIQUE,
+  user_id               INTEGER NOT NULL,
+  intent                TEXT NOT NULL CHECK (intent IN ('convert_project', 'incorporate_company', 'new_company')),
+  project_id            INTEGER,
+  company_id            INTEGER,
+  track                 TEXT NOT NULL CHECK (track IN ('legacy_v1', 'v2')),
+  path                  TEXT CHECK (path IS NULL OR path IN ('simple', 'specialist')),
+  stage                 TEXT NOT NULL CHECK (stage IN ('draft', 'options_shown', 'chosen', 'structure_review', 'details', 'quoted', 'paid', 'preparing', 'ready_to_file', 'submitted', 'registry_query', 'registered', 'activating', 'handed_off')),
+  stage_entered_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  waiting_on            TEXT NOT NULL DEFAULT 'nobody' CHECK (waiting_on IN ('founder', 'hq', 'partner', 'counsel', 'registry', 'nobody')),
+  hold_reason           TEXT,
+  form_key              TEXT,
+  catalogue_version_id  INTEGER,
+  structure_gate        TEXT,
+  partner_id            INTEGER,
+  hq_owner_user_id      INTEGER,
+  revision              INTEGER NOT NULL DEFAULT 0,
+  closed_at             TEXT,
+  close_reason          TEXT CHECK (close_reason IS NULL OR close_reason IN ('cancelled', 'declined', 'rejected', 'refunded', 'handed_off', 'abandoned')),
+  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_formation_cases_open_project
+  ON formation_cases(project_id) WHERE track = 'v2' AND closed_at IS NULL AND project_id IS NOT NULL`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_formation_cases_open_company
+  ON formation_cases(company_id) WHERE track = 'v2' AND closed_at IS NULL AND company_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_formation_cases_user ON formation_cases(user_id, stage)`,
+    `CREATE TABLE IF NOT EXISTS formation_case_orders (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id           INTEGER NOT NULL,
+  incorporation_id  INTEGER NOT NULL UNIQUE,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+)`,
+    `CREATE INDEX IF NOT EXISTS idx_formation_case_orders_case ON formation_case_orders(case_id)`,
+    `CREATE TABLE IF NOT EXISTS formation_case_stages (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id            INTEGER NOT NULL,
+  stage              TEXT NOT NULL,
+  responsible_role   TEXT,
+  owner_user_id      INTEGER,
+  evidence_json      TEXT,
+  completed_by       INTEGER,
+  completed_at       TEXT,
+  created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (case_id, stage)
+)`,
+    `CREATE TABLE IF NOT EXISTS formation_case_events (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id         INTEGER NOT NULL,
+  at              TEXT NOT NULL DEFAULT (datetime('now')),
+  actor_user_id   INTEGER,
+  party           TEXT NOT NULL CHECK (party IN ('founder', 'hq', 'partner', 'counsel', 'registry', 'system')),
+  kind            TEXT NOT NULL,
+  from_stage      TEXT,
+  to_stage        TEXT,
+  to_revision     INTEGER,
+  visibility      TEXT NOT NULL DEFAULT 'hq_only' CHECK (visibility IN ('all', 'hq_partner', 'hq_only')),
+  detail_json     TEXT
+)`,
+    `CREATE INDEX IF NOT EXISTS idx_formation_case_events_case ON formation_case_events(case_id, id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_formation_case_events_revision
+  ON formation_case_events(case_id, to_revision) WHERE to_revision IS NOT NULL`,
     // Migration 411 (D601) — the packet and the filing, recorded by an admin.
     // Declared there; these are the D235 safety net for a database the runner
     // has not reached yet. "duplicate column" is swallowed below.
@@ -112,6 +180,7 @@ export async function recordPaidIncorporation(
 
   // Only enqueue if the row actually transitioned from pending_payment -> paid.
   if ((r.meta?.changes ?? 0) > 0) {
+    await openCaseForPaidOrder(env, incorporationId);
     await enqueueJob(env, 'incorporation_packet_start', {
       incorporation_id: incorporationId,
     }, {
@@ -218,6 +287,7 @@ export async function recordPaidIncorporationFromPaymentIntent(
   ).run();
 
   if ((r.meta?.changes ?? 0) > 0) {
+    await openCaseForPaidOrder(env, incorporationId);
     await enqueueJob(env, 'incorporation_packet_start', {
       incorporation_id: incorporationId,
     }, {
@@ -227,16 +297,29 @@ export async function recordPaidIncorporationFromPaymentIntent(
   }
 }
 
+/**
+ * D6686: the payment is on record, so the order has its case at `paid`. A
+ * failure here leaves the payment recorded and the case to the next
+ * ensureCaseForOrder (the packet job's, or any case read); it never fails the
+ * webhook that recorded the payment.
+ */
+async function openCaseForPaidOrder(env: Env, incorporationId: number): Promise<void> {
+  try { await ensureCaseForOrder(env, incorporationId); }
+  catch (e) { console.error('formation case: could not open the case of a paid order', incorporationId, (e as Error)?.message); }
+}
+
+/**
+ * The `incorporation_packet_start` job: paid → preparing, through the case
+ * service (D6686), so the order's status (paid → packet_processing) and the
+ * case's stage move in one batch. A case not at `paid` is left alone, as the
+ * old `WHERE status = 'paid'` left the order: a replayed job changes nothing.
+ */
 export async function startIncorporationPacket(env: Env, incorporationId: number): Promise<void> {
   await ensureIncorporationsSchema(env);
-  await env.DB.prepare(
-    `UPDATE incorporations
-     SET status = 'packet_processing',
-         updated_at = datetime('now')
-     WHERE id = ? AND status = 'paid'`,
-  ).bind(incorporationId).run();
+  const c = await ensureCaseForOrder(env, incorporationId);
+  if (!c || c.stage !== 'paid') return;
+  await transition(env, c.id, 'preparing', { party: 'system' }, { detail: { job: 'incorporation_packet_start' } });
   // The downstream packet-build pipeline (eSign PDF assembler) will run here in a future task.
-  // For now, the status advances to 'packet_processing' so the queue can advance.
 }
 
 export async function getIncorporationForUser(
