@@ -93,6 +93,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `ReadinessHome.jsx` | D6049 (#6049, Raise v2 RA-16): Fundraising readiness's own page, drawn by `CycleModulePage`/`PhoneModulePage` in place of the generic chart and table (`defs/raise.jsx` `homes`): at most three priorities, every area in one table (status, evidence, why it matters, one action from the Worker's `fix_href`; List / Chart), Product-market fit apart (`PmfPart`), Detail collapsed (history, raise kit and benchmark); `ReadinessBands` folds the page's Eadwyn bands as AI gap analysis. Writes nothing. |
 | `readinessModel.js` | D6049: pure. The areas from the module read's records (Product-market fit left out), their RA-23 state words, evidence and "Not recorded · no target set", the priorities (at most three, by gain, never Team), the summary and the header's coverage line. |
 | `MarketFigureHistory.jsx` | D6011 (#6011): Market intelligence's History part, from the module read's `parts.market_history`: each change to the three figures with its value, method, source, who and when; Unreadable when null, and "No change recorded yet" when empty |
+| `ResearchPipeline.jsx` | D6001 (#6001): Customer research's recruiting controls, a writer's only: Add a lead beside Record a session, each row's Move stage (the interview record's `set-stage`), and the Waitlist leads panel (Invite, Follow up, the promoted sign-up's interview) the card's waitlist link lands on; a failed waitlist read says so |
 
 ## Rules
 
