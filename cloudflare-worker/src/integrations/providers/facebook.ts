@@ -8,6 +8,7 @@ import { decryptCredentials } from '../secrets';
 import { FACEBOOK_READ_SCOPES } from '../facebookScopes';
 import { activeCompanyFor } from '../../middleware/activeCompany';
 import { companyEnabled } from '../companyScope';
+import { purgeFacebookConnection } from '../../services/facebook/grow';
 
 const GRAPH = 'https://graph.facebook.com/v26.0';
 const AUTHORIZE = 'https://www.facebook.com/v26.0/dialog/oauth';
@@ -89,6 +90,35 @@ async function revoke(env: Env, token: string, account = 'me') {
   if (failure) throw failure;
 }
 
+/**
+ * D5859: the bounded Graph call and the app-secret proof, for the Grow reads in `services/facebook/insights.ts`. One
+ * Graph version (`GRAPH`) and one error mapping for every Facebook call.
+ */
+export type FacebookGrant = Awaited<ReturnType<typeof graphGrant>>;
+export const facebookGraph = (path: string, grant: FacebookGrant) => graph(path, grant);
+export const facebookGrant = graphGrant;
+
+/**
+ * D5859: the Pages this connection's token lists now, each with its Page access token, for one sync. The Page tokens
+ * are used for that sync and never stored. A connection without its read grant is refused, as the Page list is.
+ */
+export async function facebookPageGrants(env: Env, row: IntegrationRow): Promise<Array<{ id: string; name: string; grant: FacebookGrant }>> {
+  if (!facebookReady(env)) throw unavailable();
+  const credentials = await decryptCredentials(env, row.uid, row.credentials_enc);
+  const token = credentials?.access_token;
+  if (typeof token !== 'string' || !token) throw new ConnectRefusal(401, 'facebook_reconnect', 'Reconnect with Facebook to continue.');
+  const grant = await graphGrant(env, token);
+  requireReadGrant(await permissions(grant));
+  const pages = await collection('/me/accounts?fields=id,name,access_token&limit=100', grant);
+  const out: Array<{ id: string; name: string; grant: FacebookGrant }> = [];
+  for (const value of pages) {
+    const page = value as { id?: unknown; name?: unknown; access_token?: unknown } | null;
+    if (!isId(page?.id) || typeof page?.name !== 'string' || typeof page?.access_token !== 'string' || !page.access_token) continue;
+    out.push({ id: page.id, name: page.name.slice(0, 200), grant: await graphGrant(env, page.access_token) });
+  }
+  return out;
+}
+
 export async function listFacebookPages(env: Env, row: IntegrationRow) {
   if (!facebookReady(env)) throw unavailable();
   const credentials = await decryptCredentials(env, row.uid, row.credentials_enc);
@@ -144,6 +174,8 @@ registerProvider({
   async disconnect(c, _user, row) {
     const credentials = await decryptCredentials(c.env, row.uid, row.credentials_enc);
     if (typeof credentials?.access_token === 'string') await revoke(c.env, credentials.access_token, isId(row.external_account_id) ? row.external_account_id : 'me');
+    // D5859: once Facebook has revoked the grant, the facts this connection fed, their ledger rows and its Page links go.
+    await purgeFacebookConnection(c.env, Number(row.id));
   },
   async action(c, user, row, name, body) {
     if ((await selectJwt(c))?.payload.impersonated_by) throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot manage Facebook Pages.');
