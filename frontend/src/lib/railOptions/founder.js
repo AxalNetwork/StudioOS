@@ -153,6 +153,15 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Build · Operating systems', key: 'draft:build/kpi', route: '/build/operating-systems', label: 'Draft an annotation', kind: 'numbers', handler: 'draft',
     at: [[BUILD, "surface: 'build/kpi'"]],
   },
+  // D6042 (#6042): the two Build modules that had no Eadwyn draft, each on its page's kind.
+  {
+    page: 'Founder · Build · Founding team', key: 'draft:build/founding', route: '/build/founding-team', label: 'Check the split and vesting', kind: 'plan', handler: 'draft',
+    at: [[BUILD, "surface: 'build/founding'"]],
+  },
+  {
+    page: 'Founder · Build · Company creation', key: 'draft:build/company', route: '/build/company-creation', label: 'Summarise the filings', kind: 'legal', handler: 'draft',
+    at: [[BUILD, "surface: 'build/company'"]],
+  },
 
   // ── Raise.
   {
@@ -466,8 +475,6 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Validate · Verdict': 'Export summary is a CSV the Worker builds; no model.',
   'Founder · Build · Solution design': 'Its records and forms only.',
   'Founder · Build · Prototype / MVP': 'Its records and forms only.',
-  'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
-  'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
   // #3938 part 2: search runs on the room's own index, whose embedder is fixed (D1478 retrieve_index), so nothing is offered to pick.
   'Founder · Raise · Data room': 'Search runs on the room’s own index with fixed models, so there is nothing to pick; the room is read on Fundraising readiness.',

@@ -927,6 +927,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         showRecords={!distribution}
         // D5081 (#5081, RA-14): Use of funds' Home owns the page; no generic "at a glance" or Categories under it.
         owned={uofOwnsHome ? { sub: UOF_FRAME } : null}
+        // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
@@ -937,8 +938,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : fnOf(def.add, slug)?.(q, openAction)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
-        onExport={cycle === 'grow' && projectId && read?.exportable === true
-          ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
+        onExport={def.exportRecords && projectId && !narrativeAdmin
+          ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort })
+          : cycle === 'grow' && projectId && read?.exportable === true
+            ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,

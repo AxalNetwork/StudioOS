@@ -37,6 +37,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,7 +178,7 @@ test('the reasons that outlived their blockers are corrected, not reworded', () 
   // exist, and the two must still agree — the rail row is typed on the page
   // while the sentence is fetched, and correcting one and not the other is how
   // they came to disagree in the first place.
-  const SEC = read('cloudflare-worker/src/routes/admin_security.ts');
+  const SEC = readAdminSecurity();
   assert.doesNotMatch(SEC, /this is a view that has not been built/,
     'the payload still says the overlay is unbuilt');
   assert.doesNotMatch(SEC, /which is U1\./, 'the overlay is unbuilt, not blocked by U1');

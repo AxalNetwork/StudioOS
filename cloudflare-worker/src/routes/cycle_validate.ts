@@ -48,9 +48,10 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canReadDecision, canWrite, ownsVenture, type ProjectRef } from './_founder_validate_helpers';
 import { focusOf, indexOf, meterOf } from '../services/validateFocus';
+import { currentMarketFigures, type MarketFigureRow } from '../services/marketFigures';
 import { part } from '../services/cycleFocus';
 import {
-  CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
+  CYCLE, QUESTION, MODULES, CARD_FOR, readWaitlistBar, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
   type Ctx, type ModuleSlug,
 } from '../services/cycleValidate';
 import {
@@ -113,7 +114,7 @@ const idParam = (v: string | undefined): number | null => (/^[1-9][0-9]{0,9}$/.t
 cycleValidate.get('/overview', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
-  const ctx = ctxOf(c, s.projectId);
+  const ctx = { ...ctxOf(c, s.projectId), canWrite: canWrite(s.project, s.user) };
   const decisions = canReadDecision(s.project, s.user);
   // #5999: the viewer's write gate, the very check every writer below passes to `scope`
   // (PUT /interviews-target among them), so "Set a target" is drawn only where a save is allowed.
@@ -181,6 +182,22 @@ cycleValidate.get('/modules/:slug', async (c) => {
   }
   const google = GOOGLE_MODULE[slug];
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
+  if (slug === 'demand-signals') {
+    const series = card.series as { bar?: number | null } | null;
+    try {
+      const bar = series ? series.bar ?? null : await readWaitlistBar(ctx);
+      parts = { ...parts, waitlist_bar: bar, waitlist_bar_unreadable: false };
+    } catch {
+      parts = { ...parts, waitlist_bar: null, waitlist_bar_unreadable: true };
+    }
+  }
+  if (slug === 'demand-signals' && writer) {
+    const linked = await c.env.DB.prepare(
+      `SELECT 1 AS connected FROM lovable_app_links
+       WHERE project_id = ? AND module = 'experiments' AND last_status = 'live' LIMIT 1`
+    ).bind(s.projectId).first<{ connected: number }>().catch(() => null);
+    parts = { ...parts, lovable_connected: linked?.connected === 1 };
+  }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
     records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },
     // D693 decision 7: every Validate module read says so too.
@@ -292,7 +309,10 @@ cycleValidate.get('/market-readiness', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
   try {
-    return c.json(await loadMarketReadiness(ctxOf(c, s.projectId)));
+    // D6011 (#6011): `figures` is each current figure's method and named source, so the sizing page keeps them.
+    const [readiness, { current }] = await Promise.all([loadMarketReadiness(ctxOf(c, s.projectId)), currentMarketFigures(c.env, s.projectId)]);
+    const figure = (r: MarketFigureRow | null) => (r ? { method: r.method, market_source_id: r.market_source_id, set_at: r.set_at } : null);
+    return c.json({ ...readiness, figures: { tam: figure(current.tam), sam: figure(current.sam), som: figure(current.som) } });
   } catch (e) {
     console.warn('[cycle_validate] market readiness unreadable:', (e as Error)?.message);
     return c.json({ detail: 'Market readiness could not be read' }, 503);
