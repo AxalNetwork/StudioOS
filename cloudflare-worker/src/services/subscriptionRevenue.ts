@@ -23,6 +23,14 @@ const metrics = {
   ltv: { state: 'not_recorded', reason: 'The ledger has no pre-coverage customer payment history.' },
 } as const;
 
+/**
+ * The ledger rows the subscription stream is read from (D5946), as one SQL condition. D5950's read model counts its
+ * incomplete rows and last reconciliation over exactly these rows, so the two can never disagree on the set.
+ */
+export const SUBSCRIPTION_LEDGER_ROWS = `((kind = 'invoice' AND source = 'stripe') OR (kind = 'refund' AND source IN ('stripe', 'hq')))
+          AND livemode IS NOT 0
+          AND (revenue_stream IN ('tier', 'investor', 'mi') OR revenue_stream IS NULL)`;
+
 export async function subscriptionRevenue(env: Env, quarter: Quarter) {
   const base = { period: quarter.key, ...metrics };
   try {
@@ -47,9 +55,7 @@ export async function subscriptionRevenue(env: Env, quarter: Quarter) {
               SUM(CASE kind WHEN 'invoice' THEN gross_cents ELSE refund_cents END) AS amount
          FROM financial_events
         WHERE occurred_at >= ? AND occurred_at < ?
-          AND ((kind = 'invoice' AND source = 'stripe') OR (kind = 'refund' AND source IN ('stripe', 'hq')))
-          AND livemode IS NOT 0
-          AND (revenue_stream IN ('tier', 'investor', 'mi') OR revenue_stream IS NULL)
+          AND ${SUBSCRIPTION_LEDGER_ROWS}
         GROUP BY currency, kind, revenue_stream IS NULL
         ORDER BY currency, kind`,
     ).bind(quarter.start, quarter.end).all<LedgerGroup>();
