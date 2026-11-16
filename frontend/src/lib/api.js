@@ -219,6 +219,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/share/captable/')
     // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
     || currentPath.startsWith('/share/evidence/')
+    // D6897 (#6897): a readiness snapshot a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/readiness/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*

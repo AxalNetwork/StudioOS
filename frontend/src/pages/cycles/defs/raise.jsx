@@ -124,7 +124,7 @@ const raise = {
   homes: toFnMap({
     'fundraising-readiness': (data, ctx) => ({
       sub: coverageLine(data?.records),
-      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} />,
+      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} role={ctx.role} />,
       Bands: ReadinessBands,
     }),
   }),
