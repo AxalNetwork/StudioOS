@@ -12,7 +12,7 @@ import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
 import { coverageLine } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
-import { isNarrativeAdmin } from '../../raise/narrative/narrativeModel';
+import { narrativeStanding } from '../../raise/narrative/narrativeModel';
 import { forecastHref } from '../../raise/useoffunds/useOfFundsModel';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
@@ -57,9 +57,10 @@ const raise = {
     )])),
     // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
     // D913: its Objections heard, with no Answer it for an admin.
+    // D5074 part 7: `admin` is the part's narrative map (no `edit`: no Answer it, no reads list); no map draws neither.
     'investor-narrative': (data, ctx) => (
       <>
-        <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} projectId={ctx.projectId} />
+        <NarrativeHome data={data} admin={narrativeStanding(data?.parts?.narrative?.capabilities).readOnly} projectId={ctx.projectId} />
         {mercuryPart('investor-narrative', data, ctx)}
         <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
         <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />

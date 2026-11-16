@@ -693,7 +693,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
   // #3712: Add/Edit dialogs sit outside the page gate, including phone sheets.
   // The authenticated role decides read-only access; shell preview never grants writes.
-  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, user) : {};
+  // D5074 part 7: from the module read's narrative map; the account words only a read that carried none.
+  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, module?.parts?.narrative?.capabilities, user) : {};
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
