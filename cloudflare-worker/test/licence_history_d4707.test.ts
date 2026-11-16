@@ -179,7 +179,7 @@ test('history pages by id with no fixed cap: every row is reachable, none twice'
   assert.equal((await call(db, '/events?before=abc')).status, 400);
 });
 
-// D4819 part 5 (#5928, L18): "Retry branch sync" — POST /:uid/sync/retry re-pushes the current copy.
+// D4819 part 21 (#5928, L18): "Retry branch sync" — POST /:uid/sync/retry re-pushes the current copy.
 test('sync retry: a draft has no copy to sync; an issued licence pushes again and records how it ended', async () => {
   // Mutations checked: the draft refusal dropped; the audit row not written; the outcome always committed.
   const db = freshDb();

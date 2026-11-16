@@ -12,7 +12,7 @@
  */
 import { useConsequenceSheet } from '../LicenceConsequenceSheet';
 import LicenceOutcomeCard, { useLicenceWrite } from '../LicenceOutcomeCard';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -160,19 +160,30 @@ function EntityCompletion({ licence, onSaved }) {
   );
 }
 
-export function ContractStep({ licence, onSaved }) {
+/**
+ * D4819 part 5 (#5931) — `GET /:uid/contract`, read once for this step and for New licence steps 5 and 6
+ * (`NewLicenceSteps.jsx`). `data` is null while reading and false when the read failed; `onData` sees each answer.
+ */
+export function useLicenceContract(uid, onData) {
   const [data, setData] = useState(null);
+  const seen = useRef(onData);
+  seen.current = onData;
+  const load = useCallback(() => {
+    api.licenceContract(uid)
+      .then((d) => { setData(d); seen.current?.(d); })
+      .catch((e) => { reportError('licence_contract_load_failed', e); setData(false); });
+  }, [uid]);
+  useEffect(load, [load]);
+  return { data, setData, load };
+}
+
+export function ContractStep({ licence, onSaved }) {
   const [slug, setSlug] = useState('');
+  const { data, setData, load } = useLicenceContract(licence.uid, (d) => setSlug((s) => s || d.templates?.[0]?.slug || ''));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
-  const load = useCallback(() => {
-    api.licenceContract(licence.uid)
-      .then((d) => { setData(d); setSlug((s) => s || d.templates?.[0]?.slug || ''); })
-      .catch((e) => { reportError('licence_contract_load_failed', e); setData(false); });
-  }, [licence.uid]);
-  useEffect(load, [load]);
-  // D4819 part 5 (#5928): Send for signature asks in the one consequence sheet (L17) and reports in the L18 card.
+  // D4819 part 21 (#5928): Send for signature asks in the one consequence sheet (L17) and reports in the L18 card.
   const [sheet, ask] = useConsequenceSheet();
   const write = useLicenceWrite({ onSettled: () => { load(); onSaved?.(); }, tag: 'licence_contract' });
   const sendBusy = write.busy;

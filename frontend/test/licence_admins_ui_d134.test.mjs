@@ -87,7 +87,7 @@ test('the transient state between demote and detach is rendered, not inferred', 
 });
 
 test('appointing asks for a reason of ten characters, after the consequence, and sends it', () => {
-  // D4819 part 5 (#5928): the reason is asked in the one consequence sheet.
+  // D4819 part 21 (#5928): the reason is asked in the one consequence sheet.
   const MODEL = codeOnly(read('frontend/src/pages/admin/licenceConsequenceModel.js'));
   const askAt = MODEL.indexOf("case 'addAdmin':");
   assert.ok(askAt > 0);

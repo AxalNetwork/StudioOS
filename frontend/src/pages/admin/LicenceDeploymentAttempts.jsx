@@ -121,7 +121,7 @@ export default function LicenceDeploymentAttempts({ licence, initialEmail = '', 
   const [doJur, setDoJur] = useState('none');
 
   useEffect(() => { if (outerNotice) setNotice(outerNotice); }, [outerNotice]);
-  // D4819 part 5 (#5928): Retry and Reconcile, when the operator presses them, ask in the one consequence sheet
+  // D4819 part 21 (#5928): Retry and Reconcile, when the operator presses them, ask in the one consequence sheet
   // (L17) first. Their outcomes stay D4706's notice, which already says pending, done, refused or unknown, and
   // follows the provisioning run as it settles. The quiet re-check while an attempt is open asks nothing.
   const [sheet, ask] = useConsequenceSheet();

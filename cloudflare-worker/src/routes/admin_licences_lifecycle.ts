@@ -130,7 +130,7 @@ r.post('/:uid/reinstate', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// D4819 part 5 (#5928, board L18): "Retry branch sync". A write whose push did not land is partial: HQ holds the
+// D4819 part 21 (#5928, board L18): "Retry branch sync". A write whose push did not land is partial: HQ holds the
 // change and the branch does not yet. The scheduled retry (`retryPendingLicencePushes`) owns that, but an operator
 // looking at a partial outcome can push the current copy now. It changes nothing at HQ: it allocates the next revision,
 // pushes it, and records what the branch answered, as every write does. Never repeats the write that went partial.

@@ -15,6 +15,12 @@
  */
 import { REASON_MAX } from './licenceReasonModel';
 
+/**
+ * The four questions every sheet answers, in order (L17). D4819 part 5 (#5931): the New licence Issue step asks
+ * the same four, so they are named once here.
+ */
+export const CONSEQUENCE_QUESTIONS = Object.freeze(['What will happen', 'What else it affects', 'Reason recorded', 'Can it be undone?']);
+
 /** The lifecycle actions, in the order More lists them. */
 export const LIFECYCLE_ACTIONS = Object.freeze(['activate', 'reinstate', 'renew', 'suspend', 'terminate']);
 
@@ -166,7 +172,7 @@ export function licenceConsequence(action, l, reads = {}) {
       reason: { min: 1, max: REASON_MAX, question: 'Why is this licence being terminated? Its administrators read this.' },
       undo: { reversible: false, text: 'This cannot be undone. A terminated licence cannot be reactivated.' },
     };
-    // D4819 part 5 (#5928, L18): the other writes the canvas names go through the same sheet. `reads.target`
+    // D4819 part 21 (#5928, L18): the other writes the canvas names go through the same sheet. `reads.target`
     // carries what the write is about (the account, the invoice, the agreement, the attempt).
     case 'addAdmin': {
       const t = reads.target || {};
@@ -302,7 +308,7 @@ export function licenceConsequence(action, l, reads = {}) {
   }
 }
 
-/** D4819 part 5 (#5928): every write that goes through the sheet, the nine L18 names first. */
+/** D4819 part 21 (#5928): every write that goes through the sheet, the nine L18 names first. */
 export const SHEET_ACTIONS = Object.freeze([
   'addAdmin', 'removeAdmin', 'issueInvoice', 'voidInvoice', 'sendAgreement', 'deploy', 'retryDeploy', 'reconcileDeploy', 'syncRetry',
   ...LIFECYCLE_ACTIONS,

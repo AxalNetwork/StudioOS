@@ -44,7 +44,7 @@ export function DeployStep({ licence }) {
   const [busy, setBusy] = useState(false);
   // D4706 — how the last Deploy ended, in the shared outcome vocabulary.
   const [notice, setNotice] = useState(null);
-  // D4819 part 5 (#5928): Deploy asks in the one consequence sheet (L17) first.
+  // D4819 part 21 (#5928): Deploy asks in the one consequence sheet (L17) first.
   const [sheet, ask] = useConsequenceSheet();
 
   const load = useCallback(() => {

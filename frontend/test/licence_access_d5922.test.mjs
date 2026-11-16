@@ -93,7 +93,7 @@ test('Add administrator is offered on every status the Worker appoints on, and n
 });
 
 test('add and remove state their consequence before the reason, at the Worker\'s ten characters', () => {
-  // D4819 part 5 (#5928): add and remove now go through the one consequence sheet (licenceConsequenceModel.js).
+  // D4819 part 21 (#5928): add and remove now go through the one consequence sheet (licenceConsequenceModel.js).
   const text = (sheet) => [...sheet.happens, ...sheet.affects].map((r) => `${r.text}. ${r.note || ''}`).join(' ') + ` ${sheet.undo.text}`;
   const add = licenceConsequence('addAdmin', LICENCE, { target: { email: ' new@example.test ', adminRole: 'delegate' } });
   assert.equal(add.reason.min, 10);
@@ -206,7 +206,7 @@ test('Remove… says what it will do before the reason, then sends the demote wi
   const v = await mount(w.handle);
   try {
     await v.clickNoFlush(v.within('licence-admin-11', 'licence-admin-remove'));
-    assert.ok(v.has('licence-consequence-sheet'), 'the one consequence sheet opens (D4819 part 5)');
+    assert.ok(v.has('licence-consequence-sheet'), 'the one consequence sheet opens (D4819 part 21)');
     assert.match(v.textOf('licence-consequence-happens'), /C\. Martin loses the admin role now/);
     await v.change('licence-consequence-field', 'Left the French studio in October.');
     await v.click('licence-consequence-confirm');

@@ -92,7 +92,7 @@ function Sources({ sync, host }) {
 }
 
 /**
- * Retry sync, where L15 puts it. D5924 drew it disabled because no route re-sent a copy on demand; D4819 part 5
+ * Retry sync, where L15 puts it. D5924 drew it disabled because no route re-sent a copy on demand; D4819 part 21
  * (#5928) added one, so it sends when the page passes `onRetry`, and stays disabled (with its reason) when not.
  * What it does sits beside it, not only on hover.
  */

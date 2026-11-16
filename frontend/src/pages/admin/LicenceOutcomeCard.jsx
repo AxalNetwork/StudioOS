@@ -1,5 +1,5 @@
 /**
- * D4819 part 5 (#5928) — Licences v2 board L18: one licence write's outcome,
+ * D4819 part 21 (#5928) — Licences v2 board L18: one licence write's outcome,
  * drawn in its own state (`licenceOutcomeModel.js`). Each state has a word
  * and a shape as well as a colour. A partial outcome is amber and dashed,
  * never green, and offers Retry branch sync rather than the write again. An

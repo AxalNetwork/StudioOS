@@ -33,7 +33,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
     );
   }, [api, licence.uid]);
   useEffect(() => { load(); }, [load]);
-  // D4819 part 5 (#5928): Issue and Void go through the one consequence sheet (L17) and report in the L18 card.
+  // D4819 part 21 (#5928): Issue and Void go through the one consequence sheet (L17) and report in the L18 card.
   const [sheet, ask] = useConsequenceSheet();
   const write = useLicenceWrite({ onSettled: load, tag: 'licence_fee_invoices' });
   const issue = async () => {

@@ -40,6 +40,29 @@ import {
 // Unreadable; None is a claim about the licence and must never be produced by
 // a request that did not arrive.
 
+/**
+ * D4819 part 5 (#5931) — the licence's administrators, read once for this editor and for New licence step 4
+ * (`NewLicenceSteps.jsx`). `items` is undefined while reading, an array when read (empty is None), and null when
+ * the read failed or answered without a list, with `loadErr` the server's sentence: a failed read is never an empty list.
+ */
+export function useLicenceAdmins(uid) {
+  const [items, setItems] = useState(undefined);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = useCallback(() => {
+    setItems(undefined);
+    setLoadErr(null);
+    api.licenceAdmins(uid)
+      .then((d) => setItems(Array.isArray(d?.items) ? d.items : null))
+      .catch((e) => {
+        reportError('AdminLicences:licenceAdmins', e);
+        setItems(null);
+        setLoadErr(e?.message || 'The administrator list could not be read.');
+      });
+  }, [uid]);
+  useEffect(load, [load]);
+  return { items, loadErr, load };
+}
+
 const ACCOUNT_TONE = {
   active: 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-950/40 dark:text-green-300',
   deactivated: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
@@ -57,10 +80,10 @@ function AccountChip({ state }) {
 }
 
 export function AdminsEditor({ licence, onSaved, prefill = null }) {
-  // D4819 part 5 (#5928): appoint and remove go through the one consequence sheet (L17), and every write here
+  // D4819 part 21 (#5928): appoint and remove go through the one consequence sheet (L17), and every write here
   // reports through the L18 outcome card. Never window.prompt.
   const [sheet, ask] = useConsequenceSheet();
-  const [items, setItems] = useState(undefined);
+  const { items, load } = useLicenceAdmins(licence.uid);
   // D801 — "Grant admin" from a delegate request arrives with the email and the
   // role filled, and the form already open; HQ still reads it and appoints,
   // through the same POST.
@@ -68,17 +91,6 @@ export function AdminsEditor({ licence, onSaved, prefill = null }) {
     ? { email: prefill.email, admin_role: 'delegate', reason: `Delegate requested by the Administrator (${prefill.uid}).` }
     : { email: '', admin_role: 'principal', reason: '' }));
   const [adding, setAdding] = useState(Boolean(prefill));
-
-  const load = useCallback(() => {
-    setItems(undefined);
-    api.licenceAdmins(licence.uid)
-      .then((d) => setItems(Array.isArray(d?.items) ? d.items : null))
-      .catch((e) => {
-        reportError('AdminLicences:licenceAdmins', e);
-        setItems(null);
-      });
-  }, [licence.uid]);
-  useEffect(load, [load]);
 
   const refresh = () => { load(); onSaved?.(); };
 

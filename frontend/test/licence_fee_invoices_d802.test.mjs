@@ -61,7 +61,7 @@ async function mount(api) {
   return {
     by, props, text: () => text(container),
     click: (id) => act(async () => { props(by(id)).onClick(); await settle(); await settle(); }),
-    // D4819 part 5: Issue and Void ask in the consequence sheet, which renders in this tree.
+    // D4819 part 21: Issue and Void ask in the consequence sheet, which renders in this tree.
     clickNoWait: (id) => act(async () => { props(by(id)).onClick(); await settle(); }),
     type: (id, value) => act(async () => { props(by(id)).onChange({ target: { value } }); }),
     submit: (id) => act(async () => { props(by(id)).onSubmit({ preventDefault() {} }); await settle(); await settle(); }),

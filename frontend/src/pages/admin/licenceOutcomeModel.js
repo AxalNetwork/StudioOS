@@ -1,5 +1,5 @@
 /**
- * D4819 part 5 (#5928) — Licences v2 board L18: how a licence write ended, in
+ * D4819 part 21 (#5928) — Licences v2 board L18: how a licence write ended, in
  * five states, each drawn differently (`LicenceOutcomeCard.jsx`).
  *
  *   pending    sent, no answer yet: "Suspending… Waiting for HQ to confirm."

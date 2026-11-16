@@ -1,5 +1,5 @@
 /**
- * D4819 part 5 (#5928) — Licences v2 board L18: five outcome states, drawn
+ * D4819 part 21 (#5928) — Licences v2 board L18: five outcome states, drawn
  * differently; partial never looks like success; unknown says not to repeat
  * and offers a re-read; a refusal shows the Worker's words; and the nine
  * actions the canvas names go through the one consequence sheet.

@@ -100,7 +100,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   // terminate) says how it ended. An unknown outcome re-reads the licence
   // before anything is offered again, so the status shown is the one the
   // server holds, not the one the operator hoped for.
-  // D4819 part 5 (#5928, L18): the write's outcome is kept as what happened (`action`, `phase`, `result`,
+  // D4819 part 21 (#5928, L18): the write's outcome is kept as what happened (`action`, `phase`, `result`,
   // `error`) and drawn against the licence's `sync` as last read, so a partial outcome says what the branch
   // holds now. Pending, completed, partial, refused and unknown each look different (`LicenceOutcomeCard`).
   const [actOutcome, setActOutcome] = useState(null);
@@ -121,7 +121,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   if (!d) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const facts = overviewFacts(d, reads);
-  // D4819 part 5: Retry branch sync, from the outcome card and from the Branch sync strip.
+  // D4819 part 21: Retry branch sync, from the outcome card and from the Branch sync strip.
   const retrySync = () => act('syncRetry', adminLicenceSyncApi.retry, d.uid);
   // D801: "Open terms" goes to the term's row or its step; "Grant admin" prefills the appointment.
   const openTerm = (target) => {

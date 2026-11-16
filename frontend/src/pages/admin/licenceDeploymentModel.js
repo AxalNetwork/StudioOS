@@ -76,7 +76,7 @@ export function attemptLine(a) {
 export const SYNC_RETRY_WINDOW_MINUTES = 60;
 
 /**
- * What Retry sync does, said beside it. D4819 part 5 (#5928) added the route (`POST /:uid/sync/retry`), so the
+ * What Retry sync does, said beside it. D4819 part 21 (#5928) added the route (`POST /:uid/sync/retry`), so the
  * button sends; HQ's own hourly re-send still runs.
  */
 export const RETRY_SYNC_REASON = 'Re-sends the licence’s current copy to the branch now. HQ also re-sends a copy that has not landed by itself, at most once an hour.';

@@ -6,6 +6,7 @@ import { answerChips } from '../../cycles/forms.js';
 import DataRoomDialog, { roomRefusal } from './DataRoomDialog.jsx';
 import FolderLightbox, { NewFolderDialog } from './DataRoomFolders.jsx';
 import DataRoomSearch from './DataRoomSearch.jsx';
+import DataRoomTrash from './DataRoomTrash.jsx';
 import {
   GATES, OWNER_ONLY, endCopy, fileHref, folderChoices, gateCopy, matchCopy, moveCopy, removeCopy, tableRows, treeRows,
 } from './filesModel.js';
@@ -19,6 +20,11 @@ import { roomCan } from './dataRoomModel.js';
  * `/raise/data-room/file/<id>`. Every change opens a dialog that names who
  * gains or loses the files; a co-founder moves, renames and matches, and the
  * owner alone changes a gate or removes.
+ *
+ * D6073 (DR28): Remove moves files to Trash for 30 days. Trash is the last row
+ * of the tree, for the owner and co-founders (`restore`), with its count from
+ * the room read (`trash_count`); choosing it puts the Trash list where the
+ * table was.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -38,7 +44,7 @@ async function eachFile(files, write) {
   }
 }
 
-function Tree({ tree, folder, onFolder, onOpenFolder }) {
+function Tree({ tree, folder, onFolder, onOpenFolder, trash = null }) {
   const row = (key, label, count, depth = 0, extra = null) => (
     <li key={key} className="flex items-center gap-1" style={{ paddingLeft: depth * 12 }}>
       <button type="button" aria-current={folder === key ? 'true' : undefined} onClick={() => onFolder(key)} data-testid={`dataroom-tree-${key}`}
@@ -55,6 +61,7 @@ function Tree({ tree, folder, onFolder, onOpenFolder }) {
       {tree.folders.map((f) => row(f.uid, `${f.nda ? '🔒 ' : ''}${f.name}`, f.files, f.depth + 1,
         <button type="button" className={`px-1.5 text-[12px] ${MUTED}`} aria-label={`Open the folder ${f.name}`} onClick={() => onOpenFolder(f.uid)} data-testid={`dataroom-folder-open-${f.uid}`}>⋯</button>))}
       {row('top', 'Top level', tree.top)}
+      {trash ? row('trash', '🗑︎ Trash', trash.count == null ? '' : trash.count) : null}
     </ul>
   );
 }
@@ -72,6 +79,8 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   const can = (k) => roomCan(room, k);
   const canGate = can('set_gate');
   const canDelete = can('delete');
+  const canTrash = can('restore');
+  const trash = canTrash ? { count: Number.isSafeInteger(room?.trash_count) ? room.trash_count : null } : null;
   const tree = useMemo(() => treeRows(room), [room]);
   const rows = useMemo(() => tableRows(room, { folder, q }), [room, folder, q]);
   const files = (room?.files || []).filter((f) => picked.has(f.uid));
@@ -148,10 +157,13 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
       </DataRoomDialog>
     );
   } else if (dialog?.kind === 'remove') {
-    const copy = removeCopy(files);
+    const copy = removeCopy(files, null, { room });
     open = (
       <DataRoomDialog copy={copy} danger onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-remove"
-        onConfirm={async () => { await eachFile(files, (f) => api.dataRoomDeleteFile(projectUid, f.uid)); finish(`Removed ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
+        onConfirm={async () => { await eachFile(files, (f) => api.dataRoomDeleteFile(projectUid, f.uid)); finish(`Moved ${files.length} file${files.length === 1 ? '' : 's'} to Trash for 30 days.`); }}>
+        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]" data-testid="dataroom-remove-facts">
+          {copy.facts.map((f) => <React.Fragment key={f.k}><dt className={`font-bold ${MUTED}`}>{f.k}</dt><dd className={`m-0 ${INK}`}>{f.v}</dd></React.Fragment>)}
+        </dl>
         <p className={`m-0 rounded-[8px] border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-700`} data-testid="dataroom-remove-trash">{copy.trash}</p>
       </DataRoomDialog>
     );
@@ -176,14 +188,21 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
           onOpen={(uid) => { const f = (room?.files || []).find((x) => x.uid === uid); if (f) navigate(fileHref(f.id, search)); }}
         />
       )}
-      {none ? (
+      {none && folder === 'trash' ? (
+        <div className="flex flex-col gap-3 px-4 py-3">
+          <button type="button" className={`${BTN} self-start`} onClick={() => setFolder('all')} data-testid="dataroom-trash-back">Back to files</button>
+          <DataRoomTrash projectUid={projectUid} onChanged={reload} />
+        </div>
+      ) : none ? (
         <div className="flex flex-col items-start gap-2 px-4 py-6" data-testid="dataroom-files-none">
           <p className={`m-0 text-[13px] ${INK}`}>No files yet.</p>
           <p className={`m-0 text-[12.5px] ${MUTED}`}>Upload your diligence files. Each one gets a gate before any investor can see it.</p>
+          {trash && trash.count !== 0 ? <button type="button" className={BTN} onClick={() => setFolder('trash')} data-testid="dataroom-tree-trash">{`🗑︎ Trash${trash.count == null ? '' : ` · ${trash.count}`}`}</button> : null}
         </div>
       ) : (
         <div className="grid gap-4 px-4 py-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <nav aria-label="Folders"><Tree tree={tree} folder={folder} onFolder={(k) => { setFolder(k); setPicked(new Set()); }} onOpenFolder={setOpenFolder} /></nav>
+          <nav aria-label="Folders"><Tree tree={tree} folder={folder} trash={trash} onFolder={(k) => { setFolder(k); setPicked(new Set()); }} onOpenFolder={setOpenFolder} /></nav>
+          {folder === 'trash' ? <DataRoomTrash projectUid={projectUid} onChanged={reload} /> : (
           <div className="flex min-w-0 flex-col gap-3">
             <input type="search" className={INPUT} placeholder="Search files" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search files" data-testid="dataroom-files-search" />
             {picked.size ? (
@@ -224,6 +243,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
             )}
             <p className={`m-0 text-[11.5px] ${MUTED}`}>A link issued is not proof the file was read. Who can open it now counts each grant, its folders, the gate and the NDA today.</p>
           </div>
+          )}
         </div>
       )}
       {open}
