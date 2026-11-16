@@ -408,6 +408,11 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // A lazy step (`/build`'s overview, D6028) resolves its import through the loader's hooks thread, which a
+  // busy runner can hold past six ticks; wait for its skeleton to go (bounded), never assert on the skeleton.
+  for (let i = 0; i < 200 && ids().includes('cycle-step-loading'); i += 1) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+  }
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
