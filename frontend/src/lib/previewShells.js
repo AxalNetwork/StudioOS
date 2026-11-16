@@ -63,6 +63,9 @@ export function writesAs(superAdmin) {
   return superAdmin === true ? 'the Super Admin' : 'you';
 }
 
-export function previewNote(superAdmin) {
+export function previewNote(superAdmin, shell) {
+  if (superAdmin === true && shell === 'investor') {
+    return 'You can read deals and keep notes here. Return to HQ for investment decisions and closing actions.';
+  }
   return `This changes this browser’s chrome only. Every write still goes out as ${writesAs(superAdmin)}.`;
 }

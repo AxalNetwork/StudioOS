@@ -204,13 +204,14 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   // A custom KPI is a record too; another venture's is not.
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpa1')).body.title, 'NPS');
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpb1')).status, 404);
-  assert.equal((await rec(db, 'revenue-and-traction', 'arr')).status, 404);
+  // D6104: arr is now a derived KPI; a KPI the platform does not know is still a 404.
+  assert.equal((await rec(db, 'revenue-and-traction', 'ltv')).status, 404);
 });
 
 test('6: Visits and Shared are Not recorded, with the reason', async () => {
   const db = fixture();
   const ch = await rec(db, 'distribution', 'cha1');
-  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No page-visit store', c: 'Not recorded', tone: 'grey' });
+  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No per-channel visit count', c: 'Not recorded', tone: 'grey' });
   assert.equal(sectionOf(ch, 'funnel').rows[2].c, '1');
   const kpi = await rec(db, 'revenue-and-traction', 'mrr');
   assert.deepEqual(sectionOf(kpi, 'shared').rows[0], { a: 'Metrics page', b: 'There is no public metrics page', c: 'Not recorded', tone: 'grey' });
@@ -574,7 +575,7 @@ test('7: form-options answer each module\'s chips to writers only', async () => 
   assert.equal(fb.status, 200);
   assert.deepEqual(fb.body.themes, [{ value: 'Speed', label: 'Speed', count: 2 }]);
   const kpi = (await fo('revenue-and-traction')).body;
-  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway']);
+  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom-kpa1'));
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom'));
   assert.equal(kpi.kpis.some((k: any) => k.value === 'custom-kpb1'), false);

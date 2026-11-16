@@ -1,6 +1,6 @@
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
+import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
@@ -37,10 +37,11 @@ export const PHONE_GUTTER = 'px-[22px] pt-[14px] pb-[18px]';
  * #1661's `PhoneBar`, lifted out of the body's gutter and kept at the top of
  * the scroll area (CO:24-25), with the body's 14px under it.
  */
-export function CycleBar({ back, title, sub, eadwynLabel }) {
+export function CycleBar({ back, title, sub, eadwynLabel, more }) {
   return (
     <div className="sticky top-0 z-10 -mx-[22px] -mt-[14px] mb-[14px]" data-testid="cycle-bar">
-      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel} />
+      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel}
+        action={more ? <div className="flex shrink-0 items-center gap-2">{more}{eadwynLabel && <EadwynButton label={eadwynLabel} />}</div> : undefined} />
     </div>
   );
 }
@@ -110,6 +111,9 @@ export default function PhoneModulePage({
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
+  // D6049 (#6049, RA-16): a module that owns its page (Fundraising readiness) draws `home(...)` in place of
+  // One next thing, the chart and the rows, with the bar's line (`sub`) its own; the same props as the desktop page.
+  home = null, sub = undefined,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -122,7 +126,7 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
@@ -160,6 +164,23 @@ export default function PhoneModulePage({
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  if (typeof home === 'function') {
+    const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
+    return (
+      <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">
+        {bar}
+        {tabs}
+        {home({ card, records: recs, recordsStatus: rStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search, phone: true })}
+        {toolLinks.map((item) => (
+          <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
+            {item.label || `Open ${name}`}
+          </Link>
+        ))}
+        {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+        {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
+      </div>
+    );
+  }
 
   const group = {
     label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
@@ -251,7 +272,7 @@ export default function PhoneModulePage({
       ))}
       {zero && <PhoneAskEntry asks={asks} />}
       {zero
-        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
         : <>
           {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
           {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}

@@ -167,3 +167,67 @@ test('D609: create — the deal must exist and be one the caller can open', asyn
   assert.equal((await make(ADMIN, 'x')).status, 400);
   assert.equal(count(db), 4);
 });
+
+// ── D6183 (#6183): Eadwyn summarises the typed notes; there is no audio ────────
+import { summaryDeps, parseSummary, MIN_NOTES_CHARS } from '../src/routes/references.ts';
+
+const NOTES = 'Former manager. Says the founder hires slowly and well, and shipped the payments rewrite on time.';
+function withRun<T>(output: string | null, fn: (calls: any[]) => Promise<T>, extra: Record<string, unknown> = {}): Promise<T> {
+  const original = summaryDeps.run;
+  const calls: any[] = [];
+  summaryDeps.run = (async (_env: any, opts: any) => { calls.push(opts); return { ok: output != null, output, refusal: null, usage: { model: 'test-model' }, ...extra }; }) as any;
+  return fn(calls).finally(() => { summaryDeps.run = original; });
+}
+
+test('D6183: summarise stores the summary from the notes only, marks it summarised, and says when the notes change', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE reference_checks SET notes = ? WHERE id = 101').run(NOTES);
+  await withRun('{"summary":"The founder hires carefully and delivers.","strengths":["Hires well","Ships on time"],"concerns":[]}', async (calls) => {
+    const r = await call(db, INV_INVITED, 'POST', '/101/summarize');
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual([r.body.status, r.body.summary.summary, r.body.summary.strengths, r.body.summary.from, r.body.summary_stale],
+      ['summarized', 'The founder hires carefully and delivers.', ['Hires well', 'Ships on time'], 'notes', false]);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].surface, '/deals');
+    assert.match(calls[0].messages[0].content, /hires slowly and well/, 'the notes are what is summarised');
+    assert.doesNotMatch(JSON.stringify(calls[0]), /rita@example\.test/, 'the reference\'s email is not sent to the model');
+  });
+  // Edit the notes: the summary is kept but says it no longer matches.
+  await call(db, INV_INVITED, 'PATCH', '/101', { notes: `${NOTES} Later: also a strong seller.` });
+  assert.equal((await call(db, INV_INVITED, 'GET', '/101')).body.summary_stale, true);
+});
+
+test('D6183: summarise is refused before any run for short notes, a non-author, a stranger and another deal', async () => {
+  const db = freshDb();
+  await withRun('{"summary":"x"}', async (calls) => {
+    db.prepare('UPDATE reference_checks SET notes = ? WHERE id = 101').run('too short');
+    const short = await call(db, INV_INVITED, 'POST', '/101/summarize');
+    assert.deepEqual([short.status, short.body.code], [409, 'notes_required']);
+    assert.ok('too short'.length < MIN_NOTES_CHARS);
+    db.prepare('UPDATE reference_checks SET notes = ? WHERE id IN (101, 201)').run(NOTES);
+    assert.equal((await call(db, INV_COMMITTED, 'POST', '/101/summarize')).status, 403, 'only the author or an admin');
+    assert.equal((await call(db, INV_NONE, 'POST', '/101/summarize')).status, 404);
+    assert.equal((await call(db, INV_INVITED, 'POST', '/201/summarize')).status, 404, 'another deal reads as missing');
+    assert.equal((await call(db, FOUNDER, 'POST', '/101/summarize')).status, 403);
+    assert.equal(calls.length, 0, 'no refused call reached the model');
+  });
+});
+
+test('D6183: an unreadable model answer stores nothing; the audio routes are gone', async () => {
+  const db = freshDb();
+  db.prepare('UPDATE reference_checks SET notes = ? WHERE id = 101').run(NOTES);
+  await withRun('not json at all', async () => {
+    const r = await call(db, ADMIN, 'POST', '/101/summarize');
+    assert.deepEqual([r.status, r.body.code], [503, 'summary_unreadable']);
+  });
+  await withRun(null, async () => {
+    assert.equal((await call(db, ADMIN, 'POST', '/101/summarize')).status, 503);
+  });
+  const row = db.prepare('SELECT summary_json, status FROM reference_checks WHERE id = 101').get() as any;
+  assert.deepEqual([row.summary_json, row.status], [null, 'scheduled']);
+  for (const [m, p] of [['POST', '/101/recording'], ['GET', '/101/recording-url'], ['POST', '/101/transcribe']] as const) {
+    assert.equal((await call(db, ADMIN, m, p)).status, 404, `${m} ${p} no longer exists`);
+  }
+  assert.equal(parseSummary('{"summary":"  ","strengths":[]}'), null);
+  assert.deepEqual(parseSummary('Here: {"summary":"ok","strengths":["a",3,""],"concerns":"x"}'), { summary: 'ok', strengths: ['a'], concerns: [] });
+});

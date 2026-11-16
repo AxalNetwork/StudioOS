@@ -8,6 +8,7 @@ import { claimLpRowsByEmail } from '../services/lpClaim';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
 import { assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
+import { managedFundIds } from '../services/fundGpAccess';
 import { LedgerRefusal,ledgerId,ledgerCents,ledgerDate,ledgerText,accountCategories,ledgerAudit,commitLedger,
   ledgerPeriod,postLedgerEntry,accrueFundFee,readFundLedger } from '../services/fundLedger';
 const r = new Hono<{Bindings:Env}>();
@@ -28,45 +29,62 @@ r.use('*',async(c,next)=>{
   if (done && c.res.ok) await auditFundAct(c.env,done.user,done.act,{fund_id:done.fund_id,route:`${c.req.method} ${c.req.path}`});
 });
 const parseId=(raw:string)=>/^\d+$/.test(raw) && ledgerId(Number(raw)) ? Number(raw) : null;
-async function funds(env:Env,user:any) {
+/**
+ * The funds whose ledger this caller may read. D6241 (#6241): beside the
+ * assigned administrator and the LPs, the GP of record of a fund (the operating
+ * gate's own scope, `managedFundIds`: institutional tier, verified active
+ * company) reads it in full, read only. `gp` marks those rows.
+ */
+async function funds(c:any,user:any) {
+  const env:Env=c.env;
   if (holdsLicence(user, 'investor')) await claimLpRowsByEmail(env,Number(user.id),user.email);
   const scope=lpMembershipScope(user);
-  const result=user.role==='admin'
-    ? await env.DB.prepare(`SELECT id,name,fund_admin_user_id FROM vc_funds ORDER BY id`).all<any>()
-    : holdsLicence(user, 'investor') ? await env.DB.prepare(`SELECT f.id,f.name,f.fund_admin_user_id FROM vc_funds f
-      WHERE f.fund_admin_user_id=? OR EXISTS (SELECT 1 FROM limited_partners lp WHERE lp.fund_id=f.id AND ${scope.sql}) ORDER BY f.id`)
-      .bind(user.id,...scope.binds).all<any>() : {success:true,results:[]};
+  if (user.role==='admin') {
+    const all=await env.DB.prepare(`SELECT id,name,fund_admin_user_id FROM vc_funds ORDER BY id`).all<any>();
+    if (!all.success) throw new Error('Fund ledger scope unreadable');
+    return all.results.map((f:any)=>({...f,gp:false}));
+  }
+  if (!holdsLicence(user, 'investor')) return [];
+  const managed=await managedFundIds(c,user);
+  const result=await env.DB.prepare(`SELECT f.id,f.name,f.fund_admin_user_id FROM vc_funds f
+      WHERE f.fund_admin_user_id=? OR f.id IN (SELECT value FROM json_each(?))
+         OR EXISTS (SELECT 1 FROM limited_partners lp WHERE lp.fund_id=f.id AND ${scope.sql}) ORDER BY f.id`)
+      .bind(user.id,JSON.stringify(managed),...scope.binds).all<any>();
   if (!result.success) throw new Error('Fund ledger scope unreadable');
-  return result.results;
+  return result.results.map((f:any)=>({...f,gp:managed.includes(Number(f.id))}));
 }
+/** Who may write (the administrator and an admin), and who reads in full (they, and the GP of record). */
+const writerOf=(user:any,fund:any)=>user.role==='admin' || fund.fund_admin_user_id===user.id;
+const fullReaderOf=(user:any,fund:any)=>writerOf(user,fund) || fund.gp===true;
 /** D714: a write asserts its act; the administrator PUT asserts its own, a Super Admin act. */
 async function access(c:any,write:boolean|'fund_ledger.administrator'=false) {
   const user=await requireAuth(c), id=parseId(c.req.param('id'));
   if (!id || !(user.role === 'admin' || holdsLicence(user, 'investor'))) throw new LedgerRefusal('Fund not found.',404);
-  const fund=(await funds(c.env,user)).find((f:any)=>f.id===id);
+  const fund=(await funds(c,user)).find((f:any)=>f.id===id);
   if (!fund) throw new LedgerRefusal('Fund not found.',404);
-  const full=user.role==='admin' || fund.fund_admin_user_id===user.id;
-  if (write && !full) throw new LedgerRefusal('Only an admin or the assigned fund administrator can write this ledger.',404);
+  const full=fullReaderOf(user,fund), canManage=writerOf(user,fund);
+  // D6241: the GP of record reads in full and writes nothing.
+  if (write && !canManage) throw new LedgerRefusal('Only an admin or the assigned fund administrator can write this ledger.',404);
   if (write) {
     const act:FundActKey=write===true ? 'fund_ledger.write' : write;
     await assertAdminAct(c,user,act);
     c.set('fundAdminAct',{user,act,fund_id:fund.id});
   }
-  return {user,fund,full};
+  return {user,fund,full,canManage};
 }
 const body=(c:any)=>c.req.json().catch(()=>null);
 r.get('/',async c=>{
   const user=await requireAuth(c);
   if (!(user.role === 'admin' || holdsLicence(user, 'investor'))) throw new LedgerRefusal('Fund not found.',404);
   const items=[];
-  for (const fund of await funds(c.env,user)) items.push(await readFundLedger(c.env,fund,user.role==='admin'||fund.fund_admin_user_id===user.id));
+  for (const fund of await funds(c,user)) items.push(await readFundLedger(c.env,fund,fullReaderOf(user,fund),undefined,writerOf(user,fund)));
   return c.json({items,basis:'Operational fund ledger; not the fund’s statutory books. No opening balances are inferred.'});
 });
 r.get('/:id',async c=>{
-  const {fund,full}=await access(c);
+  const {fund,full,canManage}=await access(c);
   const raw=c.req.query('period_id'), periodId=raw===undefined ? undefined : parseId(raw);
   if (periodId===null) throw new LedgerRefusal('Choose a valid accounting period.');
-  return c.json(await readFundLedger(c.env,fund,full,periodId));
+  return c.json(await readFundLedger(c.env,fund,full,periodId,canManage));
 });
 r.put('/:id/administrator',async c=>{
   const {user,fund}=await access(c,'fund_ledger.administrator'), data=await body(c);
@@ -80,7 +98,7 @@ r.put('/:id/administrator',async c=>{
 });
 r.get('/:id/accounts',async c=>{
   const {fund,full}=await access(c);
-  if (!full) throw new LedgerRefusal('Only the fund administrator or an admin can read the chart of accounts.',404);
+  if (!full) throw new LedgerRefusal('Only the fund administrator, the GP of record or an admin can read the chart of accounts.',404);
   const result=await c.env.DB.prepare(`SELECT id,code,name,category FROM fund_ledger_accounts WHERE fund_id=? ORDER BY code`).bind(fund.id).all<any>();
   if (!result.success) throw new Error('Chart of accounts read failed');
   return c.json({items:result.results});
