@@ -38,21 +38,25 @@ async function mounted(el) {
 }
 const fakeApi = (read) => { const calls = []; return { calls, fromPosthog: async (...a) => { calls.push(['from', ...a]); return read; }, sync: async (...a) => { calls.push(['sync', ...a]); }, accept: async (...a) => { calls.push(['accept', ...a]); }, dismiss: async () => {}, deleteFact: async () => {} }; };
 
-test('the words: a week PostHog gave no count for is a dash, never 0%; a survey score is PostHog\'s', () => {
-  assert.equal(cohortLine({ week: '2026-10-05', size: 180, pct: [38.9, null] }), '2026-10-05 · 180 people · W1 38.9% · W2 —');
+test('D6319: cohort periods use the recorded interval and old cohorts say it is missing', () => {
+  const cohort = { week: '2026-10-05', size: 180, pct: [38.9, null] };
+  for (const [interval, word] of [['day', 'Day'], ['week', 'Week'], ['month', 'Month']]) {
+    assert.equal(cohortLine(cohort, interval), `2026-10-05 · 180 people · ${word} 1 38.9% · ${word} 2 —`);
+  }
+  assert.equal(cohortLine({ week: '2026-10-05', size: 180, pct: [38.9] }), '2026-10-05 · 180 people · period not recorded · Period 1 38.9%');
   assert.equal(surveyLine({ responses: 46, nps: 31 }), '46 responses · NPS 31');
   assert.equal(surveyLine({ responses: null, average: 4.2 }), 'Responses not recorded · Average 4.2');
   assert.equal(surveyLine({ responses: 1 }), '1 response');
 });
 
 test('Revenue and traction: product retention under its own title, apart from revenue retention', async () => {
-  const read = { ok: true, link: LINK, tracked: [], proposals: [], facts: [{ id: 4, kind: 'metric', fact_key: 'retention:abc', period: '2026-10-31', label: 'Week-4 retention', as_of: '2026-10-31', data: { cohorts: [{ week: '2026-09-28', size: 200, pct: [42, 31] }] } }] };
+  const read = { ok: true, link: LINK, tracked: [], proposals: [], facts: [{ id: 4, kind: 'metric', fact_key: 'retention:abc', period: '2026-10-31', label: 'Week-4 retention', as_of: '2026-10-31', data: { interval: 'month', cohorts: [{ week: '2026-09-28', size: 200, pct: [42, 31] }] } }] };
   const api = fakeApi(read);
   const ui = await mounted(h(RevenuePosthog, { projectId: 1, api }));
   try {
     assert.ok(ui.text().includes(RETENTION_TITLE));
     assert.ok(ui.text().includes(APART_LINE));
-    assert.deepEqual(ui.all('posthog-cohort').map((n) => ui.say(n)), ['2026-09-28 · 200 people · W1 42% · W2 31%']);
+    assert.deepEqual(ui.all('posthog-cohort').map((n) => ui.say(n)), ['2026-09-28 · 200 people · Month 1 42% · Month 2 31%']);
     await ui.click(ui.by('posthog-sync'));
     assert.deepEqual(api.calls.find((c) => c[0] === 'sync'), ['sync', 'grow', 1]);
   } finally { await ui.close(); }

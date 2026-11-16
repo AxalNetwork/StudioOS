@@ -40,6 +40,7 @@ import {
 } from './builderModel.js';
 import { shortDay } from './deskModel.js';
 import { CorrectDialog, SendDialog } from './ReportingDialogs.jsx';
+import ReportPrintButton from './printing/ReportPrintButton.jsx';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -489,6 +490,7 @@ function Sent({ report, navigate, search, justSent }) {
         {report.corrected_by && <span className={`${CHIP} ${LAV}`}>↻ Corrected</span>}
         {readOnly && <span className={`${CHIP} border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400`} data-testid="reporting-sent-readonly">◉ Read only</span>}
         {team && !report.corrected_by && <button type="button" className={GHOST} onClick={() => setCorrecting(true)} aria-haspopup="dialog" data-testid="reporting-correct-open">Correct this report</button>}
+        <ReportPrintButton report={report} className={GHOST} />
       </div>
       <p className={MUTED} data-testid="reporting-sent-line">{sentLine(report)}</p>
       {justSent && <p className={`m-0 rounded-lg border px-3 py-2 text-[12.5px] ${LAV}`} data-testid="reporting-just-sent">Sent. Each recipient is told through their notification settings; the table below says who was reached.</p>}

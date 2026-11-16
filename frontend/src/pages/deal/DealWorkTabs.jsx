@@ -8,7 +8,7 @@
  * leaves the rest of the tab standing. Every change opens an in-page dialog
  * that says what it changes, and its refusal stays inside the dialog.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { api, dd } from '../../lib/api';
@@ -16,6 +16,7 @@ import { ddLifecycleApi } from '../../lib/api/ddLifecycle';
 import { ddDeskApi } from '../../lib/api/ddDesk';
 import { dealWorkroomApi } from '../../lib/api/dealWorkroom';
 import { reportError } from '../../lib/log';
+import { safeExternalUrl } from '../../lib/url';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import DealReferencesTab from '../../components/deals/DealReferencesTab';
 import DealPaperRow from './DealPaper';
@@ -26,11 +27,13 @@ import { ownDealTarget, showsProof } from '../investor/proofOfFundsModel';
 import { tabHref } from '../dealPageModel';
 import { CARD, EYE, SUB, H3, BTN_S, BTN_P } from './DealFrame';
 import { Slot } from './DealOverview';
+import SharedRoomFiles from './SharedRoomFiles.jsx';
 import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
+import { LINK_LINE, composeBody } from '../duediligence/ddCaseModel';
 import { DECK_SLOT } from './dealFrameModel';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
-  caseCard, caseDoors, caseForDeal, icStep, myCommitment, openFlagRows, sectionProgress, templateChoices, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
+  caseCard, caseDoors, caseForDeal, closedReason, icStep, myCommitment, openFlagRows, sectionProgress, templateChoices, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
 } from './dealWorkModel';
 
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink focus:border-axal-violet focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -63,9 +66,9 @@ function useRead(load, deps) {
   // deal changed, or a retry started) lands nowhere, and none lands after unmount.
   const serial = useRef(0);
   useEffect(() => () => { serial.current += 1; }, []);
-  const run = () => {
+  const run = ({ keepReady = false } = {}) => {
     const mine = ++serial.current;
-    setRead({ status: 'loading' });
+    setRead((read) => keepReady && read.status === 'ready' ? read : { status: 'loading' });
     load().then((data) => { if (serial.current === mine) setRead({ status: 'ready', data }); })
       .catch((e) => { reportError('DealWork:read', e); if (serial.current === mine) setRead({ status: 'unreadable', error: e }); });
   };
@@ -75,7 +78,7 @@ function useRead(load, deps) {
 }
 
 /** Ask, then act: the dialog every change on these tabs opens first. */
-function ConfirmDialog({ title, sub, act, danger = false, onConfirm, onClose, testId, check, children, done }) {
+function ConfirmDialog({ title, sub, act, danger = false, onConfirm, onClose, testId, check, children, done, initialFocus, lockWhileBusy = false }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [result, setResult] = useState(null);
@@ -86,13 +89,14 @@ function ConfirmDialog({ title, sub, act, danger = false, onConfirm, onClose, te
     try { const r = await onConfirm(); if (done) setResult(done(r)); else onClose(true); } catch (e) { setErr(e?.message || 'That did not save. Nothing was changed. Try again.'); } finally { setBusy(false); }
   };
   return (
-    <Lightbox label={title} title={title} sub={sub} onClose={() => onClose(Boolean(result))} testId={testId}
+    <Lightbox label={title} title={title} sub={sub} initialFocus={initialFocus}
+      onClose={() => { if (!lockWhileBusy || !busy) onClose(Boolean(result)); }} testId={testId}
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
           {result
             ? <button type="button" className={actionPrimary} onClick={() => onClose(true)} data-testid={`${testId}-done`}>Done</button>
             : (<>
-              <button type="button" className={actionGhost} onClick={() => onClose(false)}>Back</button>
+              <button type="button" className={actionGhost} disabled={lockWhileBusy && busy} onClick={() => onClose(false)}>Back</button>
               <button type="button" className={danger ? actionDanger : actionPrimary} disabled={busy} onClick={go} data-testid={`${testId}-confirm`}>{act}</button>
             </>)}
         </div>
@@ -111,19 +115,11 @@ export function DealDiligence({ deal, userId }) {
   const [list, reloadList] = useRead(() => dd.listCases({ subject_type: 'project', subject_id: deal.project_id }), [deal.project_id]);
   const found = caseForDeal(list, deal.project_id);
   const uid = found.state === 'ready' ? found.row.uid : null;
-  const [detail, setDetail] = useState({ status: 'idle' });
-  const loadDetail = () => {
-    if (!uid) return;
-    setDetail({ status: 'loading' });
-    dd.getCase(uid).then((data) => setDetail({ status: 'ready', data })).catch((e) => { reportError('DealWork:case', e); setDetail({ status: 'unreadable' }); });
-  };
-  useEffect(loadDetail, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [caseRead, loadDetail] = useRead(async () => uid ? { uid, userId, data: await dd.getCase(uid) } : null, [uid, userId]);
   const [opening, setOpening] = useState(false);
-  const data = detail.status === 'ready' ? detail.data : null;
+  const result = caseRead.data;
+  const data = result && result.uid === uid && result.userId === userId ? result.data : null;
   const card = found.state === 'ready' ? caseCard(found.row, data, userId) : null;
-  // A section reviewer who neither opened nor leads the case gets no requests from the Worker (owner material).
-  const owns = found.state === 'ready' && [found.row.owner_user_id, found.row.lead_user_id].some((u) => Number(u) === Number(userId));
-  const requests = data ? requestRows(data) : [];
   const flagList = data ? openFlagRows(data) : null;
   const progress = data ? sectionProgress(data) : [];
   const ic = found.state === 'ready' ? icStep(found.row, data) : null;
@@ -164,7 +160,7 @@ export function DealDiligence({ deal, userId }) {
             </div>
           )}
           <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{card.opened}</p>
-          {detail.status === 'unreadable' && <Unreadable what="The case’s sections and requests" onRetry={loadDetail} />}
+          {caseRead.status === 'unreadable' && <Unreadable what="The case’s sections and requests" onRetry={loadDetail} />}
           {card.yours?.map((s) => <p key={s.title} className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Your section: {s.title} <Pill tone="now">{s.status}</Pill></p>)}
           {ic && (
             <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-dd-ic">
@@ -195,21 +191,8 @@ export function DealDiligence({ deal, userId }) {
           ))}
         </Card>
       )}
-      {card && (
-        <Card title="Requests to the founder" testId="deal-dd-requests"
-          meta={data ? <span className="font-mono text-[12px] font-bold text-axal-amber-deep dark:text-amber-300">{requests.filter((r) => r.tone === 'wait').length} waiting</span> : null}>
-          {detail.status === 'loading' && <Reading />}
-          {detail.status === 'unreadable' && <Unreadable what="The requests" claim="That is not a claim that none was sent." onRetry={loadDetail} />}
-          {data && !owns && <p className={`m-0 ${SUB}`}>The requests are the case owner’s: you review a section of this case.</p>}
-          {data && owns && requests.length === 0 && <p className={`m-0 ${SUB}`}>No requests have been sent to the founder on this case.</p>}
-          {requests.map((r) => (
-            <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
-              <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
-              <Pill tone={r.tone}>{r.state}</Pill>
-            </div>
-          ))}
-        </Card>
-      )}
+      {card && <FounderRequests key={`${uid}:${userId}`} row={found.row} userId={userId} data={data}
+        unreadable={caseRead.status === 'unreadable'} reload={loadDetail} />}
       <div className="md:col-span-1"><DealReferencesTab dealId={deal.id} /></div>
       <Slot slot={QUESTIONS_SLOT} testId="deal-dd-questions" />
       {opening && <OpenCaseDialog deal={deal} onClose={(changed) => { setOpening(false); if (changed) reloadList(); }} />}
@@ -266,6 +249,152 @@ function OpenCaseDialog({ deal, onClose }) {
   );
 }
 
+function FounderRequests({ row, userId, data, unreadable, reload }) {
+  const [dialog, setDialog] = useState(null);
+  const [notice, setNotice] = useState('');
+  const current = data?.case ?? row;
+  const viewer = Number(userId);
+  const owner = viewer > 0 && viewer === Number(current.owner_user_id);
+  const lead = viewer > 0 && viewer === Number(current.lead_user_id);
+  const allowed = owner || lead;
+  const requests = data && allowed ? requestRows(data) : [];
+  const active = requests.find((r) => r.id === dialog?.id);
+  const close = (message) => {
+    setDialog(null);
+    if (message) {
+      setNotice(message);
+      reload({ keepReady: true });
+    }
+  };
+  const action = (kind, id) => {
+    setNotice('');
+    setDialog({ kind, id });
+  };
+  return (
+    <Card title="Requests to the founder" testId="deal-dd-requests"
+      meta={data && allowed ? <span className="text-right font-mono text-[12px] font-bold text-axal-amber-deep dark:text-amber-300">{requests.filter((r) => r.tone === 'wait').length} waiting</span> : null}>
+      {!data && (unreadable ? <Unreadable what="The requests" claim="That is not a claim that none was sent." onRetry={reload} /> : <Reading />)}
+      {data && !allowed && <p className={`m-0 ${SUB}`}>The case owner and lead can open the requests.</p>}
+      {data && allowed && (
+        <>
+          <button type="button" className={`${BTN_S} w-fit`} onClick={() => action('new')} data-testid="deal-dd-request-new">New request</button>
+          {requests.length === 0 && <p className={`m-0 ${SUB}`}>No requests have been sent to the founder on this case.</p>}
+          {requests.map((r) => (
+            <div key={r.id} className="grid min-w-0 gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 break-words text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
+                <Pill tone={r.tone}>{r.state}</Pill>
+              </div>
+              {owner && r.tone === 'wait' && (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={BTN_S} onClick={() => action('remind', r.id)} data-testid={`deal-dd-request-${r.id}-remind`}>Remind</button>
+                  <button type="button" className={BTN_S} onClick={() => action('withdraw', r.id)} data-testid={`deal-dd-request-${r.id}-withdraw`}>Withdraw</button>
+                </div>
+              )}
+              {r.answer && <button type="button" className={`${BTN_S} w-fit`} onClick={() => action('answer', r.id)} data-testid={`deal-dd-request-${r.id}-answer`}>Open the answer</button>}
+            </div>
+          ))}
+          <p role="status" className={`m-0 ${SUB}`}>{notice}</p>
+          {dialog?.kind === 'new' && <NewFounderRequest uid={row.uid} close={close} />}
+          {active?.tone === 'wait' && owner && dialog.kind === 'remind' && (
+            <ConfirmDialog testId="deal-dd-remind-dialog" title={`Remind the founder · ${active.title}`}
+              sub="The founder gets a reminder by notification and email. You can send one reminder a day."
+              act="Send reminder" lockWhileBusy onConfirm={() => dd.remindRequest(row.uid, active.id)}
+              onClose={(changed) => close(changed ? 'Reminder sent.' : '')} />
+          )}
+          {active?.tone === 'wait' && owner && dialog.kind === 'withdraw' && <WithdrawFounderRequest uid={row.uid} request={active} close={close} />}
+          {active?.answer && dialog.kind === 'answer' && <FounderAnswer uid={row.uid} request={active} onClose={() => close()} />}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function NewFounderRequest({ uid, close }) {
+  const [form, setForm] = useState({ title: '', details: '', due: '' });
+  const titleField = useRef(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const set = (field) => (event) => setForm({ ...form, [field]: event.target.value });
+  return (
+    <ConfirmDialog testId="deal-dd-new-request-dialog" title="New request"
+      sub="The founder will see this in their diligence requests."
+      act="Send request" lockWhileBusy initialFocus={titleField} check={() => composeBody(form, today).error}
+      onConfirm={() => dd.createRequest(uid, composeBody(form, today).body)}
+      onClose={(changed) => close(changed ? 'Request sent.' : '')}>
+      <label className={SUB}>Title
+        <input ref={titleField} className={FIELD} maxLength={200} value={form.title} onChange={set('title')} data-testid="deal-dd-request-title" />
+      </label>
+      <label className={SUB}>Details (optional)
+        <textarea className={FIELD} rows={3} maxLength={4000} value={form.details} onChange={set('details')} data-testid="deal-dd-request-details" />
+      </label>
+      <label className={SUB}>Due date (optional)
+        <input type="date" className={FIELD} min={today} value={form.due} onChange={set('due')} data-testid="deal-dd-request-due" />
+      </label>
+    </ConfirmDialog>
+  );
+}
+
+function WithdrawFounderRequest({ uid, request, close }) {
+  const [reason, setReason] = useState('');
+  return (
+    <ConfirmDialog testId="deal-dd-withdraw-dialog" title={`Withdraw request · ${request.title}`}
+      sub="The founder will no longer see this request. Files already sent stay on the case."
+      act="Withdraw request" danger lockWhileBusy onConfirm={() => dd.withdrawRequest(uid, request.id, reason.trim() || undefined)}
+      onClose={(changed) => close(changed ? 'Request withdrawn.' : '')}>
+      <label className={SUB}>Reason (optional)
+        <textarea className={FIELD} rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deal-dd-request-withdraw-reason" />
+      </label>
+    </ConfirmDialog>
+  );
+}
+
+function FounderAnswer({ uid, request, onClose }) {
+  const { note, url, files } = request.answer;
+  const link = safeExternalUrl(url);
+  const [opening, setOpening] = useState(null);
+  const [error, setError] = useState('');
+  const download = async (file) => {
+    setOpening(file.id);
+    setError('');
+    try {
+      const result = await dd.documentLink(uid, 'request_file', file.id);
+      if (!/^\/api\/dd\/documents\/dl\/[a-f0-9]{64}$/.test(result?.url)) throw new Error('The file did not open. Try again.');
+      window.location.assign(result.url);
+    } catch (e) {
+      setError(e?.message || 'The file did not open. Try again.');
+    } finally {
+      setOpening(null);
+    }
+  };
+  return (
+    <Lightbox label={`Answer to ${request.title}`} title={request.title} sub={request.state} onClose={onClose} testId="deal-dd-answer-dialog">
+      <div className="grid min-w-0 gap-3 px-5 py-4">
+        {note && <p className="m-0 whitespace-pre-wrap break-words text-[13px] text-axal-ink dark:text-gray-100">{note}</p>}
+        {link && <a className={`${BTN_S} w-fit`} href={link} target="_blank" rel="noopener noreferrer">Open the founder’s link</a>}
+        {!note && !link && <p className={`m-0 ${SUB}`}>No written response was recorded.</p>}
+        <h3 className={H3}>Files</h3>
+        {files === null && <p className={`m-0 ${SUB}`}>Unreadable. The case could not load the files for this answer.</p>}
+        {files?.length === 0 && <p className={`m-0 ${SUB}`}>No files attached.</p>}
+        {files?.length > 0 && (
+          <>
+            <ul className="m-0 grid list-none gap-2 p-0">
+              {files.map((file) => (
+                <li key={file.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words text-[13px] text-axal-ink dark:text-gray-100">{file.name}</span>
+                  <button type="button" aria-label={`Download ${file.name}`} className={BTN_S} onClick={() => download(file)}
+                    disabled={opening !== null} data-testid={`deal-dd-answer-file-${file.id}`}>{opening === file.id ? 'Opening…' : 'Download'}</button>
+                </li>
+              ))}
+            </ul>
+            <p className={`m-0 ${SUB}`}>{LINK_LINE}</p>
+            <Err text={error} />
+          </>
+        )}
+      </div>
+    </Lightbox>
+  );
+}
+
 // ---------------------------------------------------------------- DL8, DL9 Documents and data room
 
 export function DealDocuments({ deal }) {
@@ -281,12 +410,9 @@ export function DealDocuments({ deal }) {
   const [paper, reloadPaper] = useRead(() => api.esignList({ deal_id: deal.id }), [deal.id]);
   const st = roomStateOf(access, room);
   const listing = room.status === 'ready' ? roomListing(room.data) : null;
-  const [folder, setFolder] = useState('');
-  const [q, setQ] = useState('');
   const [dialog, setDialog] = useState(null); // 'ask' | 'nda'
   const [message, setMessage] = useState('');
   const [dl, setDl] = useState({}); // uid → { busy, err }
-  const files = useMemo(() => (listing?.files || []).filter((f) => (!folder || f.folder_uid === folder) && (!q.trim() || f.name.toLowerCase().includes(q.trim().toLowerCase()))), [listing, folder, q]);
   const download = async (f) => {
     setDl((m) => ({ ...m, [f.uid]: { busy: true } }));
     try {
@@ -309,39 +435,7 @@ export function DealDocuments({ deal }) {
           {st.state === 'behind_nda' && st.ndaPending && <span className={SUB}>The NDA is out for signature. The files open once every party has signed.</span>}
         </section>
       )}
-      {listing && (
-        <div className="grid gap-3.5 md:grid-cols-[240px_minmax(0,1fr)]">
-          <Card eye="Folders" testId="deal-room-folders">
-            <button type="button" onClick={() => setFolder('')} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === '' ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
-              <span>All files</span><span className="font-mono text-[12px]">{listing.files.length}</span>
-            </button>
-            {listing.folders.map((f) => (
-              <button key={f.uid} type="button" onClick={() => setFolder(f.uid)} className={`flex items-center justify-between rounded-axal-sm px-2 py-1.5 text-left text-[13px] ${folder === f.uid ? 'bg-axal-lavender font-extrabold text-axal-violet-deep dark:bg-violet-950 dark:text-violet-300' : 'font-semibold text-axal-ink dark:text-gray-100'}`}>
-                <span>{f.name}</span><span className="font-mono text-[12px]">{f.count}</span>
-              </button>
-            ))}
-            {st.withheld > 0 && (
-              <p className="m-0 border-t border-axal-hairline px-2 pt-2 text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid="deal-room-withheld">
-                {st.withheld} file{st.withheld === 1 ? ' needs' : 's need'} your NDA
-                <span className={`block font-normal ${SUB}`}>Their names show once you sign.</span>
-              </p>
-            )}
-          </Card>
-          <Card title={`Files · ${files.length}`} testId="deal-room-files">
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search files" aria-label="Search files" className={FIELD} />
-            {files.length === 0 && <p className={`m-0 ${SUB}`}>{listing.files.length === 0 ? 'No file here is open to you yet.' : 'No file matches.'}</p>}
-            {files.map((f) => (
-              <div key={f.uid} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-room-file">
-                <span className="min-w-0 flex-1 text-[13px] font-bold text-axal-ink dark:text-gray-100">{f.name}</span>
-                <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{f.size} · {f.added}</span>
-                <button type="button" className="text-[12.5px] font-bold text-axal-violet-deep underline dark:text-violet-300" disabled={dl[f.uid]?.busy} onClick={() => download(f)}>Open</button>
-                <Err text={dl[f.uid]?.err} />
-              </div>
-            ))}
-            <p className={`m-0 ${SUB}`}>Each download is a one-time link and is logged. The founder sees who opened what.</p>
-          </Card>
-        </div>
-      )}
+      {listing && <SharedRoomFiles key={projectUid} projectUid={projectUid} listing={listing} rawFiles={room.data?.files || []} withheld={st.withheld || 0} onDownload={download} downloads={dl} />}
       <div className="grid gap-3.5 md:grid-cols-2">
         <Card title="Deal paper" testId="deal-paper">
           <p className={`m-0 ${SUB}`}>The envelopes on this deal that you are party to.</p>
@@ -459,7 +553,10 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
         {c.state === 'none' && (
           <>
             <p className={`m-0 ${SUB}`}>You have not committed to this deal. Committing records your intent; no money moves.</p>
-            <button type="button" className={`${BTN_P} w-fit`} onClick={onChangeAmount} data-testid="deal-commit-open">Commit</button>
+            {/* D6191: Commit is offered only on an open deal; otherwise the tab says why. */}
+            {deal.status === 'active'
+              ? <button type="button" className={`${BTN_P} w-fit`} onClick={() => onChangeAmount?.(null)} data-testid="deal-commit-open">Commit</button>
+              : <p className={`m-0 ${SUB}`} data-testid="deal-commit-closed">{closedReason(deal)}</p>}
           </>
         )}
         {c.state === 'ready' && (
@@ -476,10 +573,11 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
               {c.note && <span className={SUB}>{NOTE_READERS}</span>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {!c.confirmed && <button type="button" className={BTN_S} onClick={onChangeAmount} data-testid="deal-change-amount">Change amount</button>}
+              {!c.confirmed && deal.status === 'active' && <button type="button" className={BTN_S} onClick={() => onChangeAmount?.(c.row)} data-testid="deal-change-amount">Change amount</button>}
               <button type="button" className={`${BTN_S} text-axal-destructive dark:text-red-300`} onClick={() => setWithdrawing(true)} data-testid="deal-withdraw">Withdraw</button>
             </div>
             {c.confirmed && <p className={`m-0 ${SUB}`}>A confirmed commitment changes only by withdrawing it and committing again.</p>}
+            {!c.confirmed && deal.status !== 'active' && <p className={`m-0 ${SUB}`} data-testid="deal-commit-closed">{closedReason(deal)}</p>}
             {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c.row, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </>
         )}

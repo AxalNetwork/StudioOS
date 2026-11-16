@@ -9,6 +9,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 
 | File | Covers |
 | --- | --- |
+| `INCORPORATION_STATE_2026-11-15.md` | #6684 (E4 of #6680): what the read-only `scripts/report-incorporation-state.mjs` reports per incorporation jurisdiction (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals), how it is kept read only, and the operator's step 2 (results pending). |
 | `RUNTIME_DDL_2026-11-07.md` | Every runtime `ADD COLUMN` in the Worker: 360 blind ALTERs in 61 files, 359 for columns a migration already declares, so each fails as `duplicate column name` on every fresh isolate against an up-to-date database; the cohort bootstrap moved onto `runSchemaBootstrap` and the no-growth ratchet (#4568 R2-04). |
 | `USAGE_TABLES_2026-11-07.md`, `USAGE_TABLES_2026-11-07.json` | The five usage tables read from the code: every statement, its plan, each index's readers and write cost, the foreign keys and triggers that bound retention, and D4568's before and after (D4568). |
 | `D1_BASELINE_2026-11-06.md`, `D1_BASELINE_2026-11-06.json` | The D1 contention benchmark's first results (simulated): statements per operation and stage, the scans that grow with the platform, load steps, growth, invariants, and what production's baseline must still supply (D4567). |
