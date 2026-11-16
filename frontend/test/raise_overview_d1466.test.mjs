@@ -7,13 +7,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createElement as h } from 'react';
+import { act, createElement as h } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import CycleOverview, { CycleCard, FIGURE_COLS, figureCols, lastCardSpan } from '../src/pages/cycles/CycleOverview.jsx';
 import RaiseLead, { RaiseAsk, RaiseFromTools, RaiseNextSteps, gainLabel, lastRead, nextStepItems } from '../src/pages/cycles/RaiseOverviewLead.jsx';
 import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
+import { CHECKOUT_EVENT } from '../src/components/checkout/checkoutEntry.js';
+import { installDocument } from './_contracts_dom.mjs';
 import { OVERVIEWS, card, figure } from './_cycle_fixtures.mjs';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
@@ -109,6 +112,64 @@ test('RO14: a read-only summary has an amber Read only bar, no primary action an
   assert.match(member, /data-testid="cycle-action"[^>]*>Build your deck</);
   assert.match(member, /cycle-action[\s\S]*data-testid="raise-ask"/, 'a member sees Ask after the primary action');
   assert.doesNotMatch(member, /cycle-overview-read-only/);
+});
+
+const CAP_TABLE_PLAN = { locked: true, tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' };
+const capTableCard = (plan) => card('raise', 'Cap table', 0, {
+  series: [{ kind: 'big', value: '78%', label: 'Modelled ownership' }],
+  plan,
+});
+const capTablePhone = (plan) => ({
+  cards: [capTableCard(plan)],
+  index: [{ key: 'cap-table', title: 'Cap table', detail: 'Before and after the round', value: 'Modelled ownership', href: '/raise/cap-table?project=7' }],
+});
+
+test('RO13: the plan takes precedence over a drawable Cap table chart on desktop and phone', () => {
+  const desktop = (plan) => html(h(CycleCard, { cycle: 'raise', card: capTableCard(plan) }));
+  const phone = (plan) => html(h(PhoneCycleRoot, { cycle: 'raise', raw: capTablePhone(plan) }));
+  assert.match(desktop(CAP_TABLE_PLAN), /data-state="locked"/);
+  assert.match(text(desktop(CAP_TABLE_PLAN)), /Recording and scenarios are on the Raise \+ Grow plan/);
+  assert.match(desktop(CAP_TABLE_PLAN), /data-testid="card-plan-upgrade"/);
+  assert.doesNotMatch(desktop(CAP_TABLE_PLAN), /Modelled ownership|Next step for Cap table/);
+  assert.match(phone(CAP_TABLE_PLAN), /<button[^>]*data-testid="phone-index-cap-table"/);
+  assert.match(text(phone(CAP_TABLE_PLAN)), /On the Raise \+ Grow plan.*See plans/);
+  assert.doesNotMatch(phone(CAP_TABLE_PLAN), /Modelled ownership/);
+  for (const plan of [{ ...CAP_TABLE_PLAN, locked: false }, undefined]) {
+    assert.match(desktop(plan), /Modelled ownership/);
+    assert.doesNotMatch(desktop(plan), /card-plan-upgrade/);
+    assert.match(phone(plan), /<a[^>]*data-testid="phone-index-cap-table"/);
+    assert.match(phone(plan), /Modelled ownership/);
+    assert.doesNotMatch(phone(plan), /See plans/);
+  }
+});
+
+test('RO13: both upgrade controls open checkout with the Worker catalogue key', async () => {
+  const restore = installDocument();
+  const oldDispatch = globalThis.dispatchEvent;
+  const events = [];
+  globalThis.dispatchEvent = (event) => { events.push(event); return true; };
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const nodes = (n) => [n, ...n.childNodes.flatMap(nodes)];
+  const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1];
+  try {
+    await act(async () => root.render(h(MemoryRouter, null,
+      h(CycleCard, { cycle: 'raise', card: capTableCard(CAP_TABLE_PLAN) }),
+      h(PhoneCycleRoot, { cycle: 'raise', raw: capTablePhone(CAP_TABLE_PLAN) }))));
+    for (const id of ['card-plan-upgrade', 'phone-index-cap-table']) {
+      const button = nodes(host).find((n) => props(n)?.['data-testid'] === id);
+      assert.equal(button?.tagName, 'BUTTON');
+      props(button).onClick();
+    }
+    assert.deepEqual(events.map((e) => [e.type, e.detail.plan_key]), [
+      [CHECKOUT_EVENT, 'founder:studio'], [CHECKOUT_EVENT, 'founder:studio'],
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    if (oldDispatch === undefined) delete globalThis.dispatchEvent;
+    else globalThis.dispatchEvent = oldDispatch;
+    restore();
+  }
 });
 
 test('RO15, RO11: a refusal is the Worker sentence in muted ink; only a failed read is red', () => {

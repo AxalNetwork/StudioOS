@@ -20,7 +20,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { Card } from '../../ui';
+import { Card, DataState } from '../../ui';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
 import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
@@ -66,13 +66,9 @@ function useRead(fn, deps) {
   return { ...r, retry: run };
 }
 
+/** D5129 (#5129): the shared Unavailable block, with this page's claim. */
 function Unreadable({ what, onRetry }) {
-  return (
-    <div className="rounded-lg border border-red-200 bg-red-50/60 p-3 text-[12px] text-red-900 dark:border-red-900 dark:bg-red-950/20 dark:text-red-100">
-      <strong>{UNREADABLE}.</strong> {what} did not answer. This is not zero.
-      {onRetry ? <button type="button" onClick={onRetry} className="ml-2 font-semibold underline">Try again</button> : null}
-    </div>
-  );
+  return <DataState state="unavailable" size="block" what={what} claim="This is not zero." onRetry={onRetry} retryLabel="Try again" />;
 }
 
 const Loading = ({ what }) => <p className="text-[12px] text-axal-muted">Loading {what}…</p>;
@@ -112,7 +108,7 @@ export function KeyMetrics({ metrics }) {
   const round = m.last_funding;
   return (
     <section id="metrics" className="space-y-3">
-      <div><h2 className={h2}>Key metrics</h2><p className={lede}>Each figure shows its own source and date. Not recorded means no source holds it; Unreadable means the read failed.</p></div>
+      <div><h2 className={h2}>Key metrics</h2><p className={lede}>Each figure shows its own source and date. Not recorded means no source holds it; Unavailable means the read failed.</p></div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard title="Funding total" m={m.funding_total} value={money(m.funding_total?.value, m.funding_total?.currency)}
           detail={m.funding_total?.currency ? `All rounds the source lists, in ${m.funding_total.currency}` : null} confidence={conf}
