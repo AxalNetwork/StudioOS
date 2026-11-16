@@ -1,4 +1,5 @@
 import { heldLicences, holdsLicence } from '../services/accountLicences';
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { mayReadTrustScores } from '../services/scoreAccess';
 /**
  * Trust Center routes — Task #3 (Y-1).
@@ -352,6 +353,8 @@ trust.get('/agreements/:envelope_uuid/history', async (c) => {
 // ---------------------------------------------------------------------------
 trust.post('/intro/request', async (c) => {
   const investor = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, investor);
+  if (previewRefusal) return previewRefusal;
   await ensureTrustSchema(c.env);
   const body = await c.req.json().catch(() => ({} as any));
   // Dynamic-import the heavy provider modules (envelope + notify) to
@@ -700,6 +703,8 @@ trust.get('/nda/required', async (c) => {
 // ---------------------------------------------------------------------------
 trust.post('/nda/sign/:envelope_uuid', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const envelopeUuid = c.req.param('envelope_uuid');
   if (!envelopeUuid || envelopeUuid.length > 64) return c.json({ error: 'invalid_envelope' }, 400);
   const row: any = await c.env.DB.prepare(

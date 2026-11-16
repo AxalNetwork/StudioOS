@@ -241,6 +241,68 @@ export function evidenceByItem(data) {
 }
 
 /* ------------------------------------------------------------------ *
+ * One item, expanded (DDL4; #6290): its note, severity, owner, due date and
+ * evidence, with Add evidence and Edit item for who works its section.
+ * ------------------------------------------------------------------ */
+
+/** The Worker keeps a severity only on an item marked Flag or Fail. */
+export const SEVERITY_STATUSES = Object.freeze(['flag', 'fail']);
+export const ITEM_SEVERITIES = Object.freeze(['critical', 'high', 'medium', 'low', 'info']);
+export const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+export const NOTE_MAX = 4000;
+/** No Worker route removes evidence (D1248 §8), so the row says so instead of offering it. */
+export const NO_REMOVE_LINE = 'Evidence stays on the item once added; it cannot be removed here.';
+
+/** One item's evidence as rows: a file opens through the two-minute link, a link opens itself. */
+export function evidenceRows(list) {
+  if (!Array.isArray(list)) return null;
+  return list.map((e) => ({
+    key: e.uid, kind: e.kind === 'file' ? 'file' : 'link', attachmentId: e.attachment_id ?? null, url: e.url ?? null,
+    name: e.filename || e.label || e.url || NOT_RECORDED, by: e.added_by_name || NOT_RECORDED, at: fmtDay(e.created_at) || NOT_RECORDED,
+  }));
+}
+
+/** Add evidence's body: a file up to 10 MB, or an http(s) link with an optional label. */
+export function evidenceBody({ mode, url = '', label = '', file = null } = {}) {
+  if (mode === 'file') {
+    if (!file) return { error: 'Choose the file.' };
+    if (Number(file.size) > EVIDENCE_MAX_BYTES) return { error: 'The file is over 10 MB. Nothing was sent.' };
+    return { kind: 'file', file };
+  }
+  if (mode !== 'link') return { error: 'Choose a file or a link.' };
+  const u = String(url).trim();
+  if (!u) return { error: 'Paste the link.' };
+  if (!/^https?:\/\/\S+$/i.test(u)) return { error: 'The link starts with http:// or https://.' };
+  const l = String(label).trim();
+  return { kind: 'link', url: u, label: l || undefined };
+}
+
+/**
+ * Edit item's PATCH body: only what changed. A cleared note, owner or due date is null; a due date that changes
+ * is today or later; a severity is sent only on an item marked Flag or Fail.
+ */
+export function itemEditPatch(item, f, today) {
+  const patch = {};
+  const note = String(f.note ?? '');
+  if (note.length > NOTE_MAX) return { error: `The note is at most ${NOTE_MAX.toLocaleString('en-US')} characters.` };
+  if (note !== String(item.note ?? '')) patch.note = note.trim() ? note : null;
+  if (SEVERITY_STATUSES.includes(item.status)) {
+    const sev = f.severity || null;
+    if (sev != null && !ITEM_SEVERITIES.includes(sev)) return { error: 'Choose the severity.' };
+    if (sev !== (item.severity ?? null)) patch.severity = sev;
+  }
+  const owner = f.ownerId === '' || f.ownerId == null ? null : Number(f.ownerId);
+  if (owner !== (item.owner_user_id == null ? null : Number(item.owner_user_id))) patch.owner_user_id = owner;
+  const due = f.due || null;
+  if (due !== (item.due_date || null)) {
+    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) return { error: 'The due date is a day, like 2026-11-30.' };
+    if (due && today && due < today) return { error: 'The due date is today or later.' };
+    patch.due_date = due;
+  }
+  return Object.keys(patch).length ? { patch } : { error: 'Nothing changed.' };
+}
+
+/* ------------------------------------------------------------------ *
  * Flags (DDL5, DDL14 B and C)
  * ------------------------------------------------------------------ */
 
@@ -542,4 +604,14 @@ export const CASE_REFUSALS = Object.freeze({
 export function caseRefusal(e, fallback) {
   const code = e?.code || e?.data?.code;
   return (code && CASE_REFUSALS[code]) || refusalText(e, fallback);
+}
+
+
+/** D6292 (#6292): recorded numeric context ids only, on member routes, never an admin address. */
+export function caseContextLinks(cs) {
+  const id = value => /^[1-9]\d*$/.test(String(value ?? '')) && Number.isSafeInteger(Number(value)) ? String(value) : null;
+  if (cs?.scoped) return { deal: null, company: null, dataRoom: null };
+  const deal = id(cs?.deal_id), company = cs?.subject_type === 'project' ? id(cs.subject_id) : null;
+  return { deal: deal ? `/deals/${deal}` : null, company: company ? `/projects/${company}` : null,
+    dataRoom: deal ? `/deals/${deal}/documents` : null };
 }

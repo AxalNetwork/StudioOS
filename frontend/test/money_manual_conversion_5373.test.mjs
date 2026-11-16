@@ -92,7 +92,7 @@ const ALLOW = [
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
     "frontend/src/pages/investor/fundCallsModel.js": 2,
     "frontend/src/pages/investor/proofOfFundsModel.js": 3,
-    "frontend/src/pages/investor/deals/ClosingZone.jsx": 4,
+    "frontend/src/pages/investor/deals/ClosingZone.jsx": 3,
     "cloudflare-worker/src/routes/_capital_call_writes.ts": 1,
     "cloudflare-worker/src/routes/capital.ts": 1,
     "cloudflare-worker/src/routes/funds.ts": 5,
@@ -146,7 +146,8 @@ const ALLOW = [
     "cloudflare-worker/src/services/mercury/raiseFeeds.ts": 3,
     "cloudflare-worker/src/services/mercurySpend.ts": 1,
     "frontend/src/pages/admin/consoles/bankCashModel.js": 1,
-    "cloudflare-worker/src/services/reportFigures.ts": 1,
+    // D6104: +1, burn multiple (net burn dollars ÷ the USD-only ledger's net new cents).
+    "cloudflare-worker/src/services/reportFigures.ts": 2,
   } },
   { kind: 'usd', reason: "The spin-out revenue ledger is US dollars only: the Worker refuses any other currency (`currency_unsupported`).", files: {
     "frontend/src/components/spinout/RevenueLedger.jsx": 1,
@@ -199,7 +200,8 @@ const ALLOW = [
     "cloudflare-worker/src/services/decks/newDeck.ts": 1,
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
     "cloudflare-worker/src/services/growCycle.ts": 1,
-    "cloudflare-worker/src/services/growKpis.ts": 3,
+    // D6104: +1, burn multiple divides the USD-only ledger's cents into project_metrics dollars.
+    "cloudflare-worker/src/services/growKpis.ts": 4,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,

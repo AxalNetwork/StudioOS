@@ -189,8 +189,10 @@ test('migration 237 builds a ledger, not another frozen-status table', () => {
   assert.match(patch, /const moving = asked !== null && asked !== existing\.state;/,
     'the transition flag that gates date stamping is gone');
   assert.match(patch, /its state cannot change/, 'a delivered entry can be re-opened');
-  assert.match(patch, /asked !== existing\.state && existing\.state !== 'promised'/,
+  // D6202: open is promised or in progress (OPEN_STATES); anything else is terminal.
+  assert.match(patch, /asked !== existing\.state && !OPEN_STATES\.has\(existing\.state\)/,
     'the terminal-state check changed shape');
+  assert.match(ROUTE, /export const OPEN_STATES = new Set\(\['promised', 'in_progress'\]\);/, 'the open states changed');
 });
 
 test('the read and the write narrow on the same accessible set, and neither reaches a query with an empty one', () => {
@@ -240,7 +242,9 @@ test('all four chips are live and the page implements each one', () => {
   assert.ok(!FILTERS.includes('NO_SUPPORT_LEDGER'), 'the retired reason constant is back');
 
   assert.match(M, /filter === 'delivered' \? row\.state === 'delivered'/, 'Delivered no longer reads state');
-  assert.match(M, /filter === 'outstanding' \? row\.state === 'promised'/, 'Outstanding no longer reads state');
+  // D6203 (#6203): Outstanding is both open states (promised and in progress), read from the state as before.
+  assert.match(M, /filter === 'outstanding' \? OPEN_STATES\.has\(row\.state\)/, 'Outstanding no longer reads state');
+  assert.match(M, /export const OPEN_STATES = new Set\(\['promised', 'in_progress'\]\)/, 'Outstanding no longer names both open states');
   assert.match(P, /\.filter\(inView\(filter\)\)/, 'the page no longer applies the view predicate');
   // `company` is a VIEW, like IP2's `Rules` — a rollup, not a narrower row set.
   assert.match(P, /const byCompany = filter === 'company';/, 'the By company view is gone');
@@ -435,7 +439,9 @@ test('a transition names the record and the revision it read, and the loser keep
   assert.match(P, /if \(busy\) return; \/\/ D4642/, 'a double-clicked Log support can submit twice');
   const ledger = fn('CommitmentRow');
   assert.match(ledger, /disabled=\{!!busy\}/, 'the move buttons are live during a pending save');
-  assert.match(ledger, /onAsk\(c\.row, 'delivered'\)/, 'Mark delivered no longer passes the whole row');
+  // D6203: each move (Start, Mark delivered, Withdraw, Cancel) is one button over the row's moves, passing the whole row.
+  assert.match(ledger, /onAsk\(c\.row, next\)/, 'a move no longer passes the whole row');
+  assert.match(M, /promised: \['in_progress', 'delivered', 'withdrawn', 'cancelled'\]/, 'Mark delivered is no longer a move of a promise');
   assert.match(ledger, /onConfirm\(c\.row, asking\.next\)/, 'the confirmation no longer passes the whole row');
 });
 
