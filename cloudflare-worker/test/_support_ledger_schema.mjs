@@ -14,7 +14,7 @@ const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), '../sql/migr
 const file = (prefix) => readFileSync(resolve(MIGRATIONS, readdirSync(MIGRATIONS).find((f) => f.startsWith(`${prefix}_`))), 'utf8');
 
 /** The migrations after 237 that change the ledger's tables, in order. */
-export const SUPPORT_LEDGER_MIGRATIONS = ['202611092215', '202611150140'];
+export const SUPPORT_LEDGER_MIGRATIONS = ['202611092215', '202611150140', '202611152342'];
 
 /** Apply the ledger's tables to `db` (node:sqlite). */
 export function applySupportLedgerSchema(db) {
