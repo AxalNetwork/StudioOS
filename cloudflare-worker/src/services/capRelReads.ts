@@ -166,7 +166,8 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     `SELECT id, name, target_cents, target_amount, currency, close_date FROM raise_rounds
       WHERE project_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
   ).bind(projectId).first<{ id: number; name: string | null; target_cents: number | null; target_amount: number | null; currency: string | null; close_date: string | null }>()
-    .catch(() => null);
+    // D6081: a round that could not be read is Unavailable, never "no round".
+    .catch(() => { sources.round = { state: 'unreadable', reason: 'The active round could not be read' }; return null; });
   const currency = currencyOf(round?.currency, 'USD');
 
   // Every prospect's email, to find the same person in the other stores.
@@ -300,7 +301,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     currency,
     currency_basis: round?.currency ? 'The active round’s currency.' : 'No round records a currency; amounts entered as dollars are USD.',
     round: round ? { name: round.name, close_date: round.close_date, target_cents: targetCents, currency } : null,
-    round_reason: round ? null : 'No active round is recorded, so there is no target to count against.',
+    round_reason: round ? null : sources.round?.state === 'unreadable' ? 'The active round could not be read. Try again.' : 'No active round is recorded, so there is no target to count against.',
     totals: {
       ...totals,
       percent_of_target: targetCents ? Math.round((totals.counted_cents / targetCents) * 1000) / 10 : null,

@@ -16,7 +16,8 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { pageFacts, pageWindow } from '../services/listPage';
 import { ensureFollowsSchema } from './follows';
-import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { receivedInvestorUpdate } from '../services/portfolioAskAccess';
+import { investorProjectIds, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
@@ -791,6 +792,34 @@ async function recipientOf(env: Env, updateId: number, userId: number) {
   return env.DB.prepare('SELECT * FROM update_recipients WHERE update_id = ? AND user_id = ? ORDER BY id LIMIT 1')
     .bind(updateId, userId).first<any>();
 }
+
+// Report detail reads asks without recording an open of the sent update.
+r.get('/:uid/asks', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isInvestor(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
+    const update = await c.env.DB.prepare(
+      'SELECT id, project_id, kind, sent_at FROM portfolio_updates WHERE uid = ?',
+    ).bind(c.req.param('uid')).first<{ id: number; project_id: number; kind: string; sent_at: string | null }>();
+    if (!update?.sent_at || update.kind === 'report') return c.json({ detail: 'Not found' }, 404);
+    const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+    if (!held?.includes(update.project_id) || !(await receivedInvestorUpdate(c.env, update.id, user.id))) {
+      return c.json({ detail: 'Forbidden' }, 403);
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT a.uid, a.kind, a.text, a.link_ref,
+              EXISTS (SELECT 1 FROM update_ask_replies r WHERE r.ask_id = a.id) AS answered,
+              s.state AS support_state
+         FROM update_asks a LEFT JOIN portfolio_support_entries s
+           ON s.ask_uid = a.uid AND s.recorded_by = ?
+        WHERE a.update_id = ? ORDER BY a.id`,
+    ).bind(user.id, update.id).all<{ uid: string; kind: string; text: string; link_ref: string | null; answered: number; support_state: string | null }>();
+    if (!Array.isArray(rows.results)) return c.json({ detail: 'The asks could not be read.' }, 503);
+    const linked = await updateAskLinks(c.env, rows.results, user, false, 'investor');
+    return c.json({ asks: linked.map(({ uid, kind, text, link_ref, link_reason, answered, support_state }) =>
+      ({ uid, kind, text, link_ref: kind === 'capital' ? link_ref : null, link_reason: link_reason ?? null, answered: Boolean(answered), support_state })) });
+  } catch (e) { return mapError(c, e); }
+});
 
 // GET /api/portfolio-updates/:uid/page — the sent update. The author sees the
 // replies to each ask and who opened it; a recipient sees what their audience
