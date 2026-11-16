@@ -341,11 +341,13 @@ export const INVESTOR_ZONE_FILTERS = {
   'research/ask': [
     { canvas: 'All sessions', key: 'all' },
     { canvas: 'Saved', key: 'saved' },
-    {
-      canvas: 'Cited in a memo',
-      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
-    },
+    // D6272: `Cited in a memo` is gone. No store can select it — a citation
+    // names a passage and carries no memo — so it was a control that could
+    // only refuse. `Show cleared` takes its place: the sessions Clear history
+    // hid (owner, #6274 question 4 B), read back by the Worker's `cleared`
+    // scope with Restore beside them.
     { canvas: 'Discarded', key: 'discarded' },
+    { canvas: 'Show cleared', key: 'cleared' },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads

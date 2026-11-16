@@ -99,9 +99,9 @@ test('the workspace draws every fund figure from the read, none from the design 
   // The underwriting block and the raise figures are drawn only from an LP's read.
   assert.match(workspace, /\{F\.portfolio \? \(\s*<div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="underwriting-kpis">/);
   assert.match(workspace, /\{F\.raise \? \(/);
-  // The Cohort 4 list is not a record: no sliders, a Not recorded line instead.
-  assert.doesNotMatch(workspace, /Allocation preference for/);
-  assert.match(workspace, /data-testid="cohort-pipeline">[\s\S]{0,200}Not recorded\./);
+  // The Cohort 4 list is not a record, and #6138 removed the allocation
+  // section altogether: no sliders and no company from the list on the page.
+  assert.doesNotMatch(workspace, /Allocation preference for|Cohort 4 allocation window|COHORT_4/);
   // The brief prints the page's read.
   assert.match(workspace, /exportFundBriefPdf\(\{[\s\S]{0,400}metrics: live,/);
 });

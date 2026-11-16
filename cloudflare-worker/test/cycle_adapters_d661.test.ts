@@ -694,7 +694,7 @@ test('D661: every Grow table has a value source for each column, and its filter 
   assert.deepEqual((await rowBy('market-expansion', (c) => c.market === 'France')).Readiness,
     { text: 'Not recorded: Regulation, Partners, Cost to enter not scored', tone: 'muted' });
   assert.deepEqual(await rowBy('durable-company-building', (c) => c.obligation === 'Annual filing'),
-    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' } });
+    { Obligation: 'Annual filing', Kind: 'Compliance', Due: dayFrom(40), Owner: { text: 'No owner named', tone: 'warn' }, State: { text: 'Upcoming', tone: 'v3' }, Repeats: 'Once' });
   const durable = adaptModule('grow', 'durable-company-building', (await growCall(f, 'GET', `/modules/durable-company-building?project=${GP}`)).body);
   assert.ok(Array.isArray(durable.parts?.checklist) && durable.parts.checklist.some((i: any) => i.key === 'key_person_cover' && i.done), 'the checklist part comes through');
 });

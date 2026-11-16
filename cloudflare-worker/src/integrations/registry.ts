@@ -27,6 +27,7 @@ import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
 import { SEARCH_CONSOLE_READ_SCOPES } from './searchConsoleOAuth';
 import { TYPEFORM_READ_SCOPES } from './typeformOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
+import { FACEBOOK_BUILT_FEEDS, FACEBOOK_FEEDS } from './facebookFeeds';
 import { TIKTOK_BUILT_FEEDS, TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
@@ -669,7 +670,7 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
-  facebook: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [],
+  facebook: { category: 'Social', verified: false, pulls: FACEBOOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...FACEBOOK_FEEDS],
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: TIKTOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },

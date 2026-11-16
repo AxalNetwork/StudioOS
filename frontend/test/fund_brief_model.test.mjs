@@ -86,7 +86,6 @@ test('the brief renders every section the design has', () => {
     assert.ok(vm[k], `missing section: ${k}`);
   }
   assert.equal(vm.raise.length, 5, 'a committed LP: target, committed, soft-circled, capacity, first close');
-  assert.equal(vm.terms.length, 12, 'the design shows twelve fund-structure rows');
   assert.equal(vm.tiers.length, TIERS.length);
   assert.equal(vm.record.length, 6);
   assert.equal(vm.providers.length, SERVICE_PROVIDERS.length);
@@ -198,11 +197,10 @@ function withModel(patch, fn) {
 }
 
 test('economics on the brief track FUND', () => {
-  withModel({ mgmtFeePct: 2.5, carryPct: 25, minTicketK: 75, allocThresholdK: 400 }, (vm) => {
+  withModel({ mgmtFeePct: 2.5, carryPct: 25, minTicketK: 75 }, (vm) => {
     assert.equal(byKey(vm.terms, 'Management fee').v, '2.5%');
     assert.equal(byKey(vm.terms, 'Carried interest').v, '25%');
     assert.equal(byKey(vm.terms, 'Minimum ticket').v, '$75K');
-    assert.equal(byKey(vm.terms, 'Allocation rights').v, 'from $400K');
   });
 });
 
@@ -227,8 +225,13 @@ test('tiers are the workspace tiers, with the matrix agreeing on column count', 
   for (const row of TIER_RIGHTS) {
     assert.equal(row.c.length, TIERS.length, `"${row.right}" has one cell per tier`);
   }
-  const allocator = TIERS.find((t) => t.hl);
-  assert.equal(allocator.amountK, FUND.allocThresholdK);
+  const highlighted = TIERS.find((t) => t.hl);
+  assert.equal(highlighted.amountK, FUND.allocThresholdK);
+});
+
+test('D6138: Fund I terms and tiers carry no allocation preference promise', () => {
+  const brief = fundBriefModel();
+  assert.doesNotMatch(JSON.stringify([fundTerms(), TIERS, TIER_RIGHTS, brief.tiers]), /allocation (rights|preferences|window)/i);
 });
 
 /* -------------------------------------------------- masthead, recipient, file */

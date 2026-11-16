@@ -7,8 +7,8 @@
 // 1. ACCESS STATE IS DERIVED, NOT CHOSEN. The export drives every gate off
 //    `st.access`, flipped by a row of buttons. Shipping that would hand any
 //    logged-in viewer a control that unlocks the reporting package, the LP data
-//    room and the allocation sliders by claiming "$250K committed". Here the
-//    state comes from the caller's own rows in GET /api/funds/lp-portal via the
+//    room by claiming a commitment. Here the state comes from the caller's
+//    own rows in GET /api/funds/lp-portal via the
 //    pure `lpAccessState()` (see lib/spinoutFundModel.js). Admins keep a preview
 //    switcher because the five states are otherwise unreachable to look at, and
 //    it is inert — nothing on this page writes.
@@ -17,12 +17,11 @@
 //    lib/spinoutFundFigures.js; a figure with no record reads "Not recorded".
 //    A visitor's read carries the target and close status only, so the raise
 //    and underwriting blocks are drawn for committed LPs alone.
-// 3. NO FAKE WRITES. Application submit and allocation submit have no backing
-//    endpoint, so they state that plainly instead of pretending to persist.
+// 3. Demo-day sliders were removed following the owner’s decision (#6138).
 //
 // Everything else — thesis hero, raise progress, key terms, tier matrix,
 // commitment process, application form, underwriting KPIs, report archive,
-// participation-rights ladder, IR, allocation gate, onboarding requirements and
+// participation-rights ladder, IR, onboarding requirements and
 // the compliance footer — is preserved.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -44,7 +43,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import { fundReportingApi } from '../lib/api/fundReporting.js';
 import {
-  lpAccessState, lpHasReports, lpAllocationOpen,
+  lpAccessState, lpHasReports,
   ALLOC_THRESHOLD_K, LP_STATES, FUND, THESIS, fundTerms,
   TIERS, TIER_RIGHTS, PROCESS_STEPS, SPINOUT_FUND_SLUG,
 } from '../lib/spinoutFundModel';
@@ -109,17 +108,17 @@ const GATE = {
   },
   approved: {
     tone: 'violet', icon: Check, title: 'You are approved. Complete your commitment to activate participation.',
-    body: 'Approved LPs can review full reporting. Commit capital to receive the quarterly reporting package, and reach $250K to hold allocation and decision rights.',
+    body: 'Approved LPs can review full reporting. Commit capital to receive the quarterly reporting package.',
     wrap: 'border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30',
   },
   committed: {
     tone: 'violet', icon: Check, title: 'You are a committed LP.',
-    body: 'You receive the full reporting package, portfolio updates and demo-day observer access. Increase your commitment to $250K to hold allocation and decision rights.',
+    body: 'You receive the full reporting package, portfolio updates and demo-day observer access.',
     wrap: 'border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30',
   },
   voting: {
-    tone: 'green', icon: ShieldCheck, title: 'Full participation active.',
-    body: `You hold allocation and decision rights for Cohort 4 and complete reporting access. Scheduled demo day: ${FUND.demoDay}.`,
+    tone: 'green', icon: ShieldCheck, title: 'You are a committed LP.',
+    body: `You receive the full reporting package, portfolio updates and demo-day observer access. Scheduled demo day: ${FUND.demoDay}.`,
     wrap: 'border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30',
   },
 };
@@ -129,7 +128,7 @@ const PROFILE_CHIP = {
   pending: ['amber', 'Applicant · under review'],
   approved: ['violet', 'Approved LP'],
   committed: ['violet', 'Committed LP'],
-  voting: ['green', 'Committed LP · full rights'],
+  voting: ['green', 'Committed LP'],
 };
 
 /* --------------------------------------------------------------- static data */
@@ -160,7 +159,7 @@ const LADDER = [
   ['Invited', 0, 'Review the thesis, key terms and cohort summaries.'],
   ['Approved', 1, 'Full reporting archive and diligence data room.'],
   ['Committed', 2, 'Quarterly reporting package, portfolio updates, demo day.'],
-  [`Allocator · $${ALLOC_THRESHOLD_K}K`, 3, 'Allocation preferences and decision rights.'],
+  [`Participation · $${ALLOC_THRESHOLD_K}K`, 3, 'Decision rights.'],
 ];
 
 // Documents this platform does NOT produce. The design listed them beside the
@@ -294,7 +293,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const GateIcon = gate.icon;
   const [chipTone, chipText] = PROFILE_CHIP[state] || PROFILE_CHIP.visitor;
   const hasReports = lpHasReports(state);
-  const allocOpen = lpAllocationOpen(state);
   const showApply = state === 'visitor';
   const showPending = state === 'pending';
 
@@ -491,7 +489,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-gray-900 dark:text-gray-100">
             {gate.title}
-            {state === 'committed' && derived.commitmentK > 0 && ` (${commitLabel})`}
+            {(state === 'committed' || state === 'voting') && derived.commitmentK > 0 && ` (${commitLabel})`}
           </div>
           <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">{gate.body}</div>
         </div>
@@ -637,9 +635,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
 
       {/* participation tiers */}
       <div>
-        <SectionLabel right={<span className="text-[11.5px] text-gray-400 dark:text-gray-500">Rights scale with commitment · allocation rights begin at ${ALLOC_THRESHOLD_K}K</span>}>
-          Participation tiers
-        </SectionLabel>
+        <SectionLabel>Participation tiers</SectionLabel>
         <div className={`${CARD} overflow-x-auto`}>
           <table className="w-full min-w-[760px] text-left">
             <thead>
@@ -943,48 +939,6 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       {/* GP desk — admin only */}
       {isAdmin && <GpReportDesk />}
 
-      {/* allocation gate */}
-      <div>
-        <SectionLabel right={<Chip tone={allocOpen ? 'green' : 'gray'}>{allocOpen ? 'Allocation open' : `Opens at $${ALLOC_THRESHOLD_K}K`}</Chip>}>
-          Demo day · allocation preferences
-        </SectionLabel>
-        {!allocOpen ? (
-          <div className={`${CARD} flex flex-col items-center justify-center px-6 py-10 text-center`}>
-            <Lock size={24} className="text-gray-400 dark:text-gray-500" />
-            <div className="mt-2.5 text-[15px] font-bold text-gray-900 dark:text-gray-100">
-              Allocation rights begin at ${ALLOC_THRESHOLD_K}K committed
-            </div>
-            <div className="mt-1.5 max-w-md text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {derived.commitmentK > 0
-                ? `You are committed at ${commitLabel}. Increase your commitment to $${ALLOC_THRESHOLD_K}K to express allocation preferences across graduating companies.`
-                : 'Commit capital to participate in the allocation window for graduating companies.'}
-            </div>
-          </div>
-        ) : (
-          <div className={`${CARD} p-6`}>
-            <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-              Cohort 4 allocation window
-            </div>
-            <p className="mt-1 text-[12.5px] text-gray-500 dark:text-gray-400">
-              Express allocation preferences across graduating companies. Preferences are
-              commitment-weighted, pooled across LPs, and settle at close after the fund team
-              confirms final terms.
-            </p>
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 px-3 py-2.5 text-[11px] text-gray-500 dark:text-gray-400">
-              <AlertCircle size={13} className="flex-none" />
-              Preferences are a decision input, not an order. Final allocations are set by the fund
-              within its reserve policy and confirmed in your closing statement.
-            </div>
-            {/* D6137: the Cohort 4 list was the design file's, not a record, so
-                no company is named and there is nothing to allocate across. */}
-            <div className="mt-4 rounded-xl border border-gray-200 dark:border-gray-800 p-4 text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="cohort-pipeline">
-              <span className="font-bold text-gray-900 dark:text-gray-100">Not recorded.</span>{' '}
-              No store holds the Cohort 4 pipeline yet. Confirm your intended allocation with the GP directly.
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* onboarding */}
       <div>
         <SectionLabel>Onboarding requirements</SectionLabel>
@@ -1063,7 +1017,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       <WorkspaceHeader
         icon={Landmark}
         title="Spin-Out Lab &middot; LP &amp; Investor Workspace"
-        description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and commitment-gated allocation."
+        description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and participation."
       />
       {/* Standing, stated up front — as the design does. The same fact appears
           under "Participation rights" further down, but an LP arriving here
@@ -1133,7 +1087,7 @@ const fmtTicket = (dollars) => (dollars >= 1_000_000
  *
  * Submitting grants nothing. The workspace's access ladder still derives from
  * `limited_partners` rows the GP writes; an application moves the viewer to
- * 'pending', which unlocks no reporting, no data room and no allocation.
+ * 'pending', which unlocks neither reporting nor the data room.
  */
 function LpApplicationForm({ loaded, existing, onSubmitted }) {
   const [investorType, setInvestorType] = useState(existing?.investor_type || 'individual');
@@ -1182,8 +1136,6 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
     );
   }
 
-  const tier = ticket >= ALLOC_THRESHOLD_K * 1000 ? 'Allocation rights' : 'Standard participation';
-
   return (
     <div className={`${CARD} p-6`} data-testid="lp-application-form">
       <p className="m-0 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400">
@@ -1218,7 +1170,7 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
           <div className="flex items-baseline justify-between gap-2">
             <div className={LBL}>Target commitment</div>
             <div className={`${MONO} text-[13px] font-bold text-gray-900 dark:text-gray-100`}>
-              {fmtTicket(ticket)} <span className="font-medium text-gray-400 dark:text-gray-500">· {tier}</span>
+              {fmtTicket(ticket)}
             </div>
           </div>
           <input
@@ -1234,7 +1186,6 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
           />
           <div className="mt-1 flex justify-between text-[10.5px] text-gray-400 dark:text-gray-500">
             <span>{fmtTicket(TICKET_MIN)} minimum</span>
-            <span>${ALLOC_THRESHOLD_K}K unlocks allocation rights</span>
             <span>{fmtTicket(TICKET_MAX)}</span>
           </div>
         </div>
