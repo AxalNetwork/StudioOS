@@ -301,14 +301,16 @@ const OBLIGATION_STATE = { scheduled: ['Scheduled', 'v2'], upcoming: ['Upcoming'
 function kpiValue(r) {
   if (!num(r.value)) return reasonCell(r.reason) || null;
   if (r.unit === 'usd_cents') return usd(r.value);
-  if (r.kpi === 'MRR') return usd(r.value * 100);
+  if (r.kpi === 'MRR' || r.id === 'arr') return usd(r.value * 100);
+  // D6104: burn multiple, worked out from burn and the ledger.
+  if (r.unit === 'multiple') return `${Math.round(r.value * 100) / 100}×`;
   return r.value.toLocaleString('en-US');
 }
 
 function kpiChange(r) {
   if (!num(r.change_30d)) return null;
   if (r.change_30d === 0) return 'no change';
-  const size = r.kpi === 'MRR' ? usd(Math.abs(r.change_30d) * 100) : Math.abs(r.change_30d).toLocaleString('en-US');
+  const size = r.kpi === 'MRR' || r.id === 'arr' ? usd(Math.abs(r.change_30d) * 100) : Math.abs(r.change_30d).toLocaleString('en-US');
   return `${r.change_30d > 0 ? '▲' : '▼'} ${size}`;
 }
 
