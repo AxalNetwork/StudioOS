@@ -117,7 +117,8 @@ export function percentToBps(text) {
   const whole = Number(m[1]);
   const frac = m[2] || '';
   if (whole > 100 || (whole === 100 && /[1-9]/.test(frac))) return { ok: false, message: 'Enter a percentage from 0 to 100' };
-  const head = Number(whole * 100 + Number((frac + '00').slice(0, 2)));
+  // The digits are joined as text ("12" and "50" make 1250), so no factor is applied to a number.
+  const head = Number(`${whole}${(frac + '00').slice(0, 2)}`);
   const rest = frac.slice(2);
   return { ok: true, value: rest && /[1-9]/.test(rest) ? Number(`${head}.${rest}`) : head };
 }
@@ -234,7 +235,6 @@ export function placeRefusal(step, e) {
   const msg = String(e?.message || '');
   const data = e?.data || {};
   if (step === 'create' && e?.status === 409 && /already in use/.test(msg)) return { field: 'licence_ref', message: msg };
-  if (step === 'create' && e?.status === 400 && /^licence_ref and legal_entity_name/.test(msg)) return { field: 'licence_ref', message: msg };
   if (step === 'entity' && (data.field || e?.field)) {
     const f = data.field || e.field;
     return { field: f, message: msg.replace(/\.$/, '') };
