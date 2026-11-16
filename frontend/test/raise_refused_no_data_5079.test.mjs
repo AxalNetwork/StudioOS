@@ -300,7 +300,8 @@ const CHECKS = [
   { name: 'the data room’s Home says a summary is not the room', file: 'frontend/src/pages/raise/dataroom/DataRoomHome.jsx',
     before: "  if (read.room?.mode === 'summary') {", after: "  if (read.room?.mode === 'summary') { return null; }\n  if (false) {",
     pattern: 'a summary answer is not the room' },
-  { name: 'the pipeline tells a refusal from a failure', file: 'frontend/src/pages/raise/caprel/CapRelPipeline.jsx',
+  // D5081 part 2 (#5081): the prospects read moved to `capRelHomeRead.js`, shared by Pipeline, Overview and CycleRoute.
+  { name: 'the pipeline tells a refusal from a failure', file: 'frontend/src/pages/raise/caprel/capRelHomeRead.js',
     before: "setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) })",
     after: "setRead({ status: 'unreadable', items: null, projectId })", pattern: 'never as an unreadable store' },
   { name: 'the pipeline reports its refusal', file: 'frontend/src/pages/raise/caprel/CapRelOverview.jsx',
