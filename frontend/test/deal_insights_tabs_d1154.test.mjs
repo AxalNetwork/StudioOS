@@ -21,7 +21,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
 import { WAITS } from '../src/pages/dealPageModel.js';
 import {
-  NOT_RECORDED, NOT_REPORTED, SLOTS, chartSummary, coverageView, figureText, insightState, personView, safeUrl, sizingView, slotOf, sourceText, tractionView,
+  NOT_RECORDED, NOT_REPORTED, SLOTS, TRACTION_TILES, chartSummary, coverageView, figureText, insightState, personView, safeUrl, sizingView, slotOf, sourceText, tractionCsv, tractionSources, tractionView,
 } from '../src/pages/deal/dealInsightsModel.js';
 
 const h = React.createElement;
@@ -308,4 +308,72 @@ test('the wiring: the three tabs drawn from their own file, the reads through de
   const tabs = readFileSync(new URL('../src/pages/deal/DealInsightTabs.jsx', import.meta.url), 'utf8');
   assert.ok(!/['"`]#[0-9a-f]{3,8}['"`]|\[#[0-9a-f]{3,8}\]/i.test(tabs), 'colours come from the tokens');
   assert.match(tabs, /dealInsightsApi\.team/);
+});
+
+
+// D6177 (#6177): the existing Traction route stays reachable during the eight-tab refactor.
+test('D6177: no reported month draws one canvas empty card and no tiles, charts or stale slots', async () => {
+  const empty = { ...TRACTION, history: { state: 'recorded', data: TRACTION.history.data.map(m => ({ month: m.month, state: 'not_reported', figures: [] })) } };
+  const v = await mounted('/deals/4/traction', { traction: response(empty) });
+  try {
+    assert.equal(v.ids().filter(id => id === 'deal-traction-empty').length, 1);
+    assert.equal(v.textOf('deal-traction-empty'), '○No traction reported yet.Figures appear once the founder reports them or connects a source.');
+    assert.ok(!v.ids().some(id => id.startsWith('deal-traction-chart-') || id.startsWith('deal-traction-tile-') || id.startsWith('deal-slot-traction-')));
+    assert.ok(!v.ids().includes('deal-traction-csv'));
+  } finally { await v.close(); }
+});
+
+test('D6177: last shared is the newest reported month and charts name their own source/as-of', async () => {
+  const v = await mounted('/deals/4/traction', { traction: response(TRACTION) });
+  try {
+    assert.equal(v.textOf('deal-traction-last-shared'), 'Last shared: Oct 2026');
+    assert.match(v.textOf('deal-traction-source-mrr'), /From stripe.*As of 28 Oct 2026/);
+    assert.match(v.textOf('deal-traction-source-customers'), /Typed.*As of 28 Oct 2026/);
+  } finally { await v.close(); }
+  const view = tractionView({ ...TRACTION, history: { ...TRACTION.history, data: [...TRACTION.history.data].reverse() } });
+  assert.equal(view.lastShared, '2026-10');
+  assert.deepEqual(tractionSources([{ value: 0, source: 'typed' }, { value: null, source: 'unreadable', as_of: '2099-01-01' }]), ['Typed · the founder’s own figure · As of Not recorded']);
+});
+
+test('D6177: CSV keeps twelve rows per figure, Not reported gaps and an actual zero', () => {
+  const rows = tractionCsv(tractionView(TRACTION)).trim().split('\r\n').map(line => line.split(','));
+  assert.deepEqual(rows.shift(), ['month', 'figure', 'value', 'unit', 'source']);
+  for (const figure of TRACTION_TILES) assert.equal(rows.filter(row => row[1] === figure.label).length, 12);
+  for (const row of rows.filter(row => row[0] === '2026-01')) { assert.equal(row[2], 'Not reported'); assert.notEqual(row[2], '0'); }
+  assert.equal(rows.find(row => row[0] === '2026-03' && row[1] === 'Net burn')[2], '0');
+  const view = tractionView(TRACTION);
+  view.series.mrr[0] = { ...view.series.mrr[0], source: 'Source, "quoted"\nnext line' };
+  assert.ok(tractionCsv(view).includes('"Source, ""quoted""\nnext line"'));
+  view.series.mrr[0].source = '=1+1';
+  assert.ok(tractionCsv(view).includes(",'=1+1\r\n"));
+});
+
+test('D6177: Download CSV uses the existing read, creates the named file and releases its URL', async () => {
+  const v = await mounted('/deals/4/traction', { traction: response(TRACTION) });
+  const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL, element: document.createElement };
+  let blob, clicked, removed = false; const revoked = [];
+  URL.createObjectURL = b => { blob = b; return 'blob:synthetic'; };
+  URL.revokeObjectURL = u => revoked.push(u);
+  document.createElement = tag => {
+    const node = original.element.call(document, tag);
+    if (tag === 'a') { node.click = () => { clicked = { href: node.href, download: node.download }; }; node.remove = () => { node.parentNode?.removeChild(node); removed = true; }; }
+    return node;
+  };
+  try {
+    const requests = v.requests.length;
+    await v.click('Download CSV');
+    assert.deepEqual(clicked, { href: 'blob:synthetic', download: 'deal-4-traction.csv' });
+    assert.equal(blob.type, 'text/csv;charset=utf-8');
+    assert.equal(await blob.text(), tractionCsv(tractionView(TRACTION)));
+    assert.equal(v.requests.length, requests);
+    assert.ok(removed); assert.deepEqual(revoked, ['blob:synthetic']);
+  } finally { URL.createObjectURL = original.create; URL.revokeObjectURL = original.revoke; document.createElement = original.element; await v.close(); }
+});
+
+test('D6177: unreadable and NDA-masked reads never advertise an empty deal or CSV', async () => {
+  for (const data of [MASKED_READ, { ...TRACTION, history: { state: 'unreadable' } }]) {
+    const v = await mounted('/deals/4/traction', { traction: response(data) });
+    try { assert.ok(!v.ids().includes('deal-traction-empty')); assert.ok(!v.ids().includes('deal-traction-csv')); }
+    finally { await v.close(); }
+  }
 });

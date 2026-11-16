@@ -29,7 +29,7 @@ import {
   AttentionItem, HealthStatus, ObligationStatus, PerformanceSummary, Skeleton, SourceFailure, SummaryTile,
 } from '../portfolio/PortfolioParts';
 import {
-  HEALTH, NOT_RECORDED, SHAPES, attentionOf, companyRowsOf, filterRows, lastQuarterEndOf, navChangeOf, performanceOf, quarterShape,
+  HEALTH, NOT_RECORDED, SHAPES, UNREADABLE, attentionOf, companyRowsOf, filterRows, lastQuarterEndOf, navChangeOf, performanceOf, quarterShape,
   reportingSummaryOf, valueAddSummaryOf,
 } from '../portfolio/portfolioModel';
 
@@ -143,8 +143,11 @@ function ValueAddCard({ summary, onRetry }) {
   else {
     figures = (
       <div className="pf-tiles" data-testid="portfolio-support-figures">
-        <SummaryTile label="Open commitments" value={String(summary.open ?? NOT_RECORDED)} note="Promised, not yet delivered" />
+        <SummaryTile label="Open commitments" value={String(summary.open ?? NOT_RECORDED)} note="Promised or in progress, not yet delivered" />
         <SummaryTile label="Delivered" value={String(summary.delivered ?? NOT_RECORDED)} note="Every recorded entry" />
+        {/* D6203 (#6203): the ledger's own introduction figures (D6202). A figure the read lacked reads Unreadable, never 0. */}
+        <SummaryTile label="Introductions made" value={summary.introductions == null ? UNREADABLE : String(summary.introductions)} note="Delivered introduction entries" />
+        <SummaryTile label="Meetings resulting" value={summary.meetings == null ? UNREADABLE : String(summary.meetings)} note="Introductions whose meeting a member recorded as held" />
         <SummaryTile label="No support recorded" value={summary.untouched == null ? NOT_RECORDED : String(summary.untouched)} note={summary.inBook != null ? `${summary.supported} of ${summary.inBook} companies supported` : null} />
       </div>
     );
@@ -156,7 +159,7 @@ function ValueAddCard({ summary, onRetry }) {
         <Link className="pf-btn is-quiet" to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open Value-add <ArrowUpRight size={13} aria-hidden="true" /></Link>
       </div>
       {figures}
-      <p className="pf-foot">Meetings resulting from introductions: <span className="pf-not-recorded">{NOT_RECORDED}</span> — the support ledger records promised and delivered work, not meeting outcomes.</p>
+      <p className="pf-foot">An introduction counts toward Meetings resulting only when a member recorded its meeting as held; one nobody recorded is not counted as no meeting.</p>
     </section>
   );
 }
