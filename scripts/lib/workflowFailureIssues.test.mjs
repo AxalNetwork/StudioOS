@@ -236,3 +236,12 @@ test('a previously adopted known target also deduplicates without its now-absent
   assert.equal((await mock.reporter(knownCatalog).report(input({workflow_id:14,id:401}))).action,'created');
   assert.equal(canonical.body, 'Owner notes');
 });
+
+test('#6675 queue invalidation skips issue creation while an actionable attempt still deduplicates', async () => {
+  const mock = service(), writer = mock.reporter();
+  const queued = input({ event: 'merge_group', head_branch: 'gh-readonly-queue/main/pr-7-' + 'b'.repeat(40) });
+  assert.deepEqual(await writer.report({ ...queued, queueInvalidated: true }), { action: 'ignored', reason: 'non_actionable' });
+  assert.equal(mock.issues.length, 0);
+  assert.deepEqual(await writer.report(queued), { action: 'created', issueNumber: 1 });
+  assert.deepEqual(await writer.report(queued), { action: 'duplicate', issueNumber: 1 });
+});
