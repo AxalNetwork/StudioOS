@@ -399,6 +399,39 @@ const real = (db: DatabaseSync, who: number, method: string, path: string, body?
   call(db, who, method, path, body, RECORD_SPECS);
 const rec = (slug: string, id: string, suffix = '') => `/validate/modules/${slug}/records/${id}${suffix}?project=1`;
 
+test('D6002: only writers can assign held interviews to active segments on their venture', async () => {
+  const db = seeded();
+  db.exec(`INSERT INTO customer_segments (id, project_id, name, name_norm, source, archived_at)
+    VALUES (4, 1, 'New segment', 'new segment', 'manual', NULL), (8, 1, 'Archived', 'archived', 'manual', '2026-10-12')`);
+  const read = async (who: number) => (await call(db, who, 'GET', '/validate/modules/ideal-customer-profile?project=1')).body;
+  const getAction = async (who: number) => (await real(db, who, 'GET', rec('customer-research', '2'))).body.actions
+    .find((action: any) => action.key === 'set-segment');
+  const edit = (who: number, segment_id: unknown) => real(db, who, 'POST', rec('customer-research', '2', '/actions/set-segment'), { segment_id });
+  const before = await read(10);
+  assert.deepEqual(before.parts.unassigned, [{ id: 2, interviewee: 'Jon Example', date: '2026-10-09', fit: null }]);
+  assert.equal(before.parts.unassigned_total, 1);
+  assert.deepEqual(before.parts.segments.map((s: { id: number }) => s.id), [3, 4]);
+  assert.equal('unassigned' in (await read(40)).parts, false);
+  assert.equal(await getAction(40), undefined);
+  assert.equal((await edit(40, 3)).status, 403);
+  assert.deepEqual((await getAction(10)).form.fields[0].options.map((o: { value: string }) => o.value), ['', '3', '4']);
+  assert.equal((await edit(10, 22)).status, 404);
+  assert.equal((await edit(10, 8)).status, 404);
+  assert.equal((await edit(10, false)).status, 400);
+  assert.equal((await edit(10, 3)).status, 200);
+  const after = await read(10);
+  assert.equal(after.parts.unassigned_total, 0);
+  assert.equal(after.records.rows.find((row: any) => row.id === 3).interviews, 2);
+  assert.equal((await getAction(10)).form.fields[0].value, '3');
+  assert.equal((await edit(10, 4)).status, 200);
+  for (const [id, operation] of [['3', 'interview_segment_unlinked'], ['4', 'interview_segment_linked']]) {
+    const activity = await real(db, 10, 'GET', rec('ideal-customer-profile', id, '/activity'));
+    assert.ok(activity.body.items.some((item: any) => item.action === operation));
+  }
+  assert.equal((await edit(10, '')).status, 200);
+  assert.equal((await read(10)).parts.unassigned_total, 1);
+});
+
 test('#1692 test 2: another venture\'s record answers 404 on the read, the activity, every action, PATCH and DELETE', async () => {
   const db = seeded();
   for (const [slug, r] of Object.entries(RECORDS)) {
