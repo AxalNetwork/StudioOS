@@ -44,6 +44,10 @@ import { confidenceCell, decisionOf, flowStateOf, screeningSummary } from './scr
  *   · Material risks, Last change and Stale screens: no read carries them,
  *     so each says Not recorded (named in D4815).
  *
+ * ON A PHONE (D6151, board DE26): below 768px the table gives way to one card
+ * per venture, with the same reads and the same decision. Move to diligence
+ * and Pass… run the width of the card; Pass opens the same reason dialog.
+ *
  * EACH READ FAILS ALONE. A failed read costs its own column or figure, which
  * says Unreadable; it never prints 0, and an unreadable flow offers Try
  * again, never Pass.
@@ -84,31 +88,37 @@ function fitOfRead(fits, dealId) {
   return fitCell(fits.get(String(dealId)) || { state: 'unavailable' });
 }
 
-function Decision({ row, decision, busy, error, onMove, onPass, onRetry }) {
+/**
+ * The decision cell. `card` (DE26) is the phone's: the two buttons run the full width of the card,
+ * at 44px, and every test id carries `-card` so the table's and the card's never collide.
+ */
+function Decision({ row, decision, busy, error, onMove, onPass, onRetry, card = false }) {
+  const id = (name) => `screening-${name}-${row.deal_id}${card ? '-card' : ''}`;
+  const wide = card ? 'w-full min-h-[44px] text-[13px]' : '';
   if (decision.kind === 'open') {
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => onMove(row)} data-testid={`screening-move-${row.deal_id}`}>
+        <div className={card ? 'flex flex-col gap-2' : 'flex flex-wrap gap-1.5'}>
+          <button type="button" className={`${BTN_PRIMARY} ${wide}`} disabled={busy} onClick={() => onMove(row)} data-testid={id('move')}>
             {busy ? 'Moving…' : 'Move to diligence'}
           </button>
-          <button type="button" className={BTN_GHOST} disabled={busy} onClick={() => onPass(row)} data-testid={`screening-pass-${row.deal_id}`}>
+          <button type="button" className={`${BTN_GHOST} ${wide}`} disabled={busy} onClick={() => onPass(row)} data-testid={id('pass')}>
             Pass…
           </button>
         </div>
-        {error && <p className="m-0 text-[11px] text-red-700 dark:text-red-300" role="alert" data-testid={`screening-refused-${row.deal_id}`}>{error}</p>}
+        {error && <p className="m-0 text-[11px] text-red-700 dark:text-red-300" role="alert" data-testid={id('refused')}>{error}</p>}
       </div>
     );
   }
   if (decision.kind === 'unreadable') {
     return (
-      <span className="inline-flex flex-wrap items-center gap-2" data-testid={`screening-decision-unread-${row.deal_id}`}>
+      <span className="inline-flex flex-wrap items-center gap-2" data-testid={id('decision-unread')}>
         <span className={MUTED}>Unreadable</span>
-        <button type="button" className={BTN_GHOST} onClick={onRetry}>Try again</button>
+        <button type="button" className={`${BTN_GHOST} ${wide}`} onClick={onRetry}>Try again</button>
       </span>
     );
   }
-  return <span className={decision.kind === 'not_investor' ? MUTED : 'text-[12px] font-semibold text-axal-ink dark:text-gray-100'} data-testid={`screening-decision-${row.deal_id}`}>{decision.text}</span>;
+  return <span className={decision.kind === 'not_investor' ? MUTED : 'text-[12px] font-semibold text-axal-ink dark:text-gray-100'} data-testid={id('decision')}>{decision.text}</span>;
 }
 
 export default function InvestorScreeningZone() {
@@ -308,8 +318,8 @@ export default function InvestorScreeningZone() {
             </p>
           ) : (
             <section className="overflow-hidden rounded-[12px] border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="screening-scorecards">
-              {/* Sideways on a phone, as the sibling zones' instruments are. */}
-              <div className="overflow-x-auto">
+              {/* From 768px up the table; below it the cards (DE26), so nothing scrolls sideways. */}
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[960px] border-collapse text-left text-[12.5px]">
                   <thead>
                     <tr className="border-b border-axal-hairline dark:border-gray-800">
@@ -360,6 +370,43 @@ export default function InvestorScreeningZone() {
                   </tbody>
                 </table>
               </div>
+              <ul className="m-0 flex list-none flex-col gap-3 p-3 md:hidden" data-testid="screening-cards">
+                {visible.map((r) => {
+                  const fit = fitOfRead(fits, r.deal_id);
+                  const conf = confidenceCell(strips, r.deal_id);
+                  const decision = decisionOf(flow, r.deal_id);
+                  return (
+                    <li key={r.deal_id} className="flex flex-col gap-2 rounded-[12px] border border-axal-hairline p-3.5 dark:border-gray-800" data-testid="screening-card">
+                      <div>
+                        <Link to={`/deals/${r.deal_id}`} className="text-[14px] font-bold text-axal-ink hover:underline dark:text-gray-100">{nameOf(r)}</Link>
+                        <div className={MUTED}>{[r.sector, r.deal_status ? String(r.deal_status).replaceAll('_', ' ') : null].filter(Boolean).join(' · ') || <NotRecorded />}</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <DealStrip read={strips} dealId={r.deal_id} />
+                        <Link to={`/deals/${r.deal_id}/scorecard`} className={`${LINK} inline-flex min-h-[44px] items-center`}>Scorecard</Link>
+                      </div>
+                      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]">
+                        <dt className={MUTED}>Fit</dt>
+                        <dd className="m-0 text-right" title={fit.title || undefined} data-testid={`screening-fit-${r.deal_id}-card`}>{fit.kind === 'scored' ? `${fit.word}${fit.confidence ? ` · ${fit.confidence}` : ''}` : <span className={MUTED}>{fit.word}</span>}</dd>
+                        <dt className={MUTED}>Confidence</dt>
+                        <dd className="m-0 text-right" data-testid={`screening-confidence-${r.deal_id}-card`}>{conf.kind === 'scored' ? conf.text : <span className={MUTED}>{conf.text}</span>}</dd>
+                        <dt className={MUTED}>Material risks</dt>
+                        <dd className="m-0 text-right"><NotRecorded /></dd>
+                      </dl>
+                      <Decision
+                        card
+                        row={r}
+                        decision={decision}
+                        busy={busyId === r.deal_id}
+                        error={refusals[r.deal_id]}
+                        onMove={moveToDiligence}
+                        onPass={(row) => { setResult(''); setDialog(row); }}
+                        onRetry={loadFlow}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
               <p className="m-0 border-t border-axal-hairline px-3 py-2.5 text-[11px] leading-relaxed text-gray-600 dark:border-gray-800 dark:text-gray-400">
                 A scorecard closed to you, or one its founder has not shared, is an outline, never a low score. Confidence counts the scored scopes by the word each carries. Your decision is your own deal flow: the round stays open for other investors.
               </p>
