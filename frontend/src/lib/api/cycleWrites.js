@@ -106,6 +106,8 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // D6789 (#6789): mark a checklist item Not applicable (out of the score), or say it applies again.
+      checklistNotApplicable: (projectId, key, na) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, not_applicable: na === true }) }),
       // D1090 (#2955): Distribution's content calendar, typed by hand. A piece from Notion is edited in Notion.
       content: (projectId, body) => request('/cycles/grow/channels/content', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
