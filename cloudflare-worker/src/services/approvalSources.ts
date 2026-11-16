@@ -45,6 +45,7 @@ import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
 import { IS_WAITING_SQL } from './partnerProfiles';
 import type { HqLaneKey } from './hqApprovalSources';
+import { studioSource } from './approvalLaneRegistry';
 
 /** A lane's stable key. The UI orders by this list, so the order is the canvas's. */
 export type ApprovalLaneKey =
@@ -162,8 +163,7 @@ const REFERRAL_OPEN = [...PRE_VERDICT_STATUSES].filter((s) => s !== 'draft');
 
 export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
-    key: 'lp',
-    label: 'LP applications',
+    ...studioSource('lp'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM lp_applications WHERE status = \'pending\'',
     rowsSql:
@@ -171,12 +171,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'LP application · ' || a.fund_slug AS what, a.created_at AS created_at "
       + 'FROM lp_applications a LEFT JOIN users u ON u.id = a.user_id '
       + "WHERE a.status = 'pending' ORDER BY a.created_at ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'LP applications',
   },
   {
-    key: 'referrals',
-    label: 'Referrals',
+    ...studioSource('referrals'),
     // THE STATUS LIST IS WRITTEN OUT, AND A TEST HOLDS IT TO
     // `PRE_VERDICT_STATUSES` MINUS `'draft'`. Building it with `${}` is what
     // `check-sql-prepare` refuses; letting it drift from the route's own set is
@@ -192,12 +189,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM referral_submissions s LEFT JOIN users u ON u.id = s.referrer_user_id '
       + "WHERE s.status IN ('submitted', 'under_review', 'more_info_needed') "
       + 'ORDER BY s.created_at ASC LIMIT ?',
-    notifies: 'Nobody yet',
-    decidedOn: 'Refer & Earn › Queue',
   },
   {
-    key: 'cohort',
-    label: 'Cohort applications',
+    ...studioSource('cohort'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM cohort_applicants WHERE status = \'pending\'',
     rowsSql:
@@ -205,12 +199,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Cohort application' AS what, ca.created_at AS created_at "
       + 'FROM cohort_applicants ca LEFT JOIN users u ON u.id = ca.user_id '
       + "WHERE ca.status = 'pending' ORDER BY ca.created_at ASC LIMIT ?",
-    notifies: 'The member',
-    decidedOn: 'Spin-Out Lab',
   },
   {
-    key: 'moderation',
-    label: 'Spinout moderation',
+    ...studioSource('moderation'),
     // Awaiting a decision, the same predicate the moderation console counts
     // as open_count (D448). A sanction in force is not this lane.
     countSql:
@@ -222,8 +213,6 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM spinout_moderation_cases m LEFT JOIN users u ON u.id = m.user_id WHERE '
       + MODERATION_AWAITING_SQL
       + ' ORDER BY m.created_at ASC LIMIT ?',
-    notifies: 'Nobody yet',
-    decidedOn: 'Spin-Out moderation',
   },
   // ── S16 (D215): the queues the live console kept on their own pages. ──
   //
@@ -231,8 +220,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   // "waiting on an admin". The other four are named in `NOT_LANED` below with
   // the reason, rather than laned over a predicate invented to fill a column.
   {
-    key: 'kyc',
-    label: 'KYC',
+    ...studioSource('kyc'),
     // The store IS `users`: kyc.ts:195 stamps `kyc_submitted_at` and sets
     // `'pending'` whenever the provider did not decide on its own.
     countSql:
@@ -241,12 +229,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       "SELECT u.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || u.id) AS who, "
       + "'KYC · ' || COALESCE(u.role, 'account') AS what, u.kyc_submitted_at AS created_at "
       + "FROM users u WHERE u.kyc_status = 'pending' ORDER BY u.kyc_submitted_at ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'KYC & KYB',
   },
   {
-    key: 'partner_profiles',
-    label: 'Partner profiles',
+    ...studioSource('partner_profiles'),
     // PK is `email` and `user_id` may be null (migration 275's header), so the
     // row id is SQLite's `rowid` and the join is on email, as profiling.ts does.
     // D990 — a Draft (no chat, no answers: Eadwyn's name-only rows) is not
@@ -260,12 +245,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'p.created_at AS created_at '
       + 'FROM partner_profiles p LEFT JOIN users u ON u.email = p.email '
       + 'WHERE ' + IS_WAITING_SQL + ' ORDER BY p.created_at ASC LIMIT ?',
-    notifies: 'The partner, when an agreement is sent',
-    decidedOn: 'Partner profiles',
   },
   {
-    key: 'exploring',
-    label: 'Exploring',
+    ...studioSource('exploring'),
     // NO STATUS COLUMN: the queue is `role = 'exploring'` (admin_exploring.ts),
     // left when an admin assigns the final role. D1039: the lane counts only
     // those who signed (EXPLORER_SIGNED), because nobody else can be given a
@@ -286,12 +268,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       'SELECT COUNT(*) AS holding, '
       + 'COALESCE(SUM(CASE WHEN (SELECT rr.binding_envelope_id FROM user_role_review rr WHERE rr.user_id = u.id) IS NULL THEN 1 ELSE 0 END), 0) AS no_agreement_sent '
       + "FROM users u WHERE u.role = 'exploring'",
-    notifies: 'Nobody yet',
-    decidedOn: 'Exploring board',
   },
   {
-    key: 'jobs',
-    label: 'Jobs',
+    ...studioSource('jobs'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM job_postings WHERE status = \'pending_review\'',
     rowsSql:
@@ -299,12 +278,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Job · ' || j.title AS what, j.created_at AS created_at "
       + 'FROM job_postings j LEFT JOIN users u ON u.id = j.host_user_id '
       + "WHERE j.status = 'pending_review' ORDER BY j.created_at ASC LIMIT ?",
-    notifies: 'The host',
-    decidedOn: 'Jobs',
   },
   {
-    key: 'events',
-    label: 'Events',
+    ...studioSource('events'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM events WHERE status = \'pending_review\'',
     rowsSql:
@@ -312,12 +288,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Event · ' || e.title AS what, COALESCE(e.submitted_at, e.created_at) AS created_at "
       + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id '
       + "WHERE e.status = 'pending_review' ORDER BY julianday(COALESCE(e.submitted_at, e.created_at)) ASC LIMIT ?",
-    notifies: 'The host',
-    decidedOn: 'Events › Review',
   },
   {
-    key: 'best_fit',
-    label: 'Best-Fit consultations',
+    ...studioSource('best_fit'),
     // The canvas says "Best-Fit"; the queue is the booking table the
     // consultations route decides (the legacy admin report page was retired by #3734).
     countSql:
@@ -329,12 +302,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'b.created_at AS created_at '
       + 'FROM admin_consultation_bookings b LEFT JOIN users u ON u.id = b.user_id '
       + "WHERE b.status = 'requested' ORDER BY b.created_at ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'Best-Fit',
   },
   {
-    key: 'due_diligence',
-    label: 'Due diligence',
+    ...studioSource('due_diligence'),
     // `open` and `in_review` are both undecided (the CHECK's other two are
     // `completed` and `archived`). Nothing here is territory-specific: the
     // table has no territory column, and the branch's D1 is the territory.
@@ -346,13 +316,10 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Due diligence · ' || d.subject_label AS what, d.created_at AS created_at "
       + 'FROM dd_cases d LEFT JOIN users u ON u.id = d.owner_user_id '
       + "WHERE d.status IN ('open', 'in_review') ORDER BY d.created_at ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'Due diligence',
   },
   // ── D1041 (#2889): the lanes D1038's canvas adds, each in its store's own words. ──
   {
-    key: 'kyb',
-    label: 'KYB',
+    ...studioSource('kyb'),
     // D1231: submitted business sources. Staff-linked identity cases, like licensed
     // studios, stay in the Super Admin business queue rather than the shared inbox.
     countSql:
@@ -361,14 +328,10 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       "SELECT id, display_name AS who, 'KYB · ' || entity_name AS what, COALESCE(submitted_at, created_at) AS created_at "
       + "FROM kyb_businesses b WHERE status IN ('in_review') AND kind != 'licensed_studio' AND (studio_code IS NULL OR studio_code = ?) AND NOT EXISTS (SELECT 1 FROM users guard WHERE guard.role = 'admin' AND (guard.id = b.linked_user_id OR guard.id IN (SELECT json_extract(o.value,'$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o))) "
       + 'ORDER BY julianday(COALESCE(submitted_at, created_at)), id LIMIT ?',
-    notifies: 'Nobody yet',
-    decidedOn: 'KYC & KYB › Businesses',
-    decisionPath: '/admin/kyc/businesses',
     bindings: env => [branchOf(env) || 'hq'],
   },
   {
-    key: 'comarketing',
-    label: 'Co-marketing pitches',
+    ...studioSource('comarketing'),
     // `comarketing_pitches` (baseline): proposed → approved | rejected |
     // withdrawn; approved → published | withdrawn (`LEGAL_TRANSITIONS`).
     countSql:
@@ -379,8 +342,6 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM comarketing_pitches c LEFT JOIN partners pt ON pt.id = c.partner_id '
       + 'LEFT JOIN users u ON u.id = c.submitter_user_id '
       + "WHERE c.status = 'proposed' ORDER BY julianday(c.created_at) ASC LIMIT ?",
-    notifies: 'The partner',
-    decidedOn: 'Co-marketing',
     // Only the publish transition stamps `published_at`, so this is every
     // approved pitch still waiting to go out.
     sub: {
@@ -389,8 +350,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     },
   },
   {
-    key: 'wellbeing_experts',
-    label: 'Wellbeing experts',
+    ...studioSource('wellbeing_experts'),
     // D1043: the directory's "To verify" bar: active, unverified, not
     // declined or hidden, at least 70% complete
     // (`profile_completion_pct`, recomputed on every edit), and not a sample
@@ -408,12 +368,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "AND e.decision_state <> 'declined' "
       + "AND COALESCE(e.profile_completion_pct, 0) >= 70 AND substr(e.uid, 1, 5) <> 'seed_' "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
-    notifies: 'The expert',
-    decidedOn: 'Wellbeing',
   },
   {
-    key: 'perk_listings',
-    label: 'Perk listings',
+    ...studioSource('perk_listings'),
     // `in_review` ONLY. A draft is the partner's own, still being written; the
     // Perks queue's own read counts it too, which part 1 (#2887) corrects. The
     // wait is from `updated_at`, which a submit stamps (the queue sorts by it).
@@ -425,12 +382,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Perk · ' || pk.offer AS what, COALESCE(pk.updated_at, pk.created_at) AS created_at "
       + 'FROM perks pk LEFT JOIN users u ON u.id = pk.partner_user_id '
       + "WHERE pk.status = 'in_review' ORDER BY julianday(COALESCE(pk.updated_at, pk.created_at)) ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'Perks',
   },
   {
-    key: 'strategic_access',
-    label: 'Strategic referral access',
+    ...studioSource('strategic_access'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM referral_strategic_access WHERE status = \'requested\'',
     rowsSql:
@@ -438,12 +392,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Strategic referral access' AS what, r.created_at AS created_at "
       + 'FROM referral_strategic_access r LEFT JOIN users u ON u.id = r.user_id '
       + "WHERE r.status = 'requested' ORDER BY julianday(r.created_at) ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'Refer & Earn',
   },
   {
-    key: 'lab_hosts',
-    label: 'Office-hours hosts',
+    ...studioSource('lab_hosts'),
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM lab_host_applications WHERE status = \'pending\'',
     rowsSql:
@@ -451,12 +402,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Office-hours host · ' || h.host_kind AS what, h.created_at AS created_at "
       + 'FROM lab_host_applications h LEFT JOIN users u ON u.id = h.user_id '
       + "WHERE h.status = 'pending' ORDER BY julianday(h.created_at) ASC LIMIT ?",
-    notifies: 'Nobody yet',
-    decidedOn: 'Spin-Out Lab › Hosts',
   },
   {
-    key: 'score_flags',
-    label: 'Score sign-off',
+    ...studioSource('score_flags'),
     // A flagged official score stays hidden from LPs until an admin signs it
     // off. Sandbox runs are a founder's own practice and never reach an LP.
     countSql:
@@ -468,12 +416,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM score_snapshots s LEFT JOIN projects p ON p.id = s.project_id '
       + "WHERE s.admin_review_status = 'flagged' AND COALESCE(s.is_sandbox, 0) = 0 "
       + 'ORDER BY julianday(s.created_at) ASC LIMIT ?',
-    notifies: 'Nobody yet',
-    decidedOn: 'Monitoring',
   },
   {
-    key: 'articles',
-    label: 'Articles',
+    ...studioSource('articles'),
     // Waiting on a reviewer: submitted, or picked up and in review. Changes
     // requested is back with the author; approved waits only on a publish.
     countSql:
@@ -485,12 +430,9 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM articles a LEFT JOIN users u ON u.id = a.author_user_id '
       + "WHERE a.status IN ('submitted', 'in_review') "
       + 'ORDER BY julianday(COALESCE(a.submitted_at, a.created_at)) ASC LIMIT ?',
-    notifies: 'The author',
-    decidedOn: 'Content queue',
   },
   {
-    key: 'product_testers',
-    label: 'Product testers',
+    ...studioSource('product_testers'),
     // D1132 (#3012): D1042's store (migration 576). `applied` is the one
     // undecided state (`TRANSITIONS.approve.from`); the wait is from
     // `applied_at`. Every decision emails the member and writes their inbox
@@ -502,8 +444,6 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + "'Product tester application' AS what, t.applied_at AS created_at "
       + 'FROM product_testers t LEFT JOIN users u ON u.id = t.user_id '
       + "WHERE t.status = 'applied' ORDER BY julianday(t.applied_at) ASC, t.id ASC LIMIT ?",
-    notifies: 'The member',
-    decidedOn: 'Approvals › Product testers',
   },
 ] as const;
 

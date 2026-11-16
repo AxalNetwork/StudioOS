@@ -9,6 +9,9 @@ import EventSyndicationPanel from './EventSyndicationPanel';
 // /events/new has its own (MEV12b); a new event lands on its Details tab.
 // #5868 (D3724 gap 5, NE1): the topics picker, up to five of the Worker's
 // `EVENT_TOPICS`, saved as `topics` on create and edit and read back on edit.
+// #5871 (D3724 gap 13, D5871, NE1): "Create the meeting for me · Google Meet"
+// beside the join link (`EventMeetField`), for Online and Hybrid only. The
+// press asks the next Save for the link; the Worker makes it inside that save.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -28,6 +31,8 @@ import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
 import { eventLocalInput, eventTimePayload } from './eventTimeModel';
 import { TOPICS_UNREAD, topicPicker, toggleTopic } from './myEventsTabsModel';
+import EventMeetField from './EventMeetField';
+import { meetPayload, meetRefusal } from './eventMeetModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -121,6 +126,8 @@ export default function EventEditorPage() {
   const [saved, setSaved] = useState(null);
   const [channelCopy, setChannelCopy] = useState(null);
   const [pending, setPending] = useState(undefined);
+  // #5871: the meeting press — idle, asked (the next Save makes it), made, or refused.
+  const [meet, setMeet] = useState({ state: 'idle' });
   // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Title and
   // Description, for an admin or its host (`canManage`). #4046 (B2): on
   // /events/new too, where the new event hangs under the caller, its host.
@@ -192,7 +199,9 @@ export default function EventEditorPage() {
     ...eventTimePayload(form, saved),
     location_kind: form.location_kind,
     location_text: form.location_text.trim() || null,
-    location_url: form.location_url.trim() || null,
+    // #5871: an in-person event shows its link to anyone, so a join link the
+    // host can no longer see in the editor is not kept on it.
+    location_url: form.location_kind === 'in_person' ? null : form.location_url.trim() || null,
     cover_url: form.cover_url.trim() || null,
     cover_alt: form.cover_alt.trim() || null,
     cover_source: form.cover_source || null,
@@ -206,6 +215,21 @@ export default function EventEditorPage() {
     ...(Array.isArray(form.topics) ? { topics: form.topics } : {}),
   }), [form, rules, saved]);
 
+  // #5871: the Save, with the Meet link when the press asked for one.
+  const withMeet = meetPayload(meet.state, form.location_kind).add_meet === true;
+  const send = (eventId, body) => (withMeet ? eventsApi.saveWithMeet(eventId, body) : eventId ? eventsApi.update(eventId, body) : eventsApi.create(body));
+  // A created link lands in the field; a refusal is said beside it and the typed link stays usable.
+  const afterMeet = (updated) => {
+    if (!withMeet) return;
+    const url = updated?.event?.location_url;
+    if (url) set('location_url', url);
+    setMeet(url ? { state: 'made' } : { state: 'idle' });
+  };
+  const meetFailed = (e) => {
+    const refusal = withMeet ? meetRefusal(e) : null;
+    if (refusal) setMeet({ state: 'refused', refusal });
+  };
+
   const save = async () => {
     if (!form.title.trim()) { showToast({ kind: 'error', msg: 'Add a title first.' }); return; }
     if (!form.starts_at) { showToast({ kind: 'error', msg: 'Pick a start date and time.' }); return; }
@@ -213,12 +237,13 @@ export default function EventEditorPage() {
     try {
       if (isEdit) {
         const body = payload();
-        const updated = await eventsApi.update(id, body);
+        const updated = await send(id, body);
+        afterMeet(updated);
         await fill.afterSave(Number(id));
         setSaved((ev) => updated?.event || (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
-        const created = await eventsApi.create(payload());
+        const created = await send(null, payload());
         const newId = created?.id ?? created?.event?.id;
         // #4046 (B2): what Ask placed and the host kept is filed against the new event.
         await fill.afterSave(newId);
@@ -228,6 +253,7 @@ export default function EventEditorPage() {
         else navigate('/my/events/hosting');
       }
     } catch (e) {
+      meetFailed(e);
       showToast({ kind: 'error', msg: e?.message || 'Could not save the event.' });
     } finally {
       setSaving(false);
@@ -249,7 +275,7 @@ export default function EventEditorPage() {
         // MEV12b: create the draft, submit it, and land on its Details tab.
         if (!form.title.trim()) throw new Error('Add a title first.');
         if (!form.starts_at) throw new Error('Pick a start date and time.');
-        const created = await eventsApi.create(payload());
+        const created = await send(null, payload());
         const newId = created?.id ?? created?.event?.id;
         if (!newId) throw new Error('The reply did not say the new event\'s id.');
         await fill.afterSave(newId);
@@ -260,7 +286,8 @@ export default function EventEditorPage() {
         return;
       }
       const body = payload();
-      const updated = await eventsApi.update(id, body);
+      const updated = await send(id, body);
+      afterMeet(updated);
       const reply = await eventsApi.submitReview(id);
       const next = reply?.event?.status;
       if (!next) throw new Error('The reply did not say the event\'s status.');
@@ -269,6 +296,7 @@ export default function EventEditorPage() {
       setPublishing(null);
       showToast({ kind: 'success', msg: asked.done });
     } catch (e) {
+      meetFailed(e);
       setPublishError(e?.message || (asked.kind === 'review' ? 'Could not send for review.' : 'Could not publish.'));
     } finally {
       setSaving(false);
@@ -365,10 +393,8 @@ export default function EventEditorPage() {
             </div>
           )}
           {form.location_kind !== 'in_person' && (
-            <div>
-              <label className={labelCls}>Join URL</label>
-              <input className={inputCls} value={form.location_url} onChange={(e) => set('location_url', e.target.value)} placeholder="https://meet…" />
-            </div>
+            <EventMeetField locationKind={form.location_kind} value={form.location_url} onChange={(v) => set('location_url', v)}
+              meet={meet} onMeet={setMeet} busy={saving} />
           )}
         </section>
 

@@ -84,3 +84,56 @@ export function refusalWords(err) {
     default: return 'The request could not be sent. Nothing was recorded; try again.';
   }
 }
+
+/* ---------------------------------------------------------------- HQ's side
+ * D6205 part 2: the admin position sheet lists one company's requests and
+ * answers the open ones (`PATCH /api/mark-requests/:uid`). The rules below are
+ * the Worker's own, so the form never offers an answer it would refuse:
+ *   resolved  a mark or a correction links a mark of this company; a
+ *             follow-on says how in a note
+ *   declined  always says why in a note
+ */
+
+/** One company's requests for HQ: open ones first (oldest first, the queue), then answered ones, newest first. */
+export function adminRequestsOf(items) {
+  const list = (Array.isArray(items) ? items : []).filter((it) => it && it.uid);
+  const open = list.filter((it) => it.state === 'open').sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const answered = list.filter((it) => it.state !== 'open').sort((a, b) => String(b.resolved_at || '').localeCompare(String(a.resolved_at || '')));
+  return { open, answered };
+}
+
+/** Who asked, as HQ reads it. A requester without a recorded name is said to be not recorded, never guessed. */
+export const requesterOf = (req) => (req && req.requester && req.requester.name) || 'Investor (name not recorded)';
+
+/** Whether resolving this kind of request must link a mark. */
+export const needsMark = (kind) => kind === 'mark' || kind === 'correction';
+
+/** What an answer needs before it can be sent: null when it can be, else the sentence. */
+export function answerProblem({ kind, state, markUid, note }) {
+  const text = String(note || '').trim();
+  if (text.length > REASON_MAX) return `Keep the note under ${REASON_MAX} characters.`;
+  if (state === 'resolved') {
+    if (needsMark(kind) && !markUid) return 'Choose the mark recorded for this request.';
+    if (!needsMark(kind) && !text) return 'Say how the follow-on round was recorded.';
+    return null;
+  }
+  if (state === 'declined') return text ? null : 'Say why the request is declined.';
+  return 'Choose Resolve or Decline.';
+}
+
+/** The mark an answer starts on: the one just recorded through the write flow, when it is this company's. */
+export function defaultMarkUid(marks, justRecorded) {
+  const uids = (Array.isArray(marks) ? marks : []).map((m) => m && m.uid).filter(Boolean);
+  return justRecorded && uids.includes(justRecorded) ? justRecorded : '';
+}
+
+/** A refused answer, in the sheet's own words. */
+export function answerRefusalWords(err) {
+  switch (err && err.code) {
+    case 'request_answered': return 'This request was already answered. The list is read again.';
+    case 'mark_not_found': return 'That mark is not recorded for this company. Choose one from its history.';
+    case 'mark_required': return 'Choose the mark recorded for this request.';
+    case 'note_required': return 'Say how the request was answered.';
+    default: return 'The answer could not be saved. Nothing was changed; try again.';
+  }
+}

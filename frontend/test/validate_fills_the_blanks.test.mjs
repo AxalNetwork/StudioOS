@@ -102,6 +102,9 @@ const CYCLES = {
       [/friday retro/i, 'build/retro'],
       [/roadmap ordering/i, 'build/roadmap'],
       [/annotates the metric/i, 'build/kpi'],
+      // D6042 — Founding team's and Company creation's record-only drafts.
+      [/founding team/i, 'build/founding'],
+      [/open filings/i, 'build/company'],
     ],
   },
   Raise: {

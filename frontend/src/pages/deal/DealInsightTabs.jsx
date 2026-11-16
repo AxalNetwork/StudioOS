@@ -199,6 +199,7 @@ export function DealMarket({ deal }) {
                 <Card key={t.key} eye={t.label} testId={`deal-market-${t.key}`}>
                   {t.value ? <p className={BIG}>{t.value}</p> : <Missing reason={t.reason} />}
                   {t.value && (t.source ? <Pill tone="src">{t.source}</Pill> : <span className={SUB}>{t.reason}</span>)}
+                  {t.value && t.asOf && <span className={SUB}>{t.asOf}</span>}
                 </Card>
               ))
               : <Card title="Market size" testId="deal-market-sizing" className="md:col-span-3"><Block block={d.sizing} what="TAM, SAM and SOM" retry={retry} testId="deal-market-sizing">{() => null}</Block></Card>}
@@ -222,6 +223,8 @@ export function DealMarket({ deal }) {
                     <li key={`${r.name}-${i}`} className="flex flex-col gap-0.5 border-t border-axal-hairline pt-2 dark:border-gray-700">
                       <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.name} · {r.where}</span>
                       {r.decided && <span className={SUB}>Decided {r.decided}</span>}
+                      {/* D6171 (#6171): demand, regulation, partners and cost, each with its source or Not recorded. */}
+                      <span className={SUB} data-testid="deal-market-readiness">Readiness: {r.readinessText}</span>
                     </li>); })}</ul>
                   : <p className={`m-0 ${SUB}`}>The founder has not recorded where the company sells.</p>)}
               </Block>
