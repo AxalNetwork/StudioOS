@@ -20,7 +20,8 @@ const TONE = {
 };
 
 export function LicenceReasonDialog({ ask, onDone }) {
-  const [text, setText] = useState('');
+  // D4819 part 11: `initial` carries a reason already written elsewhere (a delegate request's), still editable.
+  const [text, setText] = useState(() => String(ask.initial ?? ''));
   const fieldId = useId();
   const ruleId = useId();
   const field = useRef(null);

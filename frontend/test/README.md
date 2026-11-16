@@ -205,6 +205,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |
+| `report_print_6094.test.mjs` | #6094: frozen print provenance, zero/absence, literal narrative and reader/private-recipient boundaries. |
 | `workflow_channel_delivery_6370.test.mjs` | D6370: dedicated private destinations, terminal attempts, cursor rollback, replay, provider refusal and acknowledgement. |
 | `workflow_channel_registry.test.mjs` | D6370: validate operator registry construction against private Slack membership. |
 | `workflow_channel_inventory.test.mjs` | D6370: workflow inventory coverage, unique hashtags and registered identities. |
@@ -215,3 +216,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |

@@ -116,7 +116,7 @@ const GATE = {
   },
   voting: {
     tone: 'green', icon: ShieldCheck, title: 'Full participation active.',
-    body: `You hold allocation and decision rights for Cohort 4, complete reporting access, and follow-on co-invest priority. Scheduled demo day: ${FUND.demoDay}.`,
+    body: `You hold allocation and decision rights for Cohort 4 and complete reporting access. Scheduled demo day: ${FUND.demoDay}.`,
     wrap: 'border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30',
   },
 };
@@ -157,7 +157,7 @@ const LADDER = [
   ['Invited', 0, 'Review the thesis, key terms and cohort summaries.'],
   ['Approved', 1, 'Full reporting archive and diligence data room.'],
   ['Committed', 2, 'Quarterly reporting package, portfolio updates, demo day.'],
-  [`Allocator · $${ALLOC_THRESHOLD_K}K`, 3, 'Allocation preferences, decision rights, follow-on co-invest.'],
+  [`Allocator · $${ALLOC_THRESHOLD_K}K`, 3, 'Allocation preferences and decision rights.'],
 ];
 
 // Documents this platform does NOT produce. The design listed them beside the

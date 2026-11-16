@@ -34,9 +34,9 @@ test('supersession needs a trusted exact failed job, attempt, step and structure
   const f = fixture('cloudflare-worker-deploy', 'Verify the exact main candidate', 'Wait for all six required checks');
   assert.deepEqual(await workflowFailureHints({ ...f, api(path) {
     assert.equal(path, annotations);
-    return notice('StudioOS release admission', 'superseded');
-  } }), { superseded: true });
-  for (const rows of [[], notice('different', 'superseded'), [{ title: 'StudioOS release admission', message: 'superseded', annotation_level: 'failure' }]]) {
+    return notice('StudioOS release outcome v1', ['superseded', 'initial', 23, 2, head, baseSha].join(' '));
+  } }), { superseded: true, supersededStage: 'initial' });
+  for (const rows of [[], notice('StudioOS release admission', 'superseded'), notice('different', 'superseded'), [{ title: 'StudioOS release admission', message: 'superseded', annotation_level: 'failure' }]]) {
     assert.deepEqual(await workflowFailureHints({ ...f, api: () => rows }), {});
   }
   assert.deepEqual(await workflowFailureHints({ ...f, api() { throw Error('annotations unavailable'); } }), {});
@@ -127,4 +127,53 @@ test('only the latest completed CI push and the exact red attempt can open the a
   assert.deepEqual(await lookup(null), {});
   f.run.conclusion = 'startup_failure';
   assert.deepEqual(await withoutReads(f), {});
+});
+
+test('#6675 both production rechecks and branch rollout require a stage- and attempt-bound supersession', async () => {
+  for (const [stage, job, step] of [
+    ['production-lock', 'build and deploy studioos Worker', 'Recheck candidate under the production lock'],
+    ['production-ownership', 'build and deploy studioos Worker', 'Confirm the candidate still owns the production release'],
+    ['branch-rollout-lock', 'redeploy every provisioned branch', 'Recheck the candidate under the branch rollout lock'],
+  ]) {
+    const f = fixture('cloudflare-worker-deploy', job, step);
+    const message = ['superseded', stage, 23, 2, head, baseSha].join(' ');
+    const api = () => notice('StudioOS release outcome v1', message);
+    assert.deepEqual(await workflowFailureHints({ ...f, api }), { superseded: true, supersededStage: stage });
+    assert.deepEqual(await workflowFailureHints({ ...f, api: () => notice('StudioOS release outcome v1', message.replace(' 23 2 ', ' 23 1 ')) }), {});
+    const sourceMapFailure = { ...f.jobs[0], steps: [{ name: 'Upload sourcemaps to Sentry', conclusion: 'failure' }] };
+    assert.deepEqual(await withoutReads({ ...f, jobs: [sourceMapFailure] }), {});
+  }
+});
+
+test('#6675 only verified queue-ref loss without a real producer failure suppresses repair', async () => {
+  const f = fixture('ci', 'suite (worker-4-of-6)', 'Check merge queue ref still exists', 'merge_group');
+  f.run.head_branch = 'gh-readonly-queue/main/pr-37-' + baseSha;
+  f.jobs[0].head_branch = f.run.head_branch;
+  const ref = 'refs/heads/' + f.run.head_branch;
+  const message = ['ref-lost', 23, 2, head, ref].join(' ');
+  const refs = root + '/git/matching-refs/' + ref.slice('refs/'.length);
+  const aggregate = { ...f.jobs[0], id: 86, name: 'landing gate',
+    steps: [{ name: 'Required fast checks and full suite passed', conclusion: 'failure' }] };
+  const jobs = [...f.jobs, aggregate];
+  function api(path) {
+    if (path === annotations) return notice('StudioOS queue outcome v1', message);
+    if (path === root + '/git/commits/' + head) return { sha: head, parents: [{ sha: baseSha }] };
+    if (path.startsWith(root + '/contents/')) return { type: 'file', path: path.slice((root + '/contents/').length).split('?')[0], sha: 'c'.repeat(40) };
+    if (path === refs) return [];
+    return null;
+  }
+  assert.deepEqual(await workflowFailureHints({ ...f, jobs, api }), { queueInvalidated: true });
+  for (const unavailable of [
+    path => path === annotations ? [] : api(path),
+    path => path === refs ? { message: 'Forbidden' } : api(path),
+    path => path === refs ? [{ ref }] : api(path),
+    path => path === refs ? Promise.reject(new Error('unavailable')) : api(path),
+    path => path.startsWith(root + '/contents/') && path.endsWith(head) ? { ...api(path), sha: 'd'.repeat(40) } : api(path),
+  ]) {
+    assert.deepEqual(await workflowFailureHints({ ...f, jobs, api: unavailable }), {});
+  }
+  const testFailure = { ...f.jobs[0], id: 87,
+    steps: [{ name: 'Run node scripts/test-drift-parts.mjs worker-4-of-6', conclusion: 'failure' }] };
+  assert.deepEqual(await workflowFailureHints({ ...f, jobs: [testFailure, aggregate], api }), {});
+  assert.deepEqual(await workflowFailureHints({ ...f, jobs: [...jobs, testFailure], api }), {});
 });

@@ -292,6 +292,9 @@ export function newVersionLine(values, versions) {
   const n = nextVersion(saved);
   const who = AUDIENCE[String(values?.investor_type ?? '')];
   const from = /^version-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  // D6069: starting from the deck's words leaves the deck as it is, and says so.
+  const deck = /^deck-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  if (deck) return `Creates v${n}${who ? ` for ${who}` : ''}. Pitch deck v${deck[1]} does not change.`;
   const kept = from ? from[1] : saved.length ? String(Math.max(...saved.map((v) => Number(v.version ?? v.value) || 0))) : null;
   return [`Creates v${n}${who ? ` for ${who}` : ''}.`, kept ? `Nothing in v${kept} changes.` : null].filter(Boolean).join(' ');
 }

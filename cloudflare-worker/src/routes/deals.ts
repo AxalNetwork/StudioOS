@@ -1,4 +1,5 @@
 import { notifyInvitationAnswer } from '../services/dealInvitationAnswer';
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
@@ -10,6 +11,7 @@ import { openConditionsOnDeal } from './ic';
 import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
+import { dealHiddenFrom, editorialKeys, hiddenDealIds, hiddenJson, preparationManagesDeal, PREPARATION_MANAGED_TERMS, withoutHidden, type ReaderMode } from '../services/dealPreparation';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
@@ -25,6 +27,22 @@ import {
 } from '../services/dealTransitions';
 
 const deals = new Hono<{ Bindings: Env }>();
+
+// D5454 (#5454): the private preparation boundary. A deal whose preparation metadata is not positively released
+// answers every by-id route here, reads and writes alike, exactly as a deal that does not exist. The id is parsed
+// the way each route parses it (`parseInt`), so `/12abc` cannot slip past as a different id. It runs before the
+// route's own gate and reads no caller, so it grants nothing and the auth inventory reads each route's gate alone.
+// The only rows it can answer for are deals with unknown or corrupt preparation metadata (a never-released draft
+// owns no deal row), and the reply names nothing.
+deals.use('/:id/*', async (c, next) => {
+  const id = parseInt(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return next();
+  if (await dealHiddenFrom(c.env, id, 'transactional')) return c.json({ error: 'Deal not found' }, 404);
+  return next();
+});
+
+/** D5454: which preparation rule a list or count applies. Deal staff see released deals of every state; anyone else discovers only published ones. */
+const listMode = (user: User): ReaderMode => (isDealStaff(user) ? 'transactional' : 'discovery');
 
 // Task #4, #127, D4632 — the stages, and the one policy for birth and moves.
 const PIPELINE: readonly string[] = DEAL_PIPELINE;
@@ -152,6 +170,15 @@ deals.get('/', async (c) => {
         : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
+  // D5454: a never-released or unknown preparation never lists; a withdrawn/archived release lists only to deal
+  // staff, the venture's owner and an investor already related to it (`can_read`).
+  const privateIds = await hiddenDealIds(c.env, 'transactional');
+  rows = withoutHidden(rows as any[], privateIds, (d: any) => d.id);
+  // The founder branch above reads only the caller's own ventures, so it keeps them.
+  if (investorReader) {
+    const unlisted = await hiddenDealIds(c.env, 'discovery');
+    rows = (rows as any[]).filter((d: any) => !unlisted.has(Number(d.id)) || d.can_read === true);
+  }
   // D4631: the studio's internal fields leave to staff by licence, not by primary role.
   // `row_founder_id` decided the row's audience; it is an internal key and never leaves.
   return c.json((rows as any[]).map(({ row_founder_id: _founder, ...row }) => serializeDeal(row, isDealStaff(user) ? 'admin' : 'member')));
@@ -163,6 +190,8 @@ deals.get('/', async (c) => {
 deals.get('/funnel', async (c) => {
   const user = await requireAuth(c);
   if (!isPrivilegedRole(user)) return c.json({ stages: [], total: 0 });
+  // D5454: counted over the same population the caller's list shows.
+  const hidden = hiddenJson(await hiddenDealIds(c.env, listMode(user)));
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT d.status AS stage,
@@ -173,6 +202,7 @@ deals.get('/funnel', async (c) => {
     FROM deals d
     LEFT JOIN projects p ON p.id = d.project_id
     WHERE (p.id IS NULL OR p.deleted_at IS NULL)
+      AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
     GROUP BY d.status`;
   await sql.end();
   const byStage: Record<string, any> = {};
@@ -214,6 +244,8 @@ deals.get('/pass-analytics', async (c) => {
   const user = await requireAuth(c);
   if (!isPrivilegedRole(user)) return c.json({ detail: 'Forbidden' }, 403);
   await ensureDealPassSchema(c.env);
+  // D5454: the counts and the deals behind a bucket leave out what the caller's list leaves out.
+  const hidden = hiddenJson(await hiddenDealIds(c.env, listMode(user)));
   const sql = getSQL(c.env);
 
   // D1242 (#2423 item 6): a round intake scoring set to Not raising is not a
@@ -225,6 +257,7 @@ deals.get('/pass-analytics', async (c) => {
       LEFT JOIN projects p ON p.id = d.project_id
      WHERE d.status = ${PASSED_STATUS}
        AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
        AND NOT (d.passed_by_user_id IS NULL
                 AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
                 AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
@@ -236,6 +269,7 @@ deals.get('/pass-analytics', async (c) => {
       LEFT JOIN projects p ON p.id = d.project_id
      WHERE d.status = ${PASSED_STATUS}
        AND (p.id IS NULL OR p.deleted_at IS NULL)
+       AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
        AND d.passed_by_user_id IS NULL
        AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
        AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE})`;
@@ -254,6 +288,7 @@ deals.get('/pass-analytics', async (c) => {
         LEFT JOIN users u ON u.id = d.passed_by_user_id
        WHERE d.status = ${PASSED_STATUS} AND d.pass_reason = ${reason}
          AND (p.id IS NULL OR p.deleted_at IS NULL)
+         AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
        ORDER BY d.passed_at DESC
        LIMIT 100`) as any[];
   } else if (reason === PASS_REASON_UNRECORDED) {
@@ -266,6 +301,7 @@ deals.get('/pass-analytics', async (c) => {
         LEFT JOIN users u ON u.id = d.passed_by_user_id
        WHERE d.status = ${PASSED_STATUS} AND d.pass_reason IS NULL
          AND (p.id IS NULL OR p.deleted_at IS NULL)
+         AND d.id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(${hidden}))
          AND NOT (d.passed_by_user_id IS NULL
                   AND NOT EXISTS (SELECT 1 FROM deal_stage_events e WHERE e.deal_id = d.id AND e.to_stage = ${PASSED_STATUS} AND e.actor_user_id IS NOT NULL)
                   AND EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = d.project_id AND a.action = 'auto_scored' AND a.details LIKE ${INTAKE_LINE}))
@@ -320,7 +356,9 @@ deals.get('/stage-analytics', async (c) => {
   )) as any[];
 
   await sql.end();
-  const funnel = buildStageFunnel(PIPELINE, events as any);
+  // D5454: transitions of a deal the caller's list leaves out are not counted.
+  const counted = withoutHidden(events, await hiddenDealIds(c.env, listMode(user)), (e: any) => e.deal_id);
+  const funnel = buildStageFunnel(PIPELINE, counted as any);
   return c.json({
     window_days: days,
     recording_started_at: started,
@@ -330,7 +368,7 @@ deals.get('/stage-analytics', async (c) => {
       && (Date.now() - new Date(String(started).replace(' ', 'T') + 'Z').getTime()) >= days * 86_400_000,
     unavailable: started ? null : DEAL_METRIC_UNAVAILABLE.stage_history,
     stages: funnel,
-    events_counted: events.length,
+    events_counted: counted.length,
     // Stated, not omitted: the design's source-quality table has no backing.
     source_quality_unavailable: DEAL_METRIC_UNAVAILABLE.source_quality,
   });
@@ -371,6 +409,8 @@ deals.get('/screening', async (c) => {
       SELECT d.id AS deal_id, d.status AS deal_status, p.name AS company, p.sector
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
+    // D5454: a never-released or unknown preparation is no deal on the desk.
+    rows = withoutHidden(rows as any[], await hiddenDealIds(c.env, 'transactional'), (r: any) => r.deal_id);
     if (narrowed) {
       // D1254 preserves the deal reader's invited-or-committed rule, including
       // historical deals/commitments. The open-deal rule for trust is separate.
@@ -515,7 +555,8 @@ deals.get('/invitations/mine', async (c) => {
     WHERE di.investor_user_id = ${user.id} AND (di.company_id = ${companyId} OR di.company_id IS NULL)
     ORDER BY di.created_at DESC`;
   await sql.end();
-  return c.json(rows);
+  // D5454: an invitation on a deal that is not released is no invitation the investor can open.
+  return c.json(withoutHidden(rows as any[], await hiddenDealIds(c.env, 'transactional'), (r: any) => r.deal_id));
 });
 
 // D462 — every recorded transfer this caller may read, in one list. The
@@ -558,7 +599,8 @@ deals.get('/transfers', async (c) => {
         LEFT JOIN projects p ON p.id = d.project_id
        ORDER BY t.recorded_at DESC LIMIT 500`;
   await sql.end();
-  return c.json({ items: (rows as any[]).map(withFirm) });
+  // D5454: the same rule as the by-id routes.
+  return c.json({ items: withoutHidden(rows as any[], await hiddenDealIds(c.env, 'transactional'), (r: any) => r.deal_id).map(withFirm) });
 });
 
 // D630 (#1388) — the deal-room quota, read without joining anything: used
@@ -652,6 +694,12 @@ deals.put('/:id', async (c) => {
   if (data.lead_partner_id !== undefined && String((user as any)?.role) !== 'admin') {
     await sql.end();
     return c.json(LEAD_ADMIN_ONLY, 403);
+  }
+
+  // D5454: once a preparation manages the deal, its editorial terms change only through a reviewed release.
+  if (editorialKeys(data).length && await preparationManagesDeal(c.env, id)) {
+    await sql.end();
+    return c.json(PREPARATION_MANAGED_TERMS.body, PREPARATION_MANAGED_TERMS.status);
   }
 
   // A denomination change would relabel historical commitments/transfers.
@@ -822,6 +870,8 @@ deals.put('/:id', async (c) => {
 // ---------------------------------------------------------------------------
 deals.post('/:id/advance', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
@@ -878,6 +928,8 @@ deals.post('/:id/advance', async (c) => {
 // ---------------------------------------------------------------------------
 deals.post('/:id/pass', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const body = await c.req.json().catch(() => ({} as any));
   const reason = (body as any)?.reason;
@@ -1134,6 +1186,8 @@ deals.get('/:id/commitments', async (c) => {
 
 deals.post('/:id/commitments', async (c) => {
   const user = await requireRole(c, 'investor');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   await requireApprovedKyc(c);
   const id = Number(c.req.param('id'));
   const data = await c.req.json();
@@ -1377,6 +1431,8 @@ deals.post('/:id/transfers', async (c) => {
   // the closing checklist's ticks and no longer records money; the deal's
   // investors read it.
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (user.role !== 'admin') {
     return c.json({
       error: 'admin_records_transfers',
@@ -1506,6 +1562,8 @@ const CLOSING_TEMPLATE_SLUGS = new Set(['safe', 'spa', 'subscription']);
 
 deals.post('/:id/closing-checklist/apply', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json().catch(() => ({} as any));
   const slug = String(data?.template_slug || '');
@@ -1595,6 +1653,8 @@ function checklistNote(data: any): string | null | undefined {
 
 deals.post('/:id/closing-checklist/items', async (c) => {
   const user = await requireRole(c, 'partner');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
@@ -1647,11 +1707,15 @@ deals.post('/:id/closing-checklist/items', async (c) => {
 deals.patch('/:id/closing-checklist/items/:itemUid', async (c) => {
   // D4631, kept by D6156: role partner plus canMoveRound sets state, owner, due date and note alike.
   const user = await requireRole(c, 'partner');
+  const data = await c.req.json().catch(() => ({} as any));
+  if (data?.state !== undefined || data?.owner_user_id !== undefined || data?.owner_label !== undefined || data?.due_date !== undefined) {
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+  }
   const id = parseInt(c.req.param('id'));
   const lead = await c.env.DB.prepare('SELECT lead_partner_id FROM deals WHERE id = ?').bind(id).first<{ lead_partner_id: number | null }>();
   if (lead && !canMoveRound(user, lead.lead_partner_id)) return c.json(NOT_YOUR_ROUND, 403);
   const itemUid = c.req.param('itemUid');
-  const data = await c.req.json().catch(() => ({} as any));
   const stateGiven = data?.state !== undefined;
   const state = stateGiven ? String(data.state ?? '') : '';
   if (stateGiven && !CHECKLIST_STATES.includes(state)) {
@@ -1821,6 +1885,8 @@ deals.post('/:id/invitations', async (c) => {
 
 deals.post('/:id/invitations/respond', async (c) => {
   const user = await requireRole(c, 'investor');
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
   const resp = data.response;
