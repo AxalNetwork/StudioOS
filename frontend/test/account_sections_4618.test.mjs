@@ -254,7 +254,7 @@ test('Notifications: a failed Slack read hides only the Slack column; the matrix
 });
 
 test('Profile: a deletion request from the extracted card re-reads the account, and the card draws what the page re-read', async () => {
-  // Guards the shared invalidation between AccountDeletionCard (account/ProfileSections.jsx) and the page's one
+  // Guards the shared invalidation between AccountDeletionCard (SettingsPage.jsx, kept with #4614's set) and the page's one
   // account read: the card hands its change back through `reload`, never a copy of its own.
   let requested = null;
   const m = await mountPage('/account', (method, path) => {

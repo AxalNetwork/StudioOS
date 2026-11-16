@@ -9,8 +9,10 @@ import { EXPLAINERS } from '../lib/explainers';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
 import { loadRecaptcha, invisibleToken } from '../lib/recaptcha';
 import { useToast } from '../components/useToast';
+import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
+import { toUtcInstant } from '../lib/notices';
 import {
-  AlertTriangle, CheckCircle2,
+  AlertTriangle, CheckCircle2, Download, Trash2,
   Plus, KeyRound,
   Sun, Moon,
 } from 'lucide-react';
@@ -54,7 +56,7 @@ import { BUILDER_PAGES, builderViewFor, builderPathFor } from './account/builder
 // Privacy, Notifications and Billing load with their section (`lazySection`),
 // each card behind its own loading line and Unreadable boundary.
 import { Field, inputCls } from './account/SettingsFields';
-import { AccountDeletionCard, DocumentsAgreementsSection, ProfileEditors, RolesAccessCard } from './account/ProfileSections';
+import { DocumentsAgreementsSection, ProfileEditors, RolesAccessCard } from './account/ProfileSections';
 import { CorporateEntityCard, YourCompaniesSection } from './account/AccountEntityRecords';
 import { lazySection, scrollToHash } from './account/lazySection';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
@@ -1773,3 +1775,76 @@ function HelpExplainersCard({ flash }) {
   );
 }
 
+function AccountDeletionCard({ data, flash, reload }) {
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      const blob = await api.exportMyData();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `axal-data-export-${data.uid || data.id}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      flash('Export downloaded');
+    } catch (e) {
+      flash(e.message || 'Export failed', 'error');
+    } finally { setExporting(false); }
+  };
+
+  const requestDelete = async () => {
+    if (!window.confirm('Submit an account deletion request? Hard delete after a 30-day grace period; our team will reach out within 7 days to confirm.')) return;
+    setDeleting(true);
+    try {
+      const res = await api.requestAccountDeletion();
+      flash(res.message || 'Deletion request submitted');
+      reload();
+    } catch (e) { flash(e.message || 'Failed to submit request', 'error'); }
+    finally { setDeleting(false); }
+  };
+
+  const cancelDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.cancelAccountDeletion();
+      flash('Deletion request cancelled');
+      reload();
+    } catch (e) { flash(e.message || 'Failed to cancel', 'error'); }
+    finally { setDeleting(false); }
+  };
+
+  return (
+    <Card title="Account & data" description="Export your data, or request account deletion (30-day grace period before hard delete).">
+      <div className="flex flex-wrap gap-3">
+        <button onClick={exportData} disabled={exporting}
+          className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+          <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data (JSON)'}
+        </button>
+        {data.deletion_requested_at ? (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-amber-700">Deletion requested {new Date(toUtcInstant(data.deletion_requested_at)).toLocaleDateString()}</span>
+            <button onClick={cancelDelete} disabled={deleting}
+              className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
+          </div>
+        ) : (
+          <button onClick={requestDelete} disabled={deleting}
+            className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
+            <Trash2 size={14} /> Request account deletion
+          </button>
+        )}
+      </div>
+      {/*
+        D169 — ONLY WHILE NOTHING IS OPEN, which is the whole point: the amber
+        line above IS the current state when a request is live, and the closed
+        row behind it is then a PREVIOUS ask. Rendering both would put a stale
+        denial beside a request the subject has just filed again — asking twice
+        after a refusal opens a new row and leaves the old outcome in place, so
+        this is reachable rather than theoretical.
+      */}
+      {!data.deletion_requested_at && <DsrOutcomeNotice outcome={data.dsr_outcome} />}
+    </Card>
+  );
+}

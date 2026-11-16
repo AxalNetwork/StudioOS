@@ -1,21 +1,19 @@
 // D4618 part 2 (#4618): Profile and identity's controllers (board AC-2), moved
 // unchanged out of `../SettingsPage.jsx`: the editors under the identity cards
 // (`ProfileEditors`: profile, background, the LinkedIn import, jurisdictions,
-// the role's preferences and the extras), Roles and access, Documents and
-// agreements, and Delete your account. `AccountProfile.jsx` keeps the identity
-// cards; the page keeps the pane's order and the Email address card, which is
-// sign-in's (#4614). Each card owns its reads; `patch` is the page's one
+// the role's preferences and the extras), Roles and access, and Documents and
+// agreements. `AccountProfile.jsx` keeps the identity cards; the page keeps the
+// pane's order, the Email address card and Delete your account
+// (`AccountDeletionCard`), which change or end the account and wait for #4614. Each card owns its reads; `patch` is the page's one
 // account write.
 import Card from './AccountCard.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../lib/api';
-import { User, Camera, AlertTriangle, Trash2, Download, Plus, X, Check, Loader2 } from 'lucide-react';
+import { User, Camera, AlertTriangle, Download, Plus, X, Check, Loader2 } from 'lucide-react';
 import { Unrecorded } from '../../ui';
 import AuthorCard from '../../components/AuthorCard';
 import { appOrigin } from '../../lib/branchHost';
-import { toUtcInstant } from '../../lib/notices';
 import { effectiveDisplayName } from '../../lib/displayName';
-import DsrOutcomeNotice from '../../components/DsrOutcomeNotice';
 import { Field, inputCls } from './SettingsFields';
 
 // ---------- Reference data --------------------------------------------------
@@ -1177,77 +1175,3 @@ function ProfileExtrasCard({ flash }) {
   );
 }
 
-
-export function AccountDeletionCard({ data, flash, reload }) {
-  const [exporting, setExporting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const exportData = async () => {
-    setExporting(true);
-    try {
-      const blob = await api.exportMyData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `axal-data-export-${data.uid || data.id}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      flash('Export downloaded');
-    } catch (e) {
-      flash(e.message || 'Export failed', 'error');
-    } finally { setExporting(false); }
-  };
-
-  const requestDelete = async () => {
-    if (!window.confirm('Submit an account deletion request? Hard delete after a 30-day grace period; our team will reach out within 7 days to confirm.')) return;
-    setDeleting(true);
-    try {
-      const res = await api.requestAccountDeletion();
-      flash(res.message || 'Deletion request submitted');
-      reload();
-    } catch (e) { flash(e.message || 'Failed to submit request', 'error'); }
-    finally { setDeleting(false); }
-  };
-
-  const cancelDelete = async () => {
-    setDeleting(true);
-    try {
-      await api.cancelAccountDeletion();
-      flash('Deletion request cancelled');
-      reload();
-    } catch (e) { flash(e.message || 'Failed to cancel', 'error'); }
-    finally { setDeleting(false); }
-  };
-
-  return (
-    <Card title="Account & data" description="Export your data, or request account deletion (30-day grace period before hard delete).">
-      <div className="flex flex-wrap gap-3">
-        <button onClick={exportData} disabled={exporting}
-          className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:border-gray-400 text-gray-800 dark:text-gray-200 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-          <Download size={14} /> {exporting ? 'Preparing…' : 'Download my data (JSON)'}
-        </button>
-        {data.deletion_requested_at ? (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-amber-700">Deletion requested {new Date(toUtcInstant(data.deletion_requested_at)).toLocaleDateString()}</span>
-            <button onClick={cancelDelete} disabled={deleting}
-              className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50">Cancel request</button>
-          </div>
-        ) : (
-          <button onClick={requestDelete} disabled={deleting}
-            className="px-4 py-2 border border-red-200 hover:border-red-400 text-red-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50">
-            <Trash2 size={14} /> Request account deletion
-          </button>
-        )}
-      </div>
-      {/*
-        D169 — ONLY WHILE NOTHING IS OPEN, which is the whole point: the amber
-        line above IS the current state when a request is live, and the closed
-        row behind it is then a PREVIOUS ask. Rendering both would put a stale
-        denial beside a request the subject has just filed again — asking twice
-        after a refusal opens a new row and leaves the old outcome in place, so
-        this is reachable rather than theoretical.
-      */}
-      {!data.deletion_requested_at && <DsrOutcomeNotice outcome={data.dsr_outcome} />}
-    </Card>
-  );
-}
