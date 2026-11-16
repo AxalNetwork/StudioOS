@@ -225,6 +225,9 @@ async function mountOverview(Route_) {
   const by = (id) => walk(container).find((n) => propsOf(n)['data-testid'] === id);
   // D6028 (#6028): Build's overview draws its module cards in `BuildOverview.jsx`, the same retry behind them.
   const cardNode = () => by('build-module-operating-systems');
+  // The first overview read resolves in the stubbed fetch, but the lazy route and its read can take more
+  // than one fixed settle on a loaded runner: wait (bounded) until the card is drawn before any assertion.
+  for (let i = 0; i < 50 && !cardNode(); i += 1) await settle();
   return {
     at, retries, overviews, settle, cardNode, state: () => cardNode()?.parentNode && propsOf(cardNode())['data-state'], text: () => textOf(cardNode()),
     go: async (project) => { await act(async () => at.navigate('/build?project_id=' + project)); await settle(); },
