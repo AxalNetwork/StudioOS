@@ -1,4 +1,5 @@
 import { UOF_OPTIONS, UOF_PAGE } from '../src/services/useOfFunds/eadwyn.ts';
+import { GUIDE_OPTION, GUIDE_PAGE } from '../src/services/interviewGuide.ts';
 import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
 import {d1Over} from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -660,7 +661,9 @@ test('D778: each founder-only band\'s fallback page is the one D771\'s inventory
   const pmfPreviews = ['draft:raise/pmf-explain', 'draft:raise/pmf-questions'];
   const uofPreviews = Object.values(UOF_OPTIONS).filter(k => k.startsWith('draft:'));
   for (const option of uofPreviews) assert.equal((byKey.get(option) as any)?.page, UOF_PAGE);
-  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !pmfPreviews.includes(o.key) && !uofPreviews.includes(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
+  // D6008: the interview guide's draft has its own mounted route (/api/cycles/validate/interview-guide/draft); its page is the guide's.
+  assert.equal((byKey.get(GUIDE_OPTION) as any)?.page, GUIDE_PAGE, GUIDE_OPTION);
+  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !pmfPreviews.includes(o.key) && !uofPreviews.includes(o.key) && o.key !== GUIDE_OPTION && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
   assert.deepEqual(others.map((o: any) => o.key).sort(),
     ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
 });

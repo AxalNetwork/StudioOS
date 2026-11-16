@@ -891,7 +891,7 @@ export default function RecordLightbox({
         {projectId && (
           <Section title="Interview guide" testId="record-guide">
             {guideOpen ? <InterviewGuide projectId={projectId} />
-              : <button type="button" onClick={() => setGuideOpen(true)} className="min-h-11 self-start rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 sm:min-h-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="record-guide-open">Open the interview guide</button>}
+              : <button type="button" onClick={() => setGuideOpen(true)} className="min-h-11 self-start rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 sm:min-h-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800" data-testid="record-guide-open">Open the interview guide</button>}
             <p className="m-0 text-[11.5px] text-axal-faint">A copy is taken onto the interview when you open the guide while recording.</p>
           </Section>
         )}
