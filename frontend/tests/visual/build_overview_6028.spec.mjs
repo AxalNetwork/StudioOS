@@ -53,7 +53,8 @@ async function open(page, request, width, theme, mode = 'ready') {
   if (theme === 'dark') await page.route('**/api/settings/appearance', (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { theme: 'dark' } }) : route.continue()));
   await page.route('**/api/cycles/build/overview*', (route) => route.fulfill({ json: overview(m.oneClick.projectId, mode) }));
   await page.goto(`/build?project_id=${m.oneClick.projectId}`);
-  // D4846 part 2 (#6852): Build draws its desktop pages from 768px (the tablet tier), the phone page below it.
+  // D4846 part 2 (#6032): Build draws its desktop overview from 768px (its
+  // tablet tier, ui/phone/tabletTier.js); the phone page is below 768px only.
   await expect(page.getByTestId(width < 768 ? 'phone-root' : 'build-overview-v2')).toBeVisible();
   if (theme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
   return m;
