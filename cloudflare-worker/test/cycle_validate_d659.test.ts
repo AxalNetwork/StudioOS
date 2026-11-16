@@ -781,6 +781,29 @@ test('D685 §5.12: the interviews target shares metric_targets but never reaches
   } finally { [console.warn, console.error] = saved; }
 });
 
+
+test('demand commits keep currency and period separate and exclude interest and unconfirmed terms', async () => {
+  const db = fixture();
+  for (const [kind, amount_cents, currency, period, status] of [
+    ['loi', 12500, 'eur', 'month', 'confirmed'],
+    ['pre_sale', 2500, 'eur', 'month', 'confirmed'],
+    ['loi', 30000, 'eur', 'year', 'confirmed'],
+    ['pre_sale', 10000, 'usd', 'month', 'confirmed'],
+    ['would_pay', 50000, 'eur', 'month', 'confirmed'],
+    ['loi', 60000, 'eur', 'month', 'to_confirm'],
+  ]) {
+    const result = await call(db, FOUNDER, 'POST', `/demand-signals?project=${P}`, { kind, amount_cents, currency, period, status });
+    assert.equal(result.status, 201);
+  }
+  const data = card((await overview(db)).body, 'demand-signals').series;
+  assert.equal(data.signals.would_pay, 1);
+  assert.deepEqual(data.committed, [
+    { currency: 'EUR', period: 'month', amount_cents: 15000 },
+    { currency: 'EUR', period: 'year', amount_cents: 30000 },
+    { currency: 'USD', period: 'month', amount_cents: 10000 },
+  ]);
+});
+
 // #5999: the overview says whether the viewer may write, by the gate the target's writer uses.
 // Mutation checked: `can_write: true` in the route fails it (a partner reads true); no `can_write`
 // fails it (undefined for every viewer); the PUT gated on `canReadBoard` in place of `canWrite` fails
