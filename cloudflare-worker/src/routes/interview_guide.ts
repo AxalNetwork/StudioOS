@@ -89,7 +89,7 @@ router.get('/', async (c) => {
   const s = await scope(c, false); if (s instanceof Response) return s;
   try {
     const [material, guide] = await Promise.all([guideMaterial(ctxOf(c, s.projectId)), readGuide(c.env, s.projectId)]);
-    let assist: 'on' | 'off' | 'unknown' = 'on';
+    let assist: 'on' | 'off' | 'unknown';
     try { assist = (await assistOff(c.env, Number(s.user.id), GUIDE_PAGE)) ? 'off' : 'on'; } catch { assist = 'unknown'; }
     return c.json({
       material, guide,
