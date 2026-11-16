@@ -29,7 +29,7 @@ import useAiSpend from '../../hooks/useAiSpend';
 import { isCold, daysSince } from '../../lib/networkBook';
 import { zonePillClass } from './deskZoneNav';
 import './founderNetworkDesk.css';
-import { LensNavLink } from '../../workspaces/lens';
+import { LensNavLink, useLensGo } from '../../workspaces/lens';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import WhoKnowsStrip from '../relationships/WhoKnowsStrip.jsx';
 import { reportError } from '../../lib/log';
@@ -100,6 +100,7 @@ export default function FounderNetworkDesk() {
         <span className={`${zonePillClass({ isActive: true })} a6-pill-current`} aria-current="page" data-testid="link-network-overview-anchor">Overview</span>
         {SECTIONS.map(([label, to]) => <LensNavLink data-testid={`link-network-${label.toLowerCase()}-anchor`} key={label} to={to} className={zonePillClass}>{label}{counts[label] != null && !firstRun ? <b className="a6-pill-count">{counts[label]}</b> : null}</LensNavLink>)}
       </nav>
+      <SectionPicker counts={firstRun ? {} : counts} state={state} />
     </header>
     {stale && <div className="a6-stale" role="status" data-testid="status-network-stale">
       <RefreshCw size={14} aria-hidden="true" />
@@ -201,12 +202,28 @@ function Overview({ records, tiles, load, state, fillsOn, ai, coldScope }) {
 }
 
 function Tile({ tile, state, onRetry }) {
-  return <section className={`a6-tile is-${tile.state}`} data-testid={`tile-network-${tile.key}`} aria-busy={tile.state === 'loading' || undefined}>
+  return <section className={`a6-tile is-${tile.state}${tile.mark ? ' is-marked' : ''}`} data-testid={`tile-network-${tile.key}`} aria-busy={tile.state === 'loading' || undefined}>
     <span className="a6-tile-label">{tile.label}</span>
     {tile.state === 'loading' ? <><i className="a6-tile-skel" aria-hidden="true" /><small>Loading…</small></>
       : tile.state === 'unreadable' ? <><strong className="a6-tile-unread"><span aria-hidden="true">?</span> {UNREADABLE}</strong><small>This is not zero.</small><button type="button" className="a6-retry" onClick={onRetry} data-testid={`button-retry-tile-${tile.key}`}>Retry</button></>
-        : <><strong>{tile.value}</strong><small>{tile.sub}{tile.state === 'stale' ? ' · out of date' : ''}</small>{tile.href ? <Link className="a6-link" to={tile.href} state={state} data-testid={`link-tile-${tile.key}`}>Open <ArrowUpRight size={12} /></Link> : null}</>}
+        : <><strong>{tile.value}</strong><small>{tile.mark ? <span aria-hidden="true" className="a6-tile-mark">{tile.mark}</span> : null}{tile.sub}{tile.state === 'stale' ? ' · out of date' : ''}</small>{tile.href ? <Link className="a6-link" to={tile.href} state={state} data-testid={`link-tile-${tile.key}`}>Open <ArrowUpRight size={12} /></Link> : null}</>}
   </section>;
+}
+
+/**
+ * NW8: below 600px the section pills become one Section picker, as the phone
+ * board draws it. Each choice opens its zone the way its pill does (a lens on a
+ * phone, D575). From 600px up it is hidden and the pills are the control.
+ */
+function SectionPicker({ counts, state }) {
+  const go = useLensGo();
+  return <label className="a6-section-picker" data-testid="network-section-picker">
+    <span className="a6-kicker">Section</span>
+    <select aria-label="Network section" value="" onChange={(e) => { if (e.target.value) go(e.target.value, state); }} data-testid="select-network-section">
+      <option value="">Overview</option>
+      {SECTIONS.map(([label, to]) => <option key={label} value={to}>{counts[label] != null ? `${label} · ${counts[label]}` : label}</option>)}
+    </select>
+  </label>;
 }
 
 function IntroGroup({ group, onRetry }) {
