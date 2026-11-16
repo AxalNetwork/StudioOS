@@ -71,7 +71,7 @@ const add = (db: DatabaseSync, title: string, kind: string, due_at: string) =>
   call(db, 'POST', '/api/cycles/grow/obligations', { project: A, title, kind, due_at });
 const list = (db: DatabaseSync, qs = '') => call(db, 'GET', `/api/cycles/grow/modules/durable-company-building?project=${A}${qs}`);
 const rec = (db: DatabaseSync, id: number) => call(db, 'GET', `/api/cycles/grow/modules/durable-company-building/records/${id}?project=${A}`);
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10); // clock-ok: relative
 const stored = (db: DatabaseSync) => Object.fromEntries((db.prepare('SELECT title, event_type, kind FROM compliance_events ORDER BY id').all() as any[])
   .map((r) => [r.title, `${r.event_type}/${r.kind}`]));
 
