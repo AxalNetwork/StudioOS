@@ -47,7 +47,7 @@ const TONE = {
 
 export default function PitchReview({ reads, readOnly }) {
   const versions = reads.versions.status === 'ok' ? asList(reads.versions.data, 'versions', 'decks') : [];
-  const current = currentVersion(versions);
+  const current = reads.selectedDeck === undefined ? currentVersion(versions) : reads.selectedDeck;
   const deckId = current?.id || null;
   const cards = reads.deck.status === 'ok' && Array.isArray(reads.deck.data?.slides) ? reads.deck.data.slides.length : 0;
   const [history, setHistory] = useState({ status: 'idle', data: null });
