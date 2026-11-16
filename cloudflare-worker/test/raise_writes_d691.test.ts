@@ -1409,21 +1409,29 @@ test('replace: the current object becomes the next version and the new one takes
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions'), 2, 'a refused replace writes nothing');
 });
 
-test('remove: the file, its versions and every object inside the room\'s prefix go; an object outside it is never deleted; another venture\'s file is null', async () => {
+test('remove: the file goes to Trash with its versions; the purge then deletes every object inside the room\'s prefix and none outside; another venture\'s file is null', async () => {
   const { db, env, store, project } = versionedRoom();
+  // D6073: the Trash columns.
+  addColumnsFrom(db, stripForeignKeys(sqlOf('202611152333_6073_data_room_trash.sql')), 'data_room_files');
   db.exec(`INSERT INTO data_room_file_versions (file_id, version, r2_key) VALUES (31, 1, 'data-room/p-room/v1'), (31, 2, 'elsewhere/v2')`);
   db.exec(`UPDATE data_room_files SET r2_key = 'data-room/p-room/current' WHERE id = 31`);
   assert.equal(await removeDataRoomFile(env, { project: { id: 8, uid: 'p-else' }, userId: R_FOUNDER, fileId: 31 }), null, 'not this venture\'s');
-  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31'), 1);
-  assert.deepEqual(await removeDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31 }), { id: 31 });
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31 AND removed_at IS NULL'), 1);
+  const out = await removeDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31 });
+  assert.equal(out?.id, 31);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31 AND removed_at IS NOT NULL'), 1, 'in Trash, not deleted');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions'), 2, 'the versions wait with it');
+  assert.deepEqual(store.deletes, [], 'nothing leaves storage on Remove');
+  assert.deepEqual(rows(db, 'SELECT entity_id, action, details FROM activity_logs').map((r) => [r.entity_id, r.action, r.details]), [['31', 'file_removed', 'File moved to Trash for 30 days with 2 earlier versions']]);
+  const { purgeFile } = await import('../src/services/dataRoomTrash.ts');
+  assert.ok(await purgeFile(env, { project, userId: R_FOUNDER, fileId: 31, reason: 'delete_now' }));
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31'), 0);
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions'), 0, 'the versions go with it');
-  assert.deepEqual(store.deletes, ['data-room/p-room/current', 'data-room/p-room/v1'], 'every object inside the prefix, none outside');
-  assert.deepEqual(rows(db, 'SELECT entity_id, action, details FROM activity_logs').map((r) => [r.entity_id, r.action, r.details]), [['31', 'file_removed', 'File removed with 2 earlier versions']]);
+  assert.deepEqual(store.deletes.flat(), ['data-room/p-room/current', 'data-room/p-room/v1'], 'every object inside the prefix, none outside');
   // The founder's DELETE route goes through the same writer.
   const del = await roomCall(dataRoom, db, R_FOUNDER, 'DELETE', '/p-room/files/f-nda');
   assert.equal(del.status, 200, del.raw);
-  assert.equal(n(db, "SELECT COUNT(*) AS n FROM data_room_files WHERE uid = 'f-nda'"), 0);
+  assert.equal(n(db, "SELECT COUNT(*) AS n FROM data_room_files WHERE uid = 'f-nda' AND removed_at IS NOT NULL"), 1);
   assert.deepEqual(rows(db, "SELECT entity_id, action FROM activity_logs WHERE action = 'file_removed'").map((r) => r.entity_id), ['31', '32']);
   assert.equal((await roomCall(dataRoom, db, R_FOUNDER, 'DELETE', '/p-room/files/no-such')).status, 404);
 });
