@@ -20,6 +20,7 @@
 
 // #4574 (H4): the addresses live in their own small file so a redirect can import them without this model.
 import { SLUG, HOME_PATH } from './useOfFundsPaths.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 export { SLUG, HOME_PATH };
 export const TITLE = 'Use of funds';
 export const LINE = 'What the raise pays for, by section, and how long it lasts.';
@@ -39,12 +40,26 @@ const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
 /** True when CycleRoute's record id under this module is a tab, not a section. */
 export const isUseOfFundsTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));
 
-/** The query a tab keeps: the venture only. */
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
 }
+
+/**
+ * D5074 slice 5 (#5074): who the viewer is on Use of funds, from the plan read's `capabilities` alone
+ * (`cloudflare-worker/src/services/useOfFunds/capabilities.ts`, the map the Worker refuses writes from). `true`
+ * allows; no map, an unknown key or any other value allows nothing. The shape is the one the page has always read
+ * (`kind`, `can_write`, `mercury`), so each control keeps its words: `can_write` is `edit`, `mercury` is the
+ * founder's own Mercury figures, and `kind` is `admin` when the caller's changes are logged under an admin's name.
+ */
+export function uofViewer(capabilities) {
+  const caps = capabilities && typeof capabilities === 'object' ? capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  return { known: !!caps, kind: can('admin_logged') ? 'admin' : 'founder', can_write: can('edit'), mercury: can('mercury') };
+}
+
+/** The plan read's viewer, from its capability map (never the read's own `viewer` field or the account). */
+export const planViewer = (plan) => uofViewer(plan?.capabilities);
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
@@ -197,7 +212,7 @@ export function committedView(block) {
 export function homeTiles(plan) {
   const base = baseOf(plan);
   const raise = raiseView(plan);
-  const today = runwayTodayView(plan?.runway_today, plan?.viewer);
+  const today = runwayTodayView(plan?.runway_today, planViewer(plan));
   const after = afterRaiseView(base);
   const committed = committedView(plan?.committed);
   return [
@@ -313,7 +328,7 @@ export const SET_ACTION = 'Set raise & allocation';
  */
 export function homeAction(read) {
   const plan = read && read.status !== 'unreadable' ? read.data : null;
-  if (!plan || !plan.viewer?.can_write || plan.base?.state !== 'ok' || planEmpty(plan)) return null;
+  if (!plan || !planViewer(plan).can_write || plan.base?.state !== 'ok' || planEmpty(plan)) return null;
   return { label: SET_ACTION, dialog: 'split' };
 }
 
@@ -375,7 +390,7 @@ export function dependencyRows(plan) {
 /** Runway, recorded against modelled (RA-21 A): today from its measured source, after the raise from the model, and the target. */
 export function runwayRows(plan) {
   const base = baseOf(plan);
-  const today = runwayTodayView(plan?.runway_today, plan?.viewer);
+  const today = runwayTodayView(plan?.runway_today, planViewer(plan));
   const after = afterRaiseView(base);
   return [
     { key: 'today', label: 'Today', tag: today.state === 'recorded' ? 'Recorded' : today.state === 'founder_only' ? 'Founder only' : null, value: today.state === 'founder_only' ? null : today.value, sub: today.sub },
@@ -399,9 +414,9 @@ export function milestonesFunded(base) {
  */
 export function setupActions(plan) {
   const out = [];
-  if (plan?.viewer?.can_write) out.push({ key: 'split', text: SET_ACTION, act: 'split' });
+  if (planViewer(plan).can_write) out.push({ key: 'split', text: SET_ACTION, act: 'split' });
   const rt = plan?.runway_today;
-  if (!rt?.chosen && plan?.viewer?.mercury !== false && rt?.sources?.mercury?.state !== 'founder_only') out.push({ key: 'mercury', text: 'Connect Mercury', href: '/account/connectors/mercury' });
+  if (!rt?.chosen && planViewer(plan).mercury !== false && rt?.sources?.mercury?.state !== 'founder_only') out.push({ key: 'mercury', text: 'Connect Mercury', href: '/account/connectors/mercury' });
   const c = committedView(plan?.committed);
   if (c.state === 'not_recorded' && c.href) out.push({ key: 'round', text: 'Open Commitments', href: c.href });
   return out.slice(0, 3);

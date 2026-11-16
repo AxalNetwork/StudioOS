@@ -17,6 +17,7 @@ import { holdsLicence } from '../services/accountLicences';
  * investors and a total. Logs hold outcomes only; a reason or a message is
  * stored, never logged.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -31,8 +32,12 @@ const r = new Hono<{ Bindings: Env }>();
 
 type Ctx = { user: User; dealId: number; projectId: number; currency: string };
 
-async function investorDeal(c: Context<{ Bindings: Env }>): Promise<Ctx | { error: Response }> {
-  const user = await requireAuth(c) as User;
+async function investorDeal(c: Context<{ Bindings: Env }>, action?: 'withdraw'): Promise<Ctx | { error: Response }> {
+  const user = await requireAuth(c);
+  if (action === 'withdraw') {
+    const error = investorPreviewRefusal(c, user);
+    if (error) return { error };
+  }
   if (!holdsLicence(user, 'investor')) return { error: c.json({ error: 'investor_only', detail: 'This is an investor’s own view of the deal.' }, 403) };
   const raw = String(c.req.param('id') || '');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'deal_not_found' }, 404) };
@@ -123,7 +128,7 @@ r.get('/:id/round', async (c) => {
 });
 
 r.post('/:id/commitments/:uid/withdrawal', async (c) => {
-  const x = await investorDeal(c);
+  const x = await investorDeal(c, 'withdraw');
   if ('error' in x) return x.error;
   const body = await c.req.json().catch(() => ({})) as { reason?: unknown };
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';

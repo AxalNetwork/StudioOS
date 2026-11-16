@@ -92,6 +92,8 @@ export function layoutView(user: User, profile: StudioProfile, row: Row | null) 
   const layout: Array<{ key: string; size: StudioSize }> = [];
   for (const e of entries) {
     const key = String(e?.key);
+    // #6133: the retired investor score tile is silently omitted from saved layouts.
+    if (profile === 'investor' && key === 'scored_opportunities') continue;
     const mod = catalogue.get(key);
     if (!mod) { dropped.push({ key, title: RETIRED_TITLES[key] ?? null, reason: 'not_offered', plan: null }); continue; }
     const plan = lockOf(user, mod);

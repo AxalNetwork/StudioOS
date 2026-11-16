@@ -15,6 +15,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { capsForViewer } from './_uof_capabilities.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   HOME_FRAME, MARK, SET_ACTION, dependencyRows, homeAction, milestonesFunded, runwayRows, setupActions,
@@ -59,7 +60,8 @@ function plan({ viewer = { kind: 'founder', can_write: true, mercury: true }, em
     : { state: 'not_recorded', chosen: null, candidates: [], partial: false, sources: { mercury: { state: mercury }, metrics: { state: 'ok' } }, reason: 'No measured cash and positive burn are recorded.' };
   const chosen = { value: RAISE, source: 'Document', ref: 'round_calls:3', kind: 'round_call', name: 'Seed', currency: 'usd', eligible: true };
   return {
-    project_id: 3, viewer,
+    // D5074 slice 5 (#6534): the page reads the viewer from the capability map the Worker sends.
+    project_id: 3, viewer, capabilities: capsForViewer(viewer),
     base: { state: 'ok', value: base, reason: null },
     round: round === 'none' ? { chosen: null, candidates: [], disagreements: [], reason: 'No approved round call, active round target or plan raise is recorded.' }
       : { chosen, candidates: [chosen], disagreements: round === 'differs' ? [{ chosen, other: {} }] : [], reason: null },
@@ -139,7 +141,9 @@ test('runway recorded against modelled, the milestones funded, and the first-use
   const first = plan({ empty: true, runway: 'none', committed: { state: 'not_recorded', href: '/raise/capital-relationships/commitments?project_id=3' } });
   assert.deepEqual(setupActions(first).map((a) => a.text), ['Set raise & allocation', 'Connect Mercury', 'Open Commitments']);
   assert.deepEqual(setupActions(plan({ empty: true })).map((a) => a.key), ['split'], 'runway measured and commitments unread: one action');
-  assert.deepEqual(setupActions({ ...first, viewer: { kind: 'founder', can_write: false, mercury: true } }).map((a) => a.key), ['mercury', 'round'], 'no write for a read-only viewer');
+  // A viewer the Worker's map gives no `edit` (a support session) is offered no write, and no Mercury of its own (D5074).
+  const readOnly = { kind: 'founder', can_write: false, mercury: true };
+  assert.deepEqual(setupActions({ ...first, viewer: readOnly, capabilities: capsForViewer(readOnly) }).map((a) => a.key), ['round'], 'no write for a read-only viewer');
   assert.ok(setupActions(first).length <= 3);
 });
 

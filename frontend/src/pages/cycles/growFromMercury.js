@@ -85,3 +85,16 @@ export function mercuryView(part) {
     })),
   };
 }
+
+
+/** Describe what the Mercury sync wrote and any transaction read limit. */
+export function mercurySyncSentence(counts) {
+  if (!counts) return '';
+  const saved = [];
+  if (counts.metric_months) saved.push(`${counts.metric_months} ${counts.metric_months === 1 ? 'month' : 'months'} of figures`);
+  if (counts.facts) saved.push(`${counts.facts} other ${counts.facts === 1 ? 'figure' : 'figures'}`);
+  if (counts.invoice_credits) saved.push(`${counts.invoice_credits} invoice ${counts.invoice_credits === 1 ? 'credit' : 'credits'}`);
+  if (counts.partner_proposals) saved.push(`${counts.partner_proposals} partner ${counts.partner_proposals === 1 ? 'proposal' : 'proposals'} to review`);
+  const summary = saved.length ? `Mercury synced ${saved.join(', ')}.` : 'Mercury saved no figures, invoice credits or partner proposals.';
+  return counts.partial ? `${summary} Mercury reached its transaction read limit, so monthly transaction totals and partner payments were left out. Sync again to carry on.` : summary;
+}

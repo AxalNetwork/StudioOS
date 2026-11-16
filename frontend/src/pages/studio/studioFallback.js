@@ -20,7 +20,6 @@ export const FALLBACK_DEFAULTS = Object.freeze({
   investor: [
     { key: 'usage_quota', size: '1/2' },
     { key: 'deal_lifecycle', size: '1/2' },
-    { key: 'scored_opportunities', size: '1/2' },
     { key: 'quick_stats', size: '1/2' },
     { key: 'portfolio_glance', size: '1/2' },
     { key: 'upcoming_events', size: '1/2' },
@@ -47,7 +46,6 @@ export const FALLBACK_TITLES = Object.freeze({
   lab_tools: 'Lab tools',
   usage_quota: 'Usage & quota',
   deal_lifecycle: 'Deal lifecycle',
-  scored_opportunities: 'Historical match scores',
   quick_stats: 'Quick stats',
   portfolio_glance: 'Portfolio glance',
   upcoming_events: 'Upcoming events',
