@@ -55,6 +55,8 @@ export interface Env {
   TELEGRAM_CHANNEL_BOT_USERNAME?: string;
   /** setWebhook's secret_token; Telegram echoes it in X-Telegram-Bot-Api-Secret-Token. */
   TELEGRAM_CHANNEL_WEBHOOK_SECRET?: string;
+  /** D5580 part 4: the bearer token the hourly pr-overlap job posts its WorkGraph snapshot with. Unset, the ingest refuses. */
+  WORKGRAPH_INGEST_TOKEN?: string;
   /** Meta app (Tech Provider) for WhatsApp Embedded Signup and the Cloud API webhook. */
   WHATSAPP_APP_ID?: string;
   /** Signs X-Hub-Signature-256 on every webhook delivery; exchanges signup codes. */
