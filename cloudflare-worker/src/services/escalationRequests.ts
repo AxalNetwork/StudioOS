@@ -278,11 +278,6 @@ export function parseNote(raw: unknown): { ok: true; note: string | null } | Req
   return { ok: true, note };
 }
 
-// Predicate shared by both scoped request lists. Historical detail may be plain text.
-export const PROGRAM_REQUEST_FILTER = `kind IN ('program_grant', 'program_terms_change', 'program_end')
-  AND CASE WHEN substr(detail, 1, 5) = '{"v":' AND json_valid(detail)
-    THEN json_extract(detail, '$.v') = ${REQUEST_FORMAT} AND json_extract(detail, '$.request.program') = ? ELSE 0 END`;
-
 /** The stored form: `{ v, request, note }` in `detail`. */
 export function encodeRequestDetail(request: Record<string, unknown>, note: string | null): string {
   return JSON.stringify({ v: REQUEST_FORMAT, request, note: note ?? null });

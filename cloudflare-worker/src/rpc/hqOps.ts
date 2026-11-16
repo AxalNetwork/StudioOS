@@ -38,7 +38,7 @@ import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
 import {
-  parseRequest, parseNoteFor, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind, PROGRAM_REQUEST_FILTER,
+  parseRequest, parseNoteFor, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind, REQUEST_FORMAT,
   isProgramRequestKind, type RequestRefusalCode,
 } from '../services/escalationRequests';
 import {
@@ -1041,9 +1041,11 @@ export async function listLicenceRequests(
     `SELECT uid, kind, subject, subject_ref, detail, raised_by_name, raised_by_branch_user_id, status,
             due_at, created_at, answer, answered_by_name, answered_at
        FROM hq_escalations WHERE branch_code = ? AND subject_ref = ?
-        ${program === null ? '' : 'AND ' + PROGRAM_REQUEST_FILTER}
+        AND (? IS NULL OR (kind IN ('program_grant', 'program_terms_change', 'program_end')
+          AND CASE WHEN substr(detail, 1, 5) = '{"v":' AND json_valid(detail)
+               THEN json_extract(detail, '$.v') = ? AND json_extract(detail, '$.request.program') = ? ELSE 0 END))
       ORDER BY created_at DESC, id DESC LIMIT ?`,
-  ).bind(HQ_TIER_CODE, licenceUid, ...(program === null ? [] : [program]), cap + 1).all<LicenceRequestRow>();
+  ).bind(HQ_TIER_CODE, licenceUid, program, REQUEST_FORMAT, program, cap + 1).all<LicenceRequestRow>();
   const now = Date.now();
   const all = (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) }));
   const complete = all.length <= cap;

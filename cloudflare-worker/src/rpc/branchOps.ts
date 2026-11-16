@@ -25,7 +25,7 @@ import { nextObligationsByFund } from '../services/entityObligations';
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { laneCounts } from '../services/approvalSources';
-import { PROGRAM_REQUEST_FILTER, REQUEST_FORMAT } from '../services/escalationRequests';
+import { REQUEST_FORMAT } from '../services/escalationRequests';
 // ONE DEFINITION OF "PAST SLA", shared across the tier boundary. It is a pure
 // function of a date, so importing it costs nothing and restating it would let
 // HQ's board and the branch's lane disagree about which items are late — with
@@ -973,7 +973,7 @@ export async function applyEscalationAnswer(
         SET answer = ?, answered_by_name = ?, answered_at = ?, status = ?,
             pushed_at = ?, updated_at = ?,
             detail = CASE WHEN kind = 'program_grant' AND substr(detail, 1, 5) = '{"v":' AND json_valid(detail)
-                     THEN CASE WHEN json_extract(detail, '$.v') = ${REQUEST_FORMAT} THEN json_set(detail, '$.hq_decision', ?) ELSE detail END
+                     THEN CASE WHEN json_extract(detail, '$.v') = ? THEN json_set(detail, '$.hq_decision', ?) ELSE detail END
                      ELSE detail END
       WHERE hq_uid = ?`,
   ).bind(
@@ -985,7 +985,7 @@ export async function applyEscalationAnswer(
     // That word is the branch taking its request back, not one of HQ's
     // decisions; collapsing it keeps this CHECK from growing a second list.
     String(a.status ?? '') === 'open' ? 'open' : 'answered',
-    String(a.pushed_at ?? ''), nowIso(),
+    String(a.pushed_at ?? ''), nowIso(), REQUEST_FORMAT,
     // The existing branch status collapses all final decisions into "answered". Keep HQ's word
     // alongside this structured program request so a decline cannot look like a grant approval.
     ['answered', 'declined', 'withdrawn'].includes(a.status) ? a.status : null, uid,
@@ -1026,9 +1026,12 @@ export async function branchEscalations(
     `SELECT id, hq_uid, kind, subject, subject_ref, relation, detail, raised_by_name, status,
             delivery_error, due_at, answer, answered_by_name, answered_at, pushed_at, created_at,
             CASE WHEN kind = 'program_grant' AND json_valid(detail) THEN json_extract(detail, '$.hq_decision') END AS hq_decision
-       FROM branch_escalations ${program === null ? '' : 'WHERE ' + PROGRAM_REQUEST_FILTER}
+       FROM branch_escalations
+      WHERE (? IS NULL OR (kind IN ('program_grant', 'program_terms_change', 'program_end')
+          AND CASE WHEN substr(detail, 1, 5) = '{"v":' AND json_valid(detail)
+               THEN json_extract(detail, '$.v') = ? AND json_extract(detail, '$.request.program') = ? ELSE 0 END))
       ORDER BY created_at DESC, id DESC LIMIT ?`,
-  ).bind(...(program === null ? [] : [program]), cap + 1).all<BranchEscalationRow>();
+  ).bind(program, REQUEST_FORMAT, program, cap + 1).all<BranchEscalationRow>();
 
   const now = Date.now();
   return {
