@@ -30,7 +30,7 @@
  * or form they touched, and leave the ledger's read standing.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -67,7 +67,13 @@ export default function InvestorPortfolioValueAdd() {
   const [filter, setFilter] = useState('all');
   const [offset, setOffset] = useState(0);
   const [pageKey, setPageKey] = useState(0);
-  const [form, setForm] = useState(null);
+  const location = useLocation();
+  const [form, setForm] = useState(() => {
+    const ask = location.state?.founderAsk;
+    return ask ? { ask_uid: ask.uid, askLabel: ask.label, askUpdate: ask.updateUid, reportKey: ask.reportKey, project_uid: ask.projectUid, kind: ask.kind,
+      state: 'promised', due_date: '', hours: '', summary: ask.text, outcome: '', promised_at: '', error: '', invalid: null } : null;
+  });
+  const [promiseReceipt, setPromiseReceipt] = useState(null);
   const [busy, setBusy] = useState('');
   // D4642: the outcome of a write against ONE entry, named. It is kept apart
   // from the ledger's read: a refused Deliver says nothing about whether the
@@ -100,7 +106,7 @@ export default function InvestorPortfolioValueAdd() {
   // until one is chosen. Outcome and hours are never filled.
   const parentId = form?.project_uid ? Number(companies.find((x) => x.project_uid === form.project_uid)?.project_id) || null : null;
   const fill = useScopedFill({
-    scope: SCOPED_FORMS.support, parent: parentId, enabled: !!parentId,
+    scope: SCOPED_FORMS.support, parent: parentId, enabled: !!parentId && !form?.ask_uid,
     values: { summary: form?.summary || '' },
     onValues: (v) => setForm((current) => (current ? { ...current, ...v, error: '' } : current)),
   });
@@ -130,12 +136,17 @@ export default function InvestorPortfolioValueAdd() {
       }));
       return;
     }
+    if (form.ask_uid && !form.confirmed) {
+      setForm((current) => ({ ...current, confirmed: true }));
+      return;
+    }
     setBusy('log');
     try {
       const created = await api.portfolioSupportLog({
         project_uid: form.project_uid,
         kind: form.kind,
         state: form.state,
+        ...(form.ask_uid ? { ask_uid: form.ask_uid, promised_at: form.promised_at || undefined } : {}),
         // An empty field is sent as absent, never as 0 — the store keeps
         // "nobody timed this" apart from "it took no time".
         ...(form.hours === '' ? {} : { hours: Number(form.hours) }),
@@ -143,6 +154,7 @@ export default function InvestorPortfolioValueAdd() {
         summary: form.summary.trim(),
         ...(form.outcome.trim() ? { outcome: form.outcome.trim() } : {}),
       });
+      if (form.ask_uid) setPromiseReceipt({ reportKey: form.reportKey });
       setForm(null);
       await fill.afterSave(created?.item?.id);
       reload();
@@ -237,6 +249,11 @@ export default function InvestorPortfolioValueAdd() {
       rail={<ValueAddRail ledger={ledger} />}
     >
       {/* D4642: ONE entry's write outcome, naming its company and the next action. */}
+      {promiseReceipt ? <section className="pf-card va-form" role="status" data-testid="va-founder-ask-receipt">
+        <h2>Support recorded</h2>
+        <Link className="pf-btn" to="/portfolio/updates" state={{ founderAskReportKey: promiseReceipt.reportKey }}>Back to the report</Link>
+        <button className="pf-btn" type="button" onClick={() => setPromiseReceipt(null)}>View in Value-add</button>
+      </section> : null}
       {notice ? (
         <div className={notice.kind === 'conflict' ? 'pf-partial va-notice' : 'pf-failure'} role="status" data-testid={`status-va-support-${notice.kind}`}>
           <span>{notice.message}</span>
@@ -376,7 +393,7 @@ function CommitmentRow({ c, busy, history, confirming, contested, onAsk, onCance
           {c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}
           <small>{c.kind}</small>
         </th>
-        <td data-label="Support item">{c.summary}<small>Hours: {c.hours}</small></td>
+        <td data-label="Support item">{c.summary}{c.row.ask_uid ? <span className="pf-muted"> · Answers a founder ask</span> : null}<small>Hours: {c.hours}</small></td>
         <td data-label="Owner"><span title={c.owner.note || undefined}>{c.owner.text}</span></td>
         <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
         <td data-label="Recorded" className="va-date">
@@ -535,7 +552,7 @@ function Introductions({ intros, onRetry }) {
             {intros.rows.map((c) => (
               <tr key={c.uid} data-testid={`row-va-intro-${c.uid}`} data-state={c.state}>
                 <th scope="row" data-label="Company">{c.companyUid ? <Link className="pf-co" to={companyHref(c.companyUid)}>{c.company}</Link> : <span className="pf-co">{c.company}</span>}</th>
-                <td data-label="Introduction">{c.summary}{c.outcome ? <small>Outcome: {c.outcome}</small> : null}</td>
+                <td data-label="Introduction">{c.summary}{c.row.ask_uid ? <span className="pf-muted"> · Answers a founder ask</span> : null}{c.outcome ? <small>Outcome: {c.outcome}</small> : null}</td>
                 <td data-label="State"><span className={`pf-chip va-state is-${c.state}`}>{c.stateLabel}</span></td>
                 <td data-label="Recorded" className="va-date">{c.recorded || 'Date not recorded'}</td>
                 <td data-label="Delivered" className="va-date">{c.closed.date || <span className="pf-not-recorded">{c.closed.missing}</span>}</td>
@@ -615,7 +632,7 @@ function PerCompany({ read, onRetry }) {
  * its field, and a failed save that keeps every entry.
  */
 function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = null }) {
-  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, error: '', invalid: null, failed: false }));
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, confirmed: false, error: '', invalid: null, failed: false }));
   const companyError = form.invalid === 'company';
   const summaryError = form.invalid === 'summary';
   const dueError = form.invalid === 'due';
@@ -625,16 +642,19 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         <div><h2>Log support</h2><p className="pf-sm">One entry, against one company in this book. Owner: you.</p></div>
         <button type="button" className="pf-btn" onClick={onCancel}>Cancel</button>
       </div>
+      {form.ask_uid ? <p className="pf-note">Answers a founder ask{form.askLabel ? ` · ${form.askLabel}` : ''}.
+        {form.askUpdate ? <> <Link to={`/updates/${encodeURIComponent(form.askUpdate)}`}>Open the update</Link></> : null}
+      </p> : null}
       <div className="va-fields">
         <label htmlFor="va-company">Company</label>
-        <select id="va-company" value={form.project_uid} onChange={set('project_uid')} aria-invalid={companyError || undefined} aria-describedby={companyError ? 'va-form-error' : undefined}>
+        <select id="va-company" disabled={!!form.ask_uid} value={form.project_uid} onChange={set('project_uid')} aria-invalid={companyError || undefined} aria-describedby={companyError ? 'va-form-error' : undefined}>
           <option value="">Choose a company</option>
           {companies.filter((x) => x.project_uid).map((x) => <option key={x.project_id} value={x.project_uid}>{x.name}</option>)}
         </select>
         <label htmlFor="va-kind">Support type</label>
         <select id="va-kind" value={form.kind} onChange={set('kind')}>{KINDS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         <label htmlFor="va-state">State</label>
-        <select id="va-state" value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="in_progress">In progress</option><option value="delivered">Delivered</option></select>
+        <select id="va-state" disabled={!!form.ask_uid} value={form.state} onChange={set('state')}><option value="promised">Promised</option><option value="in_progress">In progress</option><option value="delivered">Delivered</option></select>
         {/* D6203: a due date, optional; a closed entry is never overdue, so it is asked only while the entry is open. */}
         {form.state !== 'delivered' ? (
           <>
@@ -645,6 +665,7 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         ) : null}
         {/* Blank is sent as absent. An hours box that defaulted to 0 would put
             a measured zero in the ledger for every entry nobody timed. */}
+        {form.ask_uid ? <><label htmlFor="va-promised">Promised date</label><input id="va-promised" type="date" value={form.promised_at} onChange={set('promised_at')} /></> : null}
         <label htmlFor="va-hours">Hours</label>
         <input id="va-hours" type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} placeholder="Leave blank if untimed" />
       </div>
@@ -659,8 +680,9 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
         <textarea id="va-outcome" rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" />
       </div>
       {form.error ? <p id="va-form-error" className="va-error" role="alert" data-testid="va-form-error">{form.error}</p> : null}
+      {form.ask_uid && form.confirmed ? <p role="status">Confirm this promise against the founder’s ask.</p> : null}
       <div className="pf-tools">
-        <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : 'Record entry'}</button>
+        <button type="submit" className="pf-btn is-primary" disabled={busy} data-testid="button-va-record">{busy ? 'Recording…' : form.failed ? 'Try saving again' : form.ask_uid ? (form.confirmed ? 'Confirm promise' : 'Review promise') : 'Record entry'}</button>
       </div>
     </form>
   );

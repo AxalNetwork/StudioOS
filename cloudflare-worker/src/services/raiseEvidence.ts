@@ -1,4 +1,5 @@
 /** D891 / #2447: recorded provenance and the actual investor download gates. */
+import { liveFiles } from './dataRoomTrash';
 import type { Env, User } from '../types';
 import { isSuperAdmin } from '../auth';
 import { ownsVenture } from '../routes/_founder_validate_helpers';
@@ -11,7 +12,7 @@ import { checkClaims, claimRecord, type ClaimCheck } from './raiseClaims';
 
 /** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
 export async function readableRoomFiles(env: Env, projectId: number): Promise<any[]> {
-  const files = await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(projectId).all<any>();
+  const files = await env.DB.prepare(`SELECT * FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}`).bind(projectId).all<any>();
   const grants = await env.DB.prepare(
     `SELECT g.id, g.investor_user_id,
        EXISTS (SELECT 1 FROM raise_prospects rp WHERE rp.project_id = g.project_id
@@ -140,6 +141,7 @@ function itemMetadata(row:RaiseEvidenceItem){
     state:row.state,visibility:row.visibility,version:row.version};
 }
 function founderItem(row:RaiseEvidenceItem,found:EvidenceCandidate|undefined,failed=false){
+  if(isTypedEvidence(row))found=row as unknown as EvidenceCandidate;
   const changed=found?found.snapshot_hash!==row.snapshot_hash:null,bankUnavailable=row.private_reason==='bank'&&(!found||failed);
   return {...itemMetadata(row),id:row.id,private_reason:row.private_reason,source_table:row.source_table,source_ref:row.source_ref,snapshot_hash:bankUnavailable?null:row.snapshot_hash,
     value_num:bankUnavailable?null:row.value_num,value_unit:bankUnavailable?null:row.value_unit,currency:bankUnavailable?null:row.currency,
@@ -151,6 +153,8 @@ async function decisionItem(ctx:RaiseEvidenceContext,row:RaiseEvidenceItem){
   catch(error){return founderItem(row,undefined,error instanceof RaiseEvidenceError&&error.code==='unreadable');}
 }
 async function live(ctx:RaiseEvidenceContext,ref:Pick<EvidenceCandidate,'kind'|'area'|'source_table'|'source_ref'>,collected?:CollectedEvidence){
+  // D6864: typed evidence is its own source, so the stored row is the current one.
+  if(isTypedEvidence(ref))return ref as unknown as EvidenceCandidate;
   const sources=collected??await collectEvidenceSources(ctx.env,ctx.projectId,ctx.user.id,new Date().toISOString(),[ref.kind],[ref]);
   const rule=EVIDENCE_RULES.find(r=>r.kind===ref.kind);
   if(!rule)throw new RaiseEvidenceError('changed',409);
@@ -484,14 +488,21 @@ function valueWithheld(row:Pick<RaiseEvidenceItem,'kind'|'private_reason'>):stri
   return null;
 }
 const SHARED_MAX=500;
+/** D6864 (RA-32): evidence the founder adds by hand. Source "Typed: stated by you", strength Anecdote, Private on save. */
+export const TYPED_EVIDENCE_KIND='stated-by-founder';
+export const TYPED_EVIDENCE_TABLE='raise_evidence_typed';
+const isTypedEvidence=(r:{kind:string;source_table:string}):boolean=>r.kind===TYPED_EVIDENCE_KIND&&r.source_table===TYPED_EVIDENCE_TABLE;
 type CurrentShared={row:RaiseEvidenceItem;stale:boolean|null};
 /** Pinned items shared beyond Private whose source still matches the fingerprint the founder accepted, computed now. */
 async function currentShared(env:Env,projectId:number):Promise<{rows:CurrentShared[];partial:boolean}>{
   const shared=await env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND state='pinned' AND visibility IN ('summary','after_nda') ORDER BY id LIMIT ?`)
     .bind(projectId,SHARED_MAX).all<RaiseEvidenceItem>();
   const byOwner=new Map<number,RaiseEvidenceItem[]>();
-  for(const row of shared.results||[]){if(row.accepted_by==null)continue;const k=Number(row.accepted_by);byOwner.set(k,[...(byOwner.get(k)??[]),row]);}
   const rows:CurrentShared[]=[];let partial=false;const now=new Date().toISOString();
+  for(const row of shared.results||[]){
+    // D6864: evidence typed by hand is its own source; there is nothing to re-collect, so it stays as stated.
+    if(isTypedEvidence(row)){rows.push({row,stale:null});continue;}
+    if(row.accepted_by==null)continue;const k=Number(row.accepted_by);byOwner.set(k,[...(byOwner.get(k)??[]),row]);}
   // The bank owner is the founder who accepted the item, never the reader.
   for(const [owner,group] of byOwner){
     let sources:CollectedEvidence;
@@ -519,8 +530,8 @@ async function fileAdmits(env:Env,projectId:number,row:RaiseEvidenceItem,aud:Evi
   if(!FILE_KINDS.has(row.kind))return true;
   const id=Number(row.source_ref.split(':')[0]);if(!Number.isSafeInteger(id)||id<1)return false;
   const file=row.kind==='revenue-proof'
-    ?await env.DB.prepare(`SELECT d.visibility,d.access_tier,d.access_expires_at,d.folder_id FROM revenue_entries r JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.id=? AND r.project_id=?`).bind(id,projectId).first<any>()
-    :await env.DB.prepare('SELECT visibility,access_tier,access_expires_at,folder_id FROM data_room_files WHERE id=? AND project_id=?').bind(id,projectId).first<any>();
+    ?await env.DB.prepare(`SELECT d.visibility,d.access_tier,d.access_expires_at,d.folder_id FROM revenue_entries r JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.id=? AND r.project_id=?${await liveFiles(env.DB,'d')}`).bind(id,projectId).first<any>()
+    :await env.DB.prepare(`SELECT visibility,access_tier,access_expires_at,folder_id FROM data_room_files WHERE id=? AND project_id=?${await liveFiles(env.DB)}`).bind(id,projectId).first<any>();
   return !!file&&tierAdmits(file,aud.committed,Date.now(),aud.folders)&&(file.visibility==='open'||(file.visibility==='nda'&&nda));
 }
 async function logOpenEvidence(env:Env,projectId:number,userId:number){
@@ -558,11 +569,11 @@ export async function staffEvidence(env:Env,projectId:number,staffUserId:number,
   return {...view,reader:'staff' as const};
 }
 /** The projection an investor reads, and the founder's preview of it: the same rules, with no log. */
-async function sharedView(env:Env,projectId:number,aud:EvidenceAudience,nda:boolean){
+async function sharedView(env:Env,projectId:number,aud:EvidenceAudience,nda:boolean,only:ReadonlySet<string>|null=null){
   let admitted:CurrentShared[]|null=null,partial=false;
   try{
     const current=await currentShared(env,projectId);partial=current.partial;admitted=[];
-    for(const c of current.rows)if(await quoteConsented(env,projectId,c.row)&&await fileAdmits(env,projectId,c.row,aud,nda))admitted.push(c);
+    for(const c of current.rows)if((!only||only.has(c.row.uid))&&await quoteConsented(env,projectId,c.row)&&await fileAdmits(env,projectId,c.row,aud,nda))admitted.push(c);
   }catch{admitted=null;}
   const unreadable={state:'unreadable',reason:'The shared evidence could not be read. Try again.'} as const;
   const coverage=admitted==null?unreadable:{state:'recorded',groups:[...admitted.reduce((m,{row})=>{
@@ -588,6 +599,12 @@ const PREVIEW_AUDIENCE:EvidenceAudience={investorUserId:0,via:['data_room'],gran
 export const PREVIEW_AS='An invited investor with a data-room grant to every folder, not yet committed. A grant scoped to some folders, or a committed-only file, opens less or more.';
 /** See as an investor (VR11) and the Share dialog's "Who can see this now" (VR5): the investor's own projection, never logged
  *  as an open, and the number of investors who hold a grant and an NDA now. Counts only: no investor is named here. */
+/** D6864 (RA-27/RA-28): what a pack shared outside Axal shows, built on the founder's own preview reader (no grant scope, not
+ *  committed) so it shows no more than an invited investor on Axal would at the same point. `only` narrows it to the items
+ *  the founder ticked. Never logged as an investor open. */
+export async function outsidePackView(env:Env,projectId:number,nda:boolean,only:ReadonlySet<string>|null){
+  return sharedView(env,projectId,PREVIEW_AUDIENCE,nda,only);
+}
 export async function previewEvidence(ctx:RaiseEvidenceContext,nda:boolean){
   founderOnly(ctx);
   const view=await sharedView(ctx.env,ctx.projectId,PREVIEW_AUDIENCE,nda);

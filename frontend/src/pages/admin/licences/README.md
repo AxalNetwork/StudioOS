@@ -60,6 +60,10 @@ unchanged when it was split.
 - `UserLicenceDetail.jsx` — D5060 part 3: one user licence at `/admin/licences/registry/user/:uid` (L37, L37B):
   Overview, Programs, Agreement, Billing (only with commercial terms) and History. Its model is
   `../licenceRegistryModel.js`.
+- `NewLicenceSteps.jsx` — D4819 part 5 (#5931): New licence steps 1 and 3 to 6 (boards L41 to L47), the cards
+  L21's frame places in its card slot (`NewLicenceStep`). Its rules are `newLicenceModel.js`, in this folder.
+- `newLicenceModel.js` — D4819 part 5: what each New licence step sends, where a refusal lands, the review's groups
+  and the Issue step's four questions.
 
 The models these read stay beside the page in `../`: `licenceNavModel.js`
 (sections, tabs and selection), `licenceOverviewModel.js` (the header's and
