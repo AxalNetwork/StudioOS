@@ -178,3 +178,17 @@ test('PATCH: a decline, and a follow-on resolved, each need a note', async () =>
   assert.equal((await call(db, ADMIN, 'PATCH', `/${b.uid}`, { state: 'declined' })).body.code, 'note_required');
   assert.equal((await call(db, ADMIN, 'PATCH', '/missing', { state: 'declined', note: 'x' })).status, 404);
 });
+
+test('GET ?project_uid= (part 2): the admin sheet reads one company’s requests; an investor still reads only their own', async () => {
+  const db = fixture();
+  await quiet(() => call(db, HOLDER, 'POST', '', { project_uid: 'p7', kind: 'mark', reason: 'h' }));
+  await quiet(() => call(db, OTHER, 'POST', '', { project_uid: 'p8', kind: 'follow_on', reason: 'o' }));
+  // mutation: the `?3` clause dropped from LIST → both companies come back here.
+  const seven = await call(db, ADMIN, 'GET', '?project_uid=p7');
+  assert.deepEqual(seven.body.items.map((x: any) => x.project_uid), ['p7'], 'one company only');
+  assert.equal(seven.body.items[0].requester.name, 'Hal');
+  assert.deepEqual((await call(db, ADMIN, 'GET', '?project_uid=p8&state=open')).body.items.map((x: any) => x.project_uid), ['p8']);
+  assert.deepEqual((await call(db, ADMIN, 'GET', '?project_uid=nope')).body.items, []);
+  // The filter never widens an investor's scope.
+  assert.deepEqual((await call(db, HOLDER, 'GET', '?project_uid=p8')).body.items, [], 'an investor cannot read another investor’s request by naming its company');
+});

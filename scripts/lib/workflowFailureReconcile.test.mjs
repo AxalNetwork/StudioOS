@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { reportAttempt, reconcileFailures, requestedAttempts } from '../workflow-failure-reconcile.mjs';
+import { reportAttempt, reconcileFailures, requestedAttempts, workflowOutcomeSummary } from '../workflow-failure-reconcile.mjs';
 
 const repo = 'AxalNetwork/StudioOS';
 const root = '/repos/' + repo + '/actions/runs';
@@ -155,4 +155,26 @@ test('corrupt checkpoint data cannot drive API calls or write issues', async () 
     tracked: [{ id: 'user-control', done: 0, pending: true, created: now - hr }] }, now), /invalid_failure_checkpoint/);
   assert.deepEqual(f.calls, []);
   assert.deepEqual(f.reports, []);
+});
+
+test('#6675 operational summary counts distinct queue attempts and links verified benign outcomes', () => {
+  const summary = workflowOutcomeSummary();
+  const candidate = { id: 12, run_attempt: 1, path: '.github/workflows/ci.yml', event: 'merge_group',
+    head_repository: { full_name: 'AxalNetwork/StudioOS' }, head_branch: 'gh-readonly-queue/main/pr-37-' + 'a'.repeat(40),
+    conclusion: 'failure' };
+  summary.observe(candidate, { queueInvalidated: true }, []);
+  summary.observe(candidate, { queueInvalidated: true }, []);
+  summary.observe({ ...candidate, id: 13 }, {}, [{ conclusion: 'failure',
+    steps: [{ name: 'Run node scripts/test-drift-parts.mjs rest', conclusion: 'failure' }] }]);
+  summary.observe({ ...candidate, id: 14, conclusion: 'success' }, {}, []);
+  summary.observe({ ...candidate, id: 15 }, {}, []);
+  summary.observe({ ...candidate, id: 17 }, {}, [{ conclusion: 'failure',
+    steps: [{ name: 'Run npm run build', conclusion: 'failure' }] }]);
+  summary.observe({ id: 16, run_attempt: 2 }, { superseded: true, supersededStage: 'production-ownership' }, []);
+  const result = summary.lines().join('\n');
+  assert.match(result, /Verified queue invalidation rate: 1\/5 \(20\.0%\)/);
+  assert.match(result, /Build or test producer failure rate: 2\/5 \(40\.0%\)/);
+  assert.match(result, /Other failed queue attempts: 1/);
+  assert.match(result, /actions\/runs\/12\/attempts\/1/);
+  assert.match(result, /Release superseded \(production-ownership\).*actions\/runs\/16\/attempts\/2/);
 });

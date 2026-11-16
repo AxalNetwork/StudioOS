@@ -51,30 +51,66 @@ async function campaign(env: Env, pid: number, uid: unknown) {
   if (!row) throw new ProspectsRefused(404, 'No such campaign.', 'campaign');
   return row;
 }
-export async function prospectPipeline(env: Env, pid: number, filter: {source?: string; campaign?: string; per_status?: string}) {
+// D6316: freeze only membership and ordering, never private contact content. Pages
+// use the captured timestamp/id keyset, so intervening edits cannot hide a card.
+type ProspectCursor = { snapshot: string; status: string; at: string; id: number };
+function readProspectCursor(raw?: string): ProspectCursor | null {
+  if (!raw) return null;
+  try {
+    if (raw.length > 700) throw Error();
+    const c = JSON.parse(atob(raw));
+    if (!/^[a-f0-9-]{36}$/.test(c.snapshot) || !PROSPECT_STATUSES.includes(c.status) ||
+        typeof c.at !== 'string' || c.at.length > 40 || !Number.isSafeInteger(c.id) || c.id < 1) throw Error();
+    return c;
+  } catch { return bad('Reload the pipeline before reading more prospects.', 'cursor'); }
+}
+const prospectCursor = (snapshot:string,status:string,row:any) => btoa(JSON.stringify({snapshot,status,at:row.sort_at,id:row.id}));
+export async function prospectPipeline(env: Env, pid: number, filter: {source?: string; campaign?: string; per_status?: string; cursor?: string}) {
   const source = filter.source || '';
   if (source && !PROSPECT_SOURCES.includes(source as any)) return bad('Choose a recorded source.', 'source');
   const per = filter.per_status == null ? 20 : Number(filter.per_status);
   if (!Number.isInteger(per) || per < 1 || per > 100) return bad('Read from 1 to 100 prospects per status.', 'per_status');
   const selected = await campaign(env,pid,filter.campaign);
   if (selected && !selected.utm_campaign) return { available:false,reason:'Not recorded: this campaign has no UTM tag.',total:null,columns:[] };
-  // Keep both query texts literal so schema and interpolation guards inspect them.
-  // json_valid guards malformed old attribution; all request values are bound.
-  const args = [pid,source,source,selected?.utm_campaign ?? null,selected?.utm_campaign ?? null];
-  const totals = await env.DB.prepare(`SELECT status,COUNT(*) AS n FROM contacts WHERE project_id=? AND audience='customer' AND (?='' OR CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?) GROUP BY status`).bind(...args).all<{status:string;n:number}>();
+  const cursor = readProspectCursor(filter.cursor);
+  const snapshot = cursor?.snapshot ?? crypto.randomUUID();
+  const now = stamp();
+  if (!cursor) {
+    const expires = new Date(Date.now()+30*60*1000).toISOString();
+    // D1 batch is atomic: counts and keysets are read from one frozen membership.
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM grow_prospect_pages WHERE expires_at<=?').bind(now),
+      env.DB.prepare('INSERT INTO grow_prospect_pages(uid,project_id,source,campaign,expires_at) VALUES(?,?,?,?,?)').bind(snapshot,pid,source,selected?.uid??'',expires),
+      env.DB.prepare(`INSERT INTO grow_prospect_page_items(page_uid,contact_id,status,sort_at)
+        SELECT ?,id,status,updated_at FROM contacts WHERE project_id=? AND audience='customer' AND (?='' OR CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?)`).bind(snapshot,pid,source,source,selected?.utm_campaign??null,selected?.utm_campaign??null),
+    ]);
+  } else {
+    const valid = await env.DB.prepare(`SELECT p.uid FROM grow_prospect_pages p JOIN grow_prospect_page_items i ON i.page_uid=p.uid
+      WHERE p.uid=? AND p.project_id=? AND p.source=? AND p.campaign=? AND p.expires_at>?
+        AND i.status=? AND i.sort_at=? AND i.contact_id=?`).bind(snapshot,pid,source,selected?.uid??'',now,cursor.status,cursor.at,cursor.id).first();
+    if (!valid) throw new ProspectsRefused(409,'This pipeline page has expired or changed filters. Reload the pipeline.','cursor');
+  }
+  const totals = await env.DB.prepare('SELECT status,COUNT(*) AS n FROM grow_prospect_page_items WHERE page_uid=? GROUP BY status').bind(snapshot).all<{status:string;n:number}>();
   if ((totals.results||[]).some(row=>!PROSPECT_STATUSES.includes(row.status))) return {available:false,reason:'Not recorded: some prospects have an unsupported status.',total:null,columns:[]};
-  const rows = await env.DB.prepare(`SELECT uid,name,organization,status,source,utm_json,created_at,updated_at,
-    (SELECT MIN(due_date) FROM contact_tasks t WHERE t.contact_id=ranked.id AND t.done=0) AS due_date,
-    (SELECT MAX(created_at) FROM contact_replies r WHERE r.contact_id=ranked.id AND r.direction='inbound') AS replied_at
-    FROM (SELECT id,uid,name,organization,status,source,utm_json,created_at,updated_at,
-      ROW_NUMBER() OVER (PARTITION BY status ORDER BY updated_at DESC,id DESC) AS position FROM contacts WHERE project_id=? AND audience='customer' AND (?='' OR CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?)) ranked WHERE position<=?`).bind(...args,per).all<any>();
-  const columns = PROSPECT_STATUSES.map(status => {
-    const cards = (rows.results || []).filter(r=>r.status===status).map(r=>({uid:r.uid,name:safeCardText(r.name,120),company:safeCardText(r.organization),title:null,
-      source:sourceOf(r.source),status:r.status,utm:utmOf(r.utm_json),due_date:typeof r.due_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.due_date)?r.due_date:null,replied_at:r.replied_at,created_at:r.created_at,updated_at:r.updated_at}));
+  const columns = [];
+  for (const status of cursor ? [cursor.status] : PROSPECT_STATUSES) {
+    const rows = await env.DB.prepare(`SELECT c.id,c.uid,c.name,c.organization,c.source,c.utm_json,c.created_at,c.updated_at,i.sort_at,
+      (SELECT MIN(due_date) FROM contact_tasks t WHERE t.contact_id=c.id AND t.done=0) AS due_date,
+      (SELECT MAX(created_at) FROM contact_replies r WHERE r.contact_id=c.id AND r.direction='inbound') AS replied_at
+      FROM grow_prospect_page_items i JOIN contacts c ON c.id=i.contact_id
+      WHERE i.page_uid=? AND i.status=? AND c.project_id=? AND c.audience='customer'
+        AND (? IS NULL OR i.sort_at<? OR (i.sort_at=? AND i.contact_id<?))
+      ORDER BY i.sort_at DESC,i.contact_id DESC LIMIT ?`).bind(snapshot,status,pid,cursor?.at??null,cursor?.at??null,cursor?.at??null,cursor?.id??0,per+1).all<any>();
+    const page = (rows.results||[]).slice(0,per);
+    const cards = page.map(r=>({uid:r.uid,name:safeCardText(r.name,120),company:safeCardText(r.organization),title:null,
+      source:sourceOf(r.source),status,utm:utmOf(r.utm_json),due_date:typeof r.due_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.due_date)?r.due_date:null,replied_at:r.replied_at,created_at:r.created_at,updated_at:r.updated_at}));
     const count = Number(totals.results?.find(r=>r.status===status)?.n || 0);
-    return {status,count,cards,more:Math.max(0,count-cards.length)};
-  });
-  return {available:true,total:columns.reduce((n,c)=>n+c.count,0),columns,per_status:per};
+    const last = page.at(-1);
+    const remaining = last ? await env.DB.prepare(`SELECT COUNT(*) AS n FROM grow_prospect_page_items i JOIN contacts c ON c.id=i.contact_id
+      WHERE i.page_uid=? AND i.status=? AND c.project_id=? AND c.audience='customer' AND (i.sort_at<? OR (i.sort_at=? AND i.contact_id<?))`).bind(snapshot,status,pid,last.sort_at,last.sort_at,last.id).first<{n:number}>() : null;
+    columns.push({status,count,cards,more:Number(remaining?.n??0),next_cursor:rows.results!.length>per&&last?prospectCursor(snapshot,status,last):null});
+  }
+  return {available:true,total:(totals.results||[]).reduce((n,c)=>n+Number(c.n),0),columns,per_status:per};
 }
 export function consentValue(channel: unknown, input: Body) {
   if (!MARKETING_CHANNELS.includes(channel as any)) return bad('Choose a supported marketing channel.', 'channel');

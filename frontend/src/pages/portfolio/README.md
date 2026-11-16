@@ -131,3 +131,14 @@ Worker's stored record, and each period's asked or waived record);
 the Review with the Worker's sentence and code, and a period reads as asked or
 waived only from the company read. Decision notes:
 `documentation/architecture/decisions/D4817-p9.md`.
+
+D4817 part 10 extends the Admin Investor preview to the company workspace:
+on `/portfolio/companies/:uid` and its tabs, `PortfolioCompanyPage` draws
+`CompanyPreview.jsx` when `isInvestorPreview` holds. It reads nothing, says
+"Company withheld in preview" in place of the name, carries the chip on the
+six key facts and each tab's sections (`previewModel.js`' `PREVIEW_COMPANY_FACTS`
+and `PREVIEW_COMPANY_TABS`), and draws each tab's writes off with their reason
+through `PortfolioPreview.jsx`' `OffWrites`. `previewCompanyTabOf` names the
+company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
+`PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
+notes: `documentation/architecture/decisions/D4817-p10.md`.

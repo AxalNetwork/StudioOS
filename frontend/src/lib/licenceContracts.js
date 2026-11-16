@@ -67,7 +67,9 @@ export const LICENCE_RESPONSE_FIELDS = Object.freeze({
   // D4686 — a termination's answer, `GET /:uid`'s `sync`, and its `termination` ledger.
   terminate: Object.freeze(['ok', 'status', 'resumed', 'released', '...result', 'pushed']),
   terminate_operation: Object.freeze(['status', 'steps', 'failure_step', 'failure_code']),
-  sync: Object.freeze(['available', 'hq_revision', 'branch_revision', 'last_success_at', 'pending', 'pending_available', 'termination', 'termination_available']),
+  // D5925: `branch_report` is what the branch says it holds, read from the branch; `branch_revision` stays the push answer.
+  sync: Object.freeze(['available', 'hq_revision', 'branch_revision', 'last_success_at', 'pending', 'pending_available', 'termination', 'termination_available', 'branch_report']),
+  syncBranchReport: Object.freeze(['state', 'revision', 'copy_state', 'applied_at', 'reported_at', 'reason']),
   terms: Object.freeze(['ok', 'term_years', 'annual_fee_cents', 'currency', 'revenue_share_bps', 'token_split_bps', 'starts_on', 'renews_on', 'terms_revision', 'changed', 'pushed']),
 });
 
