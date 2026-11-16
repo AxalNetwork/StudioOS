@@ -91,7 +91,7 @@ test('1. the owner invites a prospect with an address: Invited and its date, sti
   const s = await audience(t, { states: STATES, send: { email_sent: true, invite: { uid: 'i1', prospect_id: 11, invited_at: '2026-11-16T15:00:00.000Z', email_sent: true } } });
   assert.match(s.text(), /From your pipeline/);
   assert.equal(s.inviteDisabled('Nora Ventures'), false, 'the owner can invite');
-  assert.match(s.text(), new RegExp(INVITE_NOTE.replace(/[.]/g, '\\.')));
+  assert.ok(s.text().includes(INVITE_NOTE), 'shows the INVITE_NOTE sentence');
   await s.invite('Nora Ventures');
   assert.match(s.text(), /Axal emails Nora Ventures at the address in your pipeline\./);
   await s.press('Send invitation');
@@ -118,7 +118,7 @@ test('2. an address typed for a prospect without one; a send that did not leave,
   await s.type(' ola@example.test ');
   assert.equal(s.sendDisabled(), false);
   await s.press('Send invitation');
-  assert.match(s.text(), new RegExp(INVITE_NOT_SENT.replace(/[.]/g, '\\.')));
+  assert.ok(s.text().includes(INVITE_NOT_SENT), 'shows the INVITE_NOT_SENT sentence');
   assert.doesNotMatch(s.rowText('Ola Partners'), /Invited/, 'a send that did not leave is not Invited');
   await s.press('Send invitation');
   assert.match(s.text(), /The pipeline holds another address for this investor\. Change it there first\./);
