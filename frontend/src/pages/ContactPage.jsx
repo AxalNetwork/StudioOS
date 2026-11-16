@@ -46,9 +46,13 @@ export function intentsFor(topic) {
   return topic === 'licence' ? [...INTENTS, LICENCE_INTENT] : INTENTS;
 }
 
-/** The pill pressed on arrival: Licence for `?topic=licence`, else the canvas's default. */
+/**
+ * The pill pressed on arrival: the one `?topic=` names (`lab`, `invest`,
+ * `advise` or `licence`), so "Apply to advise" lands on Advising (#6986).
+ * Any other value keeps the canvas's default.
+ */
 export function initialIntent(topic) {
-  return topic === 'licence' ? LICENCE_INTENT.value : INTENTS[0].value;
+  return intentsFor(topic).some((i) => i.value === topic) ? topic : INTENTS[0].value;
 }
 
 /**
