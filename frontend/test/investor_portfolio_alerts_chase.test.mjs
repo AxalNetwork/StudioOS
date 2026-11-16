@@ -48,7 +48,7 @@ test('the attention rules are evaluated and named, and a failed source is never 
   // attention rules (PFA06), evaluated in the shared model so Positions and
   // the Overview read one rule set (audit F-05).
   assert.match(POSITIONS, /data-testid="positions-attention-rules"/, 'the rules section is gone');
-  assert.match(POSITIONS, /attentionRulesOf\(reads, rows, flips\)/, 'the page no longer evaluates the shared rules');
+  assert.match(POSITIONS, /attentionRulesOf\(reads, rows\)/, 'the page no longer evaluates the shared rules');
   for (const name of ['Runway under 6 months', 'Update older than 30 days', 'Health turned red within 90 days', 'Latest mark below cost']) {
     assert.ok(MODEL.includes(name), `the "${name}" rule is gone`);
   }
@@ -56,8 +56,9 @@ test('the attention rules are evaluated and named, and a failed source is never 
   // KPIs — never the health snapshot, which does not carry one.
   assert.match(MODEL, /const RUNWAY_KEYS = \['runway_months', 'runway'\];/, 'the runway rule reads the wrong store');
   assert.match(MODEL, /runwayFor\(p, updates\)/, 'the runway rule does not read the founder update');
-  // The health flip reads the dated history, lazily and only for the Attention ones.
-  assert.match(POSITIONS, /api\.portfolioHealthGet\(uid, 90\)/, 'the flip rule reads no history');
+  // #6210: the health list supplies the dated transition to both views.
+  assert.doesNotMatch(POSITIONS, /api\.portfolioHealthGet\(/, 'Positions makes an extra history call');
+  assert.match(MODEL, /recentAttentionChange\(r\.health\)/, 'the flip rule bypasses the shared health read');
   // A rule whose source failed says so rather than reporting zero.
   assert.match(POSITIONS, /Not a claim that nothing fired/, 'a failed source must not read as a clear rule');
 });
