@@ -103,6 +103,11 @@ export type RecordAction = {
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
   /**
+   * D6101 (#6101): run only from a section row that names it with its body (a KPI
+   * entry's Remove); the page draws no header or Actions button for it.
+   */
+  row_only?: boolean;
+  /**
    * D5375: fields the client sends back with the form's values, as read with this record. Edit split
    * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.
    */

@@ -6,7 +6,8 @@
  *   · a small mixed run of A–E on the actual migrations keeps every
  *     invariant at 0, and every mix does its work;
  *   · each invariant query counts the fault it names (each is broken here on
- *     purpose, in this throwaway database);
+ *     purpose, in this throwaway database), a settled AI charge without its
+ *     usage row (#4559, D4569) among them;
  *   · an unrecorded charge is unknown, never 0;
  *   · the control shows the `chargedFor` scan and the candidate index's
  *     plan, and leaves no index behind;
@@ -71,6 +72,12 @@ test('#4567: each invariant query counts the fault it names', async () => {
       ['negative_balance', () => w.env.DB.prepare('UPDATE ai_topup_accounts SET balance_microusd = balance_microusd - 9007199254740991 WHERE user_id = ?').bind(res.user_id).run().then(() => assert.fail('the CHECK refused nothing'), () => {})],
       ['second_live_run', () => { db.exec('DROP INDEX IF EXISTS idx_agent_task_runs_live'); for (const [u, k] of [['bench-l1', 8], ['bench-l2', 9]] as const) db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id) VALUES (?, ?, ?, ?, 'running', ?)").run(u, run.agent_id, run.task_id, k, u); }],
       ['missing_charge', () => db.exec('UPDATE ai_usage_logs SET charged_microusd = NULL WHERE id = (SELECT usage_log_id FROM ai_rail_proposals LIMIT 1)')],
+      // #4559 (D4569): the usage rows of a settled, charged AI hold lose their hold, as a failed `recordUsage` would leave it.
+      ['settled_without_usage', () => {
+        const charged = db.prepare("SELECT uid FROM ai_budget_reservations WHERE status = 'settled' AND surface = 'ai' AND actual_included_microusd + actual_topup_microusd > 0 LIMIT 1").get() as any;
+        assert.ok(charged, 'the run settled a charged AI hold');
+        assert.ok(db.prepare('UPDATE ai_usage_logs SET reservation_uid = NULL WHERE reservation_uid = ?').run(charged.uid).changes >= 1);
+      }],
       ['duplicate_proposal', () => { db.exec('DROP INDEX IF EXISTS idx_ai_rail_proposals_run_key'); db.exec("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json, run_key) SELECT 'bench-dup', user_id, rail_page, rail_option, kind, payload_json, run_key FROM ai_rail_proposals LIMIT 1"); }],
     ];
     for (const [name, fault] of faults) {

@@ -92,7 +92,15 @@ export function requestRows(detail, nowMs = Date.now()) {
       return { id: r.id, title: r.title, tone: 'wait', state: `${days == null ? 'Waiting · asked on a date not recorded' : `Waiting ${days} day${days === 1 ? '' : 's'}`}${due}` };
     }
     const answered = dayOf(r.responded_at);
-    return { id: r.id, title: r.title, tone: 'done', state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}` };
+    return {
+      id: r.id, title: r.title, tone: 'done',
+      state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}`,
+      answer: {
+        note: r.response_note || null,
+        url: r.response_url || null,
+        files: Array.isArray(r.files) ? r.files : null,
+      },
+    };
   });
 }
 
@@ -163,15 +171,54 @@ export function sizeOf(bytes) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const PAPER_WORD = { sent: 'Sent', partially_signed: 'Partly signed', completed: 'Fully signed', declined: 'Declined', voided: 'Voided', expired: 'Expired' };
+const PAPER_WORD = { sent: 'Sent', partially_signed: 'Partly signed', completed: 'Fully signed', declined: 'Declined', voided: 'Voided', expired: 'Expired', rejected: 'Declined', void: 'Voided' };
+// D6184 (#6184): the Worker writes `rejected` and `void` (esign.ts); the older words stay for rows written before.
+const PAPER_CLOSED = ['declined', 'voided', 'expired', 'rejected', 'void'];
 /** The deal's paper: the envelopes for this deal that the e-sign read lets this viewer see. */
 export function paperRows(envelopes) {
   return (envelopes || []).map((e) => ({
     id: e.id,
     title: e.document_title || e.document_type || NOT_RECORDED,
     state: `${PAPER_WORD[e.status] || 'Status not recorded'}${e.status === 'completed' ? (dayOf(e.completed_at) ? ` ${dayOf(e.completed_at)}` : '') : (dayOf(e.created_at) ? ` · sent ${dayOf(e.created_at)}` : '')}`,
-    tone: e.status === 'completed' ? 'done' : ['declined', 'voided', 'expired'].includes(e.status) ? 'off' : 'wait',
+    tone: e.status === 'completed' ? 'done' : PAPER_CLOSED.includes(e.status) ? 'off' : 'wait',
+    // D6184 (#6184): what the viewer can do with it. Download is the completed envelope's alone
+    // (the Worker refuses any other with 409); an open one says how to sign; a closed one, neither.
+    signed: signedLine(e),
+    action: e.status === 'completed' ? 'download' : ['sent', 'partially_signed'].includes(e.status) ? 'sign' : PAPER_CLOSED.includes(e.status) ? 'closed' : 'none',
   }));
+}
+
+const countOf = (v) => (v == null || v === '' || !Number.isInteger(Number(v)) || Number(v) < 0 ? null : Number(v));
+/** "2 of 3 signed", from the list's `recipient_count` and `signed_count`; never a guessed zero. */
+export function signedLine(e) {
+  const of = countOf(e?.recipient_count);
+  const n = countOf(e?.signed_count);
+  if (of == null || n == null) return 'Signatures not recorded';
+  if (of === 0) return 'No signer is recorded on this envelope';
+  return `${n} of ${of} signed`;
+}
+
+export const PAPER_CLOSED_LINE = 'It can no longer be signed, and there is no signed copy to download.';
+export const PAPER_WAIT_DOWNLOAD = 'Download opens once the envelope is fully signed.';
+export const SIGN_BY_EMAIL = 'Your signing link was sent by email';
+
+/**
+ * D6184 (#6184): how the viewer signs an open envelope, from `GET /api/legal/esign/:id`. That read returns each
+ * recipient's email and status and never a signing link (the token is the recipient's inbox's alone, D410), so
+ * the line points to the email and no URL is ever built here. The viewer is matched by email, which is what the
+ * recipient rows carry.
+ */
+export function paperSigning(read, email) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status !== 'ready') return { state: 'unreadable' };
+  const me = String(email || '').trim().toLowerCase();
+  const rows = Array.isArray(read.data?.recipients) ? read.data.recipients : [];
+  const mine = me ? rows.find((r) => String(r.recipient_email || '').trim().toLowerCase() === me) : null;
+  if (!mine) return { state: 'not_signer', line: 'You are not a signer on this envelope. It is waiting on the others.' };
+  if (mine.status === 'signed') return { state: 'signed', line: `You signed${dayOf(mine.signed_at) ? ` on ${dayOf(mine.signed_at)}` : ''}. It is waiting on the others.` };
+  if (mine.status === 'rejected') return { state: 'declined', line: 'You declined this envelope.' };
+  if (mine.status === 'void') return { state: 'closed', line: PAPER_CLOSED_LINE };
+  return { state: 'yours', line: `${SIGN_BY_EMAIL} to ${mine.recipient_email}. Open it from that email to review and sign.` };
 }
 
 export const ASK_MAX = 2000;
