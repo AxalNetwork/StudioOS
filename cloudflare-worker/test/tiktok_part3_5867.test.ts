@@ -38,6 +38,9 @@ async function world() {
   db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   db.exec(readFileSync(`${M}/435_connector_companies.sql`, 'utf8'));
   db.exec(readFileSync(`${M}/${MIGRATION}`, 'utf8'));
+  // D5864 (#5864, PR #6875): once part 2b is on main, a sync also raises the channel proposal into its own table.
+  const proposals = readdirSync(M).find((f) => /^\d{12}_5864_tiktok_proposals\.sql$/.test(f));
+  if (proposals) db.exec(readFileSync(`${M}/${proposals}`, 'utf8'));
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (?, ?)').run(COMPANY, FOUNDER);
   return { db, env };
 }
