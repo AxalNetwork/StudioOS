@@ -238,7 +238,7 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
                       <div className="flex flex-col gap-2 rounded-[10px] border border-amber-300 bg-amber-50/70 p-3 dark:border-amber-900 dark:bg-amber-950/25 md:flex-row md:items-center" role="status" data-testid="conditions-hold">
                         <span aria-hidden="true" className="font-mono text-lg">‖</span>
                         <div className="flex-1"><b className="text-[13px]">{conditions.open} open condition{conditions.open === 1 ? ' holds' : 's hold'} every transfer on this deal.</b><div className="text-[11.5px] text-gray-700 dark:text-gray-300">Meet or waive {conditions.open === 1 ? 'it' : 'them'} in the Investment committee.</div></div>
-                        {!investor ? <a href="/deals/commit" className="inline-flex min-h-[44px] items-center rounded-[7px] bg-axal-violet-deep px-4 text-[12px] font-bold text-white hover:bg-axal-violet dark:bg-violet-500 md:min-h-[32px]" data-testid="conditions-open-ic">Open in Investment committee</a> : null}
+                        {!investor ? <a href="/deals/commit" className="inline-flex min-h-[44px] items-center rounded-[7px] bg-axal-violet-deep px-4 text-[12px] font-bold text-white hover:bg-axal-violet dark:bg-violet-500 dark:hover:bg-violet-400 md:min-h-[32px]" data-testid="conditions-open-ic">Open in Investment committee</a> : null}
                       </div>
                     ) : null}
                     {conditions.rows.length === 0 ? <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="conditions-empty">No condition {investor ? 'you may see ' : ''}is recorded on this deal.</p> : (
@@ -278,7 +278,7 @@ export default function ClosingWorkspace({ dealId, deal, user, onBack, onRecordT
                       aria-describedby={hold.enabled ? undefined : 'transfer-hold-reason'}
                       onClick={() => hold.enabled && onRecordTransfer && onRecordTransfer(dealId)}
                       data-testid="button-record-transfer"
-                      className="min-h-[44px] rounded-[7px] bg-axal-violet-deep px-4 text-[12px] font-bold text-white hover:bg-axal-violet disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 md:min-h-[32px]"
+                      className="min-h-[44px] rounded-[7px] bg-axal-violet-deep px-4 text-[12px] font-bold text-white hover:bg-axal-violet disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-400 md:min-h-[32px]"
                     >Record transfer</button>
                     {hold.reason ? (
                       <span id="transfer-hold-reason" className="text-[11.5px] text-gray-700 dark:text-gray-300" data-testid={`transfer-hold-${hold.state}`}>
