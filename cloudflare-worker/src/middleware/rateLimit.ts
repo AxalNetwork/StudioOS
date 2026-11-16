@@ -59,6 +59,8 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // D5791 (#5791): an investor's attached walkthrough on their share link, its
 // takes and each take's file (routes/deck_share_walkthrough.ts).
 export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
+// D6864 (#6864): the public evidence-pack read. Each open consumes one of the link's views, so a tight per-IP bucket.
+export const EVIDENCE_SHARE_READ = /^\/api\/share\/evidence\/[^/]+$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)
@@ -325,6 +327,15 @@ const BUCKETS: Bucket[] = [
     limit: 120,
     windowSec: 60,
     test: (p, m) => m === 'GET' && DECK_SHARE_WALKTHROUGH.test(p),
+    scope: 'ip',
+  },
+  // D6864 (#6864) — the public evidence pack a founder shared outside Axal: per IP and fail-open like the
+  // other public reads. 30 a minute is far above a person reading one pack and keeps a guessed-token sweep slow.
+  {
+    name: 'evidence_share_read',
+    limit: 30,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && EVIDENCE_SHARE_READ.test(p),
     scope: 'ip',
   },
   // 60 requests/min per user — default
