@@ -106,7 +106,7 @@ test('populated: euro sizes print; other sizes read "Not recorded" with the reas
   const { html, text } = populated();
   assert.match(text, /€50M/);
   assert.match(text, /€300M/);
-  assert.match(html, /title="Not recorded: this list records no size in a known currency"[^>]*>Not recorded</);
+  assert.match(html, /title="Not recorded: this list records no size in a known currency"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded</); // D5129: the shared chip's aria-hidden glyph precedes its word
   assert.match(text, /Size “Not recorded”: this list records no size in a known currency/);
   assert.match(text, /Size “Not recorded”: the source lists no size for these funds\./);
 });
@@ -115,7 +115,7 @@ test('populated: EIF named, neither named, and unknown reads "Not recorded"', ()
   const { html, text } = populated();
   assert.match(text, /Neither named/);
   assert.match(html, />EIF</);
-  assert.match(html, /title="No notable LPs are recorded, so EIF and EIFO backing is unknown"[^>]*>Not recorded</);
+  assert.match(html, /title="No notable LPs are recorded, so EIF and EIFO backing is unknown"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded</); // D5129: the shared chip's aria-hidden glyph precedes its word
 });
 
 test('populated: coverage from the API, and stage "Not recorded" with its reason', () => {

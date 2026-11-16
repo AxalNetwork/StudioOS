@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { OVERDUE_HOURS } from '../communityModel';
+import { DataState, StateChip, Unrecorded as SharedUnrecorded } from '../../../../ui';
 
 export const BTN = 'inline-flex min-h-[36px] max-md:min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
 export const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
@@ -29,9 +30,9 @@ export function Skeleton() {
   return <span className="block h-2.5 w-[70%] rounded-full bg-axal-hairline dark:bg-gray-700" />;
 }
 
-/** A figure no store records, in a sentence. Never a zero. */
+/** A figure no store records, in a sentence. Never a zero. D5129: the shared Not recorded chip, its reason visible. */
 export function Unrecorded({ reason }) {
-  return <><span className={TAG}>Not recorded</span><span className={SUB}>{reason}</span></>;
+  return <SharedUnrecorded reason={reason} reasonVisible />;
 }
 
 /** The amber dot past 72 hours (D915). */
@@ -52,13 +53,9 @@ export function TableToggle({ table, onToggle, testId }) {
   return <button type="button" className={LINK} aria-pressed={table} onClick={onToggle} data-testid={testId}>{table ? 'View as chart' : 'View as table'}</button>;
 }
 
+/** A block that could not be read: D5129's shared Unavailable block, with the reason the read gave. */
 export function Failed({ reason, onRetry }) {
-  return (
-    <div className="flex flex-col gap-2.5 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint p-3.5 text-[13px] leading-normal text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert">
-      <span>{reason || 'Could not be read. That is not the same as none.'}</span>
-      <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-    </div>
-  );
+  return <DataState state="unavailable" size="block" reason={reason || 'Could not be read. That is not the same as none.'} onRetry={onRetry} retryLabel="Try again" announce="always" />;
 }
 
 /**
@@ -86,13 +83,7 @@ export function Tile({ t, onRetry, children, figure = false }) {
       )}
       {children}
       {t.state === 'unrecorded' && <Unrecorded reason={t.reason} />}
-      {t.state === 'unreadable' && (
-        <>
-          <span className="text-[13px] font-bold text-axal-destructive dark:text-red-400">Unreadable</span>
-          <span className={SUB}>{t.reason}</span>
-          <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-        </>
-      )}
+      {t.state === 'unreadable' && <DataState state="unavailable" size="tile" reason={t.reason} onRetry={onRetry} retryLabel="Try again" />}
     </div>
   );
 }
@@ -124,7 +115,7 @@ export function Card({ id, title, span = 6, state, reason, onRetry, children, fo
 export function ManageRow({ testId, name, what, figure, children }) {
   let fig = null;
   if (figure?.state === 'loading') fig = <span className="font-mono text-[11.5px] text-axal-muted">Reading…</span>;
-  else if (figure?.state === 'unreadable') fig = <span className="text-[11.5px] font-bold text-axal-destructive dark:text-red-400">Unreadable</span>;
+  else if (figure?.state === 'unreadable') fig = <StateChip kind="unavailable" />;
   else if (figure?.state === 'ready') fig = <span className={`${MONO} whitespace-nowrap rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100`}>{figure.text}</span>;
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-axal-hairline px-4 py-2.5 first:border-t-0 dark:border-gray-800" data-testid={testId}>

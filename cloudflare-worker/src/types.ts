@@ -1,5 +1,9 @@
 export interface Env {
   TIKTOK_APP_APPROVED?: string;
+  /** D5839: '1' once the owner's Google Cloud project serves Search Console sign-in. */
+  GOOGLE_SEARCH_CONSOLE_APPROVED?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;

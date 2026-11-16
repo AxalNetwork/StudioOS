@@ -10,10 +10,11 @@ import { base,createHire,fields,hires,idOf,makeBase,milestone,obj,PlanError,save
 import { capTableOptions } from '../services/useOfFunds/capTableLink';
 import { planRead,runwayToday } from '../services/useOfFunds/read';
 import useOfFundsEadwyn from './use_of_funds_eadwyn';
+import { uofCan, uofCapabilities, uofStanding, type UofCapabilities } from '../services/useOfFunds/capabilities';
 import { exportAudit, planCsv, planPdf, readBasePlan } from '../services/useOfFunds/exportPlan';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
-const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean}}>();
+const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean;caps:UofCapabilities}}>();
 r.use('*',async(c,next)=>{
   let user:User;
   try { user=await requireAuth(c as any) as User; } catch { return c.json({code:'unauthorized',detail:'Sign in first.'},401); }
@@ -22,13 +23,16 @@ r.use('*',async(c,next)=>{
   if (!project) return c.json({code:'not_found',detail:'Project not found.'},404);
   if (!canWrite(project,user)) return c.json({code:'forbidden',detail:'Use of funds is available to the venture founder or an admin.'},403);
   const support=await isSupportSession(c as any);
-  if (support&&c.req.method!=='GET') return c.json({code:'support_read_only',detail:'A support session cannot change the plan.'},403);
+  // D5074 slice 5: who the caller is, once, as the capability map the plan read returns; writes refuse from it.
+  const caps=uofCapabilities(uofStanding(user,project,support));
+  if (c.req.method!=='GET'&&!uofCan(caps,'edit')) return c.json({code:'support_read_only',detail:'A support session cannot change the plan.'},403);
   const company=await activeCompanyFor(c,user);
   if (!projectInActiveCompany(company,project)) return c.json({code:'not_found',detail:'Project not found.'},404);
   const owner=await c.env.DB.prepare("SELECT id FROM users WHERE founder_id=? AND role='founder' AND is_active=1 ORDER BY id LIMIT 1").bind(project.founder_id).first<{id:number}>();
   if (!owner) return c.json({code:'owner_unavailable',detail:'The active founder for this plan is Not recorded.'},409);
-  c.set('uof',{projectId:pid,user,founderUserId:owner.id,readOnly:support});
-  c.set('mercury',user.role==='founder'&&Number(user.founder_id)===Number(project.founder_id)&&!support);
+  c.set('uof',{projectId:pid,user,founderUserId:owner.id,readOnly:!uofCan(caps,'edit')});
+  c.set('mercury',uofCan(caps,'mercury'));
+  c.set('caps',caps);
   await next();
 });
 r.onError((e,c)=> e instanceof PlanError ? c.json({code:e.code,error:e.code,detail:e.sentence,...(e.recovery?{recovery:e.recovery}:{}),...(e.currentRevision!==undefined?{current_revision:e.currentRevision}:{})},e.status as any)
@@ -39,7 +43,13 @@ const body=async(c:any)=>{
   return b;
 };
 r.route('/eadwyn', useOfFundsEadwyn);
-r.get('/plan',async c=>c.json(await planRead(c.env,c.get('uof'),c.get('mercury'))));
+// D5074 slice 5: the plan read carries the caller's capabilities beside the plan.
+// D6084's Export and Add to data room depend on the plan's data, so the read adds them to the caller's map:
+// one map, which the page reads alone (D5074 part 5).
+r.get('/plan',async c=>{
+  const plan=await planRead(c.env,c.get('uof'),c.get('mercury'));
+  return c.json({...plan,capabilities:{...c.get('caps'),...plan.viewer.capabilities}});
+});
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
   const rows=await c.env.DB.prepare('SELECT * FROM uof_scenarios WHERE project_id=? ORDER BY is_base DESC,id').bind(s.projectId).all<any>();

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import RecordView from '../src/pages/cycles/RecordView.jsx';
+import RecordView, { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import * as rules from '../src/pages/cycles/recordModel.js';
 import { mountContracts } from './_contracts_dom.mjs';
 import { fixture, mutationCheck } from './_record_d696.mjs';
@@ -85,6 +85,26 @@ test('only declared actions dispatch, using the declaration and the row body', a
     ['{ ...action, body: reference.body }', '{ ...action, ...reference }'],
     ["...(record?.side ?? [])", '...[]'],
   ]);
+});
+
+function assertSectionNote({ default: View, RecordPhoneProvider: PhoneProvider }) {
+  const record = fixture();
+  record.facts = record.facts.slice(0, 3);
+  const note = 'Axal does not monitor competitors automatically.';
+  record.side = [{ key: 'watching', title: 'Signal filters', rows: [{ a: 'Funding', b: 'on' }], note }];
+  assert.ok(markup(View, record).includes('@[760px]/cycle:grid-cols-3'));
+  for (const phone of [false, true]) {
+    const html = renderToStaticMarkup(h(PhoneProvider, { phone }, h(View, { record, ...context })));
+    assert.ok(html.includes(note), phone ? 'phone note' : 'desktop note');
+  }
+}
+test('a record with three facts and a section note renders on desktop and phone', async () => {
+  assertSectionNote({ default: RecordView, RecordPhoneProvider });
+  await mutationCheck(viewSource, 'pages/cycles/RecordView.jsx', assertSectionNote, [
+    ["@[760px]/cycle:grid-cols-3", "@[760px]/cycle:grid-cols-4"],
+    ["note={section.note}", "note={undefined}"],
+    ["{section.note}</p>", "{null}</p>"],
+  ], true);
 });
 
 function assertLayout(module) {

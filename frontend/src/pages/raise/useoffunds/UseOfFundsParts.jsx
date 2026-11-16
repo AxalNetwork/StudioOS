@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
 import {
-  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
+  NOT_RECORDED, SECTIONS, centsFromTyped, dayText, hireBody, planViewer, money, roundSourceRows, sectionOf, sectionSheet, splitCheck, sourceText, tiesRows,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -494,7 +494,7 @@ export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready'
   const v = sectionSheet(base, sectionKey, mercury);
   if (!v) return null;
   const cur = base?.currency;
-  const founderOnly = plan?.viewer?.mercury === false;
+  const founderOnly = planViewer(plan)?.mercury === false;
   const deck = tiesRows(plan).find((r) => r.key === 'deck');
   const heading = (t) => <h4 className={`m-0 ${EYEBROW}`}>{t}</h4>;
   const block = 'flex flex-col gap-2 border-t border-axal-hairline pt-3 dark:border-gray-800';
@@ -519,7 +519,7 @@ export function SectionSheet({ plan, sectionKey, mercury, mercuryState = 'ready'
         </section>
         <section className={block} data-testid="uof-section-hires">
           <div className="flex items-center justify-between gap-2">{heading('Hires')}
-            {plan?.viewer?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
+            {planViewer(plan)?.can_write && v.hireItems ? <button type="button" className={BTN_GHOST} onClick={onAddHire} data-testid="uof-section-add-hire">Add a hire</button> : null}</div>
           {v.hireItems == null ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} />
             : v.hireItems.length ? (
               <>
@@ -616,7 +616,7 @@ export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
         {plan?.round?.disagreements?.length ? (
           <div className="flex flex-wrap items-center gap-2" data-testid="uof-round-differs">
             <Pill tone="amber">! Recorded round sizes differ</Pill>
-            {plan?.viewer?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
+            {planViewer(plan)?.can_write ? <button type="button" className={BTN_GHOST} onClick={onRound}>Choose the round size</button> : null}
           </div>
         ) : null}
         {rows.filter((r) => r.key !== 'round').map((r) => (

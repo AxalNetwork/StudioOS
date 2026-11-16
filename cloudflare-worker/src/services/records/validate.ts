@@ -934,6 +934,8 @@ function fundingToDate(signals: Any[]): { value: string | null; reason: string }
   return { value: money(funded.reduce((a, s) => a + Number(s.amount_cents), 0), funded[0].currency), reason: '' };
 }
 
+const WATCH_NOTE = 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.';
+
 const market: ModuleSpec = {
   read: 'read', write: 'write', store: 'competitor_candidates',
   activityType: 'validate.market-intelligence',
@@ -946,11 +948,10 @@ const market: ModuleSpec = {
     return {
       title: String(c.name),
       sub: joined(`${kind} competitor`, monYear(tracking?.created_at ?? c.created_at) ? `tracked since ${monYear(tracking?.created_at ?? c.created_at)}` : null),
-      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Watching', tone: 'vio' }],
+      pills: [{ text: kind, tone: kind === 'Direct' ? 'bad' : 'grey' }, stopped ? { text: 'Stopped', tone: 'grey' } : { text: 'Tracked', tone: 'vio' }],
       facts: [
         fact('Latest signal', latest ? joined(latest.label || SIGNAL_TYPE[latest.signal_type] || latest.signal_type, dMon(latest.on_day)) : null, 'No signal recorded'),
         fact('Funding to date', funding.value, funding.reason),
-        { label: 'Headcount', value: null, reason: 'No public figure found' },
         fact('Source', latest?.source_url ?? latest?.source_kind ?? c.url ?? null, 'No source recorded'),
       ],
       createdBy: tracking?.created_by ?? null, createdAt: c.created_at ?? null,
@@ -1000,7 +1001,7 @@ const market: ModuleSpec = {
       },
     },
     {
-      key: 'watching', title: 'Watching for', side: true,
+      key: 'watching', title: 'Signal filters', note: WATCH_NOTE, side: true,
       read: async (ctx, id) => {
         const { watch } = await loadCompetitor(ctx, id);
         return { rows: [
@@ -1033,7 +1034,7 @@ const market: ModuleSpec = {
           { key: 'kind', label: 'Kind', kind: 'CH', options: opts([['direct', 'Direct'], ['adjacent', 'Adjacent']]), value: c.category === 'adjacent' ? 'adjacent' : 'direct',
             note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' },
           { key: 'watch', label: 'Watch for', kind: 'CK', options: opts([['funding', 'Funding'], ['launch', 'Launches'], ['hiring', 'Hires']]),
-            value: WATCH_KEYS.filter((k) => watch[k]) },
+            value: WATCH_KEYS.filter((k) => watch[k]), note: WATCH_NOTE },
           { key: 'price_position', label: 'Price', kind: 'CH', options: opts([['lower', 'Lower than ours'], ['similar', 'About the same'], ['higher', 'Higher than ours']]), value: tracking?.price_position ?? undefined },
           { key: 'depth_position', label: 'Depth', kind: 'CH', options: opts([['narrower', 'Narrower'], ['similar', 'About the same'], ['broader', 'Broader']]), value: tracking?.depth_position ?? undefined },
           { key: 'why', label: 'Why it matters', kind: 'T', value: tracking?.why_it_matters ?? '', placeholder: '[One line, optional]' },
