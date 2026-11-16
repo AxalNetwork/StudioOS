@@ -121,6 +121,8 @@ const SOURCES: Record<string, string[]> = {
   // D2407 (#2407): Beehiiv's typed reads and provider.
   // D2407 part 3: the draft tool's one call site is drafts.ts.
   beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
+  // D5863: the Display API reads are the client's; the sign-in, refresh and revoke stay in tiktokOAuth.ts (the TOKEN_EXCHANGE side).
+  tiktok: ['services/tiktok/client.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -134,7 +136,9 @@ const linesOf = (file: string) => {
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
 const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
-const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
+const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"],
+  // D5863: TikTok's video list is a POST that reads (UNVERIFIED method, #2401).
+  tiktok: ['/v2/video/list/'] };
 /**
  * D2407 part 3: a write made through an MCP tool, not an HTTP method in the
  * connector's source (the shared client sends it). It counts as a write only
@@ -312,6 +316,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   facebook: '2026-11',
   tiktok: '2026-11',
+  google_search_console: '2026-11', // D5839
   teams: '2026-11', // D5810
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
@@ -355,6 +360,8 @@ const constant = (src: string, name: string) => {
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   facebook: { file: 'integrations/providers/facebook.ts', sign_in: ['AUTHORIZE', ''], api: 'GRAPH' },
   tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
+  // D5839: Search Console's own client; the page names the property list it reads.
+  google_search_console: { file: 'integrations/searchConsoleOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'SITES' },
   hubspot: { file: 'integrations/providers/hubspot.ts', sign_in: ['HS_AUTH', '/oauth/authorize'], api: 'HS_API' },
   calendly: { file: 'integrations/providers/calendly.ts', sign_in: ['CL_AUTH', '/oauth/authorize'], api: 'CL_API' },
   salesforce: { file: 'integrations/providers/salesforce.ts', sign_in: ['PROD_HOST', '/services/oauth2/authorize'], api: null },

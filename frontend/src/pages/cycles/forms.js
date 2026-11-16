@@ -460,16 +460,20 @@ const INVESTOR_TYPE = opts([['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund
 const LIVE = 'live';
 const BLANK = 'blank';
 const VERSION = 'version-';
+const DECK = 'deck-';
 /**
  * Start from (NAR11): each saved version, newest first; the Spin-Out deck's
  * wording, for a Spin-Out venture only (owner question 5 on #2454, read as A;
- * form-options' `spinout`); then blank. D909.
+ * form-options' `spinout`); the current pitch deck version's words, for any
+ * venture with a saved deck version (D6069, form-options' `deck`); then blank. D909.
  */
-export function startFromChips(versions, spinout = false) {
+export function startFromChips(versions, spinout = false, deck = null) {
   const saved = chipsOf(versions).filter((o) => /^[1-9][0-9]{0,8}$/.test(o.value)).sort((a, b) => Number(b.value) - Number(a.value));
+  const deckVersion = posId(deck?.version);
   return [
     ...saved.map((o) => ({ value: VERSION + o.value, label: o.label, meta: 'Copies its words, sections and positioning.' })),
     ...(spinout ? [{ value: LIVE, label: 'The Spin-Out deck wording', meta: 'Starts from the wording of your Spin-Out deck.' }] : []),
+    ...(deckVersion ? [{ value: DECK + deckVersion, label: `Pitch deck v${deckVersion}'s words`, meta: `Copies the words of pitch deck v${deckVersion}, card by card. The deck does not change.` }] : []),
     { value: BLANK, label: 'Blank', meta: 'Sections only, nothing written.' },
   ];
 }
@@ -487,27 +491,29 @@ const narrative = {
   key: 'narrative-version', cta: 'Create version', button: 'New version',
   title: 'New version',
   sub: 'One narrative per investor type. Each is checked for consistency.',
-  foot: 'Start from a version or blank; you edit.',
+  foot: 'Start from a version, the pitch deck or blank; you edit.',
   fields: [
     { kind: 'CH', name: 'investor_type', k: 'Audience', opts: INVESTOR_TYPE, def: 'seed_fund', required: true },
     // D909 (NAR11): the dialog says what it creates and that the version it starts from does not change.
     { kind: 'CH', name: 'start_from', k: 'Start from', opts: startFromChips([]), def: 0, note: (v) => newVersionLine(v, []) },
     ...narrativeWords,
   ],
-  // The newest saved version is chosen; with none, the Spin-Out wording for a Spin-Out venture, else blank.
+  // The newest saved version is chosen; with none, the Spin-Out wording for a Spin-Out venture, else the pitch deck's words (D6069), else blank.
   loadOptions: (w, projectId) => raiseOptions(w, projectId, 'investor-narrative').then((r) => {
     const saved = chipsOf(r?.versions);
-    return { start_from: { opts: startFromChips(r?.versions, r?.spinout === true), def: 0, note: (v) => newVersionLine(v, saved) } };
+    return { start_from: { opts: startFromChips(r?.versions, r?.spinout === true, r?.deck), def: 0, note: (v) => newVersionLine(v, saved) } };
   }),
   // NAR12's "Make vN the start of a new version" opens this dialog with vN chosen.
   fromQuery: (q) => (/^version-[1-9][0-9]{0,8}$/.test(q.get('start_from') || '') ? { start_from: q.get('start_from') } : {}),
   toBody: (v) => {
     const from = String(v.start_from || BLANK);
     const based = from.startsWith(VERSION) ? posId(from.slice(VERSION.length)) : null;
+    const deck = from.startsWith(DECK) ? posId(from.slice(DECK.length)) : null;
     return {
       investor_type: v.investor_type || null,
-      start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,
+      start_from: based ? 'version' : deck ? 'deck' : from === BLANK ? BLANK : LIVE,
       ...(based ? { based_on_version: based } : {}),
+      ...(deck ? { deck_version: deck } : {}),
       ...narrativeWordsBody(v),
     };
   },
@@ -1473,7 +1479,8 @@ const WATCH = [
   { value: 'hiring', label: 'Hires', meta: 'roles and team size', checked: false },
 ];
 const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, def: 0, note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' };
-const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
+const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH,
+  note: 'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.' };
 const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
 const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
 /**
@@ -1581,6 +1588,61 @@ const hypothesis = {
   loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'experiments').then(hypothesisOptions),
   submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
 };
+
+// ---------- Customer research's recruiting pipeline (D6001, #6001) ----------
+//
+// Neither form is a `FORMS.validate` entry: Customer research's Add and its
+// `/new` stay Record a session (D695), so these open as dialogs over the
+// table. Add a lead writes `POST /progress/discovery/:projectId` at stage
+// `lead`; Move stage is the interview record's `set-stage` action, so the
+// move lands in the record's activity.
+
+/** A lead's channel, as the interview stores it: "Call" is `video`, typed notes `manual`. */
+export const LEAD_CHANNELS = [
+  { value: 'in_person', label: 'In person' }, { value: 'video', label: 'Call' },
+  { value: 'text', label: 'Text chat' }, { value: 'manual', label: 'Typed notes' },
+];
+export const addLead = {
+  key: 'lead', cta: 'Add a lead', button: 'Add lead',
+  title: 'Add a lead',
+  sub: 'Someone to talk to. They start at stage Lead.',
+  foot: 'Move them to Invited, Booked and Done from the list.',
+  fields: [
+    { kind: 'T', name: 'interviewee_name', k: 'Name', ph: 'Who you will talk to', required: true, max: 200 },
+    { kind: 'T', name: 'interviewee_company', k: 'Company', ph: 'Optional', max: 200 },
+    { kind: 'T', name: 'interviewee_role', k: 'Role', ph: 'Optional', max: 200 },
+    // No chip is chosen until the founder picks one: an unknown channel stays Not recorded.
+    { kind: 'CH', name: 'channel', k: 'Channel', opts: LEAD_CHANNELS, note: 'Optional. How you plan to talk.' },
+  ],
+  toBody: (v) => ({
+    interviewee_name: str(v.interviewee_name), interviewee_company: str(v.interviewee_company),
+    interviewee_role: str(v.interviewee_role), channel: v.channel || null, stage: 'lead',
+  }),
+  submit: (w, projectId, v) => w.validate.lead(projectId, addLead.toBody(v)),
+};
+
+export const STAGE_WORDS = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+/**
+ * Move stage for one row (`{ name, stage }`, the Worker's `stage`): the four
+ * stages, the current one marked. None is chosen: a row with no stage reads
+ * as Done, and saving that reading would write a stage nobody picked.
+ */
+export function moveStageForm(row) {
+  const now = Object.hasOwn(STAGE_WORDS, row?.stage) ? row.stage : null;
+  const name = str(row?.name) || 'this interview';
+  return {
+    key: 'set-stage', cta: 'Move', button: 'Move',
+    title: `Move ${name}`,
+    sub: 'Its stage now, with the date it got there.',
+    foot: 'The move is logged on the interview.',
+    fields: [
+      { kind: 'CH', name: 'stage', k: 'Stage', required: true,
+        opts: Object.entries(STAGE_WORDS).map(([value, label]) => ({ value, label, ...(value === now ? { meta: 'current' } : {}) })) },
+      { kind: 'T', name: 'at', k: 'Date reached · optional', input: 'date', note: 'Today when left empty.' },
+    ],
+    toBody: (v) => ({ stage: v.stage || null, ...(str(v.at) ? { at: str(v.at) } : {}) }),
+  };
+}
 
 /** Validate's Add forms, by module slug, registered as `FORMS.validate`. */
 export const VALIDATE_FORMS = {

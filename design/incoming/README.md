@@ -2730,3 +2730,14 @@ Forty-nine board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`WorkGraph PR Conflicts and Reservations Page.dc.html`**, **`WorkGraph PR Conflicts and Reservations · Boards.dc.html`**: WorkGraph · PR Conflicts and Reservations (#5580, D5580-p3).
 
 None is built yet. Ventures, investors, funds, people and amounts are sample content. Owner questions in the briefs are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
+
+## Landed 2026-11-15 — Incorporate in any country: entry points, the founder flow, the HQ formation console and the partner workspace (#6719, #6720, #6721, #6722)
+
+Four board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-15 from the briefs under #6681, each as a page plus its boards under the names Claude Design gave them. They extend `Incorporate Flow Page.dc.html` (D1414) and continue its INC numbering:
+- **`Incorporate Entry Points Page.dc.html`**, **`Incorporate Entry Points · Boards.dc.html`**: INC8 to INC12 (D6719).
+- **`Incorporate Any Country Page.dc.html`**, **`Incorporate Any Country · Boards.dc.html`**: INC13 to INC26 (D6720).
+- **`HQ Formation Console Page.dc.html`**, **`HQ Formation Console · Boards.dc.html`**: HQI-01 to HQI-14 (D6721).
+- **`Formation Partner Workspace Page.dc.html`**, **`Formation Partner Workspace · Boards.dc.html`**: FORM-00 to FORM-10 (D6722). Not scheduled: #6681 question 4 is A, partners are HQ records first.
+
+None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
+

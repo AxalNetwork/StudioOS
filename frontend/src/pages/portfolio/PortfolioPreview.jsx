@@ -42,7 +42,8 @@ function WithheldPerformance() {
   );
 }
 
-function WithheldSection({ section }) {
+/** One withheld section: its real heading and the chip (also drawn by `CompanyPreview`, D4817 part 10). */
+export function WithheldSection({ section }) {
   const id = `pf-preview-${section.key}`;
   return (
     <section className="pf-card" aria-labelledby={id} data-testid={`preview-section-${section.key}`}>
@@ -52,10 +53,11 @@ function WithheldSection({ section }) {
   );
 }
 
-function OffWrites({ writes }) {
+/** The writes the real board offers, drawn off, each `aria-describedby` the reason beside them. */
+export function OffWrites({ writes, title = 'Actions on this board' }) {
   return (
     <section className="pf-card" aria-labelledby="pf-preview-writes-title" data-testid="portfolio-preview-writes">
-      <div className="pf-card-head"><h2 id="pf-preview-writes-title">Actions on this board</h2></div>
+      <div className="pf-card-head"><h2 id="pf-preview-writes-title">{title}</h2></div>
       <div className="pf-preview-writes">
         {writes.map((w) => (
           <button key={w.key} type="button" className="pf-btn" disabled aria-describedby="pf-preview-writes-why" data-testid={`button-preview-write-${w.key}`}>

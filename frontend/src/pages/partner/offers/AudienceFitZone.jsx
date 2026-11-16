@@ -3,20 +3,20 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
-  // `StatCard` went with the four tiles it drew: the strip is the artboard's
-  // own composition now, and `FitTile` below carries the artboard's note under
-  // each figure and can draw an absence as a chip rather than an em dash.
+  // D4842: no tile strip, no profile table and no "who we are not for" card.
+  // OF-04 is the rank note and one rules table.
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  Section, Field, NoPartnerProfile, isNoPartnerProfile,
+  Field, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import Sheet from '../../../ui/Sheet.jsx';
 import { useGuardedWrite, scopedNote, zoneNote, WriteNote } from './useGuardedWrite';
 import { fitView } from '../../../lib/fitRuleView.js';
+import { FIT_KINDS, FIT_STRENGTHS, fitRuleRow, fitSheetCopy } from './fitRules.js';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -79,28 +79,23 @@ const SIGNALS = [
   ['weak_intent', 'Weak intent'],
 ];
 const SIGNAL_LABEL = Object.fromEntries(SIGNALS);
-const SIGNAL_TONE = { best_fit: 'ok', qualified: 'info', weak_intent: 'warn' };
 
-/** The strip tile, in the anatomy the artboards share. */
-function FitTile({ label, value, note, nr = false }) {
-  return (
-    <div className="rounded-[10px] border border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
-      <Eyebrow>{label}</Eyebrow>
-      <div className="mt-1.5">
-        {nr ? <NotRecorded /> : (
-          <span className="font-mono text-[16px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{value}</span>
-        )}
-      </div>
-      <div className="mt-1 text-[10px] leading-snug text-gray-600 dark:text-gray-400">{note}</div>
-    </div>
-  );
-}
-
-function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
+/**
+ * D4842 — THE FIT RULE SHEET (OF04b), one for adding and editing. It asks the
+ * canvas's business questions in order: who, how strong, what to say, and
+ * where to point them. The rule's kind defaults to a great-fit profile and the
+ * other three kinds sit under "Advanced rule types", disclosed rather than
+ * leading. A kind is chosen there, and the questions follow it.
+ *
+ * ONE RULE PER SAVE. The canvas puts a minimum engagement beside a sector in
+ * one sheet; the store keeps a budget floor as its own rule, so the minimum is
+ * the "Below a minimum engagement" kind under Advanced, and one Save writes one
+ * row. Delete sits on the left, away from Save (OF-10).
+ */
+export function FitRuleSheet({ initial, onSubmit, onDelete, onClose, busy, note, scope }) {
   const [kind, setKind] = useState(initial?.kind || 'best_fit');
-  const [floor, setFloor] = useState(
-    centsToInput(initial?.floor_cents),
-  );
+  const [advanced, setAdvanced] = useState(Boolean(initial?.kind && initial.kind !== 'best_fit'));
+  const [floor, setFloor] = useState(centsToInput(initial?.floor_cents));
   const [value, setValue] = useState(initial?.value || '');
   const [statement, setStatement] = useState(initial?.statement || '');
   const [referredTo, setReferredTo] = useState(initial?.referred_to || '');
@@ -112,11 +107,12 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   // sector is declined — and the route refuses one sent on any other kind, so
   // the control is not drawn where it would be rejected.
   const isProfile = kind === 'best_fit';
+  const copy = fitSheetCopy(kind);
 
   function submit() {
     const parsed = dollarsToCents(floor);
     if (isFloor && parsed.error) { setFloorError(parsed.error); return; }
-    if (isFloor && parsed.cents === null) { setFloorError('A budget floor needs an amount'); return; }
+    if (isFloor && parsed.cents === null) { setFloorError('A minimum engagement needs an amount'); return; }
     setFloorError('');
     onSubmit({
       kind,
@@ -129,126 +125,151 @@ function RuleForm({ initial, onSubmit, onCancel, busy, submitLabel }) {
   }
 
   return (
-    <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-      <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Kind">
-          <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
-            {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </Field>
-        {isProfile && (
-          <Field
-            label="How strong a fit"
-            hint="Your own judgement about this kind of client. Weak intent means “not yet”, which is not a decline."
-          >
-            <select className={inputClass} value={signal} onChange={(e) => setSignal(e.target.value)}>
-              <option value="">Not graded</option>
-              {SIGNALS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </Field>
-        )}
+    <Sheet
+      title={copy.title}
+      eyebrow={initial ? 'Audience fit · edit rule' : 'Audience fit · new rule'}
+      onClose={onClose}
+      width={560}
+      phone="sheet"
+      testId="fit-rule-sheet"
+      footer={(
+        <div className="flex flex-wrap items-center gap-2">
+          {onDelete && (
+            <button type="button" className={`${ghostButtonClass} text-red-700 dark:text-red-300`} disabled={busy} onClick={onDelete}>
+              Delete rule
+            </button>
+          )}
+          <div className="ml-auto flex gap-2">
+            <button type="button" className={`${ghostButtonClass} min-h-[44px] md:min-h-0`} onClick={onClose}>Cancel</button>
+            <button type="button" className={`${buttonClass} min-h-[44px] md:min-h-0`} disabled={busy} onClick={submit}>Save rule</button>
+          </div>
+        </div>
+      )}
+    >
+      <div className="flex flex-col gap-4" data-testid="rule-editor">
         {isFloor ? (
-          <Field label="Floor" hint={floorError || 'The smallest engagement worth starting.'}>
+          <Field label={copy.who} hint={floorError || 'Leads below this rank lower, with your reason.'}>
             <input className={inputClass} value={floor} inputMode="decimal" placeholder="e.g. 25000"
+              aria-invalid={floorError ? 'true' : undefined}
               onChange={(e) => setFloor(e.target.value)} />
           </Field>
         ) : (
-          <Field label="What it is about" hint="A sector, a capability, or the shape of client this fits.">
+          <Field label={copy.who}>
             <input className={inputClass} value={value} maxLength={200}
               onChange={(e) => setValue(e.target.value)} />
           </Field>
         )}
-      </div>
-      <div className="mt-3 grid gap-3">
-        <Field
-          label="The sentence a pass quotes"
-          hint="This is the field that matters. Without it, a pass is silence — which is what this zone exists to replace."
-        >
-          <textarea className={inputClass} rows={2} value={statement} maxLength={1000}
+        {isProfile && (
+          <fieldset>
+            <legend className="mb-1 text-[12px] font-semibold text-axal-ink dark:text-gray-100">How strong is this fit?</legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Fit strength">
+              {FIT_STRENGTHS.map(([v, l]) => (
+                <button
+                  key={v} type="button" role="radio" aria-checked={signal === v}
+                  className={`min-h-[44px] flex-1 rounded-lg border px-3 text-[13px] font-semibold md:min-h-[36px] ${signal === v
+                    ? 'border-axal-ink bg-axal-ink text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900'
+                    : 'border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}
+                  onClick={() => setSignal(signal === v ? '' : v)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11.5px] text-axal-faint">
+              Weak intent means “not yet”, which is not a decline. Pipeline reads Best fit and Weak intent when it scores a lead; Qualified is a note you keep. Leave it unset if you have not judged it.
+            </p>
+          </fieldset>
+        )}
+        <hr className="border-axal-hairline dark:border-gray-700" />
+        <Field label={copy.says} hint={copy.saysHint}>
+          <textarea className={inputClass} rows={3} value={statement} maxLength={1000}
             onChange={(e) => setStatement(e.target.value)} />
         </Field>
-        <Field
-          label="Who to send them to instead"
-          hint="Optional, and the difference between a pass that wastes a week and one that does not."
-        >
+        <Field label="Can we point them somewhere else? (optional)" hint="A firm or person better suited, named in the reply.">
           <input className={inputClass} value={referredTo} maxLength={300}
             onChange={(e) => setReferredTo(e.target.value)} />
         </Field>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className={buttonClass} disabled={busy} onClick={submit}>
-          {submitLabel}
+        <button
+          type="button" className="w-fit text-[12.5px] font-semibold text-axal-muted underline dark:text-gray-300"
+          aria-expanded={advanced} onClick={() => setAdvanced((v) => !v)}
+        >
+          Advanced rule types {advanced ? '▴' : '▾'}
         </button>
-        {onCancel && (
-          <button type="button" className={ghostButtonClass} onClick={onCancel}>Cancel</button>
+        {advanced && (
+          <Field label="Rule type" hint={FIT_KINDS.find(([k]) => k === kind)?.[2]}>
+            <select className={inputClass} value={kind} onChange={(e) => setKind(e.target.value)}>
+              {FIT_KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </Field>
         )}
+        <WriteNote note={scopedNote(note, scope)} busy={busy} />
       </div>
-    </div>
+    </Sheet>
   );
 }
 
-function RuleRow({ rule, onSave, onDelete, busy, note }) {
-  const [edit, setEdit] = useState(false);
-
+/**
+ * D4842 — THE RULES TABLE (OF-04): Rule, Who, Strength, What we say, Point them
+ * to. One row set: the rows the chip selects, which are also the export. A rule
+ * with no reply carries the primary "Add reply"; every other row is Edit. On a
+ * phone the same rows stack as cards, so no table is wider than the screen.
+ */
+function FitRulesTable({ rows, onEdit }) {
+  const who = (v) => v.who || <Unrecorded>Not named</Unrecorded>;
+  const says = (v) => (v.says
+    ? <span>“{v.says}”</span>
+    : <span className="font-bold text-amber-700 dark:text-amber-400">No reply yet</span>);
+  const action = ({ r, v }) => (
+    <button
+      type="button"
+      className={`${v.needsReply ? buttonClass : ghostButtonClass} min-h-[44px] md:min-h-0`}
+      onClick={() => onEdit(r)}
+    >
+      {v.needsReply ? 'Add reply' : 'Edit'}
+    </button>
+  );
+  const ruleCell = (v) => (
+    <>
+      <b className="text-axal-ink dark:text-gray-100">{v.rule}</b>
+      {v.kind && <div className="text-[11.5px] text-axal-faint">{v.kind}</div>}
+      {!v.inUse && <div className="text-[11.5px] text-axal-faint">Not in use</div>}
+    </>
+  );
   return (
-    <div className="border-t border-axal-hairline py-3 first:border-t-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={KIND_TONE[rule.kind] || 'neutral'}>{KIND_LABEL[rule.kind] || rule.kind}</Pill>
-            <span className="text-[13px] font-extrabold tracking-tight">
-              {rule.kind === 'budget_floor'
-                ? (rule.floor_cents != null ? moneyCents(rule.floor_cents) : <Unrecorded>No amount</Unrecorded>)
-                : (rule.value || <Unrecorded>Unnamed</Unrecorded>)}
-            </span>
-            {rule.signal && (
-              <Pill tone={SIGNAL_TONE[rule.signal] || 'neutral'}>{SIGNAL_LABEL[rule.signal]}</Pill>
-            )}
-            {!rule.is_active && <Pill tone="neutral">Not in use</Pill>}
-          </div>
-          {rule.statement ? (
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-              {rule.statement}
-            </p>
-          ) : (
-            /* Not an em-dash. A rule with no sentence is a rule that produces
-               silence when it fires, and silence is the failure this zone was
-               written to end — so it is called out rather than left blank. */
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
-              No sentence written. A pass citing this rule would have nothing to say.
-            </p>
-          )}
-          {rule.referred_to && (
-            <p className="mt-1 text-[12px] text-axal-faint">
-              Refer instead to <span className="font-semibold text-axal-muted">{rule.referred_to}</span>
-            </p>
-          )}
-        </div>
-        <button type="button" className={ghostButtonClass} onClick={() => setEdit((v) => !v)}>
-          {edit ? 'Cancel' : 'Edit'}
-        </button>
-      </div>
-
-      {edit && (
-        <div className="mt-3">
-          <RuleForm
-            initial={rule}
-            busy={busy}
-            submitLabel="Save rule"
-            onCancel={() => setEdit(false)}
-            onSubmit={(data) => onSave(rule, data, () => setEdit(false))}
-          />
-          <div className="mt-2 flex">
-            <button
-              type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-              disabled={busy} onClick={() => onDelete(rule)}
-            >
-              Delete rule
-            </button>
-          </div>
-          <WriteNote note={scopedNote(note, `rule:${rule.id}`)} busy={busy} />
-        </div>
-      )}
+    <div className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900" data-testid="fit-rules">
+      <table className="hidden w-full text-left text-[13.5px] md:table">
+        <thead className="text-[11px] uppercase tracking-[.08em] text-axal-faint">
+          <tr className="border-b border-axal-hairline dark:border-gray-700">
+            {['Rule', 'Who', 'Strength', 'What we say', 'Point them to'].map((h) => (
+              <th key={h} scope="col" className="px-4 py-2.5 font-extrabold">{h}</th>
+            ))}
+            <th scope="col" className="px-4 py-2.5"><span className="sr-only">Action</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ r, v }) => (
+            <tr key={r.id} className="border-b border-axal-hairline align-top last:border-b-0 dark:border-gray-800" data-testid="fit-rule-row">
+              <td className="px-4 py-3">{ruleCell(v)}</td>
+              <td className="px-4 py-3">{who(v)}</td>
+              <td className="px-4 py-3">{v.strength || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3 text-[13px]">{says(v)}</td>
+              <td className="px-4 py-3">{v.pointTo || <span className="text-axal-faint">—</span>}</td>
+              <td className="px-4 py-3 text-right">{action({ r, v })}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <ul className="divide-y divide-axal-hairline md:hidden dark:divide-gray-800">
+        {rows.map(({ r, v }) => (
+          <li key={r.id} className="flex flex-col gap-1.5 p-4 text-[13.5px]">
+            <div>{ruleCell(v)}</div>
+            <div>{who(v)}{v.strength && <span className="text-axal-faint"> · {v.strength}</span>}</div>
+            <div className="text-[13px]">{says(v)}</div>
+            {v.pointTo && <div className="text-[12.5px] text-axal-muted dark:text-gray-300">Point them to {v.pointTo}</div>}
+            <div>{action({ r, v })}</div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -331,7 +352,9 @@ function PassReasons({ rules, onClose }) {
 
 export default function PartnerAudienceFitZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [adding, setAdding] = useState(false);
+  // D4842: one sheet for adding and editing. `null` is closed, `{}` is a new
+  // rule, `{ rule }` edits that rule.
+  const [sheet, setSheet] = useState(null);
   const [showingPasses, setShowingPasses] = useState(false);
   const [view, setView] = useState('all');
 
@@ -355,47 +378,11 @@ export default function PartnerAudienceFitZone() {
     (write, saved, scope, onSaved) => save(write, { saved, scope, onSaved }),
     [save],
   );
-  const toggleAdding = (open) => { clearNote(); setAdding(open); };
+  const openSheet = (next) => { clearNote(); setSheet(next); };
 
   const d = state.data;
   const items = Array.isArray(d?.items) ? d.items : [];
-  const floor = items.find((r) => r.is_active && r.kind === 'budget_floor') || null;
-  // The artboard's `Fit profiles` table is who the firm IS for; its `Who we are
-  // not for` card below is the other three kinds. One split, two compositions.
-  // ONE ROW SET PER CHIP, for the principal table, the editable list and the
-  // export (`lib/fitRuleView.js`, #4696). The chip narrowed the list and the
-  // export and left the table showing the whole library.
-  // `visible` IS the editable list AND the export: `fitView` returns one set for both.
-  const { profiles, profileRows, ruleRows: visible, narrowed } = fitView(items, view);
-
-  // ══ THE ARTBOARD'S FOUR TILES ════════════════════════════════════════════
-  // `Best fit · Budget floor · Sectors declined · Capabilities absent`, counted
-  // over the whole record rather than the chip-narrowed list.
-  const bestFit = profiles.filter((r) => r.signal === 'best_fit');
-  const sectors = items.filter((r) => r.is_active && r.kind === 'sector_declined');
-  const absent = items.filter((r) => r.is_active && r.kind === 'capability_absent');
-  // The artboard's anti-persona card, grouped the way it groups: one card per
-  // exclusion KIND, with this firm's own values joined into it.
-  const ANTI = [
-    {
-      k: 'Budget floor',
-      v: floor?.floor_cents != null ? `Under ${moneyCents(floor.floor_cents)}` : null,
-      d: floor?.statement || null,
-      rules: floor ? [floor] : [],
-    },
-    {
-      k: 'Sectors declined',
-      v: sectors.map((r) => r.value).filter(Boolean).join(', ') || null,
-      d: sectors.find((r) => r.statement)?.statement || null,
-      rules: sectors,
-    },
-    {
-      k: 'Capability absent',
-      v: absent.map((r) => r.value).filter(Boolean).join(', ') || null,
-      d: absent.find((r) => r.statement)?.statement || null,
-      rules: absent,
-    },
-  ];
+  const { profiles, ruleRows: visible } = fitView(items, view);
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
   // With nothing loaded the export renders disabled and says so itself,
@@ -435,22 +422,24 @@ export default function PartnerAudienceFitZone() {
         actions={rowActions}
       />
       {/* THE EDITOR IS NOT A CHILD OF `ZoneBody` (#4688): with no rows `ZoneBody`
-          draws only its empty state, so "Write the first rule" set `adding`
-          and no form ever mounted. Mounted by `adding` alone, it also survives
-          a refresh and an unreadable list. */}
-      {adding && (
-        <div className="mb-6" data-testid="rule-editor">
-          <RuleForm
-            busy={busy}
-            submitLabel="Add rule"
-            onCancel={() => toggleAdding(false)}
-            onSubmit={(data) => run(
-              () => api.createPartnerFitRule(data), 'Rule added.', 'new',
-              () => setAdding(false),
-            )}
-          />
-          <WriteNote note={scopedNote(note, 'new')} busy={busy} />
-        </div>
+          draws only its empty state, so a form among its children never
+          mounted for the first rule. Mounted by `sheet` alone, it also
+          survives a refresh and an unreadable list. */}
+      {sheet && (
+        <FitRuleSheet
+          key={sheet?.rule?.id ?? 'new'}
+          initial={sheet?.rule || null}
+          busy={busy}
+          note={note}
+          scope={sheet?.rule ? `rule:${sheet?.rule.id}` : 'new'}
+          onClose={() => setSheet(null)}
+          onSubmit={(data) => (sheet?.rule
+            ? run(() => api.updatePartnerFitRule(sheet?.rule.id, data), 'Saved.', `rule:${sheet?.rule.id}`, () => setSheet(null))
+            : run(() => api.createPartnerFitRule(data), 'Rule added.', 'new', () => setSheet(null)))}
+          onDelete={sheet?.rule
+            ? () => run(() => api.deletePartnerFitRule(sheet?.rule.id), 'Rule deleted.', `rule:${sheet?.rule.id}`, () => setSheet(null))
+            : null}
+        />
       )}
       <WriteNote note={zoneNote(note)} busy={busy} onReload={reload} />
       <ZoneBody
@@ -460,17 +449,16 @@ export default function PartnerAudienceFitZone() {
         notice={unlinked ? <NoPartnerProfile /> : null}
         isEmpty={unlinked || (items.length === 0)}
         empty={(
+          /* OF-10: an empty state names the commercial outcome and offers one action. */
           <NothingYet
-            title="No fit rule is recorded yet"
+            title="Tell Pipeline who your firm is for"
             body={
-              'Until one is, a lead you pass on is passed in silence — the founder '
-              + 'learns nothing and neither does anyone else. A rule is a reason '
-              + 'you can hand over: what you start at, what you decline, what you '
-              + 'do not do, and who to send them to instead.'
+              'Fit rules rank your leads and give a founder who isn’t a fit a reason '
+              + 'and somewhere to go. Nothing is declined for you.'
             }
             action={(
-              <button type="button" className={buttonClass} onClick={() => toggleAdding(true)}>
-                Write the first rule
+              <button type="button" className={buttonClass} onClick={() => openSheet({})}>
+                Add your first fit rule
               </button>
             )}
           />
@@ -478,122 +466,42 @@ export default function PartnerAudienceFitZone() {
       >
         <div className="space-y-6">
           <ZoneHeading
-            title="Who the firm is for, and who it is not"
-            blurb={
-              'The second half is the working one. These are the sentences a pass '
-              + 'quotes, so a founder hears a reason rather than nothing.'
-            }
+            title="Audience fit"
+            blurb="Who your firm is for, and what to say when someone isn’t."
             action={(
-              <button type="button" className={ghostButtonClass} onClick={() => toggleAdding(!adding)}>
-                {adding ? 'Cancel' : 'Add a rule'}
+              <button type="button" className={buttonClass} onClick={() => openSheet({})}>
+                + Add fit rule
               </button>
             )}
           />
 
-          {/* ══ THE `po5` STRIP ═════════════════════════════════════════════
-              `Best fit · Budget floor · Sectors declined · Capabilities
-              absent`. `Budget floor` reads absent rather than an em dash when
-              no floor is written: a firm with no floor and a firm whose floor
-              is zero are different, and an em dash reads as the second. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <FitTile
-              label="Best fit"
-              value={String(bestFit.length)}
-              note={`of ${profiles.length} profile${profiles.length === 1 ? '' : 's'} written`}
-            />
-            <FitTile
-              label="Budget floor"
-              nr={floor?.floor_cents == null}
-              value={floor?.floor_cents != null ? moneyCents(floor.floor_cents) : ''}
-              note={floor?.referred_to ? `below it, referred to ${floor.referred_to}` : 'below it, referred out by name'}
-            />
-            <FitTile label="Sectors declined" value={String(sectors.length)} note="turned down on principle or on fit" />
-            <FitTile label="Capabilities absent" value={String(absent.length)} note="stated, not stretched" />
+          {/* OF-04's note: what the rules do downstream, and what they do not.
+              The longer account opens from "How rules affect ranking" rather
+              than being printed on the page (OF-10). */}
+          <div className="flex flex-wrap items-start gap-3 rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[13px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300" data-testid="fit-rank-note">
+            <span aria-hidden="true" className="font-extrabold text-cyan-700 dark:text-cyan-300">i</span>
+            <div className="min-w-0 flex-1">
+              Pipeline uses these rules to rank and explain your leads. They never reject a founder on their own.
+              <details className="mt-1">
+                <summary className="cursor-pointer text-[12.5px] font-semibold text-cyan-800 dark:text-cyan-300">How rules affect ranking</summary>
+                <p className="mt-1 text-[12.5px]">
+                  {d?.enforcement_note
+                    || 'Pipeline reads your active rules to score leads and to leave a lead that matches a declined sector or an absent capability out of its ranking. Nothing is auto-declined: an excluded lead stays on Leads, and passing on it is still your click.'}
+                </p>
+              </details>
+            </div>
           </div>
 
-          {/* WHOLE LIBRARY, NOT THE CHIP. The four tiles above and the card
-              below count every rule whatever the signal filter shows; the
-              profile table and the rule list count what the filter selects. */}
-          <p className="-mt-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-library-note">
-            Tiles and the “who we are not for” card count the whole library
-            ({items.length} rule{items.length === 1 ? '' : 's'}), whatever the signal filter shows.
-          </p>
-
-          {/* THE ARTBOARD'S LINKAGE NOTE, minus a number it has no store for.
-              Its own reads "… produced four explained passes last quarter" —
-              that is its sample, and nothing in this product logs a pass, so
-              the sentence says what the rules are FOR and stops where the
-              record stops. */}
-          <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
-            <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
-            Pipeline · Leads scores each lead against the rules in use. It quotes these sentences to pass a lead with a named reason —
-            “under floor, referred to Ostara Studio” rather than silence. Nothing counts how often: no pass is logged anywhere, so the number of explained
-            passes is not a figure this page can show.
-          </div>
-
-          {narrowed && (
-            <p className="-mb-3 text-[11px] text-gray-600 dark:text-gray-400" data-testid="fit-profiles-shown">
-              Showing {profileRows.length} of {profiles.length} profile{profiles.length === 1 ? '' : 's'},
-              the same rows as the list and the export below.
+          {items.length > 0 && visible.length === 0 && (
+            <p className="text-[12px] text-axal-muted">
+              No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
+              {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
+              {profiles.length} of them profiles.
             </p>
           )}
-
-          <Instrument
-            testid="fit-profiles"
-            title="Fit profiles"
-            meta="Signals feed lead scoring"
-            cols="1.9fr 1fr 2.4fr"
-            head={['Profile', 'Signal', 'Why']}
-            rows={profileRows.map((r) => ({
-              key: r.id,
-              cells: [
-                {
-                  text: r.value || undefined,
-                  sub: r.referred_to ? `Refer instead to ${r.referred_to}` : undefined,
-                  ...(r.value ? {} : { nr: true }),
-                  ...(r.is_active ? {} : { gate: 'Not in use' }),
-                },
-                r.signal
-                  ? { pill: SIGNAL_LABEL[r.signal], pillTone: SIGNAL_TONE[r.signal] }
-                  : { nr: true },
-                // A profile with no sentence is the zone's own failure case, so
-                // it is named rather than left blank — the same call the row
-                // below the table makes in amber.
-                r.statement ? { text: r.statement } : { nr: true },
-              ],
-            }))}
-            note={'A profile graded weak intent is not a decline, and keeping the two apart is what this table is for: the honest answer to a pre-product founder is “not yet”, and a match engine that cannot say “not yet” ends up saying “no” to the same founder twice. Pipeline reads the signals in this table when it scores a lead: best fit and weak intent each add a receipt to the score, and qualified is a note you keep that scoring does not read. Scoring is not rejection, and your click is still what passes on anybody. A profile with no sentence reads absent in Why because a pass citing it would have nothing to quote \u2014 which is the silence this whole zone exists to replace.'}
-          />
-
-          {/* ══ THE ARTBOARD'S `Who we are not for` CARD ════════════════════
-              First-class, in fuchsia, three across — its own note calls it
-              "first-class — a pass needs a reason, not a shrug", and that is
-              the zone's argument rather than decoration. A kind the firm has
-              written nothing under says so; it is not dropped, because an
-              exclusion nobody has stated is the reason a pass lands silent. */}
-          <div className="rounded-[10px] border border-fuchsia-200 bg-fuchsia-50/40 p-4 dark:border-fuchsia-900 dark:bg-fuchsia-950/20">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <span className="text-sm font-extrabold tracking-tight text-fuchsia-800 dark:text-fuchsia-300">
-                Who we are not for
-              </span>
-              <span className="text-[11px] text-gray-600 dark:text-gray-400">
-                First-class — a pass needs a reason, not a shrug
-              </span>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              {ANTI.map((an) => (
-                <div key={an.k} className="rounded-[9px] border border-fuchsia-200 bg-white p-3 dark:border-fuchsia-900 dark:bg-gray-900">
-                  <Eyebrow className="!text-fuchsia-800 dark:!text-fuchsia-300">{an.k}</Eyebrow>
-                  <div className="mt-1.5 text-[12px] font-bold text-axal-ink dark:text-gray-100">
-                    {an.v || <NotRecorded>Nothing stated</NotRecorded>}
-                  </div>
-                  <div className="mt-1 text-[10.5px] leading-relaxed text-gray-600 dark:text-gray-400">
-                    {an.d || 'No sentence written, so a pass citing this would have nothing to say.'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {visible.length > 0 && (
+            <FitRulesTable rows={visible.map((r) => ({ r, v: fitRuleRow(r, moneyCents) }))} onEdit={(rule) => openSheet({ rule })} />
+          )}
 
           <ZoneDraft
             surface="offers/audience-fit"
@@ -614,37 +522,6 @@ export default function PartnerAudienceFitZone() {
               it lands as the silence this zone exists to replace.
             </p>
           )}
-
-          <Section title="Rules">
-            {/* A narrowed view that finds nothing says which view it is: a bare
-                empty list under a selected chip reads as "you have written no
-                rules", which is the silence this zone exists to replace. */}
-            {items.length > 0 && visible.length === 0 && (
-              <p className="mb-3 text-[12px] text-axal-muted">
-                No profile is graded {SIGNAL_LABEL[view]?.toLowerCase() || view}.{' '}
-                {items.length} rule{items.length === 1 ? '' : 's'} recorded in total,{' '}
-                {profiles.length} of them profiles.
-              </p>
-            )}
-            <div>
-              {visible.map((rule) => (
-                <RuleRow
-                  key={rule.id}
-                  rule={rule}
-                  busy={busy}
-                  note={note}
-                  onSave={(r, data, onSaved) => run(
-                    () => api.updatePartnerFitRule(r.id, data),
-                    'Saved.', `rule:${r.id}`, onSaved,
-                  )}
-                  onDelete={(r) => run(
-                    () => api.deletePartnerFitRule(r.id),
-                    'Rule deleted.', `rule:${r.id}`,
-                  )}
-                />
-              ))}
-            </div>
-          </Section>
 
           {/* NO FIT SCORE, AND NO PARAGRAPH ABOUT ITS ABSENCE. The canvas
                 puts a percentage beside each lead. Scoring a founder’s need
