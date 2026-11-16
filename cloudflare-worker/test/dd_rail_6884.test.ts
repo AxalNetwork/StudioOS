@@ -63,13 +63,14 @@ async function world(opts: { real?: boolean; guard?: string } = {}) {
   db.prepare('UPDATE dd_checklist_items SET note_enc=? WHERE id=1').run(await encrypt('dd_checklist_items','note',1,`OWN ITEM NOTES ${EMAIL}`));
   db.prepare('UPDATE dd_case_memos SET summary_enc=? WHERE id=1').run(await encrypt('dd_case_memos','summary',1,'PRIVATE MEMO'));
   let output = draft(), hook: (() => void) | null = null;
+  let snippet = `ROOM PASSAGE ${NAME} ${EMAIL}`;
   const transport = withGuard({ run: async (_model: string, input: any) => { seen.push(input); hook?.(); return { response: output, usage: { prompt_tokens: 200, completion_tokens: 100 } }; } }, opts.guard ?? 'safe');
   env.AI = transport;
   const app = new Hono<any>();
   const injected: any = opts.real ? {} : { quote: async (_env: any, input: any) => { quotes.push(input); return quote(); }, run: async (_env: any, input: any) => { seen.push(input); hook?.(); return { ok: true, output, usage: { model: 'synthetic-model' } }; } };
   app.route('/api/ai/rail', ddRailRunRoutes({ ...injected, search: async (_env: any, user: number, project: number, query: string) => {
     searches.push({ user, project, query });
-    return { available: true, value: { hits: [{ file_uid: 'own-file', file_name: 'Assignment', snippet: `ROOM PASSAGE ${NAME} ${EMAIL}`, score: 1 }, { file_uid: 'foreign-file', file_name: 'FOREIGN FILE', snippet: 'FOREIGN PASSAGE', score: 1 }] } };
+    return { available: true, value: { hits: [{ file_uid: 'own-file', file_name: 'Assignment', snippet, score: 1 }, { file_uid: 'foreign-file', file_name: 'FOREIGN FILE', snippet: 'FOREIGN PASSAGE', score: 1 }] } };
   } }));
   app.route('/api/ai/rail', railRunRoutes(injected));
   const call = async (who: number | null, option: string = 'dd:summary', extra: any = {}) => {
@@ -80,7 +81,7 @@ async function world(opts: { real?: boolean; guard?: string } = {}) {
     return { status: res.status, body: events.done ?? JSON.parse(raw), events, raw };
   };
   const close = () => db.close();
-  return { db, env, seen, reads, writes, searches, quotes, call, close, output: (s: string) => { output = s; }, hook: (fn: () => void) => { hook = fn; } };
+  return { db, env, seen, reads, writes, searches, quotes, call, close, output: (s: string) => { output = s; }, hook: (fn: () => void) => { hook = fn; }, passage: (text: string) => { db.prepare('UPDATE data_room_passages SET text=? WHERE file_id=1').run(text); snippet = text.slice(0,320); } };
 }
 const ddState = (w: any) => JSON.stringify(['dd_cases','dd_sections','dd_checklist_items','dd_findings','dd_requests','dd_case_memos','dd_audit_log','dd_attachments'].map(t => w.db.prepare(`SELECT * FROM ${t} ORDER BY id`).all()));
 
@@ -340,4 +341,11 @@ test('summary blocking facts reuse the existing Proceed gate rather than a model
   w.db.exec("UPDATE dd_findings SET resolved_at='2026-11-16 11:00:00' WHERE id=1");
   await w.call(2);
   assert.equal(flag().blocks_proceed, false);
+});
+
+test('matched room passages use the search slice even when documents contain astral characters', async t => {
+  const w = await world(); t.after(w.close);
+  w.passage('📄'.repeat(200) + 'Recorded assignment');
+  w.output(draft(['passage:0']));
+  assert.equal((await w.call(7,'dd:answer_from_room',{ request_id: 1 })).body.proposals.length, 1);
 });
