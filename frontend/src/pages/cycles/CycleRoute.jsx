@@ -495,6 +495,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
 
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
+  const partRefresh = useRef(null);
+  const reloadPart = (options) => {
+    partRefresh.current = options?.keepParts === true ? { cycle, slug, projectId, query } : null;
+    setReload((n) => n + 1);
+  };
   // #4017 (#3710 IV-D3): the record's Email composes in the right Sheet over the record.
   const [emailing, setEmailing] = useState(false);
   // D1454 (#3710, IV-D1): the record header's two slots, filled by the record page's portal.
@@ -612,7 +617,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (record || !slug || !known || !projectId || !def) return undefined;
     if (distribution && distributionTab !== 'overview') return undefined;
     let alive = true;
-    setModuleStatus('loading');
+    const refresh = partRefresh.current;
+    partRefresh.current = null;
+    // A completed connector sync can refresh the same module without
+    // unmounting the part that is showing the sync result.
+    if (!refresh || refresh.cycle !== cycle || refresh.slug !== slug || refresh.projectId !== projectId || refresh.query !== query) {
+      setModuleStatus('loading');
+    }
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
       .then((data) => {
         if (!alive) return;
@@ -932,7 +943,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
-    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null }) : null;
+    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.

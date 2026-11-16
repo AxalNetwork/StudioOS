@@ -34,7 +34,7 @@ import LicenceIdentity from './LicenceIdentity';
 import LicenceOverview, { AttentionStrip, PhoneTriage, useOverviewReads } from './LicenceOverview';
 import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
-import { SeatEditor } from './CommercialTerms';
+import { LicensedSeats, SeatEditor } from './CommercialTerms';
 import { CountryPricing } from './CountryPricing';
 import { Exclusivity } from './Exclusivity';
 import TermsWorkspace from './TermsWorkspace';
@@ -124,6 +124,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   };
   const grantAdmin = (g) => { setGrant(g); setStep(ADMINS_STEP); };
   const section = sectionOfTab(tabOfStep(step));
+  // The views whose section draws its own two cards across the width (L11, L12): the side panel steps aside.
+  const sectionWide = step === NOTICES_STEP || step === ADMINS_STEP;
   const subTabs = phone ? phoneSectionTabs(section, d.kind) : sectionTabs(section, d.kind);
   const sectionLabel = LICENCE_SECTIONS_NAV.find((x) => x.key === section)?.label || 'Overview';
   const openSection = (key) => {
@@ -375,9 +377,10 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           ))}
         </div>
       )}
-      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside. */}
-      <div className={`mt-4 grid grid-cols-1 gap-4 ${step === NOTICES_STEP ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
-      <div className={`min-w-0 ${step === NOTICES_STEP ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
+      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside.
+          D4819 part 11: so it does on Access › Administrators, board L11's two cards side by side. */}
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${sectionWide ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
+      <div className={`min-w-0 ${sectionWide ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
         aria-labelledby={subTabs.length > 1 ? `licence-tab-${tabOfStep(step)}` : `licence-section-${section}`}>
         {step === OVERVIEW_STEP && (
           <LicenceOverview licence={d} reads={reads} retry={retry} readAt={readAt} onOpenTab={(key) => onTab?.(key)} />
@@ -426,8 +429,10 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
         )}
+        {/* D4819 part 11 (#5922): board L11, administrators with their account state beside licensed seats by profile. */}
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
           onSaved={() => { setGrant(null); refresh(); }} />}
+        {step === ADMINS_STEP && <LicensedSeats licence={d} onOpenTab={(key) => onTab?.(key)} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
         {/* D4819 part 12 (#5923): board L12, studio requests then compliance, each failing on its own. */}
         {step === NOTICES_STEP && <LicenceRequestsPanel licence={d} layout="section" onOpenTerm={openTerm} onGrantAdmin={grantAdmin} />}
@@ -441,7 +446,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           && <BrandKitEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && <LicenceHistory licence={d} />}
       </div>
-      {step !== NOTICES_STEP && !phone && (
+      {!sectionWide && !phone && (
         <LicenceRequestsPanel
           licence={d}
           onOpenTerm={openTerm}

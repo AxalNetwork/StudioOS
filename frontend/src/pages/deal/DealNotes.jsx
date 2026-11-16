@@ -193,9 +193,9 @@ function EadwynDraft({ dealId, fill, onSaved }) {
   );
 }
 
-function Notes({ dealId, userId }) {
+function Notes({ dealId, userId, evidenceNote }) {
   const [read, setRead] = useState({ status: 'loading' });
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(() => typeof evidenceNote === 'string' ? evidenceNote.slice(0, NOTE_MAX) : '');
   const [tag, setTag] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -352,10 +352,10 @@ export function DealActivity({ dealId, mineFilter = false }) {
 }
 
 /** DL14: the notes on the left, the activity beside them. */
-export default function DealNotes({ dealId, userId }) {
+export default function DealNotes({ dealId, userId, evidenceNote = null }) {
   return (
     <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-notes-tab">
-      <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2"><Notes dealId={dealId} userId={userId} /></div>
+      <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2"><Notes dealId={dealId} userId={userId} evidenceNote={evidenceNote} /></div>
       <div className="min-w-0"><DealActivity dealId={dealId} mineFilter /></div>
     </div>
   );
