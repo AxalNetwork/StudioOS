@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { REQUIRED } from './lib/requiredChecks.mjs';
 
 const requireWorker = createRequire(new URL('../cloudflare-worker/package.json', import.meta.url));
 const { parse } = requireWorker('yaml');
@@ -87,7 +88,7 @@ function runsOn(workflow, job, event) {
   return rule === 'conditional' || condition === 'conditional' ? 'conditional' : 'runs';
 }
 
-export function renderInventory(inventory, required = checkMap('REQUIRED'), shadow = checkMap('SHADOW')) {
+export function renderInventory(inventory, required = REQUIRED, shadow = checkMap('SHADOW')) {
   function jobsIn(workflow, event) {
     if (!Object.hasOwn(workflow.events, event)) return '—';
     if (event === 'push' && mainPush(workflow.events.push) === 'excluded') return 'other refs only';
