@@ -204,8 +204,16 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   facebook: {
     tagline: 'Connect the Facebook Pages you manage.',
-    long_description: ['Sign in with Facebook and choose the Pages for this company. Grow imports are planned separately.'],
-    tools: [], prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
+    long_description: [
+      'Sign in with Facebook and choose the Pages for this company. Read-only.',
+      'Each venture names one of those Pages. You press each sync from Grow: the Page’s followers land in Revenue and traction, beside revenue and never as revenue, and its daily views, unique viewers and engagements land in Distribution, up to 12 months back. A figure you delete stays deleted.',
+      'Disconnecting removes every figure your Facebook fed.',
+    ],
+    tools: [
+      tool('followers', 'Page followers', 'read', 'Reads the linked Page’s follower count, as a dated snapshot each sync.', 'revenue_and_traction', ['?fields=${FOLLOWER_FIELD}']),
+      tool('insights', 'Page views, viewers and engagements', 'read', 'Reads the linked Page’s daily views, unique viewers and engagements.', 'distribution', ['/insights?']),
+    ],
+    prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
     never_does: ['StudioOS does not publish or comment on Facebook.'],
     service: { name: 'Facebook', href: 'https://www.facebook.com' },
     sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },
@@ -248,6 +256,21 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     endpoints: { sign_in: 'https://accounts.google.com/o/oauth2/v2/auth', api: 'https://www.googleapis.com/webmasters/v3/sites' },
     added: '2026-11',
     links: { ...NO_LINKS, developer_docs: 'https://developers.google.com/webmaster-tools/v1/how-tos/authorizing' },
+    verified_on: null,
+  },
+  typeform: {
+    tagline: 'Choose the Typeform form for this company, read only.',
+    long_description: ['Sign in with Typeform, in the US or EU data center your account uses, then choose one form for this company. This release connects your account and binds the form with its field identifiers. Response imports come later.', 'Disconnecting removes the connection from Axal VC. To end the grant at Typeform as well, remove the app in your Typeform account.'],
+    tools: [],
+    never_does: ['StudioOS does not create, edit or delete a form, a response or a webhook in Typeform.'],
+    prompts: [],
+    prompts_reason: notRead('Typeform'),
+    made_by: AXAL,
+    service: { name: 'Typeform', href: 'https://www.typeform.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with Typeform', key_help_href: null },
+    endpoints: { sign_in: 'https://api.typeform.com/oauth/authorize', api: 'https://api.typeform.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://www.typeform.com/developers/get-started/applications/' },
     verified_on: null,
   },
   lovable: {

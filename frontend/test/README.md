@@ -45,6 +45,7 @@ also exercises a `project_id` deep link.
 | `_buildParts.mjs` | D5507: a provider suite's view of `BUILD_PARTS`: the modules its key sits on, before/after a named neighbour, and what its part mounts. |
 | `_storageAreasContract.mjs` | D5507: THE contract for the storage areas: key, kind and where its file opens, written by hand; read by the two suites below and the Worker's `usage_storage_d1169`. |
 | `storage_areas_contract_5507.test.mjs` | D5507: the Usage card, the Storage page's places and kinds, and ROUTE_MAP's D642 section each keep the storage-area contract. |
+| `build_overview_v2_6028.test.mjs` | D6028 (#6028): Build Overview V2's states (loading, empty venture, partial read, refused, read only, a failed overview), one primary, Not recorded never 0, and the phone root's parts. |
 
 ## Conventions
 
@@ -218,4 +219,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `fund_admin_ask_6397.test.mjs` | D6397: five recorded tasks on both tiers, no model fallback, retry/stale-scope/cleanup safety and actual App rail/Ask availability. |
 | `decision_appends_6466.test.mjs` | D6466: temp git repos where an appended section, an over-threshold addendum, an existing part file and an old decision fail with the D5615 instruction; typo, link and heading-rename fixes, new `D<n>.md` and `D<n>-p<k>.md`, the shallow PR merge checkout and this branch pass; no base exits 2. |
+| `grow_venture_switch_6320.test.mjs` | D6320: Google and Mercury discard prior venture state and ignore late responses. |
 | `grow_sync_receipts_6318.test.mjs` | D6318: PostHog and Mercury report incomplete and completed syncs, including Mercury's in-place refresh. |
