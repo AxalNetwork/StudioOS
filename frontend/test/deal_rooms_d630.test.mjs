@@ -92,26 +92,31 @@ test('a join refused by a full quota says so inline and names the plan that rais
 test('dr-pipeline: each live deal with Join or Leave, the quota, and what joining does', () => {
   const markup = html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: DEALS }, quotaState: ok(QUOTA_OK) }));
   const t = renderedText(markup);
-  assert.match(t, /3 of 5 deal rooms/);
+  // D6151 (DE20): the allowance line in the canvas's words.
+  assert.match(t, /3 of 5 rooms used/);
   assert.ok(t.includes(JOIN_NOTE), 'the join note is drawn');
   assert.match(JOIN_NOTE, /Only an invited or committed investor can read them\./);
   assert.equal((markup.match(/data-testid="dr-pipeline-row"/g) || []).length, 2, 'a passed deal is not offered');
-  assert.match(t, /Acme\s*Diligence\s*Invitation requested\s*Logistics\s*·\s*\$1,500,000\s*Open deal\s*Leave/);
+  // D6151 (DE19): venture and sector, company status, my process, round, invitation, access.
+  assert.match(t, /Acme\s*Logistics\s*co\s*Active[\s\S]*?\$1,500,000[\s\S]*?Invitation requested[\s\S]*?Open deal\s*Leave the room request/);
   // D4815: a room the investor may already open offers Open deal, not a request for what they have.
-  assert.match(t, /Birch\s*Screening\s*Fintech\s*·\s*Round size: the company has not recorded one\.\s*Open deal/);
+  assert.match(t, /Birch\s*Fintech\s*co\s*Scored[\s\S]*?— Ask not recorded[\s\S]*?Open deal/);
 
   const refused = DEALS.map((d) => (d.id === 2 ? { ...d, can_read: false } : d));
   const full = renderedText(html(h(DealRoomsList, { dealsState: { loading: false, error: false, deals: refused }, quotaState: ok(QUOTA_FULL_PRO) })));
-  assert.match(full, /Birch[\s\S]*Request an invitation\s*Your Professional plan is full/);
+  // D6151 (DE20): the full allowance says so at the top, naming the next plan, and Request stays on the row.
+  assert.match(full, /Allowance full\s*You are in 5 of 5 rooms on the Professional plan\./);
+  assert.match(full, /Birch[\s\S]*Request an invitation/);
 });
 
 test('dr-pipeline states: loading, empty, and an unreadable list that is never an empty one', () => {
   const st = (dealsState) => text(h(DealRoomsList, { dealsState, quotaState: ok(QUOTA_OK), onRetryDeals: () => {} }));
-  assert.match(st({ loading: true, error: false, deals: null }), /Loading the pipeline…/);
-  assert.match(st({ loading: false, error: false, deals: [] }), /No deal is open to join yet\./);
+  // D6151 (DE21, DE22): the canvas's loading and empty words.
+  assert.match(st({ loading: true, error: false, deals: null }), /Loading live deals…/);
+  assert.match(st({ loading: false, error: false, deals: [] }), /No live deals right now\./);
   const unread = st({ loading: false, error: true, deals: null });
-  assert.match(unread, /UnavailableThe pipeline could not be read just now\. Try again/);  // D5129 (Q2 = A): the shared chip says Unavailable
-  assert.doesNotMatch(unread, /No deal is open to join yet/);
+  assert.match(unread, /UnavailableLive deals could not be read\. That is not the same as having none\. Try again/);  // D5129 (Q2 = A): the shared chip says Unavailable
+  assert.doesNotMatch(unread, /No live deals right now/);
 });
 
 // ── dr-invites ─────────────────────────────────────────────────────────────
