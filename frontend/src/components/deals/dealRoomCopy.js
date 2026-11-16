@@ -142,12 +142,20 @@ export const REFERENCE_STATUS = {
   cancelled: 'Cancelled',
 };
 
-/** Recording, transcript and summary: the Worker stubs all three (D609's 501s). */
-export const REFERENCE_ARTEFACTS = ['Recording', 'Transcript', 'Summary'];
-export const NOT_AVAILABLE_YET = 'Not available yet';
-
-/** D6182: the references card's line under its title. */
-export const REFERENCE_INTRO = 'Reference checks on the founders. Only your firm sees these. Platform admins can also access them. Recording, transcript and summary are not available yet.';
+/** D6183: a reference call keeps notes, and Eadwyn summarises them on press. Nothing is recorded or transcribed. */
+export const REFERENCE_SUMMARY = Object.freeze({
+  lead: 'Reference checks on the founders. Keep your notes from each call; Eadwyn can summarise them. No call is recorded. Only your firm sees these. Platform admins can also access them.',
+  none: 'Not recorded: not summarised yet.',
+  needNotes: 'Not recorded: write notes from the call first.',
+  stale: 'The notes changed after this summary.',
+  from: 'Eadwyn’s summary of your notes',
+  run: 'Summarise notes',
+  again: 'Summarise again',
+  busy: 'Summarising…',
+  failed: 'The notes were not summarised. Try again.',
+});
+/** Notes shorter than this are not summarised (the Worker's MIN_NOTES_CHARS). */
+export const SUMMARY_MIN_NOTES = 40;
 
 /** D6182: the canvas's pills under a check. */
 export const REFERENCE_PILLS = { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' };

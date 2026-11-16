@@ -16,7 +16,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
-import ViewModeContext from './contexts/ViewModeContext';
+import { ViewModeProvider } from './contexts/ViewModeContext';
 import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
@@ -995,8 +995,11 @@ function UserDropdown({ user, onLogout }) {
 // `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
 // holds the two to the same addresses.
 const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+// D4817 part 10 (#5311): the company workspace and its tabs draw the same one
+// banner (`previewModel.js`' `previewCompanyTabOf`; the part 10 test holds the two together).
+const PREVIEW_BANNER_COMPANY = /^\/portfolio\/companies\/[^/]+(?:\/(?:reports|terms|financials|support|activity))?\/?$/;
 function pageOwnsPreviewBanner(pathname, selectedKey) {
-  return selectedKey === 'investor' && PREVIEW_BANNER_BOARDS.test(String(pathname || ''));
+  return selectedKey === 'investor' && (PREVIEW_BANNER_BOARDS.test(String(pathname || '')) || PREVIEW_BANNER_COMPANY.test(String(pathname || '')));
 }
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
@@ -1014,7 +1017,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const previewing = selected && home && selected.key !== home.key;
   // D4817 part 8 (#5311, PF-08): a Portfolio board previewed as Investor draws
   // the one preview banner itself (read-only, with this same way back), so the
-  // strip, whose note says writes still go out, stands down there.
+  // shell-level strip stands down there.
   const { pathname } = useLocation();
   const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
@@ -1093,7 +1096,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       {!isImpersonating && previewing && !pageBanner && (
         <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
           <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
-          <span className="opacity-90">{previewNote(superAdmin)}</span>
+          <span className="opacity-90">{previewNote(superAdmin, selectedKey)}</span>
           <button
             type="button"
             onClick={() => choose(home.key)}
@@ -1361,7 +1364,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
-    <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewModeProvider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
           under a phone's status bar. The shell's root reserves the top inset,
@@ -1657,7 +1660,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
-    </ViewModeContext.Provider>
+    </ViewModeProvider>
     </ActiveCompanyContext.Provider>
   );
 }

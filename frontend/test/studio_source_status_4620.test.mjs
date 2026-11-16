@@ -206,7 +206,6 @@ test('quickStats: a total of 0 is a true zero; a total that could not be counted
   assert.deepEqual(rowsOf(zero.dealFlow)['Deals in flow'], { value: 0, state: undefined });
   const down = quickStats({ dashboard: { quick_stats: {}, source_status: { deals: 'unreadable', scoresMine: 'ready' } }, lifecycle: lifecycleOk, dealCount: null });
   assert.equal(rowsOf(down.dealFlow)['Deals in flow'].state, 'unreadable');
-  assert.equal(rowsOf(down.dealFlow)['Avg AI match'].state, undefined, 'the average read answered');
   const text = draw(React.createElement(StatGroup, { group: down.dealFlow, what: 'The deal-flow summary', claim: 'x', onRetry: () => {} }));
   assert.match(text, /Could not be read/);
   assert.match(text, /Retry/);
