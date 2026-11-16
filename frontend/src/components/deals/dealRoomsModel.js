@@ -14,8 +14,7 @@
  */
 import { dealMoney } from './dealMoney';
 import { roomAccess } from './dealRoomCopy';
-
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../lib/absence';
 const COMPANY = { applied: 'Applied', scored: 'Scored', active: 'Active', funded: 'Funded' };
 const PROCESS = { sourcing: 'Sourcing', screening: 'Screening', diligence: 'Diligence', commit: 'Commit', closing: 'Closing', passed: 'Passed' };
 const INVITATION = { invited: 'Invited', interested: 'Interested', passed: 'Passed' };
