@@ -9,6 +9,10 @@
  *       PUT /interviews-target sets the meter's monthly target)
  *       `can_write` (#5999): whether this viewer may write (`canWrite`, the gate
  *       PUT /interviews-target uses), so the page offers "Set a target" only then
+ *       `objective` (D5997, #5997): "Trying to learn:", the venture's validation
+ *       objective, `{ state: 'ok', text, updated_at, updated_by_name, restate }`
+ *       or `{ state: 'unavailable', reason }` (`services/validateObjective.ts`);
+ *       PUT /objective { value } writes, changes or clears it (null or empty)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters, sorts, linkable }, parts }
  *       (D690 decisions 10 and 16: the canvas's filters and sorts, and `parts`,
@@ -51,12 +55,12 @@ import { focusOf, indexOf, meterOf } from '../services/validateFocus';
 import { currentMarketFigures, type MarketFigureRow } from '../services/marketFigures';
 import { part } from '../services/cycleFocus';
 import {
-  CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
+  CYCLE, QUESTION, MODULES, CARD_FOR, readWaitlistBar, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
   type Ctx, type ModuleSlug,
 } from '../services/cycleValidate';
 import {
   WriterError, writeSegment, assignInterviewSegment, setInterviewStage, writeDemandSignal,
-  setDemandSignalStatus, setWaitlistTarget, setInterviewsTarget, writeCompetitorMention, setMarketMark, addMarketSource,
+  setDemandSignalStatus, setWaitlistTarget, setInterviewsTarget, setValidationObjective, writeCompetitorMention, setMarketMark, addMarketSource,
   removeMarketSource, setHypothesisPlan, setEvidenceStrength,
   writeTheme, updateTheme, deleteTheme, updateSegment, addCompetitor, updateCompetitor, updateDemandSignal,
   createHypothesis, updateHypothesis,
@@ -69,6 +73,7 @@ import { WorkspaceError } from '../services/google/workspace';
 import { IntakeError } from '../services/interviewIntake';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { overviewParts } from '../services/validateOverviewParts';
+import { objectiveOf } from '../services/validateObjective';
 import {
   MODULE_SLUG, acceptEvidenceProposal, deleteValidateFact, dismissProposal, previewFormMapping, syncValidateFromGoogle,
   validateFromGoogle, type ValidateGoogleModule,
@@ -114,7 +119,7 @@ const idParam = (v: string | undefined): number | null => (/^[1-9][0-9]{0,9}$/.t
 cycleValidate.get('/overview', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
-  const ctx = ctxOf(c, s.projectId);
+  const ctx = { ...ctxOf(c, s.projectId), canWrite: canWrite(s.project, s.user) };
   const decisions = canReadDecision(s.project, s.user);
   // #5999: the viewer's write gate, the very check every writer below passes to `scope`
   // (PUT /interviews-target among them), so "Set a target" is drawn only where a save is allowed.
@@ -131,12 +136,16 @@ cycleValidate.get('/overview', async (c) => {
     part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
   // D5996 (#5996): V2's evidence, needs attention, hypotheses and recent changes, additive, each failing alone.
-  const v2 = await overviewParts(c.env, s.projectId, writer);
+  // D5997 (#5997): beside them "Trying to learn:" (V1), with V11's after-Pivot restate flag for a writer who reads decisions.
+  const [v2, objective] = await Promise.all([
+    overviewParts(c.env, s.projectId, writer),
+    objectiveOf(c.env, s.projectId, { writer, decisions }),
+  ]);
   // D693 decision 7: whether this viewer may see decisions, so the page can
   // drop the Verdict tab for a partner instead of drawing a read that fails.
   return c.json({
     cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index,
-    can_read_decisions: decisions, can_write: writer, ...v2,
+    can_read_decisions: decisions, can_write: writer, objective, ...v2,
   });
 });
 
@@ -182,6 +191,22 @@ cycleValidate.get('/modules/:slug', async (c) => {
   }
   const google = GOOGLE_MODULE[slug];
   if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
+  if (slug === 'demand-signals') {
+    const series = card.series as { bar?: number | null } | null;
+    try {
+      const bar = series ? series.bar ?? null : await readWaitlistBar(ctx);
+      parts = { ...parts, waitlist_bar: bar, waitlist_bar_unreadable: false };
+    } catch {
+      parts = { ...parts, waitlist_bar: null, waitlist_bar_unreadable: true };
+    }
+  }
+  if (slug === 'demand-signals' && writer) {
+    const linked = await c.env.DB.prepare(
+      `SELECT 1 AS connected FROM lovable_app_links
+       WHERE project_id = ? AND module = 'experiments' AND last_status = 'live' LIMIT 1`
+    ).bind(s.projectId).first<{ connected: number }>().catch(() => null);
+    parts = { ...parts, lovable_connected: linked?.connected === 1 };
+  }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
     records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },
     // D693 decision 7: every Validate module read says so too.
@@ -383,7 +408,7 @@ cycleValidate.put('/waitlist-target', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    await setWaitlistTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    await setWaitlistTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
     return c.json({ ok: true });
   } catch (e) { return writeFailed(c, e); }
 });
@@ -394,8 +419,19 @@ cycleValidate.put('/interviews-target', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    await setInterviewsTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value === undefined ? undefined : b.value });
+    await setInterviewsTarget(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
     return c.json({ ok: true });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// D5997 (#5997) — the validation objective ("Trying to learn:"); null or empty clears it.
+cycleValidate.put('/objective', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    const out = await setValidationObjective(c.env, { projectId: s.projectId, userId: Number(s.user.id), value: b.value });
+    return c.json({ ok: true, ...out });
   } catch (e) { return writeFailed(c, e); }
 });
 

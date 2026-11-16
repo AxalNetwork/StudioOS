@@ -35,6 +35,7 @@ export type Row = {
 export type RecordSection = {
   key: string;
   title: string;
+  note?: string;
   gate: 'read' | 'write';
   rows: Row[];
   empty?: string;
@@ -46,6 +47,7 @@ export type RecordSection = {
 export type SectionSpec = {
   key: string;
   title: string;
+  note?: string;
   side?: boolean;
   gate?: Gate;
   /** Required when a custom gate represents a writer-only section. */
@@ -80,8 +82,10 @@ export type RecordContent = {
   title: string;
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
-  /** #4411: interviews add a fifth fact to distinguish recording from quote permission. */
-  facts: [RecordFact, RecordFact, RecordFact, RecordFact] | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
+  /** Competitors show three facts (#6015). Interviews add a fifth for quote permission (#4411). */
+  facts: [RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
   /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
   uid?: string;
   createdBy?: number | null;

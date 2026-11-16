@@ -55,6 +55,7 @@ and StudioHome at `/raise/pitch`).
 | `_fund_admin_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as HQ Security's Super Admin: one fund with three LPs, an overdue call line, fee periods, a prepared pack and two bank matches. Made-up names |
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
+| `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
 
 ### Run it
 
@@ -81,3 +82,4 @@ browser is a different build.
 - **Nothing leaves 127.0.0.1.** A screen that needs the network shows what it
   shows when the read fails, and that is what is drawn.
 - `test-results/` and `playwright-report/` are output and are not committed.
+- `report_print_6094.spec.mjs`: #6094 native print document, audience boundary, light paper in both themes, cleanup/focus and print failure recovery.

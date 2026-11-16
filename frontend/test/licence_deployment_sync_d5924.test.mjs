@@ -117,7 +117,7 @@ test('an unreadable sync is never drawn as synced', () => {
   assert.equal(stateOf(reg), 'unreadable');
   assert.doesNotMatch(renderedText(reg), /Synced with HQ/);
   // The Retry on an unreadable record is there.
-  assert.match(strip({ sync: { ...SYNCED, available: false } }), /<button type="button" class="[^"]*"><svg[^>]*>.*?<\/svg> Retry<\/button>/);
+  assert.match(strip({ sync: { ...SYNCED, available: false } }), /<button type="button" class="[^"]*"[^>]*><svg[^>]*>.*?<\/svg> Retry<\/button>/);
   assert.equal(syncBoard({ ...SYNCED, branch_revision: 141 }, NOW).queueUnread, false);
   assert.equal(syncBoard({ ...SYNCED, branch_revision: 141, pending_available: false }, NOW).queueUnread, true);
 });

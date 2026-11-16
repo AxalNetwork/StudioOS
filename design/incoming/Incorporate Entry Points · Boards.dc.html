@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incorporate Entry Points · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Incorporate · entry points · #6719 (DB1) · continues Incorporate (D1414) at INC8</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Incorporate entry points — start the right thing in one click from wherever you are, and see nothing extra once incorporated</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Incorporate (/incorporate) opens with ?project=[id], with ?company=[uid] ◇, or with nothing; with nothing it shows the new start board INC8, which replaces INC1. The doors are crops of landed boards (PF1, PF2, PF5, the Company settings Legal tab, Project settings, the Portfolio empty state), each drawn in three states: Not incorporated (the action), In formation (the action replaced by “In formation · Open”, the order’s page) and Incorporated (nothing added). Only the owner of a project or an Admin of a company sees an action. INC2 to INC7, PF1 to PF8, CS-00 to CS-27 and BD26 stay as drawn apart from the added row or card. The shell follows #3704 (switcher top-left, Account menu, the one Eadwyn rail, collapsed). States follow Platform States (D5129): Not recorded, Not incorporated yet (a recorded state) and Unavailable never look alike. No price, duration or country is shown on a door. Violet dashed ◇ tags mark Worker work (#6685 formation state, #6687 company-subject order); amber ⚑ tags mark owner questions drawn at option A. Component keys are IEP8 to IEP12; landing renames them INC8 to INC12.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 15 Nov 2026 · checked against main 992bd74ad6 · [Avery Stone], [Jordan Reyes], [Kestrel Studio], [Marlow Foods], [Northwind Labs Inc.], [Bluefern Health Lda], [Harbor Robotics GmbH], [Lantern], [Tidewater], [Orbit], [Atlas Pilot], orders 412 and 418 and every legal fact are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Incorporate Entry Points Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['INC8', 'Start, choose what to incorporate · Worker ◇ (formation state, ?company=) + frontend · replaces INC1', 'Shown only when /incorporate opens with no subject. Three groups in one choice: convert a standalone project you own, incorporate a company you administer with no legal record and no open order, or a new company (a project is created first, Q2 A; the company record appears at the registry’s acceptance, #6681 7a A). Projects and companies in formation or incorporated are not listed; one line counts them. The quiet link opens the legal facts sheet (PF8). Continue is the one primary action and is off until a row is picked. Eadwyn has no task here.', [F('IEP8', 'A · [Kestrel Studio] picked', 1020), C('IEP8B', 'B · Nothing picked: Continue off', 900, 124)]],
+      ['INC9', 'Entry points · crops of landed boards · Worker ◇ (formation state) + frontend', 'Each crop adds one part, outlined and labelled Added; everything else is the landed board. Three states side by side: Not incorporated (the action) · In formation (“In formation · Open”, the order’s page) · Incorporated (nothing). (a) PF1 company card. (b) PF1 standalone project card, “Make it a company” reworded “Convert this project into a company”. (c) PF2 Legal information. (d) PF5 switcher: a third create row and a row word, no per-row menu (Q1 A). (e) Company settings › Legal: a card above the facts. (f) Project settings, with Move under a company unchanged. (g) The Portfolio empty state’s third option.', [C('IEP9A', '(a) PF1 company card', 1180, 506), C('IEP9B', '(b) PF1 standalone project card', 1180, 448), C('IEP9C', '(c) PF2 Legal information', 1180, 534), C('IEP9D', '(d) PF5 switcher', 1180, 658), C('IEP9E', '(e) Company settings › Legal', 1180, 666), C('IEP9F', '(f) Project settings', 1180, 476), C('IEP9G', '(g) Portfolio empty state', 900, 322)]],
+      ['INC10', 'States · frontend only (◇ where marked)', 'A · Loading in the real shapes on INC8 and on crops (a) and (d), with no action until the state is read; the Legal card with every fact Not recorded; Unavailable (“We could not check whether [Kestrel Studio] is incorporated”, Try again, never the action); Refused for a member who is not an Admin; INC8 with the companies list unreadable (Partial). B · Empty: nothing to incorporate, with the one row “A new company”. C · Saving and save failed on “Record its legal facts”: typed values are kept.', [C('IEP10', 'A · States', 1440, 1560), F('IEP10B', 'B · Empty', 760), C('IEP10C', 'C · Saving and save failed', 1180, 604)]],
+      ['INC11', 'Phone 390 · frontend only (◇ where marked)', 'INC8 as a list with Continue pinned to the bottom; crop (a) as stacked cards; the switcher as a bottom sheet, one column, with only the create row and the status words added; Company settings › Legal with the card; the legal facts sheet as a bottom sheet. 44px targets; no table wider than the screen.', [P('IEP11A', 'A · INC8, Continue pinned'), P('IEP11B', 'B · (a) Portfolio cards'), P('IEP11C', 'C · (d) switcher sheet'), P('IEP11D', 'D · (e) Company settings › Legal'), P('IEP11E', 'E · Record its legal facts, bottom sheet')]],
+      ['INC12', 'Dark · frontend only', 'INC8 and crops (a), (d) and (e) on the dark tokens. “In formation”, “Not a company yet”, “Not incorporated” and “Not recorded” keep their words and glyphs.', [F('IEP12', 'A · INC8', 1020), C('IEP12B', 'B · Crops (a), (d), (e)', 1180, 778)]],
+      ['Handoff', 'Handoff', 'What was checked on main, what needs the Worker (◇ #6685, #6687), the owner questions drawn at option A (⚑ Q1 to Q3 and #6681 7a), frontend-only work, rules kept and accessibility.', [W('IEPDOC')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -340,7 +340,7 @@ export async function fromPosthog(env: Env, projectId: number, module: string, v
     link: link ? { linked: true, active: link.active, mine: link.owner_id === viewerId, ...(link.owner_id === viewerId ? { uid: link.integration_uid } : {}) }
       : { linked: false, active: false, mine: false },
     tracked: tracked.map((m) => ({ uid: m.uid, kpi: `${KPI_PREFIX}${m.uid}`, name: m.insight_name, role: m.role, role_words: ROLE_WORDS[m.role], unit: m.unit, ...readingOf(m, facts, link) })),
-    facts: facts.filter((f) => f.kind !== 'metric').map((f) => ({ id: f.id, kind: f.kind, fact_key: f.fact_key, period: f.period, value: f.value, label: f.label, as_of: f.as_of, data: safeJson(f.value_json) })),
+    facts: facts.filter((f) => f.kind !== 'metric' || (module === 'revenue_and_traction' && f.fact_key.startsWith('retention:'))).map((f) => ({ id: f.id, kind: f.kind, fact_key: f.fact_key, period: f.period, value: f.value, label: f.label, as_of: f.as_of, data: safeJson(f.value_json) })),
     proposals: proposals.map((p) => ({ id: p.id, kind: p.kind, source_key: p.source_key, payload: safeJson(p.payload_json) })),
   };
 }
