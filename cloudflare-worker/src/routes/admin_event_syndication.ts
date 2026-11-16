@@ -81,7 +81,7 @@ adminEventSyndication.get('/channels', async (c) => {
   ).all<any>()).results || [];
   return c.json({
     channels: CHANNEL_KEYS.map((channel) => {
-      const adapter = syndicationChannel(channel);
+      const adapter = syndicationChannel(channel, c.env);
       return { channel, capability: adapter?.capability ?? null, adapter_ready: !!adapter, auth: adapter?.auth ?? null, account: accountOut(live.find((a: any) => a.channel === channel)) };
     }),
   });
@@ -102,7 +102,7 @@ adminEventSyndication.post('/channels/:channel/connect', async (c) => {
   if (u instanceof Response) return u;
   const channel = c.req.param('channel');
   if (!isChannelKey(channel)) return refuse(c, 400, { code: 'unknown_channel', message: 'That is not a channel Axal lists events on.' });
-  const adapter = syndicationChannel(channel);
+  const adapter = syndicationChannel(channel, c.env);
   if (!adapter) return refuse(c, 409, { code: 'adapter_not_ready', message: 'This channel is not available yet: it waits for the platform’s approval.' });
   const live = await c.env.DB.prepare("SELECT uid FROM event_channel_accounts WHERE channel = ? AND owner_kind = 'hq' AND status != 'disconnected'").bind(channel).first();
   if (live) return refuse(c, 409, { code: 'already_connected', message: 'HQ already has an account on this channel. Disconnect it first.' });
@@ -160,7 +160,7 @@ adminEventSyndication.get('/oauth/:channel/callback', async (c) => {
   let saved: { user_id: number; channel: string };
   try { saved = JSON.parse(raw); } catch { return bad(); }
   if (saved.channel !== channel || sig !== await hmac(c.env, `${channel}:${nonce}:${saved.user_id}`)) return bad();
-  const adapter = syndicationChannel(channel);
+  const adapter = syndicationChannel(channel, c.env);
   const code = c.req.query('code');
   if (!adapter?.exchangeCode || !code) return bad();
   try {

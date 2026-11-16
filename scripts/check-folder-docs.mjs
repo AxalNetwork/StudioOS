@@ -59,6 +59,7 @@ const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes(
 // a newcomer's attention. Adding a folder here is the cheap part; the README
 // it then demands is the point.
 const DOCUMENTED = new Map([
+  ['cloudflare-worker/src/services/eventSyndication', 'event syndication (D1490): the channel registry, eligibility, triggers, the job and the adapters'],
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],

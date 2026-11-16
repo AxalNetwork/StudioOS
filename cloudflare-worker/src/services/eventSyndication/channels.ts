@@ -14,6 +14,7 @@
  * adapter's verbs are `create`, `update`, `cancel`, `listGuests` and `preview`.
  */
 import type { Env } from '../../types';
+import { eventbriteAdapter } from './eventbrite';
 
 /** The five channels the schema's CHECK allows, in the HQ screen's order. */
 export const CHANNEL_KEYS = Object.freeze(['luma', 'eventbrite', 'google_business', 'linkedin', 'facebook'] as const);
@@ -39,20 +40,7 @@ export type ListingInput = {
 
 export type ListingResult = { external_id: string; external_url: string | null };
 
-/**
- * A platform's refusal. `status` is its HTTP status; `retryAfter` is the time
- * a 429 names, when it names one. The message is the platform's sentence and
- * is trimmed and cleaned of credentials before anything stores it.
- */
-export class ChannelError extends Error {
-  status: number | null;
-  retryAfter: string | null;
-  constructor(message: string, status: number | null = null, retryAfter: string | null = null) {
-    super(message);
-    this.status = status;
-    this.retryAfter = retryAfter;
-  }
-}
+export { ChannelError } from './channelError';
 
 export type SyndicationAdapter = {
   key: ChannelKey;
@@ -67,6 +55,11 @@ export type SyndicationAdapter = {
   text_limit: number;
   /** The date S-n confirmed the platform's API live; null until then. */
   verified_on: string | null;
+  /**
+   * The switch for an adapter that is built but waits on the owner's account (#3725, Eventbrite): false means
+   * `syndicationChannel(key, env)` answers null, so the channel reads "Not available yet" everywhere.
+   */
+  enabled?: (env: Env) => boolean;
   /** How HQ connects it: a key pasted on SY1, or an OAuth round trip. */
   auth: 'api_key' | 'oauth';
   /** api_key: check the key with the platform; the account it names. */
@@ -85,8 +78,11 @@ export type SyndicationAdapter = {
   preview: (input: ListingInput) => { title: string; text: string; link: string; cover_url: string | null; warnings: string[] };
 };
 
-/** The real adapters. Empty in Part A: no channel posts until its own task lands. */
-export const SYNDICATION_CHANNELS: readonly SyndicationAdapter[] = Object.freeze([]);
+/**
+ * The real adapters. Eventbrite (#3725) is built against a mock and stays switched off until its app secrets
+ * exist (`enabled`); `verified_on` stays null until a session checks it against the live API.
+ */
+export const SYNDICATION_CHANNELS: readonly SyndicationAdapter[] = Object.freeze([eventbriteAdapter]);
 
 const EXTRA = new Map<string, SyndicationAdapter>();
 
@@ -104,10 +100,16 @@ export function clearSyndicationChannelsForTest(): void {
   EXTRA.clear();
 }
 
-/** The channel's adapter, or null while it has none. */
-export function syndicationChannel(key: string | null | undefined): SyndicationAdapter | null {
+/**
+ * The channel's adapter, or null while it has none or while it is switched off in this environment. Pass `env`
+ * wherever there is one; without it (copy limits only) a switched-off adapter is still returned.
+ */
+export function syndicationChannel(key: string | null | undefined, env?: Env): SyndicationAdapter | null {
   if (!key) return null;
-  return SYNDICATION_CHANNELS.find((a) => a.key === key) ?? EXTRA.get(key) ?? null;
+  // A test's fake replaces the real row (only tests fill EXTRA; event_syndication_d1490 guards that).
+  const a = EXTRA.get(key) ?? SYNDICATION_CHANNELS.find((r) => r.key === key) ?? null;
+  if (a?.enabled && env && !a.enabled(env)) return null;
+  return a;
 }
 
 /** The limits overrides are held to when the channel has no adapter yet. */

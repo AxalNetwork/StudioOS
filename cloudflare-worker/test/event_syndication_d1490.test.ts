@@ -343,7 +343,10 @@ test('PUT: over-limit overrides and a non-https ticket link are 400; another hos
 
 test('HQ routes: channels need a Super Admin; connect and disconnect too; a branch is hq_only; no adapter is not ready', async () => {
   const f = await fixture({ adapters: false });
-  assert.equal(SYNDICATION_CHANNELS.length, 0, 'Part A ships no adapter');
+  // #3725: the only real adapter is Eventbrite, switched off until its app secrets exist, so here every channel
+  // still reads not ready.
+  assert.deepEqual(SYNDICATION_CHANNELS.map((a) => [a.key, a.verified_on, typeof a.enabled]), [['eventbrite', null, 'function']]);
+  assert.equal(SYNDICATION_CHANNELS[0].enabled!(f.env as any), false, 'no Eventbrite secrets in this environment');
   const list = await f.call(SUPER, 'GET', '/api/admin/event-syndication/channels');
   assert.equal(list.status, 200, list.text);
   assert.ok(list.body.channels.every((c: any) => c.auth === null));
