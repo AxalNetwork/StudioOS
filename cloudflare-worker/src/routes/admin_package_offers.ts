@@ -42,7 +42,8 @@ r.get('/:uid/package-offers/:offer', async (c) => {
     await requireSuperAdmin(c);
     const offer = await getPackageOffer(c.env, c.req.param('uid'), c.req.param('offer'));
     const items = await c.env.DB.prepare('SELECT * FROM licence_package_items WHERE offer_uid = ? ORDER BY position, program_key').bind(offer.uid).all();
-    return c.json({ offer: presentPackageOffer(offer), accepted_items: items.results || [] });
+    const presented = presentPackageOffer(offer);
+    return c.json({ offer: presented, accepted_items: items.results || [], accepted_hq_services: presented.acceptance?.hq_services ?? [] });
   } catch (e) { return answer(c, e); }
 });
 r.get('/:uid/package-offers/:offer/history', async (c) => {

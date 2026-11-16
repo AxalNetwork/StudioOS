@@ -132,7 +132,7 @@ r.get('/escalations', async (c) => {
     let payload: unknown = null;
     let available = true;
     try {
-      const lane = await branchEscalations(c.env, 100);
+      const lane = await branchEscalations(c.env, 100, c.req.query('program') ?? null);
       // D799 — each row's request read out of `detail`, beside it.
       payload = { ...lane, items: lane.items.map(withRequestView) };
     } catch { available = false; }

@@ -112,6 +112,30 @@ test('a missing program reference price leaves the standalone total unknown, not
   assert.equal(r.programs.find((p) => p.program_key === 'b')?.recommended_annual_fee_cents, null);
 });
 
+test('HQ delivery has its own commercial scope and cannot borrow a local program reference price', () => {
+  const pkg = pkgOf({}, ['learning', 'product-testing']);
+  const delivery = { kind: 'hq_service', description: 'HQ coordinates the testing panel.' };
+  pkg.items[1].delivery = delivery;
+  const price = (localTestingPrice: number) => recommendPackage(pkg, idxOf(450_000), defaults({ learning: 700_000, 'product-testing': localTestingPrice }));
+  const mixed = price(800_000);
+  assert.equal(mixed.recommended_annual_fee_cents, 450_000);
+  assert.equal(mixed.programs[0].recommended_annual_fee_cents, 320_000);
+  assert.deepEqual(mixed.programs[1], { program_key: 'product-testing', position: 2, delivery, pricing_default_uid: null,
+    pricing_default_version: null, base_annual_fee_cents: null, recommended_annual_fee_cents: null,
+    unavailable_reason: 'There is no standalone price for this HQ service.' });
+  assert.deepEqual([mixed.standalone_sum_cents, mixed.bundle_saving_cents, mixed.bundle_discount_bps, mixed.bundle_premium_cents], [null, null, null, null]);
+  assert.deepEqual(mixed.warnings.map((w) => [w.code, w.detail?.programs]), [['hq_service_price_unavailable', ['product-testing']]]);
+  assert.deepEqual(price(2_000_000), mixed, 'changing the price for local rights cannot reprice an HQ service');
+  pkg.items[0].included_by_default = false;
+  const serviceOnly = price(800_000);
+  assert.deepEqual([serviceOnly.available, serviceOnly.recommended_annual_fee_cents, serviceOnly.standalone_sum_cents], [true, 450_000, null]);
+  pkg.items[0].included_by_default = true;
+  pkg.items[1].included_by_default = false;
+  const localOnly = price(800_000);
+  assert.equal(localOnly.standalone_sum_cents, 320_000);
+  assert.ok(!localOnly.warnings.some((w) => w.code === 'hq_service_price_unavailable'));
+});
+
 test('no country index, or a different currency, is unavailable with a reason', () => {
   const none = recommendPackage(pkgOf(), idxOf(null), defaults({ a: 1, b: 1 }));
   assert.equal(none.available, false);

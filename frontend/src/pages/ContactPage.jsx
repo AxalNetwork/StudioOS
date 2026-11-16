@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
 import { Eyebrow, FilterPills } from '../components/site/SiteBlocks';
 import { request } from '../lib/api';
+import { enquiryProgramKey } from '../lib/siteFirm';
+import { PROGRAMS } from '../lib/programGrants';
 import { loadTurnstile } from '../lib/turnstile';
 import { openCohortCopy } from '../lib/spinoutLab';
 import './site/contact.css';
@@ -78,8 +80,10 @@ export function isHttpLink(value) {
 }
 
 /** The body `POST /api/contact` receives. `message` is the about box. */
-export function contactPayload({ intent, form, turnstileToken }) {
+export function contactPayload({ intent, form, turnstileToken, programKey }) {
+  const key = intent === 'licence' ? enquiryProgramKey(programKey) : null;
   return {
+    ...(key ? { subject: `Studio licence enquiry — ${key}` } : {}),
     intent,
     name: form.name,
     email: form.email,
@@ -108,6 +112,8 @@ export default function ContactPage() {
   // changes `?topic=` in place starts again from that topic's default.
   const [picked, setPicked] = useState({ topic, value: initialIntent(topic) });
   const intent = picked.topic === topic ? picked.value : initialIntent(topic);
+  const programKey = intent === 'licence' ? enquiryProgramKey(params.get('program')) : null;
+  const programName = PROGRAMS.find((p) => p.key === programKey)?.name ?? programKey?.replace(/-/g, ' ');
   const setIntent = (value) => setPicked({ topic, value });
   const [form, setForm] = useState(EMPTY);
   const [status, setStatus] = useState({ state: 'idle', error: '', reference: '', intent: '' });
@@ -182,7 +188,7 @@ export default function ContactPage() {
     try {
       const res = await request('/contact', {
         method: 'POST',
-        body: JSON.stringify(contactPayload({ intent, form, turnstileToken })),
+        body: JSON.stringify(contactPayload({ intent, form, turnstileToken, programKey })),
       });
       setStatus({ state: 'sent', error: '', reference: typeof res?.reference === 'string' ? res.reference : '', intent });
       setForm(EMPTY);
@@ -230,8 +236,9 @@ export default function ContactPage() {
               </div>
             ) : (
               <form className="ax-contact-form" onSubmit={submit} aria-labelledby="ax-contact-k">
-                <div id="ax-contact-k" className="ax-lbl-q ax-contact-k">Application enquiry</div>
+                <div id="ax-contact-k" className="ax-lbl-q ax-contact-k">{intent === 'licence' ? 'Studio licence enquiry' : 'Application enquiry'}</div>
                 <FilterPills options={intents} value={intent} onChange={setIntent} label="What the enquiry is about" />
+                {programName && <p className="ax-contact-fine">Program of interest: <strong>{programName}</strong></p>}
 
                 <label className="ax-vh" htmlFor="ax-contact-name">Full name</label>
                 <input

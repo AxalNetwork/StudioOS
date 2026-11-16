@@ -7,7 +7,7 @@ import { request } from '../api.js';
 
 export const licenceRequestsApi = {
   /** This licence's requests and HQ's answers, with the kinds this licence offers. */
-  list: () => request('/licence/mine/requests'),
+  list: (program) => request(program ? `/licence/mine/requests?program=${encodeURIComponent(program)}` : '/licence/mine/requests'),
   /** `{ kind, subject, detail?, request? }`; `request` carries the kind's own fields. */
   raise: ({ kind, subject, detail, request: fields } = {}) => request('/licence/mine/requests', {
     method: 'POST',

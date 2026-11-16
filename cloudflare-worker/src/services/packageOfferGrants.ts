@@ -1,11 +1,11 @@
 /** Plan package composition through the existing Program Grants rules and writer (#5024). */
 import type { Env } from '../types';
 import { canonicalJson } from './licencePricing';
-import { insertGrantStatement, programNamed, readDefaults, readinessRefusal, termsDiff, termsOf, validateTerms, type Terms } from './programGrants';
+import { insertGrantStatement, programOf, programNamed, readDefaults, readinessRefusal, termsDiff, termsOf, validateTerms, type Terms } from './programGrants';
 import { decisionGuard } from './decisionBatch';
-import type { ProgramPackageWithItems } from './licencePackagesStore';
+import type { HqService, ProgramPackageWithItems } from './licencePackagesStore';
 
-export type OfferedProgram = { program_key: string; position: number; metadata: Record<string, unknown> | null; terms: Terms };
+export type OfferedProgram = { delivery?: HqService; program_key: string; position: number; metadata: Record<string, unknown> | null; terms: Terms };
 export class PackageGrantInputError extends Error {}
 export type GrantConflict = { program_key: string; code: string; message: string };
 export type PackageGrantPlan = {
@@ -31,6 +31,11 @@ export async function offeredPrograms(env: Env, a: {
   const rows = (await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ?').bind(a.licenceId).all<Record<string, any>>()).results || [];
   const defaults = await readDefaults(env);
   return included.map((item) => {
+    if (item.delivery) {
+      if (Object.hasOwn(inputs, item.program_key)) throw new PackageGrantInputError('HQ services do not carry studio operating terms.');
+      if (programOf(item.program_key)?.readiness !== 'hq') throw new PackageGrantInputError('This service is no longer delivered by HQ. Review the package version.');
+      return { program_key: item.program_key, position: item.position, metadata: item.metadata, terms: {}, delivery: item.delivery };
+    }
     const existing = rows.find((r) => r.program_key === item.program_key);
     const raw = inputs[item.program_key];
     const check = validateTerms(item.program_key, raw);
@@ -51,13 +56,17 @@ export async function offeredPrograms(env: Env, a: {
 
 /** Conflicts are returned for review; no existing grant is ended, regranted or repriced here. */
 export async function reviewPackageGrants(env: Env, a: {
-  offerUid: string; licenceId: number; renewsOn: string | null; startsOn: string; endsOn: string; currency: string; programs: OfferedProgram[]; today: string;
+  offerUid: string; licenceId: number; renewsOn: string | null; startsOn: string; endsOn: string; currency: string; programs: OfferedProgram[]; today: string; stage: 'offer' | 'accept';
 }): Promise<{ plans: PackageGrantPlan[]; conflicts: GrantConflict[]; rows: Record<string, any>[] }> {
   const rows = (await env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? ORDER BY program_key').bind(a.licenceId).all<Record<string, any>>()).results || [];
   const defaults = await readDefaults(env);
   const conflicts: GrantConflict[] = [];
   const plans: PackageGrantPlan[] = [];
   for (const item of a.programs) {
+    if (item.delivery?.kind === 'hq_service') {
+      if (programOf(item.program_key)?.readiness !== 'hq') conflicts.push({ program_key: item.program_key, code: 'hq_service_unavailable', message: 'This service is no longer delivered by HQ.' });
+      continue;
+    }
     const existing = rows.find((r) => r.program_key === item.program_key);
     const problem = (code: string, message: string) => conflicts.push({ program_key: item.program_key, code, message });
     const program = await programNamed(env, item.program_key);
@@ -72,7 +81,7 @@ export async function reviewPackageGrants(env: Env, a: {
       if (!existing.starts_on || existing.starts_on > a.startsOn || (!openEnded && (!end || end < a.endsOn))) {
         problem('grant_dates_conflict', 'The existing grant does not record coverage for the whole package term. Review its dates in Program Grants.'); continue;
       }
-      if (a.startsOn > a.today && existing.starts_on <= a.today && (!end || end >= a.today)) {
+      if (a.stage === 'accept' && a.startsOn > a.today && existing.starts_on <= a.today && (!end || end >= a.today)) {
         problem('scheduled_existing_grant', 'A future package cannot change a currently held program’s legal policy early. Wait for its start or use the scheduled lifecycle workflow.'); continue;
       }
       const diff = termsDiff(termsOf(existing, item.program_key), item.terms)
@@ -91,19 +100,29 @@ export async function reviewPackageGrants(env: Env, a: {
   return { plans, conflicts, rows };
 }
 
+/** Recheck the grant basis in the transaction that issues or accepts the offer. */
+export function packageGrantGuard(env: Env, plan: PackageGrantPlan, offerLicenceId?: number) {
+  if (plan.action === 'retained') {
+    return env.DB.prepare(`INSERT INTO decision_guard (decision_won)
+      VALUES (CASE WHEN EXISTS (SELECT 1 FROM program_grants WHERE id = ? AND uid = ? AND state = 'granted' AND terms_revision = ?) THEN 1 ELSE 0 END)`)
+      .bind(plan.existing_id, plan.grant_uid, plan.terms_revision);
+  }
+  // Issuance only validates the absence of a local grant. Acceptance inserts it and uses the unique
+  // constraint to return its existing acceptance_conflict response if an independent grant won the race.
+  return env.DB.prepare(`INSERT INTO decision_guard (decision_won)
+    VALUES (CASE WHEN EXISTS (SELECT 1 FROM program_grant_defaults WHERE program_key = ?1 AND grantable = 1)
+      AND (?2 IS NULL OR NOT EXISTS (SELECT 1 FROM program_grants WHERE licence_id = ?2 AND program_key = ?1)) THEN 1 ELSE 0 END)`)
+    .bind(plan.program_key, offerLicenceId ?? null);
+}
+
 /** Statements join the caller's acceptance batch and its decision guard. */
 export function packageGrantStatements(env: Env, a: {
   licenceId: number; offerUid: string; actorId: number; reason: string; at: string; plans: PackageGrantPlan[];
 }): D1PreparedStatement[] {
   const statements: D1PreparedStatement[] = [];
   for (const p of a.plans) {
-    if (p.action === 'retained') {
-      statements.push(env.DB.prepare(`INSERT INTO decision_guard (decision_won)
-        VALUES (CASE WHEN EXISTS (SELECT 1 FROM program_grants WHERE id = ? AND uid = ? AND state = 'granted' AND terms_revision = ?) THEN 1 ELSE 0 END)`)
-        .bind(p.existing_id, p.grant_uid, p.terms_revision));
-    } else {
-      statements.push(env.DB.prepare(`INSERT INTO decision_guard (decision_won)
-        VALUES (CASE WHEN EXISTS (SELECT 1 FROM program_grant_defaults WHERE program_key = ? AND grantable = 1) THEN 1 ELSE 0 END)`).bind(p.program_key));
+    statements.push(packageGrantGuard(env, p));
+    if (p.action === 'created') {
       statements.push(insertGrantStatement(env, { uid: p.grant_uid, licenceId: a.licenceId, programKey: p.program_key,
         terms: p.terms, note: `Included in Axal VC package offer ${a.offerUid}; no separate program fee allocated.`, actorId: a.actorId, at: a.at }));
       statements.push(decisionGuard(env));

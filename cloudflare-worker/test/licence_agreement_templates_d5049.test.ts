@@ -213,6 +213,32 @@ test('2. merge completeness: unrecorded values and flat keys block the send; tem
   db.close();
 });
 
+test('an offer-bound master distinguishes HQ services and local rights before and after acceptance', () => {
+  const composition = [
+    { program_key: 'learning', metadata: { delivery: { kind: 'hq_service', description: 'Untrusted metadata' } } },
+    { program_key: 'product-testing', delivery: { kind: 'hq_service', description: 'HQ coordinates the testing panel.' } },
+  ];
+  const offer = { uid: 'offer-2', state: 'offered', package_key: 'core_network', package_name: 'Core Network', package_version: 2,
+    composition_json: JSON.stringify(composition), recommendation_json: '{}', recommended_annual_fee_cents: 500_000, currency: 'EUR',
+    starts_on: '2027-01-01', ends_on: '2027-12-31', accepted_annual_fee_cents: null };
+  const input = { licence: { uid: LIVE, currency: 'EUR' }, territories: [], seats: [], licenceTerms: null, grant: null, signer: null,
+    program_key: null, package_key: 'core_network', package_name: 'Other version', package_version: 1, packageOffer: offer,
+    agreement: { kind: 'package_master', prepared_on: '2026-11-08' } } as any;
+  const offered = agreementMergeValues(input);
+  const rights = 'learning (studio operation), product-testing (HQ service — HQ coordinates the testing panel.)';
+  assert.equal(offered['package.programs'], rights);
+  assert.equal(offered['package.recommended_annual_fee_cents'], '500000');
+  assert.equal(offered['package.offer_uid'], 'offer-2');
+  assert.equal(offered['package.version'], '2');
+  assert.equal(offered['package.annual_fee'], undefined);
+  assert.equal(offered['package.accepted_annual_fee_cents'], undefined);
+  const accepted = agreementMergeValues({ ...input, packageOffer: { ...offer, state: 'accepted', accepted_annual_fee_cents: 450000 } });
+  assert.equal(accepted['package.programs'], rights);
+  assert.equal(accepted['package.annual_fee'], 'EUR 4,500');
+  const serviceOnly = agreementMergeValues({ ...input, packageOffer: { ...offer, composition_json: JSON.stringify([composition[1]]) } });
+  assert.equal(serviceOnly['package.programs'], 'product-testing (HQ service — HQ coordinates the testing panel.)');
+});
+
 test('package agreements freeze the published catalogue name and version at draft time', async () => {
   const db = fixture();
   db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611091023_program_packages.sql'), 'utf8'));

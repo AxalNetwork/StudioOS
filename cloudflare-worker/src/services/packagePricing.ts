@@ -31,7 +31,7 @@ import type { Env } from '../types';
 import { divRound, roundToIncrement, PPM, canonicalJson } from './licencePricing';
 import { activeDefault, indexOfSnapshot, recommendProgramFee, type PricingDefault, type ProgramRecommendation } from './programPricing';
 import { getLicenceSnapshot, latestLicenceSnapshot, type LicenceSnapshot } from './licencePricingApply';
-import type { ProgramPackageWithItems } from './licencePackagesStore';
+import type { PackageItem, ProgramPackageWithItems } from './licencePackagesStore';
 
 const PPMn = BigInt(PPM);
 
@@ -50,9 +50,10 @@ export class PackagePricingError extends Error {
 
 export type PackageIndex = { ppm: number | null; currency: string | null; rounding_cents: number | null; model_version: string | null; reason: string | null };
 
-export type Warning = { code: 'missing_program_price' | 'program_price_unavailable' | 'provisional_market_data' | 'bundle_value_warning'; sentence: string; detail?: Record<string, unknown> };
+export type Warning = { code: 'missing_program_price' | 'hq_service_price_unavailable' | 'program_price_unavailable' | 'provisional_market_data' | 'bundle_value_warning'; sentence: string; detail?: Record<string, unknown> };
 
 export type StandaloneProgram = {
+  delivery?: PackageItem['delivery'];
   program_key: string;
   position: number;
   pricing_default_uid: string | null;
@@ -150,6 +151,13 @@ export function recommendPackage(
   // The standalone comparison: every program the version includes by default, priced as D5018 prices it alone.
   const included = pkg.items.filter((i) => i.included_by_default).sort((a, b) => a.position - b.position || a.program_key.localeCompare(b.program_key));
   const programs: StandaloneProgram[] = included.map((item) => {
+    if (item.delivery?.kind === 'hq_service') {
+      return {
+        program_key: item.program_key, position: item.position, delivery: item.delivery,
+        pricing_default_uid: null, pricing_default_version: null, base_annual_fee_cents: null, recommended_annual_fee_cents: null,
+        unavailable_reason: 'There is no standalone price for this HQ service.',
+      };
+    }
     const d = defaults.get(item.program_key) ?? null;
     const rec: ProgramRecommendation = recommendProgramFee(d, { ppm: idx.ppm, currency: idx.currency, rounding_cents: idx.rounding_cents });
     return {
@@ -161,7 +169,11 @@ export function recommendPackage(
     };
   });
   const warnings: Warning[] = [];
-  const missing = programs.filter((p) => p.pricing_default_uid === null).map((p) => p.program_key);
+  const services = programs.filter((p) => p.delivery?.kind === 'hq_service').map((p) => p.program_key);
+  if (services.length) {
+    warnings.push({ code: 'hq_service_price_unavailable', sentence: `No standalone HQ service price is recorded for ${services.join(', ')}. The package has no comparable standalone total or saving.`, detail: { programs: services } });
+  }
+  const missing = programs.filter((p) => p.delivery?.kind !== 'hq_service' && p.pricing_default_uid === null).map((p) => p.program_key);
   const unpriced = programs.filter((p) => p.pricing_default_uid !== null && p.recommended_annual_fee_cents === null);
   if (missing.length) {
     warnings.push({ code: 'missing_program_price', sentence: `No reference price is recorded for ${missing.join(', ')}, so the programs' standalone total is not known and no saving is shown.`, detail: { programs: missing } });
@@ -206,7 +218,11 @@ export function recommendPackage(
 /** The included programs' active reference prices, read once. */
 export async function defaultsFor(env: Env, pkg: ProgramPackageWithItems): Promise<Map<string, PricingDefault | null>> {
   const out = new Map<string, PricingDefault | null>();
-  for (const item of pkg.items) if (item.included_by_default && !out.has(item.program_key)) out.set(item.program_key, await activeDefault(env, item.program_key));
+  for (const item of pkg.items) {
+    if (item.included_by_default && item.delivery?.kind !== 'hq_service' && !out.has(item.program_key)) {
+      out.set(item.program_key, await activeDefault(env, item.program_key));
+    }
+  }
   return out;
 }
 

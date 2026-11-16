@@ -20,6 +20,7 @@ import { reportError } from '../../lib/log';
 import { FORMATS } from '../../data/network';
 import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
 import { formatEventPrice } from '../../lib/money';
+import { studioLicenceEnquiryPath } from '../../lib/siteFirm';
 import { COHORT_WEEKS, openCohortCopy, useCohortPlaces } from '../../lib/spinoutLab';
 import { EVENTS_COPY, eventDateParts, eventTypeTone } from '../../lib/siteNetwork2';
 import '../site/network2.css';
@@ -105,6 +106,9 @@ export function LabProgramCard() {
       </dl>
       <Link to="/spinout-lab/apply" className="ax-btn ax-btn-primary ax-n2-program-cta">
         {cohort ? `Apply to Cohort ${cohort.cohortNum}` : 'Apply to the next cohort'}
+      </Link>
+      <Link to={studioLicenceEnquiryPath('spinout-lab')} className="ax-n2-textlink">
+        Ask about running the Lab at your studio
       </Link>
     </article>
   );

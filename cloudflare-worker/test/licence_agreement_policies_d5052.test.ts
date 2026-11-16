@@ -26,7 +26,7 @@ import policiesRoute from '../src/routes/admin_licence_agreement_policies.ts';
 import contractsRoute from '../src/routes/admin_contracts.ts';
 import { onAgreementEnvelopeCompleted } from '../src/services/programAgreements.ts';
 import { programCopy, studioPrograms, parseProgramCopy } from '../src/services/licencePrograms.ts';
-import { requirementFor, programLegalStatus, gateSyncStatements, ledgerLegalSignals, readLicenceLegal,
+import { requirementFor, packageMasterExecuted, programLegalStatus, gateSyncStatements, ledgerLegalSignals, readLicenceLegal,
   latestPolicy, holdingsOf, alreadyHolds, freezeHoldingStatements, replacementOnPackageMoveStatement, syncLegalGate } from '../src/services/agreementPolicies.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -432,6 +432,31 @@ test('history: one list, oldest first, every line attributable and in context', 
   const drafted = h.find((x) => x.action === 'drafted');
   assert.deepEqual([drafted.program_key, drafted.slot_key, drafted.template_slug, drafted.reason], ['learning', 'program_licence:learning', 'program_learning_licence', REASON]);
   assert.throws(() => db.prepare('DELETE FROM licence_legal_events').run(), /append-only/);
+});
+
+test('a service-only package policy holds its own master and supplies no legal coverage for a studio-operated program', async () => {
+  const db = fixture();
+  try {
+    const packageKey = 'core_network';
+    const invalid = await policy(db, 'package', packageKey, { strategy: 'per_program', programs: [] });
+    assert.equal(invalid.status, 400);
+    assert.equal((await policy(db, 'package', packageKey, { strategy: 'package_master', programs: [], required_schedules: ['learning'] })).status, 400);
+    for (const strategy of ['none', 'package_master']) {
+      assert.equal((await policy(db, 'package', packageKey, { strategy, programs: [] })).status, 201);
+      assert.deepEqual((await latestPolicy({ DB: d1Over(db) } as any, 'package', packageKey))?.programs, []);
+    }
+    assert.equal((await legacyHolding(db, packageKey, 'service-only-offer')).status, 201);
+    const holdings = await holdingsOf({ DB: d1Over(db) } as any, LIC);
+    assert.equal(requirementFor('product-testing', holdings).basis, 'not_recorded');
+    assert.equal(requirementFor('learning', holdings).basis, 'not_recorded');
+    const executed = { slot_key: 'package_master', status: 'executed', package_key: packageKey, package_offer_uid: 'service-only-offer', package_version: 2 } as any;
+    const check = (row: typeof executed) => packageMasterExecuted([row], packageKey, 'service-only-offer', 2);
+    assert.equal(check(executed), true);
+    for (const change of [{ status: 'sent' }, { status: 'superseded' }, { package_key: 'venture_building' }, { package_offer_uid: null },
+      { package_offer_uid: 'superseded-offer' }, { package_version: 1 }, { slot_key: 'package_addendum:product-testing' }]) {
+      assert.equal(check({ ...executed, ...change }), false, JSON.stringify(change));
+    }
+  } finally { db.close(); }
 });
 
 test('a policy is refused when it does not fit its scope', async () => {
