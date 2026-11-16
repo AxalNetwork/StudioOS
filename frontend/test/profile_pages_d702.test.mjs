@@ -40,9 +40,10 @@ import VisibilityPage, { VisibilityView, MATCHING_SUB, FINDABLE_SUB } from '../s
 import { PROFILE_PAGES, NOT_CHOSEN_LINE, figureView, profileLinks, ventureChanges, ventureDraft } from '../src/pages/profile/profileModel.js';
 import { PhoneArchetypePage, PUBLISHED_SUB, PHONE_TITLE, PHONE_SUB } from '../src/pages/ArchetypeCardPage.jsx';
 import { archetypeMeta } from '../src/lib/assessmentMeta.js';
+import { readAccountPage } from './_accountSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(read('frontend/src/pages/SettingsPage.jsx'));
+const PAGE = codeOnly(readAccountPage());
 const DOCS = read('frontend/src/pages/docs/sections/account.js');
 const WORKER = codeOnly(read('cloudflare-worker/src/services/userSettings.ts'));
 
