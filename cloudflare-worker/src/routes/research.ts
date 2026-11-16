@@ -2909,13 +2909,14 @@ const DRAFT_SURFACES: Record<string, {
              FROM portfolio_support_entries s
              LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
             WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+              AND s.ask_uid IS NULL
             ORDER BY s.created_at DESC LIMIT 60`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
         c.env.DB.prepare(
           `SELECT DISTINCT pp.project_id, pr.name AS project_name
              FROM portfolio_positions pp
              LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
-             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id AND s.ask_uid IS NULL
             WHERE s.id IS NULL
               AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
