@@ -27,7 +27,7 @@ import { refuse } from '../util/refusal';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { activeGrant, logAccess, projectNdaActive, roomProject } from './data_room';
 import { tierAdmits, investorCommitted, grantFolderScope } from '../services/dataRoomAccess';
-import { libraryAllowed, lapseRoom, reconcileRoomRefs } from '../services/roomLibrary';
+import { libraryAllowed, lapseRoom, reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
 import { deleteChunkedEntity } from '../services/vectorize';
 import { Jobs } from '../models/jobs';
 import { isSupportSession } from '../services/fundAdminAccess';
@@ -140,7 +140,7 @@ r.delete('/items/:documentUid', async (c) => {
       c.env.DB.prepare('DELETE FROM research_room_refs WHERE id = ?').bind(row.ref_id),
       c.env.DB.prepare('DELETE FROM research_documents WHERE id = ?').bind(row.id),
     ]);
-    const stillThere = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(row.file_id, row.project_id).first();
+    const stillThere = await roomFileStillThere(c.env, Number(row.file_id), Number(row.project_id));
     await logAccess(c.env, Number(row.project_id), user.id, 'library_remove', stillThere ? Number(row.file_id) : null);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }

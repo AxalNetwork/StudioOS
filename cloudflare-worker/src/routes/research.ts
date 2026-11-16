@@ -90,7 +90,7 @@ import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldE
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
-import { reconcileRoomRefs } from '../services/roomLibrary';
+import { reconcileRoomRefs, roomFileStillThere } from '../services/roomLibrary';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
@@ -624,7 +624,7 @@ research.delete('/documents/:uid', async (c) => {
       c.env.DB.prepare('DELETE FROM research_room_refs WHERE document_id = ?').bind(row.id),
       c.env.DB.prepare('DELETE FROM research_documents WHERE id = ?').bind(row.id),
     ]);
-    const still = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(room.file_id, room.project_id).first();
+    const still = await roomFileStillThere(c.env, Number(room.file_id), Number(room.project_id));
     await logAccess(c.env, Number(room.project_id), user.id, 'library_remove', still ? Number(room.file_id) : null);
     return c.json({ ok: true });
   }

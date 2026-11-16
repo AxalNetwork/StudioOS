@@ -128,3 +128,9 @@ export async function refOfDocument(env: Env, documentId: number) {
        FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.document_id = ?`,
   ).bind(documentId).first<any>();
 }
+
+/** Whether a room still holds the file a removed reference pointed at, so its activity row can name it. */
+export async function roomFileStillThere(env: Env, fileId: number, projectId: number): Promise<boolean> {
+  const row = await env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(fileId, projectId).first();
+  return Boolean(row);
+}
