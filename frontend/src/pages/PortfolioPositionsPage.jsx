@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
 import WriteFlow from './portfolio/WriteFlow.jsx';
 import MarkRequestsAdmin from './portfolio/MarkRequestsAdmin.jsx';
+import RightsAdmin from './portfolio/RightsAdmin.jsx';
 import { markRequestsApi } from '../lib/api/markRequests';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
@@ -319,6 +320,8 @@ export default function PortfolioPositionsPage({ embedded = false }) {
               <MarkRequestsAdmin companyName={detail.project?.name || 'this company'} read={requests} marks={detail.marks || []}
                 justRecorded={justRecorded} onAnswer={answerRequest} onRetry={() => loadRequests(detail.project?.uid)} />
             )}
+            {/* D6868 (#6868): investors' rights from the signed documents, and their requests to record one. */}
+            {isAdmin && detail.project?.uid ? <RightsAdmin key={detail.project.uid} projectUid={detail.project.uid} companyName={detail.project?.name || 'this company'} /> : null}
           </div>
         </Sheet>
       )}

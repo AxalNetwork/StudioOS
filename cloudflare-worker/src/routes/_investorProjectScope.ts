@@ -93,7 +93,7 @@ export async function investorProjectIds(
 }
 
 /** The investor whose relationships a seat reads: the seat's primary holder, or the caller. */
-async function seatOwnerId(env: Env, user: User): Promise<number> {
+export async function seatOwnerId(env: Env, user: User): Promise<number> {
   const seatOwner = await env.DB.prepare(
     'SELECT investor_seat_primary_user_id FROM users WHERE id = ?',
   ).bind(user.id).first<{ investor_seat_primary_user_id: number | null }>().catch(() => null);
