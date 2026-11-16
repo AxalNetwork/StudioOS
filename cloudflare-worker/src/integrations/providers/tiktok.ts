@@ -7,6 +7,7 @@ import { decryptCredentials, encryptCredentials } from '../secrets';
 import { acquireRefreshLease } from '../refreshLease';
 import { exchangeTikTokCode, refreshTikTokToken, revokeTikTokToken, tiktokAuthorizeUrl } from '../tiktokOAuth';
 import type { IntegrationRow } from '../registry';
+import { purgeTikTokConnection } from '../../services/tiktok/grow';
 
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, 'tiktok');
@@ -25,7 +26,8 @@ async function approvedApp(env: Env) {
   return appCredentials(env);
 }
 
-async function accessToken(env: Env, row: IntegrationRow): Promise<string> {
+/** The connection's access token, refreshed behind the lease when it is within a minute of expiry. */
+export async function tiktokAccessToken(env: Env, row: IntegrationRow): Promise<string> {
   const lease = await acquireRefreshLease(env, 'tiktok', row.uid);
   if (!lease.acquired) throw new Error('tiktok_refresh_busy');
   try {
@@ -83,7 +85,10 @@ const provider: ProviderImpl = {
     if (typeof token === 'string') await revokeTikTokToken(await appCredentials(env), token);
   },
   async disconnect(c, _user, row) {
-    await revokeTikTokToken(await appCredentials(c.env), await accessToken(c.env, row));
+    await revokeTikTokToken(await appCredentials(c.env), await tiktokAccessToken(c.env, row));
+    // D5863 (owner decision E): once TikTok has revoked the grant, the connection's Grow facts, their ledger rows and
+    // its venture link go with it. A failed revoke throws first, and the route then deletes nothing.
+    await purgeTikTokConnection(c.env, row.id);
   },
 };
 
