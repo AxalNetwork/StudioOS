@@ -9,6 +9,7 @@
  * Modelled: these are the scenario's founders, not recorded holders.
  */
 import type { Env } from '../../types';
+import { majorToMinor } from '../../../../frontend/src/lib/money.js';
 
 type Row = { uid: string; name: string | null; is_variant: number | null; inputs_json: string | null; result_json: string | null; updated_at: string | null };
 
@@ -23,7 +24,7 @@ export function firstRound(inputs: any): { name: string | null; investment_cents
   const rounds = Array.isArray(inputs?.rounds) ? inputs.rounds : [];
   if (!rounds.length) return null;
   const r = rounds[0] ?? {};
-  const inv = typeof r.investment === 'number' && Number.isFinite(r.investment) && r.investment >= 0 ? Math.round(r.investment * 100) : null;
+  const inv = typeof r.investment === 'number' && Number.isFinite(r.investment) && r.investment >= 0 ? majorToMinor(r.investment, 'USD') : null;
   return { name: typeof r.name === 'string' && r.name ? r.name : null, investment_cents: inv };
 }
 
