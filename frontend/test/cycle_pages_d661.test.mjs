@@ -395,7 +395,8 @@ test('the five card states (variant=states and variant=new), each with its sente
   const fresh = text(html(h(FigureTile, { fig: figure('p', 'Pain themes', null, 'count', { delta_30d: null }) })));
   assert.match(fresh, /Pain themes Not recorded nothing recorded yet/);
   assert.doesNotMatch(html(h(FigureTile, { fig: figure('p', 'Pain themes', 2, 'count', { spark: [1, 2] }) })), /<svg/, 'a two-point sparkline is not drawn');
-  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Stripe could not be read/);
+  // D4846 part 2 (#6032): the failed source says Unavailable (D5129's chip) before naming it, in muted ink, not red.
+  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Unavailable Stripe could not be read/);
 });
 
 test('the overview while loading and when the whole read fails', () => {

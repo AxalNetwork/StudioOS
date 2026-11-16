@@ -9,12 +9,13 @@ The founder's Use of funds tool at `/raise/use-of-funds` (D1173, #2455). It is b
 | `ScenariosForecast.jsx` | D1178 (#3105): Runway › Forecast (UF8) with Edit drivers (the shared `Sheet`, D1317), Scenarios (UF9) with New, Edit, Make this the base and Delete, Scenarios compared (UF10, UF11). |
 | `UseOfFundsMovedRedirect.jsx` | D1178: lands the old financial model's addresses on Forecast with the venture and the moved notice. Its own file, so the redirect never loads the page. D1180: with `count`, it also counts a forward the address bar cannot (`/raise/capital?mode=workspace`, the retired Capital workspace's model tab). |
 | `scenariosForecastModel.js` | Pure: D1178's addresses and moved notice, the ten drivers and their sources, the forecast's tiles, series and sensitivity, each scenario's card and body, and the comparison table. |
+| `useOfFundsRead.js` | D5081: the plan read (`useRead`, `usePlan`) and Home's shared read and open dialog (`useUseOfFundsHome`), small enough for CycleRoute to hold without loading the tool's step, so the header's Set raise & allocation and Home draw from one read. |
 | `useOfFundsModel.js` | Pure: the addresses, the canvas's seven tabs, `isUseOfFundsTab`, the venture-only query, the forecast's link with the venture kept, and D1177's derivations: tiles, section rows, the split check, runway today against its candidates and the forecast, the ties, Needs you, plan vs actual and History. |
 
 ## Where the tool lives
 
 The tool is the Use of funds module, not a page beside it.
-- Home is CycleRoute's module page, which already draws the split card, the Categories records and Mercury's spend by category.
+- Home is CycleRoute's module page, and the tool owns it (D5081, RA-14): the page draws only the tool's tab bar and Home, then the module's own parts (From Mercury, Evidence, Eadwyn). No generic "at a glance", forecast door or Categories table is drawn under it. Its header says "What does this round buy us?" and its primary action is Set raise & allocation.
 - The tab words (`/allocation`, `/milestones`, `/runway`, `/scenarios`, `/actuals`, `/history`) arrive on the module's record route, `/raise/:slug/:id`. CycleRoute draws `UseOfFundsTabPage` for them instead of a record (`isUseOfFundsTab`).
 - A section's own page is still its key (`/product`, `/go-to-market`, …), and `/new` is still Edit split. The tool itself no longer links it: a section opens its sheet at `?section=<key>` on the tab that holds it (D6083).
 - Two pages sit under a tab and are routes of their own (D1178): `/runway/forecast` and `/scenarios/compare`. CycleRoute takes them as `uofSub`. No tab is a route.
