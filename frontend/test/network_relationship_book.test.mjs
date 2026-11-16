@@ -153,7 +153,8 @@ test('an undated contact is not called cold, and is not called thin either', () 
   assert.match(page, /cold: \(r\) => r\.days !== null && r\.days > COLD_AT,/,
     'the Going cold chip no longer requires a date to call something cold');
   assert.match(page, /export const COLD_AT = 60;/, 'the cold window has left the artboard');
-  // Sixty is the artboard's number and ninety is `MarketZone`'s, about a
+  // Sixty is the artboard's number and ninety is a market reading's (`STALE_AT`
+  // in `pages/research/marketReadingRead.js`), about a
   // different object. One transcribed onto the other is how two windows become
   // one, so the canvas is asked for its own.
   assert.match(CANVAS, /c\.days !== null && c\.days > 60/, 'the canvas’s cold window has moved');

@@ -1,3 +1,4 @@
+import { liveFiles } from './dataRoomTrash';
 import { holdsLicence } from './accountLicences';
 import { posthogFigure } from './posthog/raise';
 import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
@@ -1155,7 +1156,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
     const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
     if (!accessible.length) {
-      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const staged = await ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?${await liveFiles(ctx.env.DB)}`).bind(ctx.projectId).first<{ n: number }>();
       const reason = 'No files are currently downloadable by a granted investor.';
       if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${DATA_ROOM_ACCESS}?project_id=${ctx.projectId}` }, reason };
       return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
@@ -1220,7 +1221,7 @@ async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     `SELECT f.id, f.name, f.visibility, f.checklist_item, f.updated_at, f.folder_id, d.name AS folder,
             f.access_tier, f.access_expires_at, f.dd_request_id
        FROM data_room_files f LEFT JOIN data_room_folders d ON d.id = f.folder_id
-      WHERE f.project_id = ? ORDER BY f.updated_at DESC, f.id DESC`,
+      WHERE f.project_id = ?${await liveFiles(ctx.env.DB, 'f')} ORDER BY f.updated_at DESC, f.id DESC`,
   ).bind(ctx.projectId).all<any>();
   const all = res.results || [];
   const requested = [...new Set(all.map((f) => Number(f.dd_request_id)).filter((n) => Number.isInteger(n) && n > 0))];
@@ -1978,7 +1979,7 @@ async function deckViewsFigure(ctx: Ctx): Promise<Figure> {
  */
 export type RoomFileCount = (ctx: Ctx) => Promise<number>;
 export const ownerRoomFileCount: RoomFileCount = async (ctx) => {
-  const row = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+  const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?${await liveFiles(ctx.env.DB)}`).bind(ctx.projectId).first<{ n: number }>();
   const n = Number(row?.n);
   if (!Number.isSafeInteger(n) || n < 0) throw new Error('Data room file count unavailable');
   return n;
