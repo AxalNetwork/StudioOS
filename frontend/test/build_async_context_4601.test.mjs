@@ -223,7 +223,8 @@ async function mountOverview(Route_) {
   const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await settle();
   const by = (id) => walk(container).find((n) => propsOf(n)['data-testid'] === id);
-  const cardNode = () => by('cycle-card-operating-systems');
+  // D6028 (#6028): Build's overview draws its module cards in `BuildOverview.jsx`, the same retry behind them.
+  const cardNode = () => by('build-module-operating-systems');
   return {
     at, retries, overviews, settle, cardNode, state: () => cardNode()?.parentNode && propsOf(cardNode())['data-state'], text: () => textOf(cardNode()),
     go: async (project) => { await act(async () => at.navigate('/build?project_id=' + project)); await settle(); },
