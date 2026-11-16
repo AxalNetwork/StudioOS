@@ -28,7 +28,7 @@ import { Slot } from './DealOverview';
 import SharedRoomFiles from './SharedRoomFiles.jsx';
 import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import { LINK_LINE, composeBody } from '../duediligence/ddCaseModel';
-import { DECK_SLOT } from './dealFrameModel';
+import { DealDeckCard } from './DealDeck';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
   caseCard, caseForDeal, closedReason, myCommitment, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
@@ -354,7 +354,8 @@ export function DealDocuments({ deal }) {
           {/* D6184 (#6184): each envelope with its signed count, Download once fully signed, and how to sign. */}
           {paper.status === 'ready' && paperRows(paper.data?.envelopes).map((p) => <DealPaperRow key={p.id} row={p} />)}
         </Card>
-        <Slot slot={DECK_SLOT} testId="deal-docs-deck" />
+        {/* D6165 (#6165): the deck the venture granted you, in place of the old grey slot. */}
+        <DealDeckCard dealId={deal.id} testId="deal-docs-deck" />
       </div>
       {dialog === 'ask' && (
         <ConfirmDialog testId="deal-room-ask-dialog" title={`Ask ${deal.project_name || 'the founder'} for data room access?`}
