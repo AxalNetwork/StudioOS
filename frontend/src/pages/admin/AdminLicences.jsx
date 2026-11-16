@@ -59,12 +59,13 @@ import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, WorkerRail } from '../../ui';
 import { DEFAULT_TAB, LICENCE_TABS, kindFromParam, ledgerSelection, tabFromParam } from './licenceNavModel';
 import {
-  LEDGER_STATUSES, countsLine, filterByNeeds, ledgerIsEmpty, needsFromParam, needsSummary, needsToParam, statusFromParam, tabForSection,
+  LEDGER_STATUSES, countsLine, filterByMenus, filterByNeeds, ledgerIsEmpty, menusChosen, menusFromParams, needsFromParam, needsSummary,
+  needsToParam, statusFromParam, tabForSection, territoryOptions,
 } from './licenceLedgerModel';
 import { UNAVAILABLE } from './licences/licenceShared';
 import { Coverage } from './licences/Coverage';
 import { Detail } from './licences/LicenceDetail';
-import { CountsAndNeeds, LedgerTable } from './licences/LedgerTable';
+import { CountsAndNeeds, LedgerMenus, LedgerTable } from './licences/LedgerTable';
 import { CoverageLine, LedgerZero, SeatUtilisation } from './licences/LedgerZero';
 import { FamilyChips, RegistryLedger } from './licences/RegistryLedger';
 import { familyFromParam, familyToParam } from './licenceRegistryModel';
@@ -86,6 +87,12 @@ const REQUEST_READS_AT_ONCE = 4;
 
 /** No licence named in the URL: the ledger is shown and nothing is selected. */
 const NO_SELECTION = Object.freeze({ sel: null, finding: false, settle: false });
+
+/**
+ * D4819 part 20 (#5932), board L20 — below `md` every button, select and text
+ * field on the page is at least 44px tall, so each is a touch target.
+ */
+const PHONE_TARGETS = 'max-md:[&_button]:min-h-[44px] max-md:[&_select]:min-h-[44px] max-md:[&_input:not([type=checkbox]):not([type=radio])]:min-h-[44px]';
 
 /** The time a read answered, as the ledger's freshness line says it. */
 const readClock = (d) => `${d.toISOString().slice(11, 16)} UTC`;
@@ -130,8 +137,12 @@ export default function AdminLicences() {
   const statusFilter = statusFromParam(params.get('status'));
   const needs = needsFromParam(params.get('needs'));
   const toggleNeed = (k) => setParam({ needs: needsToParam(needs.includes(k) ? needs.filter((x) => x !== k) : [...needs, k]) });
+  // D5919 — the Territory, Renewal window and Attention menus filter the loaded rows; their choice is in the URL too.
+  const menus = menusFromParams((k) => params.get(k));
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
+  // D4819 part 20 — the phone's search over an open licence: typed here, sent to the ledger on submit.
+  const [phoneQuery, setPhoneQuery] = useState('');
   // D4707 — the filters the loaded page was read for. Until the page for the
   // current filters has arrived, the rows on screen are the old filter's, and
   // reconciling against them would move the selection for the wrong reason.
@@ -359,7 +370,7 @@ export default function AdminLicences() {
   const empty = ledgerIsEmpty({ total, filtered, summaryTotal: summaryOk ? Number(summaryOk.counts?.total) : null });
   const counts = summaryOk ? countsLine(summaryOk.counts) : null;
   const needItems = needsSummary(filteredItems, reads);
-  const rows = filterByNeeds(filteredItems, reads, needs);
+  const rows = filterByMenus(filterByNeeds(filteredItems, reads, needs), reads, menus);
   const coverageGrid = (withRenewals) => (summaryOk
     ? (withRenewals
       ? <Coverage items={summary.coverage} renewals={summary.renewals} onOpen={setSel} />
@@ -429,9 +440,23 @@ export default function AdminLicences() {
   if (wanted) {
     return (
       <RailFrame rail={rail} data-testid="hq-licences-page">
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className={`mx-auto max-w-6xl px-4 py-6 ${PHONE_TARGETS}`}>
+        {/* D4819 part 20 (#5932), board L20 — a phone's licence view opens on
+            search: it returns to the ledger with the search applied, so the
+            next licence is one query away rather than a Back and a scroll. */}
+        <form
+          role="search" className="mb-3 flex gap-2 md:hidden" data-testid="licence-phone-search"
+          onSubmit={(e) => { e.preventDefault(); setQuery(phoneQuery.trim()); setPhoneQuery(''); closeLicence(); }}
+        >
+          <input
+            type="search" value={phoneQuery} onChange={(e) => setPhoneQuery(e.target.value)}
+            placeholder="Search licences" aria-label="Search licences" data-testid="licence-phone-search-input"
+            className="min-h-[44px] min-w-0 flex-1 rounded-md border border-gray-300 px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+          />
+          <button type="submit" className="min-h-[44px] rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300">Search</button>
+        </form>
         <nav aria-label="Breadcrumb" className="text-xs font-semibold text-gray-500 dark:text-gray-400" data-testid="licence-breadcrumb">
-          <a href="/admin/licences" onClick={closeLicence} className="hover:underline">Licences</a>
+          <a href="/admin/licences" onClick={closeLicence} className="inline-flex min-h-[44px] items-center hover:underline md:min-h-0">Licences</a>
           {' / '}
           <span aria-current="page" className="text-gray-900 dark:text-gray-100">{open ? (open.brand_name || open.licence_ref) : 'Licence'}</span>
         </nav>
@@ -440,7 +465,7 @@ export default function AdminLicences() {
             Territory holdings could not be read, so overlap checks against other licences are unavailable until you retry.
           </div>
         )}
-        <div className="mt-3 rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+        <div className="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900 md:p-5">
           {sel ? (
             <Detail
               key={sel} uid={sel} held={held} onChanged={load} onOpenLicence={(u) => setSel(u)}
@@ -459,7 +484,7 @@ export default function AdminLicences() {
   if (empty) {
     return (
       <RailFrame rail={rail} data-testid="hq-licences-page">
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className={`mx-auto max-w-6xl px-4 py-6 ${PHONE_TARGETS}`}>
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>{title}{lede}</div>
           <button type="button" onClick={() => setCreating((v) => !v)}
@@ -488,7 +513,7 @@ export default function AdminLicences() {
   const more = Boolean(data.next_cursor);
   return (
     <RailFrame rail={rail} data-testid="hq-licences-page">
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className={`mx-auto max-w-6xl px-4 py-6 ${PHONE_TARGETS}`}>
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>{title}{lede}</div>
         <div className="flex flex-wrap items-center gap-2">
@@ -498,7 +523,7 @@ export default function AdminLicences() {
             </span>
           )}
           <button type="button" onClick={load} aria-label="Refresh the ledger" data-testid="licence-refresh"
-            className="grid h-8 w-8 place-items-center rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+            className="grid h-8 w-8 place-items-center rounded-md border max-md:h-11 max-md:w-11 border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
             <RefreshCw size={14} aria-hidden="true" />
           </button>
           <button type="button" onClick={() => setCreating((v) => !v)}
@@ -556,7 +581,13 @@ export default function AdminLicences() {
           <option value="">Every status</option>
           {LEDGER_STATUSES.map(([k, word]) => <option key={k} value={k}>{word.replace(/^./, (c) => c.toUpperCase())}</option>)}
         </select>
+        <LedgerMenus menus={menus} territories={territoryOptions(filteredItems, menus.territory)} onChange={setParam} />
       </div>
+      {menusChosen(menus) && more ? (
+        <p className="mt-2 text-xs text-gray-600 dark:text-gray-400" data-testid="licence-menus-scope">
+          {`These filters apply to the ${filteredItems.length} loaded of ${total ?? '?'} licences. Show more to filter the rest.`}
+        </p>
+      ) : null}
 
       {heldUnreadable && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
@@ -567,9 +598,11 @@ export default function AdminLicences() {
       {rows.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-6 text-center dark:border-gray-700" data-testid="licence-no-match">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {needs.length
-              ? 'No loaded licence matches the Needs HQ items chosen. Clear them to see every row.'
-              : 'No licences match this search, kind or status. Clear the search and switch to All to see every row in the ledger.'}
+            {menusChosen(menus)
+              ? 'No loaded licence matches the Territory, Renewal window and Attention chosen. Set them back to Every or Any to see every row.'
+              : needs.length
+                ? 'No loaded licence matches the Needs HQ items chosen. Clear them to see every row.'
+                : 'No licences match this search, kind or status. Clear the search and switch to All to see every row in the ledger.'}
           </p>
         </div>
       ) : (
@@ -578,7 +611,9 @@ export default function AdminLicences() {
           footer={(
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 font-mono text-[12px] text-gray-500 dark:border-gray-800 dark:text-gray-400">
               <span data-testid="licence-list-count">
-                {needs.length
+                {menusChosen(menus)
+                  ? `${rows.length} of ${filteredItems.length} loaded match`
+                  : needs.length
                   ? `${rows.length} of ${filteredItems.length} loaded need HQ`
                   : total !== null ? `Showing ${filteredItems.length} of ${total}` : `Showing ${filteredItems.length}`}
               </span>

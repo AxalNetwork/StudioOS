@@ -1,5 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
+import { openCheckout } from '../../components/checkout/checkoutEntry.js';
+import { cardView } from './cycleModel';
 import { cycleValidateApi } from '../../lib/api/cycleValidate';
 import { alsoInFor } from '../../lib/adminPlacement.js';
 import { EadwynButton, PhoneRows, Unreadable } from '../../ui';
@@ -70,6 +73,8 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
   const actionHref = ROOT_ACTION_PATHS[cycle] ? `/${cycle}/${ROOT_ACTION_PATHS[cycle]}` : null;
   const opensAction = !!(openAction && actionHref && focus?.href && focus.href.split(/[?#]/)[0] === actionHref);
   const rows = phoneIndex(raw, search, cycle);
+  const capTable = cycle === 'raise' && Array.isArray(raw.cards) ? raw.cards.find((card) => card?.slug === 'cap-table') : null;
+  const capTableView = cardView(capTable);
   const also = alsoInFor('founder', name);
 
   // D4602 (#4602, BD2): Build's phone root names its plan, one tap away, with the venture.
@@ -81,10 +86,15 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
     testid: 'phone-index',
     // With no focus the page's Eadwyn button sits beside the index label (D703.md records it).
     action: focus ? undefined : <EadwynButton label={overview} />,
-    rows: [...planRow, ...rows.map((r) => ({
-      key: r.key, title: r.title, description: r.detail || undefined, to: r.href || undefined,
-      notRecorded: r.value == null, value: r.value || undefined, testid: `phone-index-${r.key}`,
-    }))],
+    rows: [...planRow, ...rows.map((r) => {
+      const entry = { key: r.key, title: r.title, testid: `phone-index-${r.key}` };
+      if (r.key === 'cap-table' && capTableView.state === 'locked') {
+        return { ...entry, icon: Lock, description: `On the ${capTableView.plan.name} plan`, value: 'See plans',
+          onClick: () => openCheckout({ plan_key: capTableView.plan.plan_key }) };
+      }
+      return { ...entry, description: r.detail || undefined, to: r.href || undefined,
+        notRecorded: r.value == null, value: r.value || undefined };
+    })],
   }];
   if (also.length) {
     groups.push({

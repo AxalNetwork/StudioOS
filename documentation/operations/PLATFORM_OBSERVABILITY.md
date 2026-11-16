@@ -69,6 +69,7 @@ read), **unit**, **aggregation**, **scope**, **threshold** (warning / critical),
 | `r2.stored_bytes`, `r2.operations` | GraphQL `r2StorageAdaptiveGroups`, `r2OperationsAdaptiveGroups` | — | bytes, count | — | bucket | — | Cloudflare's | **not read** (owner item 1) |
 | Durable Objects, Vectorize, Containers | no binding-level read; dashboard only | — | — | — | — | — | — | **unavailable**; manual check in the dashboard |
 | AI providers | `ai_usage_logs` (existing ledger) and AI Gateway analytics | existing | — | — | — | — | — | owned by #3851 / #4556 |
+| `ai.settlement.without_usage_row` | one count: settled `ai_budget_reservations` with `surface = 'ai'` and a non-zero charge that no `ai_usage_logs.reservation_uid` names (D4569 §1 fact 2; §5.2) | on each read; `last_success_at` is the read | count | holds taken in the last 24 h (by `created_at`), settled at least 5 min before the read | deployment | any non-zero count is a warning; no critical level (**proposed**), hysteresis 0 | snapshot only; the holds keep their own lifetime | `unavailable`, never 0 |
 
 ## 4. The slice in code (D4559)
 
@@ -167,6 +168,45 @@ These four are listed in the read's `not_read_here`, each with its reason.
 A freshness rule: the sweep runs every 5 minutes, so a newest batch older than
 20 minutes is `unavailable` and still says when it was written.
 
+## 5.2 Settled AI charges without a usage row (D4569, #4559)
+
+D4569 §1 fact 2 found that a run settles its hold in one write, and
+`recordUsage` writes its `ai_usage_logs` row in a later one, returning null
+when it cannot. A settled charge can then exist with no usage row: the money is
+right (the hold and the ledger carry it), the attribution is missing.
+`ai.settlement.without_usage_row` counts those, from
+`readSettlementSignal` in `services/platformCapacitySignals.ts`.
+
+- **What is counted.** Holds with `status = 'settled'`,
+  `actual_included_microusd + actual_topup_microusd > 0` and `surface = 'ai'`
+  (taken by `aiRouter.run` or a deck batch, the paths that write a usage row
+  under the hold), that no `ai_usage_logs` row names by `reservation_uid`. A
+  deck run's several rows under one parent hold count as attributed.
+- **What is not.** MCP and flow holds (`surface` `mcp` or `flow`) record their
+  use in `api_usage_events`, not `ai_usage_logs`. Holds that name no surface
+  (meeting bots, image draws, live transcription, every hold from before
+  migration 632) are not covered: whether each of those owes a usage row is
+  not settled here.
+- **Window.** Holds taken in the last 24 hours by `created_at`, the column
+  indexed with `status` (`idx_ai_reservations_review_created`, migration 430),
+  and settled (`updated_at`) at least 5 minutes before the read, so a run
+  between its settle and its row's insert is not counted. Each `NOT EXISTS` is
+  answered from `idx_ai_usage_logs_reservation_ref` (migration
+  202611070806). No table is scanned and no migration is added; the test pins
+  the plan. A hold settled long after it was taken (a Super Admin's review
+  decision) is counted by when it was taken.
+- **Privacy.** The statement returns one `COUNT`; no hold, member, company or
+  agent leaves the database.
+- **Missing.** A read that throws, times out, answers without a count, or
+  meets a schema without the columns is `unavailable` with `value: null`. A
+  measured 0 clears an open episode; an outage holds it, and opens a freshness
+  gap only when a count was measured in the last 48 hours.
+- **Production rows.** This read does not repair any. If it finds a non-zero
+  count, the count is reported on #4559 and the repair is its own task.
+- **Benchmark.** `cloudflare-worker/test/_d1_bench.ts` counts the same
+  statement, over every hold, as its `settled_without_usage` invariant, and
+  `d1_benchmark_4567.test.ts` breaks it on purpose.
+
 ## 6. What is not built yet
 
 - **Account analytics** (Workers, D1 query volume and latency, Workflows, R2):
@@ -198,6 +238,9 @@ A freshness rule: the sweep runs every 5 minutes, so a newest batch older than
    warning is the Security page's existing rule). A failed or absent restore
    drill is critical from the first sweep after deploy: per D4558 no restore
    had passed as of 2026-11-06, so expect that episode to open.
+6. **Settlement threshold.** Approve the proposed level for
+   `ai.settlement.without_usage_row` (§5.2): any non-zero count in the 24-hour
+   window is a warning, with no critical level.
 
 ## 7. Detected incidents (D4854)
 
