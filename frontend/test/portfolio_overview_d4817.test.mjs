@@ -17,7 +17,7 @@
  *   - the table drawing an empty book for a failed positions read → test 4
  *     (and #5365's test 1);
  *   - the Reporting card drawing "0 of 0" for an empty population → test 2;
- *   - `ZoneNav` losing `row.extra` (no Performance in the local nav) → test 1;
+ *   - the shell losing the Performance zone (no Performance in the local nav) → test 1;
  *   - the frame not setting the document title → test 1.
  */
 import test from 'node:test';
