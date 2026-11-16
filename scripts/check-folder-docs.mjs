@@ -176,6 +176,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
+  ['frontend/src/pages/relationships',         'relationship intelligence, introduction records and consent-based offers'],
   ['frontend/src/pages/research',             'the Research zone bodies, including one fund’s dossier'],
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
