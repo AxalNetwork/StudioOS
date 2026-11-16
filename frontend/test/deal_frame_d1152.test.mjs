@@ -173,7 +173,7 @@ test('an investor\'s Overview: one h1, the financial strip, the track at Diligen
     assert.equal(v.textOf('deal-progress-chip'), 'Diligence · Step 3 of 8');
     assert.equal(v.textOf('deal-track-why'), WHY.Diligence);
     assert.ok(!v.has('deal-next-step'), 'the one next action is not drawn a second time on Overview');
-    for (const id of ['deal-score-slot', 'deal-whats-new', 'deal-terms', 'deal-round', 'deal-deck-slot']) assert.ok(v.has(id), id);
+    for (const id of ['deal-score-slot', 'deal-whats-new', 'deal-terms', 'deal-round', 'deal-deck']) assert.ok(v.has(id), id);
     // D1257: the slot is the strip, read through the batch; a deal the batch does not return is closed, never a zero.
     assert.match(v.textOf('deal-score-slot'), /opens once you are invited to this deal/);
     assert.equal(v.requests.filter((r) => /whats-new/.test(r)).length, 1);
