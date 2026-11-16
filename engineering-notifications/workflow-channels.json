@@ -138,6 +138,16 @@
     },
     {
       "id": null,
+      "path": ".github/workflows/landing-bot-model-round.yml",
+      "channel": "#axalvc-actions-landing-bot-model-round"
+    },
+    {
+      "id": null,
+      "path": ".github/workflows/landing-bot-model.yml",
+      "channel": "#axalvc-actions-landing-bot-model"
+    },
+    {
+      "id": null,
       "path": ".github/workflows/landing-feeder.yml",
       "channel": "#axalvc-actions-landing-feeder"
     },
