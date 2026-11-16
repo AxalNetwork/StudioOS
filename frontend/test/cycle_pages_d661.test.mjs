@@ -204,9 +204,10 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
     { key: 'board_cadence', label: 'Board meeting cadence agreed', done: false, source: null, done_at: null },
   ] }));
   assert.match(text(list), /Durability checklist 2 of 3 done/);
-  assert.match(text(list), /Tax ID \(EIN\) received Done · Spin-Out Lab · 2026-09-01/);
-  assert.match(text(list), /Key-person cover set up Done · typed/);
-  assert.match(text(list), /Board meeting cadence agreed Not done/);
+  // D6122 (GR-24): how each item was ticked, or how it will be.
+  assert.match(text(list), /Tax ID \(EIN\) received , done Spin-Out Lab · 1 Sept? 2026/);
+  assert.match(text(list), /Key-person cover set up , done By hand/);
+  assert.match(text(list), /Board meeting cadence agreed , open Open · Tick by hand/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
   const route = cycleRouteText();
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
