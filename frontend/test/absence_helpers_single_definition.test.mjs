@@ -93,7 +93,8 @@ test('NOT_RECORDED has one definition, and the two libs re-export it', () => {
 const DEFERRED_TITLE_CASERS = [
   // Session 5 edits both HQ pages in the same wave (task 340); converting them
   // here would put two sessions on adjacent lines. They convert afterwards.
-  'pages/hq/HqHomePage.jsx', 'pages/hq/SecurityPage.jsx',
+  // D4708 part 3: SecurityPage.jsx's copy moved, unchanged, into security/securityShared.js.
+  'pages/hq/HqHomePage.jsx', 'pages/hq/security/securityShared.js',
   // `pages/investor/InvestorPortfolioPositions.jsx` left the list with D4817
   // part 2 (#5311, PF-02): it imports `titleCase` and falls back at the call site.
 ];
