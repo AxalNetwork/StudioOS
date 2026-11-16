@@ -162,3 +162,14 @@ export const ADMIN_FAQ = [
 
 /** Where "Request a licence" goes. */
 export const LICENCE_REQUEST_PATH = '/contact?topic=licence';
+
+/** Carry the program key as enquiry context. The contact route accepts no grant or licence decision. */
+export function enquiryProgramKey(value) {
+  return typeof value === 'string' && value.length <= 60 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
+    ? value : null;
+}
+
+export function studioLicenceEnquiryPath(programKey) {
+  const key = enquiryProgramKey(programKey);
+  return key ? `${LICENCE_REQUEST_PATH}&program=${key}` : LICENCE_REQUEST_PATH;
+}

@@ -19,6 +19,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/contact_legal_cookies_d680.test.mjs
  */
 import test from 'node:test';
+import { studioLicenceEnquiryPath } from '../src/lib/siteFirm.js';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
@@ -118,7 +119,7 @@ test('every intent the page can send is one the Worker route accepts, under the 
 test('the form posts through the existing request(\'/contact\') to the existing route, with the fields it reads', () => {
   const code = codeOnly(CONTACT_SRC);
   assert.match(code, /import \{ request \} from '\.\.\/lib\/api';/);
-  assert.match(code, /await request\('\/contact', \{\s*method: 'POST',\s*body: JSON\.stringify\(contactPayload\(\{ intent, form, turnstileToken \}\)\),/);
+  assert.match(code, /await request\('\/contact', \{\s*method: 'POST',\s*body: JSON\.stringify\(contactPayload\(\{ intent, form, turnstileToken, programKey \}\)\),/);
   assert.equal((code.match(/request\(/g) || []).length, 1, 'one call, the contact post');
   // The route is the one already mounted, not a new one.
   assert.match(ROUTE_SRC, /contact\.post\('\/contact',/);
@@ -142,6 +143,23 @@ test('the form posts through the existing request(\'/contact\') to the existing 
   // The page keeps both: the off-screen honeypot and the Turnstile widget.
   assert.match(code, /name="hp"[\s\S]{0,120}tabIndex=\{-1\}/);
   assert.match(code, /loadTurnstile\(\)/);
+});
+
+test('the studio enquiry carries only the selected program and leaves the visitor’s message intact', () => {
+  const url = studioLicenceEnquiryPath('spinout-lab');
+  assert.equal(url, '/contact?topic=licence&program=spinout-lab');
+  const renderForm = (path) => render(React.createElement(ContactPage), path);
+  assert.match(renderForm(url), /Program of interest: <strong>Spin-Out Lab<\/strong>/);
+  assert.doesNotMatch(renderForm('/contact?topic=invest&program=spinout-lab'), /Program of interest/);
+  const form = { name: 'Ada', company: 'Example studio', email: 'ada@example.test', about: 'Our regional studio would like to run this program.' };
+  const payload = contact.contactPayload({ intent: 'licence', form, programKey: 'spinout-lab' });
+  assert.equal(payload.subject, 'Studio licence enquiry — spinout-lab');
+  assert.equal(payload.message, form.about);
+  assert.equal(contact.contactPayload({ intent: 'lab', form, programKey: 'spinout-lab' }).subject, undefined);
+  for (const key of [null, 'a'.repeat(61), 'a/b', 'lab&intent=invest']) {
+    assert.equal(studioLicenceEnquiryPath(key), '/contact?topic=licence');
+    assert.equal(contact.contactPayload({ intent: 'licence', form, programKey: key }).subject, undefined);
+  }
 });
 
 test('the link check matches the route: empty, or http(s) up to 500 characters', () => {

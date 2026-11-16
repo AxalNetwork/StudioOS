@@ -138,6 +138,7 @@ test('the Programs row is the Spin-Out Lab card alone, read from the cohort help
   assert.ok(card.includes(`Spin-Out Lab · Cohort ${c.cohortNum}`), 'the card names the open cohort');
   assert.ok(card.includes(`Apply to Cohort ${c.cohortNum}`), 'the CTA names the open cohort');
   assert.ok(card.includes('href="/spinout-lab/apply"'), 'the CTA goes to the Lab application');
+  assert.ok(card.includes('href="/contact?topic=licence&amp;program=spinout-lab"'), 'a prospective operator can enquire about the same Lab');
   assert.ok(card.includes(`<dt>Starts</dt><dd class="ax-mono">${c.startLabel}</dd>`), 'the start is the cohort rule\'s');
   assert.ok(card.includes('<dt>Duration</dt><dd class="ax-mono">28 days</dd>'));
   assert.ok(!card.includes('<dt>Places</dt>'), 'places are not drawn before the cohort record is read');

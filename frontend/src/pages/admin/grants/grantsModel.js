@@ -146,14 +146,14 @@ export function cellOf({ program, grant, request, defaults, studio, frozen }) {
     return { kind: 'requested', pill: `◷ Requested ${dayWord(request.created_at, { year: false }) || ''}`.trim(), sub: null, tip: `${who}, requested ${dayWord(request.created_at) || ''}`.trim() };
   }
   if (!grant) {
-    const can = !frozen && defaults?.grantable !== false;
+    const can = program.grant === 'yes' && !frozen && defaults?.grantable !== false;
     return { kind: 'none', pill: null, sub: null, tip: `${who}, not granted${can ? '. Enter grants it.' : ''}`, canGrant: can };
   }
   const end = dayWord(grant.effective_end);
   if (grant.state === 'draft') return { kind: 'draft', pill: '✎ Draft', sub: 'to finish', tip: `${who}, a draft HQ approved for this studio; grant it to finish it` };
   if (grant.state === 'paused') return { kind: 'paused', pill: `‖ Paused ${dayWord(grant.paused_at, { year: false }) || ''}`.trim(), sub: null, tip: `${who}, paused ${dayWord(grant.paused_at) || ''}`.trim() };
   if (grant.state === 'ended') {
-    const can = !frozen && defaults?.grantable !== false;
+    const can = program.grant === 'yes' && !frozen && defaults?.grantable !== false;
     return { kind: 'ended', pill: null, sub: `Ended ${dayWord(grant.ended_at, { year: false }) || ''}`.trim(), tip: `${who}, ended ${dayWord(grant.ended_at) || ''}`.trim(), canGrant: can };
   }
   const own = changedKeys(grant.terms, defaults?.terms);
@@ -180,7 +180,7 @@ export function openRequestsByCell(items) {
 }
 
 /** The grid's rows from the grid read (GR1), each with its nine cells. */
-export function gridRows(grid, requests) {
+export function gridRows(grid, requests, programs = PROGRAMS) {
   const defaults = new Map((grid?.programs || []).map((p) => [p.program_key, p]));
   const open = openRequestsByCell(requests);
   return (grid?.licences || []).map((l) => {
@@ -195,7 +195,7 @@ export function gridRows(grid, requests) {
       frozen,
       note: frozen ? 'Suspended. Program changes are frozen until HQ lifts the suspension.'
         : l.status === 'pending_activation' ? 'Grants start when the licence is active.' : null,
-      cells: PROGRAMS.map((p) => ({
+      cells: programs.map((p) => ({
         program: p,
         grant: l.grants?.[p.key],
         ...cellOf({ program: p, grant: l.grants?.[p.key], request: open.get(`${l.uid}|${p.key}`), defaults: defaults.get(p.key), studio: l.brand_name || l.licence_ref || 'This studio', frozen }),

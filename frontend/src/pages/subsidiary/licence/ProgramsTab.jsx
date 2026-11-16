@@ -10,8 +10,8 @@
  * and the deal types and requests beside them still render. A program with no
  * grant row reads "Not recorded", never "Not granted" (D981 §3).
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { licenceProgramsApi } from '../../../lib/api/licencePrograms';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import { partnerDealTypesApi } from '../../../lib/api/partnerDealTypes';
@@ -20,7 +20,7 @@ import { tabPath } from '../../../lib/licencePage';
 import { GRANTS_PATH } from '../../../lib/programGrants';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import {
-  PURPOSE, actionOf, copyStamp, periodOf, programTiles, scheduleOf, statusOf, termsSummary,
+  PURPOSE, copyStamp, periodOf, programTiles, scheduleOf, serviceTermLine, studioProgramAccess, studioProgramAccessPath, termsSummary,
   openProgramRequests,
 } from '../../../lib/studioPrograms';
 import { Skeleton } from '../../../ui';
@@ -106,10 +106,10 @@ function StatusPill({ status }) {
 }
 
 /** The Action cell, on the table and on the phone's cards. */
-function Action({ p, status, act }) {
-  const a = actionOf(p, status);
+function Action({ p, action: a, act }) {
   if (!a) return <span className="text-xs text-gray-400">—</span>;
-  if (a.kind === 'view_request') return <Link to={tabPath('requests')} className={LINK}>View request</Link>;
+  if (a.kind === 'check_history') return <Link to={studioProgramAccessPath(p.program_key, a.kind)} className={LINK}>Check request history</Link>;
+  if (a.kind === 'view_request') return <Link to={studioProgramAccessPath(p.program_key, a.kind)} className={LINK}>View request</Link>;
   if (a.kind === 'request') return <button type="button" className={LINK} onClick={() => act.ask(p, 'grant')} data-testid={`licence-program-ask-${p.program_key}`}>Request it</button>;
   return (
     <div className="flex flex-col gap-0.5">
@@ -125,7 +125,7 @@ function Action({ p, status, act }) {
 
 function Dash() { return <span className="text-xs text-gray-400">—</span>; }
 
-function ProgramsTable({ programs, open, act }) {
+function ProgramsTable({ programs, requests, act }) {
   return (
     <section className={`${CARD} overflow-hidden`} aria-label="Programs">
       <div className="flex items-center justify-between px-4 py-3">
@@ -141,7 +141,7 @@ function ProgramsTable({ programs, open, act }) {
           </thead>
           <tbody>
             {programs.map((p) => {
-              const s = statusOf(p, open);
+              const { status: s, action } = studioProgramAccess(p, requests);
               const terms = termsSummary(p);
               const sched = scheduleOf(p);
               return (
@@ -154,7 +154,7 @@ function ProgramsTable({ programs, open, act }) {
                   <td className="px-3 py-2.5 text-[12.5px]">{terms ? terms.map((t, i) => <span key={t} className={i ? 'block text-[11.5px] text-gray-500' : 'block text-gray-800 dark:text-gray-200'}>{t}</span>) : <Dash />}</td>
                   <td className="px-3 py-2.5 font-mono text-[11.5px] text-gray-700 dark:text-gray-300">{periodOf(p) || <Dash />}</td>
                   <td className={`px-3 py-2.5 text-[12px] ${sched?.muted ? 'text-gray-500' : 'font-mono text-gray-700 dark:text-gray-300'}`}>{sched ? sched.text : <Dash />}</td>
-                  <td className="px-3 py-2.5"><Action p={p} status={s} act={act} /></td>
+                  <td className="px-3 py-2.5"><Action p={p} action={action} act={act} /></td>
                 </tr>
               );
             })}
@@ -164,7 +164,7 @@ function ProgramsTable({ programs, open, act }) {
       {/* GR15a: a card per program on a phone. */}
       <ul className="divide-y divide-gray-100 border-t border-gray-100 md:hidden dark:divide-gray-800 dark:border-gray-800" data-testid="licence-programs-cards">
         {programs.map((p) => {
-          const s = statusOf(p, open);
+          const { status: s, action } = studioProgramAccess(p, requests);
           const terms = termsSummary(p);
           return (
             <li key={p.program_key} className="flex flex-col gap-1.5 px-4 py-3" data-testid={`licence-program-card-${p.program_key}`}>
@@ -173,7 +173,7 @@ function ProgramsTable({ programs, open, act }) {
                 <StatusPill status={s} />
               </div>
               <span className="text-[12px] text-gray-500 dark:text-gray-400">{s.tone === 'asked' ? s.line : terms ? terms.join(' · ') : (PURPOSE[p.program_key] || s.line)}</span>
-              <Action p={p} status={s} act={act} />
+              <Action p={p} action={action} act={act} />
             </li>
           );
         })}
@@ -219,7 +219,40 @@ function DealTypes({ read, retry }) {
   );
 }
 
+/** A program link only ever opens a form for the specific program after reading this licence's status. */
+function LinkedProgram({ program, intent, requests, onClose, onSent, onChange }) {
+  const onlyProgram = useMemo(() => [program], [program]);
+  const load = useCallback(() => licenceRequestsApi.list(program.program_key), [program.program_key]);
+  const [focused, retry] = useRead(load);
+  const { status, action } = studioProgramAccess(program, focused.value);
+  if (intent === 'terms' && action?.kind === 'open') {
+    return <ProgramTermsDialog program={program} status={status} onClose={onClose} onRequestChange={() => onChange(program)} />;
+  }
+  if (intent === 'request' && action?.kind === 'request' && Array.isArray(requests?.items) && requests.available !== false) {
+    return <ProgramRequestSheet open programs={onlyProgram} requests={requests} grantRequests={focused.value}
+      initialProgram={program.program_key} initialAsk="grant" onClose={onClose} onSent={onSent} />;
+  }
+  return (
+    <section className={`${CARD} space-y-2 p-4`} aria-live="polite" data-testid="licence-program-focused">
+      <h3 className="font-semibold">{program.name}</h3>
+      <StatusPill status={status} />
+      {status.line && <p className="text-sm">{status.line}</p>}
+      {status.request?.answer && <p className="text-sm">HQ’s answer: {status.request.answer}</p>}
+      {focused.value === null && <button type="button" className={BTN} onClick={retry}>Try again</button>}
+      {action?.kind === 'request' && intent !== 'request' && <Link className={LINK} to={studioProgramAccessPath(program.program_key, 'request')}>Request for my studio</Link>}
+      {action?.kind === 'open' && intent !== 'terms' && <Link className={LINK} to={studioProgramAccessPath(program.program_key, 'open')}>View terms</Link>}
+    </section>
+  );
+}
+
 export default function ProgramsTab({ user = null, today = new Date() }) {
+  const [params, setParams] = useSearchParams();
+  const programKey = params.get('program');
+  const closeLink = () => {
+    const next = new URLSearchParams(params);
+    next.delete('program'); next.delete('action');
+    setParams(next, { replace: true });
+  };
   const [programs, retryPrograms] = useRead(readPrograms);
   const [deals, retryDeals] = useRead(readDealTypes);
   const [requests, retryRequests] = useRead(readRequests);
@@ -240,6 +273,12 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
 
   if (read && read.linked === false) return <ProgramsUnlinked user={user} />;
 
+  const focused = programKey && list?.find((program) => program.program_key === programKey);
+  const sentRequest = (row) => {
+    setSheet(null);
+    setSent(`Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}. Nothing changes until HQ answers.`);
+    retryRequests();
+  };
   const nothingHeld = Array.isArray(list) && !list.some((p) => ['in_force', 'granted', 'paused', 'ended'].includes(p.standing));
   return (
     <div className="space-y-4" data-testid="licence-programs">
@@ -250,6 +289,24 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
         <p className="text-xs text-gray-600 dark:text-gray-400">You can ask for a change from this tab or under Requests.</p>
       </div>
       {stamp && <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:bg-slate-900 dark:text-slate-300" data-testid="licence-programs-stamp">{stamp}</p>}
+      {Array.isArray(read?.hq_services) && read.hq_services.length > 0 && (
+        <section className={`${CARD} space-y-2 px-4 py-3`} aria-label="Services delivered by HQ" id="hq-services" data-testid="licence-hq-services">
+          <h3 className="text-sm font-bold">Services delivered by HQ</h3>
+          <ul className="space-y-2">
+            {read.hq_services.map((service) => (
+              <li key={JSON.stringify([service.program_key, service.package_name, service.package_version, service.starts_on, service.ends_on])} className="text-sm">
+                <p>{service.description}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{serviceTermLine(service)}</p>
+              </li>
+            ))}
+          </ul>
+          <Link to={tabPath('contract')} className={LINK}>View licence contract</Link>
+        </section>
+      )}
+      {focused && <LinkedProgram key={`${programKey}:${params.get('action')}`} program={focused} intent={params.get('action')} requests={reqs}
+        onClose={closeLink} onSent={(row) => { closeLink(); sentRequest(row); }}
+        onChange={(p) => { closeLink(); act.ask(p, 'change'); }} />}
+      {programKey && Array.isArray(list) && !focused && <p className={`${CARD} p-4 text-sm`} role="status">This program has no recorded entry on your studio licence.</p>}
       <Tiles tiles={tiles} />
       {sent && <p className="text-sm text-emerald-700 dark:text-emerald-300" role="status" data-testid="licence-programs-sent">{sent}</p>}
 
@@ -267,15 +324,15 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
       {read && !Array.isArray(read.programs) && (
         <p className={`${CARD} p-4 text-sm text-gray-600 dark:text-gray-400`} data-testid="licence-programs-no-copy">{read.reason || 'HQ has not sent this studio its programs yet.'}</p>
       )}
-      {nothingHeld && open.length === 0 && (
+      {nothingHeld && Array.isArray(reqs?.items) && reqs.complete !== false && open.length === 0 && (
         <div className={`${CARD} flex flex-col items-center gap-2 p-6 text-center`} data-testid="licence-programs-nothing">
           <p className="text-sm font-bold text-gray-900 dark:text-gray-100">HQ has not granted any program to {read?.licence?.brand_name || 'your studio'} yet.</p>
           <p className="text-xs text-gray-600 dark:text-gray-400">See what HQ offers below, or request one.</p>
           <button type="button" className={PRIMARY} onClick={() => act.ask(null, 'grant')}>Request a program</button>
         </div>
       )}
-      {Array.isArray(list) && <ProgramsTable programs={list} open={open} act={act} />}
-      {reqs === null && (
+      {Array.isArray(list) && <ProgramsTable programs={list} requests={reqs} act={act} />}
+      {reqs !== undefined && (!Array.isArray(reqs?.items) || reqs.available === false) && (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-amber-800 dark:text-amber-200" data-testid="licence-programs-requests-unreadable">
           <span>Your requests could not be read, so a program you asked for may not show as Requested.</span>
           <button type="button" className={BTN} onClick={retryRequests}>Try again</button>
@@ -285,7 +342,7 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
 
       <ProgramTermsDialog
         program={terms}
-        status={terms ? statusOf(terms, open) : null}
+        status={terms ? studioProgramAccess(terms, reqs).status : null}
         onClose={() => setTerms(null)}
         onRequestChange={(p) => act.ask(p, 'change')}
       />
@@ -296,11 +353,7 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
         initialProgram={sheet?.program || null}
         initialAsk={sheet?.ask || null}
         onClose={() => setSheet(null)}
-        onSent={(row) => {
-          setSheet(null);
-          setSent(`Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}. Nothing changes until HQ answers.`);
-          retryRequests();
-        }}
+        onSent={sentRequest}
       />
     </div>
   );
