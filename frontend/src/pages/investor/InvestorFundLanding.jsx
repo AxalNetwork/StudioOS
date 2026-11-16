@@ -10,6 +10,7 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
 import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
+import FundOverviewPanel from './FundOverviewParts';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
@@ -199,6 +200,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
               </select>
               <span>{titleCase(active.status)}</span>
             </div>
+            {/* #6234: IF0's tiles, quarterly chart and pack gaps (FundOverviewParts.jsx). */}
+            <FundOverviewPanel key={`overview-${active.id}-${detailKey}`} fund={active} />
             <FundDetail key={`${active.id}-${detailKey}`} fund={active} />
           </>
         );

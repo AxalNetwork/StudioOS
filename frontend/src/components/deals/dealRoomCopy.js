@@ -43,12 +43,13 @@ export function roomAccess(d) {
 
 /**
  * The deal rooms page's three views (D4815): every live deal, the ones this
- * investor may open, and the ones they asked into. `test` is over one live deal.
+ * investor may open, and the ones they asked into. `test` is over one live deal; `short` is the
+ * phone's segmented label (D6151, DE23).
  */
 export const ROOM_FILTERS = Object.freeze([
-  { key: 'all', label: 'All live deals', test: () => true },
-  { key: 'open', label: 'You can open', test: (d) => roomAccess(d) === 'open' },
-  { key: 'requested', label: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
+  { key: 'all', label: 'All live deals', short: 'All', test: () => true },
+  { key: 'open', label: 'You can open', short: 'Can open', test: (d) => roomAccess(d) === 'open' },
+  { key: 'requested', label: 'Requested', short: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
 ]);
 
 /** What each view says when it holds nothing; a list that was not read never reaches these. */
