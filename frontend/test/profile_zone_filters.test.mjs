@@ -278,6 +278,8 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4832 (D4832): Sessions' row (PX-05), `Upcoming · Past · Cancelled`.
+      ['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions'],
     ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',

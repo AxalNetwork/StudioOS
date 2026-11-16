@@ -116,7 +116,7 @@ test('D1424 (#3700): each advisor zone header fills the primary D1424 names, or 
   assert.deepEqual(primaries, {
     'expertise/services': ['New service'],
     'expertise/thinking': ['New piece'],
-    'practice/sessions': ['Block a date range'],
+    'practice/sessions': ['Block time'],
     'practice/earnings': ['Download 1099 summary'],
   });
   const service = ADVISOR_ZONE_ACTIONS['expertise/services'].find((r) => r.label === 'New service');
