@@ -1,6 +1,7 @@
 // Prepare a classic GitHub Autofix on a feature branch and recover interrupted publications.
 const shaPattern = /^[a-f0-9]{40}$/
 const positiveId = value => Number.isSafeInteger(value) && value > 0
+const isPublisher = (login, configuredBot) => login === 'github-actions[bot]' || login === configuredBot
 
 async function optional(get) {
   try { return await get() } catch (error) {
@@ -31,7 +32,7 @@ function managedPatch(comparison, head, message, botLogin) {
   // A caller-chosen commit message alone is forgeable. GitHub must attest the bot's commit.
   return commit.sha === head && commit.parents?.length === 1 &&
     commit.parents[0].sha === comparison.merge_base_commit?.sha &&
-    commit.commit?.message === message && commit.author?.login === botLogin &&
+    commit.commit?.message === message && isPublisher(commit.author?.login, botLogin) &&
     commit.commit?.verification?.verified === true
 }
 
@@ -51,7 +52,7 @@ async function findPull(api, ctx, branches) {
 async function pullResult(api, pr, marker, botLogin, newlyCreated = false) {
   if (!positiveId(pr.number)) throw Error('Invalid pull request response')
   if (pr.state !== 'open') return { status: 'prior_pr', prNumber: pr.number }
-  if (newlyCreated || (pr.user?.login === botLogin && pr.body?.includes(marker))) {
+  if (newlyCreated || (isPublisher(pr.user?.login, botLogin) && pr.body?.split('\n').includes(marker))) {
     if (!pr.labels?.some(label => label.name === 'security-scan')) {
       await api.request('POST', '/issues/' + pr.number + '/labels', { labels: ['security-scan'] })
     }
@@ -156,14 +157,17 @@ export async function prepareFix(api, ctx) {
     '## Help impact', 'Assess user-facing impact while reviewing the generated patch.',
     '## Review requested', 'The code owners of the affected files.',
   ].join('\n\n')
+  let pr
   try {
-    const pr = await api.request('POST', '/pulls', { base: defaultBranch, head, draft: true,
+    pr = await api.request('POST', '/pulls', { base: defaultBranch, head, draft: true,
       title: 'Review fix for code scanning alert #' + number, body })
-    return await pullResult(api, pr, marker, botLogin, true)
   } catch (error) {
-    if (error.limited || error.status !== 422) throw error
+    if (error.limited) throw error
+    if (error.status === 403 && error.prCreationDisabled === true) return { status: 'pr_permission', branch: head }
+    if (error.status !== 422) throw error
     const raced = await findPull(api, ctx, branches)
     if (!raced) throw error
     return pullResult(api, raced, marker, botLogin)
   }
+  return pullResult(api, pr, marker, botLogin, true)
 }

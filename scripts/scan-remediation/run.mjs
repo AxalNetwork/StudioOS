@@ -51,6 +51,7 @@ export async function reconcile(api, options, dependencies = {}) {
     ? await api.pages(`/pulls?state=open&base=${encodeURIComponent(defaultBranch)}`) : [];
   const existingPulls = sameRepoAlertPRs(pulls, options);
   let failed = 0;
+  let prepared = 0;
   for (const number of candidates) {
     try {
       const alert = await api.request('GET', `/code-scanning/alerts/${number}`);
@@ -67,7 +68,7 @@ export async function reconcile(api, options, dependencies = {}) {
       if (existing) {
         // The publisher repairs the label on its own canonical PR after an interrupted run.
         const ownBranch = [`alert-fix-${number}`, `alert-autofix-${number}`].includes(existing.head.ref);
-        if (!ownBranch || existing.user?.login !== options.botLogin) {
+        if (!ownBranch || ![options.botLogin, 'github-actions[bot]'].includes(existing.user?.login)) {
           await trackers.linkPull(issue, existing.number);
           continue;
         }
@@ -80,6 +81,9 @@ export async function reconcile(api, options, dependencies = {}) {
       const result = await (dependencies.prepareFix ?? prepareFix)(api, { ...options, number, issueNumber: issue.number });
       if (result.prNumber && ['pull_request', 'existing_pr'].includes(result.status)) {
         await trackers.linkPull(issue, result.prNumber);
+      } else if (result.status === 'pr_permission') {
+        await trackers.linkPrepared(issue, result.branch);
+        prepared++;
       } else if (['manual', 'prior_pr', 'existing_work'].includes(result.status)) {
         await trackers.markReady(issue);
       }
@@ -90,6 +94,7 @@ export async function reconcile(api, options, dependencies = {}) {
       failed++;
     }
   }
+  if (prepared) console.log(`::warning::${prepared} fix branches are ready. GitHub Actions PR creation is disabled. See the tracking issues and D6935.`);
   if (failed) throw new Error(`${failed} alert operations need retry`);
   return candidates.length;
 }

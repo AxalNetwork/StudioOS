@@ -113,16 +113,34 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
     if (names(fresh).includes('state:review')) await removeLabel(fresh, 'state:review')
   }
 
+  async function commentOnce(path, body) {
+    const comments = await api.pages(path + '/comments')
+    if (!comments.some(comment => bots.has(login(comment.user?.login)) && comment.body === body)) {
+      await api.request('POST', path + '/comments', { body })
+    }
+  }
+
+  async function linkPrepared(issue, branch) {
+    const number = Number(titles.exec(issue?.title)?.[1])
+    if (!validNumber(number) || !['alert-fix-' + number, 'alert-autofix-' + number].includes(branch)) {
+      throw Error('Invalid prepared branch for tracker')
+    }
+    const fresh = await active(issue, true)
+    if (!fresh) return
+    const link = base + '/compare/' + encodeURIComponent(defaultBranch) + '...' + branch
+    await commentOnce('/issues/' + fresh.number, 'A fix is ready on this branch. ' +
+      '[Compare the prepared changes and open a pull request](' + link + '). ' +
+      'You can also let the workflow open the draft PR on a later run once its credential can create pull requests.')
+    await markReady(fresh)
+  }
+
   async function linkPull(issue, prNumber) {
     if (!validNumber(prNumber)) throw Error('Invalid pull request number')
     const fresh = await active(issue, true)
     if (!fresh) return
     const link = 'Tracking pull request: ' + base + '/pull/' + prNumber
     const path = '/issues/' + fresh.number
-    const comments = await api.pages(path + '/comments')
-    if (!comments.some(comment => bots.has(login(comment.user?.login)) && comment.body === link)) {
-      await api.request('POST', path + '/comments', { body: link })
-    }
+    await commentOnce(path, link)
     if (!names(fresh).includes('state:review')) await api.request('POST', path + '/labels', { labels: ['state:review'] })
     if (names(fresh).includes('state:ready')) await removeLabel(fresh, 'state:ready')
   }
@@ -141,7 +159,7 @@ export async function loadTrackers(api, { owner, repo, defaultBranch, botLogin =
   }
 
   return {
-    ensure, markReady, linkPull, closeFixed,
+    ensure, markReady, linkPrepared, linkPull, closeFixed,
     trackedNumbers: () => [...byAlert].filter(([, issues]) =>
       [...issues.values()].some(issue => issue.state === 'open')).map(([number]) => number),
   }

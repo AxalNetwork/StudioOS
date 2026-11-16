@@ -160,3 +160,26 @@ test('a closed fix PR returns an unclaimed review issue to ready and recovers af
   assert.deepEqual(f.issues.get(issue.number).labels.map(l => l.name), ['bug', 'priority:high', 'state:ready'])
   assert.equal(f.writes.filter(([method, , body]) => method === 'POST' && body.labels.includes('state:ready')).length, 1)
 })
+
+test('a prepared branch receives one safe comparison link and becomes ready when PR creation is restricted', async () => {
+  for (const branch of ['alert-fix-42', 'alert-autofix-42']) {
+    const f = fixture([legacy])
+    const t = await loadTrackers(f.api, ctx)
+    const { issue } = await t.ensure(42)
+    for (const invalid of ['alert-fix-420', 'main', 'malicious](https://example.org)']) {
+      await assert.rejects(t.linkPrepared(issue, invalid), /Invalid prepared branch/)
+    }
+    f.claims.add(123)
+    await t.linkPrepared(issue, branch)
+    assert.deepEqual(f.writes, [])
+    f.claims.clear()
+    await t.linkPrepared(issue, branch)
+    await t.linkPrepared(issue, branch)
+    const comments = f.comments.get('/issues/123/comments')
+    assert.equal(comments.length, 1)
+    assert.ok(comments[0].body.includes('https://github.com/AxalNetwork/StudioOS/compare/main...' + branch + ')'))
+    assert.ok(comments[0].body.includes('later run'))
+    assert.deepEqual(f.issues.get(123).labels.map(label => label.name), ['bug', 'state:ready'])
+    assert.equal(f.issues.get(123).state, 'open')
+  }
+})

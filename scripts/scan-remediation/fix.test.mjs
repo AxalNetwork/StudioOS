@@ -186,3 +186,61 @@ test('an accepted generation with an empty response waits for the next scan; an 
     assert.equal(api.pulls.length, 0)
   }
 })
+
+test('only a confirmed PR creation policy refusal hands back the prepared branch', async () => {
+  for (const [route, policy, limited] of [
+    ['/pulls', true, false], ['/pulls', false, false], ['/pulls', 'true', false],
+    ['/pulls', true, true], ['/issues/55/labels', true, false],
+  ]) {
+    const api = fake()
+    api.refs[prepared] = main
+    const original = api.request.bind(api)
+    api.request = async (method, path, body) => {
+      if (method === 'POST' && path === route) throw Object.assign(fail(403), { prCreationDisabled: policy, limited })
+      return original(method, path, body)
+    }
+    if (route === '/pulls' && policy === true && !limited) {
+      assert.deepEqual(await prepareFix(api, ctx), { status: 'pr_permission', branch: prepared })
+      assert.equal(api.pulls.length, 0)
+      assert.equal(api.refs[prepared], patch)
+      api.request = original
+      assert.deepEqual(await prepareFix(api, ctx), { status: 'pull_request', prNumber: 55 })
+      assert.equal(api.calls.filter(c => c.path === endpoint + '/commits').length, 1)
+    } else {
+      await assert.rejects(prepareFix(api, ctx), { status: 403 })
+    }
+  }
+})
+
+test('switching from the workflow token to the App completes a signed pending fix and repairs the scan label', async () => {
+  const app = { ...ctx, botLogin: 'studioos-remediation[bot]' }
+  for (const branch of [generated, prepared]) {
+    const api = fake()
+    if (branch === prepared) api.refs[prepared] = main
+    const original = api.request.bind(api)
+    api.request = async (method, path, data) => {
+      if (method === 'POST' && path === '/pulls') throw Object.assign(fail(403), { prCreationDisabled: true })
+      return original(method, path, data)
+    }
+    assert.deepEqual(await prepareFix(api, ctx), { status: 'pr_permission', branch })
+    assert.equal(api.refs[branch], patch)
+    api.request = original
+    assert.deepEqual(await prepareFix(api, app), { status: 'pull_request', prNumber: 55 })
+    assert.equal(api.pulls[0].head.ref, branch)
+    assert.equal(api.calls.filter(c => c.path.endsWith('/commits')).length, 1)
+  }
+  const api = fake()
+  api.labelError = true
+  await assert.rejects(prepareFix(api, ctx), { status: 503 })
+  const [pr] = api.pulls
+  assert.deepEqual(await prepareFix(api, app), { status: 'pull_request', prNumber: 55 })
+  assert.deepEqual(pr.labels, [{ name: 'security-scan' }])
+  pr.labels = []
+  pr.user.login = 'another-app[bot]'
+  assert.deepEqual(await prepareFix(api, app), { status: 'existing_pr', prNumber: 55 })
+  assert.deepEqual(pr.labels, [])
+  pr.user.login = app.botLogin
+  pr.body = 'quoted ' + pr.body
+  assert.deepEqual(await prepareFix(api, app), { status: 'existing_pr', prNumber: 55 })
+  assert.deepEqual(pr.labels, [])
+})

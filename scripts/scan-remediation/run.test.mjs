@@ -29,12 +29,13 @@ function fixture(rows, { tracked = [], pulls = [], claimed = [], fix = 'manual' 
     trackedNumbers: () => tracked,
     ensure: async n => { calls.push(['ensure', n]); return { issue: { number: 500 + n }, actionable: !claimed.includes(n) }; },
     closeFixed: async a => calls.push(['fixed', a.number]),
+    linkPrepared: async (i, branch) => calls.push(['prepared', i.number, branch]),
     markReady: async i => calls.push(['ready', i.number]),
     linkPull: async (i, p) => calls.push(['linked', i.number, p]),
   };
   const deps = {
     loadTrackers: async () => trackers,
-    prepareFix: async (_api, ctx) => { calls.push(['proposed', ctx.number]); return { status: fix, prNumber: 77 }; },
+    prepareFix: async (_api, ctx) => { calls.push(['proposed', ctx.number]); return { status: fix, prNumber: 77, branch: 'alert-autofix-' + ctx.number }; },
   };
   return { calls, run: (extra = {}) => reconcile(api, { ...options, ...extra }, deps) };
 }
@@ -68,6 +69,12 @@ test('manual fallback, pending, and confirmed PR outcomes have distinct issue tr
     const g = fixture([alert(1)], { fix });
     await g.run(); assert.deepEqual(g.calls.slice(2), expected);
   }
+});
+test('a confirmed PR policy refusal links the prepared branch and continues to the next alert', async () => {
+  const f = fixture([alert(1), alert(2)], {fix:'pr_permission'});
+  await f.run();
+  assert.deepEqual(f.calls.filter(([name]) => name === 'prepared'),
+    [['prepared',501,'alert-autofix-1'], ['prepared',502,'alert-autofix-2']]);
 });
 test('links human same-repo custom PR, ignores a fork, and recovers bot PR missing its label', async () => {
   const pr = (number, repo, ref, n) => ({ number, base: {ref:'main'}, head: {ref, repo:{full_name:repo}},
@@ -113,4 +120,13 @@ test('initial bot draft selects scanners before labeling; fork and human PRs ret
       assert.equal(await selectScope(env, async () => [{filename:'README.md'}]), expected);
     }
   } finally { rmSync(dir, {recursive:true,force:true}); }
+});
+
+test('only the exact pull-creation policy response allows a manual PR handoff', async () => {
+  let message = 'GitHub Actions is not permitted to create or approve pull requests.';
+  const api = githubApi('AxalNetwork','StudioOS','test', async () => Response.json({message}, {status:403}));
+  await assert.rejects(api.request('POST','/pulls',{}), {status:403,prCreationDisabled:true});
+  await assert.rejects(api.request('POST','/issues',{}), {status:403,prCreationDisabled:false});
+  message = 'Resource not accessible by integration';
+  await assert.rejects(api.request('POST','/pulls',{}), {status:403,prCreationDisabled:false});
 });

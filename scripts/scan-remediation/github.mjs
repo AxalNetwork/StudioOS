@@ -17,7 +17,14 @@ export function githubApi(owner, repo, token, fetcher = fetch) {
       // A rate limit must halt the sweep even if another endpoint considers 403 a local refusal.
       const limited = response.status === 429 || response.headers.has('retry-after')
         || (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0');
-      throw Object.assign(new Error(`GitHub HTTP ${response.status}`), { status: response.status, limited });
+      let prCreationDisabled = false;
+      if (!limited && response.status === 403 && method === 'POST' && url === root + '/pulls') {
+        const detail = await response.json().catch(() => null);
+        prCreationDisabled = /^GitHub Actions is not permitted to create or approve pull requests\.?$/i.test(detail?.message ?? '');
+      }
+      throw Object.assign(new Error(`GitHub HTTP ${response.status}`), {
+        status: response.status, limited, prCreationDisabled,
+      });
     }
     if (response.status === 204) return null;
     if (response.status === 202) {
