@@ -105,8 +105,10 @@ const RESEARCH_BODIES = {
   // WAS `pages/SignalsPage.jsx`, AND THE ZONE'S OBJECT IS WHY IT MOVED. That
   // page is the `market_intel_rows` sector feed and keeps its own route at
   // `/signals`; the `pr3` artboard is about comparable RANGES for the firm's
-  // own service lines, which is what `MarketZone` reads.
-  'research/markets': 'frontend/src/pages/research/MarketZone.jsx',
+  // own service lines. D6285: this named `MarketZone.jsx`, a body nothing had
+  // mounted since D593, so the mount checks below read a page no one saw. The
+  // body `ResearchWorkspace` mounts at this slug is the market directory.
+  'research/markets': 'frontend/src/pages/research/MarketDirectoryZone.jsx',
   'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
   'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
   'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',
@@ -781,6 +783,10 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
     // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
     if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
+    // D6272 (#6272): no store selects `Cited in a memo` (a citation names a
+    // passage, never a memo), so it is retired; `Show cleared` is the owner's
+    // filter for Clear history (#6274 question 4 B) and has no artboard label.
+    if (name === 'investor') canvas['research/ask'] = [...canvas['research/ask'].filter((label) => label !== 'Cited in a memo'), 'Show cleared'];
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {

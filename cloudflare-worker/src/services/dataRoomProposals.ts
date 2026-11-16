@@ -39,6 +39,7 @@
  *
  * Bound SQL only; every statement binds `user_id` and the room's project.
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { AI_SURFACE } from './aiSurfaces';
 import type { RunOptions } from './aiRouter';
@@ -78,7 +79,7 @@ export async function roomFacts(env: Env, projectId: number): Promise<RoomFacts>
   const files = ((await env.DB.prepare(
     `SELECT f.id, f.uid, f.name, f.folder_id, fo.name AS folder, f.checklist_item, f.visibility
        FROM data_room_files f LEFT JOIN data_room_folders fo ON fo.id = f.folder_id AND fo.project_id = f.project_id
-      WHERE f.project_id = ? ORDER BY f.id DESC LIMIT ?`,
+      WHERE f.project_id = ?${await liveFiles(env.DB, 'f')} ORDER BY f.id DESC LIMIT ?`,
   ).bind(projectId, MAX_FILES).all<RoomFile>()).results ?? []);
   const folders = ((await env.DB.prepare(
     'SELECT id, uid, name, parent_id, visibility FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name',
@@ -202,7 +203,7 @@ export async function listProposals(env: Env, userId: number, projectId: number,
   const names = new Map<string, string>();
   if (uids.length) {
     const found = (await env.DB.prepare(
-      'SELECT f.uid, f.name FROM data_room_files f JOIN json_each(?) j ON j.value = f.uid WHERE f.project_id = ?',
+      `SELECT f.uid, f.name FROM data_room_files f JOIN json_each(?) j ON j.value = f.uid WHERE f.project_id = ?${await liveFiles(env.DB, 'f')}`,
     ).bind(JSON.stringify(uids), projectId).all<{ uid: string; name: string }>()).results ?? [];
     for (const f of found) names.set(f.uid, f.name);
   }
@@ -294,7 +295,7 @@ export async function acceptProposal(env: Env, userId: number, room: Room, uid: 
   }
 
   const file = await env.DB.prepare(
-    'SELECT id, folder_id, checklist_item, visibility FROM data_room_files WHERE uid = ? AND project_id = ?',
+    `SELECT id, folder_id, checklist_item, visibility FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(env.DB)}`,
   ).bind(String(p.file_uid ?? ''), room.id).first<{ id: number; folder_id: number | null; checklist_item: string | null; visibility: string }>();
   if (!file) return { ok: false, status: 404, code: 'file_not_found', message: 'That file is no longer in the room.' };
 
@@ -379,7 +380,7 @@ export async function undoProposal(env: Env, userId: number, room: Room, uid: st
     return { ok: false, status: 409, code: 'not_undoable', message: 'Only an accepted match or folder move can be undone, once.' };
   }
   const p = parse(row.payload_json);
-  const file = await env.DB.prepare('SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?')
+  const file = await env.DB.prepare(`SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(env.DB)}`)
     .bind(String(p.file_uid ?? ''), room.id).first<{ id: number }>();
   if (!file) return { ok: false, status: 404, code: 'file_not_found', message: 'That file is no longer in the room.' };
   const restore = type === 'match'

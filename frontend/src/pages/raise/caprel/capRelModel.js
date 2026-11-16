@@ -65,8 +65,6 @@ export function capRelStanding(capabilities) {
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
-/** A block with no read yet (Overview's, D1192 §5). */
-export const NOT_YET = 'Not read here yet';
 
 /* ------------------------------------------------------------------ *
  * D1192 (#3126) — Overview, the Pipeline board and list, the dialogs.
@@ -288,3 +286,69 @@ export const MOVED = {
 export const REFUSED_LINE = 'This venture’s capital relationships are not yours to read. Switch company, or ask its founder for access.';
 /** The same distinction for one block, when only that block's read is refused. */
 export const ROUND_REFUSED_LINE = 'This venture’s round is not yours to read. That is not a claim that nobody has committed.';
+
+/* ------------------------------------------------------------------ *
+ * D5081 part 2 (#5081, RA-22) — Overview owns its page. Pure, so
+ * `frontend/test/caprel_owns_home_d5081.test.mjs` holds each rule.
+ * ------------------------------------------------------------------ */
+
+export const FIND_ACTION = 'Find investors';
+export const ADD_ACTION = 'Add investor';
+export const IMPORT_ACTION = 'Import pipeline';
+/** RA-22 B: first use, in the board's words. */
+export const START_TITLE = 'Start your investor pipeline';
+export const START_LINE = 'The round, Needs you and the pipeline by stage appear once your first investor is added.';
+export const START_READER = 'No investor is recorded for this venture yet.';
+
+/** A tab's address with the venture and, for Pipeline, the dialog it opens on arrival (`?open=add|import`). */
+const tabWith = (path, search, open = null) => {
+  const base = `${HOME_PATH}${path}${tabSearch(search)}`;
+  return open ? `${base}${base.includes('?') ? '&' : '?'}open=${open}` : base;
+};
+export const findHref = (search = '') => tabWith('/match', search);
+export const followUpHref = (search = '') => tabWith('/pipeline', search);
+export const addHref = (search = '') => tabWith('/pipeline', search, 'add');
+export const importHref = (search = '') => tabWith('/pipeline', search, 'import');
+
+/** The commitments read answered, and with no amount at all: nothing counted, nothing listed, no source missing. */
+function noAmounts(commitments) {
+  if (commitments?.status !== 'ready') return false;
+  const t = commitments.data?.totals || {};
+  return !(Number(t.counted_cents) > 0) && !(Number(t.not_counted_cents) > 0) && !t.partial;
+}
+
+/**
+ * First use (RA-22 B): the prospects read answered with no investor, and the commitments read with no amount.
+ * A read still loading, failed or refused is never first use: that would claim an empty pipeline nobody read.
+ */
+export function isFirstUse(home) {
+  const p = home?.prospects;
+  return p?.status === 'ready' && Array.isArray(p.items) && p.items.length === 0 && noAmounts(home?.commitments);
+}
+
+/**
+ * The module header's one primary on Overview (RA-14's table: Add investor · Find investors · Follow up).
+ * None while the prospects are unread, failed or refused, for a viewer who cannot work the tool, and on
+ * first use, where the start card's first action is the page's one primary (D5076). Otherwise: follow-ups
+ * overdue or due today → Follow up (n); no investor yet → Find investors; else Add investor.
+ */
+export function homeAction(home, { works = false, search = '', today } = {}) {
+  const p = home?.prospects;
+  if (!works || p?.status !== 'ready' || !Array.isArray(p.items)) return null;
+  if (isFirstUse(home)) return null;
+  const f = overviewFigures(p.items, today);
+  const due = f.overdue + f.dueToday;
+  if (due > 0) return { label: `Follow up (${due})`, href: followUpHref(search) };
+  if (f.total === 0) return { label: FIND_ACTION, href: findHref(search) };
+  return { label: ADD_ACTION, href: addHref(search) };
+}
+
+/** First use's set-up actions (RA-22 B), at most three, the first the page's primary; none for a viewer who cannot work the tool. */
+export function setupActions({ works = false, search = '' } = {}) {
+  if (!works) return [];
+  return [
+    { key: 'find', label: FIND_ACTION, href: findHref(search) },
+    { key: 'add', label: ADD_ACTION, href: addHref(search) },
+    { key: 'import', label: IMPORT_ACTION, href: importHref(search) },
+  ];
+}
