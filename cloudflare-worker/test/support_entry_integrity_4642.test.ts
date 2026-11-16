@@ -27,6 +27,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import support from '../src/routes/portfolio_support.ts';
+import { applySupportLedgerSchema } from './_support_ledger_schema.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const MINE = 41;      // the member who recorded the entries
@@ -109,33 +110,13 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, fund_id INTEGER,
       project_id INTEGER NOT NULL, round_name TEXT, invested_amount REAL
     );
-    CREATE TABLE portfolio_support_entries (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
-      fund_id INTEGER, project_id INTEGER NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'other'
-        CHECK (kind IN ('intro','board_prep','hiring','customer','fundraising','other')),
-      state TEXT NOT NULL DEFAULT 'promised'
-        CHECK (state IN ('promised','delivered','withdrawn')),
-      hours REAL, promised_at TEXT, delivered_at TEXT, withdrawn_at TEXT,
-      summary TEXT NOT NULL, outcome TEXT, recorded_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      revision INTEGER NOT NULL DEFAULT 1, updated_by INTEGER
-    );
-    CREATE TABLE portfolio_support_entry_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
-      entry_id INTEGER NOT NULL, revision INTEGER NOT NULL,
-      action TEXT NOT NULL CHECK (action IN ('amended','delivered','withdrawn')),
-      from_state TEXT, to_state TEXT,
-      changed_json TEXT NOT NULL DEFAULT '[]', actor_user_id INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE (entry_id, revision)
-    );
     CREATE TABLE mi_pro_subscriptions (
       user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT,
       period_end TEXT, stripe_customer_id TEXT
     );
   `);
+  // D6202: the ledger's tables from the real migrations (237, D4642, D6202), not a copy of their DDL.
+  applySupportLedgerSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, investor_tier, name) VALUES (?, ?, ?, ?)');
   u.run(MINE, 'investor', 'institutional', 'Mine');
   u.run(COLLEAGUE, 'investor', 'institutional', 'Colleague');

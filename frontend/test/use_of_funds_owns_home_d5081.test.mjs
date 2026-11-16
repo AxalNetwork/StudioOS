@@ -213,8 +213,9 @@ test('RA-14: Home owns the page; the generic at a glance, forecast door and Cate
 });
 
 test('RA-14 is this tool only: another Raise module keeps its generic layer', async () => {
-  const other = { module: { slug: 'fundraising-readiness', name: 'Fundraising readiness' }, card: { state: 'empty', reason: 'Not scored yet.' }, records: { total: 0, page: 1, page_size: 25, cols: [{ key: 'area', label: 'Area' }], rows: [] } };
-  const v = await mounted('/raise/fundraising-readiness?project_id=3', { slugModule: other });
+  // D6049 (#6049) gave Fundraising readiness a Home of its own, so the module that keeps the generic layer here is Pitch deck.
+  const other = { module: { slug: 'pitch-deck', name: 'Pitch deck' }, card: { state: 'empty', reason: 'Not recorded.' }, records: { total: 0, page: 1, page_size: 25, cols: [{ key: 'title', label: 'Title' }], rows: [] } };
+  const v = await mounted('/raise/pitch-deck?project_id=3', { slugModule: other });
   try {
     assert.ok(v.by('cycle-module-chart'), 'its at a glance stays');
     assert.equal(v.by('uof-home'), undefined);

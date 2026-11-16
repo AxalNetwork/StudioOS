@@ -10,6 +10,8 @@ nothing here is served.
 > hand-edited. If you are looking for a document to read or edit, it is in
 > here.
 
+[AWS CodeBuild runner setup and benchmark](operations/CODEBUILD_RUNNER_6724.md) covers optional queue capacity for StudioOS.
+
 ## Layout
 
 | Folder | What lives there |

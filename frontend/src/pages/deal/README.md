@@ -41,6 +41,10 @@ addresses are `../dealPageModel.js` (D1148).
 - `DealWorkTabs.jsx` — D1153 (#3058, part 5): Diligence (DL7), Documents and
   data room (DL8, DL9), Terms (DL10) and Commitment and closing (DL11–DL13),
   each change behind an in-page dialog.
+- `DealPaper.jsx` — D6184 (#6184): one envelope on Documents' Deal paper card:
+  its signed count, Download once fully signed (the Worker's refusal shown in
+  the row), and how to sign, which points to the emailed link and never
+  builds one.
 - `dealAudienceModel.js` — D1155 (#3060, part 7): DL15's table of who sees
   what (twelve kinds against seven viewers, each with the read that holds it
   and each place today's Worker departs from the canvas, said), `viewerOf`,
@@ -66,3 +70,6 @@ The rules for adding here: every figure no read holds is "Not recorded" with
 its reason, a read that failed is "Unreadable" with Try again and leaves the
 rest of the page standing, every change opens an in-page dialog, and colours
 come from the axal tokens with a `dark:` counterpart — never a hex value.
+
+- `roomFilesQuery.js` — D6185: sort, filter and page only admitted files using raw metadata for ordering; zero and unknown stay distinct.
+- `SharedRoomFiles.jsx` — D6185: shared content search whitelisted to the listing, name filter, stable sort/pages and phone file rows; mounted in Documents after the owner-authorized listing handoff.

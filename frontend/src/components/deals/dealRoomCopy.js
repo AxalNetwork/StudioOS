@@ -146,6 +146,33 @@ export const REFERENCE_STATUS = {
 export const REFERENCE_ARTEFACTS = ['Recording', 'Transcript', 'Summary'];
 export const NOT_AVAILABLE_YET = 'Not available yet';
 
+/** D6182: the references card's line under its title. */
+export const REFERENCE_INTRO = 'Reference checks on the founders. Recording, transcript and summary are not available yet.';
+
+/**
+ * D6182: the canvas's pills under a check. "Only your firm sees these." is not
+ * drawn: the Worker scopes the read to the deal (D609), not to a firm.
+ */
+export const REFERENCE_PILLS = { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' };
+
+/** D6182: the dialog before a check is deleted. */
+export const REFERENCE_DELETE_CONFIRM = {
+  title: (name) => `Delete the reference from ${name}?`,
+  body: () => 'The check, its consent and its notes are removed from this deal for everyone who reads it. This cannot be undone. Only its author or an admin can delete it.',
+  back: 'Keep it',
+  act: 'Delete',
+  refused: 'The reference was not deleted. Nothing was changed. Try again.',
+};
+
+/** D6182: the dialog before consent is recorded. */
+export const REFERENCE_CONSENT_CONFIRM = {
+  title: (name) => `Record ${name}’s consent?`,
+  body: (name) => `This records that ${name} agreed to the reference call, now, with you as the person who recorded it. Record it only once they have said yes. No call is recorded or transcribed.`,
+  back: 'Back',
+  act: 'Record consent',
+  refused: 'Consent was not recorded. Nothing was changed. Try again.',
+};
+
 /** The syndicate's three statuses, in order. */
 export const SYNDICATE_FLOW = [
   { key: 'open', label: 'Open' },
