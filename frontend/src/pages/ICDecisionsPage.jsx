@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Gavel, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { tallyText } from './icDecisionModel.js';
 
 const STATUS_BADGE = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -22,15 +23,18 @@ export default function ICDecisionsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  // A failed read is its own state: the list is Unreadable, never "No IC
+  // decisions yet" (#6155).
+  const [readErr, setReadErr] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: '', project_id: '', memo: '' });
   const [busy, setBusy] = useState(false);
 
   const load = () => {
-    setLoading(true);
+    setLoading(true); setReadErr(null);
     api.icList({ status: statusFilter || undefined })
       .then((res) => setItems(Array.isArray(res?.items) ? res.items : []))
-      .catch((e) => setErr(e.message || 'Failed to load'))
+      .catch((e) => { setItems([]); setReadErr(e.message || 'The list could not be read.'); })
       .finally(() => setLoading(false));
   };
   useEffect(load, [statusFilter]);
@@ -107,7 +111,15 @@ export default function ICDecisionsPage() {
       </div>
 
       {loading ? (
-        <div className="text-gray-500 text-center py-16">Loading…</div>
+        <div className="text-sm text-gray-500 text-center py-16" role="status" aria-live="polite">Reading IC decisions…</div>
+      ) : readErr ? (
+        <div className="text-center py-16" role="alert">
+          <p className="text-sm text-rose-700 dark:text-rose-300">Unreadable: the IC decisions could not be read. {readErr}</p>
+          <button type="button" onClick={load}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+            <RefreshCw size={13} /> Try again
+          </button>
+        </div>
       ) : items.length === 0 ? (
         <div className="text-gray-500 text-center py-16">No IC decisions yet.</div>
       ) : (
@@ -120,7 +132,7 @@ export default function ICDecisionsPage() {
                   <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{d.title}</div>
                   <div className="text-xs text-gray-500 truncate">
                     {d.project?.name ? `${d.project.name} · ` : ''}
-                    {d.tally ? `👍 ${d.tally.yes} · 👎 ${d.tally.no} · ➖ ${d.tally.abstain}` : ''}
+                    {tallyText(d.tally)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

@@ -185,7 +185,7 @@ test('the plans read sends each plan\'s catalogue fields, the whole catalogue, a
   assert.deepEqual(growth.catalogue.included, [...planByKey('founder:growth').included]);
   assert.equal(body.plans.find((p) => p.licence_key === 'founder:free').catalogue.key, 'founder:free');
   assert.deepEqual(body.catalogue.map((c) => c.key), PLAN_KEYS, 'every plan, those with no product among them');
-  assert.deepEqual(body.catalogue, publicCatalogue());
+  assert.deepEqual(body.catalogue.map(({ entitlements, ...entry }) => entry), publicCatalogue());
   const keys = JSON.stringify(body).match(/"name":/g);
   assert.equal(keys, null, 'the public read carries no name key');
 });

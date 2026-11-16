@@ -84,7 +84,7 @@ export function httpUrlOrNull(v: unknown): string | null {
  * an id some record could own (S1's ruling on #1736).
  */
 async function recordActor(env: Env, userId: number | null, projectId: number,
-  module: ModuleSlug, entityId: string | number | null, action: string, summary: string) {
+  module: ModuleSlug | 'objective', entityId: string | number | null, action: string, summary: string) {
   await logCycleWrite(env, { projectId, userId, cycle: 'validate', module, entityId, action, summary });
 }
 
@@ -437,6 +437,45 @@ export async function setWaitlistTarget(
      DO UPDATE SET target_value = excluded.target_value, updated_at = datetime('now')`,
   ).bind(input.projectId, WAITLIST_TARGET_KEY, n, input.userId).run();
   await recordActor(env, input.userId, input.projectId, 'demand-signals', null, 'waitlist_target_set', `Waitlist target ${n}`);
+}
+
+// ---------------------------------------------------------------------------
+// The validation objective (D5997, #5997)
+// ---------------------------------------------------------------------------
+
+/** "Trying to learn:" is one header line (board V1): one question, not a brief. */
+export const OBJECTIVE_MAX = 280;
+
+/**
+ * Write, change or clear the venture's objective ("Trying to learn:").
+ * Whitespace collapses to single spaces, so the header stays one line; an
+ * empty value or `null` clears it. A clear keeps the row with `objective`
+ * NULL, so who cleared it and when stay recorded. Logged under
+ * `validate.objective` with no record id, as a module-level write is (S1's
+ * ruling on #1736), in the same batch as the write.
+ */
+export async function setValidationObjective(
+  env: Env,
+  input: { projectId: number; userId: number | null; value: unknown },
+): Promise<{ text: string | null }> {
+  if (input.value !== null && typeof input.value !== 'string') throw new WriterError(400, 'What you are trying to learn is text');
+  const text = input.value === null ? '' : input.value.replace(/\s+/g, ' ').trim();
+  if ([...text].length > OBJECTIVE_MAX) throw new WriterError(400, `Keep what you are trying to learn to ${OBJECTIVE_MAX} characters`);
+  const value = text || null;
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO validation_objectives (project_id, objective, updated_by)
+       VALUES (?, ?, ?)
+       ON CONFLICT(project_id)
+       DO UPDATE SET objective = excluded.objective, updated_by = excluded.updated_by, updated_at = datetime('now')`,
+    ).bind(input.projectId, value, input.userId),
+    logCycleWriteStatement(env, {
+      projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'objective', entityId: null,
+      action: value ? 'objective_set' : 'objective_cleared',
+      summary: value ? `Trying to learn: ${value}` : 'Trying to learn cleared',
+    }),
+  ]);
+  return { text: value };
 }
 
 // ---------------------------------------------------------------------------
