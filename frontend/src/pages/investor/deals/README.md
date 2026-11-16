@@ -25,7 +25,8 @@ band underneath.
 | `ScreeningZone.jsx` | ID2 · Deals · Screening, redrawn to Deals v2 board DE06 (D4815, #5909) | `/deals/screening` | DECISION TABLE. The deals you can read, each with its venture scorecard strip (`POST /api/venture-scores/batch`), thesis fit and your decision (Move to diligence, Pass with a reason, through your deal flow); the pass taxonomy is a secondary view behind a disclosure. No Lab score, tier or flag, and no memo |
 | `screeningModel.js` | — | — | The decision table's pure rules: the four summary figures, the Confidence cell and Your decision. Read by `ScreeningZone.jsx` and its test |
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
-| `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |
+| `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
+| `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
 
 ## The rule for adding to this folder
 

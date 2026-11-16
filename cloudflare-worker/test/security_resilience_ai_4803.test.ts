@@ -17,9 +17,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from './_admin_security_source.mjs';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DRILL_REASON_MAX, readRestoreDrill, validateDrillMarker } from '../src/services/backup.ts';
 import { loadRecentGuardVerdicts, RECENT_GUARD_LIMIT } from '../src/services/aiRouter.ts';
 
@@ -73,7 +72,7 @@ test('a field of the wrong kind makes the marker invalid evidence, never a trust
 });
 
 test('/overview serves the KV heartbeat beside the D1 one, and the recent verdicts in the AI block', () => {
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_security.ts'), 'utf8');
+  const src = readAdminSecurity();
   assert.match(src, /backup: await readBackupHeartbeat\(env, 'd1'\),[\s\S]{0,300}kv: await readBackupHeartbeat\(env, 'kv'\),/);
   assert.match(src, /recent_verdicts: await loadRecentGuardVerdicts\(env, AI_SAFETY_WINDOW_DAYS\)/);
 });

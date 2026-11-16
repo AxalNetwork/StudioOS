@@ -8,7 +8,8 @@ import MercuryRaiseFeed from '../MercuryRaiseFeed';
 import FromNotion from '../FromNotion';
 import RaisePosthog from '../RaisePosthog';
 import NotionSnapshotImport from '../NotionSnapshotImport';
-import { PmfPart } from '../PmfPart';
+import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
+import { coverageLine } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
 import { isNarrativeAdmin } from '../../raise/narrative/narrativeModel';
@@ -78,10 +79,10 @@ const raise = {
         <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
       </>
     ),
-    // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
+    // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`. D6049 (#6049, RA-16): it is now its own
+    // section of the page's home (`homes` below), so only the sources follow here: From Mercury, PostHog, Evidence.
     'fundraising-readiness': (data, ctx) => (
       <>
-        <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
         {mercuryPart('fundraising-readiness', data, ctx)}
         <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
         <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
@@ -117,13 +118,26 @@ const raise = {
     // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
   }),
   add: toFnMap({}),
+  // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands }`: the
+  // header's coverage and freshness line, the page drawn in place of the generic chart and records table
+  // (handed the card, records, Add and record links), and the collapsed AI gap analysis the bands draw in.
+  homes: toFnMap({
+    'fundraising-readiness': (data, ctx) => ({
+      sub: coverageLine(data?.records),
+      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} />,
+      Bands: ReadinessBands,
+    }),
+  }),
   fills: {},
   // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
   // read: the round and its order of payment on Cap table, which holds the
   // scenario both read; the room and the clauses on Fundraising readiness,
   // which scores the data room and the documents, so the room's band sits
   // there rather than on Data room's module page. The narrative band sits on
-  // Investor narrative, whose check it phrases.
+  // Investor narrative, whose check it phrases. D6049 (#6049): RA-16 draws
+  // the readiness page's Eadwyn readings as "AI gap analysis", collapsed
+  // under Detail, so the room and the clauses bands stay here and draw
+  // inside that disclosure (`ReadinessBands`).
   drafts: new Map([
     ['cap-table', [{
       surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
