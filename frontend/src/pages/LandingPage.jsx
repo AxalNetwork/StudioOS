@@ -53,7 +53,8 @@ const LANES = [
   { title: 'Founders', img: 'lane-founders', cta: 'Start free',
     desc: 'Enter with an idea or an operating company. Leave with one that survives diligence.',
     items: [
-      'The 28-day Spin-Out Lab takes an idea to an incorporated company',
+      // #6988 (X6): the Lab does not promise an incorporated company.
+      'A four-week programme, by application. You spend four weeks testing demand, building your pitch and preparing for investor conversations.',
       'Pitch deck, cap table, and fundraise in one workspace for existing companies',
       'Introductions are earned and proceed under a three-way NDA',
     ] },
@@ -85,7 +86,7 @@ const LANES = [
 
 // Step two is "get matched", not "get verified": people browse on email first.
 const STEPS = [
-  { n: '01', title: 'Join', desc: 'A 30-second intake: who you are, what you are building or bringing, where you are.' },
+  { n: '01', title: 'Join', desc: 'Create an account. Your membership is reviewed after you sign up.' }, // #6988 (X6): what MEMBERSHIP_STEPS says happens
   { n: '02', title: 'Get matched', desc: 'The record routes you to the founders, partners, or advisors your profile actually fits.' },
   { n: '03', title: 'Unlock the network', desc: 'Collaborate from one workspace. Capital reads the same record when the work is ready.' },
 ];
@@ -198,7 +199,8 @@ function Hero({ stats }) {
         </p>
         <div className="ax-row-btns" style={{ marginTop: 34 }}>
           <Link to="/register" className="ax-btn ax-btn-lg ax-btn-primary">Join Axal VC →</Link>
-          <Link to="/directory" className="ax-btn ax-btn-lg ax-btn-quiet">Explore the network</Link>
+          {/* #6988 (X6): not /directory, which may list nobody; the platform page until #7006 (B2). */}
+          <Link to="/platform" className="ax-btn ax-btn-lg ax-btn-quiet">See the platform</Link>
         </div>
         {figures.length > 0 && (
           <ul className="ax-stats" style={{ listStyle: 'none', paddingLeft: 0, paddingRight: 0, marginBottom: 0 }}>
@@ -327,8 +329,8 @@ function LabBand() {
             <div className="ax-lab-eyebrow">Flagship · The Spin-Out Lab</div>
             <h2 id="ax-lab-h">Spin-Out Lab<br />28-day venture sprint.</h2>
             <p className="ax-lab-copy">
-              Founders arrive with a thesis and leave with an incorporated entity, clean cap table, filed 83(b),
-              evidenced discovery, revenue proof, and a deck built from their own data.
+              {/* #6988 (X6): no incorporated entity, filed 83(b) or revenue proof is promised. */}
+              A four-week programme, by application. You spend four weeks testing demand, building your pitch and preparing for investor conversations.
             </p>
             <div className="ax-row-btns" style={{ marginTop: 22 }}>
               <Link to="/spinout-lab" className="ax-btn ax-btn-md ax-btn-bright">See the full Lab →</Link>
@@ -459,7 +461,7 @@ function ClosingCta() {
         <div style={{ position: 'relative', maxWidth: 560 }}>
           <h2 id="ax-close-h">Join the network building what’s next.</h2>
           <p className="ax-close-copy" style={{ margin: 0 }}>
-            Founder, partner, investor, or advisor — start with a 30-second intake and get matched to the right side of the network.
+            Founder, partner, investor or advisor: create an account and choose your role.
           </p>
         </div>
         <div className="ax-row-btns" style={{ position: 'relative' }}>
