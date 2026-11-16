@@ -184,10 +184,10 @@ test('D6255: the Delivered column uses scoped period receipts even when legacy r
   ] }));
   const view = await mountContracts(React.createElement(InvestorFundReporting), '/funds/reporting?fund=10');
   try {
-    assert.deepEqual(legacy.mock.calls.map(call => call.arguments), [[{ fund_id: 10 }]]);
+    assert.equal(legacy.mock.calls.length, 0, 'the archive reads only the selected fund periods');
     assert.deepEqual(receipts.mock.calls.map(call => call.arguments), [[10]]);
-    assert.match(view.text(), /Delivered.*Q2 2026.*2 notified.*Q3 2026.*Delivery failed.*Q4 2026.*Not sent.*Older report/s);
-    assert.doesNotMatch(view.text(), /Superseded archive row/);
+    assert.match(view.text(), /Delivered.*Q2 2026.*2 notified.*Q3 2026.*Delivery failed.*Q4 2026.*Not sent/s);
+    assert.doesNotMatch(view.text(), /Superseded archive row|Older report/);
   } finally {
     await view.unmount();
   }
