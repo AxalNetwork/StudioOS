@@ -8,7 +8,7 @@ import { asOfLine } from './fromPosthogModel';
  *
  *   RevenuePosthog — Revenue and traction: the tracked metrics (each is also
  *     a KPI row "From PostHog", with no Enter by hand) and "Product retention
- *     by first-seen week, from PostHog", drawn BESIDE revenue cohort
+ *     by first-seen date, from PostHog", drawn BESIDE revenue cohort
  *     retention and labelled apart; never merged with it or with churn.
  *   ImprovementPosthog — Product improvement: each survey's responses and its
  *     NPS or average score, and answers to questions marked "feedback" as
@@ -17,14 +17,17 @@ import { asOfLine } from './fromPosthogModel';
  *
  * The venture's team alone reads either part (decision C, a).
  */
-export const RETENTION_TITLE = 'Product retention by first-seen week, from PostHog';
+export const RETENTION_TITLE = 'Product retention by first-seen date, from PostHog';
 export const APART_LINE = 'Labelled apart from revenue retention by signup month; the two are never merged.';
 export const NO_IDENTITY = 'Survey answers come without the respondent’s identity.';
 
-/** "Week 1 42% · Week 2 31% …" for one cohort; a week PostHog gave no count for reads "—", never 0%. */
-export function cohortLine(c) {
-  const weeks = (Array.isArray(c?.pct) ? c.pct : []).slice(0, 6).map((p, i) => `W${i + 1} ${p == null ? '—' : `${p}%`}`);
-  return `${c?.week} · ${Number(c?.size || 0).toLocaleString('en-US')} people${weeks.length ? ` · ${weeks.join(' · ')}` : ''}`;
+const PERIOD_WORD = new Map([['day', 'Day'], ['week', 'Week'], ['month', 'Month']]);
+
+/** An unknown interval uses neutral period numbers and says the unit is missing. */
+export function cohortLine(c, interval) {
+  const unit = PERIOD_WORD.get(interval);
+  const periods = (Array.isArray(c?.pct) ? c.pct : []).slice(0, 6).map((p, i) => `${unit || 'Period'} ${i + 1} ${p == null ? '—' : `${p}%`}`);
+  return [c?.week, `${Number(c?.size || 0).toLocaleString('en-US')} people`, ...(!unit ? ['period not recorded'] : []), ...periods].join(' · ');
 }
 
 /** "46 responses · NPS 31", or what is not recorded. */
@@ -62,7 +65,7 @@ function Retention({ facts, onDelete }) {
       <p className="m-0 text-[11px] text-axal-muted dark:text-gray-400">{APART_LINE}</p>
       {[...latest.values()].map((f) => (
         <div key={f.fact_key} className="flex flex-col gap-0.5">
-          {(f.data?.cohorts || []).map((c) => <span key={c.week} className="font-mono text-[11.5px] tabular-nums text-axal-ink dark:text-gray-200" data-testid="posthog-cohort">{cohortLine(c)}</span>)}
+          {(f.data?.cohorts || []).map((c) => <span key={c.week} className="font-mono text-[11.5px] tabular-nums text-axal-ink dark:text-gray-200" data-testid="posthog-cohort">{cohortLine(c, f.data?.interval)}</span>)}
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-[11px] text-axal-muted dark:text-gray-400">{f.label ? `${f.label} · ` : ''}{asOfLine(f.as_of)}</span>
             <button type="button" className={LINK} onClick={() => onDelete(f)} data-testid="posthog-fact-delete">Delete</button>

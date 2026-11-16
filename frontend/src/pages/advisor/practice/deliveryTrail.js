@@ -16,7 +16,11 @@
  * reader's is the right one, so these go through the browser's own formatter.
  * Using the string-slice approach here would report the UTC day to someone who
  * sent a deliverable at 11pm local and is being told it went out tomorrow.
+ *
+ * Its one import is `formatBytes`, from the Learning video upload's pure module
+ * (no React, no client), for a stored file's size (#5961).
  */
+import { formatBytes } from '../../learning/videoUpload.js';
 
 /** `not_started` | `sent` | `opened` — the three the endpoint derives. */
 export const STATE_LABEL = {
@@ -313,15 +317,12 @@ export function readyAction(item) {
       consequence: `${tag} goes back to Draft. Nothing is sent or deleted.`,
     };
   }
-  const link = typeof v.link_url === 'string' ? v.link_url.trim() : '';
-  let https = false;
-  try { https = new URL(link).protocol === 'https:'; } catch { https = false; }
-  const content = v.document === 'file' || https;
+  const content = versionDocument(v) != null;
   return {
     kind: 'mark', version: v.version, tag, label: `Mark ${tag} ready`, enabled: content,
     consequence: content
       ? `Marks ${tag} ready to send. Nothing is sent: the client sees nothing until you send it, and sending clears the mark.`
-      : `${tag} has no document, so it cannot be marked ready. Add a version with a link first.`,
+      : `${tag} has no document, so it cannot be marked ready. Add a version with a file or a link first.`,
   };
 }
 
@@ -335,7 +336,7 @@ export function readyRefusal(error, tag = 'This version') {
     return `${tag} has already been sent, so it can’t be marked ready or cleared. The list below has been read again.`;
   }
   if (error?.code === 'empty_version') {
-    return `${tag} has no document, so it cannot be marked ready. Add a version with a link first.`;
+    return `${tag} has no document, so it cannot be marked ready. Add a version with a file or a link first.`;
   }
   return error?.message || 'The Ready mark could not be changed. Nothing was changed.';
 }
@@ -429,7 +430,11 @@ export function sendConfirmation(item) {
     recipient: person ? `${person} · ${client}` : null,
     document: `${item?.title || 'Work product'} ${tag}`,
     note: String(v.summary ?? '').trim() || null,
+    // #5961: the version's own summary, when one was recorded (D5959). Null otherwise, and nothing is drawn for it.
+    summary: versionSummary(v),
     link: typeof v.link_url === 'string' ? v.link_url.trim() : '',
+    // #5961: a stored file is named by its file name (D5960); null for a link or no document.
+    fileName: null,
     after: `${tag} can’t be edited after sending; add v${Number(v.version) + 1} for changes.`,
     confirm: `Send ${tag} to ${person || client}`,
   };
@@ -437,8 +442,102 @@ export function sendConfirmation(item) {
   if (!person) {
     return { ...base, sendable: false, reason: 'No client account is linked to this work product’s engagement, so it cannot be sent.' };
   }
-  let host = '';
-  try { const u = new URL(base.link); if (u.protocol === 'https:') host = u.hostname; } catch { host = ''; }
-  if (!host) return { ...base, sendable: false, reason: `${tag} has no content to send. Add a version with a link, then send that one.` };
-  return { ...base, host, sendable: true, reason: null };
+  const doc = versionDocument(v);
+  if (doc?.kind === 'file') return { ...base, fileName: doc.name, sendable: true, reason: null };
+  if (!doc) return { ...base, sendable: false, reason: `${tag} has no content to send. Add a version with a file or a link, then send that one.` };
+  return { ...base, host: doc.host, sendable: true, reason: null };
+}
+
+// ──────────────── #5961 (D4833-p3) · a version's summary and stored file ────────────────
+//
+// D5959 stores a version's optional summary apart from its change note
+// (`version_summary`; `summary` stays the change note). D5960 lets a version's
+// document be a stored file: `document` is `file`, `link` or null, and `file`
+// is `{ name, type, size }`, never the storage key.
+
+/** What the Worker takes as a version's file (D5960, `company_documents.ts`): at most 10 MB, a PDF, JPEG or PNG. */
+export const DELIVERABLE_FILE = {
+  maxBytes: 10 * 1024 * 1024,
+  types: { 'application/pdf': 'PDF', 'image/jpeg': 'JPEG', 'image/png': 'PNG' },
+};
+/** The file input's `accept`. */
+export const DELIVERABLE_FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+/** The limits as the field says them: "A PDF, JPEG or PNG of at most 10 MB." */
+export const DELIVERABLE_FILE_LIMITS_LINE = `A PDF, JPEG or PNG of at most ${formatBytes(DELIVERABLE_FILE.maxBytes)}.`;
+
+/** A version's summary (D5959), trimmed, or null when none was recorded. Never the change note. */
+export function versionSummary(version) {
+  const s = String(version?.version_summary ?? '').trim();
+  return s || null;
+}
+
+/**
+ * A version's document: `{ kind: 'file', name, type, size, sizeLabel }` for a
+ * stored file, `{ kind: 'link', href, host, path }` for an https link, or null
+ * when it has neither (a title-only v1, or a link that is not https). A file
+ * wins over a link, as the Worker's `document` says.
+ */
+export function versionDocument(version) {
+  if (!version) return null;
+  if (version.document === 'file') {
+    const f = version.file || {};
+    const size = f.size == null ? null : Number(f.size);
+    return {
+      kind: 'file',
+      name: String(f.name || '').trim() || 'document',
+      type: f.type || null,
+      size: Number.isFinite(size) ? size : null,
+      sizeLabel: Number.isFinite(size) ? formatBytes(size) : null,
+    };
+  }
+  const href = typeof version.link_url === 'string' ? version.link_url.trim() : '';
+  try {
+    const u = new URL(href);
+    if (u.protocol === 'https:' && u.hostname) return { kind: 'link', href, host: u.hostname, path: u.pathname === '/' ? '' : u.pathname };
+  } catch { /* not a link */ }
+  return null;
+}
+
+/**
+ * A file the Worker would refuse, said in the Worker's own sentence, or null.
+ * Checked before a byte is sent; the Worker checks again by the file's bytes,
+ * and its refusal is shown as it comes.
+ */
+export function fileRefusal(file) {
+  if (!file) return null;
+  const size = Number(file.size);
+  if (Number.isFinite(size) && size > DELIVERABLE_FILE.maxBytes) return 'The file is larger than 10 MB.';
+  if (size === 0) return 'The file is empty.';
+  const declared = String(file.type || '').toLowerCase().split(';')[0].trim();
+  if (declared && !DELIVERABLE_FILE.types[declared]) return 'Upload a PDF, JPEG or PNG file.';
+  return null;
+}
+
+/**
+ * The Add version dialog's draft as what the Worker takes: `{ body, file }`,
+ * or `{ error }` with the sentence to show. The change note is required, and
+ * the document is exactly one of an https link or a file (D4712, D5960). The
+ * summary is optional and is sent only when written (D5959).
+ */
+export function versionDraft(draft) {
+  const summary = String(draft?.summary ?? '').trim();
+  if (!summary) return { error: 'Say what changed in this version.' };
+  if (summary.length > 2000) return { error: 'The note is at most 2,000 characters.' };
+  const link = String(draft?.link_url ?? '').trim();
+  const file = draft?.file || null;
+  if (file && link) return { error: 'A version’s document is a link or a file, not both. Remove one.' };
+  if (file) {
+    const refused = fileRefusal(file);
+    if (refused) return { error: refused };
+  } else {
+    let https = false;
+    try { https = new URL(link).protocol === 'https:'; } catch { https = false; }
+    if (!https) return { error: 'Choose a file, or enter a web address that starts with https://' };
+    if (link.length > 2000) return { error: 'A link is at most 2,000 characters.' };
+  }
+  const versionSummaryText = String(draft?.version_summary ?? '').trim();
+  if (versionSummaryText.length > 2000) return { error: 'The summary is at most 2,000 characters.' };
+  const body = file ? { summary } : { link_url: link, summary };
+  if (versionSummaryText) body.version_summary = versionSummaryText;
+  return { body, file };
 }

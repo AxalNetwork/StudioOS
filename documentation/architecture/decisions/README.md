@@ -129,14 +129,23 @@ and citations by number keep working.
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
+| `D6093.md` | Reporting phone writers reach Reminder settings through the existing More menu, with reader gates and the Prepare bar preserved (#6093). |
+| `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
+| `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
+| `D6292.md` | Investor Diligence door, recorded member context links and validated Cases list state in the address (#6292). |
+| [D6094](D6094.md) | #6094: frozen sent-report printing and audience-safe light PDF copy. |
 | `D5620.md` | Merge Control policy source: one bundled classifier, injected `policy_version`, fail-closed compare evaluation; four live questions not recorded (#5620). |
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6024.md` | Confirmed Build feature removal and must-have demotion, protected references, atomic audit and honest Build Plan history without stale links (#6024). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+| `D6115.md` | Remove a Grow partner, market or obligation added by mistake: a hard delete, refused for a partner with revenue or deals and a held obligation; the compliance delete runs the same writer (#6115). |
 | `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
 
 | `D6397.md` | Five recorded Fund Admin tasks in today’s shared Ask panel, with scoped navigation and no models or financial acts (#6397). |
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
+| `D5919.md` | Territory, Renewal window and Attention menus for loaded licence-ledger rows (#5919). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
+| `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |

@@ -49,11 +49,11 @@ test('quickStats: a failed lifecycle read is unreadable; a preview is withheld',
   assert.equal(p.lifecycle.state, 'withheld');
 });
 
-test('quickStats: a null count or average stays absent; it is not 0', () => {
-  const q = quickStats({ dashboard: { quick_stats: { ai_score_avg: null } }, lifecycle: { counts: { watching: null } }, dealCount: 3 });
-  const [, avg] = q.dealFlow.rows.find(([label]) => label === 'Avg AI match');
+test('quickStats: a null count stays absent; it is not 0', () => {
+  const q = quickStats({ dashboard: {}, lifecycle: { counts: { watching: null } }, dealCount: null });
+  const [, deals] = q.dealFlow.rows.find(([label]) => label === 'Deals in flow');
   const [, watching] = q.lifecycle.rows.find(([label]) => label === 'Watching');
-  assert.equal(avg, null);
+  assert.equal(deals, null);
   assert.equal(watching, null);
 });
 
@@ -87,7 +87,6 @@ test('a readable stat group draws its figures, and an absent one as not recorded
   const group = quickStats({ dashboard: { quick_stats: {} }, lifecycle, dealCount: 3 }).dealFlow;
   const text = draw(createElement(StatGroup, { group, what: 'x', claim: 'y' }));
   assert.match(text, /Deals in flow\s*3/);
-  assert.match(text, /Avg AI match\s*Not recorded/);
   assert.match(draw(createElement(Row, { label: 'IRR', value: null })), /IRR\s*Not recorded/);
 });
 
@@ -119,12 +118,11 @@ test('the investor home routes every failed read to its module\'s could-not-be-r
     quick, refreshContext, retryLifecycle, retrySources,
   });
   assert.deepEqual([t.deal_lifecycle.state, t.deal_lifecycle.onRetry], ['unreadable', retryLifecycle]);
-  assert.deepEqual([t.scored_opportunities.state, t.scored_opportunities.onRetry], ['unreadable', refreshContext]);
   assert.deepEqual([t.portfolio_glance.state, t.portfolio_glance.onRetry], ['unreadable', retrySources]);
   assert.deepEqual([t.upcoming_events.state, t.upcoming_events.onRetry], ['unreadable', retrySources]);
   // Loading is loading, never empty and never a zero.
   const loading = investorTiles({ user: {}, dashboard: null, lifecycle: undefined, records: {}, failures: {}, quick: quickStats({ lifecycle: undefined, dealCount: 0 }) });
-  for (const k of ['deal_lifecycle', 'scored_opportunities', 'portfolio_glance', 'upcoming_events']) assert.equal(loading[k].state, 'loading', k);
+  for (const k of ['deal_lifecycle', 'portfolio_glance', 'upcoming_events']) assert.equal(loading[k].state, 'loading', k);
   // An administrator's preview withholds all six (SM11).
   const preview = investorTiles({ previewing: true });
   assert.ok(Object.values(preview).every((x) => x.state === 'withheld'));

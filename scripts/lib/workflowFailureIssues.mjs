@@ -37,7 +37,7 @@ function failedJobs(jobs, run) {
   });
 }
 
-export function normalizeWorkflowFailure({ run, jobs = [], superseded = false }, catalog, repository = REPOSITORY) {
+export function normalizeWorkflowFailure({ run, jobs = [], superseded = false, queueInvalidated = false }, catalog, repository = REPOSITORY) {
   if (repository !== REPOSITORY || catalog?.repository !== repository || !Array.isArray(catalog.workflows) ||
       run?.repository?.full_name !== repository || !numberId(run?.id) || !numberId(run.workflow_id) ||
       !numberId(run.run_attempt)) throw new Error('workflow_run_identity_invalid');
@@ -47,6 +47,7 @@ export function normalizeWorkflowFailure({ run, jobs = [], superseded = false },
   const productionRelease = workflow === '.github/workflows/cloudflare-worker-deploy.yml';
   // Supersession is an explicit trusted result from the admission gate, never inferred from a later commit.
   if (productionRelease && run.conclusion === 'failure' && superseded === true) return null;
+  if (workflow === '.github/workflows/ci.yml' && run.conclusion === 'failure' && run.event === 'merge_group' && queueInvalidated === true) return null;
   const failed = failedJobs(jobs, run);
   const prs = (run.pull_requests || []).map(pr => pr?.number).filter(numberId);
   const pr = prs.length === 1 ? prs[0] : null;

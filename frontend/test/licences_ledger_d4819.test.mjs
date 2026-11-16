@@ -33,6 +33,7 @@ import { LicenceConsequenceSheet } from '../src/pages/admin/LicenceConsequenceSh
 import { licenceConsequence } from '../src/pages/admin/licenceConsequenceModel.js';
 import {
   NOT_INSTRUMENTED, attentionCell, countsLine, filterByNeeds, ledgerIsEmpty, needsFromParam, needsSummary, renewalCell, requestsCell, tabForSection, territoryCell,
+  ATTENTION_FILTERS, RENEWAL_WINDOWS, TERRITORY_NONE, filterByMenus, menusFromParams, territoryFromParam, territoryOptions,
 } from '../src/pages/admin/licenceLedgerModel.js';
 import { HQ_STRIPS } from '../src/lib/hqStrips.js';
 
@@ -500,4 +501,104 @@ test('legal Needs HQ chips count and filter the loaded ledger page', async () =>
     assert.match(v.at.path, /needs=legal_awaiting_signature/);
   } finally { await v.close(); }
   assert.equal(needsSummary(POPULATED, {}).find((item) => item.key === 'legal_stale').state, 'unavailable');
+});
+
+// ── D5919 (#5919): Territory, Renewal window and Attention menus (L01, L02) ─────
+
+test('D5919 model: each menu filters from the reads the ledger makes; an unreadable fact is never "nothing"', () => {
+  assert.equal(territoryFromParam('fr'), 'FR');
+  assert.equal(territoryFromParam('NONE'), TERRITORY_NONE);
+  assert.equal(territoryFromParam('FRA'), '');
+  assert.equal(territoryFromParam(null), '');
+  const rows = [
+    licence('a', { territories: ['FR', 'BE'], renews_on: inDays(20), status: 'active' }),
+    licence('b', { territories: ['ES'], renews_on: inDays(60), status: 'suspended' }),
+    licence('c', { territories: [], renews_on: null, status: 'draft' }),
+    licence('d', { territories: null, renews_on: inDays(-3), status: 'active' }),
+    licence('e', { territories: ['FR'], renews_on: inDays(200), status: 'active' }),
+  ];
+  assert.deepEqual(territoryOptions(rows), ['BE', 'ES', 'FR']);
+  assert.deepEqual(territoryOptions(rows, 'IT'), ['BE', 'ES', 'FR', 'IT'], 'a linked country stays choosable');
+  const uids = (m, reads = {}) => filterByMenus(rows, reads, { territory: '', renewal: '', attention: '', ...m }).map((l) => l.uid);
+  assert.deepEqual(uids({ territory: 'FR' }), ['a', 'e']);
+  assert.deepEqual(uids({ territory: TERRITORY_NONE }), ['c'], 'unreadable territories are neither a country nor None');
+  assert.deepEqual(uids({ renewal: 'overdue' }), ['d']);
+  assert.deepEqual(uids({ renewal: 'next_30' }), ['a']);
+  assert.deepEqual(uids({ renewal: 'next_90' }), ['a', 'b']);
+  assert.deepEqual(uids({ renewal: 'later' }), ['e']);
+  assert.deepEqual(uids({ renewal: 'not_recorded' }), ['c']);
+  const reads = { a: { ok: true, total: 0 }, b: { ok: true, total: 0 }, c: { ok: false }, d: { ok: true, total: 0 }, e: { ok: true, total: 1 } };
+  assert.deepEqual(uids({ attention: 'needs' }, reads), ['a', 'b', 'd', 'e']);
+  assert.deepEqual(uids({ attention: 'clear' }, reads), [], 'c\'s requests could not be read: not "Nothing needed"');
+  assert.deepEqual(uids({ attention: 'unknown' }, reads), ['c']);
+  assert.deepEqual(uids({ attention: 'unknown' }, {}), ['c', 'e'], 'still reading, with no known item, is unknown too');
+  assert.deepEqual(uids({ attention: 'clear' }, { ...reads, c: { ok: true, total: 0 } }), ['c']);
+  assert.deepEqual(uids({ territory: 'FR', renewal: 'next_30' }), ['a'], 'two menus narrow');
+  assert.deepEqual(menusFromParams((k) => ({ territory: 'es', renewal: 'soon', attention: 'needs' })[k]), { territory: 'ES', renewal: '', attention: 'needs' });
+  assert.deepEqual(RENEWAL_WINDOWS.map(([k]) => k), ['overdue', 'next_30', 'next_90', 'later', 'not_recorded']);
+  assert.deepEqual(ATTENTION_FILTERS.map(([k]) => k), ['needs', 'clear', 'unknown']);
+});
+
+const MENUS = ['licence-territory-filter', 'licence-renewal-filter', 'licence-attention-filter'];
+
+test('D5919: the menus are hidden at zero licences, as search and sort are', async () => {
+  const v = await mount('/admin/licences', worker());
+  try { for (const id of MENUS) assert.equal(v.has(id), false, id); } finally { await v.close(); }
+});
+
+test('D5919: each menu filters the table and is kept in the URL; a link reopens the view; Any restores', async () => {
+  const w = () => worker({ items: POPULATED, summary: POP_SUMMARY, requests: { a: 2, b: 0, c: 0 } });
+  const v = await mount('/admin/licences', w());
+  try {
+    for (const id of MENUS) assert.ok(v.has(id), id);
+    assert.deepEqual([...v.byId('licence-territory-filter').childNodes].map((o) => v.props(o).value), ['', 'ES', 'FR', TERRITORY_NONE]);
+    await v.change('licence-territory-filter', 'FR');
+    assert.deepEqual(v.rowsShown(), ['a']);
+    assert.match(v.at.path, /territory=FR/);
+    assert.equal(v.textOf('licence-list-count'), '1 of 3 loaded match');
+    await v.change('licence-territory-filter', '');
+    await v.change('licence-renewal-filter', 'next_90');
+    assert.deepEqual(v.rowsShown(), ['a', 'b']);
+    await v.change('licence-renewal-filter', 'not_recorded');
+    assert.deepEqual(v.rowsShown(), ['c']);
+    await v.change('licence-renewal-filter', '');
+    await v.change('licence-attention-filter', 'needs');
+    assert.deepEqual(v.rowsShown(), ['a', 'b']);
+    await v.change('licence-attention-filter', 'clear');
+    assert.deepEqual(v.rowsShown(), ['c']);
+    await v.change('licence-territory-filter', 'FR');
+    assert.equal(v.has('licence-no-match'), true, 'two menus narrow, to nothing here');
+    assert.match(v.textOf('licence-no-match'), /Territory, Renewal window and Attention/);
+    await v.change('licence-territory-filter', '');
+    await v.change('licence-attention-filter', '');
+    assert.deepEqual(v.rowsShown(), ['a', 'b', 'c']);
+    assert.doesNotMatch(v.at.path, /territory=|renewal=|attention=/);
+  } finally { await v.close(); }
+  const linked = await mount('/admin/licences?territory=es&renewal=next_90&attention=needs', w());
+  try {
+    assert.deepEqual(linked.rowsShown(), ['b']);
+    assert.deepEqual(MENUS.map((id) => linked.props(linked.byId(id)).value), ['ES', 'next_90', 'needs']);
+  } finally { await linked.close(); }
+});
+
+test('D5919: a row whose requests could not be read is Unknown, never counted as Nothing needed', async () => {
+  const fail = () => response({ error: 'down' }, 500);
+  const v = await mount('/admin/licences?attention=clear', worker({ items: POPULATED, summary: POP_SUMMARY, requests: { a: 2, b: 0, c: fail } }));
+  try {
+    assert.deepEqual(v.rowsShown(), [], 'c is the only row with no known item, and its read failed');
+    await v.change('licence-attention-filter', 'unknown');
+    assert.deepEqual(v.rowsShown(), ['c']);
+  } finally { await v.close(); }
+});
+
+test('D5919: the menus are native selects with a label and a visible focus ring', async () => {
+  const v = await mount('/admin/licences', worker({ items: POPULATED, summary: POP_SUMMARY, requests: { a: 0, b: 0, c: 0 } }));
+  try {
+    for (const id of MENUS) {
+      const n = v.byId(id);
+      assert.equal(n.tagName, 'SELECT', id);
+      assert.ok(v.props(n)['aria-label'], id);
+      assert.match(v.props(n).className, /focus-visible:outline-2/, id);
+    }
+  } finally { await v.close(); }
 });

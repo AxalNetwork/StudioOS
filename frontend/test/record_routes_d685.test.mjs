@@ -158,7 +158,8 @@ test('closing goes back to the page underneath, makes no server call, and a plai
 test('both entry points name /validate/record; the old ?new=record is gone from the cycle page and redirects from the log', () => {
   const route = cycleRouteText();
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
-  assert.match(route, /'customer-research': \(q, open\) => \(\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
+  // D6001 (#6001): Record a session stays Customer research's first Add; a writer's Add a lead follows it.
+  assert.match(route, /'customer-research': \(q, open, ctx\) => \[\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \},/);
   assert.doesNotMatch(route, /new=record/);
   // D704 (#1666): the log is Customer research now. `/validate/interviews?new=record`
   // redirects to `/validate/record` and `?new=notes|upload` to `?log=`
@@ -189,7 +190,7 @@ test('the Interviews list: titled Interviews, with a Channel filter, and the cha
   assert.equal(f.label, 'Channel');
   // Video and audio calls are one Call (the owner, 2026-10-21); `call` filters both.
   assert.deepEqual(f.options, [{ value: 'in_person', label: 'In person' }, { value: 'call', label: 'Call' }, { value: 'text', label: 'Text chat' }]);
-  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'recording_consent', 'consent', 'channel'], 'D697 decision 4: State replaced Stage; the Worker keeps stage:pipeline for the picker');
+  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'recording_consent', 'consent', 'channel', 'stage'], 'D697 decision 4: State replaced Stage; D6001 lists Stage again, last, beside State');
   assert.deepEqual(labelsOf(recs.cols).slice(-1), ['State'], 'D690: State ends the list; Channel is a filter');
   assert.equal(cellView(recs.rows[0].cells.channel).text, 'Call');
 });
