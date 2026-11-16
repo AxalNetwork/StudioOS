@@ -8,7 +8,7 @@ import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 
 /**
@@ -133,7 +133,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
   const grid = { gridTemplateColumns: [...tracks, ...(acts && tracks.length ? ['auto'] : [])].join(' ') || '1fr' };
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const stage = progressive && status === 'ready' ? listStage(records, query) : 'many';
+  const stage = progressive && status === 'ready' ? moduleStage(records, query, progressive) : 'many';
   const controls = stage === 'many';
 
   if (stage === 'zero') {
@@ -352,12 +352,12 @@ export default function CycleModulePage({
   // the page's one dominant action: the header's and the card's step give way.
   const progressive = progressiveFor(meta.key, slug);
   const recsStatus = recordsStatus || (recs ? 'ready' : status);
-  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && listStage(recs, query) === 'zero';
+  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && moduleStage(recs, query, progressive) === 'zero';
   // The card's step is the table's own Add on a progressive module: draw it once, in the table.
   const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
   const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
   const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
-  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined;
+  const stage = progressive && status === 'ready' && recsStatus === 'ready' ? moduleStage(recs, query, progressive) : undefined;
   // D6004: with a few records the header's action gives way when it is the table's own Add (Customer research's Record a session).
   const dupAction = stage === 'few' && !!action?.label && addTexts.includes(action.label);
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.

@@ -6,7 +6,7 @@ import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
-import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { dominantAdd, fewCountLabel, moduleStage, progressiveFor } from './progressiveList.js';
 import { ExportButton, Sources } from './CycleModulePage.jsx';
 import { openAskPanel, useAskPanel } from '../../ui/eadwynPanel.js';
 import { asksCountLabel } from './buildEadwyn.js';
@@ -148,7 +148,7 @@ export default function PhoneModulePage({
   const rStatus = recordsStatus || (recs ? 'ready' : status);
   // D5076: the same stages as the desktop table (progressiveList.js).
   const progressive = progressiveFor(meta.key, slug);
-  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
+  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? moduleStage(recs, query, progressive) : 'many';
   const zero = stage === 'zero';
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
