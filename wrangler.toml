@@ -47,6 +47,14 @@ workers_dev = false
 # parsed as a member of that route entry and rejected by Wrangler 4.x.)
 minify = true
 
+# D5532 part 2 (#5532): never upload source maps. Wrangler 4.x uploads them
+# when this key is UNSET (only an explicit `false` skips loadSourceMaps), and
+# Cloudflare refuses a publish whose source maps exceed 15 MiB gzipped, as
+# code 10021, the same code as a startup-CPU rejection. Every production
+# publish from 2026-11-13 13:48 UTC on failed that way (15,447 KiB gzipped).
+# Inheritable, so `--env production` gets it too; keep it ABOVE [[routes]].
+upload_source_maps = false
+
 # ---------- Worker Custom Domains ----------
 # The canonical production app is served by this Worker on both
 # `axal.vc` and `app.axal.vc`. Each is a whole-host custom domain, not a

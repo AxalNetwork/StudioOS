@@ -112,12 +112,10 @@ test('the tabs: Activity on the four pages only where part 1 fills it, and no pa
   assert.equal(PAGES['mentor-cohorts'].tabs.find((t) => t.key === 'activity').label, 'History');
   // D5313 (#5313): Perks runs in the generic shell, where the same /activity address is History, before Settings.
   assert.equal(PAGES.perks.tabs.find((t) => t.path === '/admin/programs/perks/activity').label, 'History');
-  // D963 (#2796): part 10 adds Activity to Referral partners and Investor cohort access; AI-native Venture is one page.
-  for (const k of ['investor-cohorts']) assert.equal(labels[k].at(-1), 'Activity', k);
-  // D5888 (#5888): Referral partners runs in the generic shell, where the same /activity address is History, before Settings.
-  assert.equal(PAGES['referral-partners'].tabs.find((t) => t.path === '/admin/programs/referral-partners/activity').label, 'History');
-  // D5895: AI-native Venture uses the shared shell too.
-  assert.equal(PAGES['ai-native-venture'].tabs.find((t) => t.path === '/admin/programs/ai-native-venture/activity').label, 'History');
+  // All three programs retain their activity bookmark as History in the shared shell.
+  for (const k of ['investor-cohorts', 'referral-partners', 'ai-native-venture']) {
+    assert.equal(PAGES[k].tabs.find(t => t.path === `/admin/programs/${k}/activity`).label, 'History');
+  }
   assert.ok(Object.values(labels).every((l) => !l.includes('Terms')), 'part 1’s store holds no program’s terms');
   for (const [k, p] of [['mentor-cohorts', '/admin/programs/mentor-cohorts/activity'], ['refer-and-earn', '/admin/programs/refer-and-earn/activity'],
     ['perks', '/admin/programs/perks/activity'], ['learning', '/admin/programs/learning/activity']]) {

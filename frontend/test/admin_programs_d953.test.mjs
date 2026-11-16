@@ -157,9 +157,9 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     'referral-partners': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Referral queue', 'History', 'Settings'],
     // D4298 (#4298): Influencers (IN11).
     influencer: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Applications', 'Influencers', 'Offers', 'Payouts', 'History', 'Settings'],
-    'investor-cohorts': ['Overview', 'Activity'],
     // D5895 (#5895): AI-native Venture runs in the generic shell (PG03a): its six core sections, no module tab.
     'ai-native-venture': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
+    'investor-cohorts': ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'History', 'Settings'],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');
   assert.equal(movedNotice('/admin/programs/mentor-cohorts/people', '?moved=advisor-cohorts'), 'Advisor cohort access is now Mentor cohort access, under Programs.');

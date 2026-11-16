@@ -30,13 +30,13 @@ import { APPLICATION_STAGES, channelRows, readiness, utmSource, MARKET_PARTS, ty
 import { billingPeriods, computeMovements, movementGap, readRecurring } from '../revenueMovements';
 import { runwayMonths } from '../saasMetrics';
 import {
-  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiRows, type KpiAlert, type KpiRow,
+  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiEntries, kpiRows, removeKpiEntry, type KpiAlert, type KpiRow,
 } from '../growKpis';
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  markHeld, obligationKind, obligationState, openMinutes, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
@@ -96,7 +96,8 @@ function money(cents: unknown, currency: unknown = 'usd'): string | null {
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
   try { return await work(); } catch (err) {
     if (err instanceof Refused || err instanceof KpiRefused) {
-      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}) }),
+      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}),
+        ...(err instanceof KpiRefused && err.code ? { code: err.code } : {}) }),
         { status: err.status, headers: { 'Content-Type': 'application/json' } });
     }
     throw err;
@@ -104,6 +105,16 @@ async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult
 }
 /** `ownedRow` passed before the spec ran, so a missing row is a race with a delete. */
 const vanished = () => new Response(JSON.stringify({ detail: 'Record not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+
+/**
+ * D6115 (#6115): Remove, a danger write behind a confirmation, for a record
+ * added by mistake. The writer deletes it or refuses (409) with what to do
+ * instead; the page's re-read then 404s and goes back to the list.
+ */
+const remove = (title: string, body: string, run: (c: RecordContext) => Promise<unknown>): RecordAction => ({
+  key: 'remove', label: 'Remove', kind: 'write', tone: 'danger', confirm: { title, body, cta: 'Remove' },
+  execute: (c) => refusing(async () => ({ ok: true, record: await run(c) })),
+});
 
 /** What a record read loaded, for its sections and actions; never sent (the route spreads the record). */
 const loaded = new WeakMap<RecordContent, Any>();
@@ -345,7 +356,7 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
       .bind(rc.projectId, since).all<{ utm_json: string }>();
     const signups = (res.results || []).filter((c) => utmSource(c.utm_json) === ch.utm_source).length;
     return { rows: [
-      notRecorded('Visits', 'No page-visit store'),
+      notRecorded('Visits', 'No per-channel visit count'), // D6107: PostHog visits are venture-wide, on the Distribution card
       { a: 'Sign-ups', b: 'contacts from this channel, last 30 days', c: String(signups) },
       { a: 'Paying', b: 'customers from this channel this month', c: String(row?.customers ?? 0) },
     ] };
@@ -404,11 +415,13 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
 // ── Revenue and traction — id: the KPI key ──────────────────────────────────
 
 /** Worked out by the platform, never typed (decision 4). */
-const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway']);
+const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
 const DERIVED_REASON: Record<string, string> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export function kpiValueText(value: number | null, unit: string | null): string | null {
@@ -417,6 +430,7 @@ export function kpiValueText(value: number | null, unit: string | null): string 
   if (unit === 'usd_cents') return money(value);
   if (unit === 'pct') return `${Math.round(value * 100) / 100}%`;
   if (unit === 'months') return `${Math.round(value * 10) / 10} months`;
+  if (unit === 'multiple') return `${Math.round(value * 100) / 100}×`;
   return Number(value).toLocaleString('en-US');
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
@@ -462,6 +476,37 @@ async function kpiHistory(rc: RecordContext, row: KpiRow): Promise<Array<{ month
     .map(([month, v]) => ({ month, text: kpiValueText(v, unit) ?? '' }));
 }
 
+/** A typed KPI's own unit, for an entry when the KPI row reads Not recorded. */
+const ENTRY_UNIT: Record<string, string> = { mrr: 'usd', paying_accounts: 'count', churn: 'pct', net_burn: 'usd' };
+/** What a KPI's History lists entries of: a typed or custom KPI, unless Churn reads the ledger. */
+const listsEntries = (row: KpiRow) => (row.id in ENTRY_UNIT && !(row.id === 'churn' && row.unit === 'usd_cents')) || row.id.startsWith(CUSTOM_PREFIX);
+const HISTORY_ROWS = 24;
+
+/**
+ * D6101 (#6101): History as entries, newest first, for a KPI a person can type:
+ * each hand entry with its day and a Remove, and a connected source's last
+ * figure each month (it writes one a day). Null for a derived or PostHog KPI,
+ * which keeps its months.
+ */
+async function historyEntries(rc: RecordContext, row: KpiRow): Promise<Row[] | null> {
+  if (!listsEntries(row)) return null;
+  const unit = row.unit ?? ENTRY_UNIT[row.id] ?? (await customKpis(rc.env, rc.projectId)).find((k) => `${CUSTOM_PREFIX}${k.uid}` === row.id)?.unit ?? null;
+  const shown = unit === 'money' ? 'usd_cents' : unit;
+  const months = new Set<string>();
+  const rows: Row[] = [];
+  for (const e of await kpiEntries(rc.env, rc.projectId, row.id)) {
+    if (!e.manual) {
+      const month = `${e.source}:${e.day.slice(0, 7)}`;
+      if (months.has(month)) continue;
+      months.add(month);
+    }
+    rows.push({ a: e.day, b: kpiValueText(e.value, shown) ?? '', c: e.manual ? 'By hand' : e.source, tone: e.manual ? 'grey' : 'vio',
+      ...(e.manual ? { action: { key: 'remove-entry', body: { entry: e.entry } } } : {}) });
+    if (rows.length >= HISTORY_ROWS) break;
+  }
+  return rows;
+}
+
 const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, id) => {
   await ensureProjectMetricsSchema(rc.env);
   const row = (await kpiRows(rc.env, rc.projectId, Date.now())).find((r) => r.id === id);
@@ -483,6 +528,8 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
 }, [
   section('history', 'History', async (rc, _id, record) => {
     const { row } = loadedOf(record);
+    const entries = await historyEntries(rc, row);
+    if (entries) return { rows: entries, empty: 'Not recorded yet.' };
     const months = await kpiHistory(rc, row);
     return { rows: months.map((m) => ({ a: m.month, b: m.text })), empty: 'Not recorded yet.' };
   }),
@@ -529,6 +576,21 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
         await ensureProjectMetricsSchema(c.env);
         const out = await enterKpi(c.env, c.projectId, Number(c.user.id), { kpi: id, value: field(body, 'value'), as_of: field(body, 'as_of'), note: field(body, 'note') });
         await logGrowWrite(c.env, c.projectId, Number(c.user.id), { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entered', summary: `KPI entered for ${out.as_of}` });
+        return { ok: true, record: out };
+      }),
+    });
+  }
+  // D6101 (#6101): a hand entry's Remove, run from its History row (`row_only`: no header button).
+  if (listsEntries(row)) {
+    actions.push({
+      key: 'remove-entry', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+      confirm: { title: `Remove this ${row.kpi} entry?`, cta: 'Remove',
+        body: `For a figure typed with the wrong value: ${row.kpi} then reads the next latest value, here, on the Overview and in a report draft. A report already sent keeps its figures.` },
+      execute: (c, _id, body) => refusing(async () => {
+        await ensureProjectMetricsSchema(c.env);
+        const out = await removeKpiEntry(c.env, c.projectId, id, field(body, 'entry'));
+        await logGrowWrite(c.env, c.projectId, Number(c.user.id), { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entry_removed',
+          summary: `Hand entry removed: ${kpiValueText(out.value, ENTRY_UNIT[out.id] ?? row.unit) ?? out.value} for ${out.as_of}` });
         return { ok: true, record: out };
       }),
     });
@@ -839,7 +901,8 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
-  });
+  }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
+    (c) => removePartner(c.env, c.projectId, userOf(c), id)));
   return actions;
 }, async () => ({ types: opts(PARTNER_TYPES, LABEL), stages: opts(PARTNER_STAGES, LABEL), terms_kinds: opts(TERMS_KINDS, LABEL) }));
 
@@ -928,7 +991,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
-  }];
+  }, remove(`Remove ${m.name}?`, 'For a market added by mistake: it leaves the market list, its card and its counts, with its entry plan and localisation checks.',
+    (c) => removeMarket(c.env, c.projectId, userOf(c), id))];
 }, async (rc) => {
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
     geographies: await marketGeographies(rc) };
@@ -1034,7 +1098,8 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       if (remind !== undefined) b.remind_days = (Array.isArray(remind) ? remind : remind == null || remind === '' ? [] : [remind]).map(Number);
       return { ok: true, record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), b) };
     }),
-  });
+  }, remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
+    (c) => removeObligation(c.env, c.projectId, userOf(c), Number(id))));
   return actions;
 }, async () => ({
   kinds: opts(OBLIGATION_KINDS, LABEL),

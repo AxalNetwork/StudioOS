@@ -92,6 +92,12 @@ export { PhoneHeader, HeaderForWidth } from './phone/PhoneHeader';
 // The two ways a page says it does not know something. One pair, because
 // four copies had already drifted apart in their wording — see Honesty.jsx.
 export { Unrecorded, Unreadable } from './Honesty';
+// D5129 (#5129): the platform data states those two now alias — six value
+// states, three modifiers, Loading — and the mapping from the Worker's
+// OperationalRead. Board ST-13 of `design/incoming/Platform States Page.dc.html`.
+export {
+  DataState, StateChip, PartialBanner, ProvenanceLine, stateFromRead, staleAge, normalizeState, STATE_WORDS,
+} from './Honesty';
 // The same rule one layer down, for the cases that need a STRING rather than
 // an element — inside a `title=`, a template literal, an export column. They
 // had drifted the same way and further: `text` was declared 19 times in two
