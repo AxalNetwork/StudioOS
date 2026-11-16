@@ -279,7 +279,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                 {!phone ? <ExportMenu projectId={projectId} capabilities={plan.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
-              <PaidForBy link={base?.cap_table_link} latest={plan.ties?.cap_table} canWrite={!!plan.viewer?.can_write} onPick={() => setDialog('captable')} onRetry={read.reload} />
+              <PaidForBy link={base?.cap_table_link} latest={plan.ties?.cap_table} canWrite={!!planViewer(plan)?.can_write} onPick={() => setDialog('captable')} onRetry={read.reload} />
               <Tiles plan={plan} />
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
