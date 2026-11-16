@@ -10,9 +10,15 @@
  *   GET  /guides/:area/:guide/feedback   the caller's own answer, or null
  *   PUT  /guides/:area/:guide/feedback   { answer: 'yes'|'no', missing? }
  *
+ *   POST /search-misses                  { query } a search that found no
+ *                                        guide (D6861): once per member per
+ *                                        query per UTC day, at most 20 a day
+ *
  * And `adminHelpCenter`, mounted at /api/admin/help (`requireAdmin`):
  *   GET  /feedback                       yes/no counts per guide, and each
  *                                        "what was missing" with its date
+ *   GET  /search-misses?days=30          the searches that found nothing,
+ *                                        most searched first, at most 50
  *
  * THE ANCHOR. A guide is `<area>/<guide>`. The guides live in the frontend's
  * manifest, which the Worker does not have, so the Worker checks the anchor's
@@ -155,6 +161,63 @@ help.put('/guides/:area/:guide/feedback', async (c) => {
   }
 });
 
+// ── D6861 (#6861) — searches that found nothing ─────────────────────────────
+// Migration 202611161142_6861. The query is the only text kept, normalised,
+// with no member; one that looks like an email address or carries six or more
+// digits is withheld, never stored, so an account number typed into the box
+// does not reach the admin read.
+
+export const SEARCH_QUERY_MAX = 80;
+export const SEARCH_MISSES_PER_DAY = 20;
+export const SEARCH_MISS_KEEP_DAYS = 90;
+export const SEARCH_MISS_ROWS = 50;
+
+/** The stored form of a query, `{ withheld: true }`, or the refusal code. */
+export function searchMissQuery(raw: unknown): { query: string } | { withheld: true } | { code: 'invalid_query' | 'query_too_long' } {
+  if (typeof raw !== 'string') return { code: 'invalid_query' };
+  const query = raw.normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (query.length < 2) return { code: 'invalid_query' };
+  if (query.length > SEARCH_QUERY_MAX) return { code: 'query_too_long' };
+  if (/[^\s@]+@[^\s@]+/.test(query) || /\d{6,}/.test(query.replace(/[\s-]/g, ''))) return { withheld: true };
+  return { query };
+}
+
+help.post('/search-misses', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => null) as { query?: unknown } | null;
+  const q = searchMissQuery(body?.query);
+  if ('code' in q) {
+    return refuse(c, 400, q.code === 'query_too_long'
+      ? { code: 'query_too_long', message: `A search is at most ${SEARCH_QUERY_MAX} characters.` }
+      : { code: 'invalid_query', message: '`query` is the text searched, at least 2 characters.' });
+  }
+  if ('withheld' in q) return c.json({ recorded: false, withheld: true });
+  const now = new Date();
+  const today = utcDay(now);
+  try {
+    // Drop old marks and old days, mark this query for this member today
+    // unless the member is at the day's cap, and count it only when the mark
+    // is new (`changes()` reads the INSERT OR IGNORE).
+    const out = await c.env.DB.batch([
+      c.env.DB.prepare(`DELETE FROM help_search_miss_marks WHERE day < ?`).bind(utcDay(now, -1)),
+      c.env.DB.prepare(`DELETE FROM help_search_misses WHERE day < ?`).bind(utcDay(now, -(SEARCH_MISS_KEEP_DAYS - 1))),
+      c.env.DB.prepare(
+        `INSERT OR IGNORE INTO help_search_miss_marks (user_id, query, day)
+         SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM help_search_miss_marks WHERE user_id = ? AND day = ?) < ?`,
+      ).bind(user.id, q.query, today, user.id, today, SEARCH_MISSES_PER_DAY),
+      c.env.DB.prepare(
+        `INSERT INTO help_search_misses (query, day, searches)
+         SELECT ?, ?, 1 WHERE changes() = 1
+         ON CONFLICT (query, day) DO UPDATE SET searches = searches + 1`,
+      ).bind(q.query, today),
+    ]);
+    const recorded = Number((out[3] as { meta?: { changes?: number } })?.meta?.changes ?? 0) > 0;
+    return c.json({ recorded });
+  } catch (e) {
+    return refuse(c, 503, { code: 'search_miss_not_recorded', message: 'This search could not be recorded. Nothing else is affected.', raw: e });
+  }
+});
+
 export default help;
 
 /** Mounted at /api/admin/help. Counts and texts only: no member identity. */
@@ -181,5 +244,25 @@ adminHelpCenter.get('/feedback', async (c) => {
     });
   } catch (e) {
     return refuse(c, 503, { code: 'guide_feedback_unreadable', message: 'The guide answers could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+/** D6861: the searches that found nothing over the last N days (1–90), most searched first. No member. */
+adminHelpCenter.get('/search-misses', async (c) => {
+  await requireAdmin(c);
+  const days = int(c.req.query('days'), 30, 1, SEARCH_MISS_KEEP_DAYS);
+  if (days == null) return refuse(c, 400, { code: 'invalid_days', message: `days is a whole number from 1 to ${SEARCH_MISS_KEEP_DAYS}.` });
+  try {
+    const r = await c.env.DB.prepare(
+      `SELECT query, SUM(searches) AS searches FROM help_search_misses
+        WHERE day >= ? GROUP BY query HAVING SUM(searches) > 0
+        ORDER BY searches DESC, query ASC LIMIT ?`,
+    ).bind(utcDay(new Date(), -(days - 1)), SEARCH_MISS_ROWS).all<{ query: string; searches: number }>();
+    return c.json({
+      window_days: days,
+      searches: (r.results || []).map((m) => ({ query: m.query, searches: Number(m.searches) })),
+    });
+  } catch (e) {
+    return refuse(c, 503, { code: 'search_misses_unreadable', message: 'The searches that found nothing could not be read. This is not a sign every search found a guide.', raw: e });
   }
 });
