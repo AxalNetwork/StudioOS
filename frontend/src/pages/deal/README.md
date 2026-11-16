@@ -71,5 +71,6 @@ its reason, a read that failed is "Unreadable" with Try again and leaves the
 rest of the page standing, every change opens an in-page dialog, and colours
 come from the axal tokens with a `dark:` counterpart — never a hex value.
 
+D6177 (#6177): Traction retains its route/export, draws DL18b for a successful unreported history, names Last shared and each chart’s source as-of, and exports the already-read monthly rows to CSV. Gaps stay Not reported and recorded zeroes stay 0. Scorecard/Evidence replacement and the eight-tab frame remain with their own tasks; no source-update URL is guessed.
 - `roomFilesQuery.js` — D6185: sort, filter and page only admitted files using raw metadata for ordering; zero and unknown stay distinct.
 - `SharedRoomFiles.jsx` — D6185: shared content search whitelisted to the listing, name filter, stable sort/pages and phone file rows; mounted in Documents after the owner-authorized listing handoff.

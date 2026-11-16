@@ -18,6 +18,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
@@ -351,7 +352,7 @@ test('only a Super Admin reaches the editor: the route sits behind hqOnly, and H
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/admin\/security\/trust-center" element=\{guard\(\['admin'\], hqOnly\(<TrustContentPage \/>\)\)\} \/>/);
   assert.match(app, /const hqOnly = \(component\) => \(\s*isSuperAdminUser\(user\) \? component : <SuperAdminOnlyNotice \/>/);
-  assert.match(read('frontend/src/pages/hq/SecurityPage.jsx'), /to="\/admin\/security\/trust-center"/);
+  assert.match(securityRaw(), /to="\/admin\/security\/trust-center"/);
   assert.doesNotMatch(read('frontend/src/pages/hq/TrustContentPage.jsx'), /window\.(confirm|prompt|alert)\(/);
 });
 
