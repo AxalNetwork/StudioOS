@@ -746,7 +746,7 @@ export type SegmentSummary = {
  * payment to a segment yet. Saying Measured from interview counts alone would
  * be the overclaim the canvas's own legend exists to prevent.
  */
-export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): { segments: SegmentSummary[]; unassigned: number } {
+export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]) {
   const held = interviews.filter(isHeld);
   const summary = (id: number | null, name: string, source: string | null, updated: string | null): SegmentSummary => {
     const ivs = held.filter((i) => (i.segment_id ?? null) === id);
@@ -762,9 +762,11 @@ export function segmentsOf(segments: SegmentRow[], interviews: InterviewRow[]): 
     };
   };
   const known = new Set(segments.map((s) => Number(s.id)));
+  const unassignedInterviews = held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id)));
   return {
     segments: segments.map((s) => summary(Number(s.id), s.name, s.source, s.updated_at)),
-    unassigned: held.filter((i) => i.segment_id == null || !known.has(Number(i.segment_id))).length,
+    unassigned: unassignedInterviews.length,
+    unassignedInterviews,
   };
 }
 
@@ -1485,7 +1487,8 @@ const EVIDENCE_RANK: Record<string, number> = { measured: 3, pattern: 2, anecdot
 
 async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const [segments, interviews] = await Promise.all([loadSegments(ctx), loadInterviews(ctx)]);
-  let rows = segmentsOf(segments, interviews).segments.filter((s) => has(rq.q, s.name));
+  const summary = segmentsOf(segments, interviews);
+  let rows = summary.segments.filter((s) => has(rq.q, s.name));
   if (rq.filter.evidence) rows = rows.filter((s) => (rq.filter.evidence === 'not_recorded' ? s.evidence == null : s.evidence === rq.filter.evidence));
   if (rq.filter.fit === 'strong') rows = rows.filter((s) => s.strong > 0);
   if (rq.filter.fit === 'none') rows = rows.filter((s) => s.strong === 0);
@@ -1496,7 +1499,16 @@ async function icpRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   else rows.sort((a, b) => (EVIDENCE_RANK[b.evidence ?? ''] ?? 0) - (EVIDENCE_RANK[a.evidence ?? ''] ?? 0) || b.interviews - a.interviews);
   return paged(LISTS['ideal-customer-profile'].cols, rows.map((s) => ({
     id: s.id, segment: s.name, interviews: s.interviews, strong_fit: s.strong, evidence: s.evidence, updated: s.updated_at,
-  })), rq.page, listOf('ideal-customer-profile'));
+  })), rq.page, {
+    ...listOf('ideal-customer-profile'),
+    ...(ctx.canWrite === true ? { parts: {
+      segments: segments.map(({ id, name }) => ({ id, name })),
+      unassigned_total: summary.unassigned,
+      unassigned: summary.unassignedInterviews.slice().sort((a, b) =>
+        (heldDate(b) ?? '').localeCompare(heldDate(a) ?? '') || b.id - a.id,
+      ).slice(0, PAGE_SIZE).map((i) => ({ id: i.id, interviewee: i.interviewee_name, date: heldDate(i), fit: i.icp_fit })),
+    } } : {}),
+  });
 }
 
 async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
