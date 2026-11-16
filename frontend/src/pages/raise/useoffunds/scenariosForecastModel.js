@@ -12,7 +12,7 @@
  * forecast shows is Modelled, and the forecast is never runway today
  * (#2455 owner question 1). No Capital score is drawn (owner question 2).
  */
-import { HOME_PATH, NOT_RECORDED, SECTIONS, afterRaiseView, dayText, money, monthsText, runwayTodayView, tabSearch } from './useOfFundsModel';
+import { HOME_PATH, NOT_RECORDED, SECTIONS, afterRaiseView, committedView, dayText, money, monthsText, runwayTodayView, tabSearch } from './useOfFundsModel';
 import { majorToMinor, parseMinor } from '../../../lib/money.js';
 import { capTableLine, foundersCell } from './capTableLinkModel';
 
@@ -289,6 +289,9 @@ export function compareTable(read, viewer = {}) {
   const scenarios = Array.isArray(read?.scenarios) ? read.scenarios : [];
   const cols = scenarios.map((s) => ({ id: s.id, name: `${s.name || 'Unnamed scenario'}${s.is_base ? ' · base' : ''}` }));
   const cell = (text, reason = null) => ({ text: text ?? NOT_RECORDED, missing: text == null, reason: text == null ? reason : null });
+  const committed = committedView(read?.committed);
+  const committedCell = committed.state === 'ok' ? { text: committed.value, missing: false, reason: null }
+    : { text: committed.value ?? NOT_RECORDED, missing: true, reason: committed.sub };
   const rows = [
     { key: 'raise', label: 'Raise', today: { text: 'No raise' }, cells: scenarios.map((s) => cell(money(s.amount_to_raise_cents, s.currency ?? null), 'No raise is recorded')) },
     ...SECTIONS.map((sec) => ({
@@ -305,9 +308,9 @@ export function compareTable(read, viewer = {}) {
     { key: 'cashout', label: 'Cash out', today: { text: '—' }, cells: scenarios.map((s) => cell(cashOutMonth(s), s?.model?.cashOut?.reason)) },
     { key: 'milestones', label: 'Milestones funded', today: { text: '—' }, cells: scenarios.map((s) => cell(fundedLine(s))) },
     // D6085: founders together after the round, Modelled from each scenario's linked cap-table scenario.
-    // No read carries a round's commitments yet (D1177 §9).
     { key: 'founders', label: 'Founders after the round', today: { text: NOT_RECORDED, missing: true }, cells: scenarios.map((s) => foundersCell(s?.cap_table_link)) },
-    { key: 'committed', label: 'Committed so far', today: { text: NOT_RECORDED, missing: true }, cells: scenarios.map(() => cell(null, 'Commitments are not read here yet')) },
+    // D6081: Committed so far comes from the round and is the same in every column (UF10).
+    { key: 'committed', label: 'Committed so far', today: committedCell, cells: scenarios.map(() => committedCell) },
   ];
   return { cols, rows, today };
 }

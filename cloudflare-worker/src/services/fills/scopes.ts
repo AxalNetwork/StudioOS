@@ -203,6 +203,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     parent: { kind: 'project', column: 'project_id' },
     concealed: true,
     async access(env, user, row, parentId, ctx) {
+      if (row?.ask_uid && Number(row.recorded_by) !== Number(user.id)) return NONE;
       if (isAdminUser(user)) return READ_ONLY;
       if (!holdsLicence(user, 'investor') || !ctx) return NONE;
       const projectId = Number(row ? row.project_id : parentId);

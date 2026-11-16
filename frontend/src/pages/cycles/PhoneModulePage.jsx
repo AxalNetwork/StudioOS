@@ -1,6 +1,6 @@
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
+import { EadwynButton, PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, optionLabel, recordsCount, safeHref } from './cycleModel';
@@ -37,10 +37,11 @@ export const PHONE_GUTTER = 'px-[22px] pt-[14px] pb-[18px]';
  * #1661's `PhoneBar`, lifted out of the body's gutter and kept at the top of
  * the scroll area (CO:24-25), with the body's 14px under it.
  */
-export function CycleBar({ back, title, sub, eadwynLabel }) {
+export function CycleBar({ back, title, sub, eadwynLabel, more }) {
   return (
     <div className="sticky top-0 z-10 -mx-[22px] -mt-[14px] mb-[14px]" data-testid="cycle-bar">
-      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel} />
+      <PhoneBar back={back} title={title} sub={sub} eadwynLabel={eadwynLabel}
+        action={more ? <div className="flex shrink-0 items-center gap-2">{more}{eadwynLabel && <EadwynButton label={eadwynLabel} />}</div> : undefined} />
     </div>
   );
 }
@@ -110,6 +111,8 @@ export default function PhoneModulePage({
   phoneRow: rowOf = phoneRow,
   // D5077 (#5077): the Sources region's parts and its action, and the module's Eadwyn asks (BD24 A).
   sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a tool that owns its page; its `subnav` is the page, as on the desktop (`CycleModulePage`).
+  owned = null,
   // D6049 (#6049, RA-16): a module that owns its page (Fundraising readiness) draws `home(...)` in place of
   // One next thing, the chart and the rows, with the bar's line (`sub`) its own; the same props as the desktop page.
   home = null, sub = undefined,
@@ -141,6 +144,12 @@ export default function PhoneModulePage({
     // #1704: the Worker's own sentence (Verdict for a partner), with no chart, no rows and no CTA.
     return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}
       <p role="status" className="m-0 rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300" data-testid="phone-module-refused">{message}</p>
+    </div>;
+  }
+
+  if (owned) {
+    return <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-owned="true">{bar}{tabs}
+      {Children.toArray(children).length > 0 && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
     </div>;
   }
 

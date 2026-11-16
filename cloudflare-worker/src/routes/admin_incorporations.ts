@@ -8,7 +8,9 @@
  *   POST /:id/filed           → { filed_on: 'YYYY-MM-DD' } — the date it was filed with the state
  *
  * Nothing here assembles a packet or files with a state; it records what an
- * admin did (services/incorporationFiling.ts).
+ * admin did (services/incorporationFiling.ts). D6686: each step is a
+ * transition of the order's formation case, and a v2 case answers 409
+ * `case_not_legacy`; URL, body and response are unchanged.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -29,7 +31,7 @@ r.post('/:id/packet-ready', async (c) => {
   const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { document_id?: unknown };
-  const out = await markPacketReady(c.env, id, body.document_id, admin.id);
+  const out = await markPacketReady(c.env, id, body.document_id, admin.id, admin.email);
   if (!out.ok) return c.json({ error: out.error }, out.status);
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_packet_ready', {
     incorporation_id: id, document_id: Number(body.document_id),
@@ -41,7 +43,7 @@ r.post('/:id/filed', async (c) => {
   const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { filed_on?: unknown };
-  const out = await markFiled(c.env, id, body.filed_on, admin.id);
+  const out = await markFiled(c.env, id, body.filed_on, admin.id, undefined, admin.email);
   if (!out.ok) return c.json({ error: out.error }, out.status);
   // D1415 Part 3: the company's uid only; no name and no address in the log.
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_filed', {

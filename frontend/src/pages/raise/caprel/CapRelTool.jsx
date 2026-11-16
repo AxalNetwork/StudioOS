@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
-import { Unreadable } from '../../../ui';
+import { Unreadable, usePhoneWidth } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import CallsTab from '../calls/CallsTab';
@@ -17,6 +17,8 @@ import CapRelSupport from './CapRelSupport';
 import SupportReadsCard from '../SupportReadsCard';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+
+const PHONE_ACTION = 'flex min-h-11 w-full items-center justify-center rounded-lg bg-axal-violet px-4 text-[14px] font-bold text-white no-underline hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 dark:bg-violet-600 dark:hover:bg-violet-500';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
@@ -50,13 +52,20 @@ export function CapRelTabBar({ active, search = '' }) {
   );
 }
 
-/** Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1) above the module page's own. */
-export function CapRelHomeNav({ search = '', projectId = null, onRefused = null }) {
+/**
+ * Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1). D5081 part 2 (#5081, RA-22):
+ * they are the page (CycleRoute passes `owned`), drawn from CycleRoute's reads (`home`); `works` is whether
+ * the viewer may work the tool, for first use's set-up actions; `action` is the header's primary, which a
+ * phone's bar does not carry, so it is drawn here full width.
+ */
+export function CapRelHomeNav({ search = '', projectId = null, onRefused = null, home = null, works = false, action = null }) {
+  const phone = usePhoneWidth();
   return (
     <div className="flex flex-col gap-4">
       <MovedNotice />
+      {phone && action?.href ? <Link to={action.href} className={PHONE_ACTION} data-testid="caprel-home-action">{action.label}</Link> : null}
       <CapRelTabBar active="overview" search={search} />
-      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} onRefused={onRefused} /> : null}
+      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} onRefused={onRefused} home={home} works={works} /> : null}
     </div>
   );
 }
@@ -143,7 +152,7 @@ export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetry
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
-        : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
+        : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={standing.works ? action : null} title={TITLE} sub={LINE} search={tabSearch(search)} />}
       <MovedNotice />
       <CapRelTabBar active={tab === CLOSING.id ? 'commitments' : tab} search={search} />
       {body}
