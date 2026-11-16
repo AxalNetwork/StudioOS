@@ -28,6 +28,7 @@ import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
 import { founderHasMercury } from './mercury/growPresence';
+import { ownerShown } from './obligationOwner';
 import { visitStage } from './posthog/visits';
 import { billingPeriods, byMonth, cohortRetention, computeMovements, movementGap, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
@@ -475,18 +476,20 @@ export async function checklist(env: Env, projectId: number) {
 export async function durableCard(x: Ctx): Promise<CardBody> {
   const until = iso(x.now + 90 * DAY);
   const ev = await x.env.DB.prepare(
-    `SELECT id, title, due_date, completion_status, owner_name FROM compliance_events
-      WHERE project_id = ? AND due_date IS NOT NULL AND substr(due_date, 1, 10) BETWEEN ? AND ? ORDER BY due_date`,
-  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null }>();
+    // D6790: the owner is the picked team member, else the name typed before #6790.
+    `SELECT e.id, e.title, e.due_date, e.completion_status, e.owner_name, o.name AS owner_user_name FROM compliance_events e
+      LEFT JOIN users o ON o.id = e.owner_user_id
+      WHERE e.project_id = ? AND e.due_date IS NOT NULL AND substr(e.due_date, 1, 10) BETWEEN ? AND ? ORDER BY e.due_date`,
+  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null; owner_user_name: string | null }>();
   const list = await checklist(x.env, x.projectId);
   const done = list.filter((i) => i.done).length;
-  const events = (ev.results || []).map(({ due_date, ...event }) => ({ ...event, due_at: due_date }));
+  const events = (ev.results || []).map(({ due_date, owner_name, owner_user_name, ...event }) => ({ ...event, owner: ownerShown(owner_user_name, owner_name), due_at: due_date }));
   const anyEvent = await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
   const firstOpen = list.find((i) => !i.done);
-  const ownerless = events.find((e) => !e.owner_name);
+  const ownerless = events.find((e) => !e.owner);
   return {
     state: events.length || done ? 'ok' : 'empty', range: 'Next 90 days',
-    series: { calendar: events.map((e) => ({ title: e.title, due: e.due_at.slice(0, 10), owner: e.owner_name })),
+    series: { calendar: events.map((e) => ({ title: e.title, due: e.due_at.slice(0, 10), owner: e.owner })),
       checklist: { done, total: list.length, pct: Math.round((done / list.length) * 100) } },
     next: !anyEvent && !done ? { text: 'Add obligation', href: `${x.href('durable-company-building')}&add=1` }
       : ownerless ? { text: `Give ${ownerless.title} an owner.`, href: x.href('durable-company-building') }

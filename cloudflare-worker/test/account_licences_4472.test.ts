@@ -557,6 +557,8 @@ test('cohort assignment and its picker hydrate the target’s additional Advisor
 test('Compliance reader/writer privileges follow held Partner and keep Admin privileges after an Investor addition', async () => {
   const f=fixture(); try {
     f.db.exec(readFileSync(new URL('../sql/migrations/467_founder_profile_pages.sql',import.meta.url),'utf8'));
+    // Migration 443's owner columns, which D6790's compliance read joins.
+    f.db.exec('ALTER TABLE compliance_events ADD COLUMN owner_user_id INTEGER REFERENCES users(id); ALTER TABLE compliance_events ADD COLUMN owner_name TEXT;');
     f.db.exec("INSERT INTO projects(id,name,founder_id,investor_findable) VALUES (447402,'Synthetic compliance venture',447402,0)");
     assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,403);
     await grantLicence(f.DB,change('partner',9002));
