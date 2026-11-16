@@ -686,7 +686,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   tiktok: { category: 'Social', verified: false, pulls: TIKTOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
   x: { category: 'Social', verified: false, pulls: X_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...X_FEEDS],
-    permissions: ['Read your X profile and follower count.', 'Read your own posts and their figures.', 'Keep the connection when you are away, so a sync works without signing in again.', 'Only if you turn on publishing: post, thread and delete your posts, and upload an image for a post.'] },
+    permissions: ['Read your own posts and their figures.', 'Read your X profile and follower count.', 'Keep the connection when you are away, so a sync works without signing in again.', 'Only if you turn on publishing: post, thread and delete your posts.', 'Only if you turn on publishing: upload an image for a post.'] },
   google_search_console: { category: 'Analytics', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['Read your Search Console properties, your permission level on each, and the data of the property you choose. Axal VC never changes a property, its users or its settings.'] },
   typeform: { category: 'Data', verified: false, pulls: [], sends: [], feeds: [],

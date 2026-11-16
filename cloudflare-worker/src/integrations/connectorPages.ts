@@ -1067,7 +1067,7 @@ export function trustFor(key: string, variant?: string): Trust | null {
 }
 
 /** The same pattern as `CONNECTOR_KEY_RE` (`services/eadwynConnectors.ts`); the test holds them equal. */
-const PAGE_KEY_RE = /^[a-z][a-z0-9_]{1,39}$/;
+const PAGE_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const HUB = '/account/connectors';
 
 /** A connector's page path, from a registry key or a page key; the hub for anything unknown. */

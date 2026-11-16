@@ -521,6 +521,7 @@ test('13. connectorPagePath', () => {
   assert.equal(connectorPagePath('linkedin'), '/account/connectors/linkedin');
   assert.equal(connectorPagePath('whatsapp'), '/account/connectors/whatsapp');
   assert.equal(connectorPagePath('telegram'), '/account/connectors/telegram');
+  assert.equal(connectorPagePath('x'), '/account/connectors/x', 'D2403: a one-letter key is a page');
   for (const bad of ['', '../x', 'Github', 'a/b', 'no_such_connector']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
   const re = /const PAGE_KEY_RE = \/(.+)\/;/.exec(SRC('integrations/connectorPages.ts'))![1];
   assert.equal(re, CONNECTOR_KEY_RE.source);
