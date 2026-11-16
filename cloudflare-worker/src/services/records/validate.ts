@@ -31,7 +31,7 @@ import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
-  addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
+  addCompetitorSignal, addEvidence, addExperiment, assignInterviewSegment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
   INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme, updateThemeStatement,
@@ -755,6 +755,7 @@ const customerResearch: ModuleSpec = {
     if (!isWriter(ctx)) return [];
     const d = await loadInterview(ctx, id);
     const interviewId = Number(d.iv.id);
+    const segments = await loadSegments(vctx(ctx));
     const actions: RecordAction[] = [
       {
         key: 'edit-details', label: 'Edit details', kind: 'form',
@@ -779,6 +780,22 @@ const customerResearch: ModuleSpec = {
         ] },
         execute: (c, _id, body) => refusing(async () => {
           await setInterviewStage(c.env, { projectId: c.projectId, userId: userId(c), interviewId, stage: field(body, 'stage'), at: field(body, 'at') || undefined });
+          return { ok: true };
+        }),
+      },
+      {
+        key: 'set-segment', label: 'Set segment', kind: 'form',
+        form: { title: 'Set interview segment', cta: 'Save', fields: [
+          { key: 'segment_id', label: 'Segment', kind: 'CH',
+            value: segments.some((segment) => segment.id === d.iv.segment_id) ? String(d.iv.segment_id) : '',
+            options: [{ value: '', label: 'No segment' }, ...segments.map(({ id, name }) => ({ value: String(id), label: name }))] },
+        ] },
+        execute: (c, _id, body) => refusing(async () => {
+          const raw = field(body, 'segment_id');
+          if (raw !== '' && ((typeof raw !== 'string' && typeof raw !== 'number') || !/^[1-9][0-9]{0,9}$/.test(String(raw)))) {
+            throw new WriterError(400, 'Invalid segment id');
+          }
+          await assignInterviewSegment(c.env, { projectId: c.projectId, userId: userId(c), interviewId, segmentId: raw === '' ? null : Number(raw) });
           return { ok: true };
         }),
       },
