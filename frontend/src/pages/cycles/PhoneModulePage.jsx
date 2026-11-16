@@ -60,7 +60,8 @@ export function phoneRow(cols, row) {
   const targetLine = target?.separateLink === true ? `Target: ${cellView(target).text}${typeof comparison === 'string' ? ` · ${comparison}` : ''}` : null;
   return {
     title,
-    description: [second?.text, targetLine].filter(Boolean).join(' · ') || undefined,
+    // #6006: the title cell's first note (a theme's rank reason) follows the second cell on a phone.
+    description: [second?.text, cells[0]?.note?.[0], targetLine].filter(Boolean).join(' · ') || undefined,
     pill: toned ? { label: toned.text, tone: PILL_TONE[toned.tone] || 'neutral' } : undefined,
   };
 }

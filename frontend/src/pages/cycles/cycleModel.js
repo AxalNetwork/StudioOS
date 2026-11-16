@@ -259,7 +259,9 @@ export function cellView(cell) {
   const links = Array.isArray(cell.links)
     ? cell.links.filter((l) => l && l.text != null && l.text !== '').map((l) => ({ text: String(l.text), href: safeHref(l.href) }))
     : [];
-  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href), ...(links.length ? { links } : {}) };
+  // #6006: `note`, one line or several, is drawn small under the value (a theme's sources and why it ranks there).
+  const note = (Array.isArray(cell.note) ? cell.note : [cell.note]).filter((n) => typeof n === 'string' && n !== '');
+  return { text: String(cell.text), tone: TONES.includes(cell.tone) ? cell.tone : null, href: safeHref(cell.href), ...(links.length ? { links } : {}), ...(note.length ? { note } : {}) };
 }
 
 /** #6030: a filter option with its count when the read sends one ("Pain linked · 4"). */
