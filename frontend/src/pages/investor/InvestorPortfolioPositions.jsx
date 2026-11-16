@@ -141,7 +141,7 @@ function FmvCell({ r }) {
 function MarkDateCell({ r, onOpen, requests }) {
   const label = r.mark.kind === 'marked' ? (r.markDate || NOT_RECORDED) : NOT_RECORDED;
   const body = r.uid ? (
-    <button type="button" className="pf-link-button pf-mark-open" onClick={() => onOpen(r)} aria-label={`Mark history for ${r.name}`} data-testid={`button-mark-history-${r.key}`}>{label}</button>
+    <button type="button" className="pf-link-button pf-mark-open" onClick={() => onOpen(r)} aria-label={`${label}, mark history for ${r.name}`} data-testid={`button-mark-history-${r.key}`}>{label}</button>
   ) : <span className={r.mark.kind === 'marked' && r.markDate ? 'pf-mono' : 'pf-not-recorded'}>{label}</span>;
   return (
     <>
