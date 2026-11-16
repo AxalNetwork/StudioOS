@@ -898,6 +898,43 @@ export async function updateTheme(
   return { id: input.themeId };
 }
 
+/** D6006: the longest a problem statement field may be. */
+export const MAX_STATEMENT_FIELD = 1000;
+
+/**
+ * D6006 (V19): write a theme's problem statement, the three fields together. A field sent empty clears it
+ * (NULL, Not recorded); a field left out keeps what it holds. One batch with its activity row.
+ */
+export async function updateThemeStatement(
+  env: Env,
+  input: { projectId: number; userId: number | null; themeId: number; who?: unknown; cope?: unknown; cost?: unknown },
+): Promise<{ id: number }> {
+  const g = await themeRow(env, input.projectId, input.themeId);
+  const current = await env.DB.prepare('SELECT statement_who, statement_cope, statement_cost FROM pain_groups WHERE id = ? AND project_id = ?')
+    .bind(input.themeId, input.projectId).first<{ statement_who: string | null; statement_cope: string | null; statement_cost: string | null }>();
+  const next = (raw: unknown, was: string | null) => {
+    if (raw === undefined || raw === null) return raw === null ? null : was;
+    if (typeof raw !== 'string') throw new WriterError(400, 'A problem statement field is text');
+    if (raw.trim().length > MAX_STATEMENT_FIELD) throw new WriterError(400, `A problem statement field holds at most ${MAX_STATEMENT_FIELD} characters`);
+    return raw.trim() || null;
+  };
+  const who = next(input.who, current?.statement_who ?? null);
+  const cope = next(input.cope, current?.statement_cope ?? null);
+  const cost = next(input.cost, current?.statement_cost ?? null);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE pain_groups SET statement_who = ?, statement_cope = ?, statement_cost = ?,
+              statement_updated_at = datetime('now'), statement_updated_by = ?, updated_at = datetime('now')
+        WHERE id = ? AND project_id = ?`,
+    ).bind(who, cope, cost, input.userId, input.themeId, input.projectId),
+    logCycleWriteStatement(env, {
+      projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'problem-discovery',
+      entityId: input.themeId, action: 'theme_statement_edited', summary: `Problem statement for ${g.title} edited`,
+    }),
+  ]);
+  return { id: input.themeId };
+}
+
 /**
  * Delete a theme: the group, its aliases and its links in one batch, and the
  * features that named it cleared, since D1 may run with foreign keys off.
