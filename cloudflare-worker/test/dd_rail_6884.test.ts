@@ -331,3 +331,13 @@ test('short overlapping identity aliases do not reprocess the replacement marker
   assert.equal(identityScrubber(['i','identity','i'])('iii'), '[identity withheld][identity withheld][identity withheld]');
   assert.throws(() => ddInput({ page: DD_PAGE, option: 'dd:summary', case_uid: 123 }));
 });
+
+test('summary blocking facts reuse the existing Proceed gate rather than a model inference', async t => {
+  const w = await world(); t.after(w.close);
+  await w.call(2);
+  const flag = () => JSON.parse(JSON.parse(w.seen.at(-1).messages[1].content.split('\n')[1]).sources.find((s: any) => s.id === 'flag:1').text);
+  assert.equal(flag().blocks_proceed, true);
+  w.db.exec("UPDATE dd_findings SET resolved_at='2026-11-16 11:00:00' WHERE id=1");
+  await w.call(2);
+  assert.equal(flag().blocks_proceed, false);
+});

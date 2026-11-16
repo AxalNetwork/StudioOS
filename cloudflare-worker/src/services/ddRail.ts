@@ -1,7 +1,7 @@
 /** D6884 — scoped, cited diligence drafts. No case mutation and no model-selected action. */
 import type { Env, User } from '../types';
 import { caseAllowed, MEMO_MAX, resolveSubjectUserId } from '../routes/dd';
-import { decField } from './dueDiligence';
+import { decField, blockingSectionsWithOpenSevereFlags } from './dueDiligence';
 import { UNTRUSTED_RULE, untrustedBlock, withoutUnrecordedLinks } from './ai/untrusted';
 import type { Hit } from './dataRoomSearch';
 
@@ -124,6 +124,7 @@ export async function ddContext(env: Env, scope: DdScope, input: DdInput, hits?:
     const items = (await env.DB.prepare('SELECT id, section_id, title, status, severity, note_enc FROM dd_checklist_items WHERE case_id = ? AND (? IS NULL OR section_id = ?) ORDER BY id LIMIT 1001').bind(cs.id, scope.sectionId, scope.sectionId).all<Row>()).results;
     const flags = (await env.DB.prepare('SELECT id, section_id, title, severity, state, resolved_at, detail_enc, subject_name_enc, evidence_excerpt_enc FROM dd_findings WHERE case_id = ? AND (? IS NULL OR section_id = ?) ORDER BY id LIMIT 1001').bind(cs.id, scope.sectionId, scope.sectionId).all<Row>()).results;
     if (items.length > 1000 || flags.length > 1000) throw new DdRunRefusal(409, 'dd_context_large', 'Choose a smaller section before running Eadwyn.');
+    const blockingSections = scope.sections.map(s => ({ id: Number(s.id), blocking: Number(s.blocking) }));
     for (const flag of flags) identities.push(await plaintext(env, 'dd_findings', 'subject_name', flag, 'subject_name_enc'));
     for (const s of scope.sections) {
       const notes = await plaintext(env, 'dd_sections', 'reviewer_notes', s, 'reviewer_notes_enc');
@@ -133,13 +134,15 @@ export async function ddContext(env: Env, scope: DdScope, input: DdInput, hits?:
     for (const item of items) {
       const note = await plaintext(env, 'dd_checklist_items', 'note', item, 'note_enc');
       worked ||= Boolean(note || item.status !== 'pending');
-      raw.push({ id: `item:${item.id}`, kind: 'item', text: JSON.stringify(input.option === 'dd:request_drafts' ? { title: item.title } : { title: item.title, status: item.status, severity: item.severity, note }) });
+      const blocksProceed = blockingSectionsWithOpenSevereFlags(blockingSections, [], [{ section_id: Number(item.section_id), status: String(item.status), severity: item.severity ?? null }]).length > 0;
+      raw.push({ id: `item:${item.id}`, kind: 'item', text: JSON.stringify(input.option === 'dd:request_drafts' ? { title: item.title } : { title: item.title, status: item.status, severity: item.severity, note, blocks_proceed: blocksProceed }) });
       if (['pending', 'flag', 'fail'].includes(item.status)) targets.push(`item:${item.id}`);
     }
     for (const flag of flags) {
       worked = true;
+      const blocksProceed = blockingSectionsWithOpenSevereFlags(blockingSections, [{ section_id: flag.section_id === null ? null : Number(flag.section_id), severity: String(flag.severity), resolved_at: flag.resolved_at ?? null }], []).length > 0;
       raw.push({ id: `flag:${flag.id}`, kind: 'flag', text: JSON.stringify({ title: flag.title, severity: flag.severity, state: flag.state, resolved_at: flag.resolved_at,
-        detail: await plaintext(env, 'dd_findings', 'detail', flag, 'detail_enc'), excerpt: await plaintext(env, 'dd_findings', 'evidence_excerpt', flag, 'evidence_excerpt_enc') }) });
+        detail: await plaintext(env, 'dd_findings', 'detail', flag, 'detail_enc'), excerpt: await plaintext(env, 'dd_findings', 'evidence_excerpt', flag, 'evidence_excerpt_enc'), blocks_proceed: blocksProceed }) });
     }
     if (input.option !== 'dd:request_drafts') {
       const requests = (await env.DB.prepare('SELECT id, title, state, response_note FROM dd_requests WHERE case_id = ? AND withdrawn_at IS NULL AND (? IS NULL OR section_id = ?) ORDER BY id LIMIT 1001').bind(cs.id, scope.sectionId, scope.sectionId).all<Row>()).results;
@@ -168,7 +171,7 @@ export async function ddContext(env: Env, scope: DdScope, input: DdInput, hits?:
 export const MEMO_PARTS = ['summary', 'verified', 'on_trust', 'conditions'] as const;
 export function ddMessages(ctx: DdContext, input: DdInput) {
   const rules: Record<DdOption, string> = {
-    'dd:summary': 'Summarise worked and open items and flags that block Proceed; every line is a separate draft with its source IDs. Never decide or infer Green from missing data.',
+    'dd:summary': 'Summarise worked and open items; only a source with blocks_proceed=true blocks Proceed under the existing case gate. Every line is a separate draft with its source IDs. Never decide or infer Green from missing data.',
     'dd:request_drafts': 'Draft one founder-safe request for each target item. Cite that item alone. Do not disclose internal flags, severity, reviewers, verdicts, risk or case notes.',
     'dd:memo_draft': `Draft exactly the four memo parts summary, verified, on_trust, conditions from recorded evidence. Each text has at most ${MEMO_MAX} characters. Do not choose a decision.`,
     'dd:section_summary': input.mode === 'verdict_note' ? 'Draft a neutral evidence note for this section. Suggest no verdict, decision or course of action.' : 'Summarise only this section, with a source citation for each line; suggest no verdict.',
