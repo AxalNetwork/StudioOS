@@ -55,7 +55,20 @@ export function previewBoardOf(pathname) {
  * two that disagree about writes. `selectedKey` is the switcher's selection.
  */
 export function pageOwnsPreviewBanner(pathname, selectedKey) {
-  return selectedKey === 'investor' && previewBoardOf(pathname) !== null;
+  return selectedKey === 'investor' && (previewBoardOf(pathname) !== null || previewCompanyTabOf(pathname) !== null);
+}
+
+/**
+ * D4817 part 10 (#5311): the company workspace's addresses
+ * (`/portfolio/companies/:uid` and its tabs, App.jsx's routes) and the tab
+ * each names, or null for an address that is not one. `terms` is the old
+ * Terms address, which lands on Financials.
+ */
+const COMPANY_PATH = /^\/portfolio\/companies\/[^/]+(?:\/(reports|terms|financials|support|activity))?\/?$/;
+export function previewCompanyTabOf(pathname) {
+  const m = COMPANY_PATH.exec(String(pathname || ''));
+  if (!m) return null;
+  return m[1] || 'overview';
 }
 
 /** The way back: the viewer's own shell, as the Preview shell strip names it. */
@@ -147,5 +160,71 @@ export const PREVIEW_BOARDS = {
       { key: 'deliver', label: 'Deliver' },
       { key: 'withdraw', label: 'Withdraw' },
     ],
+  },
+};
+
+/* ------------------------------------------------- the company workspace */
+
+/**
+ * D4817 part 10 (#5311): who the previewed company is. Its name, sector,
+ * stage and holding come only from the investor's own reads (positions, the
+ * reports owed), so the preview reads none and says so in their place.
+ */
+export const COMPANY_WITHHELD = 'Company withheld in preview';
+
+/** The company workspace's six key facts (`companyModel.js`' `keyFactsOf`), each withheld. */
+export const PREVIEW_COMPANY_FACTS = [
+  { key: 'invested', label: 'Invested' },
+  { key: 'ownership', label: 'Ownership' },
+  { key: 'fmv', label: 'Latest FMV' },
+  { key: 'multiple', label: 'Multiple' },
+  { key: 'report', label: 'Latest report' },
+  { key: 'support', label: 'Open support' },
+];
+
+/**
+ * Each company tab in preview: its sections, headed as the real tab heads
+ * them (a heading that carries the company's name says "this company"), and
+ * the writes the real tab offers, drawn off.
+ */
+export const PREVIEW_COMPANY_TABS = {
+  overview: {
+    sections: [
+      { key: 'why', title: 'Health and evidence' },
+      { key: 'next', title: 'Next actions' },
+      { key: 'reported', title: 'Company-reported performance' },
+      { key: 'recent', title: 'Recent activity' },
+    ],
+    writes: [],
+  },
+  financials: {
+    sections: [
+      { key: 'rounds', title: 'Investment history · gross' },
+      { key: 'return', title: 'Return' },
+      { key: 'marks', title: 'Valuation marks' },
+      { key: 'distributions', title: 'Distributions' },
+      { key: 'ownership-rights', title: 'Ownership & rights' },
+      { key: 'captable', title: 'Cap table' },
+    ],
+    writes: [{ key: 'captable-ask', label: 'Ask for access' }],
+  },
+  reports: {
+    sections: [
+      { key: 'obligation', title: 'Reporting obligation' },
+      { key: 'timeline', title: 'Reports owed to you' },
+      { key: 'updates', title: 'Updates you received' },
+    ],
+    writes: [
+      { key: 'ask', label: 'Ask for this report' },
+      { key: 'waive', label: 'Waive this period' },
+    ],
+  },
+  support: {
+    sections: [{ key: 'support', title: 'Support for this company' }],
+    writes: [{ key: 'record-support', label: 'Record support…' }],
+  },
+  activity: {
+    sections: [{ key: 'activity', title: 'Activity · newest first' }],
+    writes: [],
   },
 };
