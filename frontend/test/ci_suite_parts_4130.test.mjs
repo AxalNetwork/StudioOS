@@ -1,7 +1,7 @@
 // D4130/D5609: one generated plan covers the full suite exactly once.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -103,5 +103,94 @@ test('#6460 the real CI planner gives drafts only rest and preserves all nine pa
     const run = spawnSync('bash', ['-e', '-c', code], { encoding: 'utf8', env: { ...process.env, EVENT, DRAFT } });
     assert.equal(run.status, 0, run.stderr);
     assert.deepEqual(JSON.parse(run.stdout.trim().slice('parts='.length)), expected);
+  }
+});
+
+test('#6674 the timing selector has clean stdout on a fresh checkout', () => {
+  const root = mkdtempSync(join(tmpdir(), 'timing-selector-'));
+  try {
+    const artifacts = join(root, 'artifacts.json');
+    const commits = join(root, 'commits.json');
+    writeFileSync(commits, JSON.stringify([{ sha: 'eligible' }]));
+    const run = () => spawnSync(process.execPath,
+      ['scripts/test-drift-parts.mjs', '--main-artifact', artifacts, commits], { encoding: 'utf8' });
+    writeFileSync(artifacts, JSON.stringify({ artifacts: [{
+      id: 27, name: 'test-deps-eligible', expired: false, created_at: '2026-11-15', workflow_run: { head_sha: 'eligible' },
+    }] }));
+    let result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '27\n');
+    writeFileSync(artifacts, '{"artifacts":[]}');
+    result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '');
+    writeFileSync(artifacts, '{"artifacts":[{"id":"27"}]}');
+    result = run();
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /invalid timing artifact or main commit inventory/);
+    rmSync(artifacts);
+    result = run();
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('#6674 all three planners use the same timing download step', () => {
+  for (const workflow of ['ci', 'github-alerts', 'runner-benchmark']) {
+    const yaml = readFileSync(`.github/workflows/${workflow}.yml`, 'utf8');
+    assert.match(yaml, /run: bash scripts\/ci\/download-test-timings\.sh/);
+  }
+});
+
+test('#6674 the downloader distinguishes unavailable, absent, malformed and eligible timings', () => {
+  const root = mkdtempSync(join(tmpdir(), 'timing-download-'));
+  try {
+    mkdirSync(join(root, 'scripts', 'ci'), { recursive: true });
+    for (const path of ['scripts/test-drift-parts.mjs', 'scripts/build-generated.mjs', 'scripts/ci/download-test-timings.sh']) {
+      writeFileSync(join(root, path), readFileSync(path));
+    }
+    mkdirSync(join(root, 'scripts', 'lib'));
+    for (const name of ['shardPlan', 'flakyTests']) {
+      writeFileSync(join(root, 'scripts', 'lib', name + '.mjs'), readFileSync('scripts/lib/' + name + '.mjs'));
+    }
+    writeFileSync(join(root, 'gh'), `#!/usr/bin/env bash
+case "$2" in
+  */commits*) [[ $MODE != unavailable ]] || exit 1; echo '[{"sha":"eligible"}]' ;;
+  */actions/artifacts/27/zip) cat "$RUNNER_TEMP/timings-fixture.zip" ;;
+  */actions/artifacts'?'*) case "$MODE" in
+    absent) echo '{"artifacts":[]}' ;;
+    malformed) echo '{"error":"bad input"}' ;;
+    *) echo '{"artifacts":[{"id":27,"name":"test-deps-eligible","expired":false,"created_at":"2026-11-15","workflow_run":{"head_sha":"eligible"}}]}' ;;
+  esac ;;
+  *) exit 2 ;;
+esac
+`, { mode: 0o755 });
+    writeFileSync(join(root, 'test-timings.json'), '{"a.test.mjs":27}');
+    const zip = spawnSync('zip', ['-q', 'timings-fixture.zip', 'test-timings.json'], { cwd: root, encoding: 'utf8' });
+    assert.equal(zip.status, 0, zip.stderr);
+    const run = (MODE) => spawnSync('bash', ['scripts/ci/download-test-timings.sh'], {
+      cwd: root, encoding: 'utf8',
+      env: { ...process.env, MODE, REPO: 'AxalNetwork/StudioOS', RUNNER_TEMP: root,
+        PATH: [root, join(process.execPath, '..'), process.env.PATH].join(':') },
+    });
+    for (const [mode, status, line] of [
+      ['unavailable', 0, 'Could not query'],
+      ['absent', 0, 'No eligible'],
+      ['malformed', 1, 'Invalid main timing artifact selector input'],
+    ]) {
+      const result = run(mode);
+      assert.equal(result.status, status, result.stderr);
+      assert.ok(result.stdout.includes(line), result.stdout);
+      assert.equal(existsSync(join(root, 'test-timings.json')), false);
+    }
+    const result = run('eligible');
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /Using main timing artifact 27\./);
+    assert.equal(readFileSync(join(root, 'test-timings.json'), 'utf8'), '{"a.test.mjs":27}');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

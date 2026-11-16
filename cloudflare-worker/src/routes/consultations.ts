@@ -24,6 +24,14 @@ export const CONSULTATION_TRANSITIONS: Readonly<Record<ConsultationStatus, reado
   cancelled: [],
 });
 
+/** #6394: accept an ISO date-time (including datetime-local), never a rolled-over calendar date. */
+function validSlotAt(value: string): boolean {
+  const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?$/.exec(value);
+  if (!parts || Number(parts[2]) > 23 || Number(parts[3]) > 59 || Number(parts[4] || 0) > 59 || !Number.isFinite(Date.parse(value))) return false;
+  const day = new Date(`${parts[1]}T00:00:00Z`);
+  return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === parts[1];
+}
+
 const ADMIN_BOOKING_SELECT = `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
   b.topic, b.notes, b.report_id, b.created_at, b.version,
   u.name AS user_name, u.email AS user_email
@@ -124,7 +132,10 @@ adminConsultations.post('/:id/status', async (c) => {
   if (!(typeof expectedVersion === 'number' && Number.isSafeInteger(expectedVersion) && expectedVersion >= 1)) {
     return c.json({ code: 'expected_version_required', message: 'Name the version you read in expected_version.' }, 400);
   }
-  const slotAt = typeof body.slot_at === 'string' ? body.slot_at : null;
+  const slotAt = typeof body.slot_at === 'string' ? body.slot_at.trim() || null : null;
+  if ((body.slot_at != null && typeof body.slot_at !== 'string') || (slotAt && !validSlotAt(slotAt))) {
+    return c.json({ code: 'invalid_slot_at', message: 'slot_at must be a valid date-time or left blank to keep the booked time.' }, 400);
+  }
 
   const read = () => c.env.DB.prepare(`${ADMIN_BOOKING_SELECT} WHERE b.id = ?`).bind(id).first<Record<string, unknown>>();
   const before = await read();

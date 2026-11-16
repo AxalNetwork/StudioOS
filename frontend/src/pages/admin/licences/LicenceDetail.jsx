@@ -8,17 +8,23 @@
  * History). Every tab the view had before sits under one section
  * (`licenceNavModel.js`), drawn as a second row where a section holds more
  * than one, so nothing that was reachable has gone.
+ *
+ * D4819 part 4 (#5927) — board L17: the lifecycle actions sit in the header's
+ * More menu, which offers only what the licence's state allows
+ * (`lifecycleActionsFor`), and each opens the one consequence sheet
+ * (`LicenceConsequenceSheet.jsx`) before it writes.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import LicenceTermsSchedule from '../LicenceTermsSchedule';
 import LicenceRequestsPanel from '../LicenceRequestsPanel';
 import LicenceFeeInvoices from '../LicenceFeeInvoices';
 import LicenceHistory from '../LicenceHistory';
-import { AlertCircle, Check, X, Ban, RotateCw } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { useReasonDialog } from '../LicenceReasonDialog';
-import { LICENCE_REASONS } from '../licenceReasonModel';
+import { useConsequenceSheet } from '../LicenceConsequenceSheet';
+import { ACTION_LABELS, lifecycleActionsFor } from '../licenceConsequenceModel';
+import { HeaderMenuItem, MoreMenu } from '../../../ui/AdminPageHeader';
 import {
   DEFAULT_TAB, LICENCE_SECTIONS_NAV, phoneSectionTabs, phoneStep, sectionOfTab, sectionTabs, stepOfTab, tabKeyMove, tabOfStep,
 } from '../licenceNavModel';
@@ -28,7 +34,7 @@ import LicenceIdentity from './LicenceIdentity';
 import LicenceOverview, { AttentionStrip, PhoneTriage, useOverviewReads } from './LicenceOverview';
 import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
-import { SeatEditor } from './CommercialTerms';
+import { LicensedSeats, SeatEditor } from './CommercialTerms';
 import { CountryPricing } from './CountryPricing';
 import { Exclusivity } from './Exclusivity';
 import TermsWorkspace from './TermsWorkspace';
@@ -47,8 +53,9 @@ import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
  * ------------------------------------------------------------------ */
 
 export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB, onTab }) {
-  // D4707 — reasons are asked for in a labelled dialog, never window.prompt.
-  const [reasonDialog, ask] = useReasonDialog();
+  // D4707 — never window.prompt. D4819 part 4 — every lifecycle action opens
+  // the consequence sheet, which asks for the reason where the write records one.
+  const [consequenceSheet, askConsequence] = useConsequenceSheet();
   const [d, setD] = useState(null);
   // D4707 — the tab lives in the URL (`?tab=`), so a link reopens it.
   // D4819 part 20 (#5932), board L20 — below `md` the licence is a triage
@@ -117,6 +124,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   };
   const grantAdmin = (g) => { setGrant(g); setStep(ADMINS_STEP); };
   const section = sectionOfTab(tabOfStep(step));
+  // The views whose section draws its own two cards across the width (L11, L12): the side panel steps aside.
+  const sectionWide = step === NOTICES_STEP || step === ADMINS_STEP;
   const subTabs = phone ? phoneSectionTabs(section, d.kind) : sectionTabs(section, d.kind);
   const sectionLabel = LICENCE_SECTIONS_NAV.find((x) => x.key === section)?.label || 'Overview';
   const openSection = (key) => {
@@ -125,40 +134,28 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
     return first;
   };
 
-  const actions = (
-    <div className="flex flex-wrap gap-2">
-      {d.status === 'suspended' ? (
-        <button type="button" disabled={busy} onClick={() => act(api.licenceReinstate, d.uid)}
-          className="inline-flex items-center gap-1 rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50">
-          <Check size={12} /> Reinstate
-        </button>
-      ) : d.status === 'active' && (
-        <button type="button" disabled={busy}
-          onClick={async () => {
-            const note = await ask(LICENCE_REASONS.suspendLicence);
-            if (note) act(api.licenceSuspend, d.uid, note);
-          }}
-          className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50">
-          <Ban size={12} /> Suspend
-        </button>
-      )}
-      {d.status !== 'terminated' && (
-        <>
-          <button type="button" disabled={busy} onClick={() => act(api.licenceRenew, d.uid, {})}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">
-            <RotateCw size={12} /> Renew
-          </button>
-          <button type="button" disabled={busy}
-            onClick={async () => {
-              const note = await ask(LICENCE_REASONS.terminateLicence);
-              if (note) act(api.licenceTerminate, d.uid, note);
-            }}
-            className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-            <X size={12} /> Terminate
-          </button>
-        </>
-      )}
-    </div>
+  // D4819 part 4 — what each lifecycle action writes, once its sheet is confirmed.
+  const WRITES = {
+    activate: () => act(api.licenceActivate, d.uid),
+    reinstate: () => act(api.licenceReinstate, d.uid),
+    renew: () => act(api.licenceRenew, d.uid, {}),
+    suspend: (reason) => act(api.licenceSuspend, d.uid, reason),
+    terminate: (reason) => act(api.licenceTerminate, d.uid, reason),
+  };
+  const runAction = async (action) => {
+    if (busy) return;
+    const out = await askConsequence(action, d, reads);
+    if (out) WRITES[action](out.reason);
+  };
+  const offered = lifecycleActionsFor(d);
+  const actions = offered.length > 0 && (
+    <MoreMenu className="shrink-0" testId="licence-more">
+      {offered.map((a) => (
+        <HeaderMenuItem key={a} onSelect={() => runAction(a)} data-testid={`licence-action-${a}`}>
+          {ACTION_LABELS[a]}
+        </HeaderMenuItem>
+      ))}
+    </MoreMenu>
   );
 
   // D4819 part 3 — drawn on Operations › Branch and domain, beside the sync figures and the deployment.
@@ -281,7 +278,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
 
   return (
     <div>
-      {reasonDialog}
+      {consequenceSheet}
       <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
       <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
       <AttentionStrip licence={d} facts={facts} />
@@ -290,8 +287,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       {d.status === 'suspended' && (
         <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Suspended{d.status_note ? `: ${d.status_note}` : ''}. It still holds{' '}
-          {d.territories.length === 1 ? 'its country' : `all ${d.territories.length} of its countries`} —
-          releasing them is a termination, not a lapse.
+          {d.territories.length === 1 ? 'its country' : `all ${d.territories.length} of its countries`}.
         </div>
       )}
 
@@ -313,8 +309,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           <p className="mt-2 text-[11px] text-gray-500">A pending signature does not block activation.</p>
         </div>
       )}
-      {d.status !== 'active' && d.status !== 'terminated' && !d.blockers?.length && (
-        <button type="button" disabled={busy} onClick={() => act(api.licenceActivate, d.uid)}
+      {offered.includes('activate') && (
+        <button type="button" disabled={busy} onClick={() => runAction('activate')} data-testid="licence-activate"
           className="mt-4 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50">
           Activate
         </button>
@@ -381,9 +377,10 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           ))}
         </div>
       )}
-      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside. */}
-      <div className={`mt-4 grid grid-cols-1 gap-4 ${step === NOTICES_STEP ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
-      <div className={`min-w-0 ${step === NOTICES_STEP ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
+      {/* D4819 part 12: on Requests and compliance the requests are the section's own card, so the side panel steps aside.
+          D4819 part 11: so it does on Access › Administrators, board L11's two cards side by side. */}
+      <div className={`mt-4 grid grid-cols-1 gap-4 ${sectionWide ? '' : 'lg:grid-cols-[minmax(0,1fr)_18rem]'}`}>
+      <div className={`min-w-0 ${sectionWide ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]' : ''}`} role="tabpanel" id="licence-tabpanel"
         aria-labelledby={subTabs.length > 1 ? `licence-tab-${tabOfStep(step)}` : `licence-section-${section}`}>
         {step === OVERVIEW_STEP && (
           <LicenceOverview licence={d} reads={reads} retry={retry} readAt={readAt} onOpenTab={(key) => onTab?.(key)} />
@@ -432,8 +429,10 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
         )}
+        {/* D4819 part 11 (#5922): board L11, administrators with their account state beside licensed seats by profile. */}
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
           onSaved={() => { setGrant(null); refresh(); }} />}
+        {step === ADMINS_STEP && <LicensedSeats licence={d} onOpenTab={(key) => onTab?.(key)} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
         {/* D4819 part 12 (#5923): board L12, studio requests then compliance, each failing on its own. */}
         {step === NOTICES_STEP && <LicenceRequestsPanel licence={d} layout="section" onOpenTerm={openTerm} onGrantAdmin={grantAdmin} />}
@@ -447,7 +446,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           && <BrandKitEditor licence={d} onSaved={refresh} />}
         {step === HISTORY_STEP && <LicenceHistory licence={d} />}
       </div>
-      {step !== NOTICES_STEP && !phone && (
+      {!sectionWide && !phone && (
         <LicenceRequestsPanel
           licence={d}
           onOpenTerm={openTerm}

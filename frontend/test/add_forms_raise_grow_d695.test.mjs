@@ -497,7 +497,7 @@ const RAISE_COPY = {
   },
   'investor-narrative': {
     title: 'New version', cta: 'Create version', button: 'New version',
-    sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version or blank; you edit.',
+    sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version, the pitch deck or blank; you edit.',
     // D909 (NAR11): Audience; the Spin-Out wording only for a Spin-Out venture, so not here.
     labels: ['Audience', 'Start from', 'One-liner', 'Why now', 'The ask', 'Check against'],
     chips: {
@@ -751,7 +751,7 @@ test('2-6 (Raise): Re-score, New version, New link, Upload, Edit split, Add hold
     ['.filter((k) => k !== BY_HAND)', ''],
     ["since: v.since === 'all' ? 'all' : 'last'", "since: 'all'"],
     ["? { value, label, meta: `${when} · scored on its record`, checked: false, disabled: true }", "? { value, label, meta: `${when} · scored on its record`, checked: true }"],
-    ["start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : LIVE,"],
+    ["start_from: based ? 'version' : deck ? 'deck' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : deck ? 'deck' : LIVE,"],
     ["name, data, visibility: 'nda',", 'name, data,'],
     ['if (why) { refused.push(`${file.name}: ${why}.`); continue; }', ''],
     ["...(folder.startsWith(NEW_FOLDER) ? { folder_name: folder.slice(NEW_FOLDER.length) } : folder ? { folder_uid: folder } : {}),", '...(folder ? { folder_uid: folder } : {}),'],

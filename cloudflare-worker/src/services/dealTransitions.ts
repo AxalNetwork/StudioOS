@@ -25,6 +25,7 @@
  */
 import type { Env } from '../types';
 import { daysBetween } from './dealStageHistory';
+import { preparationManagesDeal, withoutEditorial } from './dealPreparation';
 
 export const PIPELINE = ['applied', 'scored', 'active', 'funded'] as const;
 export const PASSED_STATUS = 'rejected';
@@ -172,6 +173,8 @@ export async function runSystemMove(env: Env, input: {
   fields?: Partial<Record<MoveColumn, unknown>>;
 }): Promise<SystemMoveResult> {
   if (!DEAL_STATUSES.includes(input.to)) throw new Error('unknown_deal_status');
+  // D5454: a CRM pull never rewrites the terms a reviewed release owns; the stage still moves.
+  if (input.fields && await preparationManagesDeal(env, input.dealId)) input = { ...input, fields: withoutEditorial(input.fields) };
   const from = await env.DB.prepare('SELECT status, stage_changed_at FROM deals WHERE id = ?')
     .bind(input.dealId).first<Version>();
   if (!from) return 'missing';

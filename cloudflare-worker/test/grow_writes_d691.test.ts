@@ -231,6 +231,9 @@ test('4: Enter a KPI writes where the platform keeps it, refuses what it works o
   }
   assert.deepEqual([(await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'expansion_mrr', value: 1, as_of: on })).body.detail], ['Expansion MRR is worked out from the revenue ledger.']);
   assert.deepEqual([(await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'runway', value: 1, as_of: on })).body.detail], ['Runway is worked out from cash and burn.']);
+  // D6104: ARR and burn multiple are worked out too, and refuse a hand entry.
+  assert.deepEqual([(await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'arr', value: 1, as_of: on })).body.detail], ['ARR is worked out as 12 × MRR.']);
+  assert.deepEqual([(await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'burn_multiple', value: 1, as_of: on })).body.detail], ['Burn multiple is worked out from burn and the ledger\'s net new ARR.']);
   assert.equal((await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'churn', value: 140, as_of: on })).status, 400, 'a percentage is 0 to 100');
   assert.equal(one(f, 'SELECT COUNT(*) AS n FROM project_metrics').n, 1, 'no refusal wrote a row');
 
@@ -438,7 +441,7 @@ test('5: each module sends its records_title, filters and sorts, sorts[0] the de
     }
   }
   const kpis = (await list(f, 'revenue-and-traction')).body.records.rows.map((r: any) => r.id);
-  assert.deepEqual(kpis.filter((k: string) => !k.startsWith('custom-')).sort(), ['churn', 'expansion_mrr', 'mrr', 'net_burn', 'new_mrr', 'paying_accounts', 'runway']);
+  assert.deepEqual(kpis.filter((k: string) => !k.startsWith('custom-')).sort(), ['arr', 'burn_multiple', 'churn', 'expansion_mrr', 'mrr', 'net_burn', 'new_mrr', 'paying_accounts', 'runway']);
   assert.equal(kpis.filter((k: string) => k.startsWith('custom-')).length, 1, 'the custom KPI is its own row');
 });
 
@@ -468,7 +471,7 @@ test('5: the default sort applies when none is sent, and two filters joined as t
   await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'custom', label: 'Signups', value: 4, as_of: day(-1) });
   const kpis = (await list(f, 'revenue-and-traction')).body.records.rows;
   assert.equal(kpis[0].kpi, 'Signups', 'the latest period first, when no sort is sent');
-  assert.equal((await list(f, 'revenue-and-traction', '&sort=kpi')).body.records.rows[0].kpi, 'Burn', 'a sent sort still wins');
+  assert.equal((await list(f, 'revenue-and-traction', '&sort=kpi')).body.records.rows[0].kpi, 'ARR', 'a sent sort still wins (D6104: ARR now sorts first)');
 });
 
 test('5: Revenue and traction lists Burn, Runway and each custom KPI, Not recorded until it has a value; MRR reads Stripe from the last 35 days', async () => {

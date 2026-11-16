@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, patchFounder, patchFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, patchFormationStep, deleteFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -239,6 +239,44 @@ async function featureFields(ctx: RecordContext, id: string): Promise<Any> {
   ).bind(numericId(id), ctx.projectId).first<Any>();
   if (!row) throw new Error('Build feature vanished after its ownership check');
   return row;
+}
+
+/** #6024: protect every reference, including an inconsistent cross-project link. */
+async function featureRemovalReason(ctx: RecordContext, featureId: number): Promise<string | null> {
+  const counts = await ctx.env.DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM roadmap_okrs WHERE feature_id = ?) AS roadmap,
+    (SELECT COUNT(*) FROM venture_risks WHERE feature_id = ?) AS risks,
+    (SELECT COUNT(*) FROM mvp_test_sessions WHERE feature_id = ?) AS sessions`)
+    .bind(featureId, featureId, featureId).first<{ roadmap: number; risks: number; sessions: number }>();
+  if (!counts) throw new Error('Feature links could not be checked');
+  const linked = [counts.roadmap ? plural(counts.roadmap, 'roadmap item') : null,
+    counts.risks ? plural(counts.risks, 'risk') : null,
+    counts.sessions ? plural(counts.sessions, 'test session') : null].filter(Boolean);
+  return linked.length ? `This feature is linked to ${linked.join(', ')}. Remove those links before removing the feature.` : null;
+}
+
+/** Same mvp_features deletion as progress.ts, under Build's record write gate. */
+async function removeFeature(ctx: RecordContext, featureId: number): Promise<ActionResult> {
+  const reason = await featureRemovalReason(ctx, featureId);
+  if (reason) refuse(409, reason);
+  // Recheck inside the write: a link may arrive after the confirmation/read.
+  // D1 keeps the guarded delete and its conditional audit in one transaction;
+  // FK cascades remove only this feature's design links and release checks.
+  const results = await ctx.env.DB.batch([
+    ctx.env.DB.prepare(`DELETE FROM mvp_features WHERE id = ? AND project_id = ?
+      AND NOT EXISTS (SELECT 1 FROM roadmap_okrs WHERE feature_id = mvp_features.id)
+      AND NOT EXISTS (SELECT 1 FROM venture_risks WHERE feature_id = mvp_features.id)
+      AND NOT EXISTS (SELECT 1 FROM mvp_test_sessions WHERE feature_id = mvp_features.id)
+      RETURNING id`).bind(featureId, ctx.projectId),
+    ctx.env.DB.prepare(`INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+      SELECT ?, ?, 'build.solution-design', ?, 'build_feature_removed', 'Feature removed', ? WHERE changes() = 1`)
+      .bind(ctx.projectId, ctx.user.id, String(featureId), `user:${ctx.user.id}`),
+  ]);
+  // D1 meta.changes includes cascaded child deletes; RETURNING counts the parent.
+  if (results[0]?.results?.length !== 1) {
+    refuse(409, await featureRemovalReason(ctx, featureId) ?? 'The feature changed before it could be removed. Refresh and try again.');
+  }
+  return { ok: true };
 }
 
 async function addSession(ctx: RecordContext, featureId: number, b: Body): Promise<ActionResult> {
@@ -640,6 +678,10 @@ const solutionDesign: ModuleSpec = {
     if (Number(f.is_must_have) !== 1) {
       actions.push({ key: 'mark-must-have', label: 'Mark as must-have', kind: 'write', execute: c => viaRoute(c, patchFeature, feature, { is_must_have: true }) });
     }
+    actions.push({ key: 'delete', label: 'Remove feature', kind: 'write', tone: 'danger',
+      confirm: { title: 'Remove this feature?', cta: 'Remove feature',
+        body: 'This permanently removes the feature, its design links and release checks. Features linked to roadmap items, risks or test sessions cannot be removed. The Build Plan keeps its history.' },
+      execute: c => removeFeature(c, featureId) });
     actions.push({ key: 'edit', label: 'Edit', kind: 'form',
       form: { title: 'Edit feature', cta: 'Save', fields: [
         { key: 'title', label: 'Feature', kind: 'T', required: true, value: f.title },
@@ -866,6 +908,10 @@ const prototypeMvp: ModuleSpec = {
     if (f.delivery_status !== 'Done') {
       actions.push({ key: 'mark-done', label: 'Mark done', kind: 'write', tone: 'primary', execute: c => viaRoute(c, patchFeature, feature, { state: 'Done' }) });
     }
+    actions.push({ key: 'unmark-must-have', label: 'No longer a must-have', kind: 'write', tone: 'danger',
+      confirm: { title: 'No longer a must-have?', cta: 'Remove from must-haves',
+        body: 'Keep this feature in Solution design, but take it off the Prototype / MVP must-have list. Its roadmap links, risks and test sessions stay.' },
+      execute: c => viaRoute(c, patchFeature, feature, { is_must_have: false }) });
     actions.push({ key: 'edit', label: 'Edit', kind: 'form',
       form: { title: 'Edit must-have', cta: 'Save', fields: [
         { key: 'title', label: 'Must-have', kind: 'T', required: true, value: f.title },
@@ -982,7 +1028,6 @@ const productRoadmap: ModuleSpec = {
           : gh?.tag ? { a: 'Shipped', b: shipped ? `${gh.tag} · ${shipped}` : gh.tag, ...(gh.url ? { href: gh.url } : {}) }
             : { a: 'Shipped', b: 'Not shipped: no release names it or closes it.', tone: 'grey' }] };
     } },
-    { key: 'public', title: 'Public roadmap', side: true, async read() { return notRecorded('Ventures have no public roadmap page.'); } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const itemId = numericId(id), item = { id: String(itemId) };
@@ -1033,6 +1078,10 @@ const productRoadmap: ModuleSpec = {
       ] },
       references: body => references(body, [['feature_id', 'mvp_features']]),
       execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id'], ITEM_CLEARABLE)) });
+    // #6041: undo an item added by mistake. Its dependency edges go with it; the activity row stays.
+    actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+      confirm: { title: `Delete ${o.objective}?`, body: 'It leaves the roadmap with its dependencies. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+      execute: c => viaRoute(c, deleteRoadmap, item, {}) });
     return actions;
   },
   async formOptions(ctx) {
@@ -1185,6 +1234,10 @@ const foundingTeam: ModuleSpec = {
           { key: 'cliff_months', label: 'Cliff months', kind: 'T', value: h.cliff_months ?? '' },
         ] },
         execute: (c, _id, body) => editFounder(c, h, jsonOf(body)) },
+      // #6041 (A): remove a founder added by mistake. The cap table code refuses one with anything attached, naming it.
+      { key: 'delete', label: 'Remove founder', kind: 'write', tone: 'danger',
+        confirm: { title: `Remove ${h.name}?`, body: 'Only a founder added by mistake, with nothing attached: no vesting, issued shares, co-founder agreement, filing or contributions. They leave the founding team and the cap table. The activity log keeps a line saying so.', cta: 'Remove' },
+        execute: c => viaRoute(c, deleteFounder, { id: `h-${h.id}` }, {}) },
     ];
   },
   /** Decision 14: 100 less every holder's recorded percentage and the base scenario's pool; Not recorded with no percentage. */
@@ -1359,6 +1412,11 @@ const companyCreation: ModuleSpec = {
         references: body => references(body, [['for_holder_id', 'cap_table_founders']]),
         execute: (c, _id, body) => viaRoute(c, patchFormationStep, step,
           formBody(jsonOf(body), ['title', 'kind', 'jurisdiction', 'for_holder_id', 'due_date', 'state'], ['kind', 'jurisdiction', 'for_holder_id', 'due_date'])) });
+      // #6041: undo a filing the venture added by mistake. Only the venture's own step: a Lab step and an
+      // obligation offer no Delete.
+      actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+        confirm: { title: `Delete ${f.title}?`, body: 'It leaves the filings with its checklist and its proof file. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+        execute: c => viaRoute(c, deleteFormationStep, step, {}) });
     }
     actions.push({ key: 'upload-proof', label: 'Upload proof', kind: 'form', multipart: true,
       form: { title: 'Upload proof', cta: 'Upload', fields: [{ key: 'file', label: 'Proof', kind: 'T', input: 'file', required: true, note: 'PDF, JPEG or PNG, at most 10 MB.' }] },

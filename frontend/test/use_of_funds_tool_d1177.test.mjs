@@ -23,6 +23,7 @@ import {
   raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
   hireBody, sectionSheet, sectionSheetSearch, sheetSectionFrom, tabSearch, // D6083
 } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { capsForViewer } from './_uof_capabilities.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -72,7 +73,8 @@ function planFixture({ viewer = { kind: 'founder', can_write: true, mercury: tru
       : { state: 'not_recorded', chosen: null, candidates: [], partial: false, sources: { mercury: { state: 'founder_only' }, metrics: { state: 'ok' } }, reason: 'No measured cash and positive burn are recorded. A forecast never supplies runway today.' };
   const chosenRound = { value: raise, source: 'Document', ref: 'round_calls:3', as_of: '2026-10-14', kind: 'round_call', name: 'Seed', currency: 'usd', eligible: true };
   return {
-    project_id: 3, viewer,
+    // D5074 slice 5: the page reads only the capability map the Worker sends this viewer.
+    project_id: 3, viewer, capabilities: capsForViewer(viewer),
     base: empty ? { state: 'ok', value: base, reason: null } : { state: 'ok', value: base, reason: null },
     round: empty ? { chosen: null, candidates: [], disagreements: [], reason: 'No approved round call, active round target or plan raise is recorded.', sources: {} } : {
       chosen: chosenRound, precedence: ['round_call', 'round_record', 'plan'],
@@ -460,6 +462,28 @@ test('UF21 the phone: tiles two across, the sections as a list with a 44px opene
   assert.match(src, /max-md:min-h-\[44px\]/);
   assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, 'no browser pop-up');
   assert.doesNotMatch(src, /EadwynPanel|aiRouter|railProposals|useRailOption|FillProposals/, 'Eadwyn fills nothing here');
+});
+
+// D5074 slice 5 (#5074): every control reads the plan's capability map, never its old `viewer` field.
+test('D5074: the edit controls, the admin banner and the Mercury states follow the capability map, and the map wins over the viewer field', async () => {
+  // Mutation checked: `planViewer` reading `plan.viewer` → the disagreeing case below draws Edit split and loses the banner.
+  const cases = [
+    ['founder', { edit: true, mercury: true, admin_logged: false }, { edit: true, banner: false }],
+    ['admin', { edit: true, mercury: false, admin_logged: true }, { edit: true, banner: true }],
+    ['support session', { edit: false, mercury: false, admin_logged: false }, { edit: false, banner: false }],
+    ['no map', undefined, { edit: false, banner: false }],
+  ];
+  for (const [label, capabilities, want] of cases) {
+    // The old field says founder-who-writes every time; only the map changes.
+    const plan = { ...planFixture({ viewer: { kind: 'founder', can_write: true, mercury: true } }), capabilities };
+    if (capabilities === undefined) delete plan.capabilities;
+    const v = await mounted('/raise/use-of-funds/allocation?project_id=3', { plan });
+    try {
+      assert.equal(Boolean(v.by('uof-edit-split-open')), want.edit, `${label}: Edit split`);
+      assert.equal(Boolean(v.by('uof-admin-banner')), want.banner, `${label}: the admin banner`);
+      assert.ok(v.sent.every((s) => s.line.startsWith('GET ')), `${label}: mounting writes nothing`);
+    } finally { await v.close(); }
+  }
 });
 
 // D6082 (#6082): a milestone can be changed or removed. The scenario's revision goes with both; an emptied

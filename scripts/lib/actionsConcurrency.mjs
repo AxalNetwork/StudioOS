@@ -186,6 +186,49 @@ export function phantomVerdict(phantoms) {
     heldSlot: checked.length ? held.length > 0 : null };
 }
 
+/** The CI workflow whose merge-group runs are merge candidates (#6676). */
+export const CI_PATH = '.github/workflows/ci.yml';
+export const LANDING_GATE = 'landing gate';
+
+/**
+ * #6676 — HOW LONG A MERGE CANDIDATE WAITS. For every `merge_group` run of
+ * `ci.yml` created in [from, to): minutes from the run's creation to the
+ * first of its jobs that got a runner (any attempt), and to the first
+ * `landing gate` job that finished with a result. A run whose jobs never got
+ * a runner, or whose gate never finished, is counted as `noRunner` /
+ * `noGate` rather than given a made-up wait. Grouped by the UTC hour the run
+ * was created, plus an all-hours row; p50 and p90 by `percentile`.
+ */
+export function mergeStartWait(runs, from, to) {
+  const rows = [];
+  for (const run of runs || []) {
+    if (run.event !== 'merge_group' || run.path !== CI_PATH) continue;
+    const created = stamp(run.created_at);
+    if (!Number.isFinite(created) || created < from || created >= to) continue;
+    const jobs = run.jobs || [];
+    const starts = jobs.filter(heldSlot).map(j => stamp(j.started_at)).filter(t => Number.isFinite(t) && t >= created);
+    const gates = jobs.filter(j => j.name === LANDING_GATE && j.status === 'completed' && j.conclusion && j.conclusion !== 'skipped')
+      .map(j => stamp(j.completed_at)).filter(t => Number.isFinite(t) && t >= created);
+    rows.push({
+      hour: new Date(created).getUTCHours(),
+      start: starts.length ? (Math.min(...starts) - created) / minute : null,
+      gate: gates.length ? (Math.min(...gates) - created) / minute : null,
+    });
+  }
+  const summarise = list => ({
+    runs: list.length,
+    startP50: percentile(list.map(r => r.start).filter(v => v !== null), 50),
+    startP90: percentile(list.map(r => r.start).filter(v => v !== null), 90),
+    gateP50: percentile(list.map(r => r.gate).filter(v => v !== null), 50),
+    gateP90: percentile(list.map(r => r.gate).filter(v => v !== null), 90),
+    noRunner: list.filter(r => r.start === null).length,
+    noGate: list.filter(r => r.gate === null).length,
+  });
+  const hours = [...new Set(rows.map(r => r.hour))].sort((a, b) => a - b)
+    .map(hour => ({ hour, ...summarise(rows.filter(r => r.hour === hour)) }));
+  return { all: summarise(rows), hours };
+}
+
 export function analyse({ runs, prs = new Map(), from, to, now, hold = HOLD_MINUTES }) {
   const { executing, queued } = spans(runs, now);
   const exec = perMinute(executing, from, to);
@@ -216,12 +259,28 @@ export function analyse({ runs, prs = new Map(), from, to, now, hold = HOLD_MINU
     workflows: slotShares(executing, s => s.run.name || s.run.path || '(unnamed workflow)', from, to),
     events: slotShares(executing, s => eventClass(s.run, prs), from, to),
     labels: slotShares(executing, s => (s.job.labels || []).join(',') || '(no labels)', from, to),
+    mergeWait: mergeStartWait(runs, from, to),
     cap,
   };
 }
 
 const pct = x => (x === null ? 'n/a' : `${(x * 100).toFixed(1)}%`);
 const iso = t => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const mins = x => (x === null ? 'n/a' : x.toFixed(1));
+
+/** #6676: the merge-candidate wait table, per UTC hour of creation, with an all-hours row. */
+function mergeWaitSection(wait) {
+  if (!wait) return [];
+  const line = (label, x) => `| ${label} | ${x.runs} | ${mins(x.startP50)} | ${mins(x.startP90)} | ${mins(x.gateP50)} | ${mins(x.gateP90)} | ${x.noRunner} | ${x.noGate} |`;
+  return [
+    '### Merge candidates: wait for a runner and for the landing gate (#6676)', '',
+    `\`merge_group\` runs of \`${CI_PATH}\`, by UTC hour the run was created. Minutes from run creation to the first job with a runner, and to the first finished \`${LANDING_GATE}\` job.`, '',
+    '| Hour (UTC) | Runs | Start wait p50 | Start wait p90 | Gate p50 | Gate p90 | No runner | No gate result |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...wait.hours.map(h => line(`${String(h.hour).padStart(2, '0')}:00`, h)),
+    line('**All hours**', wait.all), '',
+  ];
+}
 
 export function report({ result, coverage, phantom }) {
   const r = result;
@@ -257,6 +316,7 @@ export function report({ result, coverage, phantom }) {
     '### Top five workflows by slot use', '', '| Workflow | Slot-minutes | Share |', '| --- | --- | --- |', ...rows(r.workflows.slice(0, 5)),
     `| (all ${r.workflows.length} workflows) | ${r.workflows.reduce((a, x) => a + x.minutes, 0).toFixed(0)} | 100% |`, '',
     '### Slot use by event', '', '| Event | Slot-minutes | Share |', '| --- | --- | --- |', ...rows(r.events), '',
+    ...mergeWaitSection(r.mergeWait),
     `Runner labels: ${r.labels.map(x => `${x.name} ${pct(x.share)}`).join(', ') || 'none'}.`, '',
     'Method: the effective ceiling is the most common per-minute maximum of jobs executing over the minutes in which at least one job was queued, so a cap that binds shows as one level held for hours and a short burst does not move it. A job counts as executing from `started_at` to `completed_at` only when a runner picked it up (`runner_id`/`runner_name` set); '
       + 'GitHub fills `started_at` on queued jobs too, so a job with no runner counts as queued from `created_at` until it ends. Skipped jobs count as neither. '

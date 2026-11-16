@@ -90,12 +90,12 @@ const SPECS: Spec[] = [
     // D1334 (#3540): sold monthly, between Basic and Pro. `planOf` maps `investor_tier=plus` to it.
     key: 'investor:plus', family: 'investor', name: 'Investor Plus', tagline: 'For angel investors, independent investors and investment professionals.', licence_key: 'investor:plus', matches: { investor_tier: 'plus' },
     sellable: true,
-    included: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+    included: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'AI usage from your plan allowance and AI tokens'],
   },
   {
     key: 'investor:professional', family: 'investor', name: 'Investor Pro', tagline: 'For professional angels, investment analysts and smaller firms.', licence_key: 'investor:professional', matches: { investor_tier: 'professional' },
     sellable: true,
-    included: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+    included: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'AI usage from your plan allowance and AI tokens', 'More advanced investment workflows'],
   },
   {
     key: 'investor:institutional', family: 'investor', name: 'Institutional', tagline: 'For institutional investors, family offices and investment teams.', licence_key: 'investor:institutional', matches: { investor_tier: 'institutional' },
@@ -118,7 +118,7 @@ const SPECS: Spec[] = [
     included: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', TOP_UP],
   },
   {
-    key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Inbound demand on tap.', licence_key: 'partner', matches: { plan_group: 'partner' },
+    key: 'partner:pro', family: 'partner', name: 'Operating Partner Pro', tagline: 'Manage client work from proposal to delivery.', licence_key: 'partner', matches: { plan_group: 'partner' },
     sellable: true,
     included: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
   },
