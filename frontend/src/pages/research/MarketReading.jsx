@@ -7,16 +7,19 @@ import { ACCENT } from '../../workspaces/shellConfig';
 import { NotRecorded } from '../../workspaces/canvasKit';
 import { StatedLimit } from '../advisor/expertise/kit';
 import useRecordCrumb from '../admin/useRecordCrumb';
-import { AGE_AT, STALE_AT, ageBand, daysSince } from './MarketZone';
 import { createRecordGate } from './recordGate.js';
 import {
+  AGE_AT,
   ATTACH_COPY,
+  STALE_AT,
+  ageBand,
   DRAFT_PILL,
   OWN_RECORD_LINE,
   ageingAttachmentNote,
   attachState,
   attachesNowhere,
   catalogLine,
+  daysSince,
   freshReadingForm,
   openProposals,
   rangeReadsForward,

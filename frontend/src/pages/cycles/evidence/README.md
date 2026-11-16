@@ -7,13 +7,15 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 | `evidenceModel.js` | The address (`/raise/evidence`, `/review`, `/preview`, `/item/:id`, `/claim/:id`), the five Source labels with SCORING's grade mapping, strengths, claim states, sharing levels, the Raise areas, and the words the investor's block draws (D1268) |
 | `evidenceView.js` | D1266: the view's model from `GET /api/cycles/raise/evidence` — the tiles, claims by area, Needs you first, the filters, coverage by source, what investors see, Accept all's cap of 50, and the words of each change |
 | `RaiseEvidence.jsx` | The route in the Raise shell: one read, Look again, the page and the drawer the address names as the shared Sheet over the view at 480 (D1317); it re-exports `EvidenceSummary` from `InvestorEvidence.jsx` |
-| `EvidenceView.jsx` | D1266: VR1's tiles and cards, and the empty, loading, error, partial, admin and refused states (VR12–VR16) |
+| `EvidenceView.jsx` | D1266: VR1's tiles and cards, and the empty, loading, error, partial, admin and refused states (VR12–VR16). D6048: first use instead of the dashboard (Raise v2 RA-15b founder, RA-15c admin viewer), the Home in RA-15's order with one action per claim (RA-26a) and the hand-off to Fundraising readiness |
 | `EvidenceDrawers.jsx` | D1266: the claim drawer (VR2) and the item drawer (VR3) |
 | `EvidenceReview.jsx` | D1266: Waiting for review (VR4), the Share dialog (VR5) and See as an investor (VR11) |
 | `EvidenceParts.jsx` | D1266: the pills, the drawer frame (the shared Sheet at 480, D1317) and the in-page dialog every change opens |
 | `moduleEvidence.js` | D1267: which surfaces and areas each Raise module shows, the newest version, a slide's claims, and the "Sources on Axal" lines |
 | `EvidencePart.jsx` | D1267: the Evidence part under each Raise module's table (VR6), and "Evidence on this slide" in the deck editor (VR7) |
 | `InvestorEvidence.jsx` | D1268: the investor's block (VR8 before the NDA, VR9 after it), one item's drawer (VR10) and the phone (VR18), on D1265's read. `EvidenceSummary` (the deal page), `SharedEvidence` (the diligence room) and `InvestorEvidence` (an investor's round call). It imports no `ui` index |
+| `ShareOutside.jsx` | D6864 (#6864): Share outside Axal's composer (RA-27), Shared links with Revoke (RA-29, `/raise/evidence/shared`) and Add evidence by hand (RA-32) |
+| `shareOutsideModel.js` | D6864: the reader choice, what each row tells the reader, link state words and glyphs, and the composer's and Add evidence's checks |
 
 `../cycleModel.js` lights Evidence after Overview in Raise's tab rail; `../../DealRoomPage.jsx` mounts `EvidenceSummary`, `../../founder/RoundCallPage.jsx` mounts `InvestorEvidence` on an investor's call, and `../../research/DiligenceRoom.jsx` mounts `SharedEvidence`. `../CycleRoute.jsx` mounts `EvidencePart` on every Raise module; `../../raise/pitch/PitchEditor.jsx` mounts `SlideEvidence`. A share-link deck draws none of it.
 
