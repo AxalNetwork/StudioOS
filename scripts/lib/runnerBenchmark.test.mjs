@@ -81,7 +81,7 @@ test('AWS selects one fixed project and the specific Actions attempt on three is
     { codebuildReady: undefined }, { runId: '12/other' }, { attempt: '0' }]) {
     assert.throws(() => benchmarkLanes({ ...trial, ...override }), /CodeBuild trial requires/);
   }
-  for (const ref of ['refs/heads/bench/runners-free-1', 'refs/heads/main', 'refs/pull/1/merge']) {
+  for (const ref of ['refs/heads/bench/runners-free-1', 'refs/heads/bench/runners-codebuild-4', 'refs/heads/main', 'refs/pull/1/merge']) {
     assert.deepEqual(benchmarkLanes({ ...trial, ref }), [{ lane: 'free', runner: 'ubuntu-latest' }]);
   }
 });
@@ -112,7 +112,7 @@ test('AWS report separates GitHub timings from provider cost, isolates the compl
   assert.equal(result.stages.plannerToGateMin, 3.25);
   assert.equal(result.candidateComparable, true);
   for (const change of [{ runner_id: 0 }, { runner_id: undefined }, { labels: ['ubuntu-latest'] },
-    { labels: ['codebuild-studioos-queue-suite-123-2'] }, { labels: null }]) {
+    { labels: ['codebuild-studioos-queue-suite-123-2'] }, { labels: ['codebuild-studioos-queue-suite-456-1'] }, { labels: null }]) {
     const wrongAssignment = report([planner, { ...suite[0], ...change }, ...suite.slice(1), gate]);
     assert.equal(wrongAssignment.lanes[0].githubRunnerAssignmentVerified, false);
     assert.equal(wrongAssignment.lanes[0].comparable, false);
