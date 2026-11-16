@@ -9,7 +9,7 @@ import FromNotion from '../FromNotion';
 import RaisePosthog from '../RaisePosthog';
 import NotionSnapshotImport from '../NotionSnapshotImport';
 import ReadinessHome, { ReadinessBands } from '../ReadinessHome';
-import { coverageLine } from '../readinessModel';
+import { coverageLine, nextPriorityAction } from '../readinessModel';
 import RaiseReceiptMatches from '../../../components/RaiseReceiptMatches';
 import EvidencePart from '../evidence/EvidencePart';
 import { isNarrativeAdmin } from '../../raise/narrative/narrativeModel';
@@ -120,12 +120,14 @@ const raise = {
     // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
   }),
   add: toFnMap({}),
-  // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands }`: the
+  // D6049 (#6049, Raise v2 RA-16): a module that owns its page. `(data, ctx)` → `{ sub, body, Bands, action }`: the
   // header's coverage and freshness line, the page drawn in place of the generic chart and records table
   // (handed the card, records, Add and record links), and the collapsed AI gap analysis the bands draw in.
   homes: toFnMap({
     'fundraising-readiness': (data, ctx) => ({
       sub: coverageLine(data?.records),
+      // D5081 part 5 (RA-12, RA-14): the header's action is the page's own, Fix next priority, or none.
+      action: nextPriorityAction(data?.records),
       body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} />,
       Bands: ReadinessBands,
     }),

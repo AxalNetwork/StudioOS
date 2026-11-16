@@ -979,7 +979,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
-        action={action}
+        // D5081 part 5 (#5081, RA-12): a module that owns its page (`def.homes`) names its own header action, or none.
+        action={home && Object.hasOwn(home, 'action') ? home.action : action}
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
