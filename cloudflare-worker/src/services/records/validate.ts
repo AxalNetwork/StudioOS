@@ -32,7 +32,7 @@ import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
   SEGMENT_URGENCIES, WAITLIST_TARGET_KEY, WATCH_DEFAULTS, WATCH_KEYS, WriterError,
   addCompetitorSignal, addEvidence, addExperiment, attachDemandEvidence, attachQuote, competitorNameNorm, deleteTheme,
-  latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setLinkStrength,
+  INTERVIEW_STAGES, latestKpis, linkTheme, markDemandToConfirm, mergeTheme, openDemandEvidence, parseWatch, setExperimentStatus, setInterviewStage, setLinkStrength,
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme,
 } from '../validateWriters';
@@ -427,6 +427,18 @@ type InterviewData = {
 };
 const interviewMemo = memo<InterviewData>('interview');
 
+const STAGE_WORD: Record<string, string> = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+const STAGE_AT: Record<string, string> = { invited: 'invited_at', booked: 'booked_at', done: 'done_at' };
+/** D6001: Move stage's four choices, the one it is at now marked "current", with the date it was reached when stored. */
+export function stageOptions(iv: Any): Array<{ value: string; label: string }> {
+  const now = iv.stage == null || iv.stage === '' ? null : String(iv.stage);
+  return INTERVIEW_STAGES.map((st) => {
+    const at = STAGE_AT[st] ? dMon(iv[STAGE_AT[st]]) : null;
+    const current = now === st ? joined('current', at) : now == null && st === 'done' ? 'current · no stage recorded' : null;
+    return { value: st, label: current ? `${STAGE_WORD[st]} · ${current}` : STAGE_WORD[st] };
+  });
+}
+
 function loadInterview(ctx: RecordContext, id: string): Promise<InterviewData> {
   return interviewMemo(ctx, id, async () => {
     const iv = await ctx.env.DB.prepare(
@@ -706,6 +718,21 @@ const customerResearch: ModuleSpec = {
           projectId: c.projectId, userId: userId(c), interviewId,
           interviewee_name: field(body, 'interviewee_name'), interviewee_company: field(body, 'interviewee_company'),
         }) })),
+      },
+      // D6001 (#6001): Move stage, through the writer `PUT /interviews/:id/stage`
+      // calls, which logs the move on this record's activity. Nothing is
+      // preselected: a row with no stage reads as Done, and saving that
+      // reading would write a stage nobody chose.
+      {
+        key: 'set-stage', label: 'Move stage', kind: 'form',
+        form: { title: `Move ${d.iv.interviewee_name ?? 'this interview'}`, cta: 'Move', fields: [
+          { key: 'stage', label: 'Stage', kind: 'CH', required: true, options: stageOptions(d.iv) },
+          { key: 'at', label: 'Date reached · optional', kind: 'T', input: 'date', note: 'Today when left empty. A stage keeps the first date it was reached.' },
+        ] },
+        execute: (c, _id, body) => refusing(async () => {
+          await setInterviewStage(c.env, { projectId: c.projectId, userId: userId(c), interviewId, stage: field(body, 'stage'), at: field(body, 'at') || undefined });
+          return { ok: true };
+        }),
       },
       {
         key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',

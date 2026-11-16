@@ -4,13 +4,19 @@
  *
  * Its one source is the support ledger, `GET /api/portfolio-support`: a row
  * per piece of work a member recorded against a company in the book, with its
- * state (Promised, Delivered or Withdrawn), its dates, who recorded it and the
- * outcome they wrote. The ledger records WORK, not results, so:
+ * state, its dates, who recorded it and the outcome they wrote.
  *
- *   - "In progress", "Cancelled", a due date and "Overdue" are not states or
- *     fields of the ledger. They read Not recorded with that reason, never 0.
- *   - A meeting that resulted from an introduction is not recorded anywhere.
- *     It reads Not recorded with that reason, never "no meeting".
+ * D6203 (#6203) reads what D6202 (#6202) added to the ledger:
+ *
+ *   - States: Promised and In progress are open; Delivered, Withdrawn and
+ *     Cancelled are closed. "Outstanding" is both open states.
+ *   - A due date, and Overdue. Overdue is the Worker's, per entry (`overdue`)
+ *     and in the figures (`totals.overdue`), by the Worker's own date: this
+ *     model never compares a due date with the browser's clock.
+ *   - An introduction's meeting: held (with its date), not held, or not
+ *     recorded. A meeting nobody recorded reads Not recorded, never "No".
+ *   - In progress, Overdue, Introductions made and Meetings resulting are
+ *     counted figures. A measured 0 stays 0; a failed read stays Unreadable.
  *   - Introductions are the ledger's own `intro` entries. An introduction
  *     REQUESTED through the quota is access to a company, not support given to
  *     one, and is not read here.
@@ -34,19 +40,38 @@ export const KINDS = [
   ['other', 'Other'],
 ];
 export const KIND_LABEL = Object.fromEntries(KINDS);
-export const STATE_LABEL = { promised: 'Promised', delivered: 'Delivered', withdrawn: 'Withdrawn' };
-/** D4642: an amendment's own verb. `amended` covers a change that moved no state. */
-export const HISTORY_LABEL = { amended: 'Amended', delivered: 'Delivered', withdrawn: 'Withdrawn' };
+export const STATE_LABEL = { promised: 'Promised', in_progress: 'In progress', delivered: 'Delivered', withdrawn: 'Withdrawn', cancelled: 'Cancelled' };
+/** D4642: an amendment's own verb. `amended` covers a change that moved no state. D6203: and the two D6202 moves. */
+export const HISTORY_LABEL = { amended: 'Amended', in_progress: 'Started', delivered: 'Delivered', withdrawn: 'Withdrawn', cancelled: 'Cancelled' };
+/** D6202: the states an entry is still open in; the rest are closed and cannot be reopened. */
+export const OPEN_STATES = new Set(['promised', 'in_progress']);
 
-/** What the ledger does not record, each with the reason a member is shown. */
+/** What the ledger leaves unrecorded on one entry, each with the reason a member is shown. */
 export const NOT_IN_LEDGER = {
-  inProgress: 'The ledger has no In progress state.',
-  overdue: 'The ledger records no due date for a commitment.',
-  meeting: 'The support ledger records the work promised and delivered, not the meetings that came of it.',
+  meeting: 'No meeting is recorded for this introduction.',
+  due: 'No due date is recorded for this entry.',
 };
+
+/** D6203: the moves an open entry offers, each confirmed in place. In progress never moves back to Promised. */
+export const MOVES = {
+  promised: ['in_progress', 'delivered', 'withdrawn', 'cancelled'],
+  in_progress: ['delivered', 'withdrawn', 'cancelled'],
+};
+export const MOVE_LABEL = { in_progress: 'Start', delivered: 'Mark delivered', withdrawn: 'Withdraw', cancelled: 'Cancel entry' };
 
 const isNum = (v) => v !== null && v !== undefined && v !== '' && typeof v !== 'boolean' && Number.isFinite(Number(v));
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * D6203: a YYYY-MM-DD that names a real day, as the Worker stores a due date or a meeting date (D6202). Checked
+ * before a write so a mistyped date is refused in the form, never sent and silently lost.
+ */
+export function validDay(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d));
+  return at.getUTCFullYear() === y && at.getUTCMonth() === m - 1 && at.getUTCDate() === d;
+}
 
 /** The ledger's read must carry its entries and its book to be read at all. */
 export const ledgerShape = (v) => Array.isArray(v.entries) && Array.isArray(v.companies) && 'totals' in v;
@@ -92,24 +117,22 @@ export function figuresOf(read) {
     if (!isNum(value)) return { key, label, value: UNREADABLE, state: 'unreadable', note: 'The ledger’s figures could not be read.' };
     return { key, label, value: String(Number(value)), state: 'ok', note: note(t) };
   };
-  const notInLedger = (key, label, reason) => ({ key, label, value: NOT_RECORDED, state: 'not_recorded', note: reason });
 
   const untouched = read.state === 'ok' && Array.isArray(read.value.untouched) ? read.value.untouched : [];
-  const intros = introductionsOf(read);
-  let introFigure;
-  if (loading) introFigure = { key: 'intros', label: 'Introductions made', value: null, state: 'loading' };
-  else if (intros.state === 'unreadable') introFigure = { key: 'intros', label: 'Introductions made', value: UNREADABLE, state: 'unreadable', note: intros.reason };
-  else if (!intros.complete) introFigure = { key: 'intros', label: 'Introductions made', value: UNAVAILABLE, state: 'unavailable', note: intros.reason };
-  else introFigure = { key: 'intros', label: 'Introductions made', value: String(intros.delivered), state: 'ok', note: `Delivered introduction entries · ${plural(intros.promised, 'still promised', 'still promised')}` };
+  // D6203: Introductions made is the Worker's counted figure over the whole scope (D6202 `by_kind.intro`),
+  // so it no longer needs a read that holds every entry.
+  const intro = (x) => (x.by_kind && typeof x.by_kind === 'object' ? x.by_kind.intro : null);
 
   return [
-    fromTotals('open', 'Open commitments', (x) => x.promised, () => 'Promised and not yet delivered or withdrawn'),
-    notInLedger('in_progress', 'In progress', NOT_IN_LEDGER.inProgress),
+    fromTotals('open', 'Open commitments', (x) => x.outstanding, () => 'Promised or in progress, not yet delivered, withdrawn or cancelled'),
+    fromTotals('in_progress', 'In progress', (x) => x.in_progress, () => 'Started and not yet delivered'),
     fromTotals('delivered', 'Delivered', (x) => x.delivered, (x) => (isNum(x.companies_in_book)
       ? `${x.companies_supported} of ${plural(Number(x.companies_in_book), 'company', 'companies')} in the book have an entry`
       : 'Every delivered entry in scope')),
-    introFigure,
-    notInLedger('overdue', 'Overdue commitments', NOT_IN_LEDGER.overdue),
+    fromTotals('intros', 'Introductions made', (x) => intro(x)?.delivered, (x) => (isNum(intro(x)?.meetings_held)
+      ? `Delivered introduction entries · ${plural(Number(intro(x).meetings_held), 'meeting', 'meetings')} resulting`
+      : 'Delivered introduction entries')),
+    fromTotals('overdue', 'Overdue commitments', (x) => x.overdue, () => 'Open entries past their due date, by the Worker’s date (UTC)'),
     fromTotals('untouched', 'No support recorded', () => untouched.length, () => (untouched.length
       ? untouched.map((x) => x.name).join(', ')
       : 'Every company in the book has an entry')),
@@ -146,7 +169,9 @@ export function commitmentOf(row, me) {
   let closed;
   if (row.state === 'delivered') closed = { label: 'Delivered', date: day(row.delivered_at), missing: 'Delivery date not recorded' };
   else if (row.state === 'withdrawn') closed = { label: 'Withdrawn', date: day(row.withdrawn_at), missing: 'Withdrawal date not recorded' };
+  else if (row.state === 'cancelled') closed = { label: 'Cancelled', date: day(row.cancelled_at), missing: 'Cancellation date not recorded' };
   else closed = { label: 'Open', date: null, missing: 'Not delivered yet' };
+  const open = OPEN_STATES.has(row.state);
   return {
     uid: row.uid,
     company: row.project_name || (row.project_id != null ? `Startup ${row.project_id}` : 'Company not recorded'),
@@ -160,11 +185,26 @@ export function commitmentOf(row, me) {
     recorded: day(row.created_at),
     promised: day(row.promised_at),
     closed,
+    open,
+    moves: MOVES[row.state] || [],
+    // D6203: the due date the ledger holds, and the Worker's own Overdue for it. A closed entry is never overdue.
+    due: day(row.due_date),
+    overdue: open && row.overdue === true,
+    meeting: row.kind === 'intro' ? meetingOf(row) : null,
     hours: hoursLabel(row.hours),
     outcome: row.outcome && String(row.outcome).trim() ? String(row.outcome).trim() : null,
     revision: Number(row.revision) || 1,
     row,
   };
+}
+
+/**
+ * D6203: an introduction's meeting, as D6202 records it. Not recorded is not "No": nobody wrote it down.
+ */
+export function meetingOf(row) {
+  if (row.meeting_outcome === 'held') return { state: 'held', text: 'Yes', date: day(row.meeting_at) };
+  if (row.meeting_outcome === 'not_held') return { state: 'not_held', text: 'No', date: null };
+  return { state: 'not_recorded', text: NOT_RECORDED, date: null, note: NOT_IN_LEDGER.meeting };
 }
 
 /** The rows of one ledger read, newest first as the Worker orders them. */
@@ -174,9 +214,10 @@ export function commitmentsOf(read, me) {
 }
 
 /**
- * The introductions the ledger records: its `intro` entries, delivered or
- * promised, each with "meeting resulting" Not recorded. `complete` says
- * whether the read held every entry, so the counts are the ledger's.
+ * The introductions the ledger records: its `intro` entries, each with its
+ * meeting. `complete` says whether the read held every entry. `counts` are the
+ * Worker's own over the whole scope (D6202 `by_kind.intro`), or null when the
+ * figures could not be read.
  */
 export function introductionsOf(read, me) {
   if (read.state === 'loading') return { state: 'loading', rows: [] };
@@ -188,11 +229,20 @@ export function introductionsOf(read, me) {
     rows,
     complete,
     delivered: rows.filter((r) => r.state === 'delivered').length,
-    promised: rows.filter((r) => r.state === 'promised').length,
+    promised: rows.filter((r) => r.open).length,
+    counts: introCounts(totalsOf(read)),
     reason: complete ? null : (totalsOf(read)
       ? `Counted only over a read that holds every entry; this one holds the newest ${read.value.entries.length} of ${read.value.totals.entries}.`
       : 'The ledger’s total could not be read, so the introductions cannot be shown to be all of them.'),
   };
+}
+
+/** D6203: the Worker's introduction figures, each a number or null; null when the figures were not read. */
+export function introCounts(t) {
+  const k = t && t.by_kind && typeof t.by_kind === 'object' ? t.by_kind.intro : null;
+  if (!k || typeof k !== 'object') return null;
+  const n = (v) => (isNum(v) ? Number(v) : null);
+  return { made: n(k.delivered), open: n(k.outstanding), meetings: n(k.meetings_held) };
 }
 
 /** The per-company rollup: every company in the book, including those with nothing recorded. */
@@ -204,8 +254,10 @@ export function companySupportOf(read) {
     uid: c.project_uid || null,
     entries: Number(c.entries) || 0,
     delivered: Number(c.delivered) || 0,
-    promised: Number(c.promised) || 0,
+    // D6203: outstanding is both open states, as the figures count it.
+    promised: (Number(c.promised) || 0) + (Number(c.in_progress) || 0),
     withdrawn: Number(c.withdrawn) || 0,
+    cancelled: Number(c.cancelled) || 0,
     // A company whose entries are all untimed, or that has none, has no hours recorded.
     hours: Number(c.entries_without_hours) === Number(c.entries)
       ? NOT_RECORDED
@@ -218,7 +270,8 @@ export function companySupportOf(read) {
 export function ledgerParams(filter, offset) {
   const params = {};
   if (offset) params.offset = offset;
-  if (filter === 'outstanding') params.state = 'promised';
+  // D6203: Outstanding is promised or in progress, which the Worker reads as `state=open`.
+  if (filter === 'outstanding') params.state = 'open';
   if (filter === 'delivered') params.state = 'delivered';
   return params;
 }
@@ -226,6 +279,6 @@ export function ledgerParams(filter, offset) {
 /** A row of the current view: the Worker narrows by state, and the page checks it again. */
 export function inView(filter) {
   return (row) => (filter === 'delivered' ? row.state === 'delivered'
-    : filter === 'outstanding' ? row.state === 'promised'
+    : filter === 'outstanding' ? OPEN_STATES.has(row.state)
       : true);
 }
