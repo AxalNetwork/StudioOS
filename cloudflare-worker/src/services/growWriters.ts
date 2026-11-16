@@ -129,6 +129,18 @@ async function roadmapItem(env: Env, pid: number, ref: unknown): Promise<{ ref: 
 
 const flag = (v: unknown) => (v === true || v === 1 || v === '1' ? 1 : 0);
 
+/** D6865 (#6865): where a feedback item came from. A row written before migration 202611161128 has none. */
+export const FEEDBACK_ORIGINS = ['inbox_reply', 'interview', 'notion', 'posthog_survey', 'typed'] as const;
+
+/** D6865: the asker's contacts record in this venture, by uid; another venture's or a missing one is a 404. NULL clears. */
+async function contactOf(env: Env, pid: number, raw: unknown): Promise<string | null> {
+  if (raw == null || raw === '') return null;
+  const uid = str(raw, 64);
+  const row = uid ? await env.DB.prepare('SELECT uid FROM contacts WHERE uid = ? AND project_id = ?').bind(uid, pid).first<{ uid: string }>() : null;
+  if (!row) throw new Refused(404, 'That customer or prospect is not on this venture', 'contact_uid');
+  return String(row.uid);
+}
+
 export async function addFeedback(
   env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
 ): Promise<{ uid: string }> {
@@ -140,6 +152,9 @@ export async function addFeedback(
   const sourceProposalId = Number.isSafeInteger(options.sourceProposalId) && Number(options.sourceProposalId) > 0
     ? Number(options.sourceProposalId) : null;
   const id = sourceProposalId == null ? newUid() : `posthog-proposal-${sourceProposalId}`;
+  // D6865: a PostHog proposal is a survey answer; a body that names no origin was typed.
+  const origin = oneOf(b.origin, FEEDBACK_ORIGINS, 'origin') ?? (sourceProposalId != null ? 'posthog_survey' : 'typed');
+  const contactUid = await contactOf(env, pid, b.contact_uid);
   if (sourceProposalId != null) {
     const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
       .bind(id, pid).first<{ uid: string }>();
@@ -147,19 +162,21 @@ export async function addFeedback(
   }
   await env.DB.prepare(
     `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
-       notify_on_ship, status, shipped_on, created_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       notify_on_ship, status, shipped_on, created_by, updated_by, contact_uid, origin)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(id, pid, text, source, str(b.from_name, 200), email(b.from_email, 'from_email'), str(b.from_company, 200), str(b.theme, 80),
     item?.ref ?? null, item?.label ?? str(b.roadmap_item_label, 200), flag(b.notify_on_ship),
-    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id).run();
+    status, status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id, contactUid, origin).run();
   await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: id, action: 'grow_feedback_logged', summary: 'Feedback logged' });
   return { uid: id };
 }
 
 export async function updateFeedback(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string; status: string }> {
   const row = await owned<Row & { id: number; status: string }>(env,
-    `SELECT id, body, source, status, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label, notify_on_ship
+    `SELECT id, body, source, status, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label, notify_on_ship, contact_uid
        FROM product_feedback WHERE uid = ? AND project_id = ?`, uid, pid);
+  // D6865: Link to a customer or prospect, or unlink with null; the typed name is kept either way.
+  const contactUid = has(b, 'contact_uid') ? await contactOf(env, pid, b.contact_uid) : (row.contact_uid as string | null);
   const status = has(b, 'status') ? oneOf(b.status, FEEDBACK_STATUS, 'status', true)! : row.status;
   let text = row.body;
   if (has(b, 'body')) { text = str(b.body, 4000); if (!text) throw new Refused(400, 'Feedback says something', 'body'); }
@@ -171,12 +188,12 @@ export async function updateFeedback(env: Env, pid: number, user: User, uid: str
   } else if (has(b, 'roadmap_item_label')) label = str(b.roadmap_item_label, 200);
   await env.DB.prepare(
     `UPDATE product_feedback SET body = ?, source = ?, status = ?, from_name = ?, from_email = ?, from_company = ?, theme = ?,
-       roadmap_item_ref = ?, roadmap_item_label = ?, notify_on_ship = ?,
+       roadmap_item_ref = ?, roadmap_item_label = ?, notify_on_ship = ?, contact_uid = ?,
        shipped_on = CASE WHEN ? = 'shipped' AND status <> 'shipped' THEN ? ELSE shipped_on END, updated_by = ?, updated_at = ? WHERE id = ?`,
   ).bind(text, has(b, 'source') ? oneOf(b.source, FEEDBACK_SOURCES, 'source', true) : row.source, status,
     has(b, 'from_name') ? str(b.from_name, 200) : row.from_name, has(b, 'from_email') ? email(b.from_email, 'from_email') : row.from_email,
     has(b, 'from_company') ? str(b.from_company, 200) : row.from_company, has(b, 'theme') ? str(b.theme, 80) : row.theme,
-    ref, label, has(b, 'notify_on_ship') ? flag(b.notify_on_ship) : row.notify_on_ship,
+    ref, label, has(b, 'notify_on_ship') ? flag(b.notify_on_ship) : row.notify_on_ship, contactUid,
     status, nowIso().slice(0, 10), user.id, nowIso(), row.id).run();
   await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_updated', summary: 'Feedback updated' });
   return { uid, status };
