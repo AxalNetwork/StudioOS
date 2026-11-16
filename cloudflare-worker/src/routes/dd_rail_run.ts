@@ -5,7 +5,7 @@ import { requireAuth, selectJwt } from '../auth';
 import { requireDdReader } from './dd';
 import legacyRailRun, { type Runner, type Quoter } from './rail_run';
 import { roomProject } from './data_room';
-import { run, quoteRun, type RunOptions } from '../services/aiRouter';
+import { run, quoteRun, assistOff, ASSIST_OFF_MESSAGE, type RunOptions } from '../services/aiRouter';
 import { loadAiBudget } from '../services/aiBudget';
 import { proposeRail } from '../services/railProposals';
 import { searchRoom, defaultDeps, type Hit, type Block } from '../services/dataRoomSearch';
@@ -38,6 +38,8 @@ export function ddRailRunRoutes(deps: { run?: Runner; quote?: Quoter; search?: S
       if (input.option === 'dd:request_drafts' && ctx.targets.length > 100) throw new DdRunRefusal(409, 'dd_context_large', 'Choose a smaller section before running Eadwyn.');
       const events: string[] = [];
       const finish = (done: unknown) => new Response([...events, event('done', done)].join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+      // Retrieval is metered too, so the case page's switch precedes search.
+      if (await assistOff(c.env, Number(user.id), DD_PAGE)) return finish({ proposals: [], dropped: [], refusal: { code: 'assist_off', status: 403, message: ASSIST_OFF_MESSAGE } });
       if (input.option === 'dd:summary' && ctx.empty) return finish({ proposals: [], dropped: [], reason: 'nothing_to_summarise', message: 'Nothing to summarise yet', risk: { state: 'not_recorded', label: 'Not recorded' } });
       if (input.option === 'dd:request_drafts' && ctx.targets.length === 0) return finish({ proposals: [], dropped: [], reason: 'no_pending_items' });
       let hits: Hit[] | undefined;

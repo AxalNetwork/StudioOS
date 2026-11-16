@@ -349,3 +349,16 @@ test('matched room passages use the search slice even when documents contain ast
   w.output(draft(['passage:0']));
   assert.equal((await w.call(7,'dd:answer_from_room',{ request_id: 1 })).body.proposals.length, 1);
 });
+
+test('the case page switch prevents drafting and paid retrieval for all five options', async t => {
+  for (const option of DD_OPTIONS) {
+    const w = await world(); t.after(w.close);
+    const who = option === 'dd:answer_from_room' ? 7 : 2;
+    w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,?,'','manual')").run(`off-${who}`, who, DD_PAGE.toLowerCase());
+    const result = await w.call(who,option,{ section_id: option === 'dd:section_summary' ? 1 : undefined, request_id: 1 });
+    assert.equal(result.body.refusal?.code, 'assist_off');
+    assert.equal(w.seen.length, 0);
+    assert.equal(w.quotes.length, 0);
+    assert.equal(w.searches.length, 0);
+  }
+});
