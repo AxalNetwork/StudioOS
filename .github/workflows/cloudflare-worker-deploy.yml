@@ -52,6 +52,7 @@ jobs:
           node-version: '22'
       - name: Wait for all six required checks
         env:
+          STUDIOOS_RELEASE_CHECK: initial
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
 
@@ -83,6 +84,7 @@ jobs:
 
       - name: Recheck candidate under the production lock
         env:
+          STUDIOOS_RELEASE_CHECK: production-lock
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -200,6 +202,7 @@ jobs:
       - name: Confirm the candidate still owns the production release
         id: admitted
         env:
+          STUDIOOS_RELEASE_CHECK: production-ownership
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -464,6 +467,7 @@ jobs:
       - name: Recheck the candidate under the branch rollout lock
         if: steps.list.outputs.codes != ''
         env:
+          STUDIOOS_RELEASE_CHECK: branch-rollout-lock
           GH_TOKEN: ${{ github.token }}
         run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
 

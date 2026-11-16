@@ -452,8 +452,8 @@ test('the investor full-bleed list covers every investor root and zone route', (
   const required = [...Object.values(OVERVIEWS), ...allZoneRoutes('investor')];
   assert.equal(Object.values(OVERVIEWS).length, 5, 'the investor shell no longer declares 5 roots');
   // 20 since D546 (#1080) added Geographies to the Research bucket; 19 since
-  // D1243 (#3256) retired Deals · Pipeline into Deal flow's table.
-  assert.equal(allZoneRoutes('investor').length, 19, 'the investor shell no longer declares 19 zones');
+  // D1243 (#3256) retired Deals · Pipeline. #6211 adds Portfolio Performance.
+  assert.equal(allZoneRoutes('investor').length, 20, 'the investor shell declares 20 zones');
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
     'these investor surfaces sit in the shell’s centred column instead of owning the page');
 

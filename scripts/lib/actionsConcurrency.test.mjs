@@ -125,3 +125,43 @@ test('phantom runs held a slot only if a job got a runner; the report says so', 
   assert.match(text, /They never held a slot\*\* \(they have no jobs at all\)/);
   assert.match(text, /\| CI \| 60 \| 100\.0% \|/);
 });
+
+// #6676: merge candidates' wait for a runner and for the landing gate, by UTC hour of creation.
+test('merge-candidate start wait: first runner and first gate result per merge_group run of ci.yml, by hour', async () => {
+  const { mergeStartWait } = await import('./actionsConcurrency.mjs');
+  const ci = (created, jobs, extra = {}) => run('CI', jobs, { event: 'merge_group', path: '.github/workflows/ci.yml', created_at: at(created), ...extra });
+  const gate = (from, to, extra = {}) => ran(from, to, { name: 'landing gate', ...extra });
+  const runs = [
+    // 00:xx — waits 4 min for a runner, gate at 30 min.
+    ci(0, [ran(4, 10, { created_at: at(0) }), gate(25, 30, { created_at: at(0) })]),
+    // 00:xx — waits 10 min; an earlier queue-cancelled job had no runner and must not count as the start.
+    ci(10, [ran(10, 12, { runner_id: 0, runner_name: '', conclusion: 'cancelled' }), ran(20, 30), gate(40, 50)]),
+    // 01:xx — never got a runner, and no gate result.
+    ci(70, [queuedOnly(70)]),
+    // 01:xx — the gate was skipped: a runner start but no gate result.
+    ci(80, [ran(81, 90), gate(80, 80, { conclusion: 'skipped', runner_id: null, runner_name: null })]),
+    // Not counted: a push run of ci.yml, a merge_group run of another workflow, and one created outside the window.
+    run('CI', [ran(1, 2)], { event: 'push', path: '.github/workflows/ci.yml' }),
+    run('Other', [ran(1, 2)], { event: 'merge_group', path: '.github/workflows/other.yml' }),
+    ci(200, [ran(201, 202)]),
+  ];
+  const wait = mergeStartWait(runs, T0, T0 + 120 * 60_000);
+  assert.equal(wait.all.runs, 4);
+  assert.deepEqual(wait.hours.map(h => h.hour), [0, 1]);
+  const [h0, h1] = wait.hours;
+  assert.equal(h0.runs, 2);
+  assert.equal(h0.startP50, 4);
+  assert.equal(h0.startP90, 10);
+  assert.equal(h0.gateP50, 30);
+  assert.equal(h0.gateP90, 40);
+  assert.deepEqual([h1.runs, h1.noRunner, h1.noGate, h1.startP50], [2, 1, 2, 1]);
+  assert.equal(h1.gateP50, null);
+  assert.deepEqual([wait.all.noRunner, wait.all.noGate], [1, 2]);
+  // It reaches the report as its own table, beside the 2026-11-14 tables.
+  const result = window(runs, 120);
+  assert.deepEqual(result.mergeWait, wait);
+  const md = report({ result, coverage: { from: T0, to: T0 + 120 * 60_000, requestedHours: 2, fraction: 1, listedFrom: T0, leadMinutes: 0, runs: 7, runsWithJobs: 7, requests: 1, cap: 10, pages: { runs: 1, jobs: 0, prs: 0, phantom: 0 } }, phantom: phantomVerdict([]) });
+  assert.match(md, /### Merge candidates: wait for a runner and for the landing gate \(#6676\)/);
+  assert.match(md, /\| 00:00 \| 2 \| 4\.0 \| 10\.0 \| 30\.0 \| 40\.0 \| 0 \| 0 \|/);
+  assert.match(md, /\| \*\*All hours\*\* \| 4 \| /);
+});

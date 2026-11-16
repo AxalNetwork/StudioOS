@@ -323,7 +323,9 @@ test('mounted CP2: an investor sees their own line and the round’s total, neve
     for (const name of ['Nora Angel', 'Fund I', 'A prospect']) assert.ok(!v.text().includes(name), `${name} never shows to this investor`);
     for (const id of ['closing-tiles', 'closing-lines', 'closing-needs-you', 'closing-account']) assert.ok(!v.has(id), id);
     assert.ok(!v.asked.some((a) => /commitments|closing-checklist|transfers|reporting/.test(a.path)), 'no read of other lines, the checklist, the transfers or the desk');
-    assert.match(v.text('closing-sent-word'), /accept a match from your Mercury/);
+    // D6198: the investor records that they sent it without Mercury; a Mercury match records it too.
+    assert.match(v.text('closing-sent-word'), /Record the day you sent it and the amount\. It reads Sent, not yet confirmed\. Accepting a match from your Mercury records it too\./);
+    assert.ok(v.has('closing-declare'), 'the investor can record that they sent it');
   } finally { await v.close(); }
 });
 

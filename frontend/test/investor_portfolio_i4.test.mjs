@@ -15,8 +15,8 @@ const frameStyles = read('frontend/src/pages/portfolio/portfolio.css');
 
 test('investor Portfolio uses the I4 landing page for the active role', () => {
   assert.match(app, /<PortfolioWorkspace activeRole=\{effectiveRole\} \/>/);
-  assert.match(workspace, /\(activeRole \|\| role\) === 'investor' && active === 'health'/);
-  assert.match(workspace, /<InvestorPortfolioCanvas \/>/);
+  assert.match(workspace, /const viewer = activeRole \|\| role;/);
+  assert.match(workspace, /if \(viewer === 'investor' && active === 'health'\) \{\s*return <InvestorPortfolioCanvas \/>;/);
   assert.match(shell, /key === 'portfolio' && children\) return children/);
 });
 
