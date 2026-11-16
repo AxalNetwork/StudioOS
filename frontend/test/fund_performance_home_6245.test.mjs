@@ -50,7 +50,8 @@ test('the page gate is the Worker gate: the Investor licence, no tier; an admin 
   assert.match(route, /effectiveRole !== 'admin' \? <FundPerformancePage locked \/> : <FundOpsRedirect \/>/);
   assert.doesNotMatch(route, /investorFundWorkspace|embedded/, 'the tier gate and the bare body are gone');
   const worker = read('cloudflare-worker/src/routes/fund_performance.ts');
-  assert.match(worker, /if \(user\.role !== 'admin' && !holdsLicence\(user, 'investor'\)\) return notFound\(\);/, 'the Worker asks the licence, not the tier');
+  // #6246 (D6246): the Worker also lets the GP of record read their own funds; it still asks no tier of an LP.
+  assert.match(worker, /if \(user\.role !== 'admin' && !holdsLicence\(user, 'investor'\) && !funds\.length\) return notFound\(\);/, 'the Worker asks the licence, not the tier');
 });
 
 test('the Fund landing links to the page, and the rail row stays one alias', () => {
