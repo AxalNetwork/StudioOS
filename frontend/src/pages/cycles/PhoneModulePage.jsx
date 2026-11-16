@@ -171,7 +171,7 @@ export default function PhoneModulePage({
   const title = data?.module?.records_title || name;
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
-  const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
+  const toolLinks = [tool, ...tools].flat().filter((item) => safeHref(item?.href)); // D6010: `tool` may be several
   if (typeof home === 'function') {
     const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
     return (
