@@ -389,5 +389,6 @@ export async function testOauthCreds(
     case 'gcip':       return testGcip(cred.id, cred.secret);
     case 'tiktok':     return { ok: false, reachable: false, detail: 'Verify TikTok credentials by completing an approved member sign-in.' };
     case 'google_search_console': return { ok: false, reachable: false, detail: 'Verify Search Console credentials by completing an approved member sign-in.' };
+    case 'typeform':   return { ok: false, reachable: false, detail: 'Verify Typeform credentials by completing an approved member sign-in.' };
   }
 }

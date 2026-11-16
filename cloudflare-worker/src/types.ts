@@ -4,6 +4,10 @@ export interface Env {
   GOOGLE_SEARCH_CONSOLE_APPROVED?: string;
   GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
   GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
+  /** D5827: '1' once the owner's Typeform app is registered and a callback verified. */
+  TYPEFORM_APP_APPROVED?: string;
+  TYPEFORM_CLIENT_ID?: string;
+  TYPEFORM_CLIENT_SECRET?: string;
   FACEBOOK_APP_APPROVED?: string;
   FACEBOOK_LOGIN_CONFIG_ID?: string;
   TIKTOK_CLIENT_KEY?: string;
