@@ -26,6 +26,10 @@ export { FEED_OUTCOMES };
  *           joins, and the store's own text column
  *   outcome ok | refused | live | ended | not_closed
  *   source  one store's table name
+ *   skip    D4708 part 2: with `before`, the rows of the cursor's own second
+ *           the last page already showed. The read then includes that second
+ *           and continues after those rows, so a page that lay wholly inside
+ *           one second is followed by the rest of it, never past it.
  *
  * A value outside its shape is a 400 naming the field, never a quietly
  * widened read: an investigator who typed a date the server ignored would be
@@ -36,6 +40,11 @@ export const FEED_SOURCES = [
 ] as const;
 export type FeedOutcome = (typeof FEED_OUTCOMES)[number];
 export type FeedSource = (typeof FEED_SOURCES)[number];
+/**
+ * D4708 part 2 — the most rows of one second the cursor can continue past (ten full pages). Each store then
+ * reads at most FEED_LIMIT + FEED_SKIP_MAX rows; a second that holds more than that is paged as before, after it.
+ */
+export const FEED_SKIP_MAX = 600;
 export type FeedQuery = {
   upper: string | null;
   lower: string | null;
@@ -43,6 +52,8 @@ export type FeedQuery = {
   like: string | null;
   outcome: FeedOutcome | null;
   source: FeedSource | null;
+  /** D4708 part 2 — continue inside the cursor's second: its start (epoch ms) and how many of its rows were shown. */
+  skip: { second: number; rows: number } | null;
   applied: Record<string, string | number>;
 };
 
@@ -61,6 +72,7 @@ export function parseFeedQuery(q: (k: string) => string | undefined):
   };
   let upper: number | null = null;
   let lower: number | null = null;
+  let skip: { second: number; rows: number } | null = null;
 
   const before = text('before');
   if (before) {
@@ -68,6 +80,18 @@ export function parseFeedQuery(q: (k: string) => string | undefined):
     if (Number.isNaN(ms)) return { ok: false, field: 'before', message: 'The cursor is not a timestamp.' };
     upper = ms;
     applied.before = before;
+  }
+  const skipText = text('skip');
+  if (skipText) {
+    const rows = /^[1-9]\d{0,3}$/.test(skipText) ? Number(skipText) : NaN;
+    if (upper === null || !(rows <= FEED_SKIP_MAX)) {
+      return { ok: false, field: 'skip', message: `The skip is a row count of at most ${FEED_SKIP_MAX}, with a cursor.` };
+    }
+    // The cursor's whole second is read again; the rows already shown are dropped after the merge.
+    const second = Math.floor(upper / 1000) * 1000;
+    skip = { second, rows };
+    upper = second + 1000;
+    applied.skip = rows;
   }
   const day = (k: 'from' | 'to') => {
     const v = text(k);
@@ -133,7 +157,7 @@ export function parseFeedQuery(q: (k: string) => string | undefined):
     query: {
       upper: upper === null ? null : sqlStamp(upper),
       lower: lower === null ? null : sqlStamp(lower),
-      actor, like, outcome, source, applied,
+      actor, like, outcome, source, skip, applied,
     },
   };
 }
@@ -166,7 +190,9 @@ export function storesFor(f: FeedQuery): Record<FeedSource, boolean> {
  * next read takes rows strictly older, at the second `datetime()` keeps, so a
  * page cut inside a second would drop that second's remaining rows. Trailing
  * rows in the last row's second are held back to the next page — unless the
- * whole page is one second, which is returned whole and said so.
+ * whole page is one second, which is returned whole and said so (`split`).
+ * D4708 part 2: the reply's cursor then carries `skip`, and the next read
+ * continues inside that second (`governanceFeed.ts`).
  */
 export function trimToSecond<T extends { ts: number }>(rows: T[], more: boolean): { page: T[]; split: boolean } {
   if (!more || rows.length === 0) return { page: rows, split: false };

@@ -141,6 +141,32 @@ introductions.post('/request', async (c) => {
     return c.json({ error: 'target_required', message: 'Provide founder_user_id, founder_id, or project_id' }, 400);
   }
 
+  // D6260 (#6260), the owner's choice B: refuse a target the investor could
+  // not see, before any slot is spent. D702 counts an investor's own ask row
+  // as reach, so an ask to a hidden founder or venture would otherwise make
+  // it findable. The check is the Asked view's own join (D702's two rules),
+  // run on each id the ask would store, since each id is reach on its own. A
+  // hidden target and an unknown id get the same answer, so the refusal does
+  // not say whether one exists.
+  const named: AskRow[] = [
+    ...(founderUserId ? [{ founder_user_id: founderUserId }] : []),
+    ...(projectId ? [{ project_id: projectId }] : []),
+    ...(founderId ? [{ founder_id: founderId }] : []),
+  ];
+  const reach = await askTargets(c.env, user, named);
+  if (reach.unreadable) {
+    return c.json({
+      error: 'target_unreadable',
+      message: 'Whether you can reach this founder or venture could not be read. No ask was sent and none was used. Try again.',
+    }, 503);
+  }
+  if (!reach.targets.every((t) => t.available)) {
+    return c.json({
+      error: 'target_not_available',
+      message: 'This founder or venture is not available to you. No ask was sent and none was used.',
+    }, 404);
+  }
+
   // Quota check — paywall gate. Free investors get 3/quarter, Plus 10 (D1334), Pro 25, Inst 100.
   const state = await getIntroQuotaState(c.env, user.id);
   if (state.used >= state.cap) {

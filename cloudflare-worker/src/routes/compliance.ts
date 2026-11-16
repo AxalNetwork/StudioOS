@@ -18,6 +18,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
+import { Refused, removeObligation } from '../services/growWriters';
 
 const compliance = new Hono<{ Bindings: Env }>();
 
@@ -505,7 +506,12 @@ compliance.delete('/events/:id', async (c) => {
   const proj = await loadProject(c, event.project_id, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   try { checkWrite(user, proj); } catch { return c.json({ detail: 'Forbidden' }, 403); }
-  await c.env.DB.prepare('DELETE FROM compliance_events WHERE id = ?').bind(id).run();
+  // D6115 (#6115): Grow's Remove runs the same delete. A held obligation is
+  // refused (409, what to do instead); its agenda goes with it; activity keeps it.
+  try { await removeObligation(c.env, Number(event.project_id), user, id); } catch (e) {
+    if (e instanceof Refused) return c.json({ detail: e.sentence }, e.status as 404 | 409);
+    throw e;
+  }
   return c.json({ ok: true });
 });
 

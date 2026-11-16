@@ -1265,10 +1265,11 @@ export const BRAND_MONOGRAM = Object.freeze({
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });
 
-/** A second key for the same brand (REGISTRY_ALIAS's two, the profile's `twitter`, the admin `gcip`). */
+/** A second key for the same brand (REGISTRY_ALIAS's two, the profile's `twitter`, the admin `gcip`, D5839's Search Console). */
 export const BRAND_ALIAS = Object.freeze({
   google_calendar: 'google',
   google_workspace: 'google',
+  google_search_console: 'google',
   microsoft_365: 'microsoft',
   twitter: 'x',
   gcip: 'google',
