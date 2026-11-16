@@ -311,6 +311,9 @@ function asQuoteConsent(raw: unknown): number | null {
   return 0;
 }
 
+/** D6001: the channels a lead may name, as the interview stores them (`video` is "Call", `manual` typed notes). */
+const LEAD_CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
+
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
@@ -401,7 +404,19 @@ progress.post('/discovery/:projectId', async (c) => {
     return c.json({ detail: 'interviewee_name is required' }, 400);
   }
   const intervieweeRole = asStringOrNull(body.interviewee_role);
-  const interviewDate = asStringOrNull(body.interview_date) || todayIso();
+  // D6001 (#6001): Add a lead makes the interview at stage `lead`, the only
+  // stage a create takes (a later stage is a move, which stamps its date). A
+  // lead has not been held, so it gets no interview date unless one is typed.
+  // With no stage the row is stored as before: no stage, which reads as Done.
+  const lead = body.stage === 'lead';
+  if (body.stage != null && body.stage !== '' && !lead) {
+    return c.json({ detail: 'A new interview takes stage lead, or no stage.' }, 400);
+  }
+  const channel = body.channel == null || body.channel === '' ? null : String(body.channel);
+  if (channel != null && !(LEAD_CHANNELS as readonly string[]).includes(channel)) {
+    return c.json({ detail: `channel must be one of ${LEAD_CHANNELS.join(', ')}` }, 400);
+  }
+  const interviewDate = asStringOrNull(body.interview_date) || (lead ? null : todayIso());
   const notes = asStringOrNull(body.notes) ?? '';
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
@@ -420,20 +435,34 @@ progress.post('/discovery/:projectId', async (c) => {
   // 215's columns are named in INTERVIEW_SELECT, so a database without them
   // fails the whole read rather than degrading. Bootstrapped beside 211's.
   await ensureDiscoveryRecordingColumns(c.env);
-  const res = await c.env.DB.prepare(
-    `INSERT INTO discovery_interviews
-       (project_id, interviewee_name, interviewee_role, interview_date,
-        notes, hypotheses_json, pains_json, featured,
-        validation_rating, validation_comment, icp_fit,
-        quote_consent, interviewee_company,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  const values = [
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
     featured, validationRating, validationComment, icpFit,
     quoteConsent, intervieweeCompany,
     nowIso, nowIso,
+  ];
+  // One statement either way, so a lead is never stored without its stage.
+  // The stage and channel columns (migration 440) are named only when sent.
+  const res = await (lead || channel != null
+    ? c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at, stage, channel)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, lead ? 'lead' : null, channel)
+    : c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values)
   ).run();
 
   const newId = lastInsertId(res);
@@ -1303,11 +1332,26 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
-  await c.env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ?').bind(id).run();
-  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
-    entityId: id, action: 'roadmap_deleted', summary: `${existing.objective} deleted` });
+  await deleteRoadmapItem(c.env, { projectId: existing.project_id, id, objective: existing.objective, userId: user.id });
   return c.json({ deleted: id });
 });
+
+/**
+ * #6041: remove one roadmap item and what hangs on it, then log it. The one delete both routes call
+ * (`DELETE /api/progress/roadmap/okr/:id` and Build's `DELETE /api/cycles/build/roadmap/:id`), each after its own
+ * ownership and write gate. The item's dependency edges go with it, in either direction, in the same batch, so the
+ * Dependencies view never draws an edge to an item that is gone. The table is migration 254's; a database that
+ * never created it has no edges to remove.
+ */
+export async function deleteRoadmapItem(env: Env, a: { projectId: number; id: number; objective: string; userId: number }): Promise<void> {
+  const edges = await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'okr_dependencies'").first();
+  await env.DB.batch([
+    ...(edges ? [env.DB.prepare('DELETE FROM okr_dependencies WHERE project_id = ? AND (okr_id = ? OR blocks_okr_id = ?)').bind(a.projectId, a.id, a.id)] : []),
+    env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(a.id, a.projectId),
+  ]);
+  await logCycleWrite(env, { projectId: a.projectId, userId: a.userId, cycle: 'build', module: 'product-roadmap',
+    entityId: a.id, action: 'roadmap_deleted', summary: `${a.objective} deleted` });
+}
 
 /**
  * Migration 252's log, bootstrapped at runtime like its siblings.

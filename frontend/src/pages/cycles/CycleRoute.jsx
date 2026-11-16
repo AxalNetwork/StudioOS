@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -381,6 +381,11 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
+/** D6049: the bands as they always drew, on a module with no page of its own (`def.homes`). */
+function PlainBands({ children }) {
+  return <>{children}</>;
+}
+
 /** D1178: a Use of funds page under a tab, and the tab it sits under. */
 const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
 
@@ -487,8 +492,14 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [canReadDecisions, setCanReadDecisions] = useState(true);
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
 
-  const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
+  // D6001 (#6001): a next link's `?filter=` opens the table filtered to the rows it names.
+  const [query, setQuery] = useState(() => queryFromSearch(location.search));
   const [reload, setReload] = useState(0);
+  const partRefresh = useRef(null);
+  const reloadPart = (options) => {
+    partRefresh.current = options?.keepParts === true ? { cycle, slug, projectId, query } : null;
+    setReload((n) => n + 1);
+  };
   // #4017 (#3710 IV-D3): the record's Email composes in the right Sheet over the record.
   const [emailing, setEmailing] = useState(false);
   // D1454 (#3710, IV-D1): the record header's two slots, filled by the record page's portal.
@@ -561,7 +572,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
   // read below (its dependency is `query`), so every module page read its module twice when it opened.
   useEffect(() => {
-    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+    const opening = queryFromSearch(location.search);
+    setQuery((cur) => (cur.q === '' && !cur.sort && cur.page === 1 && JSON.stringify(cur.filter || {}) === JSON.stringify(opening.filter) ? cur : opening));
+    // The address is read as the module opens; the table's own controls change the query after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
@@ -593,7 +607,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (record || !slug || !known || !projectId || !def) return undefined;
     if (distribution && distributionTab !== 'overview') return undefined;
     let alive = true;
-    setModuleStatus('loading');
+    const refresh = partRefresh.current;
+    partRefresh.current = null;
+    // A completed connector sync can refresh the same module without
+    // unmounting the part that is showing the sync result.
+    if (!refresh || refresh.cycle !== cycle || refresh.slug !== slug || refresh.projectId !== projectId || refresh.query !== query) {
+      setModuleStatus('loading');
+    }
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
       .then((data) => {
         if (!alive) return;
@@ -901,8 +921,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     const phoneRowOf = phone ? fnOf(def.phoneRows, slug) : null;
     // D5077 (#5077, BD7, BD8, BD18 A): on a cycle with a Sources region, the connector parts draw there,
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
-    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null }) : null;
+    const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
+    // D6001 (#6001): what a def's own Add and row control are handed: the venture, the page's one dialog, a re-read, and whether this viewer writes.
+    const defCtx = { projectId, openDialog, reload: () => setReload((n) => n + 1), canWrite: module?.parts?.can_write === true };
+    const defRowAction = fnOf(def.rowActions, slug);
+    // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
+    // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
+    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
+    const Bands = home?.Bands || PlainBands;
     body = (
       <ModulePage
         cycle={cycle}
@@ -922,15 +949,17 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         query={query}
         onQuery={setQuery}
         action={action}
+        // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
-          : fnOf(def.add, slug)?.(q, openAction)}
+          : fnOf(def.add, slug)?.(q, openAction, defCtx)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
         onExport={def.exportRecords && projectId && !narrativeAdmin
           ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort })
           : cycle === 'grow' && projectId && read?.exportable === true
             ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
+        // D6001 (#6001): a module with no Edit may name its own row control (Customer research's Move stage).
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -938,7 +967,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
           ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
             () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
-        }) : undefined}
+        }) : !narrativeAdmin && !edit && projectId && defRowAction ? (row) => defRowAction(row, defCtx) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
@@ -955,6 +984,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
         asks={moduleAsks}
+        home={home?.body ?? null}
+        sub={home ? home.sub : undefined}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
@@ -972,9 +1003,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
             railOption={`fill:${fillKind}`} />
         )}
+        <Bands>
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} scoped={cycle === 'raise' && slug === 'investor-narrative'} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
+        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
+        </Bands>
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
           <FromYourInterviews parts={module?.parts}
@@ -983,7 +1017,6 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
         {def.sourcesRegion ? null : parts}
-        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>
     );

@@ -16,6 +16,8 @@ export const cycleValidateApi = {
   setWaitlistTarget: (projectId, value) => request(`/cycles/validate/waitlist-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   // D685 §5.12: the monthly interviews target Validate's phone meter reads; null clears it.
   setInterviewsTarget: (projectId, value) => request(`/cycles/validate/interviews-target?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  // D5997 (#5997): the venture's "Trying to learn:" line; null or '' clears it.
+  setObjective: (projectId, value) => request(`/cycles/validate/objective?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   setMarketMark: (projectId, item, done) => request(`/cycles/validate/market-marks/${encodeURIComponent(item)}?${q(projectId)}`, { method: 'PUT', body: JSON.stringify({ done }) }),
   addMarketSource: (projectId, data) => request(`/cycles/validate/market-sources?${q(projectId)}`, { method: 'POST', body: JSON.stringify(data) }),
   removeMarketSource: (projectId, sourceId) => request(`/cycles/validate/market-sources/${sourceId}?${q(projectId)}`, { method: 'DELETE' }),

@@ -3379,6 +3379,58 @@
    "more": []
   },
   {
+   "pageKey": "Investor · Portfolio",
+   "optionKey": "draft:portfolio-read",
+   "optionLabel": "Draft the note",
+   "kind": "numbers",
+   "handler": "draft",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Deeper",
+     "line": "Reads figures out of documents"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Investor · Portfolio · Performance",
+   "optionKey": "draft:performance-note",
+   "optionLabel": "Draft the note",
+   "kind": "numbers",
+   "handler": "draft",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Deeper",
+     "line": "Reads figures out of documents"
+    }
+   ],
+   "more": []
+  },
+  {
    "pageKey": "Investor · Portfolio · Positions",
    "optionKey": "draft:multiple-narrative",
    "optionLabel": "Draft the narrative",

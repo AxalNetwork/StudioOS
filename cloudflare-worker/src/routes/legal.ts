@@ -80,18 +80,26 @@ const LEGAL_PAGE_DOCUMENTS: ReadonlyArray<{ key: string; layer: string }> = [
 // Task #30 — Jurisdiction wizard (worker parity).
 // Read-only catalogue endpoint. Doc generation + entity creation stays
 // on the FastAPI backend, which is the source of truth for both DBs.
+//
+// D6683 (#6683): no tax, fee or time claim without a source and a day
+// (D4357). Every such claim is gone: `est_cost_usd`, `time_to_form_days` and
+// `tax_summary` are null ("Not recorded" on the compare step, never 0), and
+// no founder-facing string here holds a currency amount, a percentage or
+// "Atlas" (`incorporate_truth_6683.test.ts`). `atlas_supported` is false
+// everywhere: D4677 removed the Atlas call. New facts arrive with the
+// catalogue (#6690, #6691), each with its source.
 export const JURISDICTIONS = [
-  { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: [500, 1500], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: true, pros: ['Stripe Atlas one-click', 'Universally accepted by US VCs'], cons: ['21% federal corporate tax', 'Annual filings + agent'], tax_summary: '21% federal corporate income tax. DE franchise tax $400–$1,750.', templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
+  { id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'The default for VC-backed startups.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: true, atlas_supported: false, pros: ['Universally accepted by US VCs'], cons: ['Annual filings + agent'], tax_summary: null, templates: ['certificate_of_incorporation_de', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
   // D586 (#1213, the owner's answer A) — Wyoming C-Corp. Priced only from the
   // catalog (a Stripe price tagged jurisdiction_id = us_wy_ccorp): there is no
   // JURISDICTION_COSTS entry and no legacy env price. Its Articles of
   // Incorporation are generated only from a counsel-approved body in the D1
   // template store (COUNSEL_REQUIRED_TEMPLATES below), never from a stub.
-  { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'A US corporation with no state corporate income tax.', est_cost_usd: [100, 600], time_to_form_days: [1, 7], fundraising_friendly: true, atlas_supported: false, pros: ['No Wyoming corporate income tax', 'Low annual report fee'], cons: ['Less familiar to US VCs than Delaware', 'Annual report + registered agent'], tax_summary: '21% federal corporate income tax. Wyoming levies no state corporate income tax.', templates: ['articles_of_incorporation_wy', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
-  { id: 'us_de_llc', label: 'Delaware LLC', country: 'United States', country_code: 'US', entity_type: 'Limited Liability Company', summary: 'Pass-through taxation. Hard to take VC.', est_cost_usd: [300, 800], time_to_form_days: [1, 5], fundraising_friendly: false, atlas_supported: false, pros: ['Pass-through tax', 'Flexible operating agreement'], cons: ['Most VCs cannot invest in LLCs', 'Self-employment tax'], tax_summary: 'Pass-through. DE franchise tax flat $300/yr.', templates: ['operating_agreement', 'ein_application_kit', 'member_consent'] },
-  { id: 'uk_ltd', label: 'UK Private Limited (Ltd)', country: 'United Kingdom', country_code: 'GB', entity_type: 'Private Limited Company', summary: 'Fast and credible for European VCs.', est_cost_usd: [50, 250], time_to_form_days: [1, 3], fundraising_friendly: true, atlas_supported: false, pros: ['£50 same-day filing', 'SEIS/EIS angel tax relief'], cons: ['US VCs may want a flip', 'Public PSC register'], tax_summary: 'Corporation tax 25% (19% small-profits up to £50k).', templates: ['uk_memorandum_of_association', 'uk_articles_of_association', 'uk_form_in01_kit'] },
-  { id: 'sg_pte', label: 'Singapore Pte Ltd', country: 'Singapore', country_code: 'SG', entity_type: 'Private Limited (Pte. Ltd.)', summary: 'Asia hub. Strong rule of law, English-language filings.', est_cost_usd: [600, 1500], time_to_form_days: [1, 5], fundraising_friendly: true, atlas_supported: false, pros: ['Startup tax exemption ~75% on first S$100k', '17% headline corporate tax'], cons: ['Need SG-resident director', 'Bank account 2–4 weeks'], tax_summary: '17% corporate tax; effective ~4–8% in years 1–3.', templates: ['sg_constitution', 'sg_acra_form_45_kit', 'sg_first_directors_resolution'] },
-  { id: 'ee_oy', label: 'Estonia OÜ (e-Residency)', country: 'Estonia', country_code: 'EE', entity_type: 'Osaühing (Private Limited)', summary: 'Fully remote, 0% tax on retained earnings.', est_cost_usd: [200, 500], time_to_form_days: [3, 14], fundraising_friendly: false, atlas_supported: false, pros: ['0% tax on retained earnings', '100% online incorporation'], cons: ['20% distribution tax on dividends', 'Need e-Residency first (~6–8 weeks)'], tax_summary: '0% on retained earnings. 20% distribution tax on dividends.', templates: ['ee_articles_of_association', 'ee_e_residency_application_kit', 'ee_founding_resolution'] },
+  { id: 'us_wy_ccorp', label: 'Wyoming C-Corp', country: 'United States', country_code: 'US', entity_type: 'C Corporation', summary: 'A US corporation formed in Wyoming.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: true, atlas_supported: false, pros: [], cons: ['Less familiar to US VCs than Delaware', 'Annual report + registered agent'], tax_summary: null, templates: ['articles_of_incorporation_wy', 'bylaws', 'stock_purchase_agreement', 'section_83b'] },
+  { id: 'us_de_llc', label: 'Delaware LLC', country: 'United States', country_code: 'US', entity_type: 'Limited Liability Company', summary: 'Hard to take VC.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: false, atlas_supported: false, pros: ['Flexible operating agreement'], cons: ['Most VCs cannot invest in LLCs'], tax_summary: null, templates: ['operating_agreement', 'ein_application_kit', 'member_consent'] },
+  { id: 'uk_ltd', label: 'UK Private Limited (Ltd)', country: 'United Kingdom', country_code: 'GB', entity_type: 'Private Limited Company', summary: 'Credible for European VCs.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: true, atlas_supported: false, pros: [], cons: ['US VCs may want a flip', 'Public PSC register'], tax_summary: null, templates: ['uk_memorandum_of_association', 'uk_articles_of_association', 'uk_form_in01_kit'] },
+  { id: 'sg_pte', label: 'Singapore Pte Ltd', country: 'Singapore', country_code: 'SG', entity_type: 'Private Limited (Pte. Ltd.)', summary: 'Asia hub. Strong rule of law, English-language filings.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: true, atlas_supported: false, pros: [], cons: ['Need SG-resident director'], tax_summary: null, templates: ['sg_constitution', 'sg_acra_form_45_kit', 'sg_first_directors_resolution'] },
+  { id: 'ee_oy', label: 'Estonia OÜ (e-Residency)', country: 'Estonia', country_code: 'EE', entity_type: 'OÜ', summary: 'Fully remote.', est_cost_usd: null, time_to_form_days: null, fundraising_friendly: false, atlas_supported: false, pros: [], cons: ['Need e-Residency first'], tax_summary: null, templates: ['ee_articles_of_association', 'ee_e_residency_application_kit', 'ee_founding_resolution'] },
 ];
 
 legal.get('/jurisdictions', async (c) => {
@@ -295,16 +303,9 @@ legal.post('/incorporate/wizard', async (c) => {
     generated.push({ id: (inserted[0] as any).id, title: meta.title, doc_type: tkey, reused: false });
   }
 
-  let handoff: any = { type: 'documents_only', next_steps: [] };
-  if (j.atlas_supported) {
-    const params = new URLSearchParams({ company: body.company_name.trim(), ref: `axal-studioos-p${project.id}` });
-    handoff = {
-      type: 'stripe_atlas',
-      provider: 'Stripe Atlas',
-      url: `https://atlas.stripe.com/start?${params.toString()}`,
-      summary: 'Continue incorporation on Stripe Atlas — your company name is pre-filled.',
-    };
-  } else if (j.id === 'us_wy_ccorp') {
+  // D6683: no Atlas handoff (D4677 removed the call; no jurisdiction is atlas_supported).
+  const handoff: any = { type: 'documents_only', next_steps: [] };
+  if (j.id === 'us_wy_ccorp') {
     handoff.next_steps = [
       'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
       'Appoint a Wyoming registered agent',

@@ -80,7 +80,10 @@ const COPY = {
     chips: { kind: ['Direct', 'Adjacent'] },
     defaults: { kind: 'direct' },
     checks: { watch: [['Funding', 'rounds and amounts', true], ['Launches', 'products and features', true], ['Hires', 'roles and team size', false]] },
-    notes: ['Direct: solves the same problem for the same customer. Adjacent: one of the two.'],
+    notes: [
+      'Direct: solves the same problem for the same customer. Adjacent: one of the two.',
+      'These settings filter which signal types a re-run keeps and which appear on the record. Axal does not monitor competitors automatically.',
+    ],
     placeholders: ['Search Research › Companies, or type a name', 'One line, optional'],
   },
   'demand-signals': {

@@ -156,7 +156,7 @@ export const BUNDLE_CONTENT = {
       'AI-assisted investment research',
       'Personal investment notes',
       'Deal comparisons',
-      'Standard research usage limits',
+      'AI usage from your plan allowance and AI tokens',
     ],
   },
   'Investor — Professional': {
