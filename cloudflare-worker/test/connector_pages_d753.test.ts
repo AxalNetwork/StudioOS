@@ -316,6 +316,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   facebook: '2026-11',
   tiktok: '2026-11',
+  x: '2026-11', // D2403
   google_search_console: '2026-11', // D5839
   typeform: '2026-11', // D5827
   teams: '2026-11', // D5810
@@ -361,6 +362,8 @@ const constant = (src: string, name: string) => {
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   facebook: { file: 'integrations/providers/facebook.ts', sign_in: ['AUTHORIZE', ''], api: 'GRAPH' },
   tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
+  // D2403: the founders app signs in and reads through the shared X client.
+  x: { file: 'services/xClient.ts', sign_in: ['AUTH_BASE', ''], api: 'API_BASE' },
   // D5839: Search Console's own client; the page names the property list it reads.
   google_search_console: { file: 'integrations/searchConsoleOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'SITES' },
   // D5827: the page names the US origin; an EU member's requests go to EU_API.
