@@ -20,6 +20,7 @@ import VentureScorecard from '../../../components/scoring/scorecard/Scorecard';
 import { SCOPE_KEYS, SCOPE_LABEL, STAGE_WORD, enteredWord, moveTargets, stageWord } from './flowModel';
 import { AskCell, DaysCell, FitCell, ScopeCell } from './FlowCells';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
+import FlowHistory from './FlowHistory.jsx';
 import { passReasonLabel, passReturnWord } from '../../../lib/dealFlow.js';
 import { OwnerPicker } from './OwnerControls';
 
@@ -30,7 +31,7 @@ const SELECT = 'rounded-md border border-axal-hairline bg-white px-1.5 py-0.5 te
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const ROW_BTN = 'flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left hover:bg-gray-50 disabled:cursor-default disabled:hover:bg-transparent dark:hover:bg-gray-800 dark:disabled:hover:bg-transparent';
 
-export default function PeekDrawer({ row, picked = [], onClose, onMove, onPass, onPick, onSaveNote, busy = false, owners = null, onRetryOwners = null, onAssign = null }) {
+export default function PeekDrawer({ row, pass = null, picked = [], onClose, onMove, onPass, onPick, onSaveNote, busy = false, owners = null, onRetryOwners = null, onAssign = null }) {
   const [breakdown, setBreakdown] = useState(false);
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(row.note || '');
@@ -98,6 +99,7 @@ export default function PeekDrawer({ row, picked = [], onClose, onMove, onPass, 
           <p className={MUTED}>Valuation cap, minimum check, closing deadline and what is committed so far are on the deal page.</p>
         </section>
 
+        <FlowHistory key={row.id} row={row} pass={pass} />
         {row.inFlow && (
           <section className="flex flex-col gap-1" aria-labelledby="peek-notes">
             <h3 id="peek-notes" className={EYE}>Your notes</h3>

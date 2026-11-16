@@ -7,7 +7,7 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 | `evidenceModel.js` | The address (`/raise/evidence`, `/review`, `/preview`, `/item/:id`, `/claim/:id`), the five Source labels with SCORING's grade mapping, strengths, claim states, sharing levels, the Raise areas, and the words the investor's block draws (D1268) |
 | `evidenceView.js` | D1266: the view's model from `GET /api/cycles/raise/evidence` — the tiles, claims by area, Needs you first, the filters, coverage by source, what investors see, Accept all's cap of 50, and the words of each change |
 | `RaiseEvidence.jsx` | The route in the Raise shell: one read, Look again, the page and the drawer the address names as the shared Sheet over the view at 480 (D1317); it re-exports `EvidenceSummary` from `InvestorEvidence.jsx` |
-| `EvidenceView.jsx` | D1266: VR1's tiles and cards, and the empty, loading, error, partial, admin and refused states (VR12–VR16) |
+| `EvidenceView.jsx` | D1266: VR1's tiles and cards, and the empty, loading, error, partial, admin and refused states (VR12–VR16). D6048: first use instead of the dashboard (Raise v2 RA-15b founder, RA-15c admin viewer), the Home in RA-15's order with one action per claim (RA-26a) and the hand-off to Fundraising readiness |
 | `EvidenceDrawers.jsx` | D1266: the claim drawer (VR2) and the item drawer (VR3) |
 | `EvidenceReview.jsx` | D1266: Waiting for review (VR4), the Share dialog (VR5) and See as an investor (VR11) |
 | `EvidenceParts.jsx` | D1266: the pills, the drawer frame (the shared Sheet at 480, D1317) and the in-page dialog every change opens |

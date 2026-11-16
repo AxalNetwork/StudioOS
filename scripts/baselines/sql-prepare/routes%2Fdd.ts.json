@@ -1,0 +1,5 @@
+{
+  "await liveFiles(c.env.DB) @ routes/dd.ts": 2,
+  "await liveFiles(c.env.DB, 'f') @ routes/dd.ts": 2,
+  "live @ routes/dd.ts": 1
+}
