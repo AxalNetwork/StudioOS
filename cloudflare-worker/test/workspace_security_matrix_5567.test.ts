@@ -68,6 +68,28 @@ test('2. revoked sponsor: a grant issued before the sponsor is disabled does not
   } finally { w.close(); }
 });
 
+test('2b. revoke and re-grant inside one grant\'s life: the grant still dies (D5567 part 3, the revision triggers)', async () => {
+  const w = await computeWorld();
+  try {
+    const { admission, security } = await dispatched(w);
+    const target = computeTarget(admission, 'executor.complete');
+    const grant = await security.issue(target); assert.ok(grant.ok);
+    assert.equal(decodeClaims(grant.value.token).permission_revision, 1, 'no change yet: revision 1');
+    // Someone else's access changing touches nothing of this sponsor's.
+    w.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(STRANGER);
+    const other = await security.issue(target); assert.ok(other.ok, 'an unrelated member\'s change leaves the run alone');
+    w.db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(SPONSOR);
+    w.db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(SPONSOR);
+    assert.equal((await authorizeCompute(w.env, admission.job_uid, admission)).allowed, true, 'the access is back');
+    assert.equal((await authorizeCompute(w.env, admission.job_uid, admission)).revision, 3, 'two changes, two steps');
+    assert.equal(code(await security.redeem(grant.value.token, target)), 'sponsor_not_authorized', 'the grant from before the revocation is dead');
+    assert.equal(code(await security.redeem(other.value.token, target)), 'sponsor_not_authorized');
+    assert.equal(code(await security.issue(target)), 'sponsor_not_authorized', 'the run registered before it gets no new grant');
+    w.db.exec('ALTER TABLE agent_authz_revisions RENAME TO agent_authz_revisions_gone');
+    assert.equal((await authorizeCompute(w.env, admission.job_uid, admission)).allowed, false, 'an unreadable revision refuses');
+  } finally { w.close(); }
+});
+
 test('3. forged callback: a changed signature or payload is refused', async () => {
   const w = await computeWorld();
   try {
