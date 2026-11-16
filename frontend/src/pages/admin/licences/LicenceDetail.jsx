@@ -121,6 +121,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   if (!d) return <p className="text-sm text-gray-500">Loading…</p>;
 
   const facts = overviewFacts(d, reads);
+  // D4819 part 5: Retry branch sync, from the outcome card and from the Branch sync strip.
+  const retrySync = () => act('syncRetry', adminLicenceSyncApi.retry, d.uid);
   // D801: "Open terms" goes to the term's row or its step; "Grant admin" prefills the appointment.
   const openTerm = (target) => {
     const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
@@ -286,7 +288,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       {consequenceSheet}
       <LicenceOutcomeCard
         outcome={actOutcome ? licenceWriteOutcome({ ...actOutcome, sync: d.sync }) : null} busy={busy}
-        onRetrySync={() => act('syncRetry', adminLicenceSyncApi.retry, d.uid)} onReread={refresh}
+        onRetrySync={retrySync} onReread={refresh}
         onDismiss={() => setActOutcome(null)} testId="licence-action-outcome"
       />
       <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
@@ -434,7 +436,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           <div>
             <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act('terminate', api.licenceTerminate, d.uid)} part="strip"
               deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load}
-              onRetry={() => act('syncRetry', adminLicenceSyncApi.retry, d.uid)} />
+              onRetry={retrySync} />
             {domainStrip}
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>

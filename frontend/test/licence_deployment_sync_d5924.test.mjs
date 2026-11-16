@@ -162,7 +162,9 @@ test('the retry window is the Worker’s own, and the on-demand retry route exis
   // D5924 drew Retry sync disabled until a route served it; #5928 added `POST /:uid/sync/retry`, and the page wires it.
   const routes = ['admin_deployments.ts', 'admin_licences.ts', 'admin_licences_lifecycle.ts'].map((f) => read(`cloudflare-worker/src/routes/${f}`)).join('\n');
   assert.match(routes, /r\.post\('\/:uid\/sync\/retry'/);
-  assert.match(read('frontend/src/pages/admin/licences/LicenceDetail.jsx'), /onRetry=\{\(\) => act\('syncRetry', adminLicenceSyncApi\.retry, d\.uid\)\}/);
+  const detailSrc = read('frontend/src/pages/admin/licences/LicenceDetail.jsx');
+  assert.match(detailSrc, /const retrySync = \(\) => act\('syncRetry', adminLicenceSyncApi\.retry, d\.uid\);/);
+  assert.match(detailSrc, /<LicenceSyncStrip [\s\S]*?onRetry=\{retrySync\}/);
 });
 
 const FAILED = {

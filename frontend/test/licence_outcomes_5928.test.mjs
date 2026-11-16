@@ -124,7 +124,8 @@ test('each control asks in the sheet before it writes, and the lifecycle actions
   };
   for (const [file, needles] of Object.entries(asks)) for (const n of needles) assert.ok(src(file).includes(n), `${file}: ${n}`);
   const detail = src('licences/LicenceDetail.jsx');
-  assert.match(detail, /<LicenceOutcomeCard[\s\S]*onRetrySync=\{\(\) => act\('syncRetry', adminLicenceSyncApi\.retry, d\.uid\)\}/);
+  assert.match(detail, /const retrySync = \(\) => act\('syncRetry', adminLicenceSyncApi\.retry, d\.uid\);/);
+  assert.match(detail, /<LicenceOutcomeCard[\s\S]*onRetrySync=\{retrySync\}/);
   assert.match(detail, /licenceWriteOutcome\(\{ \.\.\.actOutcome, sync: d\.sync \}\)/, 'the card reads the licence\'s sync as last read');
   for (const a of ['activate', 'reinstate', 'renew', 'suspend', 'terminate']) assert.ok(detail.includes(`act('${a}', `), a);
   assert.doesNotMatch(src('LicenceFeeInvoices.jsx'), /fee-invoice-void-form/, 'Void no longer writes from an inline form');
