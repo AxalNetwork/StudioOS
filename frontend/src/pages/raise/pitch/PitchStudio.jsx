@@ -21,6 +21,7 @@ import ScriptTab from './ScriptTab';
 import PitchOverview from './PitchOverview';
 import ScriptTile from './ScriptTile';
 import { presentHref } from './presentExportModel';
+import { pitchReadFailure, selectedPitchVersion } from './pitchHomeModel';
 import { BUILD_YOUR_DECK, PRIMARY_OF } from './pitchOverviewModel';
 import { NEW_PATH } from './newDeckModel';
 import { deckRail } from './deckRailGroups';
@@ -28,8 +29,7 @@ import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { NEW_LINK, ndaCell, settingsLine } from './shareModel';
 
 /**
- * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
- * on `main`, built to the "Pitch Deck Studio" canvas (PD2, PD19, PD23–PD26).
+ * D6055 (#6055) — the six Pitch destinations and their scoped reads.
  *
  *   /raise/pitch            Decks: D1604 (#3716, pd1) made it the studio's
  *                           home, `StudioHome.jsx` (the deck card with
@@ -103,6 +103,7 @@ export const NO_MODULE_TABS = Object.freeze(['overview', 'script', 'review', 'no
 function useStudioReads(tab) {
   const [params, setParams] = useSearchParams();
   const requested = params.get('project_id');
+  const requestedDeck = tab === 'review' || tab === 'analytics' ? params.get('deck') : null;
   const [projects, setProjects] = useState(loading);
   const [versions, setVersions] = useState(idle);
   const [module, setModule] = useState(idle);
@@ -136,7 +137,7 @@ function useStudioReads(tab) {
       setVersions(again(projectId));
       const v = await settle(alive, setVersions, projectId)(api.deckListVersions(projectId));
       if (!live) return;
-      const current = currentVersion(asList(v, 'versions', 'decks'));
+      const current = selectedPitchVersion(asList(v, 'versions', 'decks'), requestedDeck);
       if (!current?.id) { setDeck(idle); setEngagement(idle); return; }
       setDeck(again(current.id)); setEngagement(again(current.id));
       await Promise.all([
@@ -145,7 +146,7 @@ function useStudioReads(tab) {
       ]);
     })();
     return () => { live = false; };
-  }, [projectId, tick]);
+  }, [projectId, tick, requestedDeck]);
 
   const needsModule = !NO_MODULE_TABS.includes(tab);
   useEffect(() => {
@@ -165,8 +166,12 @@ function useStudioReads(tab) {
     [projectId],
   );
 
+  const scopedVersions = versions.for === projectId || projectId == null ? versions : loading;
+  const selectedDeck = selectedPitchVersion(asList(scopedVersions.data, 'versions', 'decks'), requestedDeck);
+  const scopedDeck = deck.for === selectedDeck?.id ? deck : loading;
+  const scopedEngagement = engagement.for === selectedDeck?.id ? engagement : loading;
   return {
-    projects, project, requested, versions, module, deck, engagement, setPage,
+    projects, project, requested, requestedDeck, selectedDeck, versions: scopedVersions, module, deck: scopedDeck, engagement: scopedEngagement, setPage, revision: tick,
     reload: () => setTick((t) => t + 1),
   };
 }
@@ -181,7 +186,7 @@ export default function PitchStudio({ tab = 'overview' }) {
   const q = ventureQuery(projectId || reads.requested);
 
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
-  const currentDeck = currentVersion(asList(reads.versions.data, 'versions', 'decks'));
+  const currentDeck = reads.selectedDeck;
   const currentId = currentDeck?.id ?? null;
   const railGroups = useMemo(() => deckRail(currentId), [currentId]);
   const rail = (
@@ -206,11 +211,15 @@ export default function PitchStudio({ tab = 'overview' }) {
           // as it did before D894: the ventures read never stands in its way.
           // D4271 (#4271): the comments across the deck, approvals and figures, above the AI review.
           <>
+            {reads.requestedDeck != null && reads.versions.status === 'ok' && !currentDeck && (
+              <ReadFailed text="Unavailable · This saved version was not found for this venture." testId="pitch-studio-version-missing" />
+            )}
             <ReviewTile reads={reads} readOnly={readOnly} projectId={projectId} />
             <PitchReview reads={reads} readOnly={readOnly} />
           </>
         ) : reads.projects.status === 'error' ? (
-          <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
+          <ReadFailed text={tab === 'overview' ? (pitchReadFailure(reads.projects.error?.status) === 'refused' ? 'Refused · Venture access is restricted.' : 'Unavailable · Your ventures could not be read.') : 'Your ventures could not be read.'}
+            onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
           <div className={`${CARD} flex flex-col items-start gap-3 p-7`} data-testid="pitch-studio-no-venture">
             <span className={`text-[15px] font-extrabold ${INK}`}>{NO_VENTURE}</span>
@@ -315,7 +324,7 @@ export function StudioAnalytics({ reads, readOnly }) {
   const heading = useRef(null);
   const root = useRef(null);
   const versions = asList(reads.versions.data, 'versions', 'decks');
-  const current = currentVersion(versions);
+  const current = reads.selectedDeck === undefined ? currentVersion(versions) : reads.selectedDeck;
   const records = reads.module.data?.records;
   const links = useMemo(() => linkRows(records, reads.engagement.data), [records, reads.engagement.data]);
   const pager = linkPage(records);

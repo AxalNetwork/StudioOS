@@ -34,13 +34,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = raw('frontend/src/pages/hq/SecurityPage.jsx');
+const PAGE = securityRaw();
 const P = codeOnly(PAGE);
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 // D4803 — the ledger moved into Security v2's Events workspace (SE03).

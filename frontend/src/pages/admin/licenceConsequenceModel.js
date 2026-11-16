@@ -15,6 +15,12 @@
  */
 import { REASON_MAX } from './licenceReasonModel';
 
+/**
+ * The four questions every sheet answers, in order (L17). D4819 part 5 (#5931): the New licence Issue step asks
+ * the same four, so they are named once here.
+ */
+export const CONSEQUENCE_QUESTIONS = Object.freeze(['What will happen', 'What else it affects', 'Reason recorded', 'Can it be undone?']);
+
 /** The lifecycle actions, in the order More lists them. */
 export const LIFECYCLE_ACTIONS = Object.freeze(['activate', 'reinstate', 'renew', 'suspend', 'terminate']);
 
