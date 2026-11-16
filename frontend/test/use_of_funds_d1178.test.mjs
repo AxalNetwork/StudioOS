@@ -229,6 +229,22 @@ test('compare: Today is the record, each scenario Modelled, and nothing unrecord
   for (const r of t.rows) for (const c of r.cells) assert.ok(!/^\$0$|^0$/.test(c.text), `${r.key} draws a zero`);
 });
 
+test('D6081 compare: Committed so far comes from the round, the same in every column; unread is never a figure', () => {
+  const committed = { state: 'ok', value: { currency: 'USD', counted_cents: 145000000, target_cents: 150000000, amount_not_recorded: 0, remaining_cents: 5000000, statuses: [{ label: 'Signed' }] } };
+  const row = (read) => compareTable(read).rows.find((r) => r.key === 'committed');
+  const ok = row({ today: TODAY, scenarios: [BASE, LEAN], committed });
+  assert.equal(ok.today.text, '$1,450,000');
+  assert.deepEqual(ok.cells.map((c) => c.text), ['$1,450,000', '$1,450,000']);
+  assert.ok(ok.cells.every((c) => !c.missing));
+  const down = row({ today: TODAY, scenarios: [BASE, LEAN], committed: { state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' } });
+  assert.deepEqual(down.cells.map((c) => c.text), ['Unavailable', 'Unavailable']);
+  assert.ok(down.cells.every((c) => c.missing && /could not be read/.test(c.reason)));
+  const none = row({ today: TODAY, scenarios: [BASE], committed: { state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.' } });
+  assert.equal(none.today.text, 'Not recorded'); assert.equal(none.cells[0].text, 'Not recorded');
+  assert.equal(row({ today: TODAY, scenarios: [BASE], committed: { state: 'refused', reason: 'Refused.' } }).cells[0].text, 'Refused');
+  assert.equal(row({ today: TODAY, scenarios: [BASE] }).cells[0].text, 'Unavailable', 'a compare read without the block is never a figure');
+});
+
 /* ------------------------------------------------------------------ *
  * Old addresses, mounted
  * ------------------------------------------------------------------ */
