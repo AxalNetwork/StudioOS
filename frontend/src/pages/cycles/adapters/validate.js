@@ -439,7 +439,8 @@ export const RECORDS = {
     // #4411 splits recording and quote permissions. Channel stays a
     // filter and a cell (its words are pinned), but no column names it.
     keys: ['interviewee', 'company', 'date', 'icp_fit', 'recording_consent', 'consent', 'state'],
-    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
+    // D6001 (#6001): `stage` and `name` are what Move stage reads; neither is a column.
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), stage: typeof r.stage === 'string' ? r.stage : null, name: r.interviewee ?? null, cells: {
       // D685 §5.11: the interviewee opens the interview's review, Customer
       // research's record (D696 decision 6). A linked row draws it as text.
       // The scoped read carries the project, so no ?project_id= is threaded.
@@ -455,11 +456,14 @@ export const RECORDS = {
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
-      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
-      // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
+      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows. Stage gave
+      // way to State there; D6001 lists it again, last, for the recruiting pipeline.
       { key: 'recording_consent', label: 'Recording consent', options: [{ value: 'given', label: 'Given' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'consent', label: 'Quotes OK', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'channel', label: 'Channel', options: ['in_person', 'call', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
+      // D6001 (#6001): Stage is listed again, beside State, as the Worker lists it.
+      { key: 'stage', label: 'Stage', options: [{ value: 'lead', label: 'Lead' }, { value: 'invited', label: 'Invited' },
+        { value: 'invited_no_slot', label: 'Invited · no slot yet' }, { value: 'booked', label: 'Booked' }, { value: 'done', label: 'Done · or no stage recorded' }] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },

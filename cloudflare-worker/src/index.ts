@@ -611,7 +611,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
+    allowHeaders: ['Content-Type', 'Authorization', 'If-Match', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record', 'X-Axal-Preview-Shell'],
   }),
 );
 
@@ -3133,6 +3133,16 @@ export default {
             }
           } catch (e) {
             taskFailed('project trash sweep', e);
+          }
+          // D6073 (#6073) — a data-room file thirty days in Trash: its objects, then its rows.
+          try {
+            const { purgeExpiredTrash } = await import('./services/dataRoomTrash');
+            const r = await purgeExpiredTrash(env, now);
+            if (r.scanned || r.purged || r.failed) {
+              console.info(`[cron] data room trash purge scanned=${r.scanned} purged=${r.purged} failed=${r.failed}`);
+            }
+          } catch (e) {
+            taskFailed('data room trash purge', e);
           }
         }
         // Task #5 (AV) — hourly Vectorize re-embed for axal-search.

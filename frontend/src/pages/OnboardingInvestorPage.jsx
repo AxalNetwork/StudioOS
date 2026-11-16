@@ -1,17 +1,50 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SelectField, SliderField } from '../components/OnboardingWizard';
+import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SelectField } from '../components/OnboardingWizard';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { COUNTRIES } from '../lib/countries';
 import { NFX_SECTORS } from '../lib/nfxSectors';
-import { investorLanding } from '../lib/onboarding';
+import { investorFundHref, investorLanding, investorProfilePayload } from '../lib/onboarding';
 import { OnboardingCanvas } from '../components/auth/AuthShell';
 
-// Phase 0.2 / Task #23 — Investor onboarding wizard.
-// Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
-// answers are also persisted to /api/investor-profile/me on finish so they
-// flow into the anonymized "Axal VC Investor Signals" aggregate.
+// D6135 (#6135): saved onboarding answers, an honest profile-copy result,
+// and an explicit, role-safe handoff after the final step.
+export function InvestorOnboardingFinish({ values, role, onContinue, onFund, autoSave = true }) {
+  const [status, setStatus] = useState(autoSave ? 'saving' : 'unconfirmed');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!autoSave && attempt === 0) return undefined;
+    let alive = true;
+    setStatus('saving');
+    Promise.resolve().then(() => api.saveInvestorProfile(investorProfilePayload(values)))
+      .then(() => { if (alive) setStatus('saved'); })
+      .catch(() => { if (alive) setStatus('failed'); });
+    return () => { alive = false; };
+  }, [values, autoSave, attempt]);
+  const fund = investorFundHref(role, values.lp_intent);
+  const button = 'min-h-11 rounded-lg px-4 py-2 text-sm font-semibold';
+  return (
+    <section className="mx-auto w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="investor-finish">
+      {status === 'saving' ? <p aria-busy="true">Saving your investor profile…</p>
+        : status === 'failed' || status === 'unconfirmed' ? <>
+          <h2 className="text-lg font-semibold" role={status === 'failed' ? 'alert' : undefined}>{status === 'failed' ? 'Your profile was not saved' : 'Your onboarding answers are saved'}</h2>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{status === 'failed' ? 'Your answers are kept in your onboarding progress.' : 'Save these answers to your investor profile, or continue without changing it.'}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" className={`${button} bg-violet-700 text-white dark:bg-violet-600`} data-testid="investor-profile-retry" onClick={() => { setStatus('saving'); setAttempt((n) => n + 1); }}>{status === 'failed' ? 'Try again' : 'Save profile'}</button>
+            <button type="button" className={`${button} border border-gray-300 dark:border-gray-600`} data-testid="investor-profile-skip" onClick={() => setStatus('skipped')}>Continue anyway</button>
+          </div>
+        </> : <>
+          <h2 className="text-lg font-semibold">{status === 'saved' ? 'Your profile is saved' : 'Continue without saving your profile'}</h2>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" className={`${button} bg-violet-700 text-white dark:bg-violet-600`} data-testid="investor-deals" onClick={onContinue}>{role === 'exploring' ? 'See membership status' : 'See deal flow'}</button>
+            {fund && <button type="button" className={`${button} border border-gray-300 dark:border-gray-600`} data-testid="investor-fund" onClick={() => onFund(fund)}>Open the Axal VC Fund</button>}
+          </div>
+        </>}
+    </section>
+  );
+}
+
 export default function OnboardingInvestorPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -28,7 +61,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'profile',
       title: 'Welcome, investor',
-      description: 'A few questions so we can match you with the right deal flow.',
+      description: 'A few questions to set the thesis fit shown on deals and, with your consent, contribute to anonymised Investor Signals.',
       validate: (v) => (!v.investor_type ? 'Pick what best describes you' : null),
       render: ({ values, set }) => (
         <div className="space-y-4">
@@ -107,7 +140,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'sectors',
       title: 'Sectors of interest',
-      description: 'Pick the areas you actively look at — we use these to surface relevant deals and to compute the anonymized Axal VC Investor Signals heatmap.',
+      description: 'These answers set the thesis fit shown on deals. With your consent, they also contribute to anonymised Axal VC Investor Signals.',
       validate: (v) => (!v.sectors?.length ? 'Select at least one sector' : null),
       render: ({ values, set }) => (
         <div className="space-y-4">
@@ -139,7 +172,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'thesis',
       title: 'Your thesis in one paragraph',
-      description: 'A few sentences on what you look for. Words you mention may surface (anonymized, only if 5+ investors say the same thing) in the public thesis cloud.',
+      description: 'A few sentences on what you look for. With your consent, words may appear in the public thesis cloud, anonymised and only when shared by at least five investors.',
       render: ({ values, set }) => (
         <div className="space-y-4">
           <TextArea
@@ -164,7 +197,7 @@ export default function OnboardingInvestorPage() {
     {
       key: 'anti-thesis',
       title: 'Anti-thesis (hard exclusions)',
-      description: 'We will NEVER match you with startups that fall in these sectors or stages.',
+      description: 'These exclusions inform the thesis fit shown on deals.',
       render: ({ values, set }) => (
         <div className="space-y-4">
           <MultiChoiceField
@@ -179,20 +212,6 @@ export default function OnboardingInvestorPage() {
             value={values.anti_thesis_stages || []}
             onChange={(x) => set('anti_thesis_stages', x)}
           />
-        </div>
-      ),
-    },
-    {
-      key: 'value-weights',
-      title: 'What matters most to you',
-      description: 'Weight how much each dimension matters in founder-investor matching. Weights are auto-normalized.',
-      render: ({ values, set }) => (
-        <div className="space-y-4">
-          <SliderField label="Mission-driven founders" value={values.mission_driven || 0.5} onChange={(x) => set('mission_driven', x)} />
-          <SliderField label="Technical depth" value={values.technical_depth || 0.5} onChange={(x) => set('technical_depth', x)} />
-          <SliderField label="Growth trajectory" value={values.growth_trajectory || 0.5} onChange={(x) => set('growth_trajectory', x)} />
-          <SliderField label="Team diversity" value={values.team_diversity || 0.5} onChange={(x) => set('team_diversity', x)} />
-          <SliderField label="Market timing" value={values.market_timing || 0.5} onChange={(x) => set('market_timing', x)} />
         </div>
       ),
     },
@@ -225,42 +244,7 @@ export default function OnboardingInvestorPage() {
     },
   ];
 
-  const handleFinish = async (values) => {
-    // Mirror the chatbot answers to the investor-profile endpoint so they
-    // feed the anonymized Axal VC Investor Signals aggregate. Failure must
-    // never block onboarding completion — it's a soft enrichment.
-    try {
-      const value_weights = {
-        mission_driven: values.mission_driven ?? 0.5,
-        technical_depth: values.technical_depth ?? 0.5,
-        growth_trajectory: values.growth_trajectory ?? 0.5,
-        team_diversity: values.team_diversity ?? 0.5,
-        market_timing: values.market_timing ?? 0.5,
-      };
-      await api.saveInvestorProfile({
-        investor_type: values.investor_type || null,
-        sectors: values.sectors || [],
-        stages: values.stages || [],
-        geos: values.geos || [],
-        ticket_band: values.check_size || null,
-        thesis_text: values.thesis_text || null,
-        contribute_to_signals: values.contribute_to_signals !== false,
-        anti_thesis_sectors: values.anti_thesis_sectors || [],
-        anti_thesis_stages: values.anti_thesis_stages || [],
-        value_weights,
-        firm_name: values.firm_name || null,
-        accreditation_status: values.accreditation_status || null,
-        country: values.country || null,
-        lp_intent: values.lp_intent || null,
-        lp_target_usd: values.lp_target_usd || null,
-        notes: values.notes || null,
-      });
-    } catch {
-      // Surfacing this in the wizard would be confusing; the user can
-      // re-save anytime from Settings → Privacy.
-    }
-    navigate(investorLanding(user?.role), { replace: true });
-  };
+  const continueToDeals = () => navigate(investorLanding(user?.role), { replace: true });
 
   return (
     <OnboardingCanvas>
@@ -268,8 +252,10 @@ export default function OnboardingInvestorPage() {
         flow="investor"
         steps={steps}
         onDark
-        finishLabel="See deal flow"
-        onFinish={handleFinish}
+        finishLabel="Finish profile"
+        requireFinalSave
+        renderComplete={(values, { resumed }) => <InvestorOnboardingFinish values={values} role={user?.role} autoSave={!resumed}
+          onContinue={continueToDeals} onFund={(href) => navigate(href, { replace: true })} />}
       />
     </OnboardingCanvas>
   );

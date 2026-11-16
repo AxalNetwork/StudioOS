@@ -35,6 +35,7 @@ function fixture() {
   db.exec(baseline.match(/CREATE TABLE activity_logs \([\s\S]*?;/)![0]);
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
+  db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql('migrations/202611092035_research_projects.sql'));
   // The directories as their migrations declare them (the seed rows are not needed).

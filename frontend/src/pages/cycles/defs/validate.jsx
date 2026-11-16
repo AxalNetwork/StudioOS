@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { cyclesApi } from '../../../lib/api/cycles';
+import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { validateExportsApi } from '../../../lib/api/founderValidateExports';
 import { useRailOption } from '../../../ui/railCrumbs';
 import Lightbox from '../../../ui/Lightbox';
@@ -28,6 +28,7 @@ import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
 import WaitlistBar from '../ValidateWaitlistBar.jsx';
+import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
@@ -158,7 +159,14 @@ const validate = {
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
   }),
   add: toFnMap({
-    'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
+    // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.
+    'customer-research': (q, open, ctx) => [{ text: 'Record a session', href: `/validate/record${q}`, onOpen: open },
+      addLeadButton(ctx, cyclesWrite)].filter(Boolean),
+  }),
+  // D6001 (#6001): Move stage on each interview row, the record's `set-stage`, so the move is in its activity.
+  rowActions: toFnMap({
+    'customer-research': (row, ctx) => moveStageAction(row, ctx,
+      (projectId, id, body) => cyclesApi.recordAction('validate', projectId, 'customer-research', id, 'set-stage', body)),
   }),
   // The AI fill bands the Validate desk carried, on the module they fill.
   fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
@@ -173,6 +181,11 @@ const validate = {
         <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
           onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
           onExport={() => api.exportValidateInterviews(ctx.projectId)} />
+        {/* D6001 (#6001): the customer waitlist's sign-ups, where the card's "Invite the N new waitlist leads" lands. */}
+        <WaitlistLeads projectId={ctx.projectId} canWrite={data?.parts?.can_write === true} projectSearch={ctx.projectId ? `?project_id=${encodeURIComponent(ctx.projectId)}` : ''}
+          load={() => api.listWaitlistCustomers(ctx.projectId)}
+          invite={(id) => api.inviteWaitlistCustomer(ctx.projectId, id)}
+          followUp={(id) => api.followUpWaitlistCustomer(ctx.projectId, id)} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />

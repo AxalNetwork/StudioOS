@@ -92,7 +92,8 @@ const CENSUS = {
   'Interviews › view Deck-eligible': ['the Consent filter\'s Agreed · deck-eligible', () => filters('customer-research').filters.find((f) => f.key === 'consent').options.some((o) => o.label === 'Agreed · deck-eligible')],
   'Interviews › view Strong fit': ['the ICP fit filter\'s Strong', () => option('customer-research', 'icp', 'strong')],
   'Interviews › view Not ICP': ['the ICP fit filter\'s None', () => option('customer-research', 'icp', 'none')],
-  'Interviews › Stage': ['State, the table\'s last column (#1691)', () => RECORDS['customer-research'].keys.includes('state') && !filters('customer-research').filters.some((f) => f.key === 'stage')],
+  // D6001 (#6001): State stays the column; Stage is a filter again, for the recruiting pipeline.
+  'Interviews › Stage': ['State, the table\'s last column (#1691), and the Stage filter (#6001)', () => RECORDS['customer-research'].keys.includes('state') && filters('customer-research').filters.some((f) => f.key === 'stage')],
   'Interviews › the pains count': ['the record\'s What it fed (#1692)', () => /'what it fed'/.test(model)],
   'Interviews › Record a session': ['the record\'s tools', () => /\/validate\/record\?interview=\$\{encodeURIComponent\(row\.id\)\}&project_id=/.test(record)],
   'Interviews › attach audio and Transcribe': ['the record\'s tools', () => /<InterviewRecording interview=\{row\}/.test(record)],

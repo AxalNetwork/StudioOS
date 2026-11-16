@@ -673,6 +673,13 @@ export function pipelineOf(interviews: InterviewRow[], signups: Array<{ crm_stat
   return { lead, invited, booked, done };
 }
 
+/**
+ * D6001: the Stage filter's "Invited · no slot yet", the rows the card's
+ * "Book the N invited leads" names. `researchRecords` filters the same rows in SQL.
+ */
+export const NO_SLOT = 'invited_no_slot';
+export const waitingForSlot = (i: { stage: string | null; booked_at: string | null }) => i.stage === 'invited' && !i.booked_at;
+
 export async function customerResearchCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('customer-research', 'Last 12 weeks', 'Interviews per week, beside the recruiting pipeline.', 'Interviews and the customer waitlist'), async (): Promise<CardBody> => {
     const [interviews, signups, weeks, painData] = await Promise.all([
@@ -683,13 +690,15 @@ export async function customerResearchCard(ctx: Ctx): Promise<Card> {
       return { state: 'empty', series: null, next: { text: 'Record your first session', href: recordHref(ctx) }, reason: 'No interviews yet. Validate starts with the first conversation.' };
     }
     const funnel = pipelineOf(interviews, signups);
-    const waitingSlot = interviews.filter((i) => i.stage === 'invited' && !i.booked_at).length;
+    const waitingSlot = interviews.filter(waitingForSlot).length;
     const newLeads = signups.filter((s) => s.crm_status == null || s.crm_status === 'new').length;
     const held = interviews.filter(isHeld).length;
     const next = waitingSlot > 0
-      ? { text: `Book the ${plural(waitingSlot, 'invited lead', 'invited leads')} with no slot yet`, href: href(ctx, 'customer-research') }
+      // D6001 (#6001): each link lands on the rows it names, the list filtered
+      // to them or the Waitlist leads panel.
+      ? { text: `Book the ${plural(waitingSlot, 'invited lead', 'invited leads')} with no slot yet`, href: `${href(ctx, 'customer-research')}&filter=stage:${NO_SLOT}` }
       : newLeads > 0
-        ? { text: `Invite the ${plural(newLeads, 'new waitlist lead', 'new waitlist leads')}`, href: href(ctx, 'customer-research') }
+        ? { text: `Invite the ${plural(newLeads, 'new waitlist lead', 'new waitlist leads')}`, href: `${href(ctx, 'customer-research')}#waitlist-leads` }
         : held < LAB_MIN_INTERVIEWS
           ? { text: `Log ${plural(LAB_MIN_INTERVIEWS - held, 'more interview', 'more interviews')}`, href: href(ctx, 'customer-research') }
           : null;
@@ -1103,8 +1112,8 @@ const STRENGTHS = [opt('anecdote', 'Anecdote'), opt('pattern', 'Pattern'), opt('
 /**
  * D690 decision 10 — each list's columns, filters and sorts, per the canvas
  * (CO:611-616). Experiments' Sprint options are the venture's own, added on
- * read. Customer research keeps its `stage` filter and `booked` sort working
- * for the recruiting picker without listing them.
+ * read. Customer research keeps its `booked` sort working for the recruiting
+ * picker without listing it, and its `stage:pipeline`; D6001 lists the Stage filter.
  */
 export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; sorts: SortSpec[] }> = {
   'problem-discovery': {
@@ -1126,6 +1135,10 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
       { key: 'consent', label: 'Quotes OK', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
       // Video and audio calls are one "Call" (the owner, 2026-10-21): `call` matches both stored channels.
       { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('call', 'Call'), opt('text', 'Text chat')] },
+      // D6001 (#6001): the stage each row is at now. An interview with no stage
+      // is a conversation logged after it was held, so it is in Done, and says so.
+      { key: 'stage', label: 'Stage', options: [opt('lead', 'Lead'), opt('invited', 'Invited'), opt('invited_no_slot', 'Invited · no slot yet'),
+        opt('booked', 'Booked'), opt('done', 'Done · or no stage recorded')] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
@@ -1377,12 +1390,12 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const recording = ['given', 'declined', 'not_asked'].includes(f.recording_consent) ? f.recording_consent : '';
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
-  const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
+  const stage = ['lead', 'invited', NO_SLOT, 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
   const channel = ['in_person', 'call', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, channel, channel, channel];
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, stage, channel, channel, channel];
   const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
     `SELECT COUNT(*) AS n
@@ -1394,7 +1407,8 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
         AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
-        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked'))
+             OR (? = 'invited_no_slot' AND i.stage = 'invited' AND COALESCE(i.booked_at, '') = ''))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))`,
   ).bind(...binds).first<{ n: number }>();
   // The page, each interview beside its latest session (by id). A pains blob
@@ -1413,7 +1427,8 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
         AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
-        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked'))
+             OR (? = 'invited_no_slot' AND i.stage = 'invited' AND COALESCE(i.booked_at, '') = ''))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))
       ORDER BY CASE WHEN ? = 'booked' THEN CASE i.stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
                CASE WHEN ? = 'name' THEN lower(i.interviewee_name) END ASC,

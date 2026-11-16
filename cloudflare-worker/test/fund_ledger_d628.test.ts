@@ -324,3 +324,37 @@ test('a concurrently posted entry cannot enter the trial balance without enterin
     assert.deepEqual(book.trial_balance.map((a:any)=>[a.code,a.debit_cents,a.credit_cents]).sort(),[['CASH',1000000,0],['PAY',0,1000000]]);
   }finally{f.db.close();}
 });
+
+// D6241 (#6241): the owner chose A. The GP of record reads Summary, Journal and Fees of a fund they run, read only.
+test('D6241: the GP of record reads the full ledger and writes nothing; LP, unrelated investor and GP below the tier as before', async()=>{
+  const {db,request}=await fixture();
+  db.exec(`ALTER TABLE users ADD COLUMN investor_tier TEXT; ALTER TABLE users ADD COLUMN investor_subscription_status TEXT;
+    UPDATE users SET investor_tier='institutional', investor_subscription_status='active' WHERE id=6;`);
+  const posted=await request('/10/periods/1/entries',2,'POST',entry);
+  assert.equal(posted.status,201,await posted.text());
+  // The GP of record (6) of Fund A: the full read, can_manage false.
+  const gp=await request('/10',6);
+  assert.equal(gp.status,200,await gp.clone().text());
+  const g=await gp.json() as any;
+  assert.equal(g.can_manage,false,'the GP of record never gets the write controls');
+  assert.equal(g.full_read,true,'and the page draws Journal and Fees for them');
+  assert.equal(g.journal.length,1,'the journal is read in full');
+  assert.ok(Array.isArray(g.trial_balance) && g.trial_balance.length>0);
+  const list=await (await request('/',6)).json() as any;
+  assert.deepEqual(list.items.map((x:any)=>[x.id,x.can_manage,x.journal.length]),[[10,false,1]],'the list carries the GP\'s fund, read in full');
+  assert.equal((await request('/10/accounts',6)).status,200,'the chart of accounts is read too');
+  // Writes stay with the administrator and an admin.
+  const before=count(db,'fund_ledger_entries');
+  assert.equal((await request('/10/periods/1/entries',6,'POST',entry)).status,404);
+  assert.equal((await request('/10/accounts',6,'POST',{code:'X',name:'X',category:'asset'})).status,404);
+  assert.equal(count(db,'fund_ledger_entries'),before,'the GP wrote nothing');
+  // The administrator still manages; an LP reads the summary only; an unrelated investor reads nothing.
+  assert.equal(((await (await request('/10',2)).json()) as any).can_manage,true);
+  const lp=await (await request('/10',3)).json() as any;
+  assert.deepEqual([lp.can_manage,lp.full_read,lp.journal.length],[false,false,0],'an LP reads the summary only');
+  assert.equal((await request('/10',7)).status==200 ? 'legacy-lp' : 'refused','legacy-lp','a claimed legacy LP still reads its summary');
+  assert.equal((await request('/10',8)).status>=400,true);
+  // Below the institutional tier the GP is not GP of record for this read.
+  db.exec(`UPDATE users SET investor_tier='pro' WHERE id=6`);
+  assert.equal((await request('/10',6)).status,404,'a GP below the tier reads nothing');
+});

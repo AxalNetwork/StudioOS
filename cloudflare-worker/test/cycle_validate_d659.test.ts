@@ -326,7 +326,8 @@ test('D659: next names the number it counted — the invited leads with no slot'
   db.prepare("INSERT INTO waitlist_signups (project_id, email, audience, crm_status) VALUES (?, 'n@x.test', 'customer', 'new'), (?, 'i@x.test', 'customer', 'invited')").run(P, P);
   const r = await overview(db);
   const cr = card(r.body, 'customer-research');
-  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}` });
+  // D6001 (#6001): the link lands on the list filtered to the two rows it names.
+  assert.deepEqual(cr.next, { text: 'Book the 2 invited leads with no slot yet', href: `/validate/customer-research?project=${P}&filter=stage:invited_no_slot` });
   assert.deepEqual(cr.series.funnel, { lead: 7, invited: 5, booked: 1, done: 1 });
 });
 

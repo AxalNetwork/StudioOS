@@ -63,6 +63,21 @@
  *   DELETE /beehiiv/facts/:id?project=             a writer; it stays deleted
  *   DELETE /beehiiv/posts/:id?project=             a writer; it stays deleted
  *
+ * D5863 (#5863, part 2a of #2401): the founder's own TikTok. Distribution's and
+ * Revenue and traction's reads carry `parts.from_tiktok` (`services/tiktok/grow.ts`),
+ * for anyone who may read the module; a failed read is `unreadable` and the
+ * module still loads. A support session is refused; the logs carry counts only.
+ *   POST   /tiktok/sync                            { project } the member whose TikTok serves the venture (the first sync links it)
+ *   DELETE /tiktok/facts/:id?project=&kind=account|video  a writer; it stays deleted
+ * D5859 (#5859, part 2a of #2399): a linked Facebook Page. Distribution's and
+ * Revenue and traction's reads carry `parts.from_facebook` (`services/facebook/grow.ts`),
+ * for anyone who may read the module; a failed read is `unreadable` and the module
+ * still loads. A venture names one Page (owner, option A on #2399). A support
+ * session is refused; the logs carry counts only.
+ *   PUT    /facebook/page                          { project, page_id | null } the member whose connection chose the Page
+ *   POST   /facebook/sync                          { project } the member whose connection holds the venture's link
+ *   DELETE /facebook/facts/:id?project=            a writer; it stays deleted
+ *
  * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
  * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
  * founder, not in a support session, with a place switched on), PUB8's empty
@@ -107,12 +122,20 @@ import {
   GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
 import { projectEnabled } from '../integrations/companyScope';
-import type { IntegrationRow } from '../integrations/registry';
+import { ConnectRefusal, type IntegrationRow } from '../integrations/registry';
 import { BeehiivReadError, beehiivId, beehiivReadsFor } from '../services/beehiiv/reads';
 import {
   BEEHIIV_SLUGS, NEWSLETTER_NOT_LINKED, NEWSLETTER_UNREADABLE, newsletterByUpdate, SENTENCES as BEEHIIV_SENTENCES, acceptChannelProposal, beehiivPart as beehiivModulePart, deleteBeehiivRow,
   dismissChannelProposal, linkOf as beehiivLinkOf, linkPublication, syncBeehiiv, unlinkPublication, type BeehiivSlug,
 } from '../services/beehiiv/grow';
+import { TikTokReadError, grantedScopes, tiktokReadsFor } from '../services/tiktok/client';
+import { SENTENCES as TIKTOK_SENTENCES, TIKTOK_SLUGS, claimVenture, deleteTikTokRow, linkOf as tiktokLinkOf, syncTikTok, tiktokPart as tiktokModulePart, type TikTokSlug } from '../services/tiktok/grow';
+import { facebookPageGrants } from '../integrations/providers/facebook';
+import { facebookReads } from '../services/facebook/insights';
+import {
+  FACEBOOK_SLUGS, SENTENCES as FACEBOOK_SENTENCES, deleteFacebookFact, facebookPart as facebookModulePart, linkOf as facebookLinkOf,
+  linkPage as linkFacebookPage, syncFacebook, unlinkPage as unlinkFacebookPage, type FacebookSlug,
+} from '../services/facebook/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { codeAmount } from '../../../frontend/src/lib/money.js';
@@ -147,8 +170,9 @@ function fail(c: C, e: unknown) {
   throw e;
 }
 
-const ctxFor = (env: Env, projectId: number): Ctx => ({
-  env, projectId, now: Date.now(),
+/** `team` (D6107, #6107 Q3 = A): only the venture's team sees Distribution's PostHog visits; a card read passes `isTeamViewer`. */
+const ctxFor = (env: Env, projectId: number, team = false): Ctx => ({
+  env, projectId, now: Date.now(), team,
   href: (slug) => `/grow/${slug}?project=${projectId}`,
 });
 
@@ -162,7 +186,7 @@ r.get('/overview', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
-    const x = ctxFor(c.env, pid);
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
     // D1333 (#3481): Publish to… from Overview, and what was published from here.
     const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
@@ -454,7 +478,7 @@ r.get('/modules/:slug', async (c) => {
     const meta = GROW_MODULES.find((m) => m.slug === c.req.param('slug'));
     if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
     const mod = { slug: meta.slug, name: meta.name, records_title: RECORDS_TITLE[meta.slug] };
-    const x = ctxFor(c.env, pid);
+    const x = ctxFor(c.env, pid, await isTeamViewer(c.env, user, pid));
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
     const writer = await writes(c, user, pid);
@@ -467,6 +491,8 @@ r.get('/modules/:slug', async (c) => {
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
     // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
     const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), ...(await beehiivPart(c, user, pid, meta.slug)),
+      ...(await tiktokPart(c, user, pid, meta.slug)),
+      ...(await facebookPart(c, user, pid, meta.slug)),
       publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     // D6124: `exportable` tells the page to draw Export; the export route checks the same two things itself.
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow'),
@@ -857,6 +883,88 @@ const deleteBeehiiv = (store: 'beehiiv_grow_facts' | 'beehiiv_post_stats') => be
 r.delete('/beehiiv/facts/:id', deleteBeehiiv('beehiiv_grow_facts'));
 r.delete('/beehiiv/posts/:id', deleteBeehiiv('beehiiv_post_stats'));
 
+/** D5863: Distribution's and Revenue and traction's TikTok part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function tiktokPart(c: C, user: User, pid: number, slug: string): Promise<{ from_tiktok?: unknown }> {
+  if (!(TIKTOK_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_tiktok: await tiktokModulePart(c.env, pid, slug as TikTokSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] tiktok part unreadable:', slug, (e as Error).name);
+    return { from_tiktok: { state: 'unreadable', reason: TIKTOK_SENTENCES.unreadable } };
+  }
+}
+
+// ── D5863 (#5863, part 2a of #2401): the founder's own TikTok ──────────────
+
+class TikTokRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never TikTok's text. */
+export const TIKTOK_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s TikTok.',
+  tiktok_not_connected: 'TikTok is not connected. Sign in with TikTok on your Connectors page first.',
+  company_not_enabled: 'Your TikTok is not switched on for this venture’s company. Switch it on on the TikTok connector page.',
+  venture_served: 'A teammate’s TikTok already serves this venture. Only they can sync it.',
+  serves_other_venture: 'Your TikTok already serves another venture. One TikTok account serves one venture.',
+  sign_in_again: 'TikTok asked you to sign in again.',
+  rate_limited: 'TikTok asked us to wait. Try again in a minute.',
+  tiktok_unreadable: 'TikTok could not be read. Nothing changed; try again.',
+  bad_kind: 'Say which TikTok figure: kind=account or kind=video.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const tiktokReadRefusal = (e: TikTokReadError): TikTokRefused =>
+  e.code === 'unauthorized' ? new TikTokRefused(409, 'sign_in_again')
+    : e.code === 'rate_limited' ? new TikTokRefused(429, 'rate_limited') : new TikTokRefused(502, 'tiktok_unreadable');
+
+const tiktok = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new TikTokRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof TikTokRefused ? e : e instanceof TikTokReadError ? tiktokReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: TIKTOK_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+r.post('/tiktok/sync', tiktok(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'tiktok' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new TikTokRefused(409, 'tiktok_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new TikTokRefused(403, 'company_not_enabled');
+  const claim = await claimVenture(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id });
+  if (claim === 'served') throw new TikTokRefused(409, 'venture_served');
+  if (claim === 'elsewhere') throw new TikTokRefused(409, 'serves_other_venture');
+  const link = await tiktokLinkOf(c.env, pid);
+  const reads = await tiktokReadsFor(c.env, row);
+  const counts = await syncTikTok(c.env, reads, {
+    integrationId: Number(row.id), projectId: pid, today: new Date().toISOString().slice(0, 10), scopes: grantedScopes(row), cursor: link?.video_cursor ?? null,
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_tiktok_synced',
+    summary: `Grow synced from TikTok: ${counts.snapshots} snapshot, ${counts.videos} videos, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+r.delete('/tiktok/facts/:id', tiktok(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const kind = c.req.query('kind');
+  if (kind !== 'account' && kind !== 'video') throw new TikTokRefused(400, 'bad_kind');
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteTikTokRow(c.env, kind, pid, id) : null;
+  if (!slug) throw new TikTokRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: kind === 'account' ? 'grow_tiktok_snapshot_deleted' : 'grow_tiktok_video_deleted',
+    summary: kind === 'account' ? 'TikTok audience snapshot deleted' : 'TikTok video figures deleted' });
+  return c.json({ ok: true, id });
+}));
+
 // ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
 
 const GOOGLE_SLUGS: Record<string, 'revenue_and_traction' | 'durable_company_building'> = {
@@ -953,5 +1061,122 @@ r.delete('/google/facts/:id', async (c) => {
     return c.json({ ok: true, id });
   } catch (e) { return fail(c, e); }
 });
+
+// ── D5859 (#5859, part 2a of #2399): a linked Facebook Page ────────────────
+
+/** D5859: Distribution's and Revenue and traction's Facebook part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function facebookPart(c: C, user: User, pid: number, slug: string): Promise<{ from_facebook?: unknown }> {
+  if (!(FACEBOOK_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    const viewer = { userId: Number(user.id), support: await isSupportSession(c), writer: await writes(c, user, pid) };
+    return { from_facebook: await facebookModulePart(c.env, pid, slug as FacebookSlug, viewer) };
+  } catch (e) {
+    console.error('[cycle_grow] facebook part unreadable:', slug, (e as Error).name);
+    return { from_facebook: { state: 'unreadable', reason: FACEBOOK_SENTENCES.unreadable } };
+  }
+}
+
+class FacebookRefused extends Error {
+  status: number; code: string;
+  constructor(status: number, code: string) { super(code); this.status = status; this.code = code; }
+}
+
+/** Each refusal's sentence, written here: never Facebook's text. */
+export const FACEBOOK_REFUSALS: Record<string, string> = {
+  support_session_refused: 'A support session cannot read or change a member’s Facebook Pages.',
+  facebook_not_connected: 'Facebook is not connected. Connect it on your Connectors page first.',
+  company_not_enabled: 'Your Facebook is not switched on for this venture’s company. Switch it on on the Facebook connector page.',
+  page_not_chosen: 'That Page is not one you chose for this venture’s company. Choose it on the Facebook connector page first.',
+  facebook_page_not_granted: 'Facebook no longer lists that Page for your account. Choose your Pages again on the Facebook connector page.',
+  facebook_page_not_linked: 'No Facebook Page is linked to this venture yet. Link one first.',
+  venture_served: 'A teammate’s Facebook already serves this venture. Only they can change or sync it.',
+  page_elsewhere: 'That Page already feeds another venture. One Page feeds one venture.',
+  sign_in_again: 'Facebook asked you to sign in again.',
+  rate_limited: 'Facebook asked us to wait. Try again in a minute.',
+  facebook_unavailable: 'Facebook is not available yet.',
+  facebook_unreadable: 'Facebook could not be read. Nothing changed; try again.',
+  bad_page: 'Say which Page: a Page id, or null to unlink.',
+  fact_not_found: 'That figure is not on this venture.',
+};
+
+const facebookReadRefusal = (e: ConnectRefusal): FacebookRefused =>
+  e.code === 'facebook_reconnect' ? new FacebookRefused(409, 'sign_in_again')
+    : e.code === 'facebook_rate_limited' ? new FacebookRefused(429, 'rate_limited')
+      : e.code === 'facebook_unavailable' ? new FacebookRefused(503, 'facebook_unavailable')
+        : new FacebookRefused(502, 'facebook_unreadable');
+
+const facebook = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
+  try {
+    const user = await requireAuth(c);
+    if (await isSupportSession(c)) throw new FacebookRefused(403, 'support_session_refused');
+    return await fn(c, user);
+  } catch (e) {
+    const r = e instanceof FacebookRefused ? e : e instanceof ConnectRefusal ? facebookReadRefusal(e) : null;
+    if (r) return c.json({ error: r.code, detail: FACEBOOK_REFUSALS[r.code] }, r.status as 400);
+    return fail(c, e);
+  }
+};
+
+/** The caller's own active Facebook connection, switched on for the venture's company. */
+async function facebookRow(c: C, user: User, pid: number): Promise<IntegrationRow> {
+  const row = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'facebook' AND status = 'active' LIMIT 1")
+    .bind(user.id).first<IntegrationRow>();
+  if (!row) throw new FacebookRefused(409, 'facebook_not_connected');
+  if (!(await projectEnabled(c.env, Number(row.id), pid))) throw new FacebookRefused(403, 'company_not_enabled');
+  return row;
+}
+
+r.put('/facebook/page', facebook(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  if (b.page_id === null) {
+    const held = await facebookLinkOf(c.env, pid);
+    if (held && held.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+    await unlinkFacebookPage(c.env, pid, Number(row.id));
+    await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_page_unlinked', summary: 'Facebook Page unlinked from this venture' });
+    return c.json({ ok: true, link: null });
+  }
+  const pageId = typeof b.page_id === 'string' && /^\d{1,32}$/.test(b.page_id) ? b.page_id : null;
+  if (!pageId) throw new FacebookRefused(400, 'bad_page');
+  const company = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(pid).first<{ company_id: number | null }>();
+  const chosen = (() => { try { return JSON.parse(row.config_json ?? '{}').pages_by_company?.[String(company?.company_id)]; } catch { return null; } })();
+  if (!Array.isArray(chosen) || !chosen.includes(pageId)) throw new FacebookRefused(403, 'page_not_chosen');
+  const page = (await facebookPageGrants(c.env, row)).find((p) => p.id === pageId);
+  if (!page) throw new FacebookRefused(403, 'facebook_page_not_granted');
+  const out = await linkFacebookPage(c.env, { integrationId: Number(row.id), projectId: pid, userId: user.id, pageId, pageName: page.name });
+  if (out !== 'ok') throw new FacebookRefused(409, out === 'served' ? 'venture_served' : 'page_elsewhere');
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_page_linked', summary: 'Facebook Page linked to this venture' });
+  return c.json({ ok: true, link: { page_id: pageId, page_name: page.name } });
+}));
+
+r.post('/facebook/sync', facebook(async (c, user) => {
+  const b = await body(c);
+  const pid = await project(c, user, b.project, true);
+  const row = await facebookRow(c, user, pid);
+  const link = await facebookLinkOf(c.env, pid);
+  if (!link) throw new FacebookRefused(409, 'facebook_page_not_linked');
+  if (link.integration_id !== Number(row.id)) throw new FacebookRefused(409, 'venture_served');
+  // Every sync re-reads the Pages the token lists, and refuses a Page it no longer lists.
+  const page = (await facebookPageGrants(c.env, row)).find((p) => p.id === link.page_id);
+  if (!page) throw new FacebookRefused(403, 'facebook_page_not_granted');
+  const counts = await syncFacebook(c.env, facebookReads(page.id, page.grant), {
+    integrationId: Number(row.id), projectId: pid, pageId: page.id, today: new Date().toISOString().slice(0, 10),
+    cursor: link.insights_cursor, backfilled: link.backfilled,
+  });
+  await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?').bind(row.id).run();
+  await logGrowWrite(c.env, pid, user.id, { module: 'distribution', entityId: pid, action: 'grow_facebook_synced',
+    summary: `Grow synced from Facebook: ${counts.followers} follower snapshot, ${counts.daily} daily figures, ${counts.kept_deleted} kept deleted${counts.partial ? ', partly synced' : ''}` });
+  return c.json({ ok: true, counts });
+}));
+
+r.delete('/facebook/facts/:id', facebook(async (c, user) => {
+  const pid = await project(c, user, c.req.query('project'), true);
+  const id = Number(param(c, 'id'));
+  const slug = Number.isSafeInteger(id) && id > 0 ? await deleteFacebookFact(c.env, pid, id) : null;
+  if (!slug) throw new FacebookRefused(404, 'fact_not_found');
+  await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_facebook_fact_deleted', summary: 'Facebook figure deleted' });
+  return c.json({ ok: true, id });
+}));
 
 export default r;

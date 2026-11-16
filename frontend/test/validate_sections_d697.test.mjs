@@ -198,10 +198,11 @@ test('1: Export interviews downloads venture 7\'s file, and a refusal prints the
   } finally { await m.close(); }
 });
 
-test('1: the table has no Stage column or chip, and Consent offers "Agreed · deck-eligible"', () => {
+test('1: the table has no Stage column, a Stage filter (D6001), and Consent offers "Agreed · deck-eligible"', () => {
   const recs = adaptRecords('validate', 'customer-research', { cols: COLS['customer-research'], rows: [], total: 0 });
   assert.equal(recs.cols.some((c) => c.label === 'Stage'), false);
-  assert.equal(recs.filters.some((f) => f.key === 'stage' || f.label === 'Stage'), false);
+  // D6001 (#6001): the recruiting pipeline's Stage filter is listed again; State stays the column.
+  assert.deepEqual(recs.filters.find((f) => f.key === 'stage')?.options.map((o) => o.value), ['lead', 'invited', 'invited_no_slot', 'booked', 'done']);
   assert.ok(recs.filters.find((f) => f.key === 'consent').options.some((o) => o.value === 'agreed' && o.label === 'Agreed · deck-eligible'));
 });
 

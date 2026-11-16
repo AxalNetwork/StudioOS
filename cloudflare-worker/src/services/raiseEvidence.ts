@@ -1,4 +1,5 @@
 /** D891 / #2447: recorded provenance and the actual investor download gates. */
+import { liveFiles } from './dataRoomTrash';
 import type { Env, User } from '../types';
 import { isSuperAdmin } from '../auth';
 import { ownsVenture } from '../routes/_founder_validate_helpers';
@@ -11,7 +12,7 @@ import { checkClaims, claimRecord, type ClaimCheck } from './raiseClaims';
 
 /** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
 export async function readableRoomFiles(env: Env, projectId: number): Promise<any[]> {
-  const files = await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(projectId).all<any>();
+  const files = await env.DB.prepare(`SELECT * FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}`).bind(projectId).all<any>();
   const grants = await env.DB.prepare(
     `SELECT g.id, g.investor_user_id,
        EXISTS (SELECT 1 FROM raise_prospects rp WHERE rp.project_id = g.project_id
@@ -519,8 +520,8 @@ async function fileAdmits(env:Env,projectId:number,row:RaiseEvidenceItem,aud:Evi
   if(!FILE_KINDS.has(row.kind))return true;
   const id=Number(row.source_ref.split(':')[0]);if(!Number.isSafeInteger(id)||id<1)return false;
   const file=row.kind==='revenue-proof'
-    ?await env.DB.prepare(`SELECT d.visibility,d.access_tier,d.access_expires_at,d.folder_id FROM revenue_entries r JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.id=? AND r.project_id=?`).bind(id,projectId).first<any>()
-    :await env.DB.prepare('SELECT visibility,access_tier,access_expires_at,folder_id FROM data_room_files WHERE id=? AND project_id=?').bind(id,projectId).first<any>();
+    ?await env.DB.prepare(`SELECT d.visibility,d.access_tier,d.access_expires_at,d.folder_id FROM revenue_entries r JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.id=? AND r.project_id=?${await liveFiles(env.DB,'d')}`).bind(id,projectId).first<any>()
+    :await env.DB.prepare(`SELECT visibility,access_tier,access_expires_at,folder_id FROM data_room_files WHERE id=? AND project_id=?${await liveFiles(env.DB)}`).bind(id,projectId).first<any>();
   return !!file&&tierAdmits(file,aud.committed,Date.now(),aud.folders)&&(file.visibility==='open'||(file.visibility==='nda'&&nda));
 }
 async function logOpenEvidence(env:Env,projectId:number,userId:number){

@@ -56,9 +56,10 @@ import { makeZoneActions } from './zoneActionBuilder';
  *
  * `primary: true` (D1424, #3700) marks the one row a zone's header draws
  * filled, in indigo: Closing's Record wire, Reports' Chase all overdue,
- * Value-add's Log support, LPs' Add LP, Calls' New call and Research › Ask's
- * New brief. Screening, Commit, Positions, Accounting, Reporting and the
- * Network zones have no live first step, so no primary. Deal flow (the Deals
+ * Value-add's Log support, LPs' Add LP, Calls' New call, Reporting's New
+ * reporting period (#6230) and Research › Ask's New brief. Screening, Commit,
+ * Positions, Accounting and the Network zones have no live first step, so no
+ * primary. Deal flow (the Deals
  * root) has no table: its "Set your thesis" primary is drawn by `DealFlow`
  * while no deal matches (owner answer C).
  */
@@ -161,9 +162,16 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Period close', unbuilt: 'periods are not opened or closed from here' },
   ],
   'funds/reporting': [
-    { label: 'Build pack', unbuilt: 'report packs are not assembled from this desk' },
+    // #6230: `Build pack` said packs were not assembled from this desk, while
+    // `FundReportPeriodPage` at `/funds/:fundId/reporting/new` drafts and issues
+    // one. The page supplies the handler only for a fund the member operates
+    // (`can_manage`, the Worker's own `requireFundGp` test); without one the
+    // action is absent and the archive says why.
+    { canvas: 'Build pack', label: 'New reporting period', kind: 'handler', handler: 'newPeriod', primary: true },
     { label: 'Export archive', kind: 'export' },
-    { label: 'Delivery log', unbuilt: 'per-LP delivery is counted, never itemised' },
+    // Was 'per-LP delivery is counted, never itemised'. Nothing counts it: a
+    // period records when it was issued, and no delivery row exists.
+    { label: 'Delivery log', unbuilt: 'issuing a period records when it was issued, not which LP received it, so there is no delivery to log' },
   ],
 
   // ── Portfolio ────────────────────────────────────────────────────────────
@@ -260,20 +268,18 @@ export const INVESTOR_ZONE_ACTIONS = {
   // true of the op, since a box that always appends to one thread cannot start
   // a second.
   //
-  // `Clear history` KEEPS A NOTE, AND IT IS A DIFFERENT NOTE. "No session
-  // history is stored to clear" stopped being true with the same migration —
-  // but what replaced it is not a clear button. Nothing deletes an answer,
-  // deliberately: kept-or-not-kept is the only bit the ops row writes, and
-  // erasing a reader's own questions is the one irreversible act on this page.
-  // The reason is now about the refusal rather than about an absent store.
+  // `Clear history` IS LIVE, AND IT STILL ERASES NOTHING. "No session history
+  // is stored to clear" stopped being true with the same migration; the owner
+  // then chose hide over delete (D6272, #6274 question 4 B), so the one
+  // irreversible act this page declined to offer is still not offered.
   'research/ask': [
     { label: 'New brief', kind: 'handler', handler: 'newSession', primary: true },
     { label: 'Export session', kind: 'export' },
-    // D495 (#1023): BUILT UP TO THE OWNER'S LINE. The refusal above was never
-    // a recorded decision. Whether Clear deletes the caller's sessions, hides
-    // them behind a "Show cleared" filter, or stays refused is question 4 on
-    // #1023, and until it is answered nothing is cleared.
-    { label: 'Clear history', unbuilt: 'the history is stored and nothing clears it yet: whether clearing deletes your sessions, hides them, or stays refused is the owner’s decision, asked on #1023', hover: 'Clearing history is not decided yet. Nothing has been deleted.' },
+    // D6272: BUILT TO THE OWNER'S ANSWER (#6274, question 4 B). Clearing
+    // HIDES the caller's sessions (`cleared_at`) and deletes nothing; the
+    // `Show cleared` filter reads them back and offers Restore. The question
+    // this row cited to #1023 (closed) is answered, so no note remains.
+    { label: 'Clear history', kind: 'handler', handler: 'clearHistory' },
   ],
   // Both of these zones have had a real body since the research stores landed,
   // and both were calling `zoneActionsFor` all along — with no key here, so
@@ -284,10 +290,14 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    // D495 (#1023): both wait on `research.ts`'s `deals/*` routes, which are
-    // slot S02's, so the reason names what each waits on rather than a store.
-    { label: 'New request', unbuilt: 'a founder opens a room; asking one to waits on the deal-request routes in research.ts (slot S02), and a button that wrote nowhere would replace the conversation that does', hover: 'Requesting a data room waits on the deal-request routes (slot S02).' },
-    { label: 'Attach to deal', unbuilt: 'nothing links a room grant to a deal record yet; that link waits on the deal routes in research.ts (slot S02)', hover: 'Linking a room to a deal waits on the deal routes (slot S02).' },
+    // D6272: THE NOTES SAY WHERE A ROOM IS ASKED FOR TODAY. They said both
+    // waited on "the deal-request routes in research.ts (slot S02)", but the
+    // request shipped on the deal itself (`POST /api/deals/:id/room-access/
+    // request`, the deal's Documents tab, `Ask for access`). This list is the
+    // rooms already granted, so the request stays on the deal and the row
+    // points there. Interim wording until the room-list build replaces it.
+    { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
+    { label: 'Attach to deal', unbuilt: 'a room opens from its own deal, and nothing on this list links a grant to a deal record yet; open the deal to see its room', hover: 'Each room opens from its own deal.' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [

@@ -11,8 +11,8 @@ branch sign-out, data-subject close); it calls `loadSecurityOverview` and
 | --- | --- |
 | `overview.ts` | `/overview`'s payload, store by store (`readPart`, the security-events and DSR blocks, the KYC and Backup / DR absences, `sources[]`). |
 | `aiSafety.ts` | The AI-safety block (`aiSafetyBlock`), what it cannot count, its window, and `GUARDRAILS_POINTER`, the field `/governance` serves instead of a second copy. |
-| `governanceFeed.ts` | The ledger: the five stores' statements (complete literals), the filters, the merge, the whole-second page and the reply (`loadGovernance`, `feedFilterOf`). |
-| `feedQuery.ts` | The ledger's cursor and filters (`parseFeedQuery`), which stores a filtered read can hold, the binds, `trimToSecond`. |
+| `governanceFeed.ts` | The ledger: the five stores' statements (complete literals), the filters, the merge (`feedOrder`, the stores' own order), the whole-second page, its continuation inside one second ([D4708-p2](../../../../documentation/architecture/decisions/D4708-p2.md)) and the reply (`loadGovernance`, `feedFilterOf`). |
+| `feedQuery.ts` | The ledger's cursor and filters (`parseFeedQuery`), which stores a filtered read can hold, the binds, `trimToSecond`, and `skip` with its cap `FEED_SKIP_MAX`. |
 | `feedFormat.ts` | How a stored row is worded: names, reasons, clipped text, minute stamps, a support session's outcome. |
 | `dataAccess.ts` | Canvas H7's Data access zone: support sessions and exports, each half with its own availability. |
 | `contract.ts` | The Worker's import of `frontend/src/lib/securityContract.js`, and `CONTRACT_HOLDS`, which fails the typecheck when a service's own status or outcome union drifts from it. |
