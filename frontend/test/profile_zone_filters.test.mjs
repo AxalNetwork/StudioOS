@@ -280,6 +280,11 @@ const PROFILES = {
       ['practice/engagements', 'design/incoming/Practice v2 Page.dc.html', 'engagements'],
       ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery'],
       ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+      // #4826 (D4826 part 2): Thinking is redrawn to the Expertise v2 canvas
+      // (EX-11), whose chips are literal radio buttons in the `thinking`
+      // section builder — `All · Needs you · With editors · Published` — read
+      // by `row: 'radios'`. It overrides AX4's `All · Published · Drafts · Essays`.
+      ['expertise/thinking', 'design/incoming/Expertise v2 Page.dc.html', 'thinking', { row: 'radios' }],
     ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
