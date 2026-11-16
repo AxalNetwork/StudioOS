@@ -14,7 +14,7 @@
  *     --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/auth_apple_6957.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
@@ -82,6 +82,8 @@ function envFor(db: any, over: Record<string, unknown> = {}) {
 const pair = await generateKeyPair('RS256', { extractable: true });
 const stranger = await generateKeyPair('RS256', { extractable: true });
 const JWK = { ...(await exportJWK(pair.publicKey)), kid: KID, alg: 'RS256', use: 'sig' };
+// A fixed clock (D5614): the route, the verifier and the tokens all read Date.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-16T12:00:00.000Z') });
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 function claims(over: Record<string, unknown> = {}) {
