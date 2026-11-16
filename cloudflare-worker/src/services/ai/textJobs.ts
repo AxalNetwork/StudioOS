@@ -280,6 +280,7 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:ic-memo': 'IN1', 'draft:closing-cover-note': 'IN1', 'draft:thin-evidence': 'IN1',
   'draft:multiple-narrative': 'IN5',
   'draft:performance-note': 'IN5', 'draft:portfolio-read': 'IN5', // D6212: the quarter-end note, as the multiple's narrative
+  'draft:statement-cover-note': 'IN5', // D6888: the statement's covering note, from its own figures, as D6212's notes
   'draft:updates-read': 'IN13', // nearest: a summary on the 70B (IN9 reads sentiment and writes nothing)
   'draft:support-summary': 'IN11', 'draft:lp-reminder': 'RA10',
   // Advisor and Operating Partner practice
