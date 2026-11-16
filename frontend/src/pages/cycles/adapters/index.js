@@ -57,9 +57,7 @@ export function adaptRecords(cycle, slug, records) {
   if (!def) return { ...records, cols: [], rows: [] };
   // The read lists its labels in the canvas's order; the adapter names the
   // key each label's cell is filled from, in the same order.
-  // D6016: a module may name its own columns (`labels`, in its keys' order) where the page's board differs from the read's.
-  const names = Array.isArray(def.labels) ? def.labels : labels;
-  const cols = names.map((label, i) => ({ key: def.keys[i] ?? `col${i}`, label: String(label) }));
+  const cols = labels.map((label, i) => ({ key: def.keys[i] ?? `col${i}`, label: String(label) }));
   const rows = (Array.isArray(records.rows) ? records.rows : []).map((r, i) => def.row(r || {}, i));
   return {
     ...records,

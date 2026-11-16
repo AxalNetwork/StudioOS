@@ -15,7 +15,7 @@ import { hypothesisRecordView } from '../src/pages/cycles/hypothesisRecord.js';
 import HypothesisRecord from '../src/pages/cycles/HypothesisRecord.jsx';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
-const WORKER_COLS = ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'];
+const WORKER_COLS = ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'];
 const row = (r) => ({ id: 7, hypothesis: 'H2 · They will pay €300 a month', status: 'contested', moved: null, evidence: 2, strength: 'anecdote',
   supporting: 1, contradicting: 1, fit_unrecorded: 2, both: 0, interviews: 2, interviewees: 2, organizations: 2,
   linked_evidence: { interview: 0, signal: 1, metric: 0, experiment: 0 }, sprint: 'Sprint 4', owner: 'Mia L.', provenance: null, ...r });

@@ -491,10 +491,9 @@ export const RECORDS = {
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
-  // D6016 (#6016, V7): the Hypotheses list in the canvas's columns. The labels are the page's (the read still sends its
-  // D4585 six); each cell is drawn from what the read already sends, and a column the read cannot fill is left out.
+  // D6016 (#6016, V7): the Hypotheses list in the canvas's columns, labelled by the read (D661); each cell is drawn from
+  // what the read already sends.
   experiments: {
-    labels: ['Code', 'Claim', 'Evidence state', 'Relationships', 'Distinct sources', 'Sprint', 'Owner', 'Source'],
     keys: ['code', 'claim', 'status', 'relationships', 'sources', 'sprint', 'owner', 'source'],
     row: (r) => {
       const [code, claim] = splitClaim(r.hypothesis);
