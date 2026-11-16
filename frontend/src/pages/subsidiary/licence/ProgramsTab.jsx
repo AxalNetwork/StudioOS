@@ -237,6 +237,7 @@ function LinkedProgram({ program, intent, requests, onClose, onSent, onChange })
       <h3 className="font-semibold">{program.name}</h3>
       <StatusPill status={status} />
       {status.line && <p className="text-sm">{status.line}</p>}
+      {status.request?.status === 'undelivered' && <Link className={LINK} to="/branch/approvals">Open To HQ to retry delivery</Link>}
       {status.request?.answer && <p className="text-sm">HQ’s answer: {status.request.answer}</p>}
       {focused.value === null && <button type="button" className={BTN} onClick={retry}>Try again</button>}
       {action?.kind === 'request' && intent !== 'request' && <Link className={LINK} to={studioProgramAccessPath(program.program_key, 'request')}>Request for my studio</Link>}
@@ -276,7 +277,9 @@ export default function ProgramsTab({ user = null, today = new Date() }) {
   const focused = programKey && list?.find((program) => program.program_key === programKey);
   const sentRequest = (row) => {
     setSheet(null);
-    setSent(`Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}. Nothing changes until HQ answers.`);
+    setSent(row?.status === 'undelivered'
+      ? <>Saved at your studio. HQ has yet to receive this request. <Link className={LINK} to="/branch/approvals">Open To HQ to retry delivery</Link></>
+      : `Sent to HQ${row?.due_at ? `. HQ answers by ${String(row.due_at).slice(0, 10)}` : ''}. Nothing changes until HQ answers.`);
     retryRequests();
   };
   const nothingHeld = Array.isArray(list) && !list.some((p) => ['in_force', 'granted', 'paused', 'ended'].includes(p.standing));

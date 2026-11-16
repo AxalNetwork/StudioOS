@@ -475,3 +475,17 @@ test('the studio reads issued custom terms and accepted HQ-delivered services se
     assert.deepEqual(s.posts, []);
   } finally { await v.unmount(); s.restore(); }
 });
+
+
+test('an undelivered branch request opens the existing retry queue', async () => {
+  const s = stub({ ...ANSWERS, 'POST /api/licence/mine/requests': () => json({ id: 7, status: 'undelivered' }, 201) });
+  const v = await render(h(ProgramsTab), studioProgramAccessPath('referral-partners', 'request'));
+  try {
+    await v.change('program-request-why', 'Partners are ready.');
+    const props = Object.entries(v.form('program-request-why')).find(([key]) => key.startsWith('__reactProps$'))[1];
+    await act(async () => { await props.onSubmit({ preventDefault() {} }); });
+    await v.settle();
+    assert.match(v.of('licence-programs-sent'), /Saved at your studio.*HQ has yet to receive this request.*retry delivery/);
+    assert.equal(s.posts.length, 1);
+  } finally { await v.unmount(); s.restore(); }
+});
