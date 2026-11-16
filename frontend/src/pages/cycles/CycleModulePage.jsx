@@ -260,13 +260,14 @@ function RowAction({ action }) {
  * page with nothing recorded shows no connector state; it is still one press
  * away. From the first record it is an open section under the records.
  */
-export function Sources({ children, phone = false, zero = false, action = null, drafts = false }) {
+export function Sources({ children, phone = false, zero = false, action = null, drafts = false, fold = null }) {
   const manage = <ManageTools action={action} />;
   if (zero) {
     return (
       <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources" data-stage="zero">
         <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-x-2 px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
-          <span>{drafts ? 'Sources and Eadwyn drafts' : 'Sources'}</span>
+          {/* D6100: a module's own fold label (progressiveList.js `fold`) where it sets one. */}
+          <span>{fold || (drafts ? 'Sources and Eadwyn drafts' : 'Sources')}</span>
           <span className="text-[11.5px] font-normal text-axal-faint dark:text-gray-500">What your tools report appears here once the first record exists</span>
         </summary>
         <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{manage}{children}</div>
@@ -411,7 +412,7 @@ export default function CycleModulePage({
           {/* D5077 (BD18 A): before the first record, the module's own asks; the rail carries them after. */}
           {zero && <ModuleAsk asks={asks} />}
           {zero
-            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+            ? (hasChildren || sources) && <Sources zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
             : <>{children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}</>}
         </>
       )}

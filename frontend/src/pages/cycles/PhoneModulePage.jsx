@@ -251,7 +251,7 @@ export default function PhoneModulePage({
       ))}
       {zero && <PhoneAskEntry asks={asks} />}
       {zero
-        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren}>{children}{sources}</Sources>
+        ? (hasChildren || sources) && <Sources phone zero action={sourcesAction} drafts={hasChildren} fold={progressive?.fold}>{children}{sources}</Sources>
         : <>
           {hasChildren && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
           {sources && <Sources phone action={sourcesAction}>{sources}</Sources>}
