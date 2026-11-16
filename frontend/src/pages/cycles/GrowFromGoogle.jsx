@@ -176,8 +176,12 @@ export function RevenueFromGoogleView({ projectId, state, reload, api = googleWo
   );
 }
 export function RevenueFromGoogle({ projectId, api = googleWorkspace }) {
-  const { state, reload } = useGrowGoogle(projectId, SLUG.revenue, api);
-  return <RevenueFromGoogleView projectId={projectId} state={state} reload={reload} api={api} />;
+  return <GrowGooglePart key={projectId} View={RevenueFromGoogleView} projectId={projectId} slug={SLUG.revenue} api={api} />;
+}
+
+function GrowGooglePart({ View, projectId, slug, api, canDecide }) {
+  const { state, reload } = useGrowGoogle(projectId, slug, api);
+  return <View projectId={projectId} state={state} reload={reload} api={api} canDecide={canDecide} />;
 }
 
 function DecideDialog({ projectId, proposal, verb, api, onClose, onDone }) {
@@ -276,6 +280,5 @@ export function DurableFromGoogleView({ projectId, state, reload, canDecide = tr
   );
 }
 export function DurableFromGoogle({ projectId, canDecide = true, api = googleWorkspace }) {
-  const { state, reload } = useGrowGoogle(projectId, SLUG.durable, api);
-  return <DurableFromGoogleView projectId={projectId} state={state} reload={reload} canDecide={canDecide} api={api} />;
+  return <GrowGooglePart key={projectId} View={DurableFromGoogleView} projectId={projectId} slug={SLUG.durable} api={api} canDecide={canDecide} />;
 }

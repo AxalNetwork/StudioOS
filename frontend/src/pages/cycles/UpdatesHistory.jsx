@@ -42,7 +42,7 @@ const AMBER = 'whitespace-nowrap rounded-full border border-amber-200 bg-amber-5
 const FILTER = 'min-h-[36px] min-w-0 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const yearOf = (row) => /^(\d{4})-/.exec(row.sent_at || row.submitted_at || '')?.[1];
 
-export default function UpdatesHistory({ updates, reason = null, onShare, rowAction = null, filterable = false }) {
+export default function UpdatesHistory({ updates, reason = null, onShare, rowAction = null, filterable = false, limit = null, more = null }) {
   const filterId = useId();
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('');
@@ -55,6 +55,8 @@ export default function UpdatesHistory({ updates, reason = null, onShare, rowAct
     (!year || yearOf(row) === year) &&
     (!search || [updateTitle(row), row.title].some((title) => title?.toLowerCase().includes(search)))
   ) : rows;
+  // D6122 (GR-21): Company shows the last `limit` updates, with a link to where the rest are written.
+  const capped = Number.isInteger(limit) && limit > 0 ? shown.slice(0, limit) : shown;
   if (updates === undefined) return null;
   let body;
   if (updates === null) body = <p role="alert" className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="updates-unreadable">{reason || 'Unreadable: Updates history could not be read'}</p>;
@@ -67,7 +69,7 @@ export default function UpdatesHistory({ updates, reason = null, onShare, rowAct
   else if (!shown.length) body = <p className="m-0 py-2 text-[12.5px] text-axal-muted dark:text-gray-400">No reports or updates match these filters.</p>;
   else body = (
     <ul className="m-0 list-none p-0">
-      {shown.map((u) => (
+      {capped.map((u) => (
         <li key={u.uid} className="flex flex-wrap items-start justify-between gap-2 border-b border-axal-ground py-2 text-[12.5px] last:border-b-0 dark:border-gray-800" data-testid="updates-row">
           <div className="min-w-0 flex-1 break-words">
             {u.href ? <Link to={u.href} className="font-semibold text-axal-ink hover:underline dark:text-gray-100">{updateTitle(u)}</Link>
@@ -85,7 +87,10 @@ export default function UpdatesHistory({ updates, reason = null, onShare, rowAct
   );
   return (
     <section id="updates" className="flex min-w-0 scroll-mt-4 flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-updates" aria-labelledby="updates-title">
-      <h2 id="updates-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{filterable ? 'History' : 'Updates'}</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="updates-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{filterable ? 'History' : limit ? `Updates history · last ${limit}` : 'Updates'}</h2>
+        {more && <Link to={more.href} className="text-[12px] font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="updates-more">{more.text}</Link>}
+      </div>
       {filterable && rows.length > 0 && (
         <>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">

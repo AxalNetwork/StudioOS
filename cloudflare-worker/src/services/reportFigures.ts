@@ -4,7 +4,8 @@
  *   REPORT_FIGURES   each figure a report can carry: its key, label, Grow
  *                    module, unit, the sources it may come from, and the
  *                    other keys it is known by. It unifies Share an update's
- *                    five keys (`METRIC_KEYS`, `updateShare.ts`) with the KPI
+ *                    shared keys (`METRIC_KEYS`, `updateShare.ts`), including
+ *                    ARR and net_retention (#6178), with the KPI
  *                    rule keys of `portfolio_kpi_definitions` (migration 168),
  *                    so `burn` and `net_burn`, `runway` and `runway_months` are
  *                    one figure each. A test holds the assembler to it.

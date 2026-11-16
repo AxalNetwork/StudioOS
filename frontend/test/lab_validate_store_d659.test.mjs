@@ -68,7 +68,7 @@ test('D659: the client names the project on every call and the routes the Worker
     // D6020 (#6020): six writes no page called are gone; the record actions and forms make them.
     'addMarketSource', 'marketReadiness', 'module', 'overview', 'removeMarketSource', 'setEvidenceStrength',
     // D5997 (#5997): the venture's "Trying to learn:" line, called by `ValidateObjective.jsx`.
-    'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setObjective', 'setWaitlistTarget',
+    'setInterviewSegment', 'setInterviewStage', 'setInterviewsTarget', 'setMarketMark', 'setObjective', 'setWaitlistTarget',
   ]);
   const src = raw('frontend/src/lib/api/cycleValidate.js');
   for (const line of src.split('\n').filter((l) => l.includes('request(`'))) {

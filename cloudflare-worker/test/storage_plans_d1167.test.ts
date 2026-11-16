@@ -60,12 +60,17 @@ test('the Best suited for words are the owner’s exact lines, shared by plans a
     [['founder:studio'], 'Power users with substantial research and documentation'],
     [['investor:professional'], 'Professional investors and intensive company-building workflows'],
     [['lp_access'], 'Verified Axal VC fund investors; fund documents excluded'],
+    // D6883: the owner's answer on #5957, a value and not a reason.
+    [['investor:institutional'], 'Negotiated'],
   ] as const;
-  for (const [keys, words] of rows) for (const key of keys) assert.equal(storagePlan(key)!.best_suited, words, key);
-  for (const key of ['admin', 'investor:institutional']) {
-    assert.equal(storagePlan(key)!.best_suited, null);
-    assert.ok(storagePlan(key)!.best_suited_reason);
+  // Every plan but staff is listed, so a change to any other plan's words fails here.
+  assert.deepEqual(rows.flatMap(([keys]) => keys).sort(), Object.keys(STORAGE_PLANS).filter((k) => k !== 'admin').sort());
+  for (const [keys, words] of rows) for (const key of keys) {
+    assert.equal(storagePlan(key)!.best_suited, words, key);
+    assert.equal(storagePlan(key)!.best_suited_reason, null, key);
   }
+  assert.equal(storagePlan('admin')!.best_suited, null);
+  assert.equal(storagePlan('admin')!.best_suited_reason, 'Staff accounts hold no plan.');
 });
 
 for (const [fields, expected] of [
