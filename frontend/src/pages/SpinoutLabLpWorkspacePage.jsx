@@ -156,7 +156,7 @@ const LADDER = [
   ['Invited', 0, 'Review the thesis, key terms and cohort summaries.'],
   ['Approved', 1, 'Full reporting archive and diligence data room.'],
   ['Committed', 2, 'Quarterly reporting package, portfolio updates, demo day.'],
-  [`Participation · $${ALLOC_THRESHOLD_K}K`, 3, 'Decision rights and follow-on co-invest.'],
+  [`Participation · $${ALLOC_THRESHOLD_K}K`, 3, 'Decision rights.'],
 ];
 
 // Documents this platform does NOT produce. The design listed them beside the

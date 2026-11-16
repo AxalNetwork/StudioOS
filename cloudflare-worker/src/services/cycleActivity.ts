@@ -22,9 +22,10 @@ type BuildModule = BuildModuleSlug;
  * Each cycle's module slugs: a write logged under a module that does not
  * exist fails to compile. Validate also logs `verdict` (D693): Verdict's
  * decisions are Validate rows (`validate.verdict`) although Verdict is not one
- * of the six modules in cycleValidate's MODULES.
+ * of the six modules in cycleValidate's MODULES, and `objective` (D5997): the
+ * venture's "Trying to learn:" line, a write of the cycle and of no module.
  */
-export type CycleModules = { validate: ValidateModule | 'verdict'; build: BuildModule; raise: RaiseModule; grow: GrowModule };
+export type CycleModules = { validate: ValidateModule | 'verdict' | 'objective'; build: BuildModule; raise: RaiseModule; grow: GrowModule };
 
 /**
  * `entityId` is the record id the module read sends. `null` is the explicit

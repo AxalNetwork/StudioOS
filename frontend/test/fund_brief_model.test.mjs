@@ -246,3 +246,13 @@ test('with stock data the brief reproduces the design one-pager', () => {
   assert.equal(vm.steps[0].label, 'Invited');
   assert.equal(vm.steps[7].label, 'Funded');
 });
+
+// D6140 (#6140): the owner removed the co-invest promise. No tier, rights row or ladder step offers it.
+test('D6140: no tier, rights row or LP ladder step promises co-invest', async () => {
+  const model = await import('../src/lib/spinoutFundModel.js');
+  const text = JSON.stringify([model.TIERS, model.TIER_RIGHTS]);
+  assert.doesNotMatch(text, /co-invest/i);
+  const { readFileSync } = await import('node:fs');
+  const page = readFileSync(new URL('../src/pages/SpinoutLabLpWorkspacePage.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(page, /co-invest/i);
+});
