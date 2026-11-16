@@ -27,6 +27,7 @@
 import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
+import { PITCH_TABS } from './pitchRoutes.js';
 
 export const STUDIO_PATH = '/raise/pitch';
 export const EDIT_PATH = '/raise/pitch/edit';
@@ -53,20 +54,10 @@ export const LINE = 'Your deck, what to say, and who has seen it, in one place.'
 // PD21: an admin reads the studio and leaves notes (D905).
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
-/**
- * D4254 (#4254): the tile row. The Overview (`STUDIO_PATH`) is not a tile; it
- * lights none. Share & analytics lives at /share (the old /analytics address was retired by D2319).
- */
 export const DECKS_PATH = '/raise/pitch/decks';
 export const SCRIPT_PATH = '/raise/pitch/script';
 export const SHARE_PATH = '/raise/pitch/share';
-export const TABS = [
-  { id: 'decks', label: 'Decks', path: DECKS_PATH },
-  { id: 'script', label: 'Script & rehearsal', path: SCRIPT_PATH },
-  { id: 'review', label: 'Review', path: REVIEW_PATH },
-  { id: 'analytics', label: 'Share & analytics', path: SHARE_PATH },
-  { id: 'notes', label: 'Notes', path: NOTES_PATH },
-];
+export const TABS = PITCH_TABS;
 
 export const EMPTY_DECK = 'No deck yet. Start from your records.';
 export const NO_VIEWS = 'No one has opened a link yet.';

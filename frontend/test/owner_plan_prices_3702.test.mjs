@@ -77,7 +77,7 @@ import { publicPricingApi } from '../src/lib/api/publicPricing.js';
 import { resetPlansRead } from '../src/lib/planPrices.js';
 import { register } from 'node:module';
 register(new URL('./_airailRender-hook.mjs', import.meta.url));
-const { InvestorBillingPanel, PersonaBillingPanel } = await import('../src/pages/SettingsPage.jsx');
+const { InvestorBillingPanel, PersonaBillingPanel } = await import('../src/pages/account/BillingSection.jsx');
 const nodeText = n => n?.childNodes?.length ? n.childNodes.map(nodeText).join('') : n?.textContent || '';
 
 test('Billing shows Institutional as Custom/contact and personas have only two plans', async () => {

@@ -18,9 +18,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
@@ -28,8 +27,7 @@ import {
   Sanctions, BackupDr, drillSentence, securityEventsBar, dsrBranchesSentence,
 } from '../src/pages/hq/SecurityPage.jsx';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const PAGE = readFileSync(resolve(here, '../src/pages/hq/SecurityPage.jsx'), 'utf8');
+const PAGE = securityRaw();
 const CODE = codeOnly(PAGE);
 const render = (C, props) => renderToStaticMarkup(React.createElement(C, props));
 

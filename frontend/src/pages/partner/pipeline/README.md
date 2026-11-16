@@ -12,7 +12,8 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 | `ProposalsZone.jsx` | `/pipeline/proposals` since D4838 PP04: a follow-up list (client, value, state, last activity, next action), a phone card per proposal, and a sheet with each quote's versions and its outcome with a loss reason. |
 | `proposalsFollowUp.js` | D4838 PP04: the pure rules the Proposals list reads. They cover last activity, next action, the sheet's tabs and the strip, and they never count an open. |
 | `leadsModel.js` | #5935: the pure rules Leads draws by: fit state, reasons, Why this score?, Recent, the strip, the pass reasons (the Worker's `PASS_REASONS`). |
-| `NegotiationsZone.jsx` | `/pipeline/negotiations`: stage, ball, the open question and clause-level terms. |
+| `NegotiationsZone.jsx` | `/pipeline/negotiations` since D5938: the board of recorded stages (PP05), a stage selector over one list on a phone (PP05m), a card moved by buttons, and the Eadwyn counter drawn "Not sent" only while a draft exists. |
+| `NegotiationTermsSheet.jsx` | D5938: one negotiation's terms sheet (PP05b): We proposed, They proposed and Current position, a difference marked with ≠ and words, and the stage, ball and open question. |
 | `RetainersZone.jsx` | `/pipeline/retainers`: cadence, monthly equivalent, usage against retained hours and renewal. |
 | `AnalyticsZone.jsx` | `/pipeline/analytics`: win rate, cycle, weighted forecast and loss reasons, by window and by shape. |
 | `OpportunitySheet.jsx` | D4838 PP08 (#5934): the shared opportunity sheet. It shows one lead, proposal, negotiation and engagement, joined by id, on `frontend/src/ui/Sheet.jsx`. Tabs appear only for records that exist, and Activity comes from D5942's recorded feed. A zone opens it with whichever id it holds. |
