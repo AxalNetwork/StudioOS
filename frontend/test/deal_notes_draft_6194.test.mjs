@@ -114,6 +114,17 @@ test('the draft is Eadwyn\'s and Not saved, and names its sources with what was 
   } finally { await w.unmount(); }
 });
 
+test('#6174: the Evidence hand-off prefills the note without saving it', async () => {
+  const evidenceNote = 'Evidence · Runway from the bank · Fundraising readiness\n\n';
+  const w = await mount(h(DealNotes, { dealId: 900, userId: 41, evidenceNote }), routes());
+  try {
+    assert.equal(w.props(w.byTestId('deal-note-body')).value, evidenceNote);
+    assert.ok(!w.calls.some((c) => c.method === 'POST' && c.url.includes('/deals/900/notes')));
+    await w.type('deal-note-body', `${evidenceNote}Ask for the latest figures.`);
+    assert.match(w.props(w.byTestId('deal-note-body')).value, /latest figures/);
+  } finally { await w.unmount(); }
+});
+
 test('Save as my note saves through the notes route, then records the proposal against the new id', async () => {
   // Mutation checked: the record step dropped → no /api/fills/record call.
   const w = await mount(h(DealNotes, { dealId: 900, userId: 41 }), routes());

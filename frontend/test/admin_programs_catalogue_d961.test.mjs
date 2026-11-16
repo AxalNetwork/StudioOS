@@ -395,8 +395,9 @@ test('one failed block fails only itself: the Lab series, a queue, a card figure
   try {
     assert.equal(view.textOf('programs-chart-joins-missing-lab'), 'Lab applications: Could not be read. Lab applications could not be read on this database. That is not the same as none.');
     assert.ok(view.has('programs-chart-joins-chart'), 'the other series stand');
-    assert.match(view.textOf('programs-card-perks-figure').trim(), /^Live perks could not be read\./);
-    assert.match(view.textOf('programs-card-spinout-lab-applications').trim(), /^Lab applications could not be read\./);
+    // D5129 (Q2 = A): the shared Unreadable leads with the word Unavailable.
+    assert.match(view.textOf('programs-card-perks-figure').trim(), /^UnavailableLive perks could not be read\./);
+    assert.match(view.textOf('programs-card-spinout-lab-applications').trim(), /^UnavailableLab applications could not be read\./);
     assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
     assert.equal(view.textOf('programs-tile-waiting-value'), '8');
   } finally { await view.close(); }

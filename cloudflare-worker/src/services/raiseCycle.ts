@@ -865,7 +865,7 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
 
 /**
  * D909: where a version started, as the versions table and the Versions tab
- * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * say it: "v1", "Blank", the live wording, "Pitch deck v3" (D6069), or null (saved before 463 recorded
  * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
  * a Spin-Out venture reads it by that name; any other venture's earlier
  * versions copied it under today's name, "The live deck".
@@ -873,6 +873,8 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
 export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
   if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
   if (v.start_from === 'blank') return 'Blank';
+  // D6069: a deck start keeps the deck version it read in based_on_version.
+  if (v.start_from === 'deck' && v.based_on_version != null) return `Pitch deck v${v.based_on_version}`;
   if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
   return null;
 }

@@ -19,8 +19,7 @@
  *
  * An option that runs no model (a CRUD write, a client-side CSV export, the
  * Network's heuristic propositions) is not listed, and the rail lists none.
- * Boards with no row offer no such option today: Deals, Portfolio, Performance,
- * Axal VC Fund, Fund, Overview, LPs, Distributions, Reporting, Network and its
+ * Boards with no row offer no such option today: Deals, Axal VC Fund, Fund, Overview, LPs, Distributions, Reporting, Network and its
  * three boards, Benchmarking and Markets.
  */
 export const INVESTOR_RAIL_OPTIONS = Object.freeze([
@@ -32,6 +31,11 @@ export const INVESTOR_RAIL_OPTIONS = Object.freeze([
   { page: 'Investor · Deals · Closing', key: 'draft:closing-cover-note', label: 'Draft the note', kind: 'write', handler: 'draft',
     source: { file: 'pages/investor/deals/ClosingZone.jsx', match: 'surface="deals/closing"' } },
   // Portfolio
+  // D6212 (#6212): a note on what moved, from the quarter-end reads, on the Overview and on Performance.
+  { page: 'Investor · Portfolio', key: 'draft:portfolio-read', label: 'Draft the note', kind: 'numbers', handler: 'draft',
+    source: { file: 'pages/investor/InvestorPortfolioCanvas.jsx', match: 'surface="portfolio/overview"' } },
+  { page: 'Investor · Portfolio · Performance', key: 'draft:performance-note', label: 'Draft the note', kind: 'numbers', handler: 'draft',
+    source: { file: 'pages/investor/InvestorPortfolioPerformance.jsx', match: 'surface="portfolio/performance"' } },
   { page: 'Investor · Portfolio · Positions', key: 'draft:multiple-narrative', label: 'Draft the narrative', kind: 'numbers', handler: 'draft',
     source: { file: 'pages/investor/InvestorPortfolioPositions.jsx', match: 'surface="portfolio/positions"' } },
   { page: 'Investor · Portfolio · Updates', key: 'draft:updates-read', label: 'Draft the read', kind: 'synth', handler: 'draft',

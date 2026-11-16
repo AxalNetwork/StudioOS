@@ -250,10 +250,11 @@ test('mounted: a broken count is drawn as Unreadable, never as 0, and the other 
     const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1];
     const of = (id) => { const n = walk(container).find((x) => props(x)?.['data-testid'] === id); assert.ok(n, `no ${id}`); return textOf(n); };
     const has = (id) => walk(container).some((x) => props(x)?.['data-testid'] === id);
-    assert.match(of('community-tile-upcoming'), /Unreadable/);
+    // D5129 (Q2 = A): the screen word for a failed read is Unavailable.
+    assert.match(of('community-tile-upcoming'), /Unavailable/);
     assert.doesNotMatch(of('community-tile-upcoming'), /\b0\b|\b3\b/, 'the string count was drawn');
     // D4820: the experts figure is drawn in the Wellbeing card.
-    assert.match(of('community-figure-experts'), /Unreadable/);
+    assert.match(of('community-figure-experts'), /Unavailable/);
     assert.doesNotMatch(of('community-figure-experts'), /verified of/);
     assert.ok(!has('community-by-type'), 'events by type was drawn without every type');
     assert.ok(!has('community-experts'), 'the experts bar was drawn without its verified count');

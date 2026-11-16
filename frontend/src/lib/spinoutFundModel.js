@@ -185,19 +185,18 @@ export const TIERS = [
   { name: 'Member', amountK: 100, amount: '$100K', sub: '',
     rights: 'Adds in-person demo day, portfolio deep-dives, founder introductions.' },
   { name: 'Allocator', amountK: 250, amount: '$250K', sub: 'Allocation rights', hl: true,
-    rights: 'Adds commitment-weighted allocation preferences, voting, follow-on co-invest.' },
+    rights: 'Adds commitment-weighted allocation preferences and voting.' },
   { name: 'Anchor', amountK: 500, amount: '$500K+', sub: 'By discussion',
-    rights: 'Adds co-invest priority and LPAC seat eligibility. Terms by discussion.' },
+    rights: 'Adds LPAC seat eligibility. Terms by discussion.' },
 ];
 
-/** The rights matrix. One cell per tier, in TIERS order. */
+/** The rights matrix. One cell per tier, in TIERS order. D6140: no co-invest right is offered (no store holds an offer). */
 export const TIER_RIGHTS = [
   { right: 'Quarterly reports', note: 'Audited statement + portfolio marks', c: ['✓', '✓', '✓', '✓'] },
   { right: 'Cohort dashboard', note: 'Live readiness + revenue telemetry', c: ['✓', '✓', '✓', '✓'] },
   { right: 'Demo day', note: 'Livestream at Supporter; in person above', c: ['Stream', 'In person', 'In person', 'In person'] },
   { right: 'Portfolio deep-dives', note: 'Company-level diligence sessions', c: ['—', '✓', '✓', '✓'] },
   { right: 'Allocation preferences', note: `Commitment-weighted, from $${FUND.allocThresholdK}K`, c: ['—', '—', '✓', '✓'] },
-  { right: 'Follow-on co-invest', note: 'Priority at Anchor', c: ['—', '—', '✓', 'Priority'] },
   { right: 'LPAC seat eligibility', note: 'Three seats at first close', c: ['—', '—', '—', '✓'] },
 ];
 

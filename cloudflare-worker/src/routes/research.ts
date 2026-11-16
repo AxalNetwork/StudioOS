@@ -56,6 +56,7 @@ import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from 
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
+import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -1369,6 +1370,47 @@ async function founderProject(
   return ids.length === 1 ? ids[0] : null;
 }
 
+/**
+ * D6212 (#6212): the quarter-end material for the Portfolio notes, scoped as every
+ * read in `routes/positions.ts` is (the same `investorProjectIds` predicate the
+ * Positions draft uses). An empty accessible set is an empty draft, never an
+ * unscoped one: the CSV predicate reads NULL as "all rows".
+ */
+async function portfolioNoteGather(c: any, userId: number, quarters: number): Promise<string[]> {
+  const me = (await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+    .bind(userId).first()) as { id: number; role: string | null } | null;
+  const role = String(me?.role || '');
+  if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some((licence: string) => licence === 'partner' || licence === 'investor')) return [];
+  const ids = await investorProjectIds(c.env, { id: userId, role } as any, null);
+  if (ids != null && ids.length === 0) return [];
+  const csv = ids == null ? null : ids.join(',');
+  // The same CSV predicate every positions read uses, written out in each query so no SQL is interpolated.
+  const [positions, distributions, marks] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.invested_amount, x.position_date, x.created_at, p.name AS project_name
+         FROM portfolio_positions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.amount, x.distribution_date, p.name AS project_name
+         FROM portfolio_distributions x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all().catch(() => ({ results: [] })),
+    c.env.DB.prepare(
+      `SELECT x.project_id, x.as_of_date, x.fmv, x.basis, x.event, p.name AS project_name
+         FROM portfolio_marks x JOIN projects p ON p.id = x.project_id AND p.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(x.project_id AS TEXT) || ',') > 0)`,
+    ).bind(csv, csv).all(),
+  ]);
+  return portfolioNoteMaterial({
+    positions: (positions.results || []) as any[],
+    distributions: (distributions.results || []) as any[],
+    marks: (marks.results || []) as any[],
+    today: todayIso(),
+    quarters,
+  });
+}
+
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
@@ -2652,6 +2694,20 @@ const DRAFT_SURFACES: Record<string, {
         + `${m.source ? `; source ${m.source}` : ''}`
       ));
     },
+  },
+
+  // D6212 (#6212): Performance's and the Overview's note on what moved. Both read
+  // the same quarter-end series `/api/positions/analytics?as_of=` computes, built in
+  // `services/portfolioNotes.ts`; Performance reads eight quarter-ends, the
+  // Overview the last two. A book with nothing recorded gathers [] and the route
+  // answers `nothing_to_draft` before any model is called.
+  'portfolio/performance': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 8),
+  },
+  'portfolio/overview': {
+    instruction: PORTFOLIO_NOTE_INSTRUCTION,
+    gather: async (c, userId) => portfolioNoteGather(c, userId, 2),
   },
 
   'portfolio/updates': {

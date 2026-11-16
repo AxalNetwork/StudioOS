@@ -11,6 +11,7 @@
  */
 import { useViewMode } from '../contexts/ViewModeContext';
 import { planKeyOfSpec, registerPathFor } from './planIntent';
+import { LICENCE_PRICE_UNIT } from './pricingEntitlements.js';
 
 /** The switch's tabs, in the canvas's order: `key` is `?for=`, `family` the plans' family (`aiCredits.planOf`). */
 export const PRICING_TABS = Object.freeze([
@@ -231,7 +232,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
         card.price = usd(shown.unit_amount);
         if (yearly) { card.yearlyMissing = true; card.note = 'Yearly not offered yet'; }
       }
-      card.unit = '/ month';
+      card.unit = `/ month ${LICENCE_PRICE_UNIT}`;
       if (shown.allowance_microusd > 0) card.feats.push(`${usd(Math.floor(shown.allowance_microusd / 10_000))} of AI tokens a month`);
     }
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
