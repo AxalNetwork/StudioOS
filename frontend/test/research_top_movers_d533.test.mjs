@@ -87,7 +87,7 @@ test('a failed read is Unreadable; an index not computed is Not recorded with th
     assert.doesNotMatch(t, /Not recorded|Rising/);
   }
   const pending = html(h(TopMovers, { overview: ready({ status: 'not_recorded', reason: "Live observations are recorded, but this month's index has not been computed yet" }) }));
-  assert.match(pending, /title="Live observations are recorded, but this month&#x27;s index has not been computed yet">Not recorded</);
+  assert.match(pending, /title="Live observations are recorded, but this month&#x27;s index has not been computed yet">(?:<svg[\s\S]*?<\/svg>)?Not recorded</); // D5129: the shared chip's aria-hidden glyph precedes its word
   assert.doesNotMatch(pending, /Rising|could not be read/);
 });
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Pill, Skeleton } from '../../../ui';
+import { Card, DataState, Pill, Skeleton, Unrecorded as SharedUnrecorded } from '../../../ui';
 import ZoneActions from '../../../workspaces/ZoneActions';
 import { FillLabel } from '../../../ui/useScopedFill.jsx';
 import { moneyCents } from '../../../workspaces/boards/format';
@@ -17,9 +17,12 @@ import { LICENCE_SENTENCES, isLicenceSentence } from './licenceRefusal';
  * "it does show anything, it looks blank, probably not connected to anything".
  */
 
-/** Absent renders as absent. Never a zero, never an em-dash pretending to be one. */
+/**
+ * Absent renders as absent. Never a zero, never an em-dash pretending to be one.
+ * D5129 (#5129): the shared Not recorded chip, under the name this kit's importers use.
+ */
 export function Unrecorded({ children = 'Not recorded' }) {
-  return <span className="text-axal-faint italic">{children}</span>;
+  return <SharedUnrecorded>{children}</SharedUnrecorded>;
 }
 
 /**
@@ -198,14 +201,8 @@ export function StaleNote({ error, onRetry, testid }) {
  * could not be read is not "none".
  */
 export function Unreadable({ children, onRetry }) {
-  return (
-    <p className="flex flex-wrap items-center gap-3 text-[11.5px] font-semibold leading-relaxed text-amber-800 dark:text-amber-300">
-      <span>{children}</span>
-      {onRetry ? (
-        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Try again</button>
-      ) : null}
-    </p>
-  );
+  // D5129: the shared Unavailable treatment; `children` is this kit's whole sentence.
+  return <DataState state="unavailable" reason={children} onRetry={onRetry} retryLabel="Try again" as="p" />;
 }
 
 export function StatedLimit({ title, children }) {

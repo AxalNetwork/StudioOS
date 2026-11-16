@@ -145,13 +145,13 @@ test('D659: a new venture — every card empty with its one starting action, eve
   assert.equal(r.status, 200);
   for (const c of r.body.cards) {
     assert.equal(c.state, 'empty', c.slug);
-    assert.ok(c.next && c.next.text && c.next.href.startsWith('/validate/'), `${c.slug} names its starting action`);
+    assert.ok(c.next && c.next.text && (c.next.href.startsWith('/validate/') || c.slug === 'demand-signals'), `${c.slug} names its starting action`);
     assert.equal(c.series, null, `${c.slug} draws nothing`);
   }
   assert.equal(card(r.body, 'problem-discovery').next.text, 'Record your first session');
   assert.equal(card(r.body, 'ideal-customer-profile').next.text, 'Start the profile');
   assert.equal(card(r.body, 'market-intelligence').next.text, 'Add the total market, with its source');
-  assert.equal(card(r.body, 'demand-signals').next.text, 'Connect a landing page');
+  assert.deepEqual(card(r.body, 'demand-signals').next, { text: 'Open the landing-page builder', href: `/build/brand?project_id=${P}` });
   assert.equal(card(r.body, 'experiments').next.text, 'Write the claim you most need to be true');
   assert.equal(card(r.body, 'verdict').next.text, 'Record a decision');
   for (const f of r.body.figures) {
@@ -165,6 +165,19 @@ test('D659: a new venture — every card empty with its one starting action, eve
 // ---------------------------------------------------------------------------
 // The five states
 // ---------------------------------------------------------------------------
+
+test('a waitlist bar persists without sign-ups; the card stays empty until sign-ups arrive', async () => {
+  const db = fixture();
+  const url = `/modules/demand-signals?project=${P}`;
+  const target = `/waitlist-target?project=${P}`;
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: 40 })).status, 200);
+  const saved = (await call(db, FOUNDER, 'GET', url)).body;
+  assert.equal(saved.card.state, 'empty');
+  assert.equal(saved.card.series, null);
+  assert.equal(saved.parts.waitlist_bar, 40);
+  assert.equal((await call(db, FOUNDER, 'PUT', target, { value: null })).status, 200);
+  assert.equal((await call(db, FOUNDER, 'GET', url)).body.parts.waitlist_bar, null);
+});
 
 test('D659: one failing source makes only its own card unreadable, naming the source', async () => {
   const db = fixture();
@@ -454,7 +467,11 @@ test('D659: a demand signal — an amount of 0 is refused, a typed signal is con
   const d = card(o.body, 'demand-signals');
   assert.equal(d.series.signals.loi, 1);
   assert.equal(d.series.signals.pre_sale, 1, 'the paid deposit counts; the unconfirmed one does not yet');
-  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}` });
+  assert.deepEqual(d.next, { text: 'Set the bar for waitlist sign-ups', href: `/validate/demand-signals?project=${P}#waitlist-bar` });
+  assert.equal(card((await overview(db, PARTNER)).body, 'demand-signals').next, null);
+  const partnerModule = await call(db, PARTNER, 'GET', `/modules/demand-signals?project=${P}`);
+  assert.equal(partnerModule.body.parts.can_write, false);
+  assert.equal(partnerModule.body.card.next, null);
   assert.equal((await call(db, FOUNDER, 'PUT', `/waitlist-target?project=${P}`, { value: 40 })).status, 200);
   const o2 = await overview(db);
   assert.equal(card(o2.body, 'demand-signals').series.bar, 40);
@@ -762,6 +779,29 @@ test('D685 §5.12: the interviews target shares metric_targets but never reaches
     assert.equal(res.status, 200, JSON.stringify(body));
     assert.deepEqual(body.items.map((t: any) => t.metric_key), ['mrr']);
   } finally { [console.warn, console.error] = saved; }
+});
+
+
+test('demand commits keep currency and period separate and exclude interest and unconfirmed terms', async () => {
+  const db = fixture();
+  for (const [kind, amount_cents, currency, period, status] of [
+    ['loi', 12500, 'eur', 'month', 'confirmed'],
+    ['pre_sale', 2500, 'eur', 'month', 'confirmed'],
+    ['loi', 30000, 'eur', 'year', 'confirmed'],
+    ['pre_sale', 10000, 'usd', 'month', 'confirmed'],
+    ['would_pay', 50000, 'eur', 'month', 'confirmed'],
+    ['loi', 60000, 'eur', 'month', 'to_confirm'],
+  ]) {
+    const result = await call(db, FOUNDER, 'POST', `/demand-signals?project=${P}`, { kind, amount_cents, currency, period, status });
+    assert.equal(result.status, 201);
+  }
+  const data = card((await overview(db)).body, 'demand-signals').series;
+  assert.equal(data.signals.would_pay, 1);
+  assert.deepEqual(data.committed, [
+    { currency: 'EUR', period: 'month', amount_cents: 15000 },
+    { currency: 'EUR', period: 'year', amount_cents: 30000 },
+    { currency: 'USD', period: 'month', amount_cents: 10000 },
+  ]);
 });
 
 // #5999: the overview says whether the viewer may write, by the gate the target's writer uses.

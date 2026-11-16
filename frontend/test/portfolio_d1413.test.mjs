@@ -631,7 +631,8 @@ test('the routes: company settings tabs and the project page beside their siblin
 
 test('the rendered overview says "Not recorded" in muted grey, never red', async () => {
   const html = renderToStaticMarkup(h('div', null, h((await import('../src/pages/account/companies/portfolioUi.jsx')).Fact, { fact: { kind: 'none' } })));
-  assert.match(html, /<span class="italic text-gray-500 dark:text-gray-400">Not recorded<\/span>/);
+  // D5129: the shared Not recorded chip (dotted border, dash glyph), muted grey.
+  assert.match(html, /<span class="[^"]*border-dotted[^"]*text-gray-600 dark:[^"]*text-gray-400"[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded<\/span>/);
   assert.doesNotMatch(html, /red/);
   assert.equal(renderedText(html), 'Not recorded');
 });
