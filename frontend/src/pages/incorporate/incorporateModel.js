@@ -44,12 +44,16 @@ export const DECLINED = 'Your card was declined. Nothing was charged.';
 export const WAITING_FILING = 'Waiting for Axal VC to record the filing';
 export const SAVED_HERE = 'Your answers are saved on this device. Pick up where you left off.';
 
-/** The four goal questions' answer → the jurisdiction recommended (the wizard's rule, unchanged). */
+/**
+ * The four goal questions' answer → the jurisdiction recommended. D6683
+ * (#6683): the lowest-cost answer no longer sends a founder to Estonia (the
+ * owner's playbook); no cost is recorded to rank by. Estonia stays
+ * selectable by hand.
+ */
 export function recommend(answers = {}) {
   if (answers.raisingVc === 'yes_us') return 'us_de_ccorp';
   if (answers.raisingVc === 'yes_eu') return 'uk_ltd';
   if (answers.region === 'apac') return 'sg_pte';
-  if (answers.minimalCost === 'yes' && answers.raisingVc !== 'yes_us') return 'ee_oy';
   if (answers.entityPref === 'llc') return 'us_de_llc';
   return 'us_de_ccorp';
 }

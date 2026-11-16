@@ -4,7 +4,7 @@ import { posthogApi } from '../../lib/api/posthog';
 import Lightbox from '../../ui/Lightbox';
 import {
   DELETE_LINE, DISCONNECTED, NOT_LINKED, NOT_MINE, NO_METRICS, ROLE_CHIPS, TRACK_LINE, UNTRACK_LINE,
-  asOfLine, matchInsights, metricRow, partState, refusalOf,
+  asOfLine, matchInsights, metricRow, partState, posthogSyncSentence, refusalOf,
 } from './fromPosthogModel';
 
 /**
@@ -26,7 +26,12 @@ import {
  * dismisses; the rest of the team reads. Built from #2409's PH1–PH10 brief:
  * no "Connector · PostHog" canvas has been drawn.
  */
-export default function FromPosthog({ section, projectId, module, api = posthogApi, onSync = null, phone = false, children = null, renderProposal = null, actions = null }) {
+export default function FromPosthog(props) {
+  const { section, projectId, module } = props;
+  return <PosthogPart key={`${section}:${projectId}:${module}`} {...props} />;
+}
+
+function PosthogPart({ section, projectId, module, api = posthogApi, onSync = null, phone = false, children = null, renderProposal = null, actions = null }) {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [round, setRound] = useState(0);
   const [note, setNote] = useState(null);
@@ -35,6 +40,7 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
   const [deleting, setDeleting] = useState(null);
   const [busy, setBusy] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState('');
   const [open, setOpen] = useState(!phone);
   useEffect(() => {
     let live = true;
@@ -65,9 +71,12 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
     setBusy(null);
   };
   const sync = async () => {
-    setSyncing(true); setNote(null);
-    try { await onSync(); again(); } catch (e) { setNote(refusalOf(e)); }
-    setSyncing(false);
+    setSyncing(true); setNote(null); setSyncNotice('');
+    try {
+      const result = await onSync();
+      if (section === 'grow') setSyncNotice(posthogSyncSentence(result));
+      again();
+    } catch (e) { setNote(refusalOf(e)); } finally { setSyncing(false); }
   };
 
   const frame = (body) => (
@@ -120,6 +129,7 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
   return frame(
     <div className="flex flex-col gap-3">
       {state === 'disconnected' && <p className={WARN} role="status" data-testid="posthog-disconnected">{DISCONNECTED}</p>}
+      {syncNotice && <p className={MUTED} role="status" data-testid="posthog-sync-note">{syncNotice}</p>}
       {note && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert" data-testid="posthog-note">{note}</p>}
       {tracked.length === 0
         ? <p className={MUTED} data-testid="posthog-no-metrics">{NO_METRICS}{!mine ? ` ${NOT_MINE}` : ''}</p>
