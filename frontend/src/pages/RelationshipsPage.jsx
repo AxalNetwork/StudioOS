@@ -40,7 +40,8 @@ import { railOptionFor } from '../lib/railOptions';
  */
 
 // The artboard's own window: past sixty days is going cold. Not ninety — that
-// is `MarketZone`'s attachment gate, a different question about a different
+// is a market reading's attachment gate (`STALE_AT` in
+// `pages/research/marketReadingRead.js`), a different question about a different
 // object, and transcribing one onto the other is how two numbers become one.
 export const COLD_AT = 60;
 

@@ -340,9 +340,9 @@ export default function DiligenceRoom({ role = 'investor' }) {
         )}
 
         <StatedLimit title="What this page will not do">
-          Nothing here asks a founder to open a room, or to stage more of one. The grant is theirs to
-          make and theirs to revoke. A request button that wrote nowhere would be worse than the
-          conversation it replaced.
+          Nothing here asks a founder to stage more of this room. A room is asked for on its deal:
+          open the deal from <Link to="/deals" className="font-bold underline">Deals</Link>, then
+          Documents, then Ask for access. The grant stays the founder’s to make and to revoke.
         </StatedLimit>
       </div>
     </WorkspaceShell>

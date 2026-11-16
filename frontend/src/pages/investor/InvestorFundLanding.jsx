@@ -3,21 +3,19 @@ import { ArrowUpRight, CircleAlert, FileText, LockKeyhole, RefreshCw } from 'luc
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
-import { WorkerRail } from '../../ui';
+import { Unrecorded, Unreadable as SharedUnreadable, WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
 import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
+import FundOverviewPanel from './FundOverviewParts';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
 const date = (value) => value ? String(value).slice(0, 10) : 'Unrecorded';
 
-function Unrecorded({ children = 'Unrecorded' }) {
-  return <span className="i6-unrecorded">{children}</span>;
-}
 
 function LockedFund() {
   return (
@@ -47,9 +45,8 @@ function LockedFund() {
 // each card now says which of the two it is.
 const UNAVAILABLE = Symbol('unavailable');
 const unread = (value) => value === UNAVAILABLE;
-const Unreadable = ({ what }) => (
-  <p className="i6-load-error"><CircleAlert size={13} />{what} could not be read. This is not a claim that none exist.</p>
-);
+// D5129 (#5129): the shared Unavailable treatment, with this page's claim.
+const Unreadable = ({ what }) => <SharedUnreadable what={what} claim="This is not a claim that none exist." />;
 
 function FundDetail({ fund }) {
   const [detail, setDetail] = useState({ lps: null, calls: null, periods: null });
@@ -91,14 +88,14 @@ function FundDetail({ fund }) {
           <div><dt>Collected</dt><dd data-testid="text-fund-collected">{collected.value ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</dd></div>
           <div><dt>Deployed</dt><dd>{fmtCents(fund.deployed_cents)}</dd></div>
           <div><dt>DPI</dt><dd>{fmtMultiple(fund.dpi) || <Unrecorded />}</dd></div>
-          <div><dt>RVPI · on NAV</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
+          <div><dt>RVPI · on NAV</dt><dd><Unrecorded /></dd></div>
         </dl>
         <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
       </section>
 
       <div className="i6-grid">
         <section className="i6-card i6-registry" id="lps">
-          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to={zone('/funds/lps')} data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count not recorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to={zone('/funds/lps')} data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
           {detail.lps === null ? <div className="i6-skeleton" /> : unread(detail.lps) ? <Unreadable what="The LP register" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
             <table><thead><tr><th>LP</th><th className="right">Committed</th><th>LPA</th></tr></thead><tbody>
               {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{lpCommitmentText(lp) ?? <Unrecorded>{NOT_RECORDED}</Unrecorded>}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
@@ -203,6 +200,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
               </select>
               <span>{titleCase(active.status)}</span>
             </div>
+            {/* #6234: IF0's tiles, quarterly chart and pack gaps (FundOverviewParts.jsx). */}
+            <FundOverviewPanel key={`overview-${active.id}-${detailKey}`} fund={active} />
             <FundDetail key={`${active.id}-${detailKey}`} fund={active} />
           </>
         );

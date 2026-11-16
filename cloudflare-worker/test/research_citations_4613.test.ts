@@ -37,6 +37,7 @@ function fixture(modelAnswer = 'Same-day reconciliation [1].') {
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/216_research_funds.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
+  db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(sql('migrations/202611092035_research_fund_catalogue_uid.sql'));
   db.exec(`INSERT INTO users (id,email,name,role) VALUES (${OWNER},'owner@example.test','Owner','founder'), (${OTHER},'other@example.test','Other','founder')`);

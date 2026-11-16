@@ -45,7 +45,7 @@ const SURFACES = [
   'frontend/src/pages/PricingPage.jsx',
   'cloudflare-worker/src/routes/billing.ts',
   'frontend/src/components/PaywallModal.jsx',
-  'frontend/src/pages/SettingsPage.jsx',
+  'frontend/src/pages/account/BillingSection.jsx',
   'cloudflare-worker/src/middleware/requireTier.ts',
   'cloudflare-worker/src/middleware/requireInvestorTier.ts',
   'frontend/src/lib/sitePricing.js',
@@ -130,8 +130,8 @@ test('the paywall is the catalogue, and carries no price', () => {
 });
 
 test('Billing names its plans from the paywall\'s table and reads its prices, never types them', () => {
-  const src = code(read('frontend/src/pages/SettingsPage.jsx'));
-  assert.match(src, /import \{ FREE, priceText, usePlansRead \} from '\.\.\/lib\/planPrices';/);
+  const src = code(read('frontend/src/pages/account/BillingSection.jsx'));
+  assert.match(src, /import \{ FREE, priceText, usePlansRead \} from '\.\.\/\.\.\/lib\/planPrices';/);
   assert.match(src, /professional: `\$\{TIER_PLANS\.professional\.label\} — \$\{priceText\(prices, TIER_PLANS\.professional\.key, billingCycle === 'yearly' \? 'year' : 'month'\)\}`/);
   assert.match(src, /growth: `\$\{TIER_PLANS\.growth\.label\} — \$\{priceText\(prices, TIER_PLANS\.growth\.key\)\}`/);
   assert.doesNotMatch(src, /\bprice: '/, 'a persona plan types a price');
@@ -185,7 +185,7 @@ test('the plans read sends each plan\'s catalogue fields, the whole catalogue, a
   assert.deepEqual(growth.catalogue.included, [...planByKey('founder:growth').included]);
   assert.equal(body.plans.find((p) => p.licence_key === 'founder:free').catalogue.key, 'founder:free');
   assert.deepEqual(body.catalogue.map((c) => c.key), PLAN_KEYS, 'every plan, those with no product among them');
-  assert.deepEqual(body.catalogue, publicCatalogue());
+  assert.deepEqual(body.catalogue.map(({ entitlements, ...entry }) => entry), publicCatalogue());
   const keys = JSON.stringify(body).match(/"name":/g);
   assert.equal(keys, null, 'the public read carries no name key');
 });

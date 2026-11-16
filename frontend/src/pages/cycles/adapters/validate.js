@@ -133,6 +133,17 @@ function idealCustomerProfile(s) {
   return out;
 }
 
+/**
+ * D6011 (#6011): a figure's source and the date it was set, from its
+ * `market_figures` row. Saved before that store, it has neither and says so;
+ * saved with none named, it says that and keeps its date.
+ */
+export function marketBandSource(f) {
+  const day = typeof f?.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.as_of) ? f.as_of : null;
+  if (!day) return nonEmpty(f?.source) || 'source not recorded';
+  return `${nonEmpty(f?.source) || 'no source named'} · as of ${day}`;
+}
+
 function marketIntelligence(s) {
   if (!s || typeof s !== 'object') return [];
   // A figure the founder typed carries no source yet (D659 says so rather
@@ -140,7 +151,7 @@ function marketIntelligence(s) {
   const band = (label, f) => ({
     label,
     value: usdShort(f?.value),
-    source: num(f?.value) ? (nonEmpty(f?.source) || 'source not recorded') : undefined,
+    source: num(f?.value) ? marketBandSource(f) : undefined,
   });
   const out = [{ kind: 'bands', items: [band('Total addressable', s.tam), band('Serviceable', s.sam), band('Obtainable', s.som)] }];
   if (num(s.competitors_tracked)) {
@@ -153,13 +164,26 @@ function demandSignals(s) {
   if (!s || typeof s !== 'object') return [];
   const out = [];
   const signups = list(s.signups);
-  if (signups.length) {
+  if (s.chart_ready !== false && signups.length) {
     out.push({
       kind: 'line',
       values: signups.map((w) => (num(w?.total) ? w.total : null)),
       ...(num(s.bar) ? { target: s.bar, target_label: `bar · ${s.bar.toLocaleString('en-US')}` } : {}),
       labels: weekTicks(signups.map((w) => w?.week_start)),
     });
+  }
+  if (s.signals && typeof s.signals === 'object' && !Array.isArray(s.signals)) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: Object.entries(SIGNAL).map(([key, label]) => ({
+      label, value: num(s.signals[key]) ? s.signals[key].toLocaleString('en-US') : '0',
+    })) });
+  }
+  const committed = list(s.committed).filter(row => typeof row?.currency === 'string' && num(row.amount_cents));
+  if (committed.length) {
+    out.push({ kind: 'rows', showWhenSparse: true, items: committed.map(row => ({
+      label: `Committed · ${row.currency}`,
+      value: money(row.amount_cents, row.currency, row.period)
+        + (row.period === 'not_recorded' ? ' · period not recorded' : row.period === 'once' ? ' · once' : ''),
+    })) });
   }
   const n = s.need_to_have;
   if (n && num(n.interviews) && num(n.of) && n.of > 0) {
@@ -385,7 +409,8 @@ export const RECORDS = {
     // #4411 splits recording and quote permissions. Channel stays a
     // filter and a cell (its words are pinned), but no column names it.
     keys: ['interviewee', 'company', 'date', 'icp_fit', 'recording_consent', 'consent', 'state'],
-    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
+    // D6001 (#6001): `stage` and `name` are what Move stage reads; neither is a column.
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), stage: typeof r.stage === 'string' ? r.stage : null, name: r.interviewee ?? null, cells: {
       // D685 §5.11: the interviewee opens the interview's review, Customer
       // research's record (D696 decision 6). A linked row draws it as text.
       // The scoped read carries the project, so no ?project_id= is threaded.
@@ -401,11 +426,14 @@ export const RECORDS = {
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
-      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
-      // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
+      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows. Stage gave
+      // way to State there; D6001 lists it again, last, for the recruiting pipeline.
       { key: 'recording_consent', label: 'Recording consent', options: [{ value: 'given', label: 'Given' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'consent', label: 'Quotes OK', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'channel', label: 'Channel', options: ['in_person', 'call', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
+      // D6001 (#6001): Stage is listed again, beside State, as the Worker lists it.
+      { key: 'stage', label: 'Stage', options: [{ value: 'lead', label: 'Lead' }, { value: 'invited', label: 'Invited' },
+        { value: 'invited_no_slot', label: 'Invited · no slot yet' }, { value: 'booked', label: 'Booked' }, { value: 'done', label: 'Done · or no stage recorded' }] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },

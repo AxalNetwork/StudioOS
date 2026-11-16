@@ -28,6 +28,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
+import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
@@ -35,9 +37,9 @@ import { codeOnly } from './_codeOnly.mjs';
 const at = (p) => resolve(process.cwd(), p);
 const raw = (p) => readFileSync(at(p), 'utf8');
 
-const PAGE = raw('frontend/src/pages/hq/SecurityPage.jsx');
+const PAGE = securityRaw();
 const API = raw('frontend/src/lib/api.js');
-const ROUTE = raw('cloudflare-worker/src/routes/admin_security.ts');
+const ROUTE = readAdminSecurity();
 
 /**
  * JSX prose is line-wrapped by the formatter, so a sentence that reads as one

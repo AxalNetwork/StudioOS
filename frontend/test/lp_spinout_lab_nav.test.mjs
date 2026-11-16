@@ -263,3 +263,8 @@ test('the access ladder reads the application, and the workspace feeds it one', 
   assert.match(workspace, /lpAccessState\(portal, application\)/);
   assert.match(workspace, /spinoutLab\.lpApplication\(\)/);
 });
+
+test('D6138: the workspace keeps the application commitment slider and removes the allocation control and promise', () => {
+  assert.match(workspace, /type="range"[\s\S]*?aria-label="Target commitment"/);
+  assert.doesNotMatch(workspace, /allocation (rights|preferences?|window)|allocationOpen|allocOpen/i);
+});

@@ -116,6 +116,14 @@ Activity; `company.css` holds their styles on the frame's tokens. The name is
 drawn only once an authorised read has named the company. Decision notes:
 `documentation/architecture/decisions/D4817-p6.md`.
 
+D6208 (#6208) adds the Overview table's Sector, Stage and Reporting filters
+and its sort (`filterRows`, `filterOptionsOf`, `sortRows`, `tableCaptionOf`
+in the model) and the header's Export on the Overview and on Performance.
+`PortfolioExport.jsx` draws Export, one button or a menu of choices, and
+writes only through `exportView` (`../../lib/csvExport.js`); the model's
+`companyExportOf`, `quarterExportOf` and `cohortExportOf` decide what each
+file holds, or why there is nothing to write. Decision notes:
+`documentation/architecture/decisions/D6208.md`.
 D6227 (#6227) turns Activity into one timeline: the Worker's joined read
 `GET /api/positions/:uid/activity` (client `../../lib/api/positionActivity.js`),
 drawn by `CompanyActivity` through `companyModel.js`' `activityOf`. A source
@@ -131,3 +139,14 @@ Worker's stored record, and each period's asked or waived record);
 the Review with the Worker's sentence and code, and a period reads as asked or
 waived only from the company read. Decision notes:
 `documentation/architecture/decisions/D4817-p9.md`.
+
+D4817 part 10 extends the Admin Investor preview to the company workspace:
+on `/portfolio/companies/:uid` and its tabs, `PortfolioCompanyPage` draws
+`CompanyPreview.jsx` when `isInvestorPreview` holds. It reads nothing, says
+"Company withheld in preview" in place of the name, carries the chip on the
+six key facts and each tab's sections (`previewModel.js`' `PREVIEW_COMPANY_FACTS`
+and `PREVIEW_COMPANY_TABS`), and draws each tab's writes off with their reason
+through `PortfolioPreview.jsx`' `OffWrites`. `previewCompanyTabOf` names the
+company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
+`PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
+notes: `documentation/architecture/decisions/D4817-p10.md`.

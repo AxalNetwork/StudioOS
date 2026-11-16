@@ -133,9 +133,10 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
       </ZoneBody>
 
       <StatedLimit title="What this page will not do">
-        Nothing here asks a founder to open a room, or to stage more of one. The grant is
-        theirs to make and theirs to revoke, and a request button that wrote nowhere would
-        be worse than the conversation it replaced.
+        This list is the rooms you have been let into, so nothing here asks a founder for
+        one. A room is asked for on its deal: open the deal from{' '}
+        <Link to="/deals" className="font-bold underline">Deals</Link>, then Documents, then
+        Ask for access. The founder decides, and the grant stays theirs to revoke.
       </StatedLimit>
     </div>
   );

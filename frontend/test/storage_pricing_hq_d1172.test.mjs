@@ -220,3 +220,15 @@ test('the route is HQ-only, on the Platform strip under Infrastructure (D4860 pa
   assert.deepEqual(hqLinks('/admin/platform/storage')[0], { label: 'Your own storage', href: '/account/usage/storage', primary: true });
   assert.doesNotMatch(hqLine('/admin/platform/ai-usage'), /storage/);
 });
+
+test('D6883: Institutional’s Best suited for is the word Negotiated, from the catalogue, on the card and the comparison', () => {
+  const inst = publicCatalogue().find((p) => p.key === 'investor:institutional');
+  assert.equal(inst.best_suited_for, 'Negotiated');
+  assert.equal(inst.best_suited_for_reason, null);
+  const specs = PLAN_CARDS.investor;
+  const at = specs.findIndex((s) => s.storage === 'investor:institutional');
+  assert.ok(at >= 0, 'the Investor tab has an Institutional card that names its catalogue plan');
+  const [, rows] = storageGroup(READ, specs, 'investor', STORAGE_COMPARE);
+  assert.equal(rows[1][at + 1], 'Negotiated');
+  assert.doesNotMatch(JSON.stringify(rows), /negotiated with the plan/);
+});

@@ -6,25 +6,40 @@
  * Unavailable with Try again; none is ever 0 or a guess. The agreement and
  * branch lines are the Overview's own facts (`identityFacts`), so the header
  * and the Overview cannot disagree. The lifecycle actions are passed in as
- * `actions` and drawn where the canvas puts them, top right.
+ * `actions` and drawn where the canvas puts them, top right: since D4819
+ * part 4 (#5927) that is the More menu (board L17), and a terminated licence,
+ * which allows no action, draws none. Record a request is not drawn: it is
+ * the studio's lane (`/licence/mine/requests`), and HQ has no write for it.
  */
 import React from 'react';
-import { identityFacts } from '../licenceOverviewModel';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
+import { identityFacts, phoneIdentity } from '../licenceOverviewModel';
 import { FactState, TryAgain } from './LicenceOverview';
 
 export default function LicenceIdentity({ licence: d, facts, retry, actions }) {
-  const rows = identityFacts(d, facts);
+  // D4819 part 20 (#5932), board L20 — on a phone the header is the identity
+  // and the primary status only: the name, "reference · territory" and Status.
+  // The agreement follows in the triage rows; the rest is in the Overview.
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
+  const all = identityFacts(d, facts);
+  const rows = phone ? all.filter((r) => r.key === 'status') : all;
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3" data-testid="licence-identity">
+    <header className="flex flex-wrap items-start justify-between gap-3" data-testid="licence-identity" data-layout={phone ? 'phone' : 'desk'}>
       <div className="min-w-0 flex-1">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{d.brand_name}</h2>
-        <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{d.legal_entity_name}</div>
-        <div className="mt-1 text-[11px] font-medium text-gray-500 dark:text-gray-400" data-testid="licence-kind-pill">
-          {d.kind === 'white_label'
-            ? 'White-label · platform supervised, brand unsupervised'
-            : 'Axal subsidiary · platform supervised'}
-        </div>
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4 xl:grid-cols-7" data-testid="licence-identity-facts">
+        {phone ? (
+          <div className="mt-0.5 font-mono text-[12px] text-gray-500 dark:text-gray-400" data-testid="licence-identity-line">{phoneIdentity(all)}</div>
+        ) : (
+          <>
+            <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{d.legal_entity_name}</div>
+            <div className="mt-1 text-[11px] font-medium text-gray-500 dark:text-gray-400" data-testid="licence-kind-pill">
+              {d.kind === 'white_label'
+                ? 'White-label · platform supervised, brand unsupervised'
+                : 'Axal subsidiary · platform supervised'}
+            </div>
+          </>
+        )}
+        <dl className={`mt-3 grid gap-x-4 gap-y-2 ${phone ? 'grid-cols-1' : 'grid-cols-2 sm:grid-cols-4 xl:grid-cols-7'}`} data-testid="licence-identity-facts">
           {rows.map((r) => (
             <div key={r.key} className="min-w-0" data-testid={`licence-identity-${r.key}`}>
               <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{r.label}</dt>

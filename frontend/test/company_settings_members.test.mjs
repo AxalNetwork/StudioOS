@@ -29,6 +29,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readAccountPage } from './_accountSource.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -181,7 +182,7 @@ test('the new api method exists on both sides of the drift boundary', () => {
 test('Settings renders Your companies and Documents & agreements', () => {
   // Before Wave 2, SettingsPage.jsx made ZERO company or e-sign calls — both
   // canvas panes were absent while both backends were live.
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   assert.ok(s.includes('api.listMyCompanies('), 'GET /company/memberships had no consumer');
   assert.ok(s.includes('api.esignList('), 'GET /legal/esign had no consumer in Settings');
   assert.ok(s.includes('<YourCompaniesSection'), 'the pane must be mounted, not just defined');
@@ -210,7 +211,7 @@ test('Your companies reads the shape the worker actually returns', () => {
   assert.match(body, /my_role: link\.role_in_company,/, 'the worker exposes the role as my_role');
   assert.match(body, /return c\.json\(out\)/, 'the worker returns a bare array, not {items}');
 
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   assert.match(s, /Array\.isArray\(r\)/, 'the pane must handle the bare-array response');
   assert.match(s, /c\.my_role/, 'the pane must read my_role, not role_in_company');
 });
@@ -218,7 +219,7 @@ test('Your companies reads the shape the worker actually returns', () => {
 test('Settings does not become a second company switcher', () => {
   // Company context changes through ui/CompanySwitcher.jsx and nowhere else.
   // This pane reports membership and links out; it must not call setCompany.
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   const i = s.indexOf('function YourCompaniesSection');
   const body = s.slice(i, s.indexOf('function DocumentsAgreementsSection'));
   assert.ok(!/setCompany\(/.test(body), 'switching belongs to CompanySwitcher alone');
@@ -232,7 +233,7 @@ test('Settings does not become a second company switcher', () => {
 test('presets write the same prefs shape the grid writes', () => {
   // No second storage shape and no migration: a preset patches
   // `notification_prefs`, exactly as a checkbox does.
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   // D568 — the grid and the presets write through ONE writer, `savePrefs`,
   // which PUTs the whole prefs object to /notifications/prefs (the column the
   // root PATCH used to write). Same shape, one route, one call site each.
@@ -242,7 +243,7 @@ test('presets write the same prefs shape the grid writes', () => {
   // in_app/inapp are mirrored by the grid for the legacy reader; a preset that
   // set only one of them would desync the bell subsystem.
   const i = s.indexOf('const NOTIFICATION_PRESETS');
-  const block = s.slice(i, s.indexOf('const ActivityPage'));
+  const block = s.slice(i, s.indexOf('// D568 — THE CANVAS\'S TYPE × CHANNEL MATRIX', i));
   const applies = block.match(/in_app: (true|false), inapp: (true|false)/g) || [];
   assert.ok(applies.length >= 4, 'every preset must set in_app and inapp together');
   for (const a of applies) {
@@ -255,7 +256,7 @@ test('the per-event grid survives the presets', () => {
   // The canvas says presets "replace" the matrix. They do not: the grid is the
   // only way to express "email capital calls but not the digest", and dropping
   // it to match a canvas would be a downgrade sold as a redesign.
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   assert.match(s, /renderTable\(NOTIFICATION_EVENTS\)/, 'the event grid must stay');
   assert.match(s, /renderTable\(PARTNER_NOTIFICATION_EVENTS\)/, 'the partner grid must stay');
   assert.match(s, /stays editable/i, 'the UI must say the switches remain editable');
@@ -264,7 +265,7 @@ test('the per-event grid survives the presets', () => {
 test('a preset covers exactly the events the user can see', () => {
   // Applying a preset must not leave the partner block out of step with the
   // core grid — the stored prefs and the visible switches have to agree.
-  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const s = readAccountPage();
   const i = s.indexOf('const applyPreset');
   const body = s.slice(i, i + 700);
   assert.match(body, /NOTIFICATION_EVENTS\.map/);

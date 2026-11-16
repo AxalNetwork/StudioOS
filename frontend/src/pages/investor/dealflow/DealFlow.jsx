@@ -30,7 +30,7 @@ import { DealStrip, StripKey } from '../../../components/scoring/scorecard/Score
 import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
   MAX_COMPARE, SCOPES, SCOPE_SWITCH,
-  compareHref, opensDeal, viewHref,
+  compareHref, opensDeal, picksOf, viewHref,
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
@@ -253,7 +253,8 @@ export default function DealFlow({ view, scope }) {
   const phone = usePhoneWidth();
   const settings = useMemo(() => settingsOf(location.search), [location.search]);
   const viewUid = new URLSearchParams(location.search).get('v');
-  const [picked, setPicked] = useState([]);
+  // D6149 (#6149): Compare's Add a venture returns with its picks ticked (`&pick=`).
+  const [picked, setPicked] = useState(() => picksOf(location.search));
   const [page, setPage] = useState(1);
   const [words, setWords] = useState(true);
   const [dialog, setDialog] = useState(null);
@@ -436,7 +437,7 @@ export default function DealFlow({ view, scope }) {
         <DeleteViewDialog view={dialog.view} onClose={() => setDialog(null)} onDeleted={() => { setDialog(null); retryViews(); if (viewUid === dialog.view.uid) navigate(settingsHref({ view, scope, settings }), { replace: true }); }} />
       )}
       {peekRow && (
-        <PeekDrawer row={peekRow} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
+        <PeekDrawer row={peekRow} pass={entries?.find((entry) => String(entry.deal_id) === String(peekRow.id))?.pass || null} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
       )}
       {dialog?.kind === 'pass' && (
         <PassDialog row={dialog.row} invited={passAnswersInvitation(dialog.row)} onClose={() => setDialog(null)}

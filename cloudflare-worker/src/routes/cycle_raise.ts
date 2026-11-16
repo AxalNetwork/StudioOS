@@ -21,7 +21,7 @@
  *   POST  /readiness/rescore         { items?, since?, pmf? }
  *   GET   /pmf/history?project=&limit=&before=  stored Product-market fit points
  *   D1146 (#3032): GET /pmf/model?project=  → { version, stored, scored_with, published_at, model, grades }, RD4's model
- *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
+ *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, deck_version? (D6069, with start_from: deck), one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
  *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
  *   GET   /narrative/compare?a=&b=   → { a, b, pairs: [{ key, label, a: { body }, b: { body }, state }] }
@@ -107,6 +107,7 @@
  *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
  *   POST /capital-relationships/proposals/accept-batch { uids }    D5073: up to 50, one result per proposal
  *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
+ *   POST /capital-relationships/feedback-pattern     CRL11 (#6080): one run over recorded feedback → up to three cited themes; writes nothing
  *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
  *
  * The reads are `services/raiseCycle.ts`; the writes are
@@ -191,7 +192,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PATTERN_OPTION, PROPOSAL_PAGE, acceptProposal, feedbackPattern, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -204,6 +205,7 @@ import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
+import { addTypedEvidence, createPackLink, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -626,6 +628,26 @@ cycleRaise.post('/capital-relationships/drafts', async (c) => {
   } catch (e) { return capRelTabFailed(c, e, 'draft run'); }
 });
 
+// CRL11 (#6080): a pattern across investor feedback. One metered run over the venture's recorded feedback, under
+// `scope` (the owner or a co-founder; staff and readers are refused before it). It writes nothing. With fewer than
+// two investors' feedback it runs nothing and says so; AI off, out of tokens and a refused run answer as every
+// Eadwyn run here does (`refuseRun`).
+cycleRaise.post('/capital-relationships/feedback-pattern', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: PATTERN_OPTION }, null);
+    const out = await feedbackPattern(c.env, s.projectId, Number(s.user.id), rail);
+    if (out.state === 'too_few') {
+      return c.json({ state: 'too_few', feedback: out.feedback, investors: out.investors, themes: [],
+        detail: 'A pattern needs feedback from at least two investors. Record what each one said on their record first. Nothing was run.' });
+    }
+    if (out.state === 'run_failed') return refuseRun(c, out.result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read the feedback just now. Nothing was charged. Try again.' });
+    return c.json({ state: 'ok', feedback: out.feedback, investors: out.investors, themes: out.themes, dropped: out.dropped,
+      basis: 'Read from the feedback recorded on each investor. Nothing here is saved.' });
+  } catch (e) { return capRelTabFailed(c, e, 'feedback pattern'); }
+});
+
 cycleRaise.get('/pmf/history', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
@@ -668,7 +690,7 @@ cycleRaise.post('/readiness/rescore', async (c) => {
 });
 
 const narrativeFields = (b: Record<string, unknown>) => ({
-  investorType: b.investor_type, basedOnVersion: b.based_on_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
+  investorType: b.investor_type, basedOnVersion: b.based_on_version, deckVersion: b.deck_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
@@ -1759,6 +1781,27 @@ cycleRaise.delete('/evidence/claims/:id/note', async c => {
 cycleRaise.delete('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }
   catch (error) { return evidenceFailure(c, error); }
+});
+// D6864 (#6864, canvas D6054 RA-27/RA-29/RA-32): evidence added by hand, and packs shared outside Axal as links.
+// Founder-only; nothing here sends anything. The reader's public page is routes/evidence_share_public.ts.
+function shareFailure(c: any, error: unknown) {
+  return error instanceof EvidenceShareError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error);
+}
+cycleRaise.post('/evidence/items', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await addTypedEvidence(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.get('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await listPackLinks(ctx)); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await revokePackLink(ctx, c.req.param('uid'))); }
+  catch (error) { return shareFailure(c, error); }
 });
 
 export default cycleRaise;
