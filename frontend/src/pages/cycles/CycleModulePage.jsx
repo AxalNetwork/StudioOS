@@ -335,6 +335,9 @@ export default function CycleModulePage({
   // D5077 (#5077): the module's connector parts, drawn in the Sources region below the records; the
   // region's Connect or manage tools (`sourcesAction`); and the module's Eadwyn asks for the zero state.
   sources = null, sourcesAction = null, asks = null,
+  // D5081 (#5081, RA-14): a mature tool that owns its page (`{ sub }`): its `subnav` is the page, so the module's
+  // generic "at a glance", its tool doors and its records are not drawn under it, and the header says the tool's line.
+  owned = null,
   // D6049 (#6049, RA-16): a module that owns its page draws `home(...)` in place of the generic chart
   // and records table, with the header's line (`sub`) its own. Only Fundraising readiness has one.
   home = null, sub = undefined,
@@ -363,7 +366,8 @@ export default function CycleModulePage({
   // D5077: what the caller handed besides the sources (Eadwyn's bands); a list of nulls and falses is none.
   const hasChildren = Children.toArray(children).length > 0;
   const rowHref = (row) => (rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null);
-  const owned = typeof home === 'function';
+  // D6049's `home(...)` and D5081's `owned` both own the page; `home` draws the module's own Home, `owned` the tool's subnav.
+  const ownsHome = typeof home === 'function';
   const doors = toolLinks.map((item) => (
     <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
       {item.label || `Open ${name}`}
@@ -371,7 +375,7 @@ export default function CycleModulePage({
   ));
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={stage}>
-      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : [card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero || dupAction ? null : action} title={name} sub={sub !== undefined ? sub : owned ? owned.sub : [card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
       {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
@@ -383,13 +387,13 @@ export default function CycleModulePage({
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
           <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
         </div>
-      ) : owned ? (
+      ) : ownsHome ? (
         <>
           {home({ card, records: recs, recordsStatus: recsStatus, recordsMessage, add, rowHref, onRetry, onRetryRecords: onRetryRecords || onRetry, search })}
           {doors}
           {children}{sources && <Sources action={sourcesAction}>{sources}</Sources>}
         </>
-      ) : (
+      ) : owned ? children : (
         <>
           <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-module-chart" data-state={view.state}>
             <div className="flex flex-wrap items-baseline justify-between gap-2.5">

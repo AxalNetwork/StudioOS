@@ -66,13 +66,30 @@ test('Free gets an authorized header/key strip only; all other deal reads and DD
   assert.equal(free.status, 200); assert.equal(free.body.plan_limited, true);
   assert.equal(free.body.project_name, 'Synthetic venture'); assert.equal(free.body.currency, 'USD');
   assert.equal(free.body.capital_committed, 25000);
-  for (const name of ['notes','description','minimum_check','valuation_cap','project_id','founder_user_id','partner_name']) assert.equal(name in free.body, false, name);
+  for (const name of ['notes','description','minimum_check','valuation_cap','project_id','founder_user_id','partner_name','company_profile_url']) assert.equal(name in free.body, false, name);
   for (const path of ['/deals','/deals/100/documents','/deals/100/commitments','/deals/100/activity','/dd/cases']) assert.equal((await call(f, 4, 'GET', path)).status, 402, path);
   assert.equal((await call(f, 7, 'GET', '/deals/100')).status, 403);
   assert.equal((await call(f, 4, 'POST', '/deals/100/commitments', { amount: 5000 })).status, 402);
   const paid = await call(f, 2, 'GET', '/deals/100');
   assert.equal(paid.body.plan_limited, undefined); assert.equal(paid.body.description, 'PRIVATE DESCRIPTION'); assert.equal(paid.body.notes, undefined);
   assert.equal((await call(f, 5, 'GET', '/deals/100')).status, 200);
+});
+
+test('the authorized deal supplies a link only to an addressable public profile', async () => {
+  const f = fixture();
+  f.db.exec("UPDATE projects SET uid='synthetic-venture', status='active' WHERE id=10");
+  const paid = await call(f, 2, 'GET', '/deals/100');
+  assert.equal(paid.body.company_profile_url, '/startups/synthetic-venture');
+  assert.equal('profile_uid' in paid.body, false);
+  assert.equal('profile_status' in paid.body, false);
+  for (const status of ['rejected', 'intake']) {
+    f.db.prepare('UPDATE projects SET status=? WHERE id=10').run(status);
+    assert.equal((await call(f, 2, 'GET', '/deals/100')).body.company_profile_url, null, status);
+  }
+  f.db.exec("UPDATE projects SET status='active', deleted_at='2026-10-01' WHERE id=10");
+  assert.equal((await call(f, 2, 'GET', '/deals/100')).body.company_profile_url, null);
+  f.db.exec("UPDATE projects SET uid='..', deleted_at=NULL WHERE id=10");
+  assert.equal((await call(f, 2, 'GET', '/deals/100')).body.company_profile_url, null);
 });
 
 test('missing target or timestamps remain null while actual zero elapsed days and zero commitment remain zero', async () => {
