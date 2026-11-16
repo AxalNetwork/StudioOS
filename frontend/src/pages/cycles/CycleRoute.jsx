@@ -1012,7 +1012,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
