@@ -20,7 +20,7 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { useOfFundsApi } from '../src/lib/api/useOfFunds.js';
 import {
   afterRaiseView, centsFromTyped, historyRows, homeTiles, money, monthsText, needsRows, planEmpty, planVsActual,
-  raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
+  committedView, raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
   hireBody, sectionSheet, sectionSheetSearch, sheetSectionFrom, tabSearch, // D6083
 } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
 import { capsForViewer } from './_uof_capabilities.mjs';
@@ -136,8 +136,8 @@ test('a missing input is Not recorded, never a zero', () => {
   assert.equal(rows[0].hires, null, 'hires not read are not none');
   const tiles = homeTiles(planFixture({ empty: true }));
   assert.equal(tiles.find((t) => t.key === 'raise').value, null);
-  assert.equal(tiles.find((t) => t.key === 'committed').value, null);
-  assert.ok(tiles.find((t) => t.key === 'committed').sub.includes('not read here yet'));
+  // D6081: a plan read without its committed block reads Unavailable, never a figure.
+  assert.equal(tiles.find((t) => t.key === 'committed').value, 'Unavailable');
   assert.equal(planEmpty(planFixture({ empty: true })), true);
   assert.equal(planEmpty(planFixture()), false);
   assert.equal(centsFromTyped(''), null);
@@ -255,10 +255,12 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
     assert.equal(v.text('uof-tile-today-value'), '9.4 months');
     assert.equal(v.text('uof-tile-after-value'), 'at least 18 months');
     assert.notEqual(v.text('uof-tile-today-value'), v.text('uof-tile-after-value'));
-    assert.equal(v.text('uof-tile-committed-value'), 'Not recorded');
+    assert.equal(v.text('uof-tile-committed-value'), 'Unavailable', 'D6081: this fixture carries no committed block');
     assert.equal(v.all('uof-section-row').length, 5);
     assert.ok(v.text('uof-cash').includes('Modelled'));
-    assert.ok(v.text('uof-ties').includes('! Different raise'));
+    // D5081 (RA-21): where the plan is used is its Dependencies card, each row marked; a different raise is Stale.
+    assert.equal(v.text('uof-dep-cap'), 'Stale');
+    assert.ok(v.text('uof-tie-cap').includes('This plan raises $1,500,000'));
     assert.ok(v.by('uof-need-round_disagreement'));
     assert.ok(v.sent.some((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3'));
     assert.equal(v.by('uof-admin-banner'), undefined, 'the founder has no banner');
@@ -268,7 +270,10 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
 test('UF3 Edit split: a total other than 100 waits; a good split saves the raise, the shares and the target', async () => {
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': () => response({ ok: true }) } });
   try {
-    await v.click('uof-edit-split-open');
+    // D5081 (RA-14): on a desktop Home, Edit split opens from the header's Set raise & allocation, drawn once.
+    assert.equal(v.text('cycle-action'), 'Set raise & allocation');
+    assert.equal(v.by('uof-edit-split-open'), undefined, 'the action is not drawn twice');
+    await v.click('cycle-action');
     assert.equal(v.pr(v.by('uof-edit-split')).role, 'dialog', 'D1317: Edit split opens as the shared Sheet');
     assert.ok(v.pr(v.by('uof-edit-split'))['aria-labelledby']);
     assert.equal(v.pr(v.by('uof-edit-split'))['data-width'], 640);
@@ -294,7 +299,7 @@ test('D5069 a split refused because the plan changed keeps the dialog, says so, 
   const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': conflict } });
   try {
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     await v.type('uof-split-amount', '2000000');
     await v.click('uof-split-save');
     assert.match(v.text('uof-split-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
@@ -348,7 +353,7 @@ test('UF16: an admin works under the banner, their writes say so, and Mercury fi
     assert.ok(v.text('uof-admin-banner').includes('as an Admin. Changes are logged under your name.'));
     assert.equal(v.text('uof-tile-today-value'), 'Founder only');
     assert.ok(v.by('uof-cash-founder-only'));
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     assert.ok(v.text('uof-split-admin').includes('logged under your name'));
   } finally { await v.close(); }
   const a = await mounted('/raise/use-of-funds/actuals?project_id=3', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
@@ -362,7 +367,8 @@ test('UF17–UF19: empty, error and Mercury partial each say what they are', asy
   let v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ empty: true }) });
   try {
     assert.ok(v.text('uof-empty').includes('Set your raise and split to see what it buys.'));
-    assert.equal(v.text('uof-tile-raise-value'), 'Not recorded');
+    // D5081 (RA-14): first use collapses the analytics to its set-up actions; no tile draws Not recorded four times.
+    assert.equal(v.by('uof-tile-raise-value'), undefined);
   } finally { await v.close(); }
   v = await mounted('/raise/use-of-funds?project_id=3', { plan: null });
   try {
@@ -724,4 +730,79 @@ test('D6083 UF21c: on a phone the sheet is a bottom sheet and Add a hire a botto
   assert.match(src, /testId="uof-section-sheet"/);
   assert.match(src, /<Sheet label=\{v\.label\}[^>]*phone="sheet"/);
   assert.match(src, /<Lightbox label="Add a hire"[^>]*phone="sheet"/);
+});
+
+/* ------------------------------------------------------------------ *
+ * D6081 (#6081): Committed, from the round
+ * ------------------------------------------------------------------ */
+
+const COMMITTED = {
+  state: 'ok', source: 'Capital relationships', href: '/raise/capital-relationships/commitments?project_id=3', reason: null,
+  value: { round_name: 'Seed', currency: 'USD', counted_cents: 145000000, target_cents: 150000000, amount_not_recorded: 0, remaining_cents: 5000000,
+    received_cents: null, statuses: [{ status: 'signed', label: 'Signed', investors: 2 }] },
+};
+
+test('D6081 committedView: a read is "$X of $Y · Signed · from the round" with Remaining; nothing unread is a figure', () => {
+  const read = committedView(COMMITTED);
+  assert.equal(read.value, '$1,450,000');
+  assert.equal(read.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(read.foot, 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+  assert.equal(read.tie, 'Committed $1,450,000 · Signed');
+  const two = committedView({ ...COMMITTED, value: { ...COMMITTED.value, received_cents: 25000000, statuses: [{ label: 'Received' }, { label: 'Signed' }, { label: 'Wired' }] } });
+  assert.equal(two.sub, 'of $1,500,000 · Received, Signed, Wired · from the round');
+  assert.equal(two.tie, 'Committed $1,450,000 · received $250,000 · Received, Signed, Wired');
+  const over = committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 160000000, remaining_cents: -10000000 } });
+  assert.match(over.foot, /over the target by \$100,000$/);
+  const noAmount = committedView({ ...COMMITTED, value: { ...COMMITTED.value, amount_not_recorded: 1, remaining_cents: null } });
+  assert.equal(noAmount.foot, null, 'a sum missing an amount gives no Remaining');
+  assert.match(noAmount.sub, /1 with no amount/);
+  assert.match(noAmount.footReason, /has no amount recorded/);
+  const noTarget = committedView({ ...COMMITTED, value: { ...COMMITTED.value, target_cents: null, remaining_cents: null } });
+  assert.equal(noTarget.foot, null);
+  assert.match(noTarget.sub, /^no target recorded/);
+  // A real zero, read, is a zero.
+  assert.equal(committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 0, remaining_cents: 150000000, statuses: [] } }).value, '$0');
+
+  const unavailable = committedView({ state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' });
+  assert.equal(unavailable.value, 'Unavailable'); assert.equal(unavailable.foot, undefined);
+  assert.equal(committedView(undefined).value, 'Unavailable', 'no block is never a figure');
+  const none = committedView({ state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: COMMITTED.href });
+  assert.equal(none.value, null); assert.equal(none.href, COMMITTED.href); assert.equal(none.link, 'Capital relationships › Commitments');
+  const refused = committedView({ state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders.' });
+  assert.equal(refused.value, 'Refused'); assert.equal(refused.muted, true);
+  for (const b of [unavailable, none, refused]) assert.ok(!/\$/.test(String(b.value ?? '')), `${b.state} draws no amount`);
+
+  // The tile and the round tie use the same read.
+  const plan = { ...planFixture(), committed: COMMITTED };
+  const tile = homeTiles(plan).find((t) => t.key === 'committed');
+  assert.equal(tile.value, '$1,450,000'); assert.equal(tile.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(tiesRows(plan).find((r) => r.key === 'round').sub, 'Committed $1,450,000 · Signed');
+});
+
+test('D6081 UF1 Home: Committed from the round with Remaining; Unavailable hides Remaining; no round links Commitments', async () => {
+  const ok = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: COMMITTED } });
+  try {
+    assert.equal(ok.text('uof-tile-committed-value'), '$1,450,000');
+    assert.ok(ok.text('uof-tile-committed').includes('of $1,500,000 · Signed · from the round'));
+    assert.equal(ok.text('uof-remaining'), 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+    assert.equal(ok.by('uof-committed-unavailable'), undefined);
+  } finally { await ok.close(); }
+  const down = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' } } });
+  try {
+    assert.equal(down.text('uof-tile-committed-value'), 'Unavailable');
+    assert.equal(down.by('uof-remaining'), undefined, 'Remaining is not shown');
+    assert.match(down.text('uof-committed-unavailable'), /Remaining is not shown\. It is not \$0\./);
+    assert.ok(!/\$[1-9]/.test(down.text('uof-tile-committed')), 'no amount is drawn');
+  } finally { await down.close(); }
+  const none = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: '/raise/capital-relationships/commitments?project_id=3' } } });
+  try {
+    assert.equal(none.text('uof-tile-committed-value'), 'Not recorded');
+    assert.equal(none.pr(none.by('uof-tile-committed-link')).href, '/raise/capital-relationships/commitments?project_id=3');
+    assert.equal(none.by('uof-remaining'), undefined);
+  } finally { await none.close(); }
+  const admin = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }), committed: { state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders. Staff give a reason for a support read there.' } } });
+  try {
+    assert.equal(admin.text('uof-tile-committed-value'), 'Refused');
+    assert.equal(admin.by('uof-remaining'), undefined);
+  } finally { await admin.close(); }
 });

@@ -7,7 +7,8 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 | `CapRelTool.jsx` | The tool's tab bar (`CapRelTabBar`), Overview's tab bar (`CapRelHomeNav`), and its tab pages (`CapRelTabPage`). Calls draws the module read; every other tab draws its own file below. |
 | `capRelModel.js` | Pure: the addresses, the canvas's seven tabs, `isCapRelTab`, and the venture-only query. D1192: the board's columns and moves, the status rule, Overview's figures and Needs you, the import's rows, chunks and merged answer, and the moved notices. |
 | `CapRelPipeline.jsx` | D1192 (CRL2–CRL6): Pipeline's board and list, the investor sheet (the shared `Sheet`, D1317), Add investor and Import, and the move, status, next step, step and feedback dialogs. Every write goes through `cloudflare-worker/src/services/raiseWriters.ts`. |
-| `CapRelOverview.jsx` | D1192 (CRL1, CRL13): Overview's blocks above the module page's own, and the moved notice. |
+| `CapRelOverview.jsx` | D1192 (CRL1, CRL13): Overview's blocks and the moved notice. D5081 part 2: the blocks are the page (no generic layer under them), and first use is the start card and its set-up actions. |
+| `capRelHomeRead.js` | D5081 part 2 (#5081): Overview's two reads, the prospects (`useProspects`) and the commitments, and `useCapRelHome`, which CycleRoute holds for the header's action and Overview. |
 | `CapRelMatch.jsx` | D1193 (CRL7): Match, D1190's match read: each fund's Fit and why, warm paths from your own network, verified investors as a count only, and Add to pipeline with the fund filled in. |
 | `CapRelOutreach.jsx` | D1193 (CRL8): follow-ups (Done, Snooze, Draft a message), Eadwyn's drafts for the founder to send from their own email, materials sent per investor, and updates through Grow's share sheet. |
 | `CapRelCommitments.jsx` | D1193 (CRL9, CRL10): committed against the target with what is not counted, every commitment with its status and source, closes, Mercury's matched credits, pro-rata, and the Round settings and New close dialogs. |
@@ -22,7 +23,7 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 ## Where the tool lives
 
 The tool is the Capital relationships module, not a page beside it.
-- Overview is CycleRoute's module page, which already draws the round card, the Investors table, the Calls section and Mercury's parts.
+- Overview is CycleRoute's module page. Since D5081 part 2 it owns that page (`owned`): its blocks and the module's own parts (receipt matches, Mercury, Notion, Evidence), with no generic "at a glance" card, tool door or Investors table under them. The header's primary is Overview's own (`homeAction`).
 - The tab words (`/pipeline`, `/match`, `/outreach`, `/commitments`, `/calls`, `/activity`) arrive on the module's record route, `/raise/:slug/:id`. CycleRoute draws `CapRelTabPage` for them instead of a record (`isCapRelTab`).
 - `/calls` (D1221, #2458) draws Calls for Capital, `../calls/CallsTab.jsx`; one sent call is at `/calls/:uid`, the one route `App.jsx` adds under this tool.
 - `/closing` (D1213, #2424) is the round's closing room, `CLOSING` in `capRelModel.js`: not one of the seven tabs, so the tab bar keeps Commitments lit, and Commitments holds its door. It draws `../../closing/ClosingRoom.jsx`'s `FounderClosing`.

@@ -46,6 +46,8 @@
  *                                        `not_found` (skill or company), 422 `base_not_hq`, 403 `not_editor`, 400
  *                                        `fork_reason_invalid` | `version_invalid`, 422 `version_not_published`, 409
  *                                        `base_retired` | `base_suspended` | `slug_taken`, and `checkDraft`'s codes.
+ *   POST /skills/:uid/rebase             D4538 part 5 (#5965): explicit per-conflict choices write a draft on a newer
+ *                                        Axal version; published history and pins stay unchanged. See D4538-p5.
  *   GET  /skills/:uid/base               a company skill's lineage: null for a standalone skill; else the exact base
  *                                        version's parts, the HQ skill's current version, `base_update_available`
  *                                        (a newer published HQ version, never applied), and a per-field three-way
@@ -595,7 +597,7 @@ const partKey = (p: Parts, f: PartField) => JSON.stringify(f === 'tags' ? p.tags
 /**
  * D4538's three-way comparison, field by field: the base the company forked from, the HQ skill's newest published
  * version, and the company's latest. A field is a `conflict` when both sides changed it and differently. Read only:
- * nothing is merged here (rebase and fork-again are not built, D4538-p2.md).
+ * nothing is merged here. The rebase route below applies explicit choices to a draft (D4538 part 5).
  */
 function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
   return PART_FIELDS.map((field) => {
@@ -649,6 +651,91 @@ router.post('/skills/:uid/extend', async (c) => {
     skill: await cardOf(c.env, s, user, tax, company.company_name),
     base: { uid: base.uid, name: base.name, version, current_version: base.current_version },
   }, 201);
+});
+
+/** D4538 part 5 (#5965), SK-20: Keep mine / Take Axal / Edit by hand, never an implicit conflict merge. */
+router.post('/skills/:uid/rebase', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  if (isAdmin(user) || !(await mayWrite(c.env, s, user))) return say(c, 403, 'not_editor', 'Only the company\'s editors can rebase its skills.');
+  if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return say(c, 422, 'not_extension', 'Only a company extension has an Axal base to update.');
+  if (s.status === 'retired') return say(c, 409, 'retired', 'A retired skill cannot be rebased.');
+  const company = await c.env.DB.prepare('SELECT archived_at FROM company_profiles WHERE id = ?').bind(s.company_id).first<{ archived_at: string | null }>();
+  if (!company || company.archived_at) return say(c, 409, 'company_archived', 'An archived company is read-only.');
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the rebase choices as a JSON object.');
+  if (!Number.isSafeInteger(b.version) || b.version < 1) return say(c, 400, 'version_invalid', 'Name the newest published Axal version shown in the comparison.');
+  if (typeof b.expected_draft_hash !== 'string' || !/^[a-f0-9]{64}$/.test(b.expected_draft_hash)) return say(c, 400, 'draft_hash_invalid', 'Send the draft_hash you loaded as expected_draft_hash.');
+  if (!b.resolutions || typeof b.resolutions !== 'object' || Array.isArray(b.resolutions)) return say(c, 400, 'resolutions_invalid', 'Send an object with one choice per conflicting part.');
+  const snap = await draftSnapshot(c.env, s.id);
+  if (!snap) return noSkill(c);
+  if (b.expected_draft_hash !== await draftHash(snap.parts)) return draftConflict(c, snap);
+  const base = await baseOf(c.env, s).catch(() => null);
+  if (!base?.version) return say(c, 409, 'base_unreadable', 'The original Axal base could not be read. Nothing was saved.');
+  if (base.row.status === 'retired') return say(c, 409, 'base_retired', 'This Axal skill is retired, so it cannot be rebased.');
+  if (base.row.current_version <= s.based_on_version) return say(c, 409, 'no_base_update', 'There is no newer Axal version to rebase onto.');
+  if (b.version !== base.row.current_version) return say(c, 409, 'rebase_conflict', 'The Axal comparison changed. Reload it before choosing again.');
+  const newest = await versionOf(c.env, base.row.id, b.version).catch(() => null);
+  if (!newest) return say(c, 409, 'base_unreadable', 'The newer Axal version could not be read. Nothing was saved.');
+  if (await skillRunRefusal(c.env, base.row.id, b.version)) return say(c, 409, 'base_suspended', 'The newer Axal version is suspended, so it cannot be rebased.');
+  // Match GET /base: published company definition, else draft. Never substitute a draft for unreadable history.
+  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version).catch(() => null) : null;
+  if (s.current_version > 0 && !current) return say(c, 409, 'company_version_unreadable', 'Your published company version could not be read. Nothing was saved.');
+  const mine = current ? versionParts(current) : snap.parts;
+  const theirs = versionParts(newest);
+  const fields = threeWay(versionParts(base.version), theirs, mine);
+  const resolutions = b.resolutions as Record<string, { choice?: unknown; value?: unknown } | null>;
+  for (const part of Object.keys(resolutions)) {
+    if (!fields.some(f => f.field === part && f.conflict)) return say(c, 400, 'resolution_invalid', 'Only a conflicting part needs a choice.', { part });
+  }
+  const merged: Record<string, unknown> = { slug: s.slug };
+  for (const f of fields) {
+    if (!f.conflict) { merged[f.field] = f.base_changed ? theirs[f.field] : mine[f.field]; continue; }
+    const r = resolutions[f.field];
+    if (r === undefined) return say(c, 422, 'conflict_unresolved', 'Choose what the new draft keeps for this conflicting part.', { part: f.field });
+    if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.choice !== 'string' || !['mine', 'axal', 'edit'].includes(r.choice) ||
+        (r.choice === 'edit' ? !Object.hasOwn(r, 'value') : Object.hasOwn(r, 'value'))) return say(c, 400, 'resolution_invalid', 'Choose mine, axal or edit with a value.', { part: f.field });
+    merged[f.field] = r.choice === 'mine' ? mine[f.field] : r.choice === 'axal' ? theirs[f.field] : r.value;
+  }
+  const tax = await taxonomy(c.env);
+  const checked = checkDraft(merged, { taxonomy: tax.slugs, roleKeys: ROLE_KEYS });
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
+  const d = checked.draft;
+  const outside = d.tools.find(t => !theirs.tools.includes(t));
+  if (outside) return say(c, 422, 'tool_not_in_base', `${toolLabel(outside)} is not a tool of the newer Axal base.`, { part: 'tools', tool: { key: outside, label: toolLabel(outside) } });
+  try {
+    await c.env.DB.batch([
+      draftGuard(c.env, s.id, snap.snapshot),
+      // The draft, lineage and comparison must still be the exact ones read above. An absent row also aborts.
+      c.env.DB.prepare(`SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM agent_skills s JOIN agent_skills b ON b.uid = s.based_on_skill_uid AND b.scope = 'hq'
+          JOIN company_profiles c ON c.id = s.company_id
+        WHERE s.id = ? AND s.scope = 'company' AND s.company_id = ? AND s.status = ? AND s.current_version = ?
+          AND s.based_on_skill_uid = ? AND s.based_on_version = ? AND b.current_version = ? AND b.status = ? AND c.archived_at IS NULL
+          AND (s.current_version = 0 OR EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = s.id AND v.version = s.current_version))
+          AND EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = b.id AND v.version = s.based_on_version)
+          AND EXISTS (SELECT 1 FROM agent_skill_versions v WHERE v.skill_id = b.id AND v.version = b.current_version)
+          AND NOT EXISTS (SELECT 1 FROM agent_skill_moderation m WHERE m.skill_id = b.id AND m.action = 'suspend'
+            AND (m.cleared_at IS NULL OR (m.cleared_how = 'republished' AND m.version >= b.current_version)))
+      ) THEN 1 ELSE json('rebase_conflict') END AS unchanged`)
+        .bind(s.id, s.company_id, s.status, s.current_version, s.based_on_skill_uid, s.based_on_version, b.version, base.row.status),
+      c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?,
+        based_on_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, b.version, user.id, s.id),
+      ...writeDraftStatements(c.env, s.id, d),
+    ]);
+  } catch (e) {
+    const now = await draftSnapshot(c.env, s.id);
+    if (now && now.snapshot !== snap.snapshot) return draftConflict(c, now);
+    if (/malformed JSON|rebase_conflict/i.test(String(e))) return say(c, 409, 'rebase_conflict', 'The comparison changed while saving. Nothing was saved; reload it.');
+    throw e;
+  }
+  await auditDraft(c.env, user, s, 'saved', await draftHash(snap.parts), await draftHash(d), {
+    rebase: { from: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, to: { skill_uid: base.row.uid, version: b.version },
+      company_version: current?.version ?? null, choices: Object.fromEntries(Object.entries(resolutions).map(([part, r]) => [part, r!.choice])) },
+  });
+  return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, ''), base: { uid: base.row.uid, version: b.version } });
 });
 
 router.get('/skills/:uid/base', async (c) => {

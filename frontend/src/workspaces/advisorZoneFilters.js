@@ -69,6 +69,11 @@ const NO_INTERACTION_DATE =
 // list while implying a remainder that is not yours exists somewhere.
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
+// D6285: `/research/markets` mounts the market directory, which draws no chip
+// row; only the deleted, never-mounted `MarketZone` body read these keys.
+const MARKETS_DIRECTORY_HAS_NO_CHIPS =
+  'the market directory mounted at this route draws no chip row, so nothing narrows its readings by age; only the unmounted MarketZone body did';
+const MARKETS_DIRECTORY_HOVER = 'The market directory has no age filter yet.';
 
 // `/network/introductions`. FOUR LIVE CHIPS, the partner panel's four (D392).
 // `Gated` was relabelled `Awaiting you` and `Made` was prose, both on the
@@ -165,11 +170,17 @@ export const ADVISOR_ZONE_FILTERS = {
   // one timestamp per run and binds it to every row it touches, so an age
   // predicate over it would put the whole feed in one bucket — a filter that
   // always returns everything or nothing, which is D51 in a new costume.
+  //
+  // D6285 — NOT LIVE, AND THEY HAD NOT BEEN SINCE D593. The four keys were
+  // implemented only by `MarketZone`, a body nothing mounted once the market
+  // directory replaced it; `ResearchWorkspace` hands `MarketDirectoryZone` no
+  // `zoneFilters`, so no chip was drawn. The test that called them live read
+  // the unmounted file. Prose until the directory narrows its readings by age.
   'research/markets': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Current', key: 'current' },
-    { canvas: 'Ageing', key: 'ageing' },
-    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'All', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Current', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Ageing', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
+    { canvas: 'Stale', unbuilt: MARKETS_DIRECTORY_HAS_NO_CHIPS, hover: MARKETS_DIRECTORY_HOVER },
   ],
   // The same level mismatch founder's row has, from the other end: this canvas
   // wants a company's standing with you, and the page lists analyses that name
@@ -199,9 +210,9 @@ export const ADVISOR_ZONE_FILTERS = {
   // path updates the state and leaves the number alone. Filtering on the number
   // would silently drop exactly the documents this chip is for.
   // ── Expertise (D392) ─────────────────────────────────────────────────────
-  // Four of the five artboards, sixteen chips, twelve live. Every live chip
-  // reads a column the zone already loads; the four that are not name what is
-  // missing. `expertise/visibility` has no row: its page is the gap card
+  // Four of the five artboards, sixteen chips, fifteen live since D4826 part 2.
+  // Every live chip reads a column the zone already loads; the one that is not
+  // names what is missing. `expertise/visibility` has no row: its page is the gap card
   // ("Nothing counts profile views"), and four controls above a sentence
   // explaining why there is nothing to count would be a filter over nothing.
   //
@@ -235,19 +246,20 @@ export const ADVISOR_ZONE_FILTERS = {
   ],
   // D4826 (#4826): `articles.status` is SEVEN values, not two — draft,
   // submitted, in_review, changes_requested, rejected, approved, published —
-  // and an approved piece with a `publish_at` is Scheduled (D484). The note
-  // here used to say "draft or published", which was wrong when D4681 gave the
-  // shelf a pill per state. These two chips are the canvas's own axis (AX4's
-  // `filters: fil(['All','Published','Drafts','Essays'], 0)`), so Drafts stays
-  // the coarse "not public yet" narrowing the canvas asks for; the row's pill,
-  // its audience line and the export all name the real state
-  // (`expertiseModel.articleStage`). Nothing classifies a piece as an essay
-  // rather than a note or a post — there is no kind column on articles.
+  // and an approved piece with a `publish_at` is Scheduled (D484).
+  //
+  // D4826 part 2: THE ROW IS EX-11's (`design/incoming/Expertise v2
+  // Page.dc.html`, `const thinking = () =>`), which replaced AX4's
+  // `All · Published · Drafts · Essays`. "Drafts" collected six states that
+  // are not drafts, and "Essays" named a kind no article records; EX-11 asks
+  // whose move it is instead. Each chip is a set of the shelf's own states
+  // (`expertiseModel.THINKING_VIEWS`), and `{n}` is the Worker's count over
+  // the whole shelf, dropped when it is absent rather than guessed.
   'expertise/thinking': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Published', key: 'published' },
-    { canvas: 'Drafts', key: 'draft' },
-    { canvas: 'Essays', unbuilt: 'an article records no kind, so nothing tells an essay from any other piece', hover: 'Articles carry no kind, so an essay cannot be told apart.' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
+    { canvas: 'Needs you', key: 'needs_you', label: 'Needs you {n}' },
+    { canvas: 'With editors', key: 'with_editors', label: 'With editors {n}' },
+    { canvas: 'Published', key: 'published', label: 'Published {n}' },
   ],
 
   // ── Practice ─────────────────────────────────────────────────────────────
