@@ -53,6 +53,12 @@ withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in the
 admin where the record is a member's, a support session, a disabled party and no credentials are refused, with nothing
 named, no row changed, no reveal recorded and no charge or detach sent; the rightful party then gets each answer.
 
+`authz_venture_scores_d4570.test.ts` (#4570, D4570 part 8) asks the six venture-scorecard routes (the full read,
+sharing, trajectory, the investor's deal read, corrections and recompute) through the mounted router on the full
+schema. Another venture's founder, an advisor with no share or a share switched off, a removed co-founder, a roster
+advisor, an investor by venture id or off the deal, a disabled founder and no credentials are refused, with nothing of
+the venture named and no score, correction, sharing or log row changed; each rightful party then gets its read.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
@@ -337,9 +343,12 @@ without weakening Program Grants; successful cases publish a compatible test
 catalogue version only in the fixture.
 | `_workspace_validation_5573.ts` | D5573: LOCAL MOCKED validation harness: synthetic ventures, the D5565 fake provider behind a fault injector, D5565 leases and D5567 grants on a seeded virtual clock; tests and `scripts/workspace-validation.mjs` only. |
 | `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
+| `build_feature_removal_6024.test.ts` | D6024: real record gates, protected/racing references, FK cascades and atomic actor audit, must-have demotion, canonical metrics and retained plan history. |
 
+`consultation_slot_6394.test.ts` (#6394) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 | `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
 `investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 
 | `deal_flow_attention_6424.test.ts` | D6424: mounted per-firm stale rules, visible unanswered diligence requests, firm/reviewer isolation, null/unreadable counts and support refusal. |
+| `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |

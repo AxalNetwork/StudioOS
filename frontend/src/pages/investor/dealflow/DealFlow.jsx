@@ -30,7 +30,7 @@ import { DealStrip, StripKey } from '../../../components/scoring/scorecard/Score
 import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
   MAX_COMPARE, SCOPES, SCOPE_SWITCH,
-  compareHref, opensDeal, viewHref,
+  compareHref, opensDeal, picksOf, viewHref,
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, THESIS_PATH, attentionOf, defaultHref, emptyFilters, filterCount, fitOf, flowRows, passes, pickToggle, scoresOf, settingsHref, settingsOf,
@@ -265,7 +265,8 @@ export default function DealFlow({ view, scope }) {
   const phone = usePhoneWidth();
   const settings = useMemo(() => settingsOf(location.search), [location.search]);
   const viewUid = new URLSearchParams(location.search).get('v');
-  const [picked, setPicked] = useState([]);
+  // D6149 (#6149): Compare's Add a venture returns with its picks ticked (`&pick=`).
+  const [picked, setPicked] = useState(() => picksOf(location.search));
   const [page, setPage] = useState(1);
   const [words, setWords] = useState(true);
   const [dialog, setDialog] = useState(null);

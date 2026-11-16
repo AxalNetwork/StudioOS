@@ -13,14 +13,18 @@
  *                                                       else the latest churn rate, Stripe first
  *   net_burn          project_metrics.net_burn          the latest row
  *   runway            refused (cash and burn)           runwayMonths(latest cash_balance, latest net_burn)
+ *   arr               refused (12 × MRR)                12 × the MRR row above (D6104)
+ *   burn_multiple     refused (burn ÷ net new ARR)      the latest month's net burn ÷ 12 × that month's net new
+ *                                                       MRR from the ledger (new + expansion + unsplit − churned)
  *   custom-<uid>      custom_kpi_values                 the latest value
  *   posthog-<uid>     refused ("This figure comes from    the latest PostHog fact of a tracked metric
  *                     PostHog.")                          (D1609, services/posthog/metrics.ts)
  *
  * A hand entry is `source = 'manual'`, one KPI per call, and a second entry
  * for the same KPI on the same day updates that day's manual row. A typed
- * figure is never stored under a connected source's name. MRR and Burn are US
- * dollars, as `project_metrics` keeps them (REAL, migration 249); a custom
+ * figure is never stored under a connected source's name. A hand entry typed
+ * wrong is removed by `removeKpiEntry` (D6101); a connected source's is not.
+ * MRR and Burn are US dollars, as `project_metrics` keeps them (REAL, migration 249); a custom
  * money KPI is stored as whole cents.
  */
 import type { Env } from '../types';
@@ -30,16 +34,18 @@ import { notify } from './notify';
 import { HAND_ENTRY_REFUSED, KPI_PREFIX as POSTHOG_PREFIX, ROLE_WORDS, metricReadings, trackedByUid, trackedOf } from './posthog/metrics';
 
 export class KpiRefused extends Error {
-  status: number; sentence: string; field: string | null;
-  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.sentence = sentence; this.field = field; }
+  status: number; sentence: string; field: string | null; code: string | null;
+  constructor(status: number, sentence: string, field: string | null = null, code: string | null = null) {
+    super(sentence); this.status = status; this.sentence = sentence; this.field = field; this.code = code;
+  }
 }
 
-export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway'] as const;
+export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'arr', 'burn_multiple'] as const;
 export type KpiKey = typeof KPI_KEYS[number];
 
 export const KPI_LABEL: Record<KpiKey, string> = {
   mrr: 'MRR', paying_accounts: 'Customers', new_mrr: 'New MRR', expansion_mrr: 'Expansion MRR',
-  churn: 'Churn', net_burn: 'Burn', runway: 'Runway',
+  churn: 'Churn', net_burn: 'Burn', runway: 'Runway', arr: 'ARR', burn_multiple: 'Burn multiple',
 };
 
 /**
@@ -62,6 +68,8 @@ const REFUSED: Partial<Record<KpiKey, string>> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export const CUSTOM_UNITS = ['count', 'pct', 'money'] as const;
@@ -167,7 +175,44 @@ function connectedFirst(rows: Metric[], col: MetricCol, now: number): Metric[] {
   return stripe.some((r) => r.snapshot_date >= since) ? stripe : rows.filter((r) => !isStripe(r));
 }
 
-/** Revenue and traction's rows, in the list's order: the seven, then each custom KPI. */
+/**
+ * D6104 (#6104): ARR is 12 × the MRR row, from the same source and date. With no
+ * MRR it reads Not recorded and names the input; it is never typed.
+ */
+export function arrOf(mrr: KpiRow): KpiRow {
+  if (mrr.value == null) return notRecorded('arr', KPI_LABEL.arr, 'Not recorded: needs MRR');
+  return { id: 'arr', kpi: KPI_LABEL.arr, value: mrr.value * 12, unit: mrr.unit, change_30d: mrr.change_30d == null ? null : mrr.change_30d * 12,
+    source: `Derived from MRR (12 × MRR)${mrr.source ? ` · ${mrr.source}` : ''}`, as_of: mrr.as_of, period: mrr.period, reason: null };
+}
+
+type MovementAt = (kind: string) => { amount_cents: number; as_of: string } | null;
+
+/**
+ * D6104: burn multiple = the month's net burn ÷ its net new ARR, where net new
+ * ARR is 12 × (new + expansion + unsplit − churned MRR) from the revenue
+ * ledger for the ledger's latest month. It needs burn recorded in that same
+ * month and a positive net new ARR; with any input missing it reads Not
+ * recorded and says which. Burn is US dollars (project_metrics); the ledger is
+ * cents.
+ */
+export function burnMultipleOf(burn: KpiRow, twoBillings: boolean, gap: string | null, month: string | null, at: MovementAt): KpiRow {
+  const no = (why: string) => notRecorded('burn_multiple', KPI_LABEL.burn_multiple, `Not recorded: ${why}`);
+  if (!twoBillings) return no('needs 2 billings in the revenue ledger');
+  if (gap) return no(gap.replace(/^Not recorded: /, ''));
+  if (!month) return no('needs the ledger\'s net new ARR');
+  if (burn.value == null) return no('needs burn');
+  if (burn.period !== month) return no(`needs burn recorded for ${month}`);
+  if (!(burn.value > 0)) return no('burn is zero or negative');
+  const cents = (k: string) => at(k)?.amount_cents ?? 0;
+  const netNewMrrCents = cents('new') + cents('expansion') + cents('unsplit') - cents('churned');
+  if (!(netNewMrrCents > 0)) return no(`net new ARR for ${month} is zero or negative`);
+  const netNewArr = (netNewMrrCents * 12) / 100;
+  const asOf = [burn.as_of!, at('new')?.as_of ?? at('unsplit')?.as_of ?? at('churned')?.as_of ?? burn.as_of!].sort().at(-1)!;
+  return { id: 'burn_multiple', kpi: KPI_LABEL.burn_multiple, value: Math.round((burn.value / netNewArr) * 100) / 100, unit: 'multiple',
+    change_30d: null, source: 'Derived from burn and the revenue ledger', as_of: asOf, period: month, reason: null };
+}
+
+/** Revenue and traction's rows, in the list's order: the nine, then each custom KPI. */
 export async function kpiRows(env: Env, projectId: number, now: number): Promise<KpiRow[]> {
   const metrics = await readMetrics(env, projectId);
   const ledger = await readRecurring(env, projectId);
@@ -209,6 +254,10 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
           source: 'Derived from cash and burn', as_of: asOf, period: asOf.slice(0, 7), reason: null };
   }
 
+  const mrr = latest('mrr', KPI_LABEL.mrr, connectedFirst(metrics, 'mrr', now), 'mrr', 'usd', metrics);
+  const arr = arrOf(mrr);
+  const burnMultiple = burnMultipleOf(burn, twoBillings, gap, latestMonth, at);
+
   const custom = await customKpis(env, projectId);
   const values = custom.length ? await env.DB.prepare(
     `SELECT v.kpi_id, v.as_of, v.value, v.value_cents, v.source FROM custom_kpi_values v
@@ -227,13 +276,15 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
   });
 
   return [
-    latest('mrr', KPI_LABEL.mrr, connectedFirst(metrics, 'mrr', now), 'mrr', 'usd', metrics),
+    mrr,
     latest('paying_accounts', KPI_LABEL.paying_accounts, metrics, 'paying_accounts', 'count'),
     movement('new_mrr', 'new'),
     movement('expansion_mrr', 'expansion'),
     churn,
     burn,
     runway,
+    arr,
+    burnMultiple,
     ...customRows,
     // D1609: each tracked PostHog metric, read only from PostHog facts; never written here.
     ...(await posthogRead(() => metricReadings(env, projectId), [])).map(({ metric: m, reading: r }): KpiRow => ({
@@ -330,6 +381,129 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
   ).bind(crypto.randomUUID().replace(/-/g, ''), kpi!.id, asOf, money ? null : value, money ? Math.round(value * 100) : null, note, userId).run();
   await alertsAfterWrite(env, projectId, `${CUSTOM_PREFIX}${kpi!.uid}`);
   return { id: `${CUSTOM_PREFIX}${kpi!.uid}`, as_of: asOf, value, unit: kpi!.unit, source: 'manual', created_kpi: created };
+}
+
+// ── Remove a hand entry (D6101, #6101) ──────────────────────────────────────
+//
+// A figure typed with the wrong value on an earlier day is removed, not
+// overwritten: the KPI then reads the next latest value wherever it is read
+// (the KPI table, the Overview, a report draft), because each of them reads
+// the stores as they are now. A sent report keeps the figures it froze.
+//
+// An entry is one stored row: a `project_metrics` row's id for MRR, Customers,
+// Churn and Burn, a `custom_kpi_values` uid for a custom KPI. Only a hand entry
+// is removed: `source = 'manual'`, or a `project_metrics` row with no source,
+// which migration 249 keeps for a founder's own entry and `sourceOf` reads as
+// manual. A connected source's figure (Stripe, Mercury, a sheet, a CSV import)
+// is refused with 409, and is corrected where it came from.
+
+/** One stored value of a KPI, newest first, as History lists it. */
+export type KpiStoredEntry = { entry: string; day: string; value: number; source: string; manual: boolean };
+export type KpiEntryRemoved = { id: string; entry: string; as_of: string; value: number; removed: true };
+
+/** One literal per KPI, so a key never names a column (decision 4). */
+const ENTRIES_SQL = {
+  mrr: 'SELECT id AS entry, snapshot_date AS day, mrr AS value, source FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  paying_accounts: 'SELECT id AS entry, snapshot_date AS day, paying_accounts AS value, source FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  churn: 'SELECT id AS entry, snapshot_date AS day, monthly_churn_pct AS value, source FROM project_metrics WHERE project_id = ? AND monthly_churn_pct IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+  net_burn: 'SELECT id AS entry, snapshot_date AS day, net_burn AS value, source FROM project_metrics WHERE project_id = ? AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC',
+} as const satisfies Record<TypedKey, string>;
+const ENTRY_SQL = {
+  mrr: 'SELECT id AS entry, snapshot_date AS day, mrr AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND mrr IS NOT NULL',
+  paying_accounts: 'SELECT id AS entry, snapshot_date AS day, paying_accounts AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND paying_accounts IS NOT NULL',
+  churn: 'SELECT id AS entry, snapshot_date AS day, monthly_churn_pct AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND monthly_churn_pct IS NOT NULL',
+  net_burn: 'SELECT id AS entry, snapshot_date AS day, net_burn AS value, source FROM project_metrics WHERE id = ? AND project_id = ? AND net_burn IS NOT NULL',
+} as const satisfies Record<TypedKey, string>;
+/** The manual test is inside the write, so a row a connector took over meanwhile is never cleared. */
+const CLEAR_SQL = {
+  mrr: `UPDATE project_metrics SET mrr = NULL WHERE id = ? AND project_id = ? AND mrr IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  paying_accounts: `UPDATE project_metrics SET paying_accounts = NULL WHERE id = ? AND project_id = ? AND paying_accounts IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  churn: `UPDATE project_metrics SET monthly_churn_pct = NULL WHERE id = ? AND project_id = ? AND monthly_churn_pct IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+  net_burn: `UPDATE project_metrics SET net_burn = NULL WHERE id = ? AND project_id = ? AND net_burn IS NOT NULL
+    AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`,
+} as const satisfies Record<TypedKey, string>;
+/**
+ * A manual row left holding no figure goes, so no reader counts an empty
+ * snapshot. The four typed columns are tested in the statement too, because a
+ * same-day entry of another KPI could land between the read and the delete.
+ */
+const DROP_EMPTY_SQL = `DELETE FROM project_metrics WHERE id = ? AND project_id = ?
+  AND mrr IS NULL AND paying_accounts IS NULL AND monthly_churn_pct IS NULL AND net_burn IS NULL
+  AND COALESCE(NULLIF(trim(source), ''), 'manual') = 'manual'`;
+/** A row's own bookkeeping; any other column holding a value keeps the row. */
+const ROW_META = new Set(['id', 'project_id', 'snapshot_date', 'notes', 'source', 'created_by', 'created_at']);
+
+const ENTRY_NOT_FOUND = 'This entry is not in this KPI\'s history. Reload the page to see it as it is now.';
+const connectedSentence = (source: string) =>
+  `This figure comes from ${source}, a connected source, so it cannot be removed here. Only a figure entered by hand can be; correct this one where it came from.`;
+
+/** Every stored value of a typed or custom KPI, newest first; none for a derived or PostHog KPI. */
+export async function kpiEntries(env: Env, projectId: number, key: string): Promise<KpiStoredEntry[]> {
+  type Raw = { entry: string | number; day: string; value: number | null; source: string | null };
+  let raw: Raw[] = [];
+  if (key in ENTRIES_SQL) {
+    raw = (await env.DB.prepare(ENTRIES_SQL[key as TypedKey]).bind(projectId).all<Raw>()).results || [];
+  } else if (key.startsWith(CUSTOM_PREFIX)) {
+    raw = (await env.DB.prepare(
+      `SELECT v.uid AS entry, v.as_of AS day, COALESCE(v.value_cents, v.value) AS value, v.source FROM custom_kpi_values v
+         JOIN custom_kpis k ON k.id = v.kpi_id WHERE k.uid = ? AND k.project_id = ? ORDER BY v.as_of DESC, v.id DESC`,
+    ).bind(key.slice(CUSTOM_PREFIX.length), projectId).all<Raw>()).results || [];
+  }
+  return raw.filter((r) => r.value != null && Number.isFinite(Number(r.value))).map((r) => ({
+    entry: String(r.entry), day: String(r.day), value: Number(r.value), source: sourceOf(r.source), manual: sourceOf(r.source) === 'manual',
+  }));
+}
+
+/**
+ * Remove one hand entry of one KPI (D6101). The caller has checked the writer
+ * gate and logs the removal on the KPI's record. Alerts on the KPI are checked
+ * again at once, and a Burn entry checks Runway's too, as an entry does.
+ */
+export async function removeKpiEntry(env: Env, projectId: number, key: string, rawEntry: unknown): Promise<KpiEntryRemoved> {
+  if (REFUSED[key as KpiKey]) throw new KpiRefused(400, REFUSED[key as KpiKey]!, 'kpi', 'kpi_not_entered_by_hand');
+  if (key.startsWith(POSTHOG_PREFIX)) throw new KpiRefused(400, HAND_ENTRY_REFUSED, 'kpi', 'kpi_not_entered_by_hand');
+  const entry = typeof rawEntry === 'string' || typeof rawEntry === 'number' ? String(rawEntry).trim() : '';
+  if (!entry) throw new KpiRefused(400, 'Choose the entry to remove: each hand entry in History has its own Remove.', 'entry', 'kpi_entry_required');
+  const notFound = () => new KpiRefused(404, ENTRY_NOT_FOUND, 'entry', 'kpi_entry_not_found');
+
+  let removed: { day: string; value: number };
+  if (key in CLEAR_SQL) {
+    const k = key as TypedKey;
+    if (!/^[1-9][0-9]{0,15}$/.test(entry)) throw notFound();
+    const row = await env.DB.prepare(ENTRY_SQL[k]).bind(Number(entry), projectId)
+      .first<{ entry: number; day: string; value: number; source: string | null }>();
+    if (!row) throw notFound();
+    if (sourceOf(row.source) !== 'manual') throw new KpiRefused(409, connectedSentence(sourceOf(row.source)), 'entry', 'kpi_entry_connected');
+    const cleared = await env.DB.prepare(CLEAR_SQL[k]).bind(row.entry, projectId).run();
+    if (!Number(cleared.meta?.changes ?? 0)) throw notFound();
+    const left = await env.DB.prepare('SELECT * FROM project_metrics WHERE id = ? AND project_id = ?').bind(row.entry, projectId)
+      .first<Record<string, unknown>>();
+    if (left && Object.entries(left).every(([col, v]) => ROW_META.has(col) || v == null)) {
+      await env.DB.prepare(DROP_EMPTY_SQL).bind(row.entry, projectId).run();
+    }
+    removed = { day: row.day, value: Number(row.value) };
+  } else if (key.startsWith(CUSTOM_PREFIX)) {
+    const kpi = await env.DB.prepare('SELECT id, uid, label, unit, currency FROM custom_kpis WHERE uid = ? AND project_id = ?')
+      .bind(key.slice(CUSTOM_PREFIX.length), projectId).first<CustomKpi>();
+    if (!kpi) throw new KpiRefused(404, 'Not found', 'kpi', 'kpi_not_found');
+    const row = await env.DB.prepare('SELECT uid, as_of, COALESCE(value_cents, value) AS value, source FROM custom_kpi_values WHERE uid = ? AND kpi_id = ?')
+      .bind(entry, kpi.id).first<{ uid: string; as_of: string; value: number; source: string }>();
+    if (!row) throw notFound();
+    if (sourceOf(row.source) !== 'manual') throw new KpiRefused(409, connectedSentence(sourceOf(row.source)), 'entry', 'kpi_entry_connected');
+    const del = await env.DB.prepare("DELETE FROM custom_kpi_values WHERE uid = ? AND kpi_id = ? AND source = 'manual'").bind(row.uid, kpi.id).run();
+    if (!Number(del.meta?.changes ?? 0)) throw notFound();
+    removed = { day: row.as_of, value: Number(row.value) };
+  } else {
+    throw new KpiRefused(404, 'Not found', 'kpi', 'kpi_not_found');
+  }
+
+  await alertsAfterWrite(env, projectId, key);
+  // Runway is worked out from cash and burn, so removing a burn entry can cross a Runway alert, or clear one.
+  if (key === 'net_burn') await alertsAfterWrite(env, projectId, 'runway');
+  return { id: key, entry, as_of: removed.day, value: removed.value, removed: true };
 }
 
 // ── Alerts (#1698, decision 3) ──────────────────────────────────────────────

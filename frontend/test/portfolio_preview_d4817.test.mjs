@@ -255,7 +255,10 @@ test('6. the model: who previews, which board an address draws, the one banner, 
   assert.equal(previewBoardOf('/portfolio/waterfall'), null);
   assert.equal(pageOwnsPreviewBanner('/portfolio/updates', 'investor'), true);
   assert.equal(pageOwnsPreviewBanner('/portfolio/updates', 'founder'), false, 'a founder preview keeps the strip');
-  assert.equal(pageOwnsPreviewBanner('/portfolio/companies/acme', 'investor'), false, 'a page with no banner keeps the strip');
+  // D4817 part 10 re-aimed this: the company workspace now draws the banner too
+  // (portfolio_company_preview_d4817.test.mjs); Waterfall still has none.
+  assert.equal(pageOwnsPreviewBanner('/portfolio/companies/acme', 'investor'), true, 'the company workspace draws its own banner (part 10)');
+  assert.equal(pageOwnsPreviewBanner('/portfolio/waterfall', 'investor'), false, 'a page with no banner keeps the strip');
   assert.equal(previewExitLabel(true), 'Back to HQ');
   assert.equal(previewExitLabel(false), 'Back to HQ’s own accounts');
   assert.equal(previewDocTitle('Positions · Portfolio · Axal VC'), 'Positions · Portfolio · Investor preview · Axal VC');
@@ -265,6 +268,9 @@ test('6. the model: who previews, which board an address draws, the one banner, 
   const source = /const PREVIEW_BANNER_BOARDS = \/(.+)\/;\n/.exec(app);
   assert.ok(source, 'App.jsx holds the strip\'s board list');
   const strip = new RegExp(source[1]);
+  // D4817 part 10 re-aimed this: the company addresses are App.jsx's
+  // PREVIEW_BANNER_COMPANY (held to the model by the part 10 test), so the
+  // boards' own list still answers exactly as `previewBoardOf` does.
   for (const path of [...BOARDS, '/portfolio/updates/', '/portfolio/companies/acme', '/portfolio/companies/acme/reports', '/portfolio/waterfall', '/portfolio-x', '/studio', '/deals']) {
     assert.equal(strip.test(path), previewBoardOf(path) !== null, `${path}: the strip and the model agree`);
   }

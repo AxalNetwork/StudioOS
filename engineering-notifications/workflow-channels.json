@@ -137,6 +137,11 @@
       "channel": "#axalvc-actions-labels-sync"
     },
     {
+      "id": null,
+      "path": ".github/workflows/landing-feeder.yml",
+      "channel": "#axalvc-actions-landing-feeder"
+    },
+    {
       "id": 415180957,
       "path": ".github/workflows/landing-policy.yml",
       "channel": "#axalvc-actions-landing-policy"

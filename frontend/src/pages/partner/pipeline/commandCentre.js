@@ -47,6 +47,36 @@ export const SETUP_LINKS = {
   demand: '/partner/insights',
 };
 
+/**
+ * THE RETAINER RULES, ONE COPY (#5939). The command centre's attention and risks and the Retainers zone's
+ * attention band read these, so the root and the zone cannot disagree about which retainer is low use: the zone
+ * once narrowed "under-consuming" at 60% while this file said 50, and an active retainer at 55% was an
+ * exception in one place and not the other.
+ *
+ *   · Active is the Worker's own `retainer.active` (D4693); an older answer without it falls back to "not
+ *     ended". A row with no retainer, or an ended one, is in none of the three.
+ *   · Utilisation is the Worker's figure or null. Null is not recorded (no hours logged, or not sold by the
+ *     hour) and is in neither consumption rule: it is never read as 0%.
+ */
+export const retainerActive = (r) => Boolean(r?.retainer) && Boolean(r.retainer.active ?? !r.retainer.ended_at);
+/** The recorded utilisation, or null where none is recorded. */
+export const retainerUtilPct = (r) => num(r?.utilisation_pct);
+/** Over its retained hours this period: above 100%. */
+export function isOverServiced(r) {
+  const pct = retainerUtilPct(r);
+  return retainerActive(r) && pct !== null && pct > 100;
+}
+/** Renewing inside the window: a recorded renewal 0 to `RENEWAL_WINDOW_DAYS` days away. */
+export function isRenewingSoon(r) {
+  const due = num(r?.retainer?.days_to_renewal);
+  return retainerActive(r) && due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS;
+}
+/** Low use: a recorded utilisation below `LOW_USE_PCT`. A recorded 0% is low use; no record is not. */
+export function isLowUse(r) {
+  const pct = retainerUtilPct(r);
+  return retainerActive(r) && pct !== null && pct < LOW_USE_PCT;
+}
+
 /** Active rows on a read that lists them. */
 const activeCount = (src) => list(src).filter((r) => r && (r.is_active === true || r.is_active === 1)).length;
 
@@ -185,11 +215,11 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
     });
   }
   for (const r of list(retainers)) {
-    const t = r?.retainer;
-    if (!t?.active) continue;
+    if (!retainerActive(r)) continue;
+    const t = r.retainer;
     const who = r.founder_name || r.need_title || 'Unnamed client';
-    const pct = num(r.utilisation_pct);
-    if (pct !== null && pct > 100) {
+    const pct = retainerUtilPct(r);
+    if (isOverServiced(r)) {
       out.push({
         key: `over-${r.engagement_id}`, rank: 1, sort: -pct, who,
         issue: `Retainer at ${Math.round(pct)}% of retained hours`, detail: 'over scope this period',
@@ -197,7 +227,7 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
       });
     }
     const due = num(t.days_to_renewal);
-    if (due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS) {
+    if (isRenewingSoon(r)) {
       const monthly = usdCents(num(t.current_monthly_cents));
       out.push({
         key: `renew-${r.engagement_id}`, rank: 2, sort: due, who,
@@ -221,8 +251,8 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
     });
   }
   for (const r of list(retainers)) {
-    const pct = num(r?.utilisation_pct);
-    if (!r?.retainer?.active || pct === null || pct >= LOW_USE_PCT) continue;
+    if (!isLowUse(r)) continue;
+    const pct = retainerUtilPct(r);
     out.push({
       key: `low-${r.engagement_id}`, rank: 4, sort: pct,
       who: r.founder_name || r.need_title || 'Unnamed client',
@@ -249,13 +279,12 @@ export function attentionItems({ leads, proposals, negotiations, retainers }) {
 export function riskItems({ proposals, negotiations, retainers }) {
   const out = [];
   for (const r of list(retainers)) {
-    const t = r?.retainer;
-    if (!t?.active) continue;
+    if (!retainerActive(r)) continue;
     const who = r.founder_name || r.need_title || 'Unnamed client';
-    const due = num(t.days_to_renewal);
-    if (due !== null && due >= 0 && due <= RENEWAL_WINDOW_DAYS) out.push({ key: `r-renew-${r.engagement_id}`, who, text: `Renews in ${plural(due, 'day')}`, tag: 'Renewing' });
-    const pct = num(r.utilisation_pct);
-    if (pct !== null && pct > 100) out.push({ key: `r-over-${r.engagement_id}`, who, text: `Scope overrun · ${Math.round(pct)}%`, tag: 'Over scope' });
+    const due = num(r.retainer.days_to_renewal);
+    if (isRenewingSoon(r)) out.push({ key: `r-renew-${r.engagement_id}`, who, text: `Renews in ${plural(due, 'day')}`, tag: 'Renewing' });
+    const pct = retainerUtilPct(r);
+    if (isOverServiced(r)) out.push({ key: `r-over-${r.engagement_id}`, who, text: `Scope overrun · ${Math.round(pct)}%`, tag: 'Over scope' });
   }
   const inTerms = openNegotiationQuotes(negotiations);
   for (const q of list(proposals)) {

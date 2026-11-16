@@ -2,6 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { secretJobs } from '../../scripts/lib/runnerBenchmark.mjs';
 const read = file => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 const benchmark = read('.github/workflows/runner-benchmark.yml');
@@ -44,4 +46,22 @@ test('every CI job reading a non-GITHUB_TOKEN secret stays on ubuntu-latest', t 
   const fixture = 'jobs:\n  sensitive:\n    runs-on: ubuntu-latest\n    env:\n      KEY: ${{ secrets.API_KEY }}\n';
   assert.equal(audit(fixture).length, 1);
   assert.throws(() => audit(fixture.replace('runs-on: ubuntu-latest', 'runs-on: paid-runner')));
+});
+
+test('the benchmark workflow builds the AWS shard labels from native Actions context and keeps the gate on GitHub', () => {
+  const planner = stepsOf(benchmark, 'plan');
+  assert.match(planner, /CODEBUILD_READY: \$\{\{ vars\.RUNNER_BENCHMARK_CODEBUILD_READY \}\}/);
+  const script = planner.split(`node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"\n`)[1].split('\n          NODE')[0];
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8',
+    env: { ...process.env, GITHUB_REPOSITORY: 'AxalNetwork/StudioOS', GITHUB_EVENT_NAME: 'push',
+      GITHUB_REF: 'refs/heads/bench/runners-codebuild-2', GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '3',
+      SPENDING_CAP_VERIFIED: 'true', CODEBUILD_READY: 'true' },
+  });
+  const { include } = JSON.parse(output.trim().replace(/^matrix=/, ''));
+  assert.ok(include.length > 0);
+  assert.deepEqual([...new Set(include.map(j => [j.lane, j.runner].join('/')))], ['codebuild/codebuild-studioos-queue-suite-1234-3']);
+  assert.equal(new Set(include.map(j => j.part)).size, include.length);
+  assert.match(benchmark, /gate:\n    name: benchmark gate\n    if: always\(\)\n    needs: \[plan, benchmark\]\n    runs-on: ubuntu-latest/);
+  assert.match(stepsOf(benchmark, 'gate'), /test "\$PLAN" = success && test "\$SUITE" = success/);
 });

@@ -1,6 +1,7 @@
 import { attentionRule, flowAttention, saveAttentionRule } from '../services/dealFlowAttention';
 import { selectJwt } from '../auth';
 import { holdsLicence } from '../services/accountLicences';
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -46,8 +47,8 @@ import { railFor, refuseRun } from '../util/railContext';
 type Ctx = Context<{ Bindings: Env }>;
 const routes = new Hono<{ Bindings: Env }>();
 
-async function scope(c: Ctx) {
-  const user = await requireAuth(c) as User;
+async function scope(c: Ctx, user?: User) {
+  user ??= await requireAuth(c);
   if (!holdsLicence(user, 'investor')) throw new FlowError('investor_required', 403, 'Deal flow is an investor’s own.');
   return scopeFor(user, await investorActiveCompany(c, user));
 }
@@ -116,12 +117,41 @@ routes.post('/compare-note/keep', async (c) => {
 });
 routes.get('/inbox', async (c) => { try { return c.json(await inboxItems(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
 routes.post('/inbox/:key/dismiss', async (c) => {
-  try { const s = await scope(c); return c.json(await dismissItem(c.env, s, c.req.param('key') || '', await body(c))); } catch (e) { return failure(c, e); }
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await dismissItem(c.env, await scope(c, user), c.req.param('key') || '', await body(c)));
+  } catch (e) { return failure(c, e); }
 });
 routes.get('/', async (c) => { try { return c.json(await readFlow(c.env, await scope(c))); } catch (e) { return failure(c, e); } });
-routes.post('/', async (c) => { try { const s = await scope(c); return c.json(await addToFlow(c.env, s, await body(c)), 201); } catch (e) { return failure(c, e); } });
-routes.patch('/:dealId', async (c) => { try { const s = await scope(c); return c.json(await updateFlow(c.env, s, dealId(c), await body(c))); } catch (e) { return failure(c, e); } });
-routes.post('/:dealId/pass', async (c) => { try { const s = await scope(c); return c.json(await passDeal(c.env, s, dealId(c), await body(c))); } catch (e) { return failure(c, e); } });
+routes.post('/', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await addToFlow(c.env, await scope(c, user), await body(c)), 201);
+  } catch (e) { return failure(c, e); }
+});
+routes.patch('/:dealId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const input = await body(c);
+    if (input.stage !== undefined || input.owner_user_id !== undefined) {
+      const previewRefusal = investorPreviewRefusal(c, user);
+      if (previewRefusal) return previewRefusal;
+    }
+    return c.json(await updateFlow(c.env, await scope(c, user), dealId(c), input));
+  } catch (e) { return failure(c, e); }
+});
+routes.post('/:dealId/pass', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
+    return c.json(await passDeal(c.env, await scope(c, user), dealId(c), await body(c)));
+  } catch (e) { return failure(c, e); }
+});
 routes.get('/:dealId/events', async (c) => { try { const s = await scope(c); return c.json(await flowEvents(c.env, s, dealId(c))); } catch (e) { return failure(c, e); } });
 
 export default routes;

@@ -48,6 +48,8 @@ const writes = (body) => [...body.matchAll(/(?:INSERT INTO|UPDATE|DELETE FROM)\s
 const PART_1 = [
   'Investor · Deals · Commit|draft:ic-memo',
   'Investor · Deals · Closing|draft:closing-cover-note',
+  'Investor · Portfolio|draft:portfolio-read', // D6212 (#6212)
+  'Investor · Portfolio · Performance|draft:performance-note', // D6212 (#6212)
   'Investor · Portfolio · Positions|draft:multiple-narrative',
   'Investor · Portfolio · Updates|draft:updates-read',
   'Investor · Portfolio · Value-add|draft:support-summary',
@@ -76,7 +78,7 @@ const DRAFTS = INVESTOR_RAIL_OPTIONS.filter((o) => o.handler === 'draft').map((o
 }));
 
 test('each draft option is a zone draft band whose Accept writes no other record', () => {
-  assert.equal(DRAFTS.length, 9); // D1243 retired Pipeline's notes and D1260 retired Screening's memo
+  assert.equal(DRAFTS.length, 11); // D1243 retired Pipeline's notes and D1260 retired Screening's memo; D6212 added the Overview's and Performance's notes
   const accept = handler('patch', '/drafts/:uid');
   // Accept stamps the draft. A surface may name an `accept` hook that writes a
   // record first; none of the investor's does.
