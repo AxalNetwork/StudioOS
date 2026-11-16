@@ -29,7 +29,7 @@ const TT = 61;
 const COMPANY = 70;
 const OPEN_ID = 'open-id-fixture-2';
 const M = 'cloudflare-worker/sql/migrations';
-const migration = (issue: number, slug: string) => readdirSync(M).find((f) => new RegExp(`^\\d{12}_${issue}_${slug}\\.sql$`).test(f))!;
+const migration = (issue: number, slug: string) => readdirSync(M).find((f) => /^\d{12}_/.test(f) && f.slice(13) === `${issue}_${slug}.sql`)!;
 // D5614: a fixed clock. The sync stamps today's snapshot from Date, so Date is mocked to one instant.
 mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 16, 10, 0, 0) });
 const SCOPES = ['user.info.basic', 'user.info.stats', 'video.list'];
