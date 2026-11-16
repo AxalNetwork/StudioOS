@@ -12,6 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { securityRaw } from './_securitySource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildOverview } from '../src/pages/hq/security/overviewModel.js';
@@ -36,7 +37,7 @@ test('the due day is "due today", the next day is overdue, and nothing reads "0d
 });
 
 test('the classic list says "due today" on the due day, and names the rule rather than a day count', () => {
-  const page = read('frontend/src/pages/hq/SecurityPage.jsx');
+  const page = securityRaw();
   assert.match(page, /d\.days_left === 0 \? 'due today'/, 'the due day reads "0d left" again');
   assert.doesNotMatch(page, /clock_days/, 'a reader still expects a fixed day count');
   assert.match(page, /data\.dsr\?\.clock\?\.label/, 'the zone no longer names the rule from the payload');

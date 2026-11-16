@@ -118,6 +118,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `spinout/` | Spin-Out Lab client logic. |
 | `recaptcha.js` | D1445 (#3707): loads the provider’s invisible v2 widget once and obtains a fresh, reset token for each SMS enrolment send or resend. |
 | `rate.js` | D4619 (#4619): `formatRate`, the one formatter for a rate stored as a fraction (IRR: 0.1 is "10%"); a missing rate is `null`, never "0%". |
+| `pricingEntitlements.js` | D4653: shared licence, storage/AI/introduction, service and matching explanations for Pricing, Checkout and Help; investor capacity is formatted from the public catalogue, with unreadable values preserved. |
 
 ## The drift rule
 

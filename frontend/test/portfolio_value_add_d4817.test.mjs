@@ -6,9 +6,14 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/portfolio_value_add_d4817.test.mjs
  *
+ * D6203 (#6203): In progress, Overdue and Introductions made are now the
+ * Worker's counted figures (D6202), and a row carries its due date and its
+ * meeting; `value_add_ledger_d6203.test.mjs` pins those. The fixtures here are
+ * the D6202 read's shape, and these tests keep D4817's other rules.
+ *
  * Mutation checked, each both ways (fails with the mutation, passes without):
- *   1. `figuresOf` drawing In progress as 0 instead of Not recorded → tests 1, 2, 3, 5;
- *   2. `figuresOf` drawing Overdue as the open count instead of Not recorded → tests 1, 2, 5;
+ *   1. `figuresOf` drawing In progress as Not recorded again → tests 1, 2, 5;
+ *   2. `figuresOf` drawing Overdue as the open count → tests 1, 2, 5;
  *   3. `holdsWholeLedger` dropping the `entries.length === totals.entries`
  *      check (introductions counted over a partial read) → tests 2, 5;
  *   4. `totalsOf` ignoring `page_state: 'unreadable'` (figures drawn from a
@@ -21,7 +26,7 @@
  *      tests 3, 4;
  *   9. a filtered page's Retry re-reading the whole ledger as well as its own
  *      page → test 4;
- *  10. the introductions table dropping its "Meeting resulting" Not recorded →
+ *  10. the introductions table dropping its "Meeting resulting" cell →
  *      test 1;
  *  11. a failed Mark delivered clearing its confirmation (entry and context
  *      lost) → test 6;
@@ -130,7 +135,17 @@ const COMPANIES = [
   { project_id: 5, project_uid: 'aster', name: 'Aster Bio', entries: 0, delivered: 0, promised: 0, withdrawn: 0, hours: 0, entries_without_hours: 0 },
 ];
 
-const TOTALS = { delivered: 2, promised: 2, withdrawn: 1, entries: 5, hours_recorded: 3.5, entries_without_hours: 2, companies_in_book: 5, companies_supported: 4 };
+// D6202's figures: every kind present, a kind with no entries at zero.
+const byKind = (intro = { entries: 2, delivered: 1, outstanding: 1, meetings_held: 0 }) => ({
+  intro, board_prep: { entries: 1, delivered: 1, outstanding: 0, meetings_held: 0 },
+  hiring: { entries: 1, delivered: 0, outstanding: 0, meetings_held: 0 }, customer: { entries: 1, delivered: 0, outstanding: 1, meetings_held: 0 },
+  fundraising: { entries: 0, delivered: 0, outstanding: 0, meetings_held: 0 }, other: { entries: 0, delivered: 0, outstanding: 0, meetings_held: 0 },
+});
+const TOTALS = {
+  delivered: 2, promised: 2, withdrawn: 1, in_progress: 0, cancelled: 0, outstanding: 2, overdue: 0,
+  overdue_basis: "open entries whose due date is before the Worker's date (UTC)", by_kind: byKind(),
+  entries: 5, hours_recorded: 3.5, entries_without_hours: 2, companies_in_book: 5, companies_supported: 4,
+};
 
 function ledger(over = {}) {
   const entries = over.entries || ENTRIES;
@@ -154,7 +169,7 @@ function desk(overrides = {}) {
     if (req.method === 'GET' && req.path === '/api/portfolio-support') {
       const state = req.query.get('state');
       if (!state) return json(ledger());
-      const rows = ENTRIES.filter((e) => e.state === state);
+      const rows = ENTRIES.filter((e) => (state === 'open' ? e.state === 'promised' || e.state === 'in_progress' : e.state === state));
       return json(ledger({ entries: rows, filter: { state }, page: { offset: 0, limit: 400, total: 5, matching_total: rows.length, next_offset: null } }));
     }
     return null;
@@ -173,14 +188,14 @@ test('populated: the figures, commitments promised and delivered with dates and 
     assert.equal(m.attr('link-zone-overview', 'aria-current'), undefined);
     // The figure row, in the canvas's order.
     assert.deepEqual(m.all('metric-').map((x) => [x.id, x.state]), [
-      ['metric-open', 'ok'], ['metric-in_progress', 'not_recorded'], ['metric-delivered', 'ok'],
-      ['metric-intros', 'ok'], ['metric-overdue', 'not_recorded'], ['metric-untouched', 'ok'],
+      ['metric-open', 'ok'], ['metric-in_progress', 'ok'], ['metric-delivered', 'ok'],
+      ['metric-intros', 'ok'], ['metric-overdue', 'ok'], ['metric-untouched', 'ok'],
     ]);
-    assert.match(m.text('metric-open'), /^Open commitments2Promised and not yet delivered or withdrawn$/);
-    assert.match(m.text('metric-in_progress'), /^In progressNot recordedThe ledger has no In progress state\.$/);
+    assert.match(m.text('metric-open'), /^Open commitments2Promised or in progress, not yet delivered, withdrawn or cancelled$/);
+    assert.match(m.text('metric-in_progress'), /^In progress0Started and not yet delivered$/, 'a measured 0 stays 0');
     assert.match(m.text('metric-delivered'), /^Delivered24 of 5 companies in the book have an entry$/);
-    assert.match(m.text('metric-intros'), /^Introductions made1Delivered introduction entries · 1 still promised$/);
-    assert.match(m.text('metric-overdue'), /^Overdue commitmentsNot recordedThe ledger records no due date for a commitment\.$/);
+    assert.match(m.text('metric-intros'), /^Introductions made1Delivered introduction entries · 0 meetings resulting$/);
+    assert.match(m.text('metric-overdue'), /^Overdue commitments0Open entries past their due date, by the Worker’s date \(UTC\)$/);
     assert.match(m.text('metric-untouched'), /^No support recorded1Aster Bio$/);
     assert.match(m.text('va-hours'), /Hours recorded: 3\.5 h · 2 entries carry no hours and are not counted\./);
 
@@ -189,22 +204,22 @@ test('populated: the figures, commitments promised and delivered with dates and 
     assert.deepEqual(rows.map((r) => [r.id.slice(18), r.state]), [
       ['kite-review', 'promised'], ['nw-intro', 'promised'], ['pp-intro', 'delivered'], ['kite-hire', 'withdrawn'], ['lu-deck', 'delivered'],
     ]);
-    assert.match(m.text('row-va-commitment-kite-review'), /^Kite SystemsCustomerReview pricing modelHours: 2 hAnother memberPromised2 Nov 2026Not delivered yet/);
+    assert.match(m.text('row-va-commitment-kite-review'), /^Kite SystemsCustomerReview pricing modelHours: 2 hAnother memberPromised2 Nov 2026No due dateNot delivered yet/);
     assert.match(m.text('row-va-commitment-nw-intro'), /Hours: Not recorded/, 'an untimed entry is not 0 h');
-    assert.match(m.text('row-va-commitment-nw-intro'), /You.*Promised14 Oct 2026promised 14 Oct 2026Not delivered yet.*Meeting resulting: Not recorded/);
-    assert.match(m.text('row-va-commitment-pp-intro'), /Delivered5 Oct 202619 Oct 2026Outcome: Intro madeMeeting resulting: Not recorded/);
+    assert.match(m.text('row-va-commitment-nw-intro'), /You.*Promised14 Oct 2026promised 14 Oct 2026No due dateNot delivered yet.*Meeting resulting: Not recorded/);
+    assert.match(m.text('row-va-commitment-pp-intro'), /Delivered5 Oct 2026No due date19 Oct 2026Outcome: Intro madeMeeting resulting: Not recorded/);
     assert.match(m.text('row-va-commitment-pp-intro'), /History · amended 1 time/);
-    assert.match(m.text('row-va-commitment-kite-hire'), /Withdrawn25 Sep 2026Withdrawn 1 Oct 2026/);
+    assert.match(m.text('row-va-commitment-kite-hire'), /Withdrawn25 Sep 2026No due dateWithdrawn 1 Oct 2026/);
     assert.match(m.text('row-va-commitment-lu-deck'), /Hours: 0 h/, 'a measured zero stays 0');
-    assert.match(m.text('row-va-commitment-lu-deck'), /Not recorded.*Delivered20 Sep 2026Delivery date not recorded/, 'a delivered entry with no date says so; no recorder is Not recorded');
+    assert.match(m.text('row-va-commitment-lu-deck'), /Not recorded.*Delivered20 Sep 2026No due dateDelivery date not recorded/, 'a delivered entry with no date says so; no recorder is Not recorded');
     assert.ok(m.text('button-va-deliver-kite-review'), 'an open commitment offers Mark delivered');
     assert.equal(m.text('button-va-deliver-pp-intro'), null, 'a delivered entry offers none');
 
     // Introductions: the ledger's own intro entries, each with its meeting Not recorded.
     assert.deepEqual(m.all('row-va-intro-').map((r) => r.id.slice(13)), ['nw-intro', 'pp-intro']);
     assert.match(m.text('row-va-intro-pp-intro'), /Pelican PayIntro to Head of Payments, NordbankOutcome: Intro madeDelivered5 Oct 202619 Oct 2026Not recorded$/);
-    assert.match(m.text('va-intros'), /1 delivered · 1 promised/);
-    assert.match(m.text('va-intros'), /not the meetings that came of it/);
+    assert.match(m.text('va-intros'), /1 made · 1 open · 0 meetings resulting/);
+    assert.match(m.text('va-intros'), /one nobody recorded reads Not recorded, never No/);
     assert.equal(m.text('va-intros-partial'), null);
 
     for (const uid of ['kite', 'northwind', 'pelican', 'lumen']) assert.ok(m.hrefs().includes(`/portfolio/companies/${uid}`), uid);
@@ -218,17 +233,21 @@ test('Not recorded: an empty ledger is not a failed one, and an unrecorded field
   const empty = ledger({
     entries: [], untouched: COMPANIES.map(({ project_id, project_uid, name }) => ({ project_id, project_uid, name })),
     companies: COMPANIES.map((c) => ({ ...c, entries: 0, delivered: 0, promised: 0, withdrawn: 0, hours: 0, entries_without_hours: 0 })),
-    totals: { delivered: 0, promised: 0, withdrawn: 0, entries: 0, hours_recorded: 0, entries_without_hours: 0, companies_in_book: 5, companies_supported: 0 },
+    totals: {
+      delivered: 0, promised: 0, withdrawn: 0, in_progress: 0, cancelled: 0, outstanding: 0, overdue: 0,
+      by_kind: byKind({ entries: 0, delivered: 0, outstanding: 0, meetings_held: 0 }),
+      entries: 0, hours_recorded: 0, entries_without_hours: 0, companies_in_book: 5, companies_supported: 0,
+    },
     page: { offset: 0, limit: 400, total: 0, matching_total: 0, next_offset: null },
   });
   const m = await mount(desk({ 'GET /api/portfolio-support': () => json(empty) }));
   try {
-    // Measured zeros stay 0; what the ledger does not record stays Not recorded.
+    // Measured zeros stay 0: In progress and Overdue are counted figures now (D6203), not Not recorded.
     assert.match(m.text('metric-open'), /^Open commitments0/);
     assert.match(m.text('metric-delivered'), /^Delivered00 of 5 companies/);
     assert.match(m.text('metric-intros'), /^Introductions made0/);
-    assert.match(m.text('metric-in_progress'), /Not recorded/);
-    assert.match(m.text('metric-overdue'), /Not recorded/);
+    assert.match(m.text('metric-in_progress'), /^In progress0/);
+    assert.match(m.text('metric-overdue'), /^Overdue commitments0/);
     assert.match(m.text('metric-untouched'), /^No support recorded5Kite Systems, Northwind Labs, Pelican Pay, Lumen Robotics, Aster Bio$/);
     assert.match(m.text('va-hours'), /Hours recorded: 0 h · No entry is recorded yet\./);
     assert.match(m.text('va-commitments-empty'), /No support entry is recorded yet\. The ledger is empty because nothing has been logged, not because nothing was done\./);
@@ -243,12 +262,13 @@ test('Not recorded: an empty ledger is not a failed one, and an unrecorded field
   const untimed = ledger({ totals: { ...TOTALS, hours_recorded: 0, entries_without_hours: 5 } });
   const n = await mount(desk({ 'GET /api/portfolio-support': () => json(untimed) }));
   try { assert.match(n.text('va-hours'), /Hours recorded: Not recorded · No entry carries an hour count\./); } finally { await n.close(); }
-  // A ledger longer than one read: the introductions on it cannot be shown to be all of them.
+  // A ledger longer than one read: the rows on it are not all of them, but Introductions made is the Worker's
+  // counted figure (D6202), so it stands; only the table says it holds the newest rows.
   const longer = ledger({ totals: { ...TOTALS, entries: 6 }, page: { offset: 0, limit: 5, total: 6, matching_total: 6, next_offset: 5 } });
   const o = await mount(desk({ 'GET /api/portfolio-support': ({ query }) => (query.get('offset') ? null : json(longer)) }));
   try {
-    assert.equal(o.all('metric-intros')[0].state, 'unavailable');
-    assert.match(o.text('metric-intros'), /^Introductions madeUnavailableCounted only over a read that holds every entry; this one holds the newest 5 of 6\.$/);
+    assert.equal(o.all('metric-intros')[0].state, 'ok');
+    assert.match(o.text('metric-intros'), /^Introductions made1/);
     assert.match(o.text('va-intros-partial'), /newest 5 of 6/);
     assert.match(o.text('va-commitments'), /1–5 of 6 matching entries/);
   } finally { await o.close(); }
@@ -261,7 +281,7 @@ test('Unreadable: a failed ledger read, and figures whose own read failed beside
     assert.match(m.text('status-investor-value-add-error'), /The support ledger could not be read\. That is not a claim that no support was given\./);
     assert.match(m.text('status-va-commitments-unreadable'), /could not be read/);
     assert.equal(m.text('va-commitments-empty'), null, 'no empty ledger over a failed read');
-    for (const k of ['open', 'delivered', 'untouched', 'intros']) assert.equal(m.all(`metric-${k}`)[0].state, 'unreadable', k);
+    for (const k of ['open', 'in_progress', 'delivered', 'intros', 'overdue', 'untouched']) assert.equal(m.all(`metric-${k}`)[0].state, 'unreadable', k);
     assert.match(m.text('status-va-intros-unreadable'), /That is not a claim that none was made\./);
     assert.doesNotMatch(m.text(), /D1_ERROR|no such table/, 'the Worker detail never reaches the page');
     assert.doesNotMatch(m.text('va-figures'), /\b0\b/, 'no zero for a failure');
@@ -277,8 +297,8 @@ test('Unreadable: a failed ledger read, and figures whose own read failed beside
   try {
     assert.match(n.text('status-va-figures-unreadable'), /The ledger’s figures could not be read\. No count is shown in their place; the entries below were read\./);
     assert.equal(n.all('metric-open')[0].state, 'unreadable');
-    assert.equal(n.all('metric-in_progress')[0].state, 'not_recorded', 'what the ledger never records stays Not recorded, not Unreadable');
-    assert.equal(n.all('metric-intros')[0].state, 'unavailable', 'introductions cannot be shown to be all of them');
+    assert.equal(n.all('metric-in_progress')[0].state, 'unreadable', 'a counted figure whose read failed is Unreadable, never 0');
+    assert.equal(n.all('metric-intros')[0].state, 'unreadable');
     assert.match(n.text('va-intros-partial'), /total could not be read/);
     assert.equal(n.all('row-va-commitment-').length, 5, 'the entries beside the failed figures stand');
     assert.equal(n.all('row-va-intro-').length, 2);
@@ -291,7 +311,7 @@ test('Unreadable per source: a filtered page and one entry\'s history each fail 
   let pageFails = true;
   let historyFails = true;
   const m = await mount(desk({
-    'GET /api/portfolio-support': ({ query }) => (query.get('state') === 'promised' && pageFails ? json({ detail: 'x' }, 503) : null),
+    'GET /api/portfolio-support': ({ query }) => (query.get('state') === 'open' && pageFails ? json({ detail: 'x' }, 503) : null),
     'GET /api/portfolio-support/pp-intro/history': () => (historyFails ? json({ detail: 'x' }, 500) : json({ items: [{ uid: 'e1', revision: 2, action: 'amended', actor: { name: 'Priya' }, created_at: '2026-10-20T08:00:00Z', changed: ['outcome'] }] })),
   }));
   try {
@@ -323,12 +343,12 @@ test('the model: what the ledger records, what it does not, and when a count is 
   assert.equal(holdsWholeLedger({ state: 'ok', value: ledger({ entries: ENTRIES.slice(0, 3) }) }), false, 'a page short of the total is not the ledger');
   assert.equal(totalsOf({ state: 'ok', value: ledger({ page_state: 'unreadable' }) }), null);
   const f = Object.fromEntries(figuresOf(ok).map((x) => [x.key, x]));
-  assert.deepEqual([f.in_progress.value, f.overdue.value], ['Not recorded', 'Not recorded']);
+  assert.deepEqual([f.in_progress.value, f.overdue.value], ['0', '0']);
   assert.equal(f.open.value, '2');
   const partial = introductionsOf({ state: 'ok', value: ledger({ entries: ENTRIES.slice(0, 3) }) });
   assert.equal(partial.complete, false);
   assert.match(partial.reason, /newest 3 of 5/);
-  assert.equal(Object.fromEntries(figuresOf({ state: 'ok', value: ledger({ entries: ENTRIES.slice(0, 3) }) }).map((x) => [x.key, x])).intros.state, 'unavailable');
+  assert.equal(Object.fromEntries(figuresOf({ state: 'ok', value: ledger({ entries: ENTRIES.slice(0, 3) }) }).map((x) => [x.key, x])).intros.state, 'ok', 'the Worker counts introductions over the scope');
   assert.equal(hoursLabel(null), 'Not recorded');
   assert.equal(hoursLabel(0), '0 h');
   assert.equal(hoursOf({ state: 'unreadable' }).text, 'Unreadable');
