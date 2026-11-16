@@ -165,7 +165,7 @@ export const CASE_ITEMS = [
 export const FINAL_CTA = {
   kicker: `First close · ${FUND.firstClose}`,
   headline: 'This is not pre-seed exposure. It is a formation system with an underwriting record.',
-  body: `Access is curated and application-based. Approved LPs see the full pipeline, capital accounts, and quarterly reporting; commitments at $${FUND.allocThresholdK}K carry allocation and decision rights on cohort demo days.`,
+  body: `Access is curated and application-based. Approved LPs see the full pipeline, capital accounts, and quarterly reporting; commitments at $${FUND.allocThresholdK}K carry decision rights on cohort demo days.`,
 };
 
 export const DISCLAIMER =

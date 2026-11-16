@@ -48,7 +48,7 @@ const h = React.createElement;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const ME = { id: 7, role: 'investor', name: 'Morgan' };
 
-async function mount(answer) {
+async function mount(answer, entry = '/portfolio/value-add') {
   const restore = installDocument();
   localStorage.setItem('user', JSON.stringify(ME));
   const realFetch = globalThis.fetch;
@@ -68,7 +68,7 @@ async function mount(answer) {
   const props = (node) => Object.entries(node).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const byTestId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
   const settle = async () => { for (let i = 0; i < 15; i += 1) await act(async () => { await new Promise((resolve) => setImmediate(resolve)); }); };
-  await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/portfolio/value-add'] }, h(AuthProvider, null, h(InvestorPortfolioValueAdd)))));
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: [entry] }, h(AuthProvider, null, h(InvestorPortfolioValueAdd)))));
   await settle();
   return {
     calls,
@@ -416,4 +416,33 @@ test('Log support: labelled fields, validation tied to the field, and a failed s
     assert.match(m.text('button-va-record'), /Try saving again/);
     assert.equal(m.all('metric-open')[0].state, 'ok', 'a failed save leaves the ledger read standing');
   } finally { await m.close(); }
+});
+
+test('a founder ask prefills a fixed company and writes only after confirmation', async () => {
+  const saves = [];
+  const view = await mount(desk({
+    'POST /api/portfolio-support': ({ body }) => { saves.push(body); return json({ item: { uid: 'promised' } }, 201); },
+  }), {
+    pathname: '/portfolio/value-add',
+    state: { founderAsk: { uid: 'ask-1', kind: 'customer', label: 'A customer introduction',
+      updateUid: 'u2', text: 'Introduce a customer in Europe', projectUid: 'northwind', reportKey: '1' } },
+  });
+  try {
+    assert.equal(view.fieldAttr('va-company', 'disabled'), true);
+    assert.equal(view.fieldAttr('va-state', 'disabled'), true);
+    assert.equal(view.value('va-company'), 'northwind');
+    assert.equal(view.value('va-kind'), 'customer');
+    assert.equal(view.value('va-summary'), 'Introduce a customer in Europe');
+    assert.equal(view.value('va-hours'), '');
+    assert.equal(view.value('va-outcome'), '');
+    await view.change('va-promised', '2026-11-15');
+    await view.change('va-due', '2026-11-20');
+    await view.submit('va-log-support');
+    assert.equal(saves.length, 0);
+    assert.match(view.text('va-log-support'), /Confirm promise/);
+    await view.submit('va-log-support');
+    assert.deepEqual(saves, [{ project_uid: 'northwind', kind: 'customer', state: 'promised', ask_uid: 'ask-1',
+      promised_at: '2026-11-15', due_date: '2026-11-20', summary: 'Introduce a customer in Europe' }]);
+    assert.match(view.text('va-founder-ask-receipt'), /Support recorded.*Back to the report/);
+  } finally { await view.close(); }
 });

@@ -8,6 +8,42 @@
 
 export const THIN_BELOW = 6;
 
+/**
+ * THE AGE WINDOWS ARE THE ARTBOARD'S OWN NUMBERS, transcribed and not chosen:
+ * `Pages · Partner Research` declares `const STALE_AT = 90, AGE_AT = 30`, where
+ * `Pages · Advisor Research` says a hundred and twenty. A reading past ninety
+ * days is BLOCKED from attachment rather than marked stale; one past thirty is
+ * ageing and still attachable, with its age on the row. They, `daysSince` and
+ * `ageBand` lived in the unmounted `MarketZone` body until D6285 (#6285).
+ */
+export const STALE_AT = 90;
+export const AGE_AT = 30;
+
+/**
+ * Whole days since `iso`, or null when it is not a date. Age is computed from
+ * `ran_at` and from nothing else: `updated_at` moves when a row is touched,
+ * which would make every reading look current the moment anyone edited one.
+ */
+export const daysSince = (iso) => {
+  const at = Date.parse(iso || '');
+  return Number.isFinite(at) ? Math.floor((Date.now() - at) / 86400000) : null;
+};
+
+/**
+ * A reading's age band, or null when it has never been run.
+ *
+ * NULL IS ITS OWN ANSWER and never falls into `stale`. A service line nobody has
+ * priced the market for has not gone out of date — there is nothing to have
+ * aged — and sorting it into the stale bucket would tell a firm to re-run a
+ * reading it has never run once.
+ */
+export function ageBand(days) {
+  if (days === null) return null;
+  if (days > STALE_AT) return 'stale';
+  if (days > AGE_AT) return 'ageing';
+  return 'current';
+}
+
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

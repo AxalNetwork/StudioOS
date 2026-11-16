@@ -333,6 +333,27 @@ export function dueRuleWords(d) {
   return `${d.due_days} days after ${unit} end`;
 }
 
+/**
+ * D6223 (#6223): what each duty's document pill can do. The Worker gives
+ * `source.signed_copy` = `{ state, envelope_id }`; only `available` with a
+ * positive whole id opens the signed copy (through the existing scoped
+ * `GET /api/legal/esign/:id/document`). Everything else says why in words.
+ */
+export const TERMS_COPY_WORDS = Object.freeze({
+  not_signed: 'No signed copy is recorded: this term comes from the closing’s template.',
+  not_available: 'The signed copy is not available to you here.',
+  unreadable: 'Unavailable: whether you can open the signed copy could not be read. Reload to try again.',
+  not_recorded: 'Not recorded: this read does not say whether the signed copy can be opened.',
+  failed: 'The signed copy could not be downloaded. Try again.',
+});
+export function termsCopy(src = {}) {
+  const c = src.signed_copy;
+  const id = Number(c?.envelope_id);
+  if (c?.state === 'available') return c.envelope_id != null && Number.isSafeInteger(id) && id > 0 ? { state: 'available', envelopeId: id } : { state: 'not_recorded', envelopeId: null };
+  if (c?.state === 'not_signed' || c?.state === 'not_available' || c?.state === 'unreadable') return { state: c.state, envelopeId: null };
+  return { state: src.signed ? 'not_recorded' : 'not_signed', envelopeId: null };
+}
+
 /** What the company owes the caller, read only, each from its document. */
 export function termsRows(company, figureLabel = (k) => k) {
   return (Array.isArray(company?.duties) ? company.duties : []).map((d) => {
@@ -347,6 +368,7 @@ export function termsRows(company, figureLabel = (k) => k) {
       signed: !!src.signed,
       defaulted: Array.isArray(d.defaulted) && d.defaulted.length > 0,
       route: d.holding?.route ? ROUTE_WORDS[d.holding.route] || null : null,
+      copy: termsCopy(src),
     };
   });
 }

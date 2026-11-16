@@ -465,7 +465,8 @@ export async function checklist(env: Env, projectId: number) {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
     const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;
-    return { key: i.key, label: i.label, done: byLab || byHand || byMercury,
+    // D6122 (GR-24): what ticks an item, so an open one can say so ("Ticks from the Spin-Out Lab", "Tick by hand").
+    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: byLab || byHand || byMercury,
       source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : byMercury ? `From Mercury, as of ${runway!.as_of}` : null,
       done_at: byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : byMercury ? runway!.as_of : null };
   });

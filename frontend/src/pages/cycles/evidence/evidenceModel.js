@@ -67,6 +67,8 @@ export function viewOf(pathname = '') {
   const rest = String(pathname).startsWith(BASE) ? String(pathname).slice(BASE.length) : '';
   if (/^\/review\/?$/.test(rest)) return { page: 'review', drawer: null, id: null };
   if (/^\/preview\/?$/.test(rest)) return { page: 'preview', drawer: null, id: null };
+  // D6864 (RA-29): Shared links, the record of every evidence pack that left Axal.
+  if (/^\/shared\/?$/.test(rest)) return { page: 'shared', drawer: null, id: null };
   const m = /^\/(item|claim)\/([^/]+)\/?$/.exec(rest);
   if (m && ID.test(m[2])) return { page: 'view', drawer: m[1], id: m[2] };
   return { page: 'view', drawer: null, id: null };
@@ -75,6 +77,7 @@ export const itemHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BAS
 export const claimHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BASE}/claim/${id}${search}` : `${BASE}${search}`);
 export const reviewHref = (search = '') => `${BASE}/review${search}`;
 export const previewHref = (search = '') => `${BASE}/preview${search}`;
+export const sharedHref = (search = '') => `${BASE}/shared${search}`;
 
 export const NOT_YET = 'Not read here yet';
 

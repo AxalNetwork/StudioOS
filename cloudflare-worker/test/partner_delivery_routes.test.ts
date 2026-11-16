@@ -131,6 +131,8 @@ function freshDb() {
   db.exec(migration('208_partner_delivery_stores'));
   db.exec(migration('202611072115_delivery_revisions'));
   db.exec(migration('202611111140_5314_status_report_blocked_history'));
+  // #4709: blockers kept at send, report amendments and deliverable corrections.
+  db.exec(migration('202611152339_4709_delivery_history'));
   // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
   // written by its two `PUT`s, so the harness runs their migration files for
   // the same reason it runs 208's: a hand-copied DDL that drifts from the file
@@ -480,9 +482,11 @@ test('the lowest utilisation is the lowest, whatever order the rows arrive in', 
   const u = db.prepare(
     'INSERT INTO retainer_usage (retainer_id, period, hours_used) VALUES (?,?,?)');
   // The high one is on the engagement the listing returns FIRST, so a read that
-  // takes `withUtil[0]` reports 95% as the lowest.
-  u.run(2, nowPeriod(), 34);
-  u.run(1, nowPeriod(), 95);
+  // takes `withUtil[0]` reports 95% as the lowest. Both rows share a
+  // `created_at`, and the higher id comes first (#4709's stable order), so
+  // that is 904's retainer (ret-2).
+  u.run(1, nowPeriod(), 34);
+  u.run(2, nowPeriod(), 95);
 
   const body = (await call(e, 'GET', '/health', ours)).body;
   assert.equal(body.lowest_utilisation_pct, 34, 'the strip reported something other than the lowest');

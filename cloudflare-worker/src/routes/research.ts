@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { heldLicences } from '../services/accountLicences';
 import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
@@ -1611,31 +1612,6 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
-  'research/market': {
-    // The artboard: "on six comparables — a thin base, which the reading states
-    // rather than smoothing", and "points to the two stale readings as the ones
-    // to re-run". Both halves are instructions, because a model summarising
-    // ranges will otherwise average them and drop the sample size.
-    instruction: [
-      'Summarise what these comparable readings say about the firm’s own service lines.',
-      'Carry each range’s comparable count and run date into any statement about it; never average ranges together.',
-      'Name the readings that are stale as the ones to re-run before a proposal cites them.',
-    ].join(' '),
-    gather: async (c, userId) => {
-      const rows = await c.env.DB.prepare(
-        `SELECT metric, range_low_cents, range_high_cents, comparable_count, ran_at, scope
-           FROM research_market_readings WHERE owner_user_id = ? ORDER BY ran_at DESC LIMIT 40`
-      ).bind(userId).all<{
-        metric: string; range_low_cents: number; range_high_cents: number;
-        comparable_count: number; ran_at: string; scope: string | null;
-      }>();
-      const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
-      return (rows.results || []).map((r) =>
-        `${r.metric}${r.scope ? ` (${r.scope})` : ''}: ${money(r.range_low_cents)} – ${money(r.range_high_cents)}`
-        + `, from ${r.comparable_count} comparable${r.comparable_count === 1 ? '' : 's'}, run ${r.ran_at}`);
-    },
-  },
-
   'network/relationships': {
     // The artboard: "who at the firm has the most recorded interactions with
     // that organization — Aoife Brennan sits against Thornbury Capital, where
@@ -2908,13 +2884,14 @@ const DRAFT_SURFACES: Record<string, {
              FROM portfolio_support_entries s
              LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
             WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+              AND s.ask_uid IS NULL
             ORDER BY s.created_at DESC LIMIT 60`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
         c.env.DB.prepare(
           `SELECT DISTINCT pp.project_id, pr.name AS project_name
              FROM portfolio_positions pp
              LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
-             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id
+             LEFT JOIN portfolio_support_entries s ON s.project_id = pp.project_id AND s.ask_uid IS NULL
             WHERE s.id IS NULL
               AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`
         ).bind(csv, csv).all<Record<string, unknown>>().catch(() => ({ results: [] as Record<string, unknown>[] })),
@@ -3405,13 +3382,13 @@ const DRAFT_SURFACES: Record<string, {
       if (pid == null) return [];
       const folders = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
-                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id${await liveFiles(c.env.DB, 'x')}) AS files
            FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
       ).bind(pid).all<{ name: string; visibility: string; files: number }>();
       const files = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
                 (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
-           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+           FROM data_room_files f WHERE f.project_id = ?${await liveFiles(c.env.DB, 'f')} ORDER BY f.name LIMIT 120`
       ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
       const grants = await c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
@@ -4989,7 +4966,7 @@ async function roomMaterial(env: Env, userId: number, grantUid: string): Promise
   const pid = room.grant.project_id;
   const files = await env.DB.prepare(
     `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — only what the tier and expiry admit is described, or
   // counted. D1103 — and only what the grant's folders hold.
@@ -5019,7 +4996,7 @@ research.get('/diligence/:grantUid', async (c) => {
 
   const tiered = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(c.env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
   // counted. D1103 — nor is one outside the grant's folders.
@@ -5116,7 +5093,7 @@ research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
 
   const found = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE uid = ? AND project_id = ?`
+       FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`
   ).bind(c.req.param('fileUid'), pid).first<any>();
   const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
   // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.

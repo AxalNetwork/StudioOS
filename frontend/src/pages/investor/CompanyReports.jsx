@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
+import { closingsApi } from '../../lib/api/closings';
 import { Unreadable, usePhoneWidth } from '../../ui';
 import { recordOf } from '../portfolio/reportAsk';
 import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
-  FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
+  FIGURE_KEYS, HOLDING_NOTES, TERMS_COPY_WORDS, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
 } from './portfolioReportsModel';
 import Sheet from '../../ui/Sheet.jsx';
 import ReportPrintButton from '../cycles/reporting/printing/ReportPrintButton.jsx';
@@ -317,6 +318,54 @@ export function Timeline({ company, onChanged, onAct = null, canAct = true }) {
 
 // ───────────────────────────────────────────────────────────── RPT10t: Terms
 
+/** D6223: hands a fetched blob to the browser as a file; the page itself never navigates. */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * D6223 (#6223): the duty's document pill. With a signed copy the caller may
+ * open, it downloads that copy through the existing scoped e-sign read
+ * (D6199's `signedCopyBlob`); otherwise it stays a plain pill and says why.
+ */
+function DutyDocument({ row }) {
+  const [state, setState] = useState('idle');
+  const text = `${row.document}${row.clause ? ` ${row.clause}` : ''}`;
+  if (row.copy.state !== 'available') {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Pill pill={{ tone: 'neutral', text }} testId={`company-term-doc-${row.uid}`} />
+        <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS[row.copy.state] || TERMS_COPY_WORDS.not_recorded}</span>
+      </span>
+    );
+  }
+  const download = async () => {
+    setState('pending');
+    try {
+      const { blob, filename } = await closingsApi.signedCopyBlob(row.copy.envelopeId);
+      saveBlob(blob, filename);
+      setState('idle');
+    } catch { setState('failed'); }
+  };
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <button type="button" disabled={state === 'pending'} onClick={download} data-testid={`company-term-doc-${row.uid}`}
+        aria-label={`Download your signed copy: ${text}`}
+        className="inline-flex min-h-[28px] w-fit items-center rounded-full border border-axal-violet/40 bg-white px-2 py-0.5 text-[11px] font-bold text-axal-violet underline hover:border-axal-violet disabled:opacity-50 max-sm:min-h-11 dark:border-violet-400/50 dark:bg-gray-900 dark:text-violet-300 dark:hover:border-violet-300">
+        {state === 'pending' ? 'Downloading…' : `${text} · Download signed copy`}
+      </button>
+      {state === 'failed' ? <span role="alert" className="text-[12px] text-amber-900 dark:text-amber-200" data-testid={`company-term-copy-${row.uid}`}>{TERMS_COPY_WORDS.failed}</span> : null}
+    </span>
+  );
+}
+
 export function TermsCard({ company }) {
   const rows = termsRows(company);
   return (
@@ -329,10 +378,10 @@ export function TermsCard({ company }) {
           <span className="text-[12px] text-axal-muted dark:text-gray-400">{[d.rule, d.figures].filter(Boolean).join(' · ')}</span>
           <span className="flex flex-wrap gap-1.5">
             <Pill pill={{ tone: d.signed ? 'ok' : 'neutral', text: d.signed ? 'Signed document' : 'From the closing’s template' }} />
-            <Pill pill={{ tone: 'neutral', text: `${d.document}${d.clause ? ` ${d.clause}` : ''}` }} />
             {d.defaulted ? <Pill pill={{ tone: 'late', text: 'Default, not in the paper' }} /> : null}
             {d.route ? <Pill pill={{ tone: 'neutral', text: d.route }} /> : null}
           </span>
+          <DutyDocument row={d} />
         </div>
       ))}
     </section>

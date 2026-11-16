@@ -133,7 +133,7 @@ test('the timeline, Terms and the reader’s words', () => {
   assert.equal(rows.find((r) => r.uid === 'pq3').canAsk, false, 'only a late or missing period is asked for');
   assert.equal(timelineRows({ ...ACME, periods: [{ ...ACME.periods[3], asked: true }] })[0].canAsk, false, 'once per period');
   const terms = termsRows(ACME, (k) => ({ mrr: 'MRR', customers: 'Customers' })[k]);
-  assert.deepEqual(terms[0], { uid: 'd-kpi', title: 'Quarterly KPI report', rule: '45 days after quarter end', figures: 'MRR, Customers', document: 'Investors’ Rights Agreement', clause: '§1.1(b)', signed: true, defaulted: true, route: 'Direct' });
+  assert.deepEqual(terms[0], { uid: 'd-kpi', title: 'Quarterly KPI report', rule: '45 days after quarter end', figures: 'MRR, Customers', document: 'Investors’ Rights Agreement', clause: '§1.1(b)', signed: true, defaulted: true, route: 'Direct', copy: { state: 'not_recorded', envelopeId: null } });
   assert.equal(terms[1].signed, false);
   const mods = readerModules(READER);
   assert.deepEqual(mods.groups.map((g) => [g.title, g.figures.map((f) => [f.label, f.value, f.source])]), [['Revenue and traction', [['MRR', '$44,100', 'Connector · Stripe'], ['Net burn', '$63,000', 'Connector · Mercury · shared by the founder']]]]);
@@ -284,7 +284,7 @@ test('mounted RPT11: Ask and Waive each open an in-page Review that says what it
 test('mounted RPT10t and RPT13: Terms read only from the documents signed; a syndicate holding says only the lead waives', async () => {
   const v = await companyAt('/portfolio/companies/p-abc/terms', COMPANY_ROUTES());
   try {
-    assert.match(v.text('company-term-d-kpi'), /Quarterly KPI report.*45 days after quarter end.*Signed document.*Investors’ Rights Agreement §1\.1\(b\).*Default, not in the paper.*Direct/);
+    assert.match(v.text('company-term-d-kpi'), /Quarterly KPI report.*45 days after quarter end.*Signed document.*Default, not in the paper.*Direct.*Investors’ Rights Agreement §1\.1\(b\)/);
     assert.match(v.text('company-term-d-mon'), /From the closing’s template.*Term Sheet §2\.2/);
     assert.ok(!v.has('company-holding-note-direct'), 'a direct holding needs no note');
   } finally { await v.close(); }

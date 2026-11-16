@@ -44,7 +44,8 @@ const DEALS = [
   { id: 5, project_name: 'Quayside Pay', status: 'active', is_member: 0 },
   { id: 6, project_name: 'Passed Co', status: 'rejected', is_member: 1, can_read: true },
 ];
-const rowsOf = (out) => out.split('data-testid="dr-pipeline-row"').slice(1);
+// D6151: each table row ends at its </tr>; the phone cards (`dr-card`) follow the table.
+const rowsOf = (out) => out.split('data-testid="dr-pipeline-row"').slice(1).map((r) => r.split('</tr>')[0]);
 const list = (props = {}) => html(h(DealRoomsList, {
   dealsState: { loading: false, error: false, deals: DEALS }, quotaState: QUOTA, onRetryDeals: () => {}, ...props,
 }));
@@ -70,7 +71,7 @@ test('the views count the live list that was read, and an unread list counts not
   const unread = list({ dealsState: { loading: false, error: true, deals: null } });
   assert.doesNotMatch(unread, /dr-filter-[a-z]+-count/);
   assert.match(unread, /data-testid="dr-unreadable"/);
-  assert.doesNotMatch(unread, /No deal is open to join yet/);
+  assert.doesNotMatch(unread, /No live deals right now/);
 });
 
 test('each row offers what its access allows: Open deal, Request an invitation, or Try again', () => {
@@ -88,11 +89,12 @@ test('each row offers what its access allows: Open deal, Request an invitation, 
   assert.doesNotMatch(bluefern + harbor, /dr-open|href=/);
   assert.match(bluefern, /data-testid="dr-leave"/);
   assert.match(harbor, /data-testid="dr-join"/);
-  assert.match(harbor, /An invitation or commitment is needed to open this deal\./);
+  // D6151 (DE19): the access words, beside the explanation the page's note gives once.
+  assert.match(harbor, /Invitation needed/);
   // Unreadable: Try again, never a request, never a door.
   assert.match(quayside, /data-testid="dr-access-retry"[^>]*>Try again</);
   assert.doesNotMatch(quayside, /dr-join|dr-open|href=/);
-  assert.match(quayside, /Deal access could not be confirmed\./);
+  assert.match(quayside, /! Access unreadable/);
 });
 
 test('a view narrows the list, and an empty view says why in its own words', () => {
@@ -103,7 +105,8 @@ test('a view narrows the list, and an empty view says why in its own words', () 
   // Mutation checked: `filter === 'all'` dropped from the empty choice → the generic sentence prints here and this fails.
   const none = list({ initialFilter: 'requested', dealsState: { loading: false, error: false, deals: [DEALS[1]] } });
   assert.ok(none.includes(ROOM_FILTER_EMPTY.requested));
-  assert.ok(list({ dealsState: { loading: false, error: false, deals: [] } }).includes('No deal is open to join yet.'));
+  // D6151 (DE21): the All view's own empty board.
+  assert.ok(list({ dealsState: { loading: false, error: false, deals: [] } }).includes('No live deals right now.'));
 });
 
 test('on a phone every control is a 44px target, and the views scroll rather than wrap', () => {

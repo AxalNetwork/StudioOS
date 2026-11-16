@@ -22,7 +22,7 @@ import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
 import { dealContextApi } from '../lib/api/dealContext';
 import { backOf, blockedRole, financialStrip, headerOf, readFailure, trackOf, viewerCommitment } from './deal/dealFrameModel';
 import {
-  BTN_P, BTN_S, CompanyStageChip, DealLoading, DealNotFound, DealTabs, DealUnreadable, FinancialStrip, NextAction, NoPermission, ProgressChip, RespondDialog, StageTrack, WebsiteIcon, YourPosition,
+  BTN_P, BTN_S, CompanyStageChip, DealLoading, DealMoreActions, DealNotFound, DealTabs, DealUnreadable, FinancialStrip, NextAction, NoPermission, ProgressChip, RespondDialog, StageTrack, WebsiteIcon, YourPosition,
 } from './deal/DealFrame';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { usePhoneWidth } from '../ui';
@@ -198,6 +198,7 @@ export default function DealRoomPage() {
           )}
           {/* The one next action; on a phone it sits at the foot instead (DE15). */}
           {!phone && <NextAction next={next} onRespond={setRespondTo} />}
+          <DealMoreActions key={deal.id} profileUrl={deal.company_profile_url} />
         </div>
       </header>
 

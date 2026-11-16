@@ -18,6 +18,7 @@ import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker'
 import {
   accessRows, deleteFolderCopy, effectLine, folderNdaCopy, gainLose, gateCopy, grantOn, inScope, makeCurrentCopy, moveCopy, needsYou,
   queueEntry, recentFiles, removeCopy, storageLine, tableRows, treeRows, uploadRefusal, whoCanOpen,
+  deleteNowCopy, restoreFailed, restoredLine, trashFoot, trashRows,
 } from '../src/pages/raise/dataroom/filesModel.js';
 
 const h = React.createElement;
@@ -44,6 +45,7 @@ const ROOM = {
     { uid: 'g3', status: 'active', created_at: '2026-09-01 09:00:00', expires_at: '2026-10-01', investor_name: 'Northwind', investor_email: 'n@northwind.example', nda_signed: false, committed: 0, folders: null },
   ],
   report_shares: [], recent_access: [], week: { opened: 0, downloaded: 0, blocked: 0 },
+  trash_count: 2, // D6073: the room read's count of files in Trash
 };
 const file = (id) => ROOM.files.find((f) => f.id === id);
 
@@ -79,10 +81,16 @@ test('each dialog names who gains or loses, and says nothing changes when nothin
   assert.match(move.body, /Each file keeps its own gate\. Juniper Angels can open it after this\./, 'a grant limited to Legal gains it');
   assert.deepEqual(move.patch, { folder_uid: 'f3' });
   assert.deepEqual(moveCopy(ROOM, [file(13)], '', NOW).patch, { folder_uid: null });
-  const rm = removeCopy([file(11)], 2);
-  assert.equal(rm.body, 'Remove Model.xlsx and its 2 earlier versions? Investors stop seeing it now. Copies already saved are not recalled.');
-  assert.match(rm.trash, /There is no Trash yet\. .*this deletes it\./);
-  assert.match(removeCopy([file(11), file(12)]).body, /^Remove 2 files and every earlier version\?/);
+  // D6073: Remove moves to Trash for 30 days, names the folder and the day it can be restored until.
+  const rm = removeCopy([file(11)], 2, { room: ROOM, now: NOW });
+  assert.equal(rm.title, 'Remove Model.xlsx?');
+  assert.equal(rm.body, 'Moves Model.xlsx and its 2 earlier versions to Trash for 30 days. Investors stop seeing it now. Copies already saved are not recalled.');
+  assert.deepEqual(rm.facts, [{ k: 'Folder', v: 'Financials' }, { k: 'Restorable until', v: '24 Nov 2026' }]);
+  assert.equal(rm.action, 'Move to Trash');
+  assert.match(rm.trash, /^Restore brings it back with its folder, gate and versions\. After 30 days it is deleted for good\.$/);
+  assert.doesNotMatch(rm.body + rm.trash, /no Trash|deletes it now/);
+  assert.match(removeCopy([file(11), file(12)], null, { room: ROOM, now: NOW }).body, /^Moves 2 files and every earlier version to Trash for 30 days\. Investors stop seeing them now\./);
+  assert.deepEqual(removeCopy([file(11), file(12)], null, { room: ROOM, now: NOW }).facts[0], { k: 'Folder', v: '2 folders' });
   assert.match(makeCurrentCopy(file(11), 2).body, /kept as an earlier version; nothing is lost/);
   assert.equal(effectLine({ gain: ['A', 'B', 'C', 'D'], lose: [] }, 2), 'A, B, C and 1 more can open them after this.');
   assert.equal(effectLine({ gain: ['A', 'B'], lose: [] }, 1), 'A, B can open it after this.', 'the pronoun follows the files, not the investors');
@@ -131,6 +139,13 @@ test('the tree, the table and Home: counts with subfolders, the top level, searc
 const VERSIONS = { file: { uid: 'a1' }, current: { version: 3, created_at: '2026-10-08 10:00:00', uploaded_by_name: 'Founder B', size_bytes: 2516582 }, versions: [{ version: 2, created_at: '2026-09-02 10:00:00', uploaded_by_name: null, size_bytes: null }] };
 const RECORD = { title: 'Model.xlsx', facts: [{ label: 'Answers', value: 'Financial model' }], sections: [{ key: 'opened', title: 'Who opened it', rows: [{ a: 'Bluefern Capital', b: '24 Oct 2026', c: 'Downloaded' }, { a: 'Juniper Angels', b: '21 Oct 2026', c: 'Blocked' }, { a: 'Larch', b: 'never', c: 'Not opened' }] }], actions: [] };
 
+// D6073: the Trash read. One removed from a folder still there, one whose folder was deleted, one Drive copy.
+const TRASH = { trash_days: 30, can_delete_now: true, items: [
+  { uid: 't1', name: 'Customer contracts.pdf', folder: 'Legal', folder_uid: 'f3', folder_gone: false, removed_at: '2026-10-18T12:00:00.000Z', removed_by_name: 'Founder B', days_left: 23, earlier_versions: 2, source_ref: null },
+  { uid: 't2', name: 'Old org chart.png', folder: 'Team', folder_uid: null, folder_gone: true, removed_at: '2026-09-29T12:00:00.000Z', removed_by_name: null, days_left: 1, earlier_versions: 0, source_ref: null },
+  { uid: 't3', name: 'Brand guidelines.pdf', folder: null, folder_uid: null, folder_gone: false, removed_at: '2026-10-24T12:00:00.000Z', removed_by_name: 'Founder B', days_left: null, earlier_versions: null, source_ref: 'google_drive' },
+] };
+
 function handlerFor(room = ROOM, fail = {}) {
   return (url, opts = {}) => {
     const method = opts.method || 'GET';
@@ -138,6 +153,7 @@ function handlerFor(room = ROOM, fail = {}) {
     if (/\/api\/projects(\?|$)/.test(url)) return response([{ id: 3, uid: 'p3uid', name: 'Harbor Ledger' }]);
     // D1284: D1104's queue, read by Home's Needs you.
     if (/\/data-room\/p3uid\/requests$/.test(url)) return fail.requests ? response({ detail: 'x' }, 503) : response(fail.requestsBody || { requests: [], open: 2, can_answer: true });
+    if (/\/data-room\/p3uid\/trash$/.test(url)) return fail.trash ? response({ code: 'trash_unreadable' }, 503) : response(fail.trashBody || TRASH);
     if (/\/data-room\/p3uid\/files\/[^/]+\/versions/.test(url)) return fail.versions ? response({ detail: 'x' }, 500) : response(VERSIONS);
     if (/\/data-room\/p3uid(\?|$)/.test(url)) return fail.room ? response({ detail: 'x' }, 500) : response(room);
     if (/\/form-options/.test(url)) return response({ project_uid: 'p3uid', folders: [], requests: [{ value: 7, label: 'Burn and runway' }], checklist: [{ value: 'financial_model', label: 'Financial model' }] });
@@ -205,17 +221,20 @@ test('Files: the bulk bar opens a dialog naming who gains, and only then patches
   } finally { await v.close(); }
 });
 
-test('Files: Remove says there is no Trash and then deletes; a co-founder cannot set a gate or remove', async () => {
-  // Mutation checked: the owner gate dropped → a co-founder's Set gate is enabled.
+test('Files: Remove says the files go to Trash for 30 days, then sends them; a co-founder cannot set a gate or remove', async () => {
+  // Mutation checked: the owner gate dropped → a co-founder's Set gate is enabled; the old "no Trash" sentence → the body differs.
   const v = await mounted('/raise/data-room/files?project_id=3');
   try {
     await v.change('dataroom-pick-a1', {});
     await v.change('dataroom-pick-a2', {});
     await v.click('dataroom-bulk-remove');
-    assert.match(v.of('dataroom-remove-body'), /^Remove 2 files and every earlier version\?/);
-    assert.match(v.of('dataroom-remove-trash'), /There is no Trash yet/);
+    assert.match(v.of('dataroom-remove-body'), /^Moves 2 files and every earlier version to Trash for 30 days\./);
+    assert.match(v.of('dataroom-remove-facts'), /Restorable until24 Nov 2026/);
+    assert.match(v.of('dataroom-remove-trash'), /Restore brings them back with their folder, gate and versions/);
+    assert.equal(v.of('dataroom-remove-go'), 'Move to Trash');
     await v.click('dataroom-remove-go');
     assert.deepEqual(v.writes().map((w) => w.slice(0, 2)), [['DELETE', '/api/data-room/p3uid/files/a1'], ['DELETE', '/api/data-room/p3uid/files/a2']]);
+    assert.equal(v.of('dataroom-files-done'), 'Moved 2 files to Trash for 30 days.');
   } finally { await v.close(); }
   const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }) });
   try {
@@ -377,4 +396,92 @@ test('the source: no browser pop-up anywhere in the tool, and the file route is 
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.ok(app.includes('<Route path="/raise/data-room/file/:id" element={guard(labRoles([\'admin\', \'founder\']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />'));
   assert.ok(app.indexOf('/raise/data-room/file/:id') < app.indexOf('path="/raise/:slug/:id"'));
+});
+
+/* ------------------------------------------------------------------ *
+ * D6073 — Trash (DR28)
+ * ------------------------------------------------------------------ */
+
+test('Trash rows: folder, who removed it and days left, each Not recorded when the read lacks it; Delete now in two steps', () => {
+  // Mutation checked: days_left 1 pluralised → "1 days left"; a folder that is gone not said → no "returns to Top level".
+  const rows = trashRows(TRASH);
+  assert.deepEqual(rows.map((r) => [r.name, r.folder, r.returns, r.removed, r.by, r.left, r.drive]), [
+    ['Customer contracts.pdf', 'Legal', '', '18 Oct 2026', 'Founder B', '23 days left', false],
+    ['Old org chart.png', 'Team', 'returns to Top level', '29 Sep 2026', 'Not recorded', '1 day left', false],
+    ['Brand guidelines.pdf', 'Top level', '', '24 Oct 2026', 'Founder B', 'Not recorded', true],
+  ]);
+  assert.deepEqual(trashRows(null), []);
+  const del = deleteNowCopy(rows[0]);
+  assert.equal(del.scope.body, 'Delete now: Customer contracts.pdf from Trash. One file. Its 2 earlier versions go with it.');
+  assert.equal(del.review.body, 'This cannot be undone. The file and its versions are deleted now instead of in 23 days. Restore will no longer be offered.');
+  assert.equal(del.done(2), 'Deleted. Customer contracts.pdf and its versions are gone. Trash holds 2 files.');
+  assert.equal(deleteNowCopy(rows[2]).review.body, 'This cannot be undone. The file and its versions are deleted now. Restore will no longer be offered.');
+  assert.equal(restoredLine('X.pdf', { returned_to_top_level: true }), 'X.pdf is back, at the top level: its folder was deleted.');
+  assert.equal(restoredLine('X.pdf', { returned_to_top_level: false }), 'X.pdf is back in its folder, with its gate and versions.');
+  assert.equal(restoreFailed(rows[0]), 'Restore did not go through. Customer contracts.pdf is still in Trash with 23 days left.');
+  assert.match(trashFoot(true), /Only you, the room’s owner, can Delete now\.$/);
+  assert.match(trashFoot(false), /Co-founders restore; only the room’s owner can Delete now\.$/);
+});
+
+test('Files › Trash (owner): the list with days left, Restore, and Delete now only after Scope and Review', async () => {
+  // Mutation checked: Delete now sent on the first step → a DELETE before Review; Restore sending to the files route → the URL differs.
+  const v = await mounted('/raise/data-room/files?project_id=3');
+  try {
+    assert.equal(v.of('dataroom-tree-trash').replace(/\s+/g, ''), '🗑︎Trash2', 'the count is the room read’s');
+    await v.click('dataroom-tree-trash');
+    assert.ok(v.has('dataroom-trash') && !v.has('dataroom-files-table'), 'Trash takes the table’s place');
+    assert.match(v.of('dataroom-trash'), /Removed files stay here for 30 days, then they are deleted\. Investors cannot see them\./);
+    assert.equal(v.of('dataroom-trash-left-t1'), '23 days left');
+    assert.equal(v.of('dataroom-trash-returns-t2'), 'returns to Top level');
+    assert.ok(v.has('dataroom-trash-drive'), 'a Drive copy says what Restore keeps');
+    assert.ok(v.has('dataroom-trash-cards'), 'phone cards are drawn beside the table');
+    await v.click('dataroom-trash-restore-t1');
+    assert.deepEqual(v.writes(), [['POST', '/api/data-room/p3uid/trash/t1/restore', undefined]]);
+    assert.equal(v.of('dataroom-trash-done'), 'Customer contracts.pdf is back in its folder, with its gate and versions.');
+    await v.click('dataroom-trash-delete-t1');
+    assert.match(v.of('dataroom-trash-delete-scope-body'), /One file\. Its 2 earlier versions go with it\./);
+    await v.click('dataroom-trash-delete-scope-go');
+    assert.equal(v.writes().length, 1, 'nothing is deleted on Scope');
+    assert.match(v.of('dataroom-trash-delete-review-body'), /^This cannot be undone\./);
+    await v.click('dataroom-trash-delete-review-go');
+    assert.deepEqual(v.writes().at(-1), ['DELETE', '/api/data-room/p3uid/trash/t1', undefined]);
+    assert.match(v.of('dataroom-trash-done'), /^Deleted\. Customer contracts\.pdf and its versions are gone\./);
+  } finally { await v.close(); }
+});
+
+test('Files › Trash (co-founder): Restore, no Delete now; unreadable is said; empty is said', async () => {
+  // Mutation checked: Delete now drawn from the role instead of can_delete_now → the co-founder sees it; a failed read drawn as empty.
+  const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }, { trashBody: { ...TRASH, can_delete_now: false } }) });
+  try {
+    await co.click('dataroom-tree-trash');
+    assert.ok(co.has('dataroom-trash-restore-t1'));
+    assert.ok(!co.has('dataroom-trash-delete-t1'), 'only the owner deletes now');
+    assert.match(co.of('dataroom-trash-foot'), /Co-founders restore; only the room’s owner can Delete now\./);
+  } finally { await co.close(); }
+  const bad = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor(ROOM, { trash: true }) });
+  try {
+    await bad.click('dataroom-tree-trash');
+    assert.match(bad.of('dataroom-trash-unreadable'), /Trash could not be read\. Files still work\. Nothing in Trash was changed\./);
+    assert.ok(!bad.has('dataroom-trash-empty'), 'a failed read is never an empty Trash');
+  } finally { await bad.close(); }
+  const empty = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, trash_count: 0 }, { trashBody: { trash_days: 30, can_delete_now: true, items: [] } }) });
+  try {
+    await empty.click('dataroom-tree-trash');
+    assert.match(empty.of('dataroom-trash-empty'), /Trash is empty\.Removed files stay here for 30 days\./);
+  } finally { await empty.close(); }
+  const nobody = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, capabilities: { ...ROOM_CAPS.owner, restore: false } }) });
+  try { assert.ok(!nobody.has('dataroom-tree-trash'), 'no capability, no Trash'); } finally { await nobody.close(); }
+});
+
+test('the file lightbox: Remove names the versions, the folder and the day it can be restored until, then moves it to Trash', async () => {
+  // Mutation checked: the lightbox calling removeCopy without the room → the folder reads Top level.
+  const v = await mounted('/raise/data-room/file/11?project_id=3');
+  try {
+    await v.click('dataroom-file-remove-open');
+    assert.match(v.of('dataroom-file-remove-body'), /^Moves Model\.xlsx and its 1 earlier version to Trash for 30 days\. Investors stop seeing it now\. Copies already saved are not recalled\./);
+    assert.equal(v.of('dataroom-file-remove-facts'), 'FolderFinancialsRestorable until24 Nov 2026');
+    assert.deepEqual(v.writes(), [], 'nothing is sent before the confirm');
+    await v.click('dataroom-file-remove-go');
+    assert.deepEqual(v.writes(), [['DELETE', '/api/data-room/p3uid/files/a1', undefined]]);
+  } finally { await v.close(); }
 });

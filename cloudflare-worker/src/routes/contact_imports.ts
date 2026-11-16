@@ -8,6 +8,7 @@
  *   POST  /import/linkedin-csv[?preview=1]     multipart `file`; preview writes nothing
  *   GET   /import/reviews                       the member's pending suggestions
  *   POST  /import/reviews/:uid/:decision        merge | keep | dismiss
+ *   POST  /book                                      { name, company?, title?, linkedin_url?, email? }; never invites
  *   GET   /book[?q=&page=&source=&follow_up=]                         the member's own book, with each row's sources (D1352)
  *   GET   /book/follow-ups-due[?limit=]                overdue open follow-ups, oldest due first, and their total (#5310)
  *   GET   /book/:id/notes, POST /book/:id/notes        { body }
@@ -27,6 +28,8 @@ import {
   MAX_CSV_BYTES, ReviewRefusal, addNote, addTask, bookOf, commitPlan, decideReview, followUpsDueOf, notesOf, ownContact, ownRecords, parseConnectionsCsv,
   pendingReviews, planRows, previewOf, setTaskDone, tasksOf,
 } from '../services/linkedinCsvImport';
+
+import { addTypedContact, typedContactInput } from '../services/typedContactBook';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -84,6 +87,14 @@ async function contactOr404(c: any, ctx: Ctx) {
 }
 const missing = (c: any) => no(c, 404, 'not_found', 'That contact is not in your book.');
 const body = async (c: any): Promise<Record<string, any>> => { const b = await c.req.json().catch(() => ({})); return b && typeof b === 'object' && !Array.isArray(b) ? b : {}; };
+
+// D6558: a hand-added person, with the existing own-book duplicate review vocabulary.
+r.post('/book', handle(async (c, ctx) => {
+  const w = writer(c, ctx); if (w) return w;
+  const input = typedContactInput(await body(c));
+  if ('field' in input) return refuse(c, 400, { code: 'invalid_contact', message: input.message, extra: { field: input.field }, audience: 'member' });
+  return c.json(await addTypedContact(c.env, Number(ctx.user.id), input.contact), 201);
+}));
 
 // D1352 (#3567): the book itself, for Network › Relationships.
 r.get('/book', handle(async (c, ctx) => {

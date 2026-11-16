@@ -26,9 +26,10 @@
  * the page.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { portfolioFounderAsksApi } from '../../lib/api/portfolioFounderAsks';
 import { titleCase } from '../../lib/absence';
 import { currencyFromLabel } from '../../lib/money';
 import { WorkerRail } from '../../ui';
@@ -169,6 +170,57 @@ function Inbox({ inbox, reads, retry, visible, filter, setFilter, chaseOverdue, 
   );
 }
 
+const ASK_WORDS = {
+  hire: ['A hire', 'hiring'], customer: ['A customer introduction', 'customer'],
+  partner: ['A partner', 'intro'], market: ['A market contact', 'other'], capital: ['Capital', 'fundraising'],
+};
+
+function ReportAsks({ updateUid, row }) {
+  const { reads, retry } = usePortfolioReads({ asks: {
+    call: async () => {
+      try { return await portfolioFounderAsksApi.list(updateUid); }
+      catch (e) {
+        if (e.status === 403) return { refused: true };
+        if (e.status === 404) return { asks: [] };
+        throw e;
+      }
+    },
+    shape: (value) => value.refused === true || Array.isArray(value.asks),
+  } });
+  const read = reads.asks;
+  return (
+    <section data-testid="report-founder-asks">
+      <h3>Asks in this update</h3>
+      {read.state === 'loading' ? <Skeleton rows={2} /> : null}
+      {read.state === 'unreadable' ? <div data-testid="report-asks-unreadable"><p>Unavailable. The asks could not be read.</p><button type="button" className="pf-btn" onClick={() => retry('asks')}>Retry</button></div> : null}
+      {read.state === 'ok' && read.value.refused ? <p>Refused. This account cannot read these asks.</p> : null}
+      {read.state === 'ok' && read.value.asks?.length === 0 ? <p className="pf-muted">This item carries no shared asks.</p> : null}
+      {read.state === 'ok' && read.value.asks?.length > 0 ? (
+        <>
+          <ul className="pf-required">
+            {read.value.asks.map((ask) => {
+              const [label, kind] = ASK_WORDS[ask.kind] || ['Support', 'other'];
+              return <li key={ask.uid} data-testid={`report-ask-${ask.uid}`}>
+                <div><strong>{label}</strong><p>{ask.text}</p>
+                  <p className="pf-muted">{ask.support_state ? `Your support · ${titleCase(ask.support_state)}` : ask.answered ? 'Answered' : 'No answer recorded'}</p>
+                  {ask.kind === 'capital' ? (ask.link_ref
+                    ? <Link className="pf-btn" to={`/round-calls/${encodeURIComponent(ask.link_ref)}`}>Open the round call</Link>
+                    : <p className="pf-muted">{ask.link_reason || 'No round call is available.'}</p>) : null}
+                </div>
+                {!ask.support_state && row.uid ? <Link className="pf-btn is-primary" to="/portfolio/value-add"
+                  state={{ founderAsk: { uid: ask.uid, kind, label, updateUid, text: ask.text, projectUid: row.uid, reportKey: row.key } }}>
+                  Promise support
+                </Link> : null}
+              </li>;
+            })}
+          </ul>
+          <Link className="pf-btn" to={`/updates/${encodeURIComponent(updateUid)}`}>Open the update</Link>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 /** PF-04 b: one company's report as received, with each field's source and date. */
 function ReportDetail({ row, reads, retry, rules, cadence, onClose }) {
   const updates = reads.updates;
@@ -260,6 +312,7 @@ function ReportDetail({ row, reads, retry, rules, cadence, onClose }) {
           <h3>Update as written</h3>
           {update ? (update.body ? <blockquote className="pf-quote" data-testid="report-detail-body-text">{update.body}</blockquote> : <p className="pf-muted">No narrative was written.</p>) : <p className="pf-muted">{updates.state === 'unreadable' ? 'Unreadable.' : NOT_RECORDED}</p>}
         </section>
+        {update?.uid ? <ReportAsks key={update.uid} updateUid={update.uid} row={row} /> : null}
         <section><h3>History</h3>{history}</section>
         {row.uid && companyHref(row.uid) ? <Link className="pf-btn" to={companyHref(row.uid, 'reports')} data-testid="link-report-detail-company">Open {row.name} · Reports</Link> : null}
       </div>
@@ -269,7 +322,8 @@ function ReportDetail({ row, reads, retry, rules, cadence, onClose }) {
 
 export default function InvestorPortfolioUpdates() {
   const [filter, setFilter] = useState('period');
-  const [open, setOpen] = useState(null);
+  const location = useLocation();
+  const [open, setOpen] = useState(() => location.state?.founderAskReportKey ?? null);
   const [chasing, setChasing] = useState(false);
   const [chaseNote, setChaseNote] = useState('');
   const { reads, retry, reload } = usePortfolioReads(SOURCES);

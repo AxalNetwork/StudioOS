@@ -55,7 +55,8 @@ test('"Send counter" is gone: the draft is saved, and the page says nothing is s
   // Mutations checked: the old label restored; the foot sentence dropped.
   const zone = read('../src/pages/partner/pipeline/NegotiationsZone.jsx');
   assert.doesNotMatch(zone, /Send counter/);
-  assert.match(zone, /accept="Save counter draft"/);
+  // D5938: PP05b names the accept "Accept counter draft"; it still sends nothing.
+  assert.match(zone, /accept="Accept counter draft"/);
   assert.match(zone, /nothing is sent to the client/);
   const draft = read('../src/workspaces/ZoneDraft.jsx');
   assert.match(draft, /nothing is sent/, 'the component\'s own contract is that accepting sends nothing');

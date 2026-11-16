@@ -148,11 +148,13 @@ const READY = [{ key: 'revenue', include: false, reason: 'Shared at the board me
  * The registry
  * ------------------------------------------------------------------ */
 
-test('REPORT_FIGURES: one key per figure, Share an update’s five and the KPI rules mapped onto it, every module a Grow module', () => {
+test('REPORT_FIGURES: one key per figure, shared update metrics and KPI rules mapped onto it, every module a Grow module', () => {
   const names = REPORT_FIGURES.flatMap((f) => [f.key, ...f.aliases]);
   assert.equal(new Set(names).size, names.length, 'a key or alias is used twice');
   for (const k of METRIC_KEYS) assert.ok(figureFor(k), `Share an update's ${k} has no report figure`);
   assert.equal(figureFor('burn')!.key, 'net_burn');
+  assert.equal(figureFor('arr')!.unit, 'usd');
+  assert.deepEqual([figureFor('net_retention')!.key, figureFor('nrr_pct')!.key, figureFor('net_retention')!.unit], ['net_retention', 'net_retention', 'pct']);
   assert.equal(figureFor('runway_months')!.key, 'runway');
   // Migration 168's seed rows: every KPI key maps, and the required ones by cadence are KPI_RULES_REQUIRED.
   const seeds = [...read('cloudflare-worker/sql/migrations/168_portfolio_marks_distributions.sql')

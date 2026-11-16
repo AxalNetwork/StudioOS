@@ -468,7 +468,8 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   assert.throws(() => readFileSync('frontend/src/pages/cycles/ValidatePhoneFocus.jsx', 'utf8'), /ENOENT/);
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.doesNotMatch(route, /ValidatePhoneFocus/);
-  assert.match(route, /const phone = usePhoneWidth\(\);/);
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) keeps its desktop pages from 768px.
+  assert.match(route, /const tablet = useTabletWidth\(def\?\.tabletPages === true\);\n\s+const phone = usePhoneWidth\(\) && !tablet;/);
   assert.match(route, /body = def\?\.Overview \?/, 'a cycle-owned overview can serve both widths');
   assert.match(route, /<\/> : phone \? \(\n\s+<PhoneCycleRoot /, 'other cycles retain their phone root below 1024px');
   const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');

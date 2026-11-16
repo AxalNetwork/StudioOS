@@ -51,8 +51,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
-import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
-import { investorActiveCompany } from './_investorProjectScope';
+import { isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { receivedInvestorUpdate } from '../services/portfolioAskAccess';
+import { isSupportSession } from '../integrations/providers/mercury';
+import { investorActiveCompany, investorHeldProjectIds } from './_investorProjectScope';
 import { supportBookIds } from '../services/profileWriteGates';
 import { pageFacts, pageWindow } from '../services/listPage';
 
@@ -89,7 +91,7 @@ const emptyByKind = (): Record<string, { entries: number; delivered: number; out
   Object.fromEntries([...SUPPORT_KINDS].map((k) => [k, { entries: 0, delivered: 0, outstanding: 0, meetings_held: 0 }]));
 
 type SupportRow = {
-  uid: string; fund_id: number | null; project_id: number;
+  uid: string; fund_id: number | null; project_id: number; ask_uid?: string | null;
   kind: string; state: string; hours: number | null;
   promised_at: string | null; delivered_at: string | null; withdrawn_at: string | null;
   summary: string; outcome: string | null;
@@ -225,7 +227,7 @@ r.get('/', async (c) => {
 
     const [entries, book, agg, kinds] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
+        `SELECT s.uid, s.fund_id, s.project_id, s.ask_uid, s.kind, s.state, s.hours,
                 s.promised_at, s.delivered_at, s.withdrawn_at, s.summary, s.outcome,
                 s.recorded_by, s.created_at, s.updated_at,
                 -- D6202: the lifecycle fields.
@@ -241,10 +243,11 @@ r.get('/', async (c) => {
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
             AND (? IS NULL OR s.state = ? OR (? = 'open' AND s.state IN ('promised','in_progress')))
           ORDER BY s.created_at DESC, s.id DESC
           LIMIT ? OFFSET ?`,
-      ).bind(csv, csv, stateFilter, stateFilter, stateFilter, win.limit, win.offset)
+      ).bind(csv, csv, user.id, stateFilter, stateFilter, stateFilter, win.limit, win.offset)
         .all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
       // The book itself, so "no support at all" is an anti-join over two stored
       // sets rather than an inference from the ledger's silence.
@@ -282,8 +285,9 @@ r.get('/', async (c) => {
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
           GROUP BY s.project_id`,
-      ).bind(csv, csv).all<AggRow>().catch(() => ({ results: null })),
+      ).bind(csv, csv, user.id).all<AggRow>().catch(() => ({ results: null })),
       // D6202: the same population split by kind, so "Introductions made" is a counted figure
       // (delivered intros) and a held meeting is counted rather than inferred.
       c.env.DB.prepare(
@@ -293,8 +297,9 @@ r.get('/', async (c) => {
                 SUM(CASE WHEN s.meeting_outcome = 'held' THEN 1 ELSE 0 END) AS meetings_held
            FROM portfolio_support_entries s
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+            AND (s.ask_uid IS NULL OR s.recorded_by = ?)
           GROUP BY s.kind`,
-      ).bind(csv, csv).all<{ kind: string; entries: number; delivered: number; outstanding: number; meetings_held: number }>()
+      ).bind(csv, csv, user.id).all<{ kind: string; entries: number; delivered: number; outstanding: number; meetings_held: number }>()
         .catch(() => ({ results: null })),
     ]);
 
@@ -461,27 +466,46 @@ r.post('/', async (c) => {
       return c.json({ detail: 'Project not found' }, 404);
     }
 
+    const askUid = body.ask_uid == null ? null : body.ask_uid;
+    if (askUid !== null) {
+      if (typeof askUid !== 'string' || !askUid || askUid.length > 80 || state !== 'promised') {
+        return c.json({ detail: 'A linked entry must identify an ask and start as promised.' }, 400);
+      }
+      if (!isInvestor(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
+      const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+      const ask = await c.env.DB.prepare(
+        `SELECT u.id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id
+          WHERE a.uid = ? AND u.project_id = ? AND u.sent_at IS NOT NULL AND (u.kind IS NULL OR u.kind <> 'report')`,
+      ).bind(askUid, proj.id).first<{ id: number }>();
+      if (!held?.includes(proj.id) || !ask || !(await receivedInvestorUpdate(c.env, ask.id, user.id))) {
+        return c.json({ detail: 'Ask not found' }, 404);
+      }
+    }
+
     const uid = newUid();
     const now = nowIso();
     const delivered = state === 'delivered';
-    await c.env.DB.prepare(
+    const write = await c.env.DB.prepare(
       `INSERT INTO portfolio_support_entries
          (uid, fund_id, project_id, kind, state, hours, promised_at, delivered_at,
           summary, outcome, recorded_by, created_at, updated_at,
-          due_date, meeting_outcome, meeting_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          due_date, meeting_outcome, meeting_at, ask_uid)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (ask_uid, recorded_by) DO NOTHING`,
     ).bind(
       uid, proj.id, kind, state, hoursOrNull(body.hours),
       isoDate(body.promised_at), delivered ? (isoDate(body.delivered_at) || now.slice(0, 10)) : null,
       summary, typeof body.outcome === 'string' ? body.outcome.slice(0, 2000) : null,
       user.id, now, now,
-      life.due_date ?? null, life.meeting_outcome ?? null, life.meeting_at ?? null,
+      life.due_date ?? null, life.meeting_outcome ?? null, life.meeting_at ?? null, askUid,
     ).run();
 
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM portfolio_support_entries WHERE uid = ?',
-    ).bind(uid).first<SupportRow>();
-    return c.json({ item: row }, 201);
+    const created = !askUid || !!write.meta.changes;
+    const row = askUid
+      ? await c.env.DB.prepare('SELECT * FROM portfolio_support_entries WHERE ask_uid = ? AND recorded_by = ?')
+        .bind(askUid, user.id).first<SupportRow>()
+      : await c.env.DB.prepare('SELECT * FROM portfolio_support_entries WHERE uid = ?').bind(uid).first<SupportRow>();
+    return c.json({ item: row }, created ? 201 : 200);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -498,7 +522,7 @@ r.patch('/:uid', async (c) => {
     const existing = await c.env.DB.prepare(
       'SELECT * FROM portfolio_support_entries WHERE uid = ?',
     ).bind(c.req.param('uid')).first<SupportRow>();
-    if (!existing) return c.json({ detail: 'Not found' }, 404);
+    if (!existing || (existing.ask_uid && Number(existing.recorded_by) !== Number(user.id))) return c.json({ detail: 'Not found' }, 404);
     if (empty || (ids != null && !ids.includes(Number(existing.project_id)))) {
       return c.json({ detail: 'Not found' }, 404);
     }
@@ -700,9 +724,9 @@ r.get('/:uid/history', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const { ids, empty } = await scopeFor(c, user);
     const existing = await c.env.DB.prepare(
-      'SELECT id, uid, project_id, state, revision FROM portfolio_support_entries WHERE uid = ?',
+      'SELECT id, uid, project_id, state, revision, ask_uid, recorded_by FROM portfolio_support_entries WHERE uid = ?',
     ).bind(c.req.param('uid')).first<SupportRow & { id: number }>();
-    if (!existing) return c.json({ detail: 'Not found' }, 404);
+    if (!existing || (existing.ask_uid && Number(existing.recorded_by) !== Number(user.id))) return c.json({ detail: 'Not found' }, 404);
     if (empty || (ids != null && !ids.includes(Number(existing.project_id)))) {
       return c.json({ detail: 'Not found' }, 404);
     }

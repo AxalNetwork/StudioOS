@@ -24,6 +24,7 @@
  * answers 5xx, never an empty record. Every query is fixed text with bound
  * values.
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 
 export const ISSUANCE_KINDS = ['founding', 'priced', 'safe', 'note', 'grant', 'exercise', 'transfer', 'conversion', 'cancellation', 'correction'] as const;
@@ -620,7 +621,7 @@ async function readFields(env: Env, projectId: number, body: Record<string, unkn
       const m = /^(legal_documents|data_room_files):([1-9]\d{0,15})$/.exec(ref);
       if (!m) throw bad('document_ref', 'document_ref must be legal_documents:<id> or data_room_files:<id>.');
       const found = m[1] === 'data_room_files'
-        ? await env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(Number(m[2]), projectId).first()
+        ? await env.DB.prepare(`SELECT id FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(env.DB)}`).bind(Number(m[2]), projectId).first()
         : await env.DB.prepare('SELECT ld.id FROM legal_documents ld JOIN deals d ON d.id = ld.deal_id WHERE ld.id = ? AND d.project_id = ?').bind(Number(m[2]), projectId).first();
       if (!found) throw new RecordError(400, 'unknown_document', 'That document is not this venture’s.', { field: 'document_ref' });
     }

@@ -390,7 +390,7 @@ export function quarterlyReportModel({
   ];
 
   const keyDates = [
-    { date: FUND.demoDay, label: 'Cohort demo day · allocation window' },
+    { date: FUND.demoDay, label: 'Cohort demo day' },
     { date: FUND.firstClose, label: `First close · $${FUND.minCloseM}M minimum` },
     { date: `Annual audit · ${FUND.auditDate}`, label: 'Audited statements issued' },
     { date: `K-1 · ${FUND.k1Date}`, label: 'Schedule K-1 issued' },

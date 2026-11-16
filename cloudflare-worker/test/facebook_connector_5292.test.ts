@@ -46,7 +46,13 @@ test('Meta deletion requires a signed request and deletes only matching Facebook
     CREATE TABLE integration_logs (integration_id INTEGER, provider_key TEXT);
     INSERT INTO integrations VALUES (1, 'facebook', '123'), (2, 'whatsapp', '123'), (3, 'facebook', '456');
     INSERT INTO integration_companies VALUES (1),(2),(3);
-    INSERT INTO integration_logs VALUES (1,'facebook'),(2,'whatsapp'),(3,'facebook');`);
+    INSERT INTO integration_logs VALUES (1,'facebook'),(2,'whatsapp'),(3,'facebook');
+    CREATE TABLE connector_fed_items (integration_id INTEGER, kind TEXT);
+    CREATE TABLE facebook_page_facts (integration_id INTEGER);
+    CREATE TABLE facebook_page_links (integration_id INTEGER);
+    INSERT INTO connector_fed_items VALUES (1, 'facebook_page_fact'), (3, 'facebook_page_fact'), (2, 'whatsapp_message');
+    INSERT INTO facebook_page_facts VALUES (1), (3);
+    INSERT INTO facebook_page_links VALUES (1), (3);`);
   const app = new Hono<{ Bindings: Env }>();
   app.route('/api/meta/data-deletion', deletion);
   const bindings = { ...env, WHATSAPP_APP_SECRET: ` ${env.WHATSAPP_APP_SECRET}\n`, APP_URL: 'https://preview.example/', DB: {
@@ -66,6 +72,10 @@ test('Meta deletion requires a signed request and deletes only matching Facebook
   assert.equal((await app.request(new URL(url).pathname, {}, bindings)).status, 200);
   assert.deepEqual(db.prepare('SELECT id FROM integrations ORDER BY id').all().map(r => r.id), [2, 3]);
   assert.deepEqual(db.prepare('SELECT integration_id FROM integration_logs ORDER BY integration_id').all().map(r => r.integration_id), [2, 3]);
+  // D5859: the Grow facts, their ledger rows and the Page links of that account's connection go too, and nothing else.
+  assert.deepEqual(db.prepare('SELECT integration_id FROM connector_fed_items ORDER BY integration_id').all().map(r => r.integration_id), [2, 3]);
+  assert.deepEqual(db.prepare('SELECT integration_id FROM facebook_page_facts').all().map(r => r.integration_id), [3]);
+  assert.deepEqual(db.prepare('SELECT integration_id FROM facebook_page_links').all().map(r => r.integration_id), [3]);
 });
 
 test('Facebook records only the Page read scopes on an app shared with WhatsApp', async t => {

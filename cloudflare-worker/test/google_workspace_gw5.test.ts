@@ -355,3 +355,32 @@ test('the four Raise routes each pass part 2’s gates first, and three module r
   const gate = read('../src/routes/google_workspace.ts');
   assert.match(gate, /export async function workspaceContext[\s\S]{0,200}impersonated_by\) throw new WorkspaceError\('support_session_refused', 403\)[\s\S]{0,40}return context\(c, user, project\)/);
 });
+
+test('D6073: a Drive copy in the data room’s Trash is left alone by a sync, back after Restore, and stays deleted once purged', async () => {
+  // Mutation checked: copyFile without the Trash check → the copy in Trash is replaced; the purge keeping local_id → the next sync copies it again.
+  const { db, env, integration, pick } = await fixture();
+  for (const s of alters('../sql/migrations/202611152333_6073_data_room_trash.sql', 'data_room_files')) db.exec(s);
+  const { purgeFile } = await import('../src/services/dataRoomTrash.ts');
+  pick('data_room', 'pdf1', 'file', 'Financials.pdf', 'application/pdf');
+  const meta: any = { pdf1: { name: 'Financials.pdf', mimeType: 'application/pdf', modifiedTime: '2026-10-02T00:00:00Z' } };
+  const r = reader(meta);
+  const a = { integrationId: integration.id, projectId: 1, user, read: r.fn as any, eventDays: null };
+  assert.equal((await syncRaiseGoogle(env, a)).copies_added, 1);
+  const copy = db.prepare('SELECT * FROM data_room_files').get() as any;
+  db.prepare("UPDATE data_room_files SET removed_at = '2026-11-01T00:00:00.000Z' WHERE id = ?").run(copy.id);
+  meta.pdf1.modifiedTime = '2026-11-05T00:00:00Z';
+  assert.equal((await syncRaiseGoogle(env, a)).copies_kept_deleted, 1, 'a copy in Trash stays as it is, even when Google’s file changes');
+  assert.equal((db.prepare('SELECT r2_key FROM data_room_files WHERE id = ?').get(copy.id) as any).r2_key, copy.r2_key);
+  assert.deepEqual(((await raiseGooglePart(env, { integrationId: integration.id, userId: 1, projectId: 1, slug: 'data-room' })) as any).copies, [], 'not listed as in the room');
+  // Restored: a linked copy again, replaced in place on the next change; no second copy.
+  db.prepare('UPDATE data_room_files SET removed_at = NULL WHERE id = ?').run(copy.id);
+  assert.equal((await syncRaiseGoogle(env, a)).copies_replaced, 1);
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM data_room_files').get() as any).n, 1);
+  // Purged: the ledger keeps its row with no local_id, so the copy is never made again.
+  db.prepare("UPDATE data_room_files SET removed_at = '2026-10-01T00:00:00.000Z' WHERE id = ?").run(copy.id);
+  assert.ok(await purgeFile(env, { project: { id: 1, uid: 'proj-one' }, userId: 1, fileId: copy.id, reason: 'expired' }));
+  meta.pdf1.modifiedTime = '2026-11-20T00:00:00Z';
+  assert.equal((await syncRaiseGoogle(env, a)).copies_kept_deleted, 1);
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM data_room_files').get() as any).n, 0);
+  assert.equal(((await raiseGooglePart(env, { integrationId: integration.id, userId: 1, projectId: 1, slug: 'data-room' })) as any).deleted_kept, 1);
+});

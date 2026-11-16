@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import WorkspaceShell from '../workspaces/WorkspaceShell';
 import WorkerRail from '../ui/WorkerRail';
@@ -56,6 +56,28 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
   const reading = supplied || resource;
   const page = !reading.loading && !reading.error && readableFund(reading.data) ? reading.data : null;
   const [download, setDownload] = useState({ busy: false, error: null });
+  // #6252 (D6252, Q1 answer A): the newest kept brief, read for whoever can manage the fund.
+  const [note, setNote] = useState({ loading: false, note: null, error: null });
+  const manageId = page?.can_manage ? page.fund.id : null;
+  useEffect(() => {
+    if (!manageId) return undefined;
+    let live = true;
+    setNote({ loading: true, note: null, error: null });
+    fundDraftsApi.briefNote(manageId).then(
+      (r) => { if (live) setNote({ loading: false, note: r?.note ?? null, error: null }); },
+      () => { if (live) setNote({ loading: false, note: null, error: 'Unreadable: the fund note could not be read.' }); },
+    );
+    return () => { live = false; };
+  }, [manageId]);
+  const keepBrief = async (_text, draft) => {
+    try {
+      const r = await fundDraftsApi.keepBrief(page.fund.id, draft);
+      setNote({ loading: false, note: r?.note ?? null, error: null });
+      return null;
+    } catch (failure) {
+      return [403, 404, 409, 422, 503].includes(failure?.status) && failure?.message ? failure.message : 'The brief could not be kept. Nothing was written. Try again.';
+    }
+  };
   const openLpa = async () => {
     setDownload({ busy: true, error: null });
     try { await api.downloadFundLpa(page.fund.id); setDownload({ busy: false, error: null }); }
@@ -86,11 +108,22 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
       {page.can_manage && <FundDraftBand testId="fund-brief-band" title="Fund brief" run="Draft the brief"
         body="Draft a one-paragraph description of this fund from its recorded facts."
         writes="Accept writes a note. It changes no fund record."
-        onRun={() => fundDraftsApi.brief(page.fund.id)}
-        acceptBlocked="Keeping the brief as a note is not built yet: where fund notes are stored is waiting on a decision (#6252). Nothing has been written." />}
+        onRun={() => fundDraftsApi.brief(page.fund.id)} onAccept={keepBrief} />}
+      {page.can_manage && <FundNote reading={note} />}
       <FundHandoffs page={page} role={role} />
     </>}
   </WorkspaceShell></div>;
+}
+function FundNote({ reading }) {
+  if (reading.loading) return null;
+  if (reading.error) return <article className="fd-card" data-testid="fund-note"><h2>Fund brief · kept</h2><p role="alert">{reading.error}</p></article>;
+  const n = reading.note;
+  if (!n) return null;
+  return <article className="fd-card" data-testid="fund-note"><h2>Fund brief · kept</h2>
+    <p className="fd-draft-body">{n.body}</p>
+    <small>Kept by <Recorded value={n.author?.name} reason="The author's name is not recorded." /> · <Recorded value={n.created_at} reason="The date is not recorded." /></small>
+    {Array.isArray(n.sources) ? n.sources.length > 0 && <><h3>Drawn from</h3><ol className="fd-draft-sources">{n.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol></> : <p><b>Not recorded</b><small>The note's sources could not be read.</small></p>}
+  </article>;
 }
 function FundHandoffs({ page, role }) {
   const { links, edit } = fundHandoffs(page, role);

@@ -108,7 +108,7 @@ test('nothing is drawn off the left edge or above the page', () => {
 /* -------------------------------------------------- the edits that would break it */
 
 test('one more Cohort 4 company still fits', () => {
-  COHORT_4.push({ company: 'Northgate Fabrication', sector: 'Advanced manufacturing', score: 66, revenueK: 7.4, ic: 'Watch', allocDefault: 5 });
+  COHORT_4.push({ company: 'Northgate Fabrication', sector: 'Advanced manufacturing', score: 66, revenueK: 7.4, ic: 'Watch' });
   try {
     const { contentBottom, bottom, footerTop } = layout();
     assert.ok(contentBottom <= PAGE_H_PT, 'a seventh pipeline row overflows the page');

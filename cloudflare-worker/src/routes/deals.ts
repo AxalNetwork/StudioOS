@@ -8,6 +8,7 @@ import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
+import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireApprovedKyc, requireAdmin, canAccessFounderResource } from '../auth';
 import { dealHiddenFrom, editorialKeys, hiddenDealIds, hiddenJson, preparationManagesDeal, PREPARATION_MANAGED_TERMS, withoutHidden, type ReaderMode } from '../services/dealPreparation';
@@ -644,14 +645,15 @@ deals.get('/:id', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, p.founder_id as project_founder_id, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
+  const rows = await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, p.founder_id as project_founder_id, p.uid AS profile_uid, p.status AS profile_status, p.deleted_at AS profile_deleted_at, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
   if (!(await canReadDeal(c.env, user, id, (rows[0] as any).project_founder_id))) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  const deal = serializeDeal(rows[0], isDealStaff(user) ? 'admin' : 'member');
+  const { profile_uid: profileUid, profile_status: profileStatus, profile_deleted_at: profileDeletedAt, ...row } = rows[0];
+  const deal = serializeDeal(row, isDealStaff(user) ? 'admin' : 'member');
   if (user.role === 'investor' && effectiveInvestorTier(user as InvestorUser) === 'free') {
     let own = null;
     let ownUnreadable = false;
@@ -668,7 +670,11 @@ deals.get('/:id', async (c) => {
       progress_pct: deal.progress_pct, closing_deadline: deal.closing_deadline,
       my_commitment: own ?? null, my_commitment_unreadable: ownUnreadable, plan_limited: true });
   }
-  return c.json(deal);
+  const companyProfileUrl = typeof profileUid === 'string' && /^[a-z0-9_-]+$/i.test(profileUid) && profileDeletedAt == null
+    && !STARTUP_NOT_PUBLIC_STATUSES.includes(String(profileStatus ?? '').toLowerCase())
+    ? `/startups/${encodeURIComponent(profileUid)}`
+    : null;
+  return c.json({ ...deal, company_profile_url: companyProfileUrl });
 });
 
 deals.put('/:id', async (c) => {

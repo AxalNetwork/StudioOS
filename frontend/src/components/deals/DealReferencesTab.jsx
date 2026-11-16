@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../lib/api';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { Lightbox, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { CARD, SUB, H3 } from '../../pages/deal/DealFrame';
 import {
@@ -27,18 +28,28 @@ import { Loading, Empty, Unreadable, NotRecorded } from './DealRoomKit';
  * page's rules: Delete and Record consent each open the shared Lightbox,
  * which says what changes, and a refusal stays inside it. The card draws on
  * the deal page's CARD/SUB/H3 and axal tokens, with the canvas's pills
- * (Consent given or Consent asked, Notes kept). The canvas's "Only your firm
- * sees these." is left out: the read is deal-scoped.
+ * (Consent given or Consent asked, Notes kept). D6735 scopes investor reads
+ * to the verified firm and the investor's own checks.
  */
 export default function DealReferencesTab({ dealId }) {
+  const firmId = useActiveCompany().company?.id ?? '';
+  // A firm switch discards the old rows and any open reference dialog.
+  return <FirmReferences key={`${dealId}:${firmId}`} dealId={dealId} />;
+}
+
+function FirmReferences({ dealId }) {
   const [state, setState] = useState({ loading: true, error: false, rows: null });
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: false }));
     try {
       const rows = await api.listReferences(dealId);
       setState({ loading: false, error: false, rows: Array.isArray(rows) ? rows : [] });
-    } catch {
-      setState({ loading: false, error: true, rows: null });
+    } catch (error) {
+      if (error?.code === 'no_visible_references') {
+        setState({ loading: false, error: false, rows: [] });
+      } else {
+        setState({ loading: false, error: true, rows: null });
+      }
     }
   }, [dealId]);
   useEffect(() => { load(); }, [load]);

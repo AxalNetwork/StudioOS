@@ -9,7 +9,7 @@ import { researchMarketsApi } from '../../lib/api/researchMarkets.js';
 import { researchSectorsApi } from '../../lib/api/researchSectors.js';
 import { researchOverviewApi } from '../../lib/api/researchOverview.js';
 import { SaveNote } from '../advisor/expertise/kit';
-import { STALE_AT, ageBand, daysSince } from './MarketZone';
+import { STALE_AT, ageBand, daysSince } from './marketReadingRead';
 import { comparableCount, dollarsToCents, freshReadingForm, rangeReadsForward } from './marketReadingRead';
 
 /**

@@ -317,7 +317,8 @@ test('Overview: the round from the commitments read, Needs you and the stages fr
     assert.ok(v.text('caprel-ov-counted').includes('of $2,000,000 · 2.5%'));
     assert.ok(v.has('caprel-ov-need-overdue') && v.has('caprel-ov-need-no-status'));
     assert.ok(v.text('caprel-ov-stage-committed').endsWith('2'));
-    assert.ok(v.text('caprel-ov-stages').includes('Against 30 days ago: not recorded'));
+    // D5081 part 2 (#5081, RA-22): no shipped "not read here yet" line under the stages.
+    assert.doesNotMatch(v.text('caprel-ov-stages'), /not read here yet/i);
   } finally { await v.close(); }
   const r = await mounted('/raise/capital-relationships?project_id=3', { commitments: null });
   try {

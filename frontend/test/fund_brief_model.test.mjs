@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   fundModel, money, FUND, PROGRAM, THESIS, fundTerms, TIERS, TIER_RIGHTS,
-  COHORT_4, PROCESS_STEPS, SERVICE_PROVIDERS, allocationCandidates,
+  COHORT_4, PROCESS_STEPS, SERVICE_PROVIDERS,
 } from '../src/lib/spinoutFundModel.js';
 import { fundBriefModel, fundBriefFilename, briefDate } from '../src/lib/fundBriefViewModel.js';
 
@@ -40,7 +40,6 @@ test('the brief renders every section the design has', () => {
     assert.ok(vm[k], `missing section: ${k}`);
   }
   assert.equal(vm.raise.length, 5);
-  assert.equal(vm.terms.length, 12, 'the design shows twelve fund-structure rows');
   assert.equal(vm.tiers.length, TIERS.length);
   assert.equal(vm.record.length, 6);
   assert.equal(vm.pipeline.length, COHORT_4.length);
@@ -118,11 +117,10 @@ test('fund structure is the brief-flagged slice of the one term list', () => {
 });
 
 test('economics on the brief track FUND', () => {
-  withModel({ target: FUND, values: { mgmtFeePct: 2.5, carryPct: 25, minTicketK: 75, allocThresholdK: 400 } }, (vm) => {
+  withModel({ target: FUND, values: { mgmtFeePct: 2.5, carryPct: 25, minTicketK: 75 } }, (vm) => {
     assert.equal(byKey(vm.terms, 'Management fee').v, '2.5%');
     assert.equal(byKey(vm.terms, 'Carried interest').v, '25%');
     assert.equal(byKey(vm.terms, 'Minimum ticket').v, '$75K');
-    assert.equal(byKey(vm.terms, 'Allocation rights').v, 'from $400K');
   });
 });
 
@@ -150,9 +148,8 @@ test('tiers are the workspace tiers, with the matrix agreeing on column count', 
   for (const row of TIER_RIGHTS) {
     assert.equal(row.c.length, TIERS.length, `"${row.right}" has one cell per tier`);
   }
-  // Allocation rights open at exactly one tier, and it is the highlighted one.
-  const allocator = TIERS.find((t) => t.hl);
-  assert.equal(allocator.amountK, FUND.allocThresholdK);
+  const highlighted = TIERS.find((t) => t.hl);
+  assert.equal(highlighted.amountK, FUND.allocThresholdK);
 });
 
 /* --------------------------------------------------------------- pipeline */
@@ -183,7 +180,7 @@ test('readiness tone bands are the design thresholds', () => {
 });
 
 test('a new Cohort 4 company reaches the next downloaded brief', () => {
-  COHORT_4.push({ company: 'Testbed Co', sector: 'Test', score: 80, revenueK: 1, ic: 'Advance', allocDefault: 5 });
+  COHORT_4.push({ company: 'Testbed Co', sector: 'Test', score: 80, revenueK: 1, ic: 'Advance' });
   try {
     const vm = fundBriefModel();
     assert.ok(vm.pipeline.some((p) => p.company === 'Testbed Co'));
@@ -192,17 +189,9 @@ test('a new Cohort 4 company reaches the next downloaded brief', () => {
   }
 });
 
-test('the allocation window is a subset of the pipeline the brief prints', () => {
-  const candidates = allocationCandidates();
-  const printed = new Set(fundBriefModel().pipeline.map((p) => p.company));
-  assert.ok(candidates.length > 0);
-  for (const c of candidates) {
-    assert.ok(printed.has(c.company), `${c.company} is allocable but absent from the brief`);
-    assert.notEqual(c.ic, 'Track', 'companies still at Track are not allocable');
-  }
-  // Returned rows are copies — a slider must not mutate the shared list.
-  candidates[0].allocDefault = 999;
-  assert.notEqual(allocationCandidates()[0].allocDefault, 999);
+test('D6138: Fund I terms and tiers carry no allocation preference promise', () => {
+  const brief = fundBriefModel();
+  assert.doesNotMatch(JSON.stringify([fundTerms(), TIERS, TIER_RIGHTS, brief.tiers]), /allocation (rights|preferences|window)/i);
 });
 
 /* -------------------------------------------------- masthead, recipient, file */

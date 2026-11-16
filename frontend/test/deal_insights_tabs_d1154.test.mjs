@@ -138,7 +138,7 @@ test('traction: a month not reported is a gap in every series, never 0; a record
   assert.deepEqual([tile.customers.value, tile.customers.source], ['21', 'Typed · the founder’s own figure']);
   assert.deepEqual([tile.growth.value, tile.growth.reason], [null, 'Not shared in the last twelve months']);
   assert.deepEqual([tile.arr.value, tile.arr.reason], [null, 'No founder-shared ARR recorded; MRR is not annualised']);
-  assert.deepEqual([tile.nrr.value, tile.nrr.reason], [null, 'No founder-shared NRR recorded']);
+  assert.deepEqual([tile.net_retention.value, tile.net_retention.reason], [null, 'No founder-shared NRR recorded']);
   assert.equal(figureText(null, 'usd'), null);
   assert.equal(figureText(0, 'usd'), '$0');
   assert.equal(chartSummary('MRR by month', v.series.mrr).text, 'MRR by month: $10,000 in Nov 2025, $21,000 in Oct 2026. Jan 2026 was not reported.');

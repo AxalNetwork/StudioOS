@@ -19,6 +19,7 @@ import {
 import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel';
 import { ObjectionsPanel } from './ObjectionsPanel';
 import NarrativeCoach from './NarrativeCoach';
+import ExportDialog from './ExportDialog';
 import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -257,7 +258,9 @@ function SaveDialog({ writes, version, answers = [], onSave, onClose, saving, er
 }
 
 /** The Story tab for one version, read and written through D908's stores. */
-export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false, aiOn = true }) {
+export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false, aiOn = true, exportAs = null }) {
+  // D6070: 'founder' exports and copies; 'admin' copies only, recorded with the read reason; null offers neither.
+  const [exporting, setExporting] = useState(false);
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useNarrative(projectId, version, reload);
@@ -393,6 +396,14 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-story">
       {isLiveDeck(read.data) ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-live-deck">{LIVE_DECK}</p> : roleReadOnly ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-read-only">Read only. Notes are visible to the founder.</p> : null}
+      {exportAs && !isLiveDeck(read.data) ? (
+        <div className="flex justify-end">
+          <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="story-export-open">{exportAs === 'admin' ? 'Copy text' : 'Export and copy'}</button>
+        </div>
+      ) : null}
+      {exporting ? (
+        <ExportDialog projectId={projectId} read={read.data} sources={srcState} admin={exportAs === 'admin'} unsaved={writes.length > 0} onClose={() => setExporting(false)} />
+      ) : null}
       <div className={phone ? 'flex flex-col gap-3' : 'grid grid-cols-1 gap-3.5 lg:grid-cols-[230px_minmax(0,1fr)] xl:grid-cols-[230px_minmax(0,1fr)_280px]'}>
         {phone ? (
           <label className={`${CARD} flex items-center gap-2 px-3 py-2`}>

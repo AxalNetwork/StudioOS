@@ -1014,7 +1014,7 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     references: stepRef,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
   }, {
-    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
+    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
@@ -1110,7 +1110,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   }];
   if (hasMinutes) {
     actions.push({
-      key: 'open-minutes', label: 'Open minutes', kind: 'write',
+      key: 'open-minutes', label: 'Open minutes', kind: 'write', row_only: true,
       // The occurrence is checked in its own store, then against this obligation by the writer.
       references: (body) => [{ store: 'obligation_occurrences', id: refOf(field(body, 'occurrence')) }],
       execute: (c, _id, body) => refusing(async () => ({ ok: true, ...(await openMinutes(c.env, c.projectId, userOf(c), Number(id), Number(field(body, 'occurrence')))) })),

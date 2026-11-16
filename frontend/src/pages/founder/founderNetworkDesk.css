@@ -87,3 +87,23 @@
 .dark .a6-icon-button{background:#322d39;border-color:#4b4353;color:#e1dbe6}
 @media(max-width:600px){.a6-icon-button{width:44px;height:44px}}
 .dark .a6-link{color:#c4b5fd}
+/* #5310 part 4 (D5310-p4): NW8 phone and NW10 dark, checked against their boards. */
+.a6-tile.is-marked{border-color:#fcd34d;box-shadow:inset 3px 0 0 #f59e0b}
+.a6-tile-mark{margin-right:4px;font-weight:800}
+.dark .a6-tile.is-marked{border-color:rgba(245,158,11,.45)}
+.a6-match-actions .a6-primary{border:0;background:#6d28d9;color:#fff}
+.dark .a6-match-actions .a6-primary{background:#7c3aed;color:#fff}
+.a6-section-picker{display:none}
+.a6-section-picker select{width:100%;min-height:44px;border:1px solid #e5e1e9;border-radius:10px;padding:0 12px;background:#fff;color:#27242d;font-size:14px;font-weight:700}
+.dark .a6-section-picker select{background:#322d39;border-color:#4b4353;color:#e1dbe6}
+@media(max-width:600px){
+  .a6-hero{display:flex;flex-direction:column;gap:8px}
+  .a6-hero .ask-hero-top{display:contents}
+  .a6-hero .a6-kicker{order:0;margin:0}
+  .a6-hero h1{order:1;margin:0}
+  .a6-hero>p{order:2}
+  .a6-hero-actions{order:3;flex-wrap:nowrap}
+  .a6-hero-actions .a6-primary{flex:1;font-size:14px}
+  .a6-hero nav{display:none}
+  .a6-section-picker{order:4;display:flex;flex-direction:column;margin-top:8px}
+}

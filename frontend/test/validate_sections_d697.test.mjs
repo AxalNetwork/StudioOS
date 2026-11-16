@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import { InterviewsSection, PainThemesSection, HypothesesSection, historyNotes, withVenture } from '../src/pages/cycles/ValidateSections.jsx';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection, historyNotes, withVenture } from '../src/pages/cycles/ValidateSections.jsx';
 import { adaptModule, adaptRecords } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS, TITLES } from '../src/pages/cycles/adapters/validate.js';
 import { cellView } from '../src/pages/cycles/cycleModel.js';
@@ -469,4 +469,19 @@ test('6: mounted at ?log=notes, LogInterviewModal renders after the size contain
     const frameKids = container.parentNode.childNodes;
     assert.ok(frameKids.indexOf(container) < frameKids.findIndex((k) => m.nodes(k).includes(modal)));
   } finally { await m.close(); }
+});
+
+test('D6002: ICP offers segment assignment to writers and hides the panel from readers', () => {
+  const parts = {
+    can_write: true,
+    unassigned_total: 1,
+    unassigned: [{ id: 7, interviewee: 'Synthetic Person', date: '2026-11-14', fit: 'partial' }],
+    segments: [{ id: 11, name: 'Fleet leads' }],
+  };
+  const html = ssr(h(SegmentsSection, { parts, onAssign: noop }));
+  assert.match(html, /Interviews without a segment · 1/);
+  assert.match(html, /Synthetic Person.*2026-11-14.*Partial fit/);
+  assert.match(html, /Assign to a segment/);
+  assert.match(html, /<option value="11">Fleet leads<\/option>/);
+  assert.equal(ssr(h(SegmentsSection, { parts: { ...parts, can_write: false }, onAssign: noop })), '');
 });

@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { readAccountPage } from './_accountSource.mjs';
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -73,7 +74,7 @@ test('the studio card renders the matching sex sprite, or the pair when unknown'
 });
 
 test('Settings profile details can set archetype_sex independently of pronouns', () => {
-  const settings = codeOnly(read('../src/pages/SettingsPage.jsx'));
+  const settings = codeOnly(readAccountPage());
   assert.match(settings, /label="Archetype character"/);
   assert.match(settings, /save\(\{ archetype_sex: e\.target\.value \|\| null \}\)/);
   assert.match(settings, /<option value="m">Man<\/option>/);

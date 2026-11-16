@@ -101,6 +101,8 @@ function freshDb() {
   db.exec(migration('232_partner_engagement_health'));
   // #5314 part 3: the revisions on health, caps, internal and client hours.
   db.exec(migration('202611111141_5314_delivery_write_versions'));
+  // #4709: blockers kept at send, report amendments and deliverable corrections.
+  db.exec(migration('202611152339_4709_delivery_history'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS, 'partner', 1, 'Ours', 'ours@example.com');

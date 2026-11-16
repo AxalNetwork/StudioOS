@@ -70,6 +70,19 @@ function useRead(fetcher) {
   return [state, useCallback(() => setRound((n) => n + 1), [])];
 }
 
+/** D4655: arrow keys move and select a tab; Tab leaves the group. */
+function moveTab(event, keys, active, onPick) {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const at = keys.indexOf(active);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? keys.length - 1
+    : event.key === 'ArrowRight' ? (at + 1) % keys.length
+      : event.key === 'ArrowLeft' ? (at + keys.length - 1) % keys.length : null;
+  if (next === null) return;
+  event.preventDefault();
+  onPick(keys[next]);
+  event.currentTarget.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]')[next]?.focus();
+}
+
 function Tabs({ tab, onPick }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -81,7 +94,9 @@ function Tabs({ tab, onPick }) {
     <div className="axp-tabwrap">
       <div className="axp-tabs" role="tablist" aria-label="Pricing for" ref={ref}>
         {PRICING_TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={t.key === tab} data-testid={`pricing-tab-${t.key}`}
+          <button key={t.key} type="button" role="tab" id={`pricing-audience-${t.key}`} aria-controls="pricing-audience-panel"
+            aria-selected={t.key === tab} tabIndex={t.key === tab ? 0 : -1} data-testid={`pricing-tab-${t.key}`}
+            onKeyDown={(event) => moveTab(event, PRICING_TABS.map(item => item.key), tab, onPick)}
             className={`axp-tab${t.key === tab ? ' is-on' : ''}`} onClick={() => onPick(t.key)}>
             {t.label}
           </button>
@@ -158,8 +173,8 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
     const c = compareCell(v);
     return (
       <span key={key} role="cell" className={cn}>
-        {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
-        {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
+        {c.tick && <span className="axp-tick" role="img" aria-label="Included">{TICK}</span>}
+        {c.dash && <span className="axp-dash" role="img" aria-label="Not included">—</span>}
         {c.text}
       </span>
     );
@@ -185,10 +200,15 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
       <div className="axp-phone">
         <div className="axp-chips" role="tablist" aria-label="Plan">
           {cards.map((c, i) => (
-            <button key={c.id} type="button" role="tab" aria-selected={i === at} className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
+            <button key={c.id} type="button" role="tab" id={`pricing-plan-${c.id}`} aria-controls="pricing-plan-panel"
+              aria-selected={i === at} tabIndex={i === at ? 0 : -1}
+              onKeyDown={(event) => moveTab(event, cards.map((_, index) => index), at, setPick)}
+              className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
           ))}
         </div>
+        <div role="tabpanel" id="pricing-plan-panel" aria-labelledby={`pricing-plan-${cards[at]?.id}`} tabIndex={0}>
         <div className="axp-table" role="table" aria-label={`${cards[at]?.name ?? ''} plan features`}>
+          <div className="axp-thead axp-row-phone" role="row"><span role="columnheader">Feature</span><span role="columnheader">{cards[at]?.name}</span></div>
           {groups.map(([t, rows, meta]) => (
             <React.Fragment key={t}>
               <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
@@ -197,6 +217,7 @@ function Compare({ tab, cards, storage = null, capacity = null }) {
               ))}
             </React.Fragment>
           ))}
+        </div>
         </div>
       </div>
     </section>
@@ -448,10 +469,11 @@ function Faq({ tab, catalogue }) {
       <div className="axp-faq-list">
         {items.map(([q, a], i) => (
           <div key={q} className="axp-faq-item">
-            <button type="button" aria-expanded={i === open} onClick={() => setOpen(i === open ? -1 : i)}>
+            <button type="button" aria-expanded={i === open} aria-controls={`pricing-faq-${tab}-${i}`}
+              onClick={() => setOpen(i === open ? -1 : i)}>
               <span>{q}</span><span className="axp-faq-chev" aria-hidden="true">{i === open ? '−' : '+'}</span>
             </button>
-            {i === open && <p>{a}</p>}
+            <p id={`pricing-faq-${tab}-${i}`} hidden={i !== open}>{a}</p>
           </div>
         ))}
       </div>
@@ -572,6 +594,7 @@ export function PricingBody({ user = null }) {
         )}
       </section>
 
+      <div id="pricing-audience-panel" role="tabpanel" aria-labelledby={`pricing-audience-${tab}`} tabIndex={0}>
       {roleTab && returned && <ReturnedNotice notice={returned} onClose={() => setReturned(null)} />}
 
       {roleTab && (
@@ -636,6 +659,7 @@ export function PricingBody({ user = null }) {
       )}
 
       <Faq key={`faq-${tab}`} tab={tab} catalogue={plans.status === 'ready' ? plans.body?.catalogue : null} />
+      </div>
 
       {!user && (
         <section className="axp-sec">

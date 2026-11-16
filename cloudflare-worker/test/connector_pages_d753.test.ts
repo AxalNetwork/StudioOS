@@ -92,6 +92,8 @@ const NOT_ROWS = new Set(['linkedin', 'teams', ...CHANNELS]);
 
 /** Each connector's own files. `services/notify.ts` holds Slack's one write but also sends mail, so it is not scanned for coverage. */
 const SOURCES: Record<string, string[]> = {
+  // D5859: a Page's Grow figures are read in `services/facebook/insights.ts`, through the provider's Graph call.
+  facebook: ['services/facebook/insights.ts'],
   github: ['integrations/providers/github.ts', 'integrations/providers/github/roadmap.ts', 'integrations/providers/github/solutionDesign.ts', 'integrations/providers/github/team.ts', 'integrations/providers/github/company.ts', 'integrations/providers/github/mvp.ts'],
   // D840: a member's sign-in reads through the MCP client and its typed reads, and signs in through `oauth.ts`.
   // D847: the transport is the shared client, which `mcp.ts` calls.

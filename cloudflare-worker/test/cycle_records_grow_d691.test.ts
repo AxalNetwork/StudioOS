@@ -201,6 +201,10 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
   assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null], ['Resolutions', 'Not recorded']]);
+  // D6113 follow-up: Open minutes and Tick a localisation check run from their rows only (row_only), never as header buttons.
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'open-minutes').row_only, true);
+  assert.equal(market.body.actions.find((a: any) => a.key === 'localisation-check').row_only, true);
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'edit').row_only, undefined);
   // A custom KPI is a record too; another venture's is not.
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpa1')).body.title, 'NPS');
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpb1')).status, 404);

@@ -6,7 +6,8 @@
 // that does listen would run on a branch nobody reviewed.
 //
 // The required checks are the owner's ruleset "main: required checks"
-// (2026-11-02, on #4107). When the ruleset changes, change REQUIRED here.
+// (2026-11-02, on #4107). REQUIRED lives in scripts/lib/requiredChecks.mjs
+// (#5973) because the CI scorecard reads it too; change it there.
 //
 // Run with:
 //   node --test frontend/test/merge_queue_ci_4107.test.mjs
@@ -15,15 +16,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { REQUIRED } from '../../scripts/lib/requiredChecks.mjs';
 const DIR = '.github/workflows';
-const REQUIRED = Object.freeze({
-  'test:drift (full suite)': 'ci.yml',
-  'worker (typecheck)': 'ci.yml',
-  'frontend (build)': 'ci.yml',
-  'api ↔ worker drift': 'ci.yml',
-  'applied migrations unchanged': 'migration-immutability.yml',
-  scan: 'gitleaks.yml',
-});
 const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.

@@ -698,11 +698,17 @@ test('1: each declared action runs its handler, writes its store and logs one ro
   assert.equal((db.prepare('SELECT r2_key FROM data_room_file_versions WHERE file_id = 12').get() as any).r2_key, 'k12');
   assert.equal(logged('data-room', 12).action, 'file_replaced');
   assert.equal((await act(db, 'data-room', 12, 'replace', {}, { files: room })).status, 400, 'no file');
+  // D6073: Remove moves the file to Trash for 30 days; nothing is deleted until the purge.
   await ok('data-room', 12, 'remove', undefined, room);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 12 AND removed_at IS NOT NULL'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions WHERE file_id = 12'), 1);
+  assert.deepEqual(room.deleted, [], 'nothing leaves storage on Remove');
+  assert.equal(logged('data-room', 12).action, 'file_removed');
+  const { purgeFile } = await import('../src/services/dataRoomTrash.ts');
+  assert.ok(await purgeFile({ DB: d1Over(db), FILES: room } as any, { project: { id: P, uid }, userId: FOUNDER, fileId: 12, reason: 'delete_now' }));
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 12'), 0);
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions WHERE file_id = 12'), 0);
-  assert.deepEqual(room.deleted, [now.r2_key], 'k12 lies outside the prefix and is never deleted');
-  assert.equal(logged('data-room', 12).action, 'file_removed');
+  assert.deepEqual(room.deleted.flat(), [now.r2_key], 'k12 lies outside the prefix and is never deleted');
   // A file removed between the route's ownedRow and the writer (a race) is 404, never ok with no record.
   const ctx = { env: { DB: d1Over(db), FILES: room }, projectId: P, project: { id: P, founder_id: 1001 }, user: { id: FOUNDER, role: 'founder' } } as any;
   const remove = (await RAISE_RECORDS['data-room'].actions(ctx, '12', {} as any)).find((a) => a.key === 'remove')!;

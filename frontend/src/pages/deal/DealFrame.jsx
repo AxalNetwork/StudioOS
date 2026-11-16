@@ -15,9 +15,10 @@
  * founder. The sequence itself draws no action.
  */
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Check, ExternalLink, Globe } from 'lucide-react';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, usePhoneWidth } from '../../ui';
+import { HeaderMenuItem, MoreMenu } from '../../ui/AdminPageHeader';
 import { NO_PERMISSION, NOT_FOUND, DEAL_UNREADABLE, progressChip } from './dealFrameModel';
 import { dealGroupsFor, dealViewsIn, groupHref, groupOf, tabHref } from '../dealPageModel';
 
@@ -119,6 +120,33 @@ export function DealTabs({ dealId, role, tab }) {
           ))}
         </nav>
       )}
+    </div>
+  );
+}
+
+/** Sharing actions for the authorized deal header. */
+export function DealMoreActions({ profileUrl }) {
+  const { key } = useLocation();
+  const [feedback, setFeedback] = useState(null);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setFeedback({ key, text: 'Link copied.' });
+    } catch {
+      setFeedback({ key, text: 'Could not copy the link. Copy it from the address bar.' });
+    }
+  };
+
+  return (
+    <div className="relative">
+      <MoreMenu className="" testId="deal-more">
+        {profileUrl && <HeaderMenuItem to={profileUrl} data-testid="deal-open-company-profile">Open company profile</HeaderMenuItem>}
+        <HeaderMenuItem onSelect={copyLink} data-testid="deal-copy-link">Copy link</HeaderMenuItem>
+      </MoreMenu>
+      <span role="status" className={`absolute right-0 top-full z-20 mt-1 w-max max-w-56 rounded-axal-sm bg-white text-[12px] text-axal-ink dark:bg-gray-900 dark:text-gray-100 ${feedback?.key === key ? 'border border-axal-hairline px-2 py-1 dark:border-gray-700' : 'sr-only'}`}>
+        {feedback?.key === key ? feedback.text : ''}
+      </span>
     </div>
   );
 }

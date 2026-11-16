@@ -149,6 +149,7 @@ async function mounted(url, user, handler = handlerWith()) {
     requests, text: () => text(document.body), byId,
     has: (id) => byId(id).length > 0,
     textOf: (id) => text(byId(id)[0]),
+    hrefOf: (id) => props(byId(id)[0]).href,
     tag: (t) => nodes().filter((n) => n.tagName === t),
     async click(id) { const n = byId(id)[0]; assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
     async clickText(t) { const n = nodes().find((x) => x.tagName === 'BUTTON' && text(x).trim() === t); assert.ok(n, `no button ${t}`); await act(async () => { props(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
@@ -216,6 +217,7 @@ test('an Advisor and an Explorer get DL22\'s words, and nothing is read', async 
 test('not on the deal is DL22a; a deal read that failed is DL20b, never "not found"', async () => {
   let v = await mounted('/deals/4', INVESTOR, handlerWith({ '/api/deals/4(\\?|$)': () => response({ detail: 'Forbidden' }, 403) }));
   try {
+    assert.ok(!v.has('deal-more'));
     assert.match(v.textOf('deal-no-permission-not_on_deal'), /You’re not on this deal\./);
     assert.ok(!v.requests.some((r) => /stage|notes|whats-new|commitments/.test(r)), 'nothing private is read');
   } finally { await v.close(); }
@@ -224,6 +226,52 @@ test('not on the deal is DL22a; a deal read that failed is DL20b, never "not fou
     assert.match(v.textOf('deal-unreadable'), /This deal could not be read\. That is not the same as it not existing\./);
     assert.ok(DEAL_UNREADABLE.endsWith('That is not the same as it not existing.'));
     assert.ok(!v.has('deal-not-found'));
+  } finally { await v.close(); }
+});
+
+test('Deal More copies the current tab, reports failure, and uses the supplied company profile', async () => {
+  const tab = '/deals/4/terms?from=flow#valuation';
+  const url = 'https://axal.example' + tab;
+  const v = await mounted(tab, INVESTOR, handlerWith({
+    '/api/deals/4$': () => response({ ...DEAL, company_profile_url: '/startups/harbor-ledger' }),
+  }));
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  const written = [];
+  let refused = false;
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { async writeText(value) { if (refused) throw new Error('Denied'); written.push(value); } },
+  });
+  window.location.href = url;
+  try {
+    await v.click('deal-more');
+    assert.equal(v.hrefOf('deal-open-company-profile'), '/startups/harbor-ledger');
+    await v.click('deal-copy-link');
+    assert.deepEqual(written, [url]);
+    assert.match(v.text(), /Link copied\./);
+    refused = true;
+    await v.click('deal-more');
+    await v.click('deal-copy-link');
+    assert.match(v.text(), /Could not copy the link/);
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+    else delete navigator.clipboard;
+    await v.close();
+  }
+});
+
+test('Deal More offers only Copy link without a public profile and is hidden on Free', async () => {
+  let v = await mounted('/deals/4', INVESTOR);
+  try {
+    await v.click('deal-more');
+    assert.ok(v.has('deal-copy-link'));
+    assert.ok(!v.has('deal-open-company-profile'));
+  } finally { await v.close(); }
+  v = await mounted('/deals/4', INVESTOR, handlerWith({
+    '/api/deals/4$': () => response({ ...DEAL, plan_limited: true }),
+  }));
+  try {
+    assert.ok(!v.has('deal-more'));
   } finally { await v.close(); }
 });
 

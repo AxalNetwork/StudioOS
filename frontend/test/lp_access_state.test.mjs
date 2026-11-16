@@ -1,15 +1,15 @@
 // Guards the LP access-state ladder in lib/spinoutFundModel.js.
 //
 // This is the security-relevant helper on the LP workspace: it decides whether
-// a viewer sees the reporting archive, the LP data room and the allocation
-// sliders. The Claude Design export let the VIEWER pick that state from a row
+// a viewer sees the reporting archive and the LP data room.
+// The Claude Design export let the VIEWER pick that state from a row
 // of buttons; here it is derived from the caller's own rows in
 // GET /api/funds/lp-portal, so these cases exist to keep it underivable by the
 // client and un-escalatable by a malformed payload.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  lpAccessState, lpHasReports, lpAllocationOpen, ALLOC_THRESHOLD_K,
+  lpAccessState, lpHasReports, ALLOC_THRESHOLD_K,
 } from '../src/lib/spinoutFundModel.js';
 
 const lp = (commitment, lpa_signed = true) => ({
@@ -22,7 +22,6 @@ test('no LP rows is visitor — nothing gated is unlocked', () => {
     assert.equal(lpAccessState(empty).state, 'visitor');
   }
   assert.equal(lpHasReports('visitor'), false);
-  assert.equal(lpAllocationOpen('visitor'), false);
 });
 
 test('an LP row without a countersigned LPA is pending, not approved', () => {
@@ -33,21 +32,17 @@ test('an LP row without a countersigned LPA is pending, not approved', () => {
 test('countersigned LPA with nothing committed is approved and unlocks reports', () => {
   assert.equal(lpAccessState(lp(0, true)).state, 'approved');
   assert.equal(lpHasReports('approved'), true);
-  assert.equal(lpAllocationOpen('approved'), false);
 });
 
-test('allocation opens only at or above the threshold, compared in dollars', () => {
+test('the participation tier starts at the threshold, compared in dollars', () => {
   const T = ALLOC_THRESHOLD_K * 1000;
   assert.equal(lpAccessState(lp(T)).state, 'voting');
   assert.equal(lpAccessState(lp(T + 0.01)).state, 'voting');
   assert.equal(lpAccessState(lp(T - 1)).state, 'committed');
-  assert.equal(lpAllocationOpen('committed'), false);
-  assert.equal(lpAllocationOpen('voting'), true);
 });
 
-test('display rounding cannot clear the rights threshold', () => {
-  // Regression: Math.round(249999/1000) === 250, which would have granted
-  // allocation and decision rights to a commitment that is not $250K.
+test('display rounding cannot clear the participation threshold', () => {
+  // Math.round(249999/1000) would put $249,999 in the $250K tier.
   const near = lpAccessState(lp(249_999));
   assert.equal(near.state, 'committed');
   assert.equal(near.commitmentK, 249, 'floors for display, never overstates');
@@ -72,7 +67,7 @@ test('malformed or hostile payloads degrade down the ladder, never up', () => {
   assert.equal(lpAccessState(lp(NaN, false)).state, 'pending');
   // Negative amounts are discarded rather than summed, so this LP reads as $0
   // committed. With a signed LPA that is 'approved' — critically NOT
-  // 'committed' or 'voting', so no amount of negative data buys allocation.
+  // 'committed' or 'voting'.
   assert.equal(lpAccessState(lp(-9e9)).state, 'approved');
   assert.equal(lpAccessState(lp(-9e9, false)).state, 'pending');
   assert.equal(lpAccessState(lp(-9e9)).commitmentK, 0);
@@ -95,7 +90,6 @@ test('a pending application moves visitor → pending, and unlocks NOTHING', () 
   assert.equal(r.state, 'pending');
   assert.equal(r.applicationStatus, 'pending');
   assert.equal(lpHasReports(r.state), false, 'no reporting archive');
-  assert.equal(lpAllocationOpen(r.state), false, 'no allocation rights');
 });
 
 test('an applicant cannot climb the ladder by writing their own status', () => {
@@ -109,7 +103,6 @@ test('an applicant cannot climb the ladder by writing their own status', () => {
       `status "${claimed}" resolved to ${r.state}`,
     );
     assert.equal(lpHasReports(r.state), false, `status "${claimed}" must not unlock reports`);
-    assert.equal(lpAllocationOpen(r.state), false, `status "${claimed}" must not unlock allocation`);
   }
 });
 

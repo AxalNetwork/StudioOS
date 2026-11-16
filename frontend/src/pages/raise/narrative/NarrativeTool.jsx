@@ -358,7 +358,8 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} readOnly={readOnly} />;
   else if (tab === 'story') body = (
     <>
-      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={readOnly} aiOn={fixOn} />
+      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={readOnly} aiOn={fixOn}
+        exportAs={admin ? 'admin' : readOnly ? null : 'founder'} />
       <NarrativeNotes projectId={projectId} version={version} admin={admin} />
       {admin ? null : <NarrativeReads projectId={projectId} />}
     </>

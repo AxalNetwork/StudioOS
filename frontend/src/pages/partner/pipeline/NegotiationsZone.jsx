@@ -1,63 +1,60 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { readAllPages } from '../../../lib/pagedRead';
 import PartialRead from './PartialRead';
 import { usePipelineZone } from './usePipelineZone';
+import NegotiationTermsSheet, {
+  STAGE_LABEL, BallMark, whoOf, waitedText,
+} from './NegotiationTermsSheet';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
-import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
+import { Eyebrow, NotRecorded } from '../../../workspaces/canvasKit';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  // `StatCard` went with the four tiles it drew: the strip is the artboard's
-  // own now, and its fourth tile is a count rather than the em dash that stood
-  // where a close probability would be.
-  Section, Field, SaveNote, NotComputable, NoPartnerProfile,
-  isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
+  SaveNote, NoPartnerProfile, isNoPartnerProfile, ghostButtonClass, moneyDollars,
 } from '../kit';
 
 /**
- * Pipeline · Negotiations — `/pipeline/negotiations`.
+ * Pipeline · Negotiations — `/pipeline/negotiations`, boards PP05 (the board),
+ * PP05b (the terms sheet) and PP05m (phone, a stage selector) of the
+ * `Pipeline v2` canvas. D5938 (#5938, part of #4838).
  *
- * THE ZONE THAT USED TO SAY THERE WAS NOTHING TO READ. Its card was accurate
- * for as long as it stood: a quote was either sent or decided, and the
- * conversation between those two states had no store. Migration 208 gave it
- * two — `quote_negotiations` (stage, whose move it is, the one open question)
- * and `quote_terms` (a clause with three positions rather than one value).
- * This file is what reads them.
+ * THE STORES. Migration 208 gave this zone two: `quote_negotiations` (stage,
+ * whose move it is, the one open question, `last_moved_at`) and `quote_terms`
+ * (a clause with three positions rather than one value). `GET /negotiations`
+ * reads both; `PUT /negotiations/:quoteId` and the negotiation-terms routes
+ * write them. This file reads and writes them as they are.
  *
- * WHY A TERM CARRIES THREE POSITIONS. Collapsing "we asked 90 days, they asked
- * 30, it lands at 45" to a current value of 45 loses the two halves that
- * explain the third — which is the half a person needs when the same clause
- * comes back on the next deal. So the table shows all three and the landing
- * can be empty without the row being incomplete.
+ * THE BOARD IS THE RECORDED STAGES. Scoping, Terms, Legal and Ready to sign
+ * are four lanes; `closed` is a fifth stage and not a lane, because a board is
+ * what is in play. Each lane header names the stage and counts its cards. No
+ * WIP limit is drawn: none is stored (D4838, Backend required).
  *
- * WHAT MOVES THE STALLED CLOCK, AND WHAT DOES NOT. `last_moved_at` advances on
- * a stage or ball change, or on an explicit "Log a move" — never on rewording
- * the open question. That is a worker rule rather than a page one, and it is
- * deliberate: if typing reset the clock, the stalled count could be cleared by
- * editing rather than by moving.
+ * EACH CARD ANSWERS FIVE QUESTIONS: who, how much, what is still open, who has
+ * the ball, and how long it has waited. "Waited" is days since the last
+ * RECORDED move (`days_stalled`, computed by the Worker from `last_moved_at`);
+ * a stage or ball change or "Log a move" advances it, rewording the open
+ * question does not. A negotiation with no recorded move says Not recorded,
+ * never 0.
  *
- * WHAT THIS ZONE CANNOT ANSWER. Every figure the canvas asks for that is not
- * here is named on the page, with its reason. The largest is a probability:
- * nothing records why a past negotiation was won or lost, so there is nothing
- * to weight a live one against. A percentage drawn from stage alone would be
- * the stage relabelled as a forecast.
+ * MOVING A CARD IS TWO BUTTONS, NOT A DRAG. Each card carries "back to" and
+ * "on to" the neighbouring stage; both are buttons, so a keyboard moves a card
+ * exactly as a pointer does, and focus follows the card to its new lane.
+ *
+ * PHONE IS A STAGE SELECTOR AND ONE LIST. Four lanes at 390px would be four
+ * unreadable columns, so the phone draws the stages as a radio group with
+ * their counts and the chosen stage's cards stacked below.
  */
 
-const STAGES = [
-  ['scoping', 'Scoping'],
-  ['terms', 'Terms'],
-  ['legal', 'Legal'],
-  ['ready_to_sign', 'Ready to sign'],
-  ['closed', 'Closed'],
-];
-const STAGE_LABEL = Object.fromEntries(STAGES);
-// The four the artboard draws as lanes. `closed` is a fifth stage and not a
+// The four the board draws as lanes. `closed` is a fifth stage and not a
 // lane: a board is what is in play, and a closed negotiation is not.
 const LANES = [['scoping', 'Scoping'], ['terms', 'Terms'], ['legal', 'Legal'], ['ready_to_sign', 'Ready to sign']];
+// The phone selector's own short words (PP05m draws "Ready 0").
+const SHORT = { scoping: 'Scoping', terms: 'Terms', legal: 'Legal', ready_to_sign: 'Ready' };
 
 /** The strip tile, in the anatomy the artboards share. */
 function NegotiationTile({ label, value, note, nr = false }) {
@@ -74,275 +71,135 @@ function NegotiationTile({ label, value, note, nr = false }) {
   );
 }
 
-const TERM_STATES = [
-  ['open', 'Open'],
-  ['agreed', 'Agreed'],
-  ['conceded', 'Conceded'],
-  ['refused', 'Refused'],
-];
-const TERM_STATE_LABEL = Object.fromEntries(TERM_STATES);
-// `Pill` names its tones semantically — neutral / ok / warn / danger / info —
-// and falls back to neutral for anything else WITHOUT warning. A colour name
-// here (`amber`, `rose`) therefore renders grey and looks like a styling miss
-// rather than a wrong prop, so the map is written in the component's own
-// vocabulary.
-const TERM_TONE = {
-  open: 'warn', agreed: 'ok', conceded: 'neutral', refused: 'danger',
-};
-
-/** Days stalled, in the words the canvas uses, or the absence said plainly. */
-function StalledFor({ days }) {
-  if (days === null || days === undefined) return <Unrecorded>Not moved yet</Unrecorded>;
-  if (days <= 0) return <span className="text-axal-muted">Moved today</span>;
-  const tone = days >= 7 ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-axal-muted';
-  return <span className={tone}>{days}d since it moved</span>;
-}
-
-function TermRow({ term, onSave, onDelete, busy }) {
-  const [edit, setEdit] = useState(false);
-  const [draft, setDraft] = useState(term);
-  // By VALUE, not identity: a background refresh hands every term a new object, and
-  // resetting on that would discard a draft someone is still typing.
-  const termKey = JSON.stringify(term);
-  useEffect(() => { setDraft(term); }, [termKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!edit) {
+/** "How long it has waited", or the absence said with its reason. */
+function Waited({ days }) {
+  const text = waitedText(days);
+  if (!text) {
     return (
-      <tr className="border-t border-axal-hairline align-top">
-        <td className="py-2 pr-3 font-semibold">{term.label}</td>
-        <td className="py-2 pr-3 text-axal-muted">{term.our_position || <Unrecorded />}</td>
-        <td className="py-2 pr-3 text-axal-muted">{term.their_position || <Unrecorded />}</td>
-        <td className="py-2 pr-3 text-axal-muted">{term.landing || <Unrecorded>Not landed</Unrecorded>}</td>
-        <td className="py-2 pr-3"><Pill tone={TERM_TONE[term.state]}>{TERM_STATE_LABEL[term.state] || term.state}</Pill></td>
-        <td className="py-2 text-right">
-          <button type="button" className={ghostButtonClass} onClick={() => setEdit(true)}>Edit</button>
-        </td>
-      </tr>
+      <span className="inline-flex flex-wrap items-baseline gap-1">
+        <NotRecorded />
+        <span className="text-[11px] font-normal text-axal-faint">no move logged</span>
+      </span>
     );
   }
+  // Seven days is the strip's threshold, and a stalled card says so in words.
+  return (Number(days) >= 7)
+    ? <span className="text-red-700 dark:text-red-300">{text} · stalled</span>
+    : <span>{text}</span>;
+}
 
+/** One negotiation on the board (and in the phone list). */
+function BoardCard({ row, laneIndex, onOpen, onMove, busy, note, openRef, phone }) {
+  const n = row.negotiation;
+  const who = whoOf(row);
+  const openTerms = (row.terms || []).filter((t) => t.state === 'open').length;
+  const stalled = (n.days_stalled ?? 0) >= 7;
+  const prev = LANES[laneIndex - 1];
+  const next = LANES[laneIndex + 1];
+  const name = who || `Quote ${row.quote_uid || row.quote_id}`;
+  const tall = phone ? 'min-h-[44px]' : '';
   return (
-    <tr className="border-t border-axal-hairline align-top">
-      <td className="py-2 pr-3" colSpan={6}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Term">
-            <input className={inputClass} value={draft.label || ''} maxLength={160}
-              onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
-          </Field>
-          <Field label="State">
-            <select className={inputClass} value={draft.state}
-              onChange={(e) => setDraft({ ...draft, state: e.target.value })}>
-              {TERM_STATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </Field>
-          <Field label="What we asked">
-            <input className={inputClass} value={draft.our_position || ''} maxLength={600}
-              onChange={(e) => setDraft({ ...draft, our_position: e.target.value })} />
-          </Field>
-          <Field label="What they asked">
-            <input className={inputClass} value={draft.their_position || ''} maxLength={600}
-              onChange={(e) => setDraft({ ...draft, their_position: e.target.value })} />
-          </Field>
-          <Field label="Where it lands" hint="Leave empty while it is still open — an empty landing is a real state, not a missing field.">
-            <input className={inputClass} value={draft.landing || ''} maxLength={600}
-              onChange={(e) => setDraft({ ...draft, landing: e.target.value })} />
-          </Field>
+    <article
+      data-neg-card={row.quote_id}
+      aria-label={name}
+      className={`flex flex-col gap-1 rounded-[10px] border p-3 text-[12.5px] ${
+        stalled
+          ? 'border-red-200 bg-white dark:border-red-900 dark:bg-gray-900'
+          : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900'
+      }`}
+    >
+      <b className="text-[13.5px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
+        {who || <Unrecorded>Client not recorded</Unrecorded>}
+      </b>
+      <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">
+        {row.price != null ? moneyDollars(row.price) : <Unrecorded>Amount not recorded</Unrecorded>}
+        {row.need_category ? ` · ${row.need_category}` : ''}
+      </span>
+      <dl className="mt-0.5 grid grid-cols-[86px_minmax(0,1fr)] gap-x-2 gap-y-0.5">
+        <dt className="text-axal-muted dark:text-gray-400">Open question</dt>
+        <dd className="font-bold text-axal-ink dark:text-gray-100">
+          {/* THE ONE OPEN QUESTION IS THE CARD'S REASON FOR EXISTING, so a
+              card without one says that rather than looking complete. */}
+          {n.open_question
+            || <Unrecorded>No blocker named</Unrecorded>}
+          {openTerms > 0 && (
+            <span className="block text-[11px] font-normal text-axal-muted dark:text-gray-400">
+              {openTerms === 1 ? '1 open term' : `${openTerms} open terms`}
+            </span>
+          )}
+        </dd>
+        <dt className="text-axal-muted dark:text-gray-400">Ball</dt>
+        <dd><BallMark ball={n.ball} /></dd>
+        <dt className="text-axal-muted dark:text-gray-400">Waiting</dt>
+        <dd className="font-bold"><Waited days={n.days_stalled} /></dd>
+      </dl>
+      <div className={`mt-1.5 flex flex-wrap gap-1.5 ${phone ? 'flex-col' : ''}`}>
+        <button type="button" ref={openRef} className={`${ghostButtonClass} ${tall}`} onClick={() => onOpen(row)}>
+          Open terms
+        </button>
+        <div className="flex flex-wrap gap-1.5">
+          {prev && (
+            <button type="button" className={`${ghostButtonClass} ${tall}`} disabled={busy}
+              aria-label={`Move ${name} back to ${prev[1]}`}
+              onClick={() => onMove(row, prev[0])}>
+              <span aria-hidden="true">← </span>{prev[1]}
+            </button>
+          )}
+          {next && (
+            <button type="button" className={`${ghostButtonClass} ${tall}`} disabled={busy}
+              aria-label={`Move ${name} on to ${next[1]}`}
+              onClick={() => onMove(row, next[0])}>
+              {next[1]}<span aria-hidden="true"> →</span>
+            </button>
+          )}
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className={buttonClass} disabled={busy}
-            onClick={async () => { if (await onSave(draft)) setEdit(false); }}>Save term</button>
-          <button type="button" className={ghostButtonClass} onClick={() => { setDraft(term); setEdit(false); }}>Cancel</button>
-          <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-            disabled={busy} onClick={() => onDelete(term)}>Remove</button>
-        </div>
-      </td>
-    </tr>
+      </div>
+      <SaveNote note={note?.scope === row.quote_id ? note : null} />
+    </article>
   );
 }
 
-function NegotiationCard({ row, onSaveNegotiation, onAddTerm, onSaveTerm, onDeleteTerm, busy, note }) {
-  const n = row.negotiation;
-  const [open, setOpen] = useState(false);
-  const [question, setQuestion] = useState(n?.open_question || '');
-  const [adding, setAdding] = useState(false);
-  const [newTerm, setNewTerm] = useState({ label: '', our_position: '', their_position: '', landing: '', state: 'open' });
-  useEffect(() => { setQuestion(n?.open_question || ''); }, [n?.open_question]);
-
-  const stage = n?.stage || 'scoping';
-  const ball = n?.ball || 'them';
-  // Controlled, not read back off the DOM at click time. A `getElementById`
-  // here would work until the same card rendered twice (two quotes on one
-  // need) and then silently save the other card's stage.
-  const [draftStage, setDraftStage] = useState(stage);
-  const [draftBall, setDraftBall] = useState(ball);
-  useEffect(() => { setDraftStage(stage); setDraftBall(ball); }, [stage, ball]);
-
+/** PP05m: the stages as one radio group, arrows moving between them. */
+function StageSelector({ counts, value, onChange }) {
+  const refs = useRef({});
+  const onKeyDown = (e) => {
+    const i = LANES.findIndex(([k]) => k === value);
+    let to = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to = (i + 1) % LANES.length;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to = (i - 1 + LANES.length) % LANES.length;
+    if (e.key === 'Home') to = 0;
+    if (e.key === 'End') to = LANES.length - 1;
+    if (to === null) return;
+    e.preventDefault();
+    const key = LANES[to][0];
+    onChange(key);
+    refs.current[key]?.focus?.();
+  };
   return (
-    <div className="rounded-xl border border-axal-hairline p-4 dark:border-gray-700">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-extrabold tracking-tight">
-            {row.need_title || <Unrecorded>Untitled need</Unrecorded>}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-axal-faint">
-            <span>{row.quote_uid}</span>
-            {row.need_category && <span>· {row.need_category}</span>}
-            <span>· quote {row.quote_status}</span>
-            {row.price != null && <span>· {moneyDollars(row.price)}</span>}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {n
-            ? <Pill tone={stage === 'closed' ? 'neutral' : 'info'}>{STAGE_LABEL[stage] || stage}</Pill>
-            : <Pill tone="neutral">Not tracked</Pill>}
-          <button type="button" className={ghostButtonClass} onClick={() => setOpen((v) => !v)}>
-            {open ? 'Hide' : n ? 'Update' : 'Start tracking'}
+    <div role="radiogroup" aria-label="Stage" onKeyDown={onKeyDown}
+      className="grid grid-cols-4 gap-0.5 rounded-[9px] border border-axal-hairline bg-axal-ground p-[3px] dark:border-gray-700 dark:bg-gray-900">
+      {LANES.map(([key, label]) => {
+        const on = key === value;
+        return (
+          <button
+            key={key}
+            ref={(el) => { refs.current[key] = el; }}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            aria-label={`${label}, ${counts[key]}`}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(key)}
+            className={`min-h-[44px] rounded-[7px] px-1 text-[11.5px] ${
+              on
+                ? 'bg-white font-bold text-axal-ink shadow-[0_0_0_1px_#e4e4e7] dark:bg-gray-800 dark:text-gray-100 dark:shadow-[0_0_0_1px_#374151]'
+                : 'font-semibold text-axal-muted dark:text-gray-400'
+            }`}
+          >
+            {SHORT[key]} {counts[key]}
           </button>
-        </div>
-      </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
-        <span className="text-axal-faint">
-          Ball with <span className="font-semibold text-axal-ink">{ball === 'us' ? 'us' : 'them'}</span>
-        </span>
-        <StalledFor days={n?.days_stalled ?? null} />
-      </div>
-
-      <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
-        {n?.open_question
-          ? <><span className="font-semibold">Blocking: </span>{n.open_question}</>
-          : (
-            <NotComputable why="A negotiation with no named blocker is one nobody is running — this is the field that says what it is waiting on.">
-              No open question
-            </NotComputable>
-          )}
-      </p>
-
-      {open && (
-        <div className="mt-3 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-          <div className="grid gap-3 md:grid-cols-3">
-            <Field label="Stage">
-              <select className={inputClass} value={draftStage}
-                onChange={(e) => setDraftStage(e.target.value)}>
-                {STAGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </Field>
-            <Field label="Ball in court">
-              <select className={inputClass} value={draftBall}
-                onChange={(e) => setDraftBall(e.target.value)}>
-                <option value="them">Them</option>
-                <option value="us">Us</option>
-              </select>
-            </Field>
-            <Field
-              label="Open question"
-              hint="Editing this does not reset the stalled clock — rewording is not a move."
-            >
-              <input className={inputClass} value={question} maxLength={600}
-                onChange={(e) => setQuestion(e.target.value)} />
-            </Field>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button" className={buttonClass} disabled={busy}
-              onClick={() => onSaveNegotiation(row, {
-                stage: draftStage, ball: draftBall, open_question: question,
-              })}
-            >
-              Save
-            </button>
-            {n && (
-              <button
-                type="button" className={ghostButtonClass} disabled={busy}
-                title="Records that it moved today without changing stage or court."
-                onClick={() => onSaveNegotiation(row, { touch: true })}
-              >
-                Log a move
-              </button>
-            )}
-          </div>
-          {/* Only this card's own result — see `run`'s docblock. */}
-          <SaveNote note={note?.scope === row.quote_id ? note : null} />
-        </div>
-      )}
-
-      <div className="mt-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            Terms on the table
-          </div>
-          <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
-            {adding ? 'Cancel' : 'Add a term'}
-          </button>
-        </div>
-
-        {row.terms.length === 0 && !adding && (
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-faint">
-            No clause is tracked on this one yet. A term is what is being
-            negotiated — payment days, scope cap, exclusivity — with what each
-            side asked beside it.
-          </p>
-        )}
-
-        {row.terms.length > 0 && (
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-left text-[12.5px]">
-              <thead className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                <tr>
-                  <th className="pb-1 pr-3">Term</th>
-                  <th className="pb-1 pr-3">We asked</th>
-                  <th className="pb-1 pr-3">They asked</th>
-                  <th className="pb-1 pr-3">Lands at</th>
-                  <th className="pb-1 pr-3">State</th>
-                  <th className="pb-1" />
-                </tr>
-              </thead>
-              <tbody>
-                {row.terms.map((t) => (
-                  <TermRow key={t.id} term={t} busy={busy}
-                    onSave={(d) => onSaveTerm(t, d)} onDelete={onDeleteTerm} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {adding && (
-          <div className="mt-2 rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="Term">
-                <input className={inputClass} value={newTerm.label} maxLength={160}
-                  onChange={(e) => setNewTerm({ ...newTerm, label: e.target.value })} />
-              </Field>
-              <Field label="State">
-                <select className={inputClass} value={newTerm.state}
-                  onChange={(e) => setNewTerm({ ...newTerm, state: e.target.value })}>
-                  {TERM_STATES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </Field>
-              <Field label="What we asked">
-                <input className={inputClass} value={newTerm.our_position} maxLength={600}
-                  onChange={(e) => setNewTerm({ ...newTerm, our_position: e.target.value })} />
-              </Field>
-              <Field label="What they asked">
-                <input className={inputClass} value={newTerm.their_position} maxLength={600}
-                  onChange={(e) => setNewTerm({ ...newTerm, their_position: e.target.value })} />
-              </Field>
-            </div>
-            <button
-              type="button" className={`${buttonClass} mt-3`} disabled={busy || !newTerm.label.trim()}
-              onClick={async () => {
-                // Cleared and closed only once the server took it.
-                if (!(await onAddTerm(row, newTerm))) return;
-                setNewTerm({ label: '', our_position: '', their_position: '', landing: '', state: 'open' });
-                setAdding(false);
-              }}
-            >
-              Add term
-            </button>
-          </div>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -352,52 +209,37 @@ export default function PartnerNegotiationsZone() {
     () => readAllPages((cur) => api.listPartnerNegotiations(cur)), 'The negotiation record did not load.',
   );
   const [view, setView] = useState('all');
-
+  const phone = usePhoneWidth();
+  const [phoneStage, setPhoneStage] = useState(null);
+  // The sheet holds a quote id, not a row: the row is re-read from the latest
+  // load on every render, so a background refresh updates the open sheet.
+  const [sheetFor, setSheetFor] = useState(null);
+  // Where focus goes once a moved card has re-rendered in its new lane.
+  const [focusCard, setFocusCard] = useState(null);
+  const openRefs = useRef({});
 
   /**
    * `run` comes from `usePipelineZone`: one write, resolving true only when the
-   * server accepted it, with its result reported ON THE CARD THAT MADE IT.
-   *
-   * `scope` is why this takes a third argument. A single `note` in this
-   * component is rendered by every open card, so saving a stage on one deal
-   * would print "Saved." under every other deal a person had expanded — each
-   * of them a claim about a write that did not happen there. The card compares
-   * `note.scope` to its own quote id and shows nothing otherwise.
+   * server accepted it, with its result reported ON THE CARD THAT MADE IT —
+   * `scope` is the quote id, so saving one deal never prints "Saved." under
+   * another.
    */
 
   const d = state.data;
   // A bare array, a missing key or an object are all survivable: an empty list, never a throw on `.map`.
   const items = Array.isArray(d?.items) ? d.items : [];
   const tracked = useMemo(() => items.filter((r) => r.negotiation), [items]);
-  // ══ THE `p3` CHIP ROW ════════════════════════════════════════════════════
-  // All four run off columns migration 208 stores. `quote_negotiations.ball` is
-  // literally `us` / `them`, and `Stalled 7d+` reads `days_stalled`, which the
-  // WORKER computes from `last_moved_at` — a page computing its own age from a
-  // different clock would make the chip and the strip disagree about the same
-  // negotiation.
-  //
+  // ══ THE CHIP ROW ═════════════════════════════════════════════════════════
+  // All four run off columns migration 208 stores. `Stalled 7d+` reads
+  // `days_stalled`, which the WORKER computes from `last_moved_at`.
   // A CLOSED NEGOTIATION IS IN NONE OF THEM. The board is what is in play.
   const open = useMemo(
     // D4693: the Worker's own rule (`negotiation.open`): not closed AND the quote behind it still waiting.
     () => tracked.filter((r) => r.negotiation.open ?? r.negotiation.stage !== 'closed'),
     [tracked],
   );
-  /**
-   * The chip row's narrowing — WHICH NOTHING RENDERED.
-   *
-   * This was computed and then dropped: the lanes below filtered `open`
-   * directly, so all four chips were inert. Pressing `Stalled 7d+` moved the
-   * pill and left the board exactly as it was. CodeQL found it as an unused
-   * variable, which is what an unrendered narrowing looks like from outside —
-   * and it is the same defect this bucket already had twice, in
-   * `delivery/status-reports` (chips over fields the response never sent) and
-   * in `delivery/capacity` (a read that never re-ran).
-   *
-   * `All` RETURNS `open`, NOT `items`. It returned `items` — every engagement,
-   * including the ones nobody is negotiating and the ones already closed — so
-   * the one chip that was supposed to show the whole board would have shown
-   * more than the board, contradicting the strip counted right beside it.
-   */
+  // The chip row's narrowing, drawn by the lanes below. `All` is the board
+  // (`open`), never every engagement.
   const visible = useMemo(() => {
     if (view === 'us') return open.filter((r) => r.negotiation.ball === 'us');
     if (view === 'them') return open.filter((r) => r.negotiation.ball === 'them');
@@ -412,19 +254,55 @@ export default function PartnerNegotiationsZone() {
     () => tracked.filter((r) => r.negotiation.ball === 'us' && (r.negotiation.open ?? r.negotiation.stage !== 'closed')),
     [tracked],
   );
+  const openIds = useMemo(() => new Set(open.map((r) => r.quote_id)), [open]);
+  // Off the board: a quote nobody is tracking yet, and a negotiation that is
+  // closed or whose quote is decided. Listed so each can still be opened.
+  const offBoard = useMemo(() => items.filter((r) => !openIds.has(r.quote_id)), [items, openIds]);
+
+  const lanes = useMemo(() => LANES.map(([key, name], i) => ({
+    key, name, i, cards: visible.filter((r) => r.negotiation.stage === key),
+  })), [visible]);
+  const counts = Object.fromEntries(lanes.map((l) => [l.key, l.cards.length]));
+  const shownStage = phoneStage || (lanes.find((l) => l.cards.length) || lanes[0]).key;
+
+  const sheetRow = sheetFor == null ? null : items.find((r) => r.quote_id === sheetFor) || null;
+
+  useEffect(() => {
+    if (focusCard == null) return;
+    // `run` resolves only after its refresh has rendered, so the moved card is
+    // already in its new lane here. Cleared either way: a card the chip row
+    // now hides has nothing to focus, and must not grab focus later.
+    openRefs.current[focusCard]?.focus?.();
+    setFocusCard(null);
+  }, [focusCard]);
+
+  const moveCard = async (row, stage) => {
+    const ok = await run(
+      () => api.savePartnerNegotiation(row.quote_id, { stage }),
+      `Moved to ${STAGE_LABEL[stage]}.`, row.quote_id,
+    );
+    if (ok) {
+      if (phone) setPhoneStage(stage);
+      setFocusCard(row.quote_id);
+    }
+  };
+
+  const cardProps = (r, laneIndex) => ({
+    row: r,
+    laneIndex,
+    busy,
+    note,
+    phone,
+    onOpen: (x) => setSheetFor(x.quote_id),
+    onMove: moveCard,
+    openRef: (el) => { openRefs.current[r.quote_id] = el; },
+  });
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
-  // With nothing loaded the export renders disabled and says so itself,
-  // which is what makes a header row over an unreadable store honest.
-  // FIVE OF THESE SIX EXPORT COLUMNS READ NOTHING BEFORE THIS. The row is
-  // `{ quote_id, price, need_title, need_category, founder_name,
-  // negotiation: {stage, ball, open_question} | null, terms }` — so `r.shape`,
-  // `r.value_cents`, `r.stage`, `r.ball_in_court` and `r.open_question` were
-  // all undefined and exported as empty cells, leaving a CSV of client names.
-  // The board above reads them correctly, which is why nobody saw it: only the
-  // download was wrong, and the download is disabled until rows load.
-  // `negotiation` is null for a quote nobody has started tracking, so the last
-  // three are optional-chained rather than assumed.
+  // The row is `{ quote_id, price, need_title, need_category, founder_name,
+  // negotiation: {stage, ball, open_question} | null, terms }`; `negotiation`
+  // is null for a quote nobody has started tracking, so the last three are
+  // optional-chained rather than assumed.
   const rowActions = partnerZoneActions('pipeline/negotiations', { view: {
         header: ['Client', 'Shape', 'Value', 'Stage', 'Ball', 'Open question'],
         rows: items,
@@ -432,34 +310,17 @@ export default function PartnerNegotiationsZone() {
           r.negotiation?.stage, r.negotiation?.ball, r.negotiation?.open_question],
       } });
 
-  // NOT AN EARLY RETURN ANY MORE. This was
-  //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
-  // which drew a card INSTEAD of the zone — on twelve zones, so an admin
-  // reading this workspace saw twelve copies of one card and never a page.
-  // `ZoneBody` takes the line as a `notice` above its states, and the zone
-  // renders underneath in its own empty state, which is also the state that
-  // says what this zone holds. The gate itself is untouched: the read still
-  // 400s, so `isEmpty` is forced rather than inferred from rows that never
-  // arrived, and `error` is cleared so the shared "This did not load" card —
-  // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
+  // NOT AN EARLY RETURN. `ZoneBody` takes the no-profile line as a `notice`
+  // above its states, and the zone renders underneath in its own empty state.
   const unlinked = isNoPartnerProfile(state.error);
 
   return (
     <>
-      {/* THE OPS HALF RENDERS NOTHING TODAY, ON PURPOSE, and the call is here
-          anyway. The canvas gives this zone one op — `WIP limit: 5 per stage` —
-          and no per-stage limit is stored, so the table marks it `unbuilt` and
-          the builder drops it. The FILTER half is four live chips, which is why
-          the toolbar is now mounted rather than the actions being handed
-          straight to `ZoneBody`: a header row with one empty half is still a
-          header row. */}
-      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
-          An action states what the zone DOES and an export over nothing
-          loaded renders disabled and says so; a filter chip is a claim about
-          ROWS, and a selectable `Published` over a store this account cannot
-          read is the "an empty set reads as an answer" failure
-          `zoneFilterBuilder.js` exists to prevent, reached from a new
-          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store: a
+          filter chip is a claim about ROWS, and a selectable chip over a store
+          this account cannot read reads as an answer. The ops half renders
+          nothing on purpose: its one op, a WIP limit, is `unbuilt` because no
+          per-stage limit is stored. */}
       <ZoneToolbar
         className="mb-3"
         role="partner"
@@ -488,19 +349,14 @@ export default function PartnerNegotiationsZone() {
         <PartialRead data={state.data} noun="negotiations" onRetry={load} />
         <ZoneHeading
           title="Negotiations"
-          blurb={
-            'Scope and terms, retainer versus project state. Every card carries '
-            + 'the one open question blocking it — a negotiation without a named '
-            + 'blocker is a negotiation nobody is running.'
-          }
+          blurb="Every live commercial discussion, its one unresolved blocker, and who owes the next move."
         />
 
-        {/* ══ THE `p3` STRIP ════════════════════════════════════════════════
-            `Live negotiations · Awaiting you · Awaiting them · Stalled 7d+`.
-            The artboard's fourth tile is a COUNT, which is why the em dash that
-            stood here for `Close probability` is gone rather than relabelled —
-            that tile was never on this artboard, and its absence is recorded in
-            the limits below where it belongs. */}
+        {/* ══ THE STRIP ═════════════════════════════════════════════════════
+            `Live negotiations · Awaiting you · Awaiting them · Stalled 7d+`,
+            the Worker's whole-book counts. PP05 puts its counts on the chips;
+            the chips here are the shared filter row's, so the counts stay on
+            the strip (a departure D5938 lists). */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <NegotiationTile
             label="Live negotiations"
@@ -525,152 +381,108 @@ export default function PartnerNegotiationsZone() {
           />
         </div>
 
-        {/* ══ THE LANES — this artboard is a WORK BOARD ══════════════════════
-            Four stages across, one card per negotiation, the open question on
-            every card. `closed` is a fifth stage and NOT a lane: a board is
-            what is in play.
-
-            THE COUNT IS `n`, NOT `n / 5`. The artboard draws a limit and the
-            ops row asks to edit it; no per-stage limit is stored, and the five
-            is the canvas's own sample. Printing it would police this firm's
-            board with somebody else's number — the same call `delivery/capacity`
-            makes about the hardcoded forty it refuses to treat as a cap. */}
-        <div className="grid gap-3 md:grid-cols-4">
-          {LANES.map(([key, name]) => {
-            const cards = visible.filter((r) => r.negotiation.stage === key);
-            return (
-              <div key={key} className="rounded-[10px] border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700 dark:bg-gray-900/40">
-                <div className="flex items-baseline justify-between gap-2">
-                  <Eyebrow>{name}</Eyebrow>
-                  <span className="font-mono text-[11px] font-bold text-axal-faint">{cards.length}</span>
-                </div>
-                <div className="mt-2 space-y-2">
-                  {cards.length === 0
-                    ? <p className="text-[11px] text-axal-faint">Nothing here</p>
-                    : cards.map((r) => (
-                      <div
-                        key={r.quote_id}
-                        className={`rounded-[10px] border p-3 ${
-                          (r.negotiation.days_stalled ?? 0) >= 7
-                            ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/15'
-                            : 'border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900'
-                        }`}
-                      >
-                        <div className="text-[12px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">
-                          {r.founder_name || r.need_title || `Quote ${r.quote_id}`}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-axal-muted">
-                          {moneyDollars(r.price ?? 0)}
-                        </div>
-                        {/* THE ONE OPEN QUESTION IS THE CARD'S REASON FOR
-                            EXISTING, so a card without one says that rather
-                            than looking complete. */}
-                        <div className="mt-1.5 text-[11px] leading-snug text-axal-muted">
-                          {r.negotiation.open_question
-                            || <Unrecorded>No blocker named</Unrecorded>}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Pill tone={r.negotiation.ball === 'us' ? 'warn' : 'neutral'}>
-                            {r.negotiation.ball === 'us' ? 'You' : 'Them'}
-                          </Pill>
-                          <span className={`text-[10.5px] ${
-                            (r.negotiation.days_stalled ?? 0) >= 7
-                              ? 'font-semibold text-red-700 dark:text-red-300' : 'text-axal-faint'
-                          }`}
-                          >
-                            {r.negotiation.days_stalled ?? 0} d
-                          </span>
-                        </div>
-                      </div>
+        {/* ══ THE BOARD (PP05) ══════════════════════════════════════════════
+            Four stages across, one card per negotiation. THE COUNT IS A COUNT,
+            NOT A LIMIT: no per-stage limit is stored, and printing a canvas
+            sample would police this firm's board with somebody else's number. */}
+        {phone ? (
+          <section aria-label="Negotiations by stage" data-testid="negotiation-stage-list" className="space-y-3">
+            <StageSelector counts={counts} value={shownStage} onChange={setPhoneStage} />
+            {(() => {
+              const lane = lanes.find((l) => l.key === shownStage);
+              return (
+                <div className="space-y-2" aria-label={`${lane.name}, ${lane.cards.length} negotiations`} role="list">
+                  {lane.cards.length === 0
+                    ? <p className="px-1.5 text-[12px] text-axal-faint">None at this stage</p>
+                    : lane.cards.map((r) => (
+                      <div role="listitem" key={r.quote_id}><BoardCard {...cardProps(r, lane.i)} /></div>
                     ))}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })()}
+          </section>
+        ) : (
+          <div className="grid grid-cols-4 items-start gap-3" data-testid="negotiation-lanes">
+            {lanes.map(({ key, name, i, cards }) => (
+              <section
+                key={key}
+                aria-label={`${name}, ${cards.length} negotiations`}
+                className="flex min-h-[260px] flex-col gap-2 rounded-xl border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-900/40"
+              >
+                <h3 className="flex items-center justify-between px-1 text-[13px] font-extrabold text-axal-ink dark:text-gray-100">
+                  {name}
+                  <span className="font-mono text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">{cards.length}</span>
+                </h3>
+                {cards.length === 0
+                  ? <p className="px-1.5 text-[12px] text-axal-faint">None at this stage</p>
+                  : cards.map((r) => <BoardCard key={r.quote_id} {...cardProps(r, i)} />)}
+              </section>
+            ))}
+          </div>
+        )}
 
-        {/* ══ TERMS IN PLAY — the artboard's clause-level table ══════════════ */}
-        <Instrument
-          testid="terms-in-play"
-          title="Terms in play"
-          meta="The clause-level view · only here"
-          cols="1fr .9fr .9fr 1.4fr"
-          head={['Client', 'You asked', 'They asked', 'Where it lands']}
-          rows={open.flatMap((r) => (r.terms || [])
-            .filter((t) => t.state === 'open')
-            .map((t) => ({
-              key: `${r.quote_id}-${t.id}`,
-              cells: [
-                r.founder_name
-                  ? { text: r.founder_name, sub: t.label }
-                  : { text: t.label },
-                t.our_position ? { text: t.our_position } : { nr: true },
-                t.their_position ? { text: t.their_position } : { nr: true },
-                // A LANDING MAY BE EMPTY WITHOUT THE ROW BEING INCOMPLETE —
-                // that is the whole reason a term carries three positions.
-                t.landing ? { text: t.landing } : { nr: true },
-              ],
-            })))}
-          note={'A term carries three positions rather than one value, and the row is complete without the third: collapsing "we asked ninety days, they asked thirty, it lands at forty-five" to a current value of forty-five loses the two halves that explain it — which are the halves a person needs when the same clause comes back on the next deal. Only OPEN terms are here; an agreed, conceded or refused one is settled and belongs to the deal rather than to the board. A term with no landing yet is not a gap in the record, it is a negotiation still running.'}
-        />
-
+        {/* ══ THE EADWYN COUNTER ════════════════════════════════════════════
+            `research_zone_drafts`, surface `pipeline/negotiations`: one counter
+            drafted over the book's open negotiations, the one still longest
+            first, from the clauses on record. It is not scoped to one
+            negotiation, which is why it sits on the board and not in the terms
+            sheet. "Not sent" and the three controls appear only while a draft
+            exists. Accepting stamps the draft; it writes no term and sends
+            nothing. */}
         <ZoneDraft
           surface="pipeline/negotiations"
           railOption="draft:counter"
-          label="Proposal · counter drafted"
-          accept="Save counter draft"
+          label="Eadwyn counter proposal"
+          status="Not sent"
+          accept="Accept counter draft"
+          editLabel="Edit terms"
           run="Draft the counter"
-          foot="Terms read from the clause record. Saving keeps the draft here; nothing is sent to the client."
-          empty="For the negotiation that has been still longest: a counter built from the clauses already on the table — what each side asked, what has been conceded, and the one line that says why the two positions cannot both hold."
+          foot="Accepting keeps this draft as accepted here. It writes no term and nothing is sent to the client."
+          empty="For the negotiation that has been still longest: a counter built only from the clauses already on the table, and the one line that says why the two positions cannot both hold."
           nothingToDraft="No negotiation is open, so there is nothing to counter."
         />
 
-        <Section title="Negotiations">
-          <div className="space-y-3">
-            {items.map((row) => (
-              <NegotiationCard
-                key={row.quote_id}
-                row={row}
-                busy={busy}
-                note={note}
-                onSaveNegotiation={(r, patch) => run(
-                  () => api.savePartnerNegotiation(r.quote_id, patch),
-                  'Saved.', r.quote_id,
-                )}
-                onAddTerm={(r, t) => run(
-                  () => api.createPartnerNegotiationTerm(r.quote_id, t),
-                  'Term added.', r.quote_id,
-                )}
-                onSaveTerm={(t, d) => run(
-                  () => api.updatePartnerNegotiationTerm(t.id, d),
-                  'Term saved.', row.quote_id,
-                )}
-                onDeleteTerm={(t) => run(
-                  () => api.deletePartnerNegotiationTerm(t.id),
-                  'Term removed.', row.quote_id,
-                )}
-              />
-            ))}
-          </div>
-        </Section>
+        {offBoard.length > 0 && (
+          <section aria-labelledby="neg-off-board" className="rounded-xl border border-axal-hairline p-3 dark:border-gray-700">
+            <h3 id="neg-off-board" className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              Not on the board · {offBoard.length}
+            </h3>
+            <p className="mt-1 text-[11.5px] text-axal-faint">
+              Quotes nobody is tracking yet, and negotiations that are closed or whose quote is decided.
+            </p>
+            <ul className="mt-2 divide-y divide-axal-hairline dark:divide-gray-800">
+              {offBoard.map((r) => (
+                <li key={r.quote_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-[12.5px]">
+                  <span className="min-w-0">
+                    <span className="font-bold">{whoOf(r) || <Unrecorded>Client not recorded</Unrecorded>}</span>
+                    <span className="ml-2 font-mono text-axal-muted dark:text-gray-400">
+                      {r.price != null ? moneyDollars(r.price) : 'amount not recorded'}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {r.negotiation
+                      ? <Pill tone="neutral">{r.negotiation.label || STAGE_LABEL[r.negotiation.stage] || r.negotiation.stage}</Pill>
+                      : <Pill tone="neutral">Not tracked</Pill>}
+                    <button type="button" className={`${ghostButtonClass} ${phone ? 'min-h-[44px]' : ''}`}
+                      onClick={() => setSheetFor(r.quote_id)}>
+                      {r.negotiation ? 'Open terms' : 'Start tracking'}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <StatedLimit title="What “stalled” counts, and what is not forecast">
           <p>
             <strong>No recorded move</strong>, not silence. The
-            clock advances on a stage or court change, or on an explicit “Log a
+            clock advances on a stage or ball change, or on an explicit “Log a
             move”; it does not advance when the open question is reworded. An
             email nobody logged here does not move it either — so a deal can be
             alive and read as stalled. That is the honest failure direction:
             the count over-reports rather than reassuring.
           </p>
-          {/* THE REASON THIS PARAGRAPH GIVES CHANGED, so it is stated rather
-              than left as a comment. It used to read "nothing records why a
-              past negotiation was won or lost", and migration 234 records
-              exactly that — a loss taxonomy on `quotes`. What has not changed
-              is that a taxonomy is not a rate: a handful of decided deals
-              cannot support a probability conditioned on stage, and a number
-              drawn from stage alone would be the stage relabelled as a
-              forecast. A gap claim kept past the gap reads as current. */}
           <p className="mt-2">
             <strong>Nothing here forecasts a close.</strong> Proposals now
             records WHY a bid was lost, which is a taxonomy rather than a rate —
@@ -681,14 +493,39 @@ export default function PartnerNegotiationsZone() {
             is what the record can actually support.
           </p>
           <p className="mt-2">
-            <strong>The lane count is a count, not a limit.</strong> The design
-            draws “n / 5” and offers to edit the five; no per-stage limit is
-            stored anywhere, and printing the design’s own sample would police
-            this firm’s board with somebody else’s number.
+            <strong>The lane count is a count, not a limit.</strong> No
+            per-stage limit is stored anywhere, so no lane draws one; printing a
+            design’s sample figure would police this firm’s board with somebody
+            else’s number.
           </p>
         </StatedLimit>
       </div>
     </ZoneBody>
+      {sheetRow && (
+        <NegotiationTermsSheet
+          row={sheetRow}
+          busy={busy}
+          note={note}
+          // The sheet returns focus to the control that opened it.
+          onClose={() => setSheetFor(null)}
+          onSaveNegotiation={(r, patch) => run(
+            () => api.savePartnerNegotiation(r.quote_id, patch),
+            'Saved.', r.quote_id,
+          )}
+          onAddTerm={(r, t) => run(
+            () => api.createPartnerNegotiationTerm(r.quote_id, t),
+            'Term added.', r.quote_id,
+          )}
+          onSaveTerm={(t, dr) => run(
+            () => api.updatePartnerNegotiationTerm(t.id, dr),
+            'Term saved.', sheetRow.quote_id,
+          )}
+          onDeleteTerm={(t) => run(
+            () => api.deletePartnerNegotiationTerm(t.id),
+            'Term removed.', sheetRow.quote_id,
+          )}
+        />
+      )}
     </>
   );
 }

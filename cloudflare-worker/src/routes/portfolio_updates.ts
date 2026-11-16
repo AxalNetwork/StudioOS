@@ -16,11 +16,12 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { pageFacts, pageWindow } from '../services/listPage';
 import { ensureFollowsSchema } from './follows';
-import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { receivedInvestorUpdate } from '../services/portfolioAskAccess';
+import { investorProjectIds, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics, validMetricUnit,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -143,7 +144,7 @@ const REPORT_ROW = { detail: 'This is a report. Change and send it from Reportin
 /**
  * D1057 (#2927, #2427 finding 4): the figures an update carries, each with its
  * source. A Share an update row stores them in `metrics_json` (D654), keyed
- * by `METRIC_KEYS` (mrr, growth, customers, burn, runway); part 3's
+ * by `METRIC_KEYS` (including recorded ARR and net_retention, #6178); part 3's
  * `REPORT_FIGURES` keys report figures the same way. A row from the older KPI
  * form stores bare values in `kpis_json`, which carry no source. A figure
  * nothing recorded stays null with its reason, never 0.
@@ -159,6 +160,7 @@ export function updateFigures(u: { kpis_json?: string | null; metrics_json?: str
   const raw = jload(u.metrics_json ?? null, []);
   const figures = (Array.isArray(raw) ? raw : []).flatMap((m: any) => {
     if (!m || typeof m !== 'object' || !(METRIC_KEYS as readonly string[]).includes(String(m.key))) return [];
+    if (!validMetricUnit(String(m.key), m.unit)) return [];
     const value = typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : null;
     const source = typeof m.source === 'string' && m.source.trim() ? m.source.trim() : null;
     // A recorded figure with no source is not one the update may show (D654's rule).
@@ -474,9 +476,9 @@ async function periodSnapshots(env: Env, projectId: number, start: string, end: 
     const [year, month] = start.slice(0, 7).split('-').map(Number);
     const previousMonth = new Date(Date.UTC(year, month - 2, 1)).toISOString().slice(0, 10);
     const [inPeriod, before] = await Promise.all([
-      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date`)
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, arr, nrr_pct, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date <= ? ORDER BY snapshot_date, id`)
         .bind(projectId, start, end).all<Snapshot>(),
-      env.DB.prepare(`SELECT snapshot_date, source, mrr, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date < ? ORDER BY snapshot_date`)
+      env.DB.prepare(`SELECT snapshot_date, source, mrr, arr, nrr_pct, paying_accounts, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND snapshot_date >= ? AND snapshot_date < ? ORDER BY snapshot_date, id`)
         .bind(projectId, previousMonth, start).all<Snapshot>(),
     ]);
     return { inPeriod: inPeriod.results || [], before: before.results || [] };
@@ -789,6 +791,34 @@ async function recipientOf(env: Env, updateId: number, userId: number) {
   return env.DB.prepare('SELECT * FROM update_recipients WHERE update_id = ? AND user_id = ? ORDER BY id LIMIT 1')
     .bind(updateId, userId).first<any>();
 }
+
+// Report detail reads asks without recording an open of the sent update.
+r.get('/:uid/asks', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isInvestor(user) || await isSupportSession(c)) return c.json({ detail: 'Forbidden' }, 403);
+    const update = await c.env.DB.prepare(
+      'SELECT id, project_id, kind, sent_at FROM portfolio_updates WHERE uid = ?',
+    ).bind(c.req.param('uid')).first<{ id: number; project_id: number; kind: string; sent_at: string | null }>();
+    if (!update?.sent_at || update.kind === 'report') return c.json({ detail: 'Not found' }, 404);
+    const held = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
+    if (!held?.includes(update.project_id) || !(await receivedInvestorUpdate(c.env, update.id, user.id))) {
+      return c.json({ detail: 'Forbidden' }, 403);
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT a.uid, a.kind, a.text, a.link_ref,
+              EXISTS (SELECT 1 FROM update_ask_replies r WHERE r.ask_id = a.id) AS answered,
+              s.state AS support_state
+         FROM update_asks a LEFT JOIN portfolio_support_entries s
+           ON s.ask_uid = a.uid AND s.recorded_by = ?
+        WHERE a.update_id = ? ORDER BY a.id`,
+    ).bind(user.id, update.id).all<{ uid: string; kind: string; text: string; link_ref: string | null; answered: number; support_state: string | null }>();
+    if (!Array.isArray(rows.results)) return c.json({ detail: 'The asks could not be read.' }, 503);
+    const linked = await updateAskLinks(c.env, rows.results, user, false, 'investor');
+    return c.json({ asks: linked.map(({ uid, kind, text, link_ref, link_reason, answered, support_state }) =>
+      ({ uid, kind, text, link_ref: kind === 'capital' ? link_ref : null, link_reason: link_reason ?? null, answered: Boolean(answered), support_state })) });
+  } catch (e) { return mapError(c, e); }
+});
 
 // GET /api/portfolio-updates/:uid/page — the sent update. The author sees the
 // replies to each ask and who opened it; a recipient sees what their audience

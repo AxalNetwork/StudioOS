@@ -129,6 +129,7 @@ and citations by number keep working.
 | `D5573.md` | Local mocked workspace validation harness: faultable fake provider, six invariant checkers and a `local_mocked`-only report; no hosted, cloud or production capacity proof (#5573). |
 | `D5572.md` | Disabled outbound-only customer runner protocol: enrollment, attestation, signed fenced status, capability, egress, residency and consent decisions over D5565/D5567; unmounted. |
 | `D5790.md` | Read-only HQ draft comparison against the deployed library source, with explicit refusal messages. |
+| [D6178](D6178.md) | #6178: recorded ARR/net retention shared through existing founder updates and Traction. |
 | `D6093.md` | Reporting phone writers reach Reminder settings through the existing More menu, with reader gates and the Prepare bar preserved (#6093). |
 | `D6135.md` | Investor onboarding profile-copy failure, retry and explicit continuation, unused-slider removal, saved-step resume and role-safe LP handoff (#6135). |
 | `D6177.md` | Deal Traction single empty state, recorded last-shared/source dates and browser CSV preserving gaps and real zeroes (#6177). |
@@ -138,6 +139,8 @@ and citations by number keep working.
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6024.md` | Confirmed Build feature removal and must-have demotion, protected references, atomic audit and honest Build Plan history without stale links (#6024). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+
+| `D6495.md` | Exact synthetic D5074 fixture exception, real-scanner history replay and adversarial boundary proof (#6495). |
 | `D6115.md` | Remove a Grow partner, market or obligation added by mistake: a hard delete, refused for a partner with revenue or deals and a held obligation; the compliance delete runs the same writer (#6115). |
 | `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
 

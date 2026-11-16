@@ -108,6 +108,7 @@ function fixture(entries: number) {
   db.exec(file('237'));
   db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
   db.exec(file('202611150140')); // D6202: the lifecycle columns and states
+  db.exec(file('202611152342')); // D6216: originating ask link
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   const p = db.prepare('INSERT INTO projects (id, uid, name) VALUES (?,?,?)');
   p.run(1, 'p-1', 'One');
@@ -373,6 +374,7 @@ test('a ledger whose every entry is untimed reports no hours and counts them all
   db.exec(file('237'));
   db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
   db.exec(file('202611150140')); // D6202: the lifecycle columns and states
+  db.exec(file('202611152342')); // D6216: originating ask link
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   db.prepare("INSERT INTO projects (id, uid, name) VALUES (1, 'p-1', 'One')").run();
   const ins = db.prepare(`INSERT INTO portfolio_support_entries

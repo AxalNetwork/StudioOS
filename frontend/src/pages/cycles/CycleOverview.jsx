@@ -1,7 +1,9 @@
 import { Lock } from 'lucide-react';
 import { openCheckout } from '../../components/checkout/checkoutEntry.js';
 import { Link, useNavigate } from 'react-router-dom';
-import { Unrecorded, Unreadable } from '../../ui';
+import { DataState, StateChip, Unrecorded, Unreadable } from '../../ui';
+import { BuildPartialNotice, BuildStateTag } from './BuildStates.jsx';
+import { TABLET_CARD_COLS, TABLET_FIGURE_COLS, tabletLastSpan } from '../../ui/phone/tabletTier.js';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
@@ -159,14 +161,14 @@ export function FigureTile({ fig, details = null, setLink = null }) {
       <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{fig?.label}</span>
       <span className="text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">
         {value ?? (unreadable
-          ? <span className="text-[13px] font-semibold text-red-700 dark:text-red-300">{fig?.source ? `${fig.source} could not be read` : 'Could not be read'}</span>
+          ? <span className="flex flex-col items-start gap-1 text-[12px] font-normal text-axal-muted dark:text-gray-400" data-testid={`cycle-figure-${fig?.key}-unavailable`}><StateChip kind="unavailable" />{fig?.source ? `${fig.source} could not be read` : 'This figure could not be read'}</span>
           : <span className="text-[15px]"><Unrecorded reason={fig?.source ? `${fig.source} does not hold this yet.` : undefined} /></span>)}
       </span>
       {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
         {value == null && !unreadable && setLink?.href
           ? <Link to={setLink.href} className="text-[11.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid={`cycle-figure-${fig?.key}-set`}>{setLink.text} ›</Link>
-          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>}
+          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : (unreadable ? '' : delta || (value == null ? 'nothing recorded yet' : 'change not recorded'))}</span>}
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
       {details}
@@ -232,17 +234,13 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
   if (view.state === 'not_recorded') {
     return (
       <div className="flex flex-col items-start gap-1.5" data-testid="card-not-recorded">
-        <span className="rounded-full border border-axal-hairline bg-axal-ground px-2 py-0.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">Not recorded</span>
+        <StateChip kind="not_recorded" />
         <span className="text-[12.5px] text-axal-muted dark:text-gray-400">{view.reason}</span>
       </div>
     );
   }
-  return (
-    <div role="alert" className="flex items-center justify-between gap-2.5 rounded-[10px] border border-red-200 bg-red-50 p-3.5 dark:border-red-900 dark:bg-red-950/30" data-testid="card-unreadable">
-      <span className="text-[12.5px] text-red-700 dark:text-red-300">{view.reason}</span>
-      {onRetry && <button type="button" onClick={onRetry} className="shrink-0 text-[12px] font-bold text-red-700 hover:underline dark:text-red-300">Try again</button>}
-    </div>
-  );
+  // D4846 part 2 (#6032, BD14 A): Unavailable, D5129's one shape, never a red "negative" box; the card keeps its own Retry.
+  return <DataState state="unavailable" size="block" reason={view.reason} onRetry={onRetry} retryLabel="Try again" data-testid="card-unreadable" />;
 }
 
 /** One module's card: its name (linking to its page), range, chart or state, caption and the one next action. */
@@ -301,10 +299,18 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
   const more = readOnly ? null : (moreIn ? <>{moreIn}{askNode}</> : askNode);
   const figureCount = status === 'loading' ? figurePlaceholders : figures.length;
   const cardCount = status === 'loading' ? placeholders : cards.length;
+  // D4846 part 2 (#6032, BD14 B): Build alone draws this page from 768px (its tablet tier); the others' phone page stays below 1024px.
+  const tabletCols = meta.key === 'build';
+  const lastSpan = [lastCardSpan(cardCount), tabletCols ? tabletLastSpan(cardCount) : ''].filter(Boolean).join(' ');
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-overview" data-cycle={meta.key}>
       <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} chip={chip} more={more} />
-      {readOnly && status === 'ready' && (
+      {readOnly && status === 'ready' && meta.key === 'build' ? (
+        // D4846 part 2 (BD14 A): Build's Read only is its own state, a lock and a sentence, not a warning.
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline bg-white px-3.5 py-2 text-[12.5px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-overview-read-only">
+          <BuildStateTag state="read_only" />{data?.mode === 'summary' ? 'HQ summary. Counts only; the founder’s records stay with the founder.' : 'You can read this venture’s Build but not change it.'}
+        </div>
+      ) : readOnly && status === 'ready' && (
         <div role="status" className="flex items-center gap-2 rounded-[10px] border border-amber-300 bg-amber-50 px-3.5 py-2 text-[12.5px] font-bold text-amber-900 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-200" data-testid="cycle-overview-read-only">
           Read only · {data?.mode === 'summary' ? 'HQ summary. Counts only; the founder’s records stay with the founder.' : 'You can read this cycle but not change it.'}
         </div>
@@ -320,7 +326,7 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
       ) : (
         <>
           {figureCount > 0 && (
-            <div className={`grid gap-3 ${figureCols(figureCount)}`} data-testid="cycle-figures" data-count={figureCount}>
+            <div className={`grid gap-3 ${figureCols(figureCount)} ${tabletCols ? TABLET_FIGURE_COLS[figureCount] || '' : ''}`.trim()} data-testid="cycle-figures" data-count={figureCount}>
               {status === 'loading'
                 ? Array.from({ length: figurePlaceholders }, (_, i) => <div key={i} className="h-[92px] rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" aria-busy="true" />)
                 : figures.map((f) => <FigureTile key={f.key} fig={f}
@@ -328,10 +334,13 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
             </div>
           )}
           {status !== 'loading' && lead}
-          <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="cycle-cards">
+          {/* D4846 part 2 (#6032, BD14 A): one notice when some module reads failed; each card keeps its own Retry. */}
+          {meta.key === 'build' && status === 'ready' && <BuildPartialNotice cards={cards} onRetryCard={onRetryCard} />}
+          {/* BD14 B: from 768px (Build's tablet tier; other cycles draw their phone page below 1024px) two columns. */}
+          <div className={['grid grid-cols-1 items-stretch gap-3', tabletCols ? TABLET_CARD_COLS : '', 'lg:grid-cols-2 xl:grid-cols-3'].filter(Boolean).join(' ')} data-testid="cycle-cards">
             {status === 'loading'
-              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" search={search} span={i === placeholders - 1 ? lastCardSpan(cardCount) : ''} />)
-              : cards.map((c, i) => <CycleCard key={c.slug} cycle={meta.key} card={c} search={search} span={i === cards.length - 1 ? lastCardSpan(cardCount) : ''} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
+              ? Array.from({ length: placeholders }, (_, i) => <CycleCard key={i} cycle={meta.key} card={null} slug="" search={search} span={i === placeholders - 1 ? lastSpan : ''} />)
+              : cards.map((c, i) => <CycleCard key={c.slug} cycle={meta.key} card={c} search={search} span={i === cards.length - 1 ? lastSpan : ''} onRetry={onRetryCard ? () => onRetryCard(c.slug) : undefined} />)}
           </div>
         </>
       )}

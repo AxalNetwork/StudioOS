@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { investorHasProjectDeal } from '../services/dealAccess';
 /**
@@ -539,11 +540,13 @@ dd.get('/cases/:uid', async (c) => {
     // item evidence follows its item's section, as the checklist does.
     let documents: { requestFiles: any[]; reminders: any[]; evidence: any[] } | null = null;
     try {
+      // D6073 — a file in Trash answers no request until it is restored.
+      const live = await liveFiles(c.env.DB, 'f');
       const [requestFiles, reminders, evidenceAll] = await Promise.all([
         isScoped ? Promise.resolve([]) : c.env.DB.prepare(
           `SELECT f.id, f.uid, f.name, f.content_type, f.size_bytes, f.dd_request_id, f.created_at
              FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id
-            WHERE r.case_id = ? ORDER BY f.created_at DESC, f.id DESC`,
+            WHERE r.case_id = ?${live} ORDER BY f.created_at DESC, f.id DESC`,
         ).bind(caseId).all<any>().then((r) => r.results || []),
         isScoped ? Promise.resolve([]) : c.env.DB.prepare(
           `SELECT request_id, COUNT(*) AS count, MAX(created_at) AS last_at FROM dd_request_reminders
@@ -1407,8 +1410,7 @@ dd.get('/requests/mine', async (c) => {
                   LEFT JOIN partners partner ON partner.id = d.partner_id AND LOWER(partner.email) = LOWER(requester.email)
                  WHERE d.project_id = p.id AND (c.deal_id IS NULL OR d.id = c.deal_id)
                    AND (d.lead_partner_id = requester.id OR partner.id IS NOT NULL)
-             )) AS asking_team_name,
-             (SELECT json_group_array(f.name) FROM data_room_files f WHERE f.dd_request_id = r.id) AS file_names
+             )) AS asking_team_name
         FROM dd_requests r
         JOIN dd_cases c ON c.id = r.case_id
         LEFT JOIN projects p ON c.subject_type = 'project' AND p.id = c.subject_id
@@ -1420,14 +1422,19 @@ dd.get('/requests/mine', async (c) => {
                 JOIN users u ON LOWER(u.email) = LOWER(f.email)
                WHERE u.id = ${user.id})))
        ORDER BY r.created_at DESC LIMIT 100`;
-    return c.json({ items: rows.map((r) => ({ ...r, file_names: parseNames(r.file_names) })) });
+    // D1252: the names of the files matched to each request, read apart from the tagged query above
+    // (its interpolations are binds) so D6073's clause can leave a file in the data room's Trash out.
+    const names = new Map<number, string[]>();
+    if (rows.length) {
+      const res = await c.env.DB.prepare(
+        `SELECT f.dd_request_id AS id, f.name FROM data_room_files f
+          WHERE f.dd_request_id IN (SELECT value FROM json_each(?))${await liveFiles(c.env.DB, 'f')} ORDER BY f.id`,
+      ).bind(JSON.stringify(rows.map((r) => Number(r.id)))).all<{ id: number; name: string }>();
+      for (const f of res.results || []) names.set(Number(f.id), [...(names.get(Number(f.id)) || []), String(f.name)]);
+    }
+    return c.json({ items: rows.map((r) => ({ ...r, file_names: names.get(Number(r.id)) ?? [] })) });
   } finally { await sql.end(); }
 });
-
-/** D1252: `json_group_array` answers a JSON string; a bad one is no names, never a throw. */
-function parseNames(raw: unknown): string[] {
-  try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
-}
 
 dd.patch('/requests/:id/respond', async (c) => {
   const user = await requireAuth(c);
@@ -1460,7 +1467,7 @@ dd.patch('/requests/:id/respond', async (c) => {
     if (fileUid) {
       // The file must be one of the venture's own data-room files: the subject is a project.
       if (req.subject_type !== 'project') return c.json({ error: 'Only a venture answers with a data-room file', code: 'no_data_room' }, 400);
-      const file = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?')
+      const file = await c.env.DB.prepare(`SELECT id FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`)
         .bind(fileUid, Number(req.subject_id)).first<{ id: number }>();
       if (!file) return c.json({ error: 'File not found in your data room' }, 404);
       await c.env.DB.prepare('UPDATE data_room_files SET dd_request_id = ?, updated_at = ? WHERE id = ?')
@@ -1947,7 +1954,7 @@ dd.post('/cases/:uid/documents/download', async (c) => {
   } else if (body.kind === 'request_file') {
     if (seen) return c.json({ error: 'Only the case owner or an admin may open request files' }, 403);
     const f = await c.env.DB.prepare(
-      `SELECT f.id, f.name FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id WHERE f.id = ? AND r.case_id = ?`,
+      `SELECT f.id, f.name FROM data_room_files f JOIN dd_requests r ON r.id = f.dd_request_id WHERE f.id = ? AND r.case_id = ?${await liveFiles(c.env.DB, 'f')}`,
     ).bind(id, caseId).first<{ id: number; name: string }>();
     if (!f) return c.json({ error: 'Document not found' }, 404);
     name = f.name;
@@ -1988,7 +1995,7 @@ dd.get('/documents/dl/:token', async (c) => {
   const doc = row.kind === 'attachment'
     ? await c.env.DB.prepare('SELECT file_key AS key, filename AS name, mime_type AS type FROM dd_attachments WHERE id = ? AND case_id = ?')
       .bind(row.target_id, row.case_id).first<{ key: string; name: string; type: string | null }>()
-    : await c.env.DB.prepare('SELECT r2_key AS key, name, content_type AS type FROM data_room_files WHERE id = ?')
+    : await c.env.DB.prepare(`SELECT r2_key AS key, name, content_type AS type FROM data_room_files WHERE id = ?${await liveFiles(c.env.DB)}`)
       .bind(row.target_id).first<{ key: string; name: string; type: string | null }>();
   if (!doc || !c.env.FILES) return c.json({ error: 'Document not found' }, 404);
   const obj = await c.env.FILES.get(doc.key);

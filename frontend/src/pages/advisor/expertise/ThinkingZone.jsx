@@ -7,7 +7,7 @@ import { usePagedList } from './pages';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
-import { articleStage, articleStateLabel, revisionLine } from './expertiseModel';
+import { articleStage, articleStateLabel, inThinkingView, revisionLine } from './expertiseModel';
 
 /**
  * D4681 (#4681): one piece's saved revisions (D1406's author read), opened on
@@ -85,13 +85,12 @@ export default function ThinkingZone() {
   const items = list.rows;
   const counts = list.res?.counts || null;
   const total = list.res?.page?.total ?? items.length;
-  // D392 — the chips are the pill's own two states: published, and anything
-  // not yet published (which the shelf already labels "Draft").
-  const THINKING_VIEWS = {
-    published: (a) => a.status === 'published',
-    draft: (a) => a.status !== 'published',
-  };
-  const shown = THINKING_VIEWS[view] ? items.filter(THINKING_VIEWS[view]) : items;
+  // D4826 part 2 (#4826): EX-11's chips — whose move it is — each a set of
+  // the shelf's own states (`expertiseModel.THINKING_VIEWS`), so every row a
+  // chip shows names, on its own pill, why it is there. The figures are the
+  // Worker's, over the whole shelf; one it did not send drops from its chip.
+  const shown = items.filter((a) => inThinkingView(a, view));
+  const chipCounts = { all: counts?.total, needs_you: counts?.needs_you, with_editors: counts?.with_editors, published: counts?.published };
 
   return (
     <div className="space-y-4">
@@ -103,7 +102,10 @@ export default function ThinkingZone() {
       <ZoneToolbar
         className="mb-3"
         role="advisor"
-        filters={advisorZoneFilters('expertise/thinking', { value: view, onChange: setView })}
+        // A labelled group of 44px chips below `md` (D4826 part 2).
+        filterLabel="Article state"
+        tap
+        filters={advisorZoneFilters('expertise/thinking', { value: view, onChange: setView, counts: chipCounts })}
         // D4826 (#4826): the Status column carries the shelf's own words
         // (`articleStateLabel`), not the stored column value — an export is the
         // one artefact a writer takes away, and it named six states in the

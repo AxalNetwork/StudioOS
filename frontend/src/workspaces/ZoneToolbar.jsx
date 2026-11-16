@@ -62,12 +62,18 @@ const CHIP_OFF =
   'border-gray-200 bg-white text-gray-700 hover:border-gray-300 ' +
   'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
 
+const CHIP_TAP = 'min-h-[44px] md:min-h-0';
+
 /**
  * @param {Array<{label:string,testid?:string,active?:boolean,onSelect?:()=>void,disabled?:boolean,title?:string}>} filters
  * @param {Array} actions  passed straight to `ZoneActions`
  * @param {string} role    which licence's accent the selected chip wears
+ * @param {string} [filterLabel]  names the chip row for assistive tech (`role="group"`)
+ * @param {boolean} [tap]  44px chip targets below `md`, the size a thumb needs
+ *   (D4826 part 2). Opt-in, so a zone moves to it with its own canvas rather
+ *   than every zone's row growing at once.
  */
-export default function ZoneToolbar({ filters = [], actions = [], role = 'founder', className = '' }) {
+export default function ZoneToolbar({ filters = [], actions = [], role = 'founder', className = '', filterLabel, tap = false }) {
   const live = filters.filter(Boolean);
   if (!live.length && !actions.filter(Boolean).length) return null;
   const on = accentChipClass(role);
@@ -77,7 +83,7 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
       className={`mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-gray-200 pb-3 dark:border-gray-800 ${className}`}
     >
       {live.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5" {...(filterLabel ? { role: 'group', 'aria-label': filterLabel } : {})}>
           {live.map((item) => (
             <button
               key={item.label}
@@ -100,7 +106,7 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
               {...(item.disabled
                 ? { disabled: true, title: item.title }
                 : { 'aria-pressed': Boolean(item.active), onClick: item.onSelect })}
-              className={`${CHIP} ${
+              className={`${CHIP}${tap ? ` ${CHIP_TAP}` : ''} ${
                 item.disabled
                   ? `${CHIP_OFF} cursor-not-allowed opacity-55`
                   : (item.active ? `${on} font-bold` : CHIP_OFF)

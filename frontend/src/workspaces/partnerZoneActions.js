@@ -299,7 +299,8 @@ export const PARTNER_ZONE_ACTIONS = {
   // which stopped being the whole story when the directory's readings card got
   // the record form back: it opens that form on the first reading past ninety
   // days, or the first service line never read, and records nothing itself.
-  // (`MarketZone` supplied a handler for it that this table never named.)
+  // (The unmounted `MarketZone` body, deleted by D6285, supplied a handler for
+  // it that this table never named.)
   // `Attach to proposal` STAYS PROSE: a reading attaches from its own page,
   // and nothing on this one carries a reading or a sector onto a proposal.
   'research/markets': [

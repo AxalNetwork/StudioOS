@@ -345,9 +345,12 @@ catalogue version only in the fixture.
 | `workspace_validation_5573.test.ts` | D5573: each of the eleven chaos faults keeps the invariants or fails closed; isolation and policy probes, concurrency, determinism, the CLI and the `local_mocked` label. |
 | `build_feature_removal_6024.test.ts` | D6024: real record gates, protected/racing references, FK cascades and atomic actor audit, must-have demotion, canonical metrics and retained plan history. |
 
+`shared_arr_retention_6178.test.ts` covers recorded ARR/net retention, founder snapshot/context/save/send, source proof, unit rejection, Report Figures parity, sent immutability and investor sharing/NDA boundaries.
 `consultation_slot_6394.test.ts` (#6394) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 | `fund_admin_answers_6397.test.ts` | D6397: gated audited prompt reads, recorded states/dates, scoped navigation, no models or financial writes. |
 `investor_consent_6392.test.ts` (#6392) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
+
+| `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
 
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |

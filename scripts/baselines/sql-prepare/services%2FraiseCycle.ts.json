@@ -1,3 +1,5 @@
 {
-  "SERVED_FUNDS @ services/raiseCycle.ts": 1
+  "SERVED_FUNDS @ services/raiseCycle.ts": 1,
+  "await liveFiles(ctx.env.DB) @ services/raiseCycle.ts": 2,
+  "await liveFiles(ctx.env.DB, 'f') @ services/raiseCycle.ts": 1
 }

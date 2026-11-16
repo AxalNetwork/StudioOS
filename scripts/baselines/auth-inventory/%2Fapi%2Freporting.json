@@ -1,9 +1,4 @@
 {
-  "GET /api/reporting/companies/:projectUid": {
-    "review": "record_without_ownership_check",
-    "kind": "unclassified",
-    "state": "unreviewed"
-  },
   "POST /api/reporting/periods/:uid/waive": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",

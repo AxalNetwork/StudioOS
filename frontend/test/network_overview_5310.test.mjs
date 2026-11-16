@@ -1,6 +1,7 @@
 /**
  * #5310 (D5310) — the founder Network overview, built to the #4799 canvas: NW1 populated, NW1.2
- * first run and NW5's states (read, loading, could not be read, stale, not recorded, empty, credits).
+ * first run and NW5's states (read, loading, could not be read, stale, not recorded, empty, credits),
+ * and part 4's checks against the phone (NW8) and dark (NW10) boards (D5310-p4).
  * Every person and company here is made up.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/network_overview_5310.test.mjs
@@ -9,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
   READ_LOADING, acceptGate, attentionRows, introGroups, isFirstRun, matchesView, overviewTiles, settle, sharingLine, staleNotice,
@@ -40,6 +41,23 @@ test('NW1 tiles: each figure is its own read; a failed read is Could not be read
   const noDecide = overviewTiles({ ...reads, summary: ready({ ...SUMMARY.data, requests: { received_pending: 0 }, recording: { 'requests.received_pending': { recorded: false } } }) });
   assert.equal(noDecide[2].state, 'unreadable');
   assert.equal(overviewTiles({ ...reads, accepted: fail })[3].state, 'unreadable', 'active needs both halves');
+});
+
+// D5310-p4. Mutation checked: a zero count marked (fails); an unreadable tile marked (fails);
+// the decide tile left unmarked (fails); the connections tile marked (fails).
+test('NW1, NW8, NW10 tiles: only a read count above zero that asks for something is marked, with its glyph', () => {
+  const reads = {
+    book: ready({ total: 142 }), followUps: ready({ total: 7, items: [] }), summary: SUMMARY,
+    pending: LOG([], [], { sent_pending: 2 }), accepted: LOG([req({ status: 'accepted' })], []),
+  };
+  const marks = (r) => overviewTiles(r).map((t) => t.mark ?? null);
+  assert.deepEqual(marks(reads), [null, '◷', '!', null], 'connections and active never ask for anything');
+  const zero = { ...reads, followUps: ready({ total: 0, items: [] }), summary: ready({ ...SUMMARY.data, requests: { ...SUMMARY.data.requests, received_pending: 0 } }) };
+  assert.deepEqual(marks(zero), [null, null, null, null], 'zero is not marked');
+  assert.deepEqual(marks({ ...reads, followUps: fail, summary: fail }), [null, null, null, null], 'an unread figure is not marked');
+  assert.deepEqual(marks({ ...reads, followUps: READ_LOADING }), [null, null, '!', null], 'nor a loading one');
+  const stale = { status: 'stale', data: { total: 2, items: [] }, readAt: '2026-11-14T11:00:00Z' };
+  assert.equal(overviewTiles({ ...reads, followUps: stale })[1].mark, '◷', 'a stale count still asks');
 });
 
 // Mutation checked: settle dropping the earlier value on failure (fails); staleNotice ignoring stale (fails).
@@ -129,7 +147,9 @@ async function mount(handler) {
   const { default: Desk } = await import('../src/pages/founder/FounderNetworkDesk.jsx');
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/network'] }, h(Desk))));
+  const Where = () => h('p', { 'data-testid': 'probe-location' }, useLocation().pathname);
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/network'] },
+    h(Routes, null, h(Route, { path: '/network', element: h(Desk) }), h(Route, { path: '*', element: h(Where) })))));
   const settleAll = async () => { await act(async () => { for (let i = 0; i < 20; i += 1) await new Promise((r) => setImmediate(r)); }); };
   await settleAll();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -140,6 +160,9 @@ async function mount(handler) {
     calls, has: (id) => !!byId(id), textOf: (id) => text(byId(id)), text: () => text(container),
     async click(id) { await act(async () => { props(byId(id)).onClick?.({ preventDefault() {} }); }); await settleAll(); },
     disabled: (id) => props(byId(id)).disabled === true,
+    className: (id) => props(byId(id)).className || '',
+    options: (id) => walk(byId(id)).filter((n) => n.nodeName === 'OPTION').map((n) => [props(n).value, text(n)]),
+    async choose(id, value) { await act(async () => { props(byId(id)).onChange({ target: { value } }); }); await settleAll(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -161,7 +184,7 @@ test('NW1 mounted: populated — the tiles, the attention list, the four groups,
   const v = await mount(populated());
   try {
     assert.match(v.textOf('tile-network-connections'), /Connections\s*142\s*people in your relationship book/);
-    assert.match(v.textOf('tile-network-attention'), /Needs attention\s*7\s*follow-ups past their due date/);
+    assert.match(v.textOf('tile-network-attention'), /Needs attention\s*7\s*◷follow-ups past their due date/);
     assert.match(v.textOf('tile-network-decide'), /Awaiting my action\s*3/);
     assert.match(v.textOf('tile-network-active'), /Active introductions\s*5\s*2 waiting · 3 accepted, not yet made/);
     assert.match(v.textOf('row-attention-t1'), /Example Ada · Partner, Example Seed[\s\S]*Follow-up “Send the update” due 2026-11-04/);
@@ -173,6 +196,23 @@ test('NW1 mounted: populated — the tiles, the attention list, the four groups,
     assert.equal(v.disabled('button-match-accept-p1'), false);
     assert.ok(!v.has('network-first-run'));
     assert.ok(v.calls.some((c) => /\/contacts\/book\/follow-ups-due\?limit=3/.test(c)), 'B1: the overdue read');
+  } finally { await v.close(); }
+});
+
+// D5310-p4. Mutation checked: the picker's counts dropped (fails); a choice that does not navigate (fails);
+// the Overview choice navigating away (fails); the marked class not drawn (fails).
+test('NW8 mounted: the Section picker names each zone with its count and opens it; the asking tiles are marked', async () => {
+  const v = await mount(populated());
+  try {
+    assert.deepEqual(v.options('select-network-section'), [
+      ['', 'Overview'], ['/network/relationships', 'Relationships · 142'], ['/network/introductions', 'Introductions · 5'], ['/network/organizations', 'Organizations'],
+    ]);
+    assert.match(v.className('tile-network-attention'), /is-marked/);
+    assert.doesNotMatch(v.className('tile-network-connections'), /is-marked/);
+    await v.choose('select-network-section', '');
+    assert.ok(v.has('founder-network-desk'), 'Overview stays');
+    await v.choose('select-network-section', '/network/relationships');
+    assert.equal(v.textOf('probe-location'), '/network/relationships');
   } finally { await v.close(); }
 });
 

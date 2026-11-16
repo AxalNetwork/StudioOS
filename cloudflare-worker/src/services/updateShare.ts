@@ -28,6 +28,7 @@ import { ingestContact } from '../routes/contacts';
 export interface Snapshot {
   snapshot_date: string; source: string | null;
   mrr: number | null; paying_accounts: number | null; net_burn: number | null; cash_balance: number | null;
+  arr?: number | null; nrr_pct?: number | null;
 }
 
 export interface Metric {
@@ -38,7 +39,11 @@ export interface Metric {
 export const NOT_RECORDED = 'Not recorded';
 
 /** The figures the canvas draws, in its order. */
-export const METRIC_KEYS = ['mrr', 'growth', 'customers', 'burn', 'runway'] as const;
+export const METRIC_KEYS = ['mrr', 'growth', 'customers', 'burn', 'runway', 'arr', 'net_retention'] as const;
+
+/** #6178: the existing report keys retain their money/percentage meaning at save and read. */
+export const validMetricUnit = (key: string, unit: unknown): boolean =>
+  key === 'arr' ? unit === 'usd' : key === 'net_retention' ? unit === 'pct' : true;
 
 // One label for a typed value everywhere in Grow, as `snapSource` gives it.
 const sourceLabel = (s: string | null) => (s && s.trim() ? s.trim() : 'manual');
@@ -83,7 +88,9 @@ export function buildMetrics(inPeriod: Snapshot[], before: Snapshot[], periodSta
         source: sourceLabel(cash.source), as_of: cash.snapshot_date, reason: null }
     : { key: 'runway', label: 'Runway', unit: 'months', value: null, source: null, as_of: null,
         reason: `${NOT_RECORDED}: runway needs cash and burn recorded in this period` };
-  return [mrr, growth, customers, burn, runway];
+  // #6178: recorded ARR and NRR only; MRR is not annualised and retention is not inferred.
+  return [mrr, growth, customers, burn, runway,
+    pick('arr', 'ARR', 'usd', 'arr'), pick('net_retention', 'Net revenue retention', 'pct', 'nrr_pct')];
 }
 
 /** True when no metric in the list carries a recorded figure. */
@@ -97,6 +104,7 @@ export function cleanMetrics(raw: unknown, verified: Metric[] = []): Metric[] {
     if (!m || typeof m !== 'object') continue;
     const r = m as Record<string, unknown>;
     if (!(METRIC_KEYS as readonly string[]).includes(String(r.key))) continue;
+    if (!validMetricUnit(String(r.key), r.unit)) continue;
     const value = typeof r.value === 'number' && Number.isFinite(r.value) ? r.value : null;
     out.push({
       key: String(r.key), label: String(r.label ?? r.key).slice(0, 60),
