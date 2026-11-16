@@ -127,7 +127,8 @@ test('the card says what the link buys, and stays honest when there is nobody to
 // The seam between the two sides
 // ---------------------------------------------------------------------------
 test('one definition of a local day, shared rather than copied', () => {
-  assert.match(G, /import \{ shortMoment \} from '\.\.\/advisor\/practice\/deliveryTrail'/);
+  // #5961 (D4833-p3): the same import also brings the version's summary and file readers.
+  assert.match(G, /import \{ shortMoment(, \w+)* \} from '\.\.\/advisor\/practice\/deliveryTrail'/);
   // No second formatter on the founder's card.
   assert.ok(!/toLocaleDateString/.test(G),
     'the card must read an instant through the shared formatter, not its own');

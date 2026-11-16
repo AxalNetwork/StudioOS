@@ -186,7 +186,9 @@ test('all four chips select something, and the two dead ones are why', () => {
   // Both are asserted on the LISTING, because a chip reading a field the
   // response never sends is a control that lies rather than one that filters.
   const listing = between(worker, "partnerDelivery.get('/status-reports'", "partnerDelivery.get('/engagements/:engagementId/report-draft/:period'");
-  assert.ok(/blockers: byEngagement\.get\(Number\(r\.engagement_id\)\) \|\| \[\],/.test(listing),
+  // #4709: a draft's are the engagement's open blockers; a sent report's are the ones open at its send.
+  assert.ok(/const live = byEngagement\.get\(Number\(r\.engagement_id\)\) \|\| \[\];/.test(listing)
+    && /\.\.\.reportBlockers\(r, live\),/.test(listing),
     'the listing stopped attaching blockers to each report');
   assert.ok(/^\s{6}period,$/m.test(listing), 'the listing stopped returning the current cycle');
 
@@ -238,8 +240,9 @@ test('the instNote carries the artboard’s finding, and nothing here claims to 
   const note = between(INST, 'note={', '}\n');
   assert.ok(flat(note).includes('not our delay, still our problem'),
     'the instNote dropped the artboard’s finding');
-  assert.ok(flat(note).includes('read live at this moment rather than copied into the report'),
-    'the instNote stopped saying why blockers are not a column');
+  // #4709: a draft's blockers are read live; a sent report keeps the ones open at its send.
+  assert.ok(flat(note).includes('blockers are read live') && flat(note).includes('kept with it at the send'),
+    'the instNote stopped saying which blockers a row names');
 
   // SENDING IS A PERSON'S ACT, and the page must not imply otherwise: nothing
   // in this product emails a client.

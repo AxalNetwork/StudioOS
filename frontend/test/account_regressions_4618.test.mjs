@@ -35,6 +35,9 @@ import { installDocument } from './_contracts_dom.mjs';
 // SettingsPage reaches modules that read `import.meta.env` at load; this hook gives them one (as owner_plan_prices_3702).
 register(new URL('./_airailRender-hook.mjs', import.meta.url));
 const { default: SettingsPage } = await import('../src/pages/SettingsPage.jsx');
+// D4618 part 2: Privacy, Notifications and Billing load with their section (`lazySection`). Loaded here first, as
+// the page was before, so a mount draws them within the test's settle rounds and Stripe's loader finds no document.
+await Promise.all(['PrivacySections', 'NotificationSections', 'BillingSection'].map((f) => import(`../src/pages/account/${f}.jsx`)));
 const { default: AutoReloadCard, AutoReloadForm } = await import('../src/pages/account/AutoReloadCard.jsx');
 const { useConnectors } = await import('../src/pages/account/ConnectorSheet.jsx');
 const { cardAction } = await import('../src/pages/account/connectorsModel.js');

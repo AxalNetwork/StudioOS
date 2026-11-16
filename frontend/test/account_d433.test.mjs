@@ -37,9 +37,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { readAccountPage } from './_accountSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = read('frontend/src/pages/SettingsPage.jsx');
+const PAGE = readAccountPage();
 const CODE = codeOnly(PAGE);
 const API = codeOnly(read('frontend/src/lib/api.js'));
 const APP = codeOnly(read('frontend/src/App.jsx'));
