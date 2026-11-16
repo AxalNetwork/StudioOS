@@ -6,7 +6,7 @@
 .ihs-body { margin: 0; font-size: 12.5px; color: var(--sm-body); }
 .ihs-strong { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--sm-body); }
 .ihs-mu { color: var(--sm-mut); }
-.ihs-mono { font-family: var(--font-mono, ui-monospace, Menlo, monospace); }
+.ihs-mono { font-family: var(--font-mono); }
 .ihs-nrec { font-size: 12.5px; font-weight: 600; color: var(--sm-mut); }
 .ihs-needs, .ihs-funds, .ihs-returns, .ihs-fit, .ihs-arrivals { display: flex; flex-direction: column; gap: 10px; min-width: 0; container-type: inline-size; }
 .ihs-unr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--sm-body); }
