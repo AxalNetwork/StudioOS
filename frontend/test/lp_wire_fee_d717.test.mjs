@@ -91,7 +91,7 @@ test('the panel opens on the amount and the due date, then the phone check, and 
 
 test('with no due date, or no commitment, the panel says so', () => {
   assert.match(panel(AVAILABLE, { due: null }), /No due date recorded · LP no\. L100/);
-  assert.match(panel(AVAILABLE, { commitment: null }), /Unfunded after this call<\/span><span[^>]*><span[^>]*>Not recorded/);
+  assert.match(panel(AVAILABLE, { commitment: null }), /Unfunded after this call<\/span><span[^>]*><span[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded/);
 });
 
 test('the reveal route is called only after the tick and "Show wire instructions"', () => {
@@ -195,7 +195,7 @@ test('"Download PDF" is drawn only with a handler', () => {
 
 test('absent reads Not recorded, and a failed read reads Unreadable', () => {
   const noRate = view(stmt({ ...FIGURES, rate_bps: null }));
-  assert.match(noRate, /<span>Rate<\/span><span[^>]*><span[^>]*>Not recorded/);
+  assert.match(noRate, /<span>Rate<\/span><span[^>]*><span[^>]*>(?:<svg[\s\S]*?<\/svg>)?Not recorded/);
   assert.doesNotMatch(noRate, /0% a year/);
   for (const figures of [null, { ...FIGURES, schema: 'other/1' }]) {
     const html = view(stmt(figures));

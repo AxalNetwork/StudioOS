@@ -13,22 +13,26 @@
  *   - Eadwyn's note: drafted from the bands on press, shown, and saved to the
  *     investor's notes only on Save to notes (`/api/deals/flow/compare-note`).
  *     Discard writes nothing. Eadwyn never changes a score.
+ *   - D6149 (#6149): each card has Remove (the same address without that id),
+ *     Add a venture returns to the table with the picks ticked (`&pick=`),
+ *     Export CSV writes every row the table shows (`compareSections`), and the
+ *     page prints (`comparePrint.js`).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { dealInsightsApi } from '../../../lib/api/dealInsights.js';
-import { dateText } from '../../deal/dealInsightsModel';
 import { dealFlowApi } from '../../../lib/api/dealFlow.js';
 import { dealViewsApi } from '../../../lib/api/dealViews.js';
 import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { reportError } from '../../../lib/log';
 import { Unreadable } from '../../../ui';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
-import { MAX_COMPARE } from './dealFlowModel';
-import { fitOf, flowRows, moneyText, scoresOf, stageWord, stripScopes } from './flowModel';
+import { MAX_COMPARE, addVentureHref, compareHref } from './dealFlowModel';
+import { fitOf, flowRows, scoresOf, stageWord, stripScopes } from './flowModel';
 import { AskCell, DaysCell, FitCell } from './FlowCells';
-import { COMPARE_COLOURS, COMPARE_TRACTION, barShare, compareCsv, compareRows, compareSummary, compareTraction } from './compareModel';
+import { COMPARE_COLOURS, barShare, compareCsv, compareRows, compareSections, compareSummary, compareTraction } from './compareModel';
+import { COMPARE_PRINT_CSS } from './comparePrint';
 
 const BOX = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -65,18 +69,18 @@ function ScopeBars({ ventures }) {
   );
 }
 
-/** The table: the same bands, the strongest alone in a row in weight 800, then the facts. */
+/** A row's cells drawn richer than its words (a link, a title); every other row is its words from `compareSections`. */
+const RICH_CELL = {
+  ask: (v) => <AskCell row={v} />,
+  days: (v, flowUnknown) => <DaysCell row={v} flowUnknown={flowUnknown} testId={`dealflow-compare-days-${v.id}`} />,
+  fit: (v) => <FitCell fit={v.fit} />,
+};
+
+/**
+ * The table: the same bands, the strongest alone in a row in weight 800, then the facts.
+ * D6149 (#6149): its sections and rows are `compareSections`', the list the CSV writes.
+ */
 function CompareTable({ ventures, flowUnknown = false }) {
-  const section = (label) => <tr><th scope="rowgroup" colSpan={ventures.length + 1} className="bg-gray-50 px-2 py-2 text-left text-sm font-bold dark:bg-gray-800">{label}</th></tr>;
-  const fact = (label, render) => <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">{label}</th>{ventures.map(venture => <td key={venture.id} className="px-2 py-1.5">{render(venture)}</td>)}</tr>;
-  const traction = new Map(ventures.map(venture => [venture.id, compareTraction(venture.traction)]));
-  const tractionWord = (venture, key) => {
-    const read = traction.get(venture.id);
-    if (read.state === 'loading') return 'Reading…';
-    if (read.state === 'masked') return 'Locked';
-    if (read.state === 'unreadable') return 'Unreadable';
-    return (key === 'period' ? read.period : read.figures[key]) || 'Not reported';
-  };
   const head = 'px-2 py-1.5 text-left text-[11px] font-bold uppercase text-gray-500 dark:text-gray-400';
   return (
     <div className="max-h-[65vh] overflow-auto" id="compare-table">
@@ -84,44 +88,26 @@ function CompareTable({ ventures, flowUnknown = false }) {
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
           <tr className="border-b border-axal-hairline dark:border-gray-800">
             <th scope="col" className={head}>Comparison</th>
-            {ventures.map((v, i) => <th scope="col" key={v.id} className={head}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" />{v.name}</th>)}
+            {ventures.map((v, i) => <th scope="col" key={v.id} className={head}><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-hidden="true" data-print-swatch="" />{v.name}</th>)}
           </tr>
         </thead>
-        <tbody>
-          {section('Investment case')}
-          {fact('Ask', v => <AskCell row={v} />)}
-          {fact('Instrument', v => v.instrument || 'Not recorded')}
-          {fact('Valuation cap', v => moneyText(v.valuation, v.currency) || 'Not recorded')}
-          {fact('Close', v => dateText(v.close) || 'Not recorded')}
-          {fact('Your stage', v => flowUnknown ? 'Unreadable' : stageWord(v.stage))}
-          {fact('Days in stage', v => <DaysCell row={v} flowUnknown={flowUnknown} testId={`dealflow-compare-days-${v.id}`} />)}
-        </tbody>
-        <tbody>
-          {section('Scorecard')}
-          {compareRows(ventures).map((r) => (
-            <tr key={r.key} className="border-t border-gray-100 dark:border-gray-800">
-              <th scope="row" className="px-2 py-1.5 text-left font-semibold">{r.label}</th>
-              {r.cells.map((c, i) => (
-                <td key={ventures[i].id} className={`px-2 py-1.5 ${c.best ? 'font-extrabold' : ''}`} title={c.title || undefined} data-testid={`dealflow-compare-cell-${r.key}-${i}`} data-best={c.best ? '1' : '0'}>
-                  {c.kind === 'scored' ? <>{c.word}{c.confidence && <span className="font-normal text-axal-muted dark:text-gray-400"> · {c.confidence}</span>}</> : <span className="text-axal-muted dark:text-gray-400">{c.word}</span>}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-        <tbody>
-          {section('Fit to thesis')}
-          {fact('Fit to my thesis', v => <FitCell fit={v.fit} />)}
-        </tbody>
-        <tbody>
-          {section('Traction')}
-          {fact('Reporting period', v => tractionWord(v, 'period'))}
-          {COMPARE_TRACTION.map(metric => <React.Fragment key={metric.key}>{fact(metric.label, v => tractionWord(v, metric.key))}</React.Fragment>)}
-        </tbody>
-        <tbody>
-          {section('Risk')}
-          {fact('Material risks', () => 'Not recorded')}
-        </tbody>
+        {compareSections(ventures, { flowUnknown }).map((section) => (
+          <tbody key={section.key} data-testid={`dealflow-compare-section-${section.key}`}>
+            <tr><th scope="rowgroup" colSpan={ventures.length + 1} className="bg-gray-50 px-2 py-2 text-left text-sm font-bold dark:bg-gray-800">{section.label}</th></tr>
+            {section.rows.map((row) => (
+              <tr key={row.key} className="border-t border-gray-100 dark:border-gray-800">
+                <th scope="row" className="px-2 py-1.5 text-left font-semibold">{row.label}</th>
+                {row.scope
+                  ? row.scope.cells.map((c, i) => (
+                    <td key={ventures[i].id} className={`px-2 py-1.5 ${c.best ? 'font-extrabold' : ''}`} title={c.title || undefined} data-testid={`dealflow-compare-cell-${row.scope.key}-${i}`} data-best={c.best ? '1' : '0'}>
+                      {c.kind === 'scored' ? <>{c.word}{c.confidence && <span className="font-normal text-axal-muted dark:text-gray-400"> · {c.confidence}</span>}</> : <span className="text-axal-muted dark:text-gray-400">{row.cells[i]}</span>}
+                    </td>
+                  ))
+                  : ventures.map((v, i) => <td key={v.id} className="px-2 py-1.5">{RICH_CELL[row.key] ? RICH_CELL[row.key](v, flowUnknown) : row.cells[i]}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        ))}
       </table>
     </div>
   );
@@ -194,27 +180,37 @@ function download(text) {
 
 /** DLS8/DLS9 from rows already read, each with its scores and fit. */
 export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = false }) {
+  // D6149 (#6149): Remove and Add a venture work from the ventures on the page, so a pick that is not on the list drops out.
+  const shownIds = ventures.map((v) => v.id);
+  const addHref = addVentureHref(shownIds);
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow-compare-page">
-      <nav className="text-[13px] text-axal-muted dark:text-gray-400"><Link to="/deals?view=table" className="font-semibold text-violet-700 underline dark:text-violet-300">Deal flow</Link> › Compare</nav>
+    <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow-compare-page" data-compare-print="">
+      <style>{COMPARE_PRINT_CSS}</style>
+      <nav className="text-[13px] text-axal-muted dark:text-gray-400" data-print="hide"><Link to="/deals?view=table" className="font-semibold text-violet-700 underline dark:text-violet-300">Deal flow</Link> › Compare</nav>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="m-0 text-[20px] font-extrabold">Compare · {ventures.length} ventures</h2>
         {ventures.length >= 2 && (
-          <div className="flex gap-2">
-            {ventures.length < MAX_COMPARE && <Link to="/deals?view=table" className={PRIMARY} data-testid="dealflow-compare-add">Add a venture</Link>}
-            <button type="button" className={BTN} onClick={() => download(compareCsv(ventures))} data-testid="dealflow-compare-csv">Export CSV</button>
+          <div className="flex flex-wrap gap-2" data-print="hide">
+            {ventures.length < MAX_COMPARE && <Link to={addHref} className={PRIMARY} data-testid="dealflow-compare-add">Add a venture</Link>}
+            <button type="button" className={BTN} onClick={() => download(compareCsv(ventures, { flowUnknown }))} data-testid="dealflow-compare-csv">Export CSV</button>
+            <button type="button" className={BTN} onClick={() => window.print()} data-testid="dealflow-compare-print">Print</button>
           </div>
         )}
       </div>
       {missing > 0 && <p className={MUTED} data-testid="dealflow-compare-missing">{missing === 1 ? 'One picked venture is' : `${missing} picked ventures are`} not on the deal list, so {missing === 1 ? 'it is' : 'they are'} not compared.</p>}
       {ventures.length < 2
-        ? <section className={BOX} data-testid="dealflow-compare-few"><p className="m-0 text-sm">Pick at least two ventures to compare, from the table.</p></section>
+        ? <section className={BOX} data-testid="dealflow-compare-few"><p className="m-0 text-sm">Pick at least two ventures to compare, from <Link to={addHref} className="font-semibold text-violet-700 underline dark:text-violet-300" data-testid="dealflow-compare-few-add">the table</Link>.</p></section>
         : (
           <>
-            <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-4">
+            <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-4" data-print="cards">
               {ventures.map((v, i) => (
                 <li key={v.id} className={BOX} data-testid={`dealflow-compare-${v.id}`}>
-                  <div className="flex items-center gap-2"><span className={`inline-block h-3 w-3 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-label={`${COMPARE_COLOURS[i].name} in the chart`} role="img" /><span className="font-semibold">{v.name}</span></div>
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1.5 inline-block h-3 w-3 shrink-0 rounded-full ${COMPARE_COLOURS[i].swatch}`} aria-label={`${COMPARE_COLOURS[i].name} in the chart`} role="img" data-print-swatch="" />
+                    <span className="min-w-0 flex-1 font-semibold">{v.name}</span>
+                    <Link to={compareHref(shownIds.filter((id) => id !== v.id))} className="-my-2.5 -mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg px-2 text-[12.5px] font-semibold text-axal-muted underline hover:text-axal-ink focus-visible:outline-2 focus-visible:outline-violet-600 dark:text-gray-400 dark:hover:text-gray-100"
+                      aria-label={`Remove ${v.name} from the comparison`} data-print="hide" data-testid={`dealflow-compare-remove-${v.id}`}>Remove</Link>
+                  </div>
                   {v.sector && <span className={MUTED}>{v.sector}</span>}
                   <div className="flex flex-wrap gap-1"><span className={PILL}>{flowUnknown ? 'Stage unreadable' : stageWord(v.stage)}</span><span className={PILL}>{v.round}</span></div>
                   <AskCell row={v} />
@@ -222,8 +218,8 @@ export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = fal
                 </li>
               ))}
               {ventures.length < MAX_COMPARE && (
-                <li className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 p-4 text-center dark:border-gray-600">
-                  <Link to="/deals?view=table" className="font-semibold text-violet-700 underline dark:text-violet-300">Add a venture</Link>
+                <li className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 p-4 text-center dark:border-gray-600" data-print="hide">
+                  <Link to={addHref} className="font-semibold text-violet-700 underline dark:text-violet-300" data-testid="dealflow-compare-add-slot">Add a venture</Link>
                   <span className={MUTED}>Up to four</span>
                 </li>
               )}
@@ -231,11 +227,11 @@ export function CompareView({ ventures, missing = 0, ids = [], flowUnknown = fal
             <section className={BOX} aria-labelledby="compare-chart-title">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id="compare-chart-title" className="m-0 text-[14px] font-bold">Scores by scope</h3>
-                <a href="#compare-table" className="text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300">View as table</a>
+                <a href="#compare-table" className="text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-print="hide">View as table</a>
               </div>
               <p className="m-0 text-[13px]" data-testid="dealflow-compare-summary">{compareSummary(ventures)}</p>
-              <p className={MUTED}>A bar is a band: Weak, Fair or Strong, never a number. Opacity and the label show confidence. A dashed line marks a scope without a score.</p>
-              <ScopeBars ventures={ventures} />
+              <p className={MUTED} data-print="hide">A bar is a band: Weak, Fair or Strong, never a number. Opacity and the label show confidence. A dashed line marks a scope without a score.</p>
+              <div data-print="hide"><ScopeBars ventures={ventures} /></div>
               <CompareTable ventures={ventures} flowUnknown={flowUnknown} />
             </section>
             <CompareNote key={(ids.length ? ids : ventures.map(v => v.id)).join(',')} ids={ids.length ? ids : ventures.map((v) => v.id)} />

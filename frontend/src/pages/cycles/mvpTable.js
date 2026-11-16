@@ -4,10 +4,21 @@
  *
  * The summary reads "N of M must-haves complete · target <date> · N blocked",
  * every figure from stored data. A missing date is "Not recorded" and, for a
- * writer (`facts.can_set_target`), offers Set. Facts the read did not send
+ * writer (`facts.can_set_target`), offers Set; a recorded one, Change (D6022). Facts the read did not send
  * (an unreadable module) give no line at all, never zeros.
  */
-import { cellView } from './cycleModel';
+import { cellView, linkSearch } from './cycleModel';
+
+/**
+ * D6022 (#6022): the date control's id on Prototype / MVP. A link ending
+ * `#mvp-target-date` opens the summary's form there for a writer.
+ */
+export const MVP_TARGET_ANCHOR = 'mvp-target-date';
+
+/** Where the MVP target date is set, carrying the overview's `?project=N`. */
+export function mvpTargetHref(search) {
+  return `/build/prototype-mvp${linkSearch(search)}#${MVP_TARGET_ANCHOR}`;
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

@@ -5,7 +5,14 @@ import { request } from '../api.js';
 
 export const markRequestsApi = {
   // The caller's own requests, newest first; an admin reads every one. `state`: open | resolved | declined.
-  list: ({ state } = {}) => request(`/mark-requests${state ? `?state=${encodeURIComponent(state)}` : ''}`),
+  // `projectUid` narrows to one company (D6205 part 2: the admin position sheet).
+  list: ({ state, projectUid } = {}) => {
+    const q = new URLSearchParams();
+    if (state) q.set('state', state);
+    if (projectUid) q.set('project_uid', projectUid);
+    const s = q.toString();
+    return request(`/mark-requests${s ? `?${s}` : ''}`);
+  },
   // { project_uid, kind: 'mark' | 'correction' | 'follow_on', reason }. 409 `request_open` carries the open one.
   create: ({ projectUid, kind, reason }) => request('/mark-requests', {
     method: 'POST',

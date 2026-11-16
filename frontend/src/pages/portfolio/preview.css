@@ -15,5 +15,7 @@
 .pf-preview-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .pf-preview-writes{display:flex;flex-wrap:wrap;gap:8px}
 .pf-preview-writes button{opacity:.55;cursor:not-allowed}
+/* D4817 part 10: the company preview's withheld Health, beside the heading. */
+.pf-preview-health{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--pf-mu)}
 @media(max-width:850px){.pf-preview-grid{grid-template-columns:1fr}.pf-preview-tiles{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.pf-preview-banner{align-items:flex-start}.pf-preview-exit{width:100%}}

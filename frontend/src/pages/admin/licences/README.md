@@ -17,13 +17,18 @@ unchanged when it was split.
   separate facts and Sources, the Needs HQ strip, and `useOverviewReads`, the
   reads the header and the Overview share.
 - `TerritoryEditor.jsx` — step 2, the countries a licence holds.
-- `CommercialTerms.jsx` — step 3: `SeatEditor` (step 4 is `TermsWorkspace.jsx`).
+- `CommercialTerms.jsx` — step 3: `SeatEditor` (step 4 is `TermsWorkspace.jsx`), and `LicensedSeats`, board L11's
+  seats by profile with In use Not recorded (D4819 part 11). The editor is not offered on a terminated licence.
 - `ContractStep.jsx` — step 5, the contract instantiated from a template (D5051: block 1 of the Agreement
   section, with its record in Contracts and its version history).
 - `LicenceAgreements.jsx` — D5051 (#5051): the Agreement section's other blocks (L33): the Axal VC package
   agreement, the licensed program agreements (each linking to its one record in Contracts), package readiness,
   Needs HQ · legal and the legal history. Reads the D5048 and D5052 licence reads, each its own block; creates
   nothing. Its `StatePill`, `ReadFailed` and `useBlockRead` are shared with `../grants/ProgramLegalAccess.jsx`.
+- `DeployStep.jsx` — step 6, the branch deployment.
+- `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach. D4819 part 11 (#5922) redrew it to
+  board L11: account state per row, Add administrator and Remove… with their consequence, offered only where the
+  licence's state allows (`../licenceAccessModel.js`).
 - `DeployStep.jsx` — step 6, the branch deployment (D5924: its own Deployment card, with Reconcile on a failure).
 - `AdminsEditor.jsx` — the licence's administrators: appoint, demote, detach.
 - `NoticesEditor.jsx` — compliance notices and their review.

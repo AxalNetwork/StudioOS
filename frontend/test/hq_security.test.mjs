@@ -14,6 +14,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readAdminSecurity } from '../../cloudflare-worker/test/_admin_security_source.mjs';
 import { teamRaw, teamFile } from './_hqTeamSource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -25,7 +26,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const PAGE = codeOnly(read('frontend/src/pages/hq/SecurityPage.jsx'));
-const ROUTE = codeOnly(read('cloudflare-worker/src/routes/admin_security.ts'));
+const ROUTE = codeOnly(readAdminSecurity());
 const APP = read('frontend/src/App.jsx');
 
 test('the Security row sits between Support and Settings, and /admin/security is HQ-only', () => {

@@ -682,7 +682,8 @@ test('7. a calendar event with no end reads Not recorded for its duration, with 
   assert.match(odd, /Interview with Ana Check-in Not recorded/);
   // A failed read says so, and is not an empty day.
   const failed = text(html(h(CalendarPhoneView, { events: { status: 'unreadable', items: [] }, providers: PROVIDERS, now: CAL_NOW })));
-  assert.match(failed, /Today The calendar could not be read\. This is not a claim that nothing is scheduled\./);
+  // D5129 (Q2 = A): the shared Unreadable draws the word Unavailable before its sentence.
+  assert.match(failed, /Today Unavailable The calendar could not be read\. This is not a claim that nothing is scheduled\./);
   assert.doesNotMatch(failed, /Nothing scheduled today/);
 });
 
