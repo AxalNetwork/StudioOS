@@ -10,7 +10,7 @@ import { RAIL_OPTION_JOBS } from '../src/services/ai/textJobs.ts';
 import { DEFAULT_QUESTIONS, GUIDE_OPTION, GUIDE_PAGE, mergeSave, parseDraft } from '../src/services/interviewGuide.ts';
 
 test.after(removeMigratedDatabases);
-const SECRET = 'synthetic-6008'.repeat(8);
+const SECRET = 'test'.repeat(16);
 const BASE = '/api/cycles/validate/interview-guide';
 const realRun = guideDeps.run;
 const realQuote = guideDeps.quoteRun;
