@@ -43,12 +43,13 @@ export function roomAccess(d) {
 
 /**
  * The deal rooms page's three views (D4815): every live deal, the ones this
- * investor may open, and the ones they asked into. `test` is over one live deal.
+ * investor may open, and the ones they asked into. `test` is over one live deal; `short` is the
+ * phone's segmented label (D6151, DE23).
  */
 export const ROOM_FILTERS = Object.freeze([
-  { key: 'all', label: 'All live deals', test: () => true },
-  { key: 'open', label: 'You can open', test: (d) => roomAccess(d) === 'open' },
-  { key: 'requested', label: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
+  { key: 'all', label: 'All live deals', short: 'All', test: () => true },
+  { key: 'open', label: 'You can open', short: 'Can open', test: (d) => roomAccess(d) === 'open' },
+  { key: 'requested', label: 'Requested', short: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
 ]);
 
 /** What each view says when it holds nothing; a list that was not read never reaches these. */
@@ -144,7 +145,7 @@ export const REFERENCE_STATUS = {
 
 /** D6183: a reference call keeps notes, and Eadwyn summarises them on press. Nothing is recorded or transcribed. */
 export const REFERENCE_SUMMARY = Object.freeze({
-  lead: 'Reference checks on the founders. Keep your notes from each call; Eadwyn can summarise them. No call is recorded.',
+  lead: 'Reference checks on the founders. Keep your notes from each call; Eadwyn can summarise them. No call is recorded. Only your firm sees these. Platform admins can also access them.',
   none: 'Not recorded: not summarised yet.',
   needNotes: 'Not recorded: write notes from the call first.',
   stale: 'The notes changed after this summary.',
@@ -157,10 +158,7 @@ export const REFERENCE_SUMMARY = Object.freeze({
 /** Notes shorter than this are not summarised (the Worker's MIN_NOTES_CHARS). */
 export const SUMMARY_MIN_NOTES = 40;
 
-/**
- * D6182: the canvas's pills under a check. "Only your firm sees these." is not
- * drawn: the Worker scopes the read to the deal (D609), not to a firm.
- */
+/** D6182: the canvas's pills under a check. */
 export const REFERENCE_PILLS = { consentGiven: 'Consent given', consentAsked: 'Consent asked', notesKept: 'Notes kept' };
 
 /** D6182: the dialog before a check is deleted. */

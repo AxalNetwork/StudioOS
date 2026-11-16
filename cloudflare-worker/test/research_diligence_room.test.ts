@@ -308,3 +308,23 @@ test('a room page reads only its own room’s memo', async () => {
   const all = await get(db, SIGNED, '/drafts?surface=research%2Fdiligence');
   assert.equal(all.body.items.length, 2);
 });
+
+test('D6073: a file in the data room’s Trash leaves the list’s counts, the room, its document and the memo at once, and returns on Restore', async () => {
+  // Mutation checked, one at a time: the Trash clause dropped from the room read, the document read and the memo → the NDA file shows.
+  const db = freshDb();
+  addColumnsFrom(db, stripForeignKeys(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/202611152333_6073_data_room_trash.sql'), 'utf8')), 'data_room_files');
+  const reads = async () => {
+    const list = (await get(db, SIGNED, '/diligence')).body.items.find((r: any) => r.grant_uid === 'g-signed');
+    const room = await get(db, SIGNED, '/diligence/g-signed');
+    const doc = await get(db, SIGNED, '/diligence/g-signed/files/f-nda');
+    const memo = await draftRoom(db, SIGNED, 'g-signed');
+    db.exec('DELETE FROM research_zone_drafts');
+    return { total: list.file_total, open: list.file_open, room: room.raw.includes(NDA_NAME), room_total: room.body.file_total, doc: doc.status, memo: memo.prompt!.includes(NDA_NAME) };
+  };
+  const before = await reads();
+  assert.deepEqual(before, { total: 2, open: 2, room: true, room_total: 2, doc: 200, memo: true });
+  db.exec("UPDATE data_room_files SET removed_at = '2026-11-15T00:00:00.000Z' WHERE uid = 'f-nda'");
+  assert.deepEqual(await reads(), { total: 1, open: 1, room: false, room_total: 1, doc: 404, memo: false });
+  db.exec("UPDATE data_room_files SET removed_at = NULL WHERE uid = 'f-nda'");
+  assert.deepEqual(await reads(), before);
+});
