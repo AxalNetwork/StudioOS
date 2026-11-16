@@ -319,6 +319,9 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D4708 part 3 (#4708): HQ Security's shell renders its view from security/, which holds the
+  // doors to Trust obligations by role and the Trust center content editor.
+  ['frontend/src/pages/hq/SecurityPage.jsx', ['frontend/src/pages/hq/security/SecurityConsole.jsx']],
   // D5039 (#5039): Revenue v2's parts hold the doors to the Billing tab and to one
   // dispute (`/admin/revenue/disputes/:disputeId`), from Billing exceptions and Needs attention.
   ['frontend/src/pages/hq/RevenuePage.jsx', [
