@@ -184,7 +184,6 @@ const ALLOW = [
     "frontend/src/pages/research/FundDossier.jsx": 2,
     "frontend/src/pages/research/FundReportsPanel.jsx": 2,
     "frontend/src/pages/research/FundsZone.jsx": 1,
-    "frontend/src/pages/research/MarketZone.jsx": 3,
     "frontend/src/pages/research/marketReadingRead.js": 5,
     "frontend/src/pages/wellbeing/wellbeingModel.js": 1,
     "cloudflare-worker/src/routes/admin_network_reads.ts": 1,
@@ -193,7 +192,7 @@ const ALLOW = [
     "cloudflare-worker/src/routes/partner_delivery.ts": 1,
     "cloudflare-worker/src/routes/partner_pipeline.ts": 1,
     "cloudflare-worker/src/routes/partnernet.ts": 2,
-    "cloudflare-worker/src/routes/research.ts": 7,
+    "cloudflare-worker/src/routes/research.ts": 6,
     // #4680 snapshots a legacy USD-only price in the atomic INSERT … SELECT.
     "cloudflare-worker/src/routes/services.ts": 4,
     "cloudflare-worker/src/services/conversationItems.ts": 1,

@@ -22,6 +22,7 @@ import { refuse } from '../util/refusal';
 import { ROUTE, type TaskClass } from '../services/aiRouter';
 import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
 import { publicModels, type PublicModel } from '../services/ai/publicModels';
+import { STARTUP_NOT_PUBLIC_STATUSES } from '../services/startupProfileVisibility';
 import { sendNotificationEmail } from '../services/email';
 import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 import { isRedirectKey } from '../services/redirectRoutes';
@@ -389,7 +390,7 @@ export async function publicPersonCard(env: Env, handle: string, viewer: PublicV
          WHERE founder_id = ? AND deleted_at IS NULL`,
     ).bind(row.founder_id).all<any>();
     const projects = (pr.results || []).filter(
-      (p: any) => !['archived', 'rejected', 'intake'].includes(String(p.status || '').toLowerCase()),
+      (p: any) => !STARTUP_NOT_PUBLIC_STATUSES.includes(String(p.status || '').toLowerCase()),
     );
     if (flags.projects) {
       payload.projects = projects.slice(0, 12).map((p: any) => ({
@@ -442,9 +443,6 @@ publicRoutes.get('/u/:handle', async (c) => {
   const out = await publicPersonCard(c.env, handle, viewer ? { id: Number(viewer.id), role: viewer.role } : null);
   return c.json(out.body, out.status);
 });
-
-/** The statuses that keep a venture off the public startup page. */
-export const STARTUP_NOT_PUBLIC_STATUSES = ['archived', 'rejected', 'intake'];
 
 /**
  * Task #66 — Public, shareable startup profile. Handle is the project uid.
