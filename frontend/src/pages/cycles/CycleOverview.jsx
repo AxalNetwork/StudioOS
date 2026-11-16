@@ -1,8 +1,11 @@
+import { Lock } from 'lucide-react';
+import { openCheckout } from '../../components/checkout/checkoutEntry.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
+import { mvpTargetHref } from './mvpTable.js';
 import { canonicalPitchHref } from '../raise/pitch/pitchRoutes.js';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { GROW_MODULE_TITLES, growTabs, reportingHref, growArea, growSubsections } from './growOverviewModel';
@@ -142,7 +145,11 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
   );
 }
 
-export function FigureTile({ fig, details = null }) {
+/**
+ * One overview figure. `setLink` (`{ href, text }`, D6022, #6022) is where a
+ * writer records a figure that is Not recorded: its line becomes that link.
+ */
+export function FigureTile({ fig, details = null, setLink = null }) {
   const value = figureValue(fig);
   const delta = figureDelta(fig);
   const unreadable = fig?.state === 'unreadable';
@@ -157,7 +164,9 @@ export function FigureTile({ fig, details = null }) {
       </span>
       {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
+        {value == null && !unreadable && setLink?.href
+          ? <Link to={setLink.href} className="text-[11.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid={`cycle-figure-${fig?.key}-set`}>{setLink.text} ›</Link>
+          : <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>}
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
       {details}
@@ -166,8 +175,21 @@ export function FigureTile({ fig, details = null }) {
 }
 
 export function CardBody({ card, onRetry, charts, compact = false, search = '', limit = null, wide = false }) {
-  let view = charts ? { state: 'ok', charts } : cardView(card);
+  let view = cardView(card);
+  if (charts && view.state !== 'locked') view = { state: 'ok', charts };
   if (view.state === 'ok' && limit && view.charts.length > limit) view = { ...view, charts: view.charts.slice(0, limit) };
+  if (view.state === 'locked') {
+    return (
+      <div className="flex min-h-[150px] flex-1 flex-col items-center justify-center gap-2 rounded-[10px] bg-axal-ground p-4 text-center dark:bg-gray-800" data-testid="card-plan-lock">
+        <Lock size={16} aria-hidden="true" className="text-axal-muted dark:text-gray-400" />
+        <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-200">Recording and scenarios are on the {view.plan.name} plan.</p>
+        <button type="button" onClick={() => openCheckout({ plan_key: view.plan.plan_key })} data-testid="card-plan-upgrade"
+          className="min-h-11 rounded px-2 text-[12.5px] font-semibold text-axal-violet-deep hover:underline focus-visible:outline-2 focus-visible:outline-violet-600 dark:text-violet-300">
+          See plans <span aria-hidden="true">›</span>
+        </button>
+      </div>
+    );
+  }
   if (view.state === 'loading') {
     return (
       <div className="flex flex-col gap-2" data-testid="card-loading" aria-busy="true" aria-label="Loading">
@@ -185,12 +207,15 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
   // D1466 (#3714, RO01, RO06): an empty or too-little card is one muted line
   // and, when the read names one, the module's first step: no dashed box
   // taking half the page.
+  const sparseSummary = Array.isArray(card?.series)
+    ? card.series.filter(spec => spec.showWhenSparse) : [];
   if (view.state === 'empty') {
     const next = card?.next;
     const href = nextHref(next?.href, search);
     return (
       <div className="flex flex-col items-start gap-1.5" data-testid="card-empty">
         <span className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</span>
+        {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}
         {next?.text && (href
           ? <Link to={href} className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text} ›</Link>
           : <span className="text-[12.5px] font-semibold text-axal-violet-deep dark:text-violet-300">{next.text}</span>)}
@@ -198,7 +223,11 @@ export function CardBody({ card, onRetry, charts, compact = false, search = '', 
     );
   }
   if (view.state === 'too_little') {
-    return <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="card-too-little">{view.reason}</p>;
+    if (!sparseSummary.length) return <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="card-too-little">{view.reason}</p>;
+    return <div data-testid="card-too-little">
+      <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">{view.reason}</p>
+      {sparseSummary.map((spec, i) => <Chart key={i} spec={spec} />)}
+    </div>;
   }
   if (view.state === 'not_recorded') {
     return (
@@ -294,7 +323,8 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
             <div className={`grid gap-3 ${figureCols(figureCount)}`} data-testid="cycle-figures" data-count={figureCount}>
               {status === 'loading'
                 ? Array.from({ length: figurePlaceholders }, (_, i) => <div key={i} className="h-[92px] rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" aria-busy="true" />)
-                : figures.map((f) => <FigureTile key={f.key} fig={f} />)}
+                : figures.map((f) => <FigureTile key={f.key} fig={f}
+                    setLink={!readOnly && meta.key === 'build' && f.key === 'days_to_mvp' ? { href: mvpTargetHref(search), text: 'Set the MVP target date' } : null} />)}
             </div>
           )}
           {status !== 'loading' && lead}

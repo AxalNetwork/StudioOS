@@ -238,13 +238,15 @@ const PROFILES = {
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
     //
-    // SEVENTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // SEVENTEENTH (#6230): `funds/reporting`'s `New reporting period`, which
+    // replaced `Build pack`. That gap was never real: `FundReportPeriodPage`
+    // drafts and issues a period at `/funds/:fundId/reporting/new`.
+    // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
     // stores the log and the page draws it; the op scrolls to that card.
-    //
-    // EIGHTEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
     // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
     // and `Show cleared` reads it back.
-    handlers: 18,
+    handlers: 19,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -1701,7 +1703,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 6, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.

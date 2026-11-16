@@ -22,6 +22,7 @@ import { request } from '../api.js';
 //   proposeFromNote(p, b) POST …/proposals { prospect_id, event_id? }   one metered run over a logged note
 //   acceptProposal(p, uid, edited?)  POST …/proposals/:uid/accept   written through the one prospect writer
 //   draft(p, b)           POST …/drafts { prospect_id, purpose, via? }   one metered run; the founder sends it
+//   feedbackPattern(p)    POST …/feedback-pattern   CRL11: one metered run over recorded feedback; writes nothing
 //   A proposal or draft is edited or dismissed through `railProposalsApi.decide`.
 const MATCH_KEYS = ['q', 'hq_country', 'focus', 'size_band', 'fit', 'warm', 'sort', 'limit', 'offset'];
 const project = (projectId) => `project=${encodeURIComponent(String(projectId))}`;
@@ -51,6 +52,8 @@ export const capitalRelationshipsApi = {
   acceptProposal: (projectId, uid, edited = null) => request(`/cycles/raise/capital-relationships/proposals/${encodeURIComponent(String(uid))}/accept?${project(projectId)}`, {
     method: 'POST', body: JSON.stringify(edited ? { edited } : {}),
   }),
+  // CRL11 (#6080): one metered run over recorded feedback → { state: 'ok' | 'too_few', themes, … }; writes nothing.
+  feedbackPattern: (projectId) => request(`/cycles/raise/capital-relationships/feedback-pattern?${project(projectId)}`, { method: 'POST', body: '{}' }),
   // D5073: the proposals of one note accepted in one request, one result per proposal (`{ uid, ok, code?, message? }`), at most 50.
   acceptProposals: (projectId, uids) => request(`/cycles/raise/capital-relationships/proposals/accept-batch?${project(projectId)}`, { method: 'POST', body: JSON.stringify({ uids }) }),
   draft: (projectId, body) => request(`/cycles/raise/capital-relationships/drafts?${project(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),

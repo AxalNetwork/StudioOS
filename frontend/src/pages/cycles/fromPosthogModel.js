@@ -71,3 +71,19 @@ export function matchInsights(list, q) {
   const all = Array.isArray(list) ? list : [];
   return s ? all.filter((i) => String(i?.name || i?.short_id || '').toLowerCase().includes(s)) : all;
 }
+
+
+/** One status message from the Grow sync receipt. Provider item IDs stay out of the copy. */
+export function posthogSyncSentence(result) {
+  if (!result) return '';
+  const changes = [];
+  if (result.facts) changes.push(`${result.facts} new ${result.facts === 1 ? 'figure' : 'figures'}`);
+  if (result.updated) changes.push(`${result.updated} updated`);
+  if (result.proposals) changes.push(`${result.proposals} ${result.proposals === 1 ? 'proposal' : 'proposals'} to review`);
+  const unread = Array.isArray(result.unread) ? result.unread.length : 0;
+  const sentences = [changes.length ? `PostHog synced ${changes.join(', ')}.` : 'PostHog saved no new or updated figures or proposals.'];
+  if (unread) sentences.push(`PostHog could not read ${unread} ${unread === 1 ? 'item' : 'items'}.`);
+  if (result.partial) sentences.push('A PostHog read limit or connection issue stopped the sync before it could read all items.');
+  if (unread || result.partial) sentences.push('Sync again to carry on.');
+  return sentences.join(' ');
+}

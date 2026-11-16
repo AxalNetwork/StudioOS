@@ -1,3 +1,4 @@
+import { announceInvestorPreviewRefusal, investorPreviewHeaders } from './investorPreview';
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
@@ -534,7 +535,12 @@ export async function refusalError(res, fallback) {
   const e = new Error(message || res.statusText || fallback);
   e.status = res.status;
   if (code) e.code = code;
+  announceInvestorPreviewRefusal(res.status, code);
   return e;
+}
+
+function getInvestorPreviewHeader(method) {
+  return MUTATING_METHODS.has(method?.toUpperCase()) ? investorPreviewHeaders() : {};
 }
 
 /**
@@ -545,7 +551,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders(), ...getInvestorPreviewHeader(method) };
 }
 
 /**
@@ -586,9 +592,10 @@ export async function request(path, options = {}) {
     const companyHeader = getActiveCompanyHeader();
     // D765: the rail's page (and option), so the Worker records and switches each run by it.
     const railHeader = railPageHeaders();
+    const previewHeader = getInvestorPreviewHeader(options.method);
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...previewHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -609,6 +616,7 @@ export async function request(path, options = {}) {
       headers: baseHeaders,
       signal: deadline.signal,
     });
+    if (res.status === 204) return null;
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
       // public profile reads) must never trigger an auth-redirect — a 401
@@ -675,6 +683,7 @@ export async function request(path, options = {}) {
       const e = new Error(msg);
       e.status = res.status;
       if (refusal.code) e.code = refusal.code;
+      announceInvestorPreviewRefusal(res.status, refusal.code);
       e.data = detailObj || errorObj || err || null;
       // Task #16 — surface per-field validation errors (e.g. ProfileValidationError)
       // so form components can highlight the offending input.
@@ -4059,7 +4068,9 @@ export const api = {
   revokeInvestorSeat: (id) =>
     request(`/investor-seats/${id}`, { method: 'DELETE' }),
   introductionsQuota: () => request('/introductions/quota'),
-  listIntroductions: () => request('/introductions/'),
+  // D6260: no trailing slash. The Worker mounts GET `/` under /api/introductions
+  // and Hono is strict, so `/api/introductions/` is a 404 and the Asked view read as unavailable.
+  listIntroductions: () => request('/introductions'),
   // Task #82 — request a warm intro to a founder/project. Consumes the intro
   // quota; on exhaustion the worker returns 402 {code:'quota_intros_exhausted',
   // message, upgrade_to, checkout_path} WITHOUT a `required` field, so the
@@ -5162,9 +5173,6 @@ export const api = {
   fundSimScenarioGet: (uid) => request(`/fund-sim/scenarios/${uid}`),
   fundSimScenarioDelete: (uid) =>
     request(`/fund-sim/scenarios/${uid}`, { method: 'DELETE' }),
-  // Reuse the existing /api/capital/funds endpoint for the fund picker —
-  // it returns the canonical VCFund list with id/uid/name/total_commitment.
-  capitalFundsList: () => request('/capital/funds'),
 
   // Task #8 (IH) — Data import + migration tools.
   importsList: () => request('/imports/'),

@@ -46,6 +46,7 @@ const PROVIDER_LABELS = {
   github: 'GitHub',
   vercel: 'Vercel',
   tiktok: 'TikTok',
+  google_search_console: 'Google Search Console',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

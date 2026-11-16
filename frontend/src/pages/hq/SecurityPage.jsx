@@ -748,7 +748,7 @@ export default function HqSecurityPage() {
     );
   }, [filter, query]);
   refreshAfter.current = () => { load(true); loadFeed(true); };
-  const loadOlder = useCallback((before) => api.hqGovernance(filter, { ...JSON.parse(query), before }), [filter, query]);
+  const loadOlder = useCallback((before, skip) => api.hqGovernance(filter, { ...JSON.parse(query), before, ...(skip ? { skip } : {}) }), [filter, query]);
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);

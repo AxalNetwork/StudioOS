@@ -362,6 +362,10 @@ const PROFILES = {
     // `row: 'list'`.
     v2Zones: [
       ['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads', { row: 'list' }],
+      // #4842 (D4842): Proof is redrawn to the Offers v2 canvas (OF-03), whose
+      // chips are literal radio buttons in the `proof` section builder, read
+      // by `row: 'radios'`. It overrides the po4 artboard's row.
+      ['offers/proof', 'design/incoming/Offers v2 Page.dc.html', 'proof', { row: 'radios' }],
     ],
     // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
     // RECURSE. Three of the five Offers zones have their own file in there and
@@ -513,7 +517,8 @@ function canvasFilters(profile) {
   // fails here rather than quietly dropping nothing.
   for (const [zone, file, section, { omit = [], why, row } = {}] of profile.v2Zones || []) {
     const chips = row === 'seg' ? v2SectionSeg(read(file), section)
-      : (row === 'list' ? v2SectionList(read(file), section) : v2SectionChips(read(file), section));
+      : row === 'radios' ? v2SectionRadios(read(file), section)
+        : (row === 'list' ? v2SectionList(read(file), section) : v2SectionChips(read(file), section));
     assert.ok(chips.length, `${file} draws no chips for its ${section} section`);
     for (const name of omit) {
       assert.ok(chips.includes(name), `${zone}: ${name} is omitted but the canvas does not draw it`);
@@ -538,6 +543,22 @@ function v2SectionList(src, section) {
   const from = src.indexOf('J([', row);
   const end = src.indexOf(']', from);
   return [...src.slice(from, end).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
+/**
+ * #4842 (D4842): the chips of a `class="chips"` radiogroup written as literal
+ * buttons (`<button type="button" role="radio" …>All<span>5</span></button>`)
+ * in one Offers v2 section builder, in canvas order. The `<span>` is the
+ * sample count, so only the text before it is the chip's name.
+ */
+function v2SectionRadios(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const row = src.indexOf('class="chips" role="radiogroup"', at);
+  const next = src.indexOf('\n    const ', at + 10);
+  if (row < 0 || (next >= 0 && row > next)) return [];
+  const end = src.indexOf('</div>', row);
+  return [...src.slice(row, end).matchAll(/role="radio" aria-checked="(?:true|false)">([^<]+)</g)].map((m) => m[1].trim());
 }
 
 /**

@@ -52,14 +52,14 @@ export const TIER_PLANS = {
     label: 'Investor Plus',
     blurb: 'For angel investors, independent investors and investment professionals.',
     plan: 'investor_plus_monthly',
-    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'AI usage from your plan allowance and AI tokens'],
   },
   professional: {
     key: 'investor:professional',
     label: 'Investor Pro',
     blurb: 'For professional angels, investment analysts and smaller firms.',
     plan: 'investor_pro_monthly',
-    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
+    features: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'AI usage from your plan allowance and AI tokens', 'More advanced investment workflows'],
   },
   institutional: {
     key: 'investor:institutional',
