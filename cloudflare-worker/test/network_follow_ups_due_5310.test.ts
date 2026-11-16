@@ -80,3 +80,19 @@ test('#5310: a follow-up whose contact is not in the member\'s book is never rea
     assert.equal(r.body.total, 2);
   } finally { f.close(); }
 });
+
+// #5310 (NW2): each book row carries its follow-up state and its last recorded activity, from the member's own rows.
+// Mutation checked: a done or undated follow-up counted overdue (fails); the next due date taken from a done follow-up
+// (fails); last_note_at the first note (fails); another member's follow-up counted (fails); no activity drawn as a date (fails).
+test('#5310 (NW2): book rows carry overdue count, next due date, last note and last finished follow-up', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("INSERT INTO network_contact_tasks(uid,owner_user_id,contact_id,title,due_on,done_at) VALUES ('t-theirs-on-mine',3,21,'Not mine','2020-01-01',NULL)");
+    const r = await get(f, 2, '/api/contacts/book');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const by = Object.fromEntries(r.body.contacts.map((c: any) => [c.name, c]));
+    const pick = (c: any) => [c.open_tasks, c.overdue_tasks, c.next_due_on, c.last_note_at, c.last_done_at];
+    assert.deepEqual(pick(by['Synthetic Ada']), [1, 1, '2020-01-05', '2026-09-20 10:00:00', '2020-01-02']);
+    assert.deepEqual(pick(by['Synthetic Ben']), [3, 1, '2020-02-01', null, null], 'undated and future follow-ups are open, not overdue');
+  } finally { f.close(); }
+});

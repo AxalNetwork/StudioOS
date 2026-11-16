@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 
 import { Link } from 'react-router-dom';
 import { Check, Lock, X } from 'lucide-react';
 import { checkoutApi } from '../../lib/api/billingCheckout';
+import { LICENCE_CHARGE, LICENCE_SCOPE, SERVICE_SCOPE, SUPPORT_SCOPE, AVAILABILITY_SCOPE, STAFF_SCOPE, planCapacityLine } from '../../lib/pricingEntitlements';
 import {
   FREE_FIRST, NOT_YET, POLL_MS, RENEWS, SECURE_LINE, SELLER_LINE, SLOW_MS, TITLE,
   cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, notSoldView, payTotal, planKeyOf, promoState, quoteView,
@@ -170,6 +171,7 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
   const fam = familyOf(plan);
   const price = intervals[interval] || intervals.monthly || intervals.yearly;
   const tag = spec?.tag || plan?.catalogue?.tagline;
+  const capacity = planCapacityLine(plan?.catalogue);
   return (
     <div className="flex flex-col gap-3.5" data-testid="checkout-summary">
       <span className={EYE}>Your plan</span>
@@ -178,6 +180,8 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
       </div>
       <h3 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{plan.plan_name || spec?.name || plan?.catalogue?.label || 'Plan'}</h3>
       {tag ? <p className={`m-0 ${SUB}`}>{tag}</p> : null}
+      <p className={`m-0 ${SUB}`} data-testid="checkout-licence-scope">{LICENCE_CHARGE} {LICENCE_SCOPE}</p>
+      {capacity && <p className={`m-0 ${SUB}`} data-testid="checkout-plan-capacity">{capacity}</p>}
       {unlocks ? <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="checkout-unlocks">Unlocks: {unlocks}</p> : null}
       {intervals.monthly && intervals.yearly ? (
         <div className="flex gap-[3px] self-start rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" role="group" aria-label="Billing">
@@ -207,6 +211,9 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
         </ul>
       </div>
       {price ? <Totals view={view} read={read} fallback={price.subtotal} /> : null}
+      <p className={`m-0 ${SUB}`} data-testid="checkout-service-scope">{SERVICE_SCOPE}</p>
+      <p className={`m-0 ${SUB}`} data-testid="checkout-support-scope">{SUPPORT_SCOPE}</p>
+      <p className={`m-0 ${SUB}`} data-testid="checkout-availability-scope">{AVAILABILITY_SCOPE}</p>
     </div>
   );
 }
@@ -219,7 +226,7 @@ function NotHere({ mode, plan, interval, onClose, onRetryPlan }) {
     signin: ['Sign in to continue.', `After you sign in, Checkout opens on ${plan?.plan_name || 'this plan'}.`, <Link key="s" to={signinHref(plan, interval)} className={LINK} data-testid="checkout-signin">Sign in</Link>],
     reading: ['Reading your current plan…', 'Payment waits until your current plan is read.', null],
     unreadable: ['Your current plan could not be read.', 'Your current plan is Unreadable. Try again before starting a payment.', null],
-    staff: ['Staff account · no plan needed', 'Admin, licence administrator and Super Admin accounts hold no plan.', null],
+    staff: ['Staff account · no plan needed', STAFF_SCOPE, null],
     explorer: ['Choose your profile first.', 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner. You can still buy AI tokens without a plan.', <Link key="p" to="/onboarding" className={LINK} onClick={onClose}>Choose a profile</Link>],
     other: ['This plan is for another profile.', 'Plans are sold to the profile they belong to.', null],
     unsellable: ['This plan’s price couldn’t be read just now.', 'That doesn’t mean it’s free. No payment can start until a price is on sale.', null],

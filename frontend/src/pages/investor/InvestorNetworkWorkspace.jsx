@@ -11,9 +11,10 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { titleCase } from '../../lib/absence';
 import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue, shortDate, touchHistory, touchRecorder, openReminderFor, reminderLists } from '../../lib/networkBook';
 import { useAuth } from '../../hooks/useAuthSync';
-import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
+import { introTarget, askKey, createIntroRequests, quotaFrom, askTargetName, askDate } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
 import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
+import { counterpartAnswer, introCreditView } from './introCreditModel.js';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -67,12 +68,9 @@ function propositionScopes({ pending, shown, filtered, total, filteredView }) {
   if (filteredView && filtered !== total) parts.push(`${total} recorded in all`);
   return parts.join(' · ');
 }
-// An ask names its target by id only — `GET /api/introductions` joins no
-// names — so the row says which record it points at rather than inventing one.
-const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_id}`
-  : ask?.project_id ? `Project #${ask.project_id}`
-    : ask?.founder_id ? `Founder record #${ask.founder_id}`
-      : 'Target not recorded');
+// D6260: `GET /api/introductions` names an ask's target only where the reader
+// may still see that founder or project (D702's rules); otherwise the row
+// reads "Not available" (`askTargetName`, lib/investorIntroRequest.js).
 // The last touch is the interaction log's MAX (migration 338), never a field
 // someone edits and never a metadata fallback.
 const lastTouchAt = (relationship) => relationship?.last_interaction_at || null;
@@ -170,10 +168,30 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
   const [asks, setAsks] = useState(null);
+  const [askNamesUnreadable, setAskNamesUnreadable] = useState(false);
   const [introRequestStates, setIntroRequestStates] = useState({});
-  const requestIntro = useMemo(() => createIntroRequests(body => api.introductionsRequest(body), setIntroRequestStates), []);
+  // D6260: the quota is read before an ask can be sent; `unreadable` disables sending.
+  const [introQuota, setIntroQuota] = useState({ status: 'loading', value: null });
+  const takeAsks = useCallback((value) => {
+    setAsks(Array.isArray(value?.introductions) ? value.introductions : []);
+    setAskNamesUnreadable(value?.targets_unreadable === true);
+  }, []);
+  const readIntroQuota = useCallback(() => api.introductionsQuota().then(
+    (value) => { const q = quotaFrom(value); setIntroQuota(q ? { status: 'ready', value: q } : { status: 'unreadable', value: null }); },
+    () => setIntroQuota({ status: 'unreadable', value: null }),
+  ), []);
+  const requestIntro = useMemo(() => createIntroRequests(body => api.introductionsRequest(body), setIntroRequestStates, {
+    // The answer carries the new count; the recorded asks are read again so the Asked view shows the new row.
+    onSpent: (result) => {
+      setIntroQuota((current) => { const q = quotaFrom(result, current.value); return q ? { status: 'ready', value: q } : current; });
+      api.listIntroductions().then(takeAsks, () => {});
+    },
+    onRefused: (data) => {
+      setIntroQuota((current) => { const q = quotaFrom(data, current.value); return q ? { status: 'ready', value: q } : current; });
+    },
+  }), [takeAsks]);
   const pendingAskTargets = new Set((asks || []).filter(ask => ask.status === 'pending').map(askKey));
-  const introAction = (targets) => role === 'investor' ? <InvestorIntroRequest targets={targets} states={introRequestStates} request={requestIntro} ready={asks !== null && !errors.asks} asked={pendingAskTargets} /> : null;
+  const introAction = (targets) => role === 'investor' ? <InvestorIntroRequest targets={targets} states={introRequestStates} request={requestIntro} ready={asks !== null && !errors.asks} asked={pendingAskTargets} quota={introQuota} /> : null;
   // The reminders (migration 338) and which row a form is open on.
   const [reminders, setReminders] = useState(null);
   const [reminderFor, setReminderFor] = useState(null);
@@ -189,6 +207,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const [refreshing, setRefreshing] = useState(false);
   const [busyUid, setBusyUid] = useState('');
   const [actionError, setActionError] = useState(initialActionError);
+  const creditView = introCreditView(introductions?.credits, { unreadable: Boolean(errors.introductions), loading: refreshing || (!errors.introductions && introductions === null) });
   // #6259: the touch log is read back, so it has the three states every read
   // has — null while loading, the rows, or the failure (never shown as empty).
   const [touchLog, setTouchLog] = useState(null);
@@ -208,7 +227,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       setRelationships(Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : []);
     }
     if (introResult.status === 'fulfilled') setIntroductions(introResult.value || { propositions: [], credits: null });
-    if (askResult.status === 'fulfilled') setAsks(Array.isArray(askResult.value?.introductions) ? askResult.value.introductions : []);
+    if (askResult.status === 'fulfilled') takeAsks(askResult.value);
     if (reminderResult.status === 'fulfilled') setReminders(Array.isArray(reminderResult.value?.items) ? reminderResult.value.items : []);
     setErrors({
       relationships: relationshipResult.status === 'rejected' ? 'Relationship book is unavailable right now.' : '',
@@ -219,9 +238,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
       organizations: relationshipResult.status === 'rejected' ? 'Relationship-backed organization context is unavailable right now.' : '',
     });
     setRefreshing(false);
-  }, []);
+  }, [takeAsks]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (role === 'investor') readIntroQuota(); }, [role, readIntroQuota]);
   useEffect(() => {
     if (remindersOpen) document.getElementById('network-reminders')?.scrollIntoView?.({ block: 'start' });
   }, [remindersOpen]);
@@ -408,21 +428,23 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     catch (cause) { setActionError(cause?.message || 'The reminder could not be updated.'); }
   };
   const resolveIntro = async (prop, decision) => {
+    if (decision === 'accept' && (!creditView.canAccept || busyUid)) { setActionError(creditView.reason || 'Wait for the current introduction to finish.'); return; }
     setBusyUid(prop.uid); setActionError('');
     try {
       const result = decision === 'accept' ? await api.introAccept(prop.uid) : await api.introDecline(prop.uid);
       setIntroductions((current) => current && ({
         ...current,
-        credits: result?.credits || current.credits,
+        credits: result?.credits ?? null,
         propositions: current.propositions.map((item) => item.uid === prop.uid ? { ...item, status: decision === 'accept' ? 'accepted' : 'declined' } : item),
       }));
     } catch (error) {
+      if (decision === 'accept') setIntroductions((current) => current && ({ ...current, credits: null }));
       if (error?.data?.error === 'credit_conflict') {
         // D4606: the debit lost a race and nothing was spent.
         setActionError('Your credits changed at the same moment. Nothing was spent. Try again.');
       } else if (error?.status === 409) {
         setActionError('This proposition changed elsewhere. The desk has been refreshed.');
-        load();
+        load(true);
       } else if (error?.status === 402 || error?.data?.code === 'intro_credits_exhausted') {
         setActionError('No introduction credits are currently available. Declining remains available.');
         if (error?.data?.credits) setIntroductions((current) => current && ({ ...current, credits: error.data.credits }));
@@ -667,18 +689,24 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTargetName(a, askNamesUnreadable), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="intro-credit-summary">
+                <span>Spendable intro credits · <strong>{creditView.label}</strong></span>
+                <button type="button" className="min-h-11 font-semibold underline" onClick={() => load(true)} disabled={refreshing} data-testid="intro-credit-retry">{refreshing ? 'Reading…' : 'Refresh credits'}</button>
+                {creditView.reason ? <p className="m-0 w-full text-axal-muted dark:text-gray-400" id="intro-credit-reason">{creditView.reason}</p> : null}
+              </div>
               {deskView === 'asked' ? (
                 errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
                   <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
                     <div className="inw-prop-top"><span className="inw-prop-label">Asked · {ask.quarter || 'quarter not recorded'}</span><span className="inw-state" data-testid={`status-ask-${ask.uid}`}>{typeLabel(ask.status)}</span></div>
-                    <strong>{askTarget(ask)}</strong>
-                    {ask.message ? <p>{ask.message}</p> : null}
-                    <div className="inw-prop-actions"><span className="inw-state">Asked {age(ask.created_at)}</span></div>
+                    <strong data-testid={`target-ask-${ask.uid}`}>{askTargetName(ask, askNamesUnreadable)}</strong>
+                    <p data-testid={`message-ask-${ask.uid}`}>{ask.message ? ask.message : 'No message was sent with this ask.'}</p>
+                    <div className="inw-prop-actions"><span className="inw-state" data-testid={`date-ask-${ask.uid}`}>Asked {askDate(ask.created_at)} · {age(ask.created_at)}</span></div>
                   </article>)}</div>
                   <p className="inw-footnote">An ask’s status is written when you make it and nothing moves it yet — a reply is a conversation, not a row here.</p>
                 </>
-              ) : errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
+              ) : introductions === null ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <Skeleton rows={4} />) : propositionRows.length === 0 ? (errors.introductions ? <Alert>{errors.introductions}</Alert> : <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div>) : <>
+                {errors.introductions ? <Alert>{errors.introductions} Previously loaded propositions remain below.</Alert> : null}
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
                   const target = prop.target || {}; const active = prop.status === 'pending'; const busy = busyUid === prop.uid;
@@ -686,7 +714,9 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                     <div className="inw-prop-top"><span className="inw-prop-label">Proposal · {prop.source || 'network'}</span><span className="inw-score" data-testid={`text-intro-score-${prop.uid}`}>{Number.isFinite(Number(prop.score)) ? `${prop.score} match` : 'Match pending'}</span></div>
                     <strong>{target.name || target.email || 'Proposed introduction'}</strong>
                     <p>{introductionContext(prop)}</p>
-                    <div className="inw-prop-actions">{active ? <><button type="button" onClick={() => resolveIntro(prop, 'accept')} disabled={busy} data-testid={`button-accept-intro-${prop.uid}`}><Check size={12} />{busy ? 'Working' : 'Accept intro'}</button><button type="button" className="quiet" onClick={() => resolveIntro(prop, 'decline')} disabled={busy} data-testid={`button-decline-intro-${prop.uid}`}><X size={12} />Decline</button></> : <span className="inw-state" data-testid={`status-intro-${prop.uid}`}>{typeLabel(prop.status)}</span>}{(prop.screened === true || prop.screening_status === 'screened') && <span className="inw-screened" data-testid={`status-intro-screened-${prop.uid}`}><ShieldCheck size={11} />Screened</span>}</div>
+                    <p data-testid={`intro-counterpart-${prop.uid}`}>Other side: {counterpartAnswer(prop.counterpart_status)}</p>
+                    {active ? <p className="inw-footnote" data-testid={`intro-cost-${prop.uid}`}>Accepting uses 1 credit</p> : null}
+                    <div className="inw-prop-actions">{active ? <><button type="button" onClick={() => resolveIntro(prop, 'accept')} disabled={busy || Boolean(busyUid) || !creditView.canAccept} aria-describedby={creditView.reason ? 'intro-credit-reason' : undefined} data-testid={`button-accept-intro-${prop.uid}`}><Check size={12} />{busy ? 'Working' : 'Accept intro'}</button><button type="button" className="quiet" onClick={() => resolveIntro(prop, 'decline')} disabled={busy} data-testid={`button-decline-intro-${prop.uid}`}><X size={12} />Decline</button></> : <span className="inw-state" data-testid={`status-intro-${prop.uid}`}>{typeLabel(prop.status)}</span>}{(prop.screened === true || prop.screening_status === 'screened') && <span className="inw-screened" data-testid={`status-intro-screened-${prop.uid}`}><ShieldCheck size={11} />Screened</span>}</div>
                   </article>;
                 })}</div>
                 {/* #4611 finding 7: the rest of the collection, reachable by
@@ -749,9 +779,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                   : `${relationships.length} attributed tie${relationships.length === 1 ? '' : 's'}`,
               // The credits balance is whatever the introductions service
               // reports. A missing balance renders as absent, never as zero.
-              introductions?.credits?.balance == null
-                ? 'Intro credits not recorded'
-                : `${introductions.credits.balance} intro credits available`,
+              `Intro credits · ${creditView.label}`,
             ]}
             coverageNote="Credit availability is supplied by the introductions service. Declining a proposition uses no credit."
             unavailable={[

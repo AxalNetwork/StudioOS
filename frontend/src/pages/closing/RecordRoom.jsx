@@ -22,6 +22,7 @@ import { reportingApi } from '../../lib/api/reporting';
 import { Unreadable, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN } from '../account/AccountCenter';
 import { closingHrefFor, envelopesOf, moneyCents } from './deskModel';
+import { parseMinor } from '../../lib/money';
 import { SyndicatePanel } from './RoutePanels';
 import PaperState from './PaperState';
 import { AccountDialog, CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
@@ -404,11 +405,64 @@ function InvestorLine({ closing, rows, tiles, left, phone, onSign, onPay, onRece
           <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-2 dark:border-gray-800">
             <span className="text-[13px] font-semibold">I have sent it</span>
             <p className={mutedText} data-testid="closing-sent-word">{ROOM_WAITS.sentWord} The line is Received when {closing.companyName}’s bank confirms it.</p>
+            {open ? <SentDeclaration closing={closing} row={first} full={full} onDone={onRetry} /> : null}
             <button type="button" className={`${BTN.link} w-fit`} onClick={() => onReceipt(first)}>See the evidence on your line</button>
           </div>
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * D6198 (#6198): the investor records that they sent it, without Mercury:
+ * the day, the amount and an optional short label. It reads Sent, not yet
+ * confirmed, and never Received; no account or card number is taken.
+ */
+function SentDeclaration({ closing, row, full, onDone }) {
+  const currency = closing.currency || 'USD';
+  const [form, setForm] = useState(null);
+  const [state, setState] = useState({ busy: false, err: '' });
+  const d = row.declaration;
+  if (row.status === 'Received' || row.withdrawn) return null;
+  const withdraw = async () => {
+    setState({ busy: true, err: '' });
+    try { await closingsApi.withdrawDeclaration(closing.uid, row.uid); setState({ busy: false, err: '' }); onDone?.(); }
+    catch (e) { setState({ busy: false, err: e?.message || 'It was not withdrawn. Try again.' }); }
+  };
+  if (d) {
+    return (
+      <div className="flex flex-col gap-1" data-testid="closing-declared">
+        <p className="m-0 text-[13px]">You recorded that you sent <Money text={d.amount} reason="No amount" /> on {d.sentOn}{d.reference ? ` (${d.reference})` : ''}. Sent, not yet confirmed.</p>
+        <button type="button" className={`${BTN.ghost} ${full}`} disabled={state.busy} onClick={withdraw} data-testid="closing-declared-withdraw">Withdraw what I recorded</button>
+        {state.err ? <p className="m-0 text-[12px] text-red-700 dark:text-red-300" role="alert">{state.err}</p> : null}
+      </div>
+    );
+  }
+  if (!form) return <button type="button" className={`${BTN.ghost} ${full}`} onClick={() => setForm({ sentOn: '', amount: '', reference: '' })} data-testid="closing-declare">Record that I sent it</button>;
+  const send = async () => {
+    const amount = parseMinor(form.amount, currency);
+    if (!form.sentOn) { setState({ busy: false, err: 'Choose the day you sent it.' }); return; }
+    if (!amount.ok || amount.minor <= 0) { setState({ busy: false, err: amount.ok ? 'Enter the amount you sent.' : amount.message || 'Enter the amount you sent.' }); return; }
+    setState({ busy: true, err: '' });
+    try {
+      await closingsApi.declareSent(closing.uid, row.uid, { sent_on: form.sentOn, amount_cents: amount.minor, reference: form.reference.trim() || null });
+      setForm(null); setState({ busy: false, err: '' }); onDone?.();
+    } catch (e) { setState({ busy: false, err: e?.message || 'It was not recorded. Try again.' }); }
+  };
+  const field = 'mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900';
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 dark:border-gray-800" data-testid="closing-declare-form">
+      <label className="text-[12px] font-semibold">The day you sent it<input type="date" value={form.sentOn} onChange={(e) => setForm((f) => ({ ...f, sentOn: e.target.value }))} className={field} /></label>
+      <label className="text-[12px] font-semibold">Amount ({currency})<input inputMode="decimal" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} className={field} /></label>
+      <label className="text-[12px] font-semibold">A short label, optional<input maxLength={40} value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} className={field} /></label>
+      <p className={mutedText}>Leave out account and card numbers.</p>
+      {state.err ? <p className="m-0 text-[12px] text-red-700 dark:text-red-300" role="alert">{state.err}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BTN.ghost} onClick={() => setForm(null)}>Cancel</button>
+        <button type="button" className={BTN.primary} disabled={state.busy} onClick={send} data-testid="closing-declare-send">{state.busy ? 'Recording…' : 'Record it'}</button>
+      </div>
+    </div>
   );
 }
 

@@ -57,5 +57,5 @@ test('D6124: the client reads the export route with the table’s query, from pa
 
 test('D6124: the route hands Export only where the Worker says this viewer may export', () => {
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /onExport=\{cycle === 'grow' && projectId && read\?\.exportable === true\s*\? \(\) => cyclesApi\.growExport\(projectId, slug, \{ q: query\.q, filter: filterString\(query\.filter\), sort: query\.sort \}\) : undefined\}/);
+  assert.match(route, /: cycle === 'grow' && projectId && read\?\.exportable === true\s*\? \(\) => cyclesApi\.growExport\(projectId, slug, \{ q: query\.q, filter: filterString\(query\.filter\), sort: query\.sort \}\) : undefined\}/);
 });

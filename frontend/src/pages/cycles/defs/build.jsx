@@ -2,13 +2,14 @@
  * Build's entry in CycleRoute.jsx's cycle table (D661, #1474; split out by
  * D5615, #5615): its modules, the one place a startup is created, Connect a
  * tool and its lightbox (D650, D686), the connector parts (D1311), its tools
- * and the four AI bands (D424, D510).
+ * and its AI bands (D424, D510, D6042).
  */
 import ConnectToolSheet from '../../account/ConnectToolSheet';
 import { buildPartsMap } from '../buildParts';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { cyclesWrite } from '../../../lib/api/cycles';
+import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
@@ -62,16 +63,33 @@ const build = {
     ),
   }),
   phoneRows: toFnMap({ 'prototype-mvp': mvpPhoneRow }),
+  // D6043 (#6043): each module's records list as CSV, with the table's own search, filters and sort.
+  exportRecords: (projectId, slug, query) => buildModuleExportApi.exportCsv(projectId, slug, query),
   // The Build desk's four AI bands (ZoneDraft, D424, D510), on the modules
   // they read: the roadmap tradeoff on Product roadmap; the Monday plan, the
   // Friday retro and the KPI annotation on Operating systems, the weekly
-  // cadence they serve.
+  // cadence they serve. D6042 adds the split-and-vesting check on Founding
+  // team and the filings summary on Company creation.
   drafts: new Map([
     ['product-roadmap', [{
       surface: 'build/roadmap', label: 'Proposal · tradeoff, reasoned', run: 'Argue the ordering', accept: 'Accept the argument',
       empty: 'Nothing proposed yet. Eadwyn will read the horizons and quarters you have set and argue the one ordering most worth changing — from the record, not from anything it knows about your market.',
       nothingToDraft: 'There are no objectives to argue an order between yet.',
       foot: 'This writes an argument, never an order. Reordering stays in Roadmap.',
+    }]],
+    // D6042 (#6042): Founding team's and Company creation's record-only drafts. #5077 owns the
+    // modules' asks and rail sentences (buildEadwyn.js); these are only the bands behind them.
+    ['founding-team', [{
+      surface: 'build/founding', label: 'Check · split and vesting', run: 'Check the split and vesting', accept: 'Keep this check',
+      empty: 'Nothing checked yet. Eadwyn will read the founders on your cap table — each one\'s ownership, vesting and agreement — say whether the split adds up, and list what is not recorded. It never says what the split or vesting should be.',
+      nothingToDraft: 'No founder is recorded on the cap table for this startup yet.',
+      foot: 'Kept as wording only. The cap table and vesting change only in the cap table.',
+    }]],
+    ['company-creation', [{
+      surface: 'build/company', label: 'Summary · filings and formation', run: 'Summarise the filings', accept: 'Keep this summary',
+      empty: 'Nothing summarised yet. Eadwyn will read your formation order, formation steps and open obligations, explain where formation stands, and name what is due next — from the record, never from a jurisdiction\'s rules.',
+      nothingToDraft: 'No formation order, filing or entity is recorded for this startup yet.',
+      foot: 'Kept as wording only. Nothing is filed and no filing changes.',
     }]],
     ['operating-systems', [{
       surface: 'build/this-week', label: 'Proposal · Monday plan', run: 'Draft a Monday plan', accept: 'Accept the plan',
