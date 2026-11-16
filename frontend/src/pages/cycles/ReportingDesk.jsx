@@ -98,26 +98,29 @@ export function useDesk(projectId) {
 }
 
 /** The header's More menu: Share an update, and the founders' Reminder settings. Escape closes it. */
-function MoreMenu({ action, onReminders }) {
+function MoreMenu({ action, onReminders, phone = false }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return undefined;
     const key = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const back = () => setOpen(false);
     document.addEventListener?.('keydown', key);
-    return () => document.removeEventListener?.('keydown', key);
+    window.addEventListener?.('popstate', back);
+    return () => { document.removeEventListener?.('keydown', key); window.removeEventListener?.('popstate', back); };
   }, [open]);
   const share = action?.onOpen || action?.onClick;
+  const itemClass = `${MENU_ITEM}${phone ? ' min-h-11' : ''}`;
   return (
     <div className="relative">
       <button type="button" aria-label="More" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center rounded-[9px] border border-axal-hairline bg-white px-2.5 py-2 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+        className={`inline-flex items-center rounded-[9px] border border-axal-hairline bg-white px-2.5 py-2 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800${phone ? ' min-h-11 min-w-11 justify-center' : ''}`}
         data-testid="reporting-more">⋯</button>
       {open && (
         <div role="menu" className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-axal-hairline bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="reporting-more-menu">
           {action?.href && !share
-            ? <Link role="menuitem" to={action.href} className={MENU_ITEM} onClick={() => setOpen(false)} data-testid="reporting-more-share">Share an update</Link>
-            : share ? <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => { setOpen(false); share(); }} data-testid="reporting-more-share">Share an update</button> : null}
-          {onReminders && <button type="button" role="menuitem" className={MENU_ITEM} onClick={() => { setOpen(false); onReminders(); }} data-testid="reporting-more-reminders">Reminder settings</button>}
+            ? <Link role="menuitem" to={action.href} className={itemClass} onClick={() => setOpen(false)} data-testid="reporting-more-share">Share an update</Link>
+            : share ? <button type="button" role="menuitem" className={itemClass} onClick={() => { setOpen(false); share(); }} data-testid="reporting-more-share">Share an update</button> : null}
+          {onReminders && <button type="button" role="menuitem" className={itemClass} onClick={() => { setOpen(false); onReminders(); }} data-testid="reporting-more-reminders">Reminder settings</button>}
         </div>
       )}
     </div>
@@ -197,7 +200,7 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
     ? { label: preparing ? 'Preparing…' : prepareLabel(next), onClick: next ? () => prepare(next.period) : undefined, disabled: preparing || !next }
     : null;
   const readOnly = status === 'ready' && !desk?.can_write;
-  const more = readOnly ? null : <MoreMenu action={action} onReminders={canWrite ? () => setDialog({ kind: 'reminders' }) : null} />;
+  const more = readOnly ? null : <MoreMenu action={action} onReminders={canWrite ? () => setDialog({ kind: 'reminders' }) : null} phone={phone} />;
 
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
@@ -207,7 +210,7 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
     const deskBody = status === 'loading' ? <Skeleton />
       : status === 'unreadable' ? <Unreadable what="The reporting desk" claim="This is not a claim that nothing is owed." onRetry={reload} />
         : status === 'not_shared' ? <section className={CARD} data-testid="reporting-not-shared"><p className={MUTED}>{NOT_SHARED}</p></section>
-          : !(desk?.duties || []).length ? <Empty action={action} search={s} /> : null;
+          : !(desk?.duties || []).length ? <Empty action={canWrite ? action : null} search={s} /> : null;
     if (tab === 'duties') {
       body = (
         <div className="flex flex-col gap-3" data-testid="reporting-duties">
@@ -233,7 +236,7 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
     }
   }
   const header = phone
-    ? <CycleBar back={{ label: 'Grow', to: `/grow${s}` }} title={TITLE} eadwynLabel={`Grow · ${TITLE}`} />
+    ? <CycleBar back={{ label: 'Grow', to: `/grow${s}` }} title={TITLE} eadwynLabel={`Grow · ${TITLE}`} more={canWrite ? more : null} />
     : readOnly ? <ReadOnlyHeader desk={desk} role={role} />
       : <CycleHeader cycle="grow" cards={cards} active="reporting" action={deskAction} title={TITLE} sub={LINE} search={s} more={more} />;
   return (

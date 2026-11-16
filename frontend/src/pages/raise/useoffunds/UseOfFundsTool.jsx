@@ -8,9 +8,9 @@ import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import MercuryRaiseFeed from '../../cycles/MercuryRaiseFeed';
 import {
-  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, dayText,
-  forecastHref, historyRows, homeTiles, initials, money, monthsText, needsRows, planEmpty, planVsActual, runwayCandidates,
-  planViewer, runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
+  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, committedView, dayText,
+  dependencyRows, forecastHref, historyRows, homeAction, homeTiles, initials, milestonesFunded, money, monthsText, needsRows, planEmpty, planVsActual, planViewer,
+  runwayCandidates, runwayRows, runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, setupActions, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
   AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditMilestoneDialog, EditSplitDialog,
@@ -18,6 +18,7 @@ import {
   useRead, usePlan,
 } from './UseOfFundsParts';
 import { Compare, Forecast, Scenarios } from './ScenariosForecast';
+import { useUseOfFundsHome } from './useOfFundsRead.js';
 
 /**
  * D1173 (#2455) — the Use of funds tool's tab bar and tab pages. CycleRoute
@@ -40,6 +41,13 @@ import { Compare, Forecast, Scenarios } from './ScenariosForecast';
  * UF21c) inside the tool, at `?section=<key>` on the tab that opened it, from
  * Home, Allocation and Milestones and hires; a hire is added there or beside
  * Add milestone (UF6). The generic section record page is no longer linked.
+ *
+ * D5081 (#5081, RA-14, RA-21 A): the tool owns Home. The module page draws no
+ * generic "at a glance", forecast door or Categories table under it (CycleRoute's
+ * `owned`); Home is framed "What does this round buy us?", its primary action is
+ * Set raise & allocation, and it adds runway recorded against modelled, the
+ * dependencies marked from the plan read and the milestones funded. First use
+ * collapses to its set-up actions.
  */
 
 /** D6083: the open section sheet, read from and written to the address. */
@@ -130,12 +138,26 @@ function Tile({ tile }) {
         ? <span className={`${tile.muted ? `text-[15px] ${MUTED}` : `${MONO} text-[24px] font-extrabold text-axal-ink max-md:text-[20px] dark:text-gray-100`}`} data-testid={`uof-tile-${tile.key}-value`}>{tile.value}</span>
         : <span className={`text-[15px] ${MUTED}`} data-testid={`uof-tile-${tile.key}-value`}>{NOT_RECORDED}</span>}
       <span className={`text-[11.5px] ${MUTED}`}>{tile.sub}</span>
+      {tile.href ? <Link className={`${LINK} text-[11.5px]`} to={tile.href} data-testid={`uof-tile-${tile.key}-link`}>{tile.link || 'Open'} ›</Link> : null}
     </div>
   );
 }
 
-function Tiles({ plan }) {
-  return <div className="grid gap-3 max-md:grid-cols-2 md:grid-cols-4" data-testid="uof-tiles">{homeTiles(plan).map((t) => <Tile key={t.key} tile={t} />)}</div>;
+/** D6081: the tiles, then Remaining beside a read Committed, or why it is not shown (RA-21). */
+function Tiles({ plan, onRetry }) {
+  const committed = committedView(plan?.committed);
+  return (
+    <>
+      <div className="grid gap-3 max-md:grid-cols-2 md:grid-cols-4" data-testid="uof-tiles">{homeTiles(plan).map((t) => <Tile key={t.key} tile={t} />)}</div>
+      {committed.state === 'unavailable' ? (
+        <BlockError tone="amber" testId="uof-committed-unavailable" onRetry={onRetry}
+          text="Committed is Unavailable. Capital relationships commitments could not be read, so Remaining is not shown. It is not $0." />
+      ) : null}
+      {committed.state === 'ok' ? (
+        <p className={`m-0 -mt-1 text-[11.5px] ${MUTED}`} data-testid="uof-remaining">{committed.foot || committed.footReason}</p>
+      ) : null}
+    </>
+  );
 }
 
 /** The section table (UF1): share, amount, a month over the target, its milestone and its hires. */
@@ -165,7 +187,7 @@ function SectionTable({ rows, base, sheetTo, testId = 'uof-sections' }) {
 }
 
 /** Cash over time (UF1) and the cash path (UF7): the model's path, with its table. */
-function CashCard({ base, title, testId }) {
+function CashCard({ base, title, testId, without = null }) {
   const [view, setView] = useState('chart');
   const path = base?.model?.cashPath;
   const cashOut = base?.model?.cashOut?.value;
@@ -187,7 +209,7 @@ function CashCard({ base, title, testId }) {
               label={`Modelled cash from ${points[0].month} to ${points[points.length - 1].month}${outAt != null ? `; cash runs out in ${points[outAt].month}` : '; it does not run out within the model'}.`} />
             <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid={`${testId}-foot`}>
               {outAt != null ? `Cash out ${points[outAt].month}. ` : `Cash lasts at least to ${points[points.length - 1].month}. `}
-              The raise is counted in the month it is recorded to arrive. Without the raise is not modelled yet.
+              The raise is counted in the month it is recorded to arrive. {without ? `Without the raise, cash lasts as long as runway today: ${without}.` : 'Without the raise, cash lasts as long as runway today, which is Not recorded.'}
             </p>
           </>
         )}
@@ -214,16 +236,16 @@ function NeedsCard({ plan, onAct }) {
   );
 }
 
-function TiesCard({ plan, onOpen }) {
-  const rows = tiesRows(plan);
+/** D5081 (RA-21 A): what this plan depends on, each marked Current, Stale, Unavailable or Not linked. */
+function DependenciesCard({ plan, onOpen }) {
+  const rows = dependencyRows(plan);
   return (
-    <Card title="Where this plan is used" testId="uof-ties">
+    <Card title="Dependencies" meta="Where this plan is used" testId="uof-ties">
       {rows.map((r) => (
-        <div key={r.key} className="flex flex-col gap-1 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid={`uof-tie-${r.key}`}>
-          <span className={EYEBROW}>{r.eyebrow}</span>
-          <span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">{r.text}</span>
-          {r.sub ? <span className={`text-[11.5px] ${MUTED}`}>{r.sub}</span> : null}
-          {r.pill ? <Pill tone={r.tone}>{r.pill}</Pill> : null}
+        <div key={r.key} className="flex min-w-0 flex-col gap-1 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid={`uof-tie-${r.key}`} data-mark={r.mark}>
+          <span className="flex flex-wrap items-center justify-between gap-2"><span className={EYEBROW}>{r.eyebrow}</span><Pill tone={r.tone} testId={`uof-dep-${r.key}`}>{r.word}</Pill></span>
+          {r.href ? <Link className={`${LINK} text-[12.5px]`} to={r.href}>{r.text}</Link> : <span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">{r.text}</span>}
+          {r.why ? <span className={`text-[11.5px] ${MUTED}`}>{r.why}</span> : null}
         </div>
       ))}
       <button type="button" className={`${BTN_GHOST} w-fit`} onClick={onOpen} data-testid="uof-ties-open">Open</button>
@@ -231,62 +253,121 @@ function TiesCard({ plan, onOpen }) {
   );
 }
 
-/** Home (UF1, UF16, UF17, UF22): under the module's header, above the module's own parts. */
-export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) {
-  const read = usePlan(projectId, api);
+/** D5081 (RA-21 A): runway recorded against modelled, and the target. */
+function RunwayCard({ plan }) {
+  return (
+    <Card title="Runway" meta="Recorded against modelled" testId="uof-runway-compare">
+      {runwayRows(plan).map((r) => (
+        <div key={r.key} className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid={`uof-runway-${r.key}`}>
+          <span className="flex items-center gap-2 text-[12.5px] text-axal-ink dark:text-gray-100">{r.label}{r.tag ? <Pill tone={r.tag === 'Modelled' ? 'dashed' : 'violet'}>{r.tag}</Pill> : null}</span>
+          <span className={`${MONO} text-[13px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid={`uof-runway-${r.key}-value`}>{r.value || <span className={`font-normal ${MUTED}`}>{r.tag === 'Founder only' ? 'Founder only' : NOT_RECORDED}</span>}</span>
+          {r.sub ? <span className={`w-full text-[11.5px] ${MUTED}`}>{r.sub}</span> : null}
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/** D5081 (RA-21 A): each milestone, the section that pays for it, its date and the model's word for it. */
+function MilestonesFundedCard({ base, search }) {
+  const rows = milestonesFunded(base);
+  return (
+    <Card title="Milestones funded" meta={<Link className={LINK} to={tabHref(TABS.find((t) => t.id === 'milestones'), search)}>Milestones and hires ›</Link>} testId="uof-funded">
+      {rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-funded-none">No milestone is recorded for this plan yet.</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] border-collapse text-left text-[12.5px]">
+            <thead><tr>{['Milestone', 'Funded by', 'By', 'State'].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+            <tbody>{rows.map((m) => (
+              <tr key={m.id} data-testid="uof-funded-row">
+                <td className="border-b border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-800">{m.label}</td>
+                <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">{m.section}</td>
+                <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{m.by || <NotRecorded />}</td>
+                <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">{m.state ? <Pill tone={m.state === 'Funded' ? 'green' : m.state === 'At risk' ? 'amber' : 'dashed'}>{m.state}</Pill> : <NotRecorded />}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** D5081 (RA-14): first use, collapsed to the plan's one to three set-up actions. */
+function FirstUse({ plan, onSplit }) {
+  const actions = setupActions(plan);
+  return (
+    <Card testId="uof-empty">
+      <div className="flex flex-col items-start gap-2 py-2">
+        <h3 className={H3}>Set your raise and split to see what it buys.</h3>
+        <p className={`m-0 max-w-[60ch] text-[12.5px] ${MUTED}`}>Once a raise and a five-section split are saved, Home shows what the round pays for, how long it lasts and what it depends on.</p>
+        {actions.length ? (
+          <div className="flex w-full flex-wrap gap-2" data-testid="uof-setup">
+            {actions.map((a, i) => (a.act
+              ? <button key={a.key} type="button" className={`${i === 0 ? BTN : BTN_GHOST} max-md:flex-1`} onClick={onSplit} data-testid={`uof-setup-${a.key}`}>{a.text}</button>
+              : <Link key={a.key} className={`${i === 0 ? BTN : BTN_GHOST} no-underline max-md:flex-1`} to={a.href} data-testid={`uof-setup-${a.key}`}>{a.text}</Link>))}
+          </div>
+        ) : <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-setup-none">The venture’s founders set the raise and split.</p>}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Home (UF1, UF16, UF17, UF22; D5081, RA-14 and RA-21 A): under the module's header, and the only body the module
+ * page draws for this tool. `home` is the plan read and open dialog CycleRoute shares with the header, whose
+ * primary action (Set raise & allocation, `homeAction`) opens Edit split here; without it Home reads on its own
+ * and draws that action itself. On a phone the header is the bar, so the action is drawn full width here.
+ */
+export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi, home = null }) {
+  const own = useUseOfFundsHome(home ? null : projectId, api);
+  const { read, dialog, setDialog } = home || own;
   const phone = usePhoneWidth();
   const sheet = useSectionSheet();
-  const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
   const saved = (text) => { setDialog(null); setNotice(text); read.reload(); };
   if (!projectId) return null;
+  // The header carries the action on a desktop when CycleRoute shares the read; otherwise Home draws it.
+  const inHeader = !!home && !phone;
   return (
-    <div className="mt-3 flex flex-col gap-3" data-testid="uof-home">
+    <div className="mt-3 flex min-w-0 flex-col gap-3" data-testid="uof-home">
       <PlanFrame read={read} testId="uof-home">
         {(plan) => {
           const base = baseOf(plan);
           const rows = sectionRows(base, base?.hires?.state === 'ok' ? base.hires.items : null);
           const act = (a) => (a === 'edit' ? setDialog('split') : a === 'round' ? setDialog('round') : a === 'deck' ? setDialog('ties') : null);
+          const primary = homeAction(read);
           if (planEmpty(plan)) {
             return (
               <>
-                <Tiles plan={plan} />
-                <div className="grid gap-3 md:grid-cols-3">
-                  <Card title="Where the money goes" className="md:col-span-2"><StackBar rows={rows} /></Card>
-                  <Card testId="uof-empty">
-                    <div className="flex flex-col items-center gap-2 py-4 text-center">
-                      <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-50 text-axal-violet dark:bg-violet-950 dark:text-violet-300">○</span>
-                      <h3 className={H3}>Set your raise and split to see what it buys.</h3>
-                      <p className={`m-0 text-[12.5px] ${MUTED}`}>Start with Edit split.</p>
-                      {planViewer(plan)?.can_write ? <button type="button" className={BTN} onClick={() => setDialog('split')} data-testid="uof-empty-edit">Edit split</button> : null}
-                    </div>
-                  </Card>
-                </div>
+                <FirstUse plan={plan} onSplit={() => setDialog('split')} />
                 {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={planViewer(plan)} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               </>
             );
           }
+          const today = runwayTodayView(plan.runway_today, planViewer(plan));
           return (
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="violet">Base · {base?.name || 'Base'}</Pill>
-                {planViewer(plan)?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
+                {primary && !inHeader ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog(primary.dialog)} data-testid="uof-edit-split-open">{primary.label}</button> : null}
                 {!phone ? <ExportMenu projectId={projectId} capabilities={plan.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
-              <Tiles plan={plan} />
+              <Tiles plan={plan} onRetry={read.reload} />
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-3 md:col-span-2">
-                  <Card title="Where the money goes" meta={money(base?.amount_to_raise_cents, base?.currency) ? `${money(base.amount_to_raise_cents, base.currency)} · base scenario` : null} testId="uof-money">
+                  <Card title="What the raise buys" meta={money(base?.amount_to_raise_cents, base?.currency) ? `${money(base.amount_to_raise_cents, base.currency)} · base scenario` : null} testId="uof-money">
                     <StackBar rows={rows} currency={base?.currency} />
                     {!phone ? <SectionTable rows={rows} base={base} sheetTo={sheet.to} /> : null}
                   </Card>
                   {!phone ? (planViewer(plan)?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'
                     ? <p className={`m-0 rounded-lg border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-800`} data-testid="uof-cash-founder-only">Cash over time uses the founder’s own figures. Mercury figures are visible to the founder only.</p>
-                    : <CashCard base={base} title="Cash over time" testId="uof-cash" />) : null}
+                    : <CashCard base={base} title="Cash over time" testId="uof-cash" without={today.state === 'recorded' ? today.value : null} />) : null}
+                  {!phone ? <MilestonesFundedCard base={base} search={search} /> : null}
                 </div>
                 <div className="flex min-w-0 flex-col gap-3">
-                  {!phone ? <TiesCard plan={plan} onOpen={() => setDialog('ties')} /> : null}
+                  <RunwayCard plan={plan} />
+                  {!phone ? <DependenciesCard plan={plan} onOpen={() => setDialog('ties')} /> : null}
                   <NeedsCard plan={plan} onAct={act} />
                 </div>
               </div>
@@ -339,12 +420,12 @@ export function ExportMenu({ projectId, capabilities, api = useOfFundsApi }) {
   );
 }
 
-/** Home's tab bar, and D1177's Home blocks under it. */
-export function UseOfFundsHomeNav({ search = '', projectId = null, api }) {
+/** Home's tab bar, and Home's blocks under it (D1177; D5081: the module page draws nothing else for this tool). */
+export function UseOfFundsHomeNav({ search = '', projectId = null, api, home = null }) {
   return (
     <>
       <UseOfFundsTabBar active="home" search={search} />
-      {projectId ? <UseOfFundsHome projectId={projectId} search={search} api={api} /> : null}
+      {projectId ? <UseOfFundsHome projectId={projectId} search={search} api={api} home={home} /> : null}
     </>
   );
 }

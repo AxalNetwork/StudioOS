@@ -10,8 +10,7 @@
  *     the one line under it, and the basis context on the right;
  *   - the one local navigation — Overview · Positions · Reports · Performance
  *     · Value-add — as the shell's own zone row (`ZoneNav`), whose targets
- *     come from `shellConfig`, plus Performance, a route of the bucket that is
- *     not a sidebar zone. It scrolls sideways on a phone rather than hiding a
+ *     come from `shellConfig`. It scrolls sideways on a phone rather than hiding a
  *     destination behind the rail;
  *   - the route-aware document title (`Portfolio · Axal VC`,
  *     `Positions · Portfolio · Axal VC`, …);
@@ -37,12 +36,10 @@ import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './portfolio.css';
 
-/** The canvas's local navigation, in its order. Performance is the one non-zone item. */
+/** Overview precedes the Portfolio zones in shell order. */
 export const PORTFOLIO_NAV = {
   overview: 'Overview',
-  order: ['overview', 'positions', 'updates', 'performance', 'value-add'],
   scroll: true,
-  extra: [{ slug: 'performance', label: 'Performance', to: '/portfolio/performance' }],
 };
 
 const TAB_TITLES = { positions: 'Positions', updates: 'Reports', performance: 'Performance', 'value-add': 'Value-add' };
