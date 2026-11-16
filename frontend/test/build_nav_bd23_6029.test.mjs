@@ -63,8 +63,9 @@ test('the sidebar draws the list only under the current row, expanded, with no s
   assert.match(nav, /const kids = !collapsed && !q && rowIsCurrent && Array\.isArray\(item\.children\)/);
   assert.match(nav, /\{kids\}\n\s+<\/React\.Fragment>/);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
-  assert.match(app, /visibleSubpageRoots\(sidebarGroups, \{ open: sidebarOpen && isDesktop, collapsed: effectiveCollapsed \}\)/);
-  assert.match(app, /<SidebarSubpagesContext\.Provider value=\{sidebarSubpages\}>/);
+  assert.match(app, /<SidebarSubpagesProvider groups=\{sidebarGroups\} open=\{sidebarOpen && isDesktop\} collapsed=\{effectiveCollapsed\}>/);
+  assert.doesNotMatch(app, /lib\/sidebarSubpages/, 'App.jsx imports are frozen (D5615): the provider comes from ui/SidebarNav');
+  assert.match(nav, /visibleSubpageRoots\(groups, \{ open, collapsed \}\)/);
 });
 
 test('the Build header drops its desktop tabs only while the sidebar lists Build; tablet and phone keep the select', () => {

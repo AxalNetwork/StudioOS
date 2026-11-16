@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
@@ -11,6 +11,7 @@ import { settingsActive, settingsEntry, useScopeInView } from '../lib/settingsSc
 import { useActiveProject } from '../lib/activeProject.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
+import { SidebarSubpagesContext, subpageRootsKey, visibleSubpageRoots } from '../lib/sidebarSubpages';
 
 /**
  * SidebarNav — the left navigation, lifted out of App.jsx unchanged.
@@ -327,6 +328,19 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
 }
 
 /** D6029: a sub-page lights on its exact path when `end`, else on its subtree too. */
+/**
+ * D6029 (#6029): tells the pages below which rows the desktop sidebar lists
+ * the sub-pages of now (none while it is closed or an icon rail), so Build's
+ * header drops its desktop module tabs only then. It lives here, not in
+ * App.jsx, because App.jsx's imports are frozen (D5615).
+ */
+export function SidebarSubpagesProvider({ groups, open, collapsed, children }) {
+  const key = subpageRootsKey(groups);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the groups are rebuilt on every render; `key` is their identity.
+  const roots = useMemo(() => visibleSubpageRoots(groups, { open, collapsed }), [open, collapsed, key]);
+  return <SidebarSubpagesContext.Provider value={roots}>{children}</SidebarSubpagesContext.Provider>;
+}
+
 export function subpageActive(child, pathname) {
   if (!child?.to) return false;
   return pathname === child.to || (!child.end && pathname.startsWith(`${child.to}/`));
