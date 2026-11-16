@@ -183,8 +183,8 @@ const commitTime = (c) => time(c?.commit?.committer?.date ?? c?.committedAt ?? c
  * How many attempts a kind has had on this PR, and whether one more is allowed.
  *
  * Counted from what a session cannot rewrite: the bot App's commits on the branch and completed runs of the bot
- * workflows. The series starts at the owning session's newest commit: a commit that names the App as author or
- * committer never resets it, so a head changed by a bot commit stays in the same series. Comments are never read,
+ * workflows. The limit is for the PR's whole life (owner, 2026-11-15, #6467 B): no commit restarts the count, the
+ * session's own included, so a PR the bot has tried twice for a kind waits for a person. Comments are never read,
  * so deleting or forging the sticky comment changes nothing. Main repair is counted per failure fingerprint (job
  * plus test) across every commit, not per PR.
  *
@@ -209,15 +209,12 @@ export function attempts(pr, kind, data = {}) {
   }
 
   if (!pr || !isInt(pr.number)) return { allowed: false, used: null, limit: MAX_ATTEMPTS, reasons: ['no pull request'] };
-  let start = 0;
-  commits.forEach((c, i) => { if (!isBotCommit(c, botLogin)) start = i; });
-  const tail = commits.slice(start);
-  const tailShas = new Set(tail.map((c) => c?.sha).filter(Boolean));
+  // Every completed run of this kind on this PR, whatever its head, and every bot commit of this kind on the branch.
   const mine = completed.filter((r) => r.pr === pr.number);
-  const runsInSeries = mine.filter((r) => r.kind === kind && tailShas.has(r.head_sha)).length;
-  const commitsInSeries = tail.filter((c) => isBotCommit(c, botLogin) && trailerKind(c) === kind).length;
-  const used = Math.max(runsInSeries, commitsInSeries);
-  if (used >= MAX_ATTEMPTS) reasons.push(`${used} ${kind} attempts since the session's last commit, the most is ${MAX_ATTEMPTS}`);
+  const runsOnPr = mine.filter((r) => r.kind === kind).length;
+  const botCommitsOfKind = commits.filter((c) => isBotCommit(c, botLogin) && trailerKind(c) === kind).length;
+  const used = Math.max(runsOnPr, botCommitsOfKind);
+  if (used >= MAX_ATTEMPTS) reasons.push(`${used} ${kind} attempts on this pull request, the most is ${MAX_ATTEMPTS}`);
 
   const dayAgo = now - DAY_MS;
   const botCommitsToday = commits.filter((c) => isBotCommit(c, botLogin) && (commitTime(c) ?? now) >= dayAgo).length;

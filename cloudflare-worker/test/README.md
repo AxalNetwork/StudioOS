@@ -351,4 +351,6 @@ catalogue version only in the fixture.
 `advisor_refund_amounts_6393.test.ts` (#6393) exercises the narrow Worker repair through mounted routes over canonical SQLite tables.
 
 | `deal_activity_sources_6430.test.ts` | D6430: mounted real-SQLite data-room grant/folder/tier/NDA isolation, exact-firm deck grants, anonymous signature events, bounds and per-source failures. |
+| `typed_contact_book_6558.test.ts` | D6558: mounted own-book typed writes, pending duplicate reviews, isolation, validation, support refusal and atomic provenance rollback. |
+
 | `network_activity_6557.test.ts` | D6557: mounted recorded activity, owner/participant isolation, bounded ordering, safe labels, support refusal and independent unreadable sources. |

@@ -92,9 +92,9 @@ export function ReportingArchive({ loading, error, fund, rows, filter, onRetry }
     body = <div className="if4-table-wrap"><table><thead><tr><th>Period</th><th>State</th><th>Issued</th><th>Contents</th></tr></thead><tbody>
       {visible.map((row) => <tr key={row.id ?? periodOf(row)} data-testid="row-reporting-period">
         <td><Link className="if4-period-link" to={periodPath(fund.id, row)}>{periodOf(row)}</Link><small>{span(row)}</small></td>
-        <td><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td>
-        <td>{date(row.issued_at) || 'Not issued'}</td>
-        <td><ReportContents row={row} /></td></tr>)}
+        <td data-label="State"><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td>
+        <td data-label="Issued">{date(row.issued_at) || 'Not issued'}</td>
+        <td data-label="Contents"><ReportContents row={row} /></td></tr>)}
     </tbody></table></div>;
   }
   const subtitle = loading ? 'Loading the fund’s periods' : error || !fund ? 'No count is shown' : `${visible.length} of ${count} periods`;

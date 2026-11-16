@@ -1,4 +1,8 @@
 {
   "SUMS @ routes/research.ts": 1,
+  "await liveFiles(c.env.DB) @ routes/research.ts": 2,
+  "await liveFiles(c.env.DB, 'f') @ routes/research.ts": 1,
+  "await liveFiles(c.env.DB, 'x') @ routes/research.ts": 1,
+  "await liveFiles(env.DB) @ routes/research.ts": 1,
   "scope.sql @ routes/research.ts": 2
 }

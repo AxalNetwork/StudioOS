@@ -385,6 +385,8 @@ test('14: the root has no md: rule and reads no width of its own; every light cl
 async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] } = {}) {
   // Grow V2 is a lazy cycle-owned overview on both widths (#4862).
   if (cycle === 'grow') await import('../src/pages/cycles/GrowOverview.jsx');
+  // Build V2 is a lazy cycle-owned overview too (D6028, #6028); below 1024px it draws the phone root.
+  if (cycle === 'build') await import('../src/pages/cycles/BuildOverview.jsx');
   resetStores();
   const restore = installDocument();
   const unstub = stubReads();
@@ -438,7 +440,8 @@ for (const cycle of Object.keys(READS)) {
         assert.equal(desk.all('grow-overview-v2').length, 1);
         assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
       } else {
-        assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
+        // D6028 (#6028): Build's desktop overview is its own (BD1), mounted through `def.Overview`.
+        assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : 'cycle-overview'), 'the desktop overview');
         assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
       }
       assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
