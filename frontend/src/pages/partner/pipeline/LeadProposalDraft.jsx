@@ -5,6 +5,7 @@ import ZoneDraft from '../../../workspaces/ZoneDraft';
 import useAiSpend from '../../../hooks/useAiSpend';
 import { Field, inputClass, buttonClass, ghostButtonClass } from '../kit';
 import { NotRecorded } from '../../../workspaces/canvasKit';
+import { formatMinor, parseMinor, toMajorString } from '../../../lib/money.js';
 
 /**
  * PP03c — Draft proposal, built to the owner's answer A on #5936.
@@ -27,15 +28,10 @@ export function draftLabel(draft) {
   return draft?.origin === 'eadwyn' ? 'Eadwyn proposal · not sent' : 'Draft proposal · not sent';
 }
 
-/** "$12,500" from cents, or null when no price is recorded. */
+/** "$12,500.00" from minor units (lib/money.js), or null when no price is recorded or the currency is not one StudioOS prices in. */
 export function draftPrice(draft) {
   if (draft?.price_cents == null) return null;
-  const cur = draft.currency || 'USD';
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(draft.price_cents / 100);
-  } catch {
-    return `${(draft.price_cents / 100).toFixed(2)} ${cur}`;
-  }
+  return formatMinor(draft.price_cents, draft.currency || 'USD', { locale: 'en-US' });
 }
 
 /**
@@ -43,15 +39,16 @@ export function draftPrice(draft) {
  * cents); anything that is not a non-negative number is an error, never a guess.
  */
 export function draftBody(form, origin) {
-  const typed = String(form.price ?? '').replace(/[,\s$]/g, '');
-  let price_cents = null;
-  if (typed !== '') {
-    const n = Number(typed);
-    if (!Number.isFinite(n) || n < 0) return { error: 'Price must be a number, zero or more.' };
-    price_cents = Math.round(n * 100);
-  }
   const currency = String(form.currency || 'USD').trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) return { error: 'Currency is a three-letter code, such as USD.' };
+  const typed = String(form.price ?? '').replace(/[\s$]/g, '');
+  let price_cents = null;
+  if (typed !== '') {
+    // lib/money.js reads major units to minor units exactly, in the currency's own decimals.
+    const parsed = parseMinor(typed, currency);
+    if (!parsed.ok) return { error: parsed.reason === 'currency' ? parsed.message : `Price must be a number, zero or more. ${parsed.message}` };
+    price_cents = parsed.minor;
+  }
   const scope = String(form.scope || '').trim();
   const shape = form.shape || null;
   if (!shape && price_cents == null && !scope) return { error: 'Add a shape, a price or a scope, or discard the draft.' };
@@ -60,7 +57,7 @@ export function draftBody(form, origin) {
 
 const formOf = (d) => ({
   shape: d?.shape || '',
-  price: d?.price_cents == null ? '' : String(d.price_cents / 100),
+  price: d?.price_cents == null ? '' : (toMajorString(d.price_cents, d?.currency || 'USD') ?? ''),
   currency: d?.currency || 'USD',
   scope: d?.scope || '',
 });
