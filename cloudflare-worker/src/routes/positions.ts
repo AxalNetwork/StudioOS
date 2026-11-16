@@ -187,6 +187,14 @@ r.get('/', async (c) => {
     // metrics beside it used the mark as of the requested date, so one page
     // could show a position and the totals priced on different days.
     const listAsOf = isoDate(c.req.query('as_of'));
+    // D6887 (#6887): the rows are cut at the same date. Before, `as_of` moved
+    // only the marks, so a company funded after the date was still listed and
+    // the rows' invested total did not equal the analytics `paid_in` beside it.
+    // Both queries below keep a cheque dated on or before `as_of` (bound twice;
+    // with none, every row), dated the way `/analytics` dates it
+    // (`isoDate(position_date) || isoDate(created_at)`): its position date when
+    // that starts YYYY-MM-DD, else when it was recorded (`created_at` is NOT
+    // NULL, so every cheque has a date).
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
     // handful of holdings.
@@ -202,8 +210,10 @@ r.get('/', async (c) => {
          LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
+          AND (? IS NULL OR (CASE WHEN p.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                  THEN substr(p.position_date, 1, 10) ELSE substr(p.created_at, 1, 10) END) <= ?)
         GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf).all<any>();
     // Latest ownership/round per project, also in one pass, over the same rows:
     // for a company read as GP, the latest of their funds' rounds.
     const latestRows = await c.env.DB.prepare(
@@ -213,12 +223,14 @@ r.get('/', async (c) => {
                  FROM portfolio_positions q
                 WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(q.project_id AS TEXT) || ',') > 0
                        OR instr(',' || ? || ',', ',' || CAST(q.fund_id AS TEXT) || ',') > 0)
+                  AND (? IS NULL OR (CASE WHEN q.position_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                                          THEN substr(q.position_date, 1, 10) ELSE substr(q.created_at, 1, 10) END) <= ?)
                 GROUP BY q.project_id) l
            ON l.project_id = p.project_id AND l.d = COALESCE(p.position_date, p.created_at)
          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0
                 OR instr(',' || ? || ',', ',' || CAST(p.fund_id AS TEXT) || ',') > 0)
          GROUP BY p.project_id`
-    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
+    ).bind(scope.heldCsv, scope.heldCsv, scope.fundCsv, listAsOf, listAsOf, scope.heldCsv, scope.heldCsv, scope.fundCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
     const marks = await scopedLatestMarks(c.env, scope, listAsOf);
@@ -247,6 +259,8 @@ r.get('/', async (c) => {
         // Vintage = year of first cheque, so cohort analysis is derived
         // from real position dates rather than a hand-kept field.
         vintage: row.first_date ? Number(String(row.first_date).slice(0, 4)) || null : null,
+        /** D6887: the first cheque's date (YYYY-MM-DD), on or before `as_of` when one is given. */
+        first_date: isoDate(row.first_date),
         // #125 — carrying value. `unmarked: true` means we are showing
         // cost because no mark exists; the UI must say so rather than
         // presenting cost as a valuation.
