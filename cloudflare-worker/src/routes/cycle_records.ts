@@ -165,7 +165,7 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
       if (section.when && !section.when(s.id, record)) continue;
       const data = await section.read(s.ctx, s.id, record);
       const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
-      sections.push({ key: section.key, title: section.title,
+      sections.push({ key: section.key, title: section.title, note: section.note,
         gate: section.publicGate ?? (section.gate === 'write' ? 'write' : 'read'), side: section.side, rows,
         empty: data.empty, action: canWrite ? data.action : undefined });
     }
