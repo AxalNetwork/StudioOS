@@ -239,7 +239,7 @@ test('the diligence room: the shared read by the venture; a refusal draws nothin
 test('the wiring: deal tab, round call, diligence room; no ui index; no pop-up, no hex, dark pairs; the Worker serves all three reads', () => {
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
   assert.ok(deal.includes("import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';"));
-  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} role={role} />}"));
+  assert.match(deal, /tab === 'evidence' && <EvidenceSummary[^>]*ndaHref=\{isInvestor \? tabHref\(deal.id, 'documents'\) : null\}/);
   const call = read('frontend/src/pages/founder/RoundCallPage.jsx');
   assert.ok(call.includes('<InvestorEvidence read={d.evidence??null} company={company} onRetry={on.retry}/>'));
   assert.ok(call.indexOf('<InvestorEvidence') > call.indexOf('export function InvestorCallView'), 'only on the investor’s view of a call');
@@ -256,4 +256,47 @@ test('the wiring: deal tab, round call, diligence room; no ui index; no pop-up, 
   assert.ok(read('cloudflare-worker/src/routes/data_room.ts').includes("r.get('/shared/:projectUid/evidence'"));
   assert.match(read('cloudflare-worker/src/services/roundCalls.ts'), /investorEvidence\(env,call\.project_id,investor\.id\)/);
   assert.match(read('documentation/architecture/decisions/D1268.md'), /## D1268/);
+});
+
+test('#6174: the deal gives the investor a Documents link before NDA and only coverage', () => {
+  const read = BEFORE({ items: { state: 'recorded', rows: ITEMS() }, claims: CLAIMS });
+  const markup = html(h(InvestorEvidence, { read, ndaHref: '/deals/42/documents' }));
+  assert.match(markup, /href="\/deals\/42\/documents"[^>]*>Sign the NDA on Documents/);
+  assert.doesNotMatch(markup, /evidence-filter-|evidence-claim-tally|evidence-row-/);
+  assert.doesNotMatch(html(h(InvestorEvidence, { read })), /evidence-sign-nda/);
+});
+
+test('#6174: filters use returned items and count each visible claim once', async () => {
+  const claims = { state: 'recorded', rows: [
+    { ...CLAIMS.rows[0], items: ['i-runway', 'i-mrr'] }, CLAIMS.rows[1],
+    { uid: 'private-claim', state: 'founders_figure', items: ['private-item'] },
+  ] };
+  const m = await mounted(h(EvidenceSummary, {
+    dealId: 42, role: 'investor', ndaHref: '/deals/42/documents',
+    api: { forDeal: async () => AFTER({ claims }) },
+  }));
+  try {
+    assert.equal(m.textOf('evidence-claim-tally'), '1 of 2 shared claims are backed by a record.');
+    assert.equal(m.has('evidence-filter-claim-founders_figure'), false);
+    await m.click('evidence-filter-source-connector');
+    assert.equal(m.has('evidence-row-i-theme'), false);
+    await m.click('evidence-filter-area-Investor narrative and Pitch deck');
+    assert.equal(m.has('evidence-row-i-runway'), false);
+    assert.equal(m.has('evidence-row-i-mrr'), true);
+    await m.click('evidence-filter-claim-mismatch');
+    await m.click('evidence-open-i-mrr');
+    assert.match(m.textOf('evidence-item'), /Ask the founder about this/);
+    assert.match(m.textOf('evidence-item'), /Add a note/);
+    assert.equal(m.attr('evidence-item-diligence', 'href'), '/deals/42/diligence');
+    assert.equal(m.attr('evidence-item-notes', 'href'), '/deals/42/notes');
+    assert.doesNotMatch(m.textOf('evidence-item'), /Open in the data room/);
+  } finally { await m.close(); }
+});
+
+test('#6174: unreadable items or claims never appear as zero backed claims', () => {
+  for (const field of ['items', 'claims']) {
+    const markup = html(h(InvestorEvidence, { read: AFTER({ [field]: { state: 'unreadable' } }), ndaHref: '/deals/42/documents' }));
+    assert.doesNotMatch(markup, /evidence-claim-tally|evidence-filter-claim-/);
+  }
+  assert.doesNotMatch(html(h(InvestorEvidence, { read: AFTER() })), /evidence-filter-|evidence-claim-tally/);
 });

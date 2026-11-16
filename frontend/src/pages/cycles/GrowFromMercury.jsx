@@ -1,7 +1,7 @@
 import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
-import { mercuryView, monthLabel } from './growFromMercury';
+import { mercurySyncSentence, mercuryView, monthLabel } from './growFromMercury';
 import ConnectMercury from './ConnectMercury';
 
 /**
@@ -35,11 +35,19 @@ function VentureMercury({ slug, part, projectId, reload: onReload }) {
   const reload = (...args) => { if (alive.current) onReload?.(...args); };
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState('');
+  const [syncNotice, setSyncNotice] = useState('');
   const view = mercuryView(part);
   if (view.empty) return null;
   const act = async (key, fn, failed) => {
     setBusy(key); setError('');
-    try { await fn(); reload?.(); } catch (e) { setError(e?.message || failed); } finally { setBusy(null); }
+    if (key === 'sync') setSyncNotice('');
+    try {
+      const result = await fn();
+      if (key === 'sync') {
+        setSyncNotice(mercurySyncSentence(result?.counts));
+        reload?.({ keepParts: true });
+      } else reload?.();
+    } catch (e) { setError(e?.message || failed); } finally { setBusy(null); }
   };
   const remove = (id) => act(`d${id}`, () => cyclesWrite.grow.deleteMercuryFact(projectId, id), 'That figure could not be deleted.');
   const del = (id) => (projectId && id != null ? (
@@ -119,6 +127,7 @@ function VentureMercury({ slug, part, projectId, reload: onReload }) {
           ))}
         </ul>
       )}
+      {syncNotice && <p role="status" className={MUTED} data-testid="mercury-sync-note">{syncNotice}</p>}
       {error && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="mercury-error">{error}</p>}
     </section>
   );
