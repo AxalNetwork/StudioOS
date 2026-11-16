@@ -18,7 +18,7 @@ import type { Env } from '../../types';
 import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../../integrations/registry';
 import { canWrite } from '../../routes/_founder_validate_helpers';
 import {
-  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, patchFounder, patchFormationStep, putSystem,
+  actionCall, featureLink, fitsKind, unallocated, writeProject, systemChoices, patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, patchFormationStep, deleteFormationStep, putSystem,
   type WriteCall, type WriteCtx,
 } from '../../routes/cycle_build';
 import { addOkrDependency } from '../okrGraph';
@@ -1028,7 +1028,6 @@ const productRoadmap: ModuleSpec = {
           : gh?.tag ? { a: 'Shipped', b: shipped ? `${gh.tag} · ${shipped}` : gh.tag, ...(gh.url ? { href: gh.url } : {}) }
             : { a: 'Shipped', b: 'Not shipped: no release names it or closes it.', tone: 'grey' }] };
     } },
-    { key: 'public', title: 'Public roadmap', side: true, async read() { return notRecorded('Ventures have no public roadmap page.'); } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const itemId = numericId(id), item = { id: String(itemId) };
@@ -1079,6 +1078,10 @@ const productRoadmap: ModuleSpec = {
       ] },
       references: body => references(body, [['feature_id', 'mvp_features']]),
       execute: (c, _id, body) => viaRoute(c, patchRoadmap, item, formBody(jsonOf(body), [...ITEM_KEYS, 'feature_id'], ITEM_CLEARABLE)) });
+    // #6041: undo an item added by mistake. Its dependency edges go with it; the activity row stays.
+    actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+      confirm: { title: `Delete ${o.objective}?`, body: 'It leaves the roadmap with its dependencies. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+      execute: c => viaRoute(c, deleteRoadmap, item, {}) });
     return actions;
   },
   async formOptions(ctx) {
@@ -1231,6 +1234,10 @@ const foundingTeam: ModuleSpec = {
           { key: 'cliff_months', label: 'Cliff months', kind: 'T', value: h.cliff_months ?? '' },
         ] },
         execute: (c, _id, body) => editFounder(c, h, jsonOf(body)) },
+      // #6041 (A): remove a founder added by mistake. The cap table code refuses one with anything attached, naming it.
+      { key: 'delete', label: 'Remove founder', kind: 'write', tone: 'danger',
+        confirm: { title: `Remove ${h.name}?`, body: 'Only a founder added by mistake, with nothing attached: no vesting, issued shares, co-founder agreement, filing or contributions. They leave the founding team and the cap table. The activity log keeps a line saying so.', cta: 'Remove' },
+        execute: c => viaRoute(c, deleteFounder, { id: `h-${h.id}` }, {}) },
     ];
   },
   /** Decision 14: 100 less every holder's recorded percentage and the base scenario's pool; Not recorded with no percentage. */
@@ -1405,6 +1412,11 @@ const companyCreation: ModuleSpec = {
         references: body => references(body, [['for_holder_id', 'cap_table_founders']]),
         execute: (c, _id, body) => viaRoute(c, patchFormationStep, step,
           formBody(jsonOf(body), ['title', 'kind', 'jurisdiction', 'for_holder_id', 'due_date', 'state'], ['kind', 'jurisdiction', 'for_holder_id', 'due_date'])) });
+      // #6041: undo a filing the venture added by mistake. Only the venture's own step: a Lab step and an
+      // obligation offer no Delete.
+      actions.push({ key: 'delete', label: 'Delete', kind: 'write', tone: 'danger',
+        confirm: { title: `Delete ${f.title}?`, body: 'It leaves the filings with its checklist and its proof file. The activity log keeps a line saying it was deleted.', cta: 'Delete' },
+        execute: c => viaRoute(c, deleteFormationStep, step, {}) });
     }
     actions.push({ key: 'upload-proof', label: 'Upload proof', kind: 'form', multipart: true,
       form: { title: 'Upload proof', cta: 'Upload', fields: [{ key: 'file', label: 'Proof', kind: 'T', input: 'file', required: true, note: 'PDF, JPEG or PNG, at most 10 MB.' }] },
