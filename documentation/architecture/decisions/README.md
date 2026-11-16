@@ -140,6 +140,7 @@ and citations by number keep working.
 | `D6397.md` | Five recorded Fund Admin tasks in today’s shared Ask panel, with scoped navigation and no models or financial acts (#6397). |
 | `D6413.md` | Share request-local event audience reads and batch saved visibility in bounded windows (#6413). |
 | `D6414.md` | Validate stored event preference array shapes without rewriting historical rows (#6414). |
+| `D5919.md` | Territory, Renewal window and Attention menus for loaded licence-ledger rows (#5919). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
 | `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |

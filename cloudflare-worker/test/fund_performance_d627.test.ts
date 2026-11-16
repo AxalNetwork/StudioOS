@@ -104,18 +104,49 @@ test('real SQL picks latest marks with deterministic same-day tie, ignores futur
     assert.equal(p.dpi,1000/12345);
   } finally { f.db.close(); }
 });
-test('admin reads all; LP reads only own fund; managers without LP membership cannot read; legacy email cannot override claimed owner', async () => {
+test('admin reads all; LP reads only own fund; legacy email cannot override claimed owner', async () => {
   const f = await fixture();
   try {
     assert.deepEqual((await (await f.request('/',1)).json() as any).items.map((x:any)=>x.id),[10,20]);
     assert.deepEqual((await (await f.request('/',3)).json() as any).items.map((x:any)=>x.id),[10]);
     assert.equal((await f.request('/10',3)).status,200);
-    for (const [path,user] of [['/20',3],['/10',4],['/10',2],['/10',5],['/999',1],['/10x',1]] as const) assert.equal((await f.request(path,user)).status,404);
+    for (const [path,user] of [['/20',3],['/10',4],['/10',5],['/999',1],['/10x',1]] as const) assert.equal((await f.request(path,user)).status,404);
     assert.equal((await f.request('/',5)).status,404);
     assert.deepEqual((await (await f.request('/',6)).json() as any).items.map((x:any)=>x.id),[10]);
     assert.equal(f.db.prepare('SELECT user_id FROM limited_partners WHERE id=103').get()!.user_id,6);
     assert.equal(f.db.prepare('SELECT user_id FROM limited_partners WHERE id=104').get()!.user_id,4);
     assert.equal((await route.request('/10',{},f.env)).status,401);
+  } finally { f.db.close(); }
+});
+test('D6246: the GP of record reads the fund they run; LP-only, both and neither are unchanged; figures match', async () => {
+  const f = await fixture();
+  try {
+    f.db.exec(`INSERT INTO users VALUES (7,'pro-gp@example.test','Pro GP','investor',1,'professional','active'),(8,'founder-gp@example.test','Founder GP','founder',1,NULL,NULL);
+      INSERT INTO vc_funds VALUES (30,'Fund C',2023,'active',7),(40,'Fund D',2024,'active',NULL);`);
+    const ids = async (user: number) => (await (await f.request('/',user)).json() as any).items.map((x:any)=>x.id);
+    // GP, not LP: user 2 runs Fund A and holds no LP record in it.
+    assert.deepEqual(await ids(2),[10]);
+    const asGp = await f.request('/10',2), asAdmin = await f.request('/10',1);
+    assert.equal(asGp.status,200);
+    assert.deepEqual(await asGp.json(), await asAdmin.json());
+    for (const path of ['/20','/30','/40','/999']) assert.equal((await f.request(path,2)).status,404);
+    // LP, not GP: user 3 still reads only the fund they hold a record in, and cannot reach GP-only reads.
+    assert.deepEqual(await ids(3),[10]);
+    assert.equal((await f.request('/10/positions',3)).status,402);
+    // Both: user 4 runs Fund B and is an LP in it; it appears once.
+    assert.deepEqual(await ids(4),[20]);
+    assert.equal((await f.request('/20',4)).status,200);
+    // Neither: a founder with no fund keeps the 404; a GP below the institutional tier gets no read through the GP arm.
+    assert.equal((await f.request('/',5)).status,404);
+    assert.equal((await f.request('/10',5)).status,404);
+    assert.deepEqual(await ids(7),[]);
+    assert.equal((await f.request('/30',7)).status,404);
+    // The same gate as requireFundGp: whoever it admits, this read admits.
+    for (const [user, fund] of [[2,10],[4,20],[7,30],[3,10],[8,40]] as const) {
+      const gate = (await f.request(`/${fund}/positions`,user)).status === 200;
+      const read = (await f.request(`/${fund}`,user)).status === 200;
+      if (gate) assert.equal(read,true,`user ${user} passes the GP gate on fund ${fund}`);
+    }
   } finally { f.db.close(); }
 });
 test('GP/admin valuations and attribution record both actor and data; LP has no write access', async () => {

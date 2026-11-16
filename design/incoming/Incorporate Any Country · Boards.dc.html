@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incorporate Any Country · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · /incorporate · #6720 · continues Incorporate (D1414) · INC13–INC26</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Incorporate, any country: answer, compare, choose, add people, pay, then track the case with the party that files</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Incorporate (/incorporate, with ?project= or ?company=) for a founder who owns the project or administers the company; an Axal admin keeps the read-only view (INC5g). Four steps replace INC2’s six: Confirm and answer, Compare and choose, People and details, Review and pay (then the existing payment step, INC3). The founder chooses; a named party files and is shown on every board; Axal VC does not file. Nothing files, pays or signs by itself. Options come from the Axal VC playbook and are never ranked or called recommended; no tax figure, no promised duration. A government fee with no sourced figure reads Not recorded (every country on main today). Legal-sounding lines are bracketed placeholders marked “wording pending counsel”. A country with no partner or no self-serve path says so. States follow Platform States (D5129). Eadwyn is off on the answer, options and choice steps; on the tracker it only reads out the stored stage. Violet dashed ◇ tags name the Worker issue; amber ⚑ tags mark owner questions drawn as option A.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 15 Nov 2026 · checked against main 992bd74ad6 · [Project A], [Company B], [Founder A], [Founder B], [Partner], [Owner], every bracketed country, form, source, [amount A], [amount B], [amount C] and every date are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Incorporate Any Country Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['INC13', 'Step 1 · Confirm and answer · Worker ◇', 'The subject line, “What we already know” with a source label and Edit on every value (residence from each founder’s profile ◇), and five questions on one screen. The pre-filled residence row shows Confirm; Show my options waits for it. Eadwyn is not offered. B · Incorporate [Company B]: blank legal facts read Not recorded.', [F('INC13', false, 1300), C('INC13B', 'B · Company subject, all answers confirmed', 1200, 560)]],
+      ['INC14', 'Step 2 · Options to compare · Worker ◇', '“Options to compare, from the Axal VC playbook (version 3)” with the notice placeholder (Q1 A). Three cards, each with why it is here (the founder’s own answers), what would change it, sourced country facts with checked dates or Not recorded, fee lines with who collects each, who files, and whether it can be ordered. [Estonia] has no partner: Not available to order yet, no pay path (Q6 A). The US card is filed by the Axal VC formation desk (#6681 Q9 A). Not shown, and why. B · No options. C · See all countries as information.', [F('INC14', false, 1600), C('INC14B', 'B · No option for these answers', 1100, 260), C('INC14C', 'C · See all countries · information', 1200, 420)]],
+      ['INC15', 'Step 2 · This needs a specialist first · Worker ◇', 'Replaces the cards when an answer is regulated or a spinout: which answers did it, the comparison to make, who needs to be involved, no price and no pay path. Primary: Open a case with Axal. B · Add my adviser’s memo: name, firm, licensing body, country, date and the file (Q2 A).', [F('INC15', false, 900), F('INC15B', 'B · Adviser’s memo sheet', 900)]],
+      ['INC16', 'Your choice · sheet over INC14 · Worker ◇', 'The option, the choice statement placeholder, what is recorded, and who would file ([Partner]). Primary: Confirm my choice; nothing is ordered. B · An option from all countries: an optional “Why this one?”, the tax adviser placeholder, and “Recorded by the Axal VC formation desk · no partner assigned yet”.', [F('INC16', false, 1000), F('INC16B', 'B · Not among the options shown', 1000)]],
+      ['INC17', 'Step 3 · People and details · Worker ◇', 'Driven by the chosen form: a [UK] Ltd asks for no registered agent. People with role, residence and shares totalling 100%; identity is checked by [Partner] later (#6682 Q13 A). Company name with the live name check, registered office, share capital where relevant. Sharing consent placeholder naming [Partner], what is shared, and who is told. B · A [Singapore] case blocks before payment: “Talk to [Partner]”, no priced local director (Q4 A).', [F('INC17', false, 1180), C('INC17B', 'B · Residence requirement blocks before payment', 1100, 330)]],
+      ['INC18', 'Step 4 · Review and pay · Worker ◇ + frontend', 'Fee lines grouped by who is paid and who collects: Axal VC’s fee charged now; [Partner]’s fee and the government fee (Not recorded) billed by [Partner]; year two on its own. GBP lines stay in GBP and are not summed with USD. Charged now equals the one line Axal VC collects (Q3 A). Then the existing payment step (INC3).', [F('INC18', false, 1000)]],
+      ['INC19', 'Case tracker · Worker ◇', 'What every “In formation” link opens: who has the case and since when, what you need to do (the oldest open request is the one primary action), eight steps, filings, documents and a timeline that says who recorded each event (#6681 Q4 A). B · The four top lines, a registry question, and the empty states. E · Eadwyn “Tell me where my case is”: stage, who it waits on and open requests only; Accept, Edit, Discard.', [F('INC19', false, 1120), C('INC19B', 'B · Top lines, registry question, empties', 1200, 880), F('INC19E', 'E · Eadwyn read-out', 900)]],
+      ['INC20', 'Request and approval sheets · Worker ◇', 'A · A request: what, by whom, why, due date, upload or answer, Send; no chat. B · Approve your filing pack: the documents, each appointee’s consent to act, and Approve and send to [Partner]; nothing reaches the registry before this. C · An identity check shows only that [Partner] verifies in its own system.', [F('INC20A', 'A · Request', 1000), F('INC20B', 'B · Filing pack approval', 1000), C('INC20C', 'C · Identity check', 700, 260)]],
+      ['INC21', 'Registered, and after · Worker ◇', 'Registration number, registry date and certificate; what was written to [Company B] (company record at registry acceptance, #6681 Q7a A); [Project A] is now part of [Company B]; no after-registration pack for [United Kingdom] yet. Primary: Open [Company B]. B · A US case with the pack: tax number, 83(b), bank.', [F('INC21', false, 860), C('INC21B', 'B · US after-registration pack', 1100, 300)]],
+      ['INC22', 'Closed, checked and changed · Worker ◇', 'Six states, each with its own word and glyph: Cancelled · Rejected by the registry, with the recorded reason and what happens next (#6682 Q20 A) · Refund under review · Your answers changed (reopens the choice) · We are checking your details (#6682 Q18 A) · We cannot take this case (no reason shown; wording pending counsel).', [C('INC22A', 'A · Cancelled', 1100, 250), C('INC22B', 'B · Rejected by the registry', 1100, 270), C('INC22C', 'C · Refund under review', 1100, 140), C('INC22D', 'D · Your answers changed', 1100, 200), C('INC22E', 'E · We are checking your details', 1100, 140), C('INC22F', 'F · We cannot take this case', 1100, 170)]],
+      ['INC23', 'States · frontend only', 'Loading in the real shapes; Not recorded (government fee, a country fact, registration number, expected time); options and filings unreadable one block at a time; Refused for a non-owner; saving and save failed with answers kept; a form paused mid-flow; the options step switched off (the existing compare step is shown).', [C('INC23', false, 1400, 600)]],
+      ['INC24', 'Phone 390 · frontend only', 'INC13, INC14, INC17, INC19 and the filing-pack approval as a bottom sheet. Subject first, the primary action pinned, then the parts. Cards stack, the people table becomes cards, 44px targets, no table wider than the screen.', [P('INC24A', 'INC13'), P('INC24B', 'INC14'), P('INC24C', 'INC17'), P('INC24D', 'INC19'), P('INC24E', 'INC20 B')]],
+      ['INC25', 'Dark · frontend only', 'INC14 and INC19 on the dark tokens. Not available to order yet, Waiting for you and Not recorded keep their words and glyphs.', [F('INC25A', 'INC14', 1600), F('INC25B', 'INC19', 1120)]],
+      ['INC26', 'Handoff', 'What was checked on main, what needs the Worker (◇ with issues), the owner questions drawn at A (⚑), frontend-only work, accessibility and what is open.', [W('INC26')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
