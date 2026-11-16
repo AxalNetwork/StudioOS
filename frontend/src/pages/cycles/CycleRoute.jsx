@@ -382,6 +382,11 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
+/** D6049: the bands as they always drew, on a module with no page of its own (`def.homes`). */
+function PlainBands({ children }) {
+  return <>{children}</>;
+}
+
 /** D1178: a Use of funds page under a tab, and the tab it sits under. */
 const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
 
@@ -929,6 +934,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
     const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
+    // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
+    // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
+    const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
+    const Bands = home?.Bands || PlainBands;
     body = (
       <ModulePage
         cycle={cycle}
@@ -946,6 +955,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // D5081 part 2 (RA-22): so does Capital relationships' Overview; no generic "at a glance", This venture or stage counts.
         // D5081 part 3 (RA-20): so does Cap table's Overview; no generic Planned round card or Holders list under it.
         owned={uofOwnsHome ? { sub: UOF_FRAME } : capRelOwnsHome ? { sub: CAP_REL_LINE } : capTableOwnsHome ? { sub: CAP_TABLE_LINE } : null}
+        // D6043 (#6043): a cycle that names `exportRecords` (Build) exports the list with the table's own search, filters and sort.
         recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
@@ -956,8 +966,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           : fnOf(def.add, slug)?.(q, openAction)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
-        onExport={cycle === 'grow' && projectId && read?.exportable === true
-          ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
+        onExport={def.exportRecords && projectId && !narrativeAdmin
+          ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort })
+          : cycle === 'grow' && projectId && read?.exportable === true
+            ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -982,6 +994,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
         asks={moduleAsks}
+        home={home?.body ?? null}
+        sub={home ? home.sub : undefined}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
@@ -999,9 +1013,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
             railOption={`fill:${fillKind}`} />
         )}
+        <Bands>
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} scoped={cycle === 'raise' && slug === 'investor-narrative'} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
+        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
+        </Bands>
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
           <FromYourInterviews parts={module?.parts}
@@ -1010,7 +1027,6 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
         {def.sourcesRegion ? null : parts}
-        {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>
     );
