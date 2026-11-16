@@ -9,6 +9,7 @@ test('the README workflow table and merge queue listener list match the YAML', (
   const readme = readFileSync(new URL('../../.github/workflows/README.md', import.meta.url), 'utf8');
   const expected = withInventory(readme, renderInventory(workflows));
   assert.ok(readme === expected, 'Run node scripts/workflow-inventory.mjs --write to update the generated inventory.');
-  const tableFiles = [...readme.matchAll(/^\| `([^\n`]+\.ya?ml)` \|/gm)].map(([, file]) => file);
+  const generatedBlock = readme.split('<!-- workflow-inventory:start -->')[1].split('<!-- workflow-inventory:end -->')[0];
+  const tableFiles = [...generatedBlock.matchAll(/^\| `([^\n`]+\.ya?ml)` \|/gm)].map(([, file]) => file);
   assert.deepEqual(tableFiles, workflows.map(workflow => workflow.file));
 });
