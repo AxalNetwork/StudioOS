@@ -94,10 +94,11 @@ test('Ready is a filter over the stored mark, in the canvas\'s order (D4833-p2, 
   assert.match(section, /chips\(\[\['Draft', 1\], \['Ready'\], \['Sent', 1\], \['Opened', 1\], \['Accepted', 1\], \['All', 4\]\]/);
   const page = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
   assert.match(page, /filter === 'ready'/, 'the page that mounts the chip narrows on its key');
-  // The stale copy is gone; the true part (no file upload yet) stays.
+  // The stale copy is gone. #5961 (D4833-p3) took the "no file upload yet" half away
+  // when a version's document became a link or a stored file.
   const src = read('frontend/src/pages/advisor/practice/DeliveryZone.jsx');
-  assert.doesNotMatch(src, /There is no Ready filter|There is no Ready state/);
-  assert.match(src, /There is no file upload yet/);
+  assert.doesNotMatch(src, /There is no Ready filter|There is no Ready state|no file upload/);
+  assert.match(src, /A version&rsquo;s document is a web link or a stored file/);
 });
 
 // A draft v2 marked ready by Ada, over a v1 that was opened.
@@ -302,7 +303,7 @@ test('mounted: a recipient account that no longer reads back, or was never recor
   } finally { await m.close(); }
 });
 
-test('mounted: Add version needs a change note AND a document link; nothing empty is posted', async () => {
+test('mounted: Add version needs a change note AND a document; nothing empty is posted', async () => {
   // Mutation checked: dropping the link rule from `attachmentBody` posts a note-only version.
   const m = await mount((c) => {
     if (c.path === '/api/advisors/me/deliverables/4/versions') return json({ uid: 'n', version: 3, ...c.body }, 201);
@@ -314,7 +315,8 @@ test('mounted: Add version needs a change note AND a document link; nothing empt
     assert.ok(m.byTestId('add-version-form-4'));
     assert.match(m.text(), /Add version v3/);
     assert.match(m.text(), /Change note · required/);
-    assert.match(m.text(), /Document link · required/);
+    // #5961 (D4833-p3): the canvas's three fields, in its order.
+    assert.match(m.text(), /Change note · required.*Document or URL · required.*Summary · optional/);
     assert.match(m.text(), /Save v3 as draft/);
     await m.submit('add-version-form-4');
     assert.equal(m.writes().length, 0, 'an empty version is refused');

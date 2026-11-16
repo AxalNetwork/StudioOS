@@ -40,7 +40,8 @@ test('2. mounted: Set for a writer without a date, saving then re-reading; a fai
   // the error swallowed → no alert.
   const dated = await mountForm(h(MvpSummary, { facts: { done: 3, total: 7, blocked: 1, target_date: '2026-11-18', can_set_target: true }, save: async () => {} }));
   try {
-    assert.match(dated.text(), /3 of 7 must-haves complete\s*·\s*target 18 Nov 2026\s*·\s*1 blocked/);
+    // D6022 (#6022): a writer's recorded date offers Change in Set's place.
+    assert.match(dated.text(), /3 of 7 must-haves complete\s*·\s*target 18 Nov 2026\s*Change\s*·\s*1 blocked/);
     assert.equal(dated.by('mvp-summary-set'), undefined, 'a recorded date offers no Set');
     const bar = dated.nodes().find((n) => propsOf(n).role === 'progressbar');
     assert.deepEqual([propsOf(bar)['aria-valuenow'], propsOf(bar)['aria-valuemax']], [3, 7]);

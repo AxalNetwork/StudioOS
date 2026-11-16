@@ -25,13 +25,17 @@ import {
   GB, D1_LIMIT_BYTES_DEFAULT, D1_WARN_BYTES_DEFAULT, D1_CRIT_BYTES_DEFAULT, D1_HYSTERESIS_BYTES,
   QUEUE_AGE_WARN_S, levelFor, overallLevel, d1Policy, readD1Size, readQueue, readPlatformCapacity,
 } from '../src/services/platformCapacity.ts';
+import { SETTLED_WITHOUT_USAGE_SQL } from '../src/services/platformCapacitySignals.ts';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const NOW = new Date('2026-11-06T12:00:00Z');
 
 function d1(sizeAfter: unknown, opts: { throws?: boolean; hang?: boolean } = {}) {
   return {
-    prepare: (sql: string) => ({
+    // The settlement count (D4569): none missing, unless the database is down.
+    prepare: (sql: string) => sql === SETTLED_WITHOUT_USAGE_SQL ? {
+      bind: () => ({ first: async () => { if (opts.throws) throw new Error('D1_ERROR: secret detail'); return { n: 0 }; } }),
+    } : ({
       run: async () => {
         assert.equal(sql, 'SELECT 1');
         if (opts.throws) throw new Error('D1_ERROR: secret detail');

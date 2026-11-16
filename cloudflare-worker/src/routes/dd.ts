@@ -1871,6 +1871,13 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
   if (!item) return c.json({ error: 'Checklist item not found on this case' }, 404);
   const seen = await visibleSections(c.env, cs, user);
   if (seen && !seen.has(Number(item.section_id))) return c.json({ error: 'You are not assigned to this section' }, 403);
+  // #6290: an observer reads a section and adds nothing to it, as the item PATCH refuses them.
+  if (user.role !== 'admin' && !leadsOrOpened(user, cs)) {
+    const r = await c.env.DB.prepare('SELECT role FROM dd_reviewers WHERE case_id = ? AND section_id = ? AND user_id = ?')
+      .bind(caseId, item.section_id, user.id).all<{ role: string | null }>();
+    const roles = (r.results || []).map((x) => x.role || 'reviewer');
+    if (roles.length && roles.every((x) => x === 'observer')) return c.json({ error: 'An observer reads this section and does not work its checklist.', code: 'observer_reads_only' }, 403);
+  }
 
   const uid = genUid();
   const at = new Date().toISOString();

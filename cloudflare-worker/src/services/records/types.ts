@@ -26,6 +26,7 @@ export type Row = {
 export type RecordSection = {
   key: string;
   title: string;
+  note?: string;
   gate: 'read' | 'write';
   rows: Row[];
   empty?: string;
@@ -37,6 +38,7 @@ export type RecordSection = {
 export type SectionSpec = {
   key: string;
   title: string;
+  note?: string;
   side?: boolean;
   gate?: Gate;
   /** Required when a custom gate represents a writer-only section. */
@@ -71,8 +73,10 @@ export type RecordContent = {
   title: string;
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
-  /** #4411: interviews add a fifth fact to distinguish recording from quote permission. */
-  facts: [RecordFact, RecordFact, RecordFact, RecordFact] | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
+  /** Competitors show three facts (#6015). Interviews add a fifth for quote permission (#4411). */
+  facts: [RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact]
+    | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
   /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
   uid?: string;
   createdBy?: number | null;
@@ -102,6 +106,11 @@ export type RecordAction = {
   form?: RecordForm;
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
+  /**
+   * D6101 (#6101): run only from a section row that names it with its body (a KPI
+   * entry's Remove); the page draws no header or Actions button for it.
+   */
+  row_only?: boolean;
   /**
    * D5375: fields the client sends back with the form's values, as read with this record. Edit split
    * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.
