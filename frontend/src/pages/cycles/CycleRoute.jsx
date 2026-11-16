@@ -55,7 +55,7 @@ import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
-import { cellView, cycleOf, linkEvidenceAction } from './cycleModel';
+import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
@@ -268,7 +268,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   const data = raw ? availableRecord(raw, edit) : null;
   const selected = raw && typeof location.state?.editing === 'string'
     ? rowAction(location.state.editingPayload?.record === key
-      ? { key: location.state.editing, body: location.state.editingPayload.body } : location.state.editing, declarations) : null;
+      ? { key: location.state.editing, body: location.state.editingPayload.body, values: location.state.editingValues } : location.state.editing, declarations) : null;
   const formSpec = selected ? recordFormFor(selected, raw, edit) : null;
   const closeForm = () => {
     if (currentKey.current !== key) return;
@@ -303,7 +303,7 @@ export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId
   return {
     status: state?.status ?? 'loading', data, error: state?.error, activity: state?.activity, actionError,
     link: action => { if (action.href?.startsWith('mailto:')) window.location.href = action.href; else navigate(action.href); },
-    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body } } }),
+    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body }, editingValues: action.values } }),
     write,
     client: action => { Promise.resolve().then(() => CLIENT_ACTIONS.get(action.key)?.(raw)).catch(error => {
       if (currentKey.current === key) setActionError(error?.message || 'The export could not be created.');
@@ -492,7 +492,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [canReadDecisions, setCanReadDecisions] = useState(true);
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
 
-  const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
+  // D6001 (#6001): a next link's `?filter=` opens the table filtered to the rows it names.
+  const [query, setQuery] = useState(() => queryFromSearch(location.search));
   const [reload, setReload] = useState(0);
   const partRefresh = useRef(null);
   const reloadPart = (options) => {
@@ -571,7 +572,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
   // read below (its dependency is `query`), so every module page read its module twice when it opened.
   useEffect(() => {
-    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+    const opening = queryFromSearch(location.search);
+    setQuery((cur) => (cur.q === '' && !cur.sort && cur.page === 1 && JSON.stringify(cur.filter || {}) === JSON.stringify(opening.filter) ? cur : opening));
+    // The address is read as the module opens; the table's own controls change the query after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
@@ -919,6 +923,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // under the records, with the cycle's action as its Connect or manage tools; elsewhere, as children.
     const parts = moduleStatus === 'ready' ? fnOf(def.parts, slug)?.(module, { projectId, reload: reloadPart, openAction, query, openDialog, role: user?.role ?? null }) : null;
     const moduleSources = def.sourcesRegion ? parts : null;
+    // D6001 (#6001): what a def's own Add and row control are handed: the venture, the page's one dialog, a re-read, and whether this viewer writes.
+    const defCtx = { projectId, openDialog, reload: () => setReload((n) => n + 1), canWrite: module?.parts?.can_write === true };
+    const defRowAction = fnOf(def.rowActions, slug);
     // D6049 (#6049, RA-16): a module that owns its page (`def.homes`): its body replaces the generic chart and
     // table, its line is the header's, and its Bands fold the page's Eadwyn bands. Drawn while the read loads too.
     const home = fnOf(def.homes, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1) }) ?? null;
@@ -942,15 +949,17 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         query={query}
         onQuery={setQuery}
         action={action}
+        // D6001 (#6001): a def's Add may open a dialog of its own (Customer research's Add a lead).
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
-          : fnOf(def.add, slug)?.(q, openAction)}
+          : fnOf(def.add, slug)?.(q, openAction, defCtx)}
         lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         // D6124 (#6124): Export beside Add, where the Worker says this viewer may export this table.
         onExport={def.exportRecords && projectId && !narrativeAdmin
           ? () => def.exportRecords(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort })
           : cycle === 'grow' && projectId && read?.exportable === true
             ? () => cyclesApi.growExport(projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort }) : undefined}
+        // D6001 (#6001): a module with no Edit may name its own row control (Customer research's Move stage).
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -958,7 +967,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           // #6030 (BD7): a feature with no evidence offers Link evidence: the same Edit, focused on the link fields.
           ...linkEvidenceAction(row, cellView(row?.cells?.[recs?.cols?.[0]?.key]),
             () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id), editingFocus: 'pain_group_id' } })),
-        }) : undefined}
+        }) : !narrativeAdmin && !edit && projectId && defRowAction ? (row) => defRowAction(row, defCtx) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
