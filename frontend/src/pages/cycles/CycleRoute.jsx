@@ -52,7 +52,7 @@ import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
 import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
-import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
 import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
@@ -437,7 +437,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
   const formOpen = adding && forms.length && !capTableAdding ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
   const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
-  const phone = usePhoneWidth();
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) draws its desktop pages, laid
+  // out for 768px to 1023px, in place of the phone page there; below 768px it is the phone page, as every
+  // other cycle is below 1024px.
+  const tablet = useTabletWidth(def?.tabletPages === true);
+  const phone = usePhoneWidth() && !tablet;
   // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
   // URL becomes `/new`, the rest of the query kept. A module with no form, and
   // the overview, ignore it (D688).
@@ -481,11 +485,17 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const [overviewStatus, setOverviewStatus] = useState('loading');
   // D1466 (#3714, RO15): a 403 or 404 on the overview is a refusal, drawn as the Worker's sentence.
   const [overviewMessage, setOverviewMessage] = useState('');
-  const [module, setModule] = useState(null);
+  const moduleKey = `${cycle}:${slug}:${projectId}`;
+  const [moduleRead, setModule] = useState(null);
+  // A venture change renders before the read effect runs. Never pair the
+  // previous response with the new venture's action handlers.
+  const currentModule = moduleRead?.key === moduleKey;
+  const module = currentModule ? moduleRead.data : null;
   // #3938 GR17 (D1478 part 9): the Partner network's "Rank by fit" answer, a view of the rows read; any new read puts the list back.
   const [partnerRank, setPartnerRank] = useState(null);
   useEffect(() => { setPartnerRank(null); }, [module, slug]);
-  const [moduleStatus, setModuleStatus] = useState('loading');
+  const [readModuleStatus, setModuleStatus] = useState('loading');
+  const moduleStatus = currentModule ? readModuleStatus : 'loading';
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
   const [moduleMessage, setModuleMessage] = useState('');
   // D693 decision 7: false once a Validate read says the viewer may not read
@@ -637,12 +647,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       .then((data) => {
         if (!alive) return;
         if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
-        setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready');
+        setModule({ key: moduleKey, data: adaptModule(cycle, slug, data) }); setModuleMessage(''); setModuleStatus('ready');
       })
       // A 403 is a refusal, not a failure (D693 decision 7: "Partners do not
       // see decisions."), so it is drawn as the Worker's sentence, with no Retry.
       .catch((error) => {
         if (!alive) return;
+        setModule({ key: moduleKey, data: null });
         if (error?.status === 403) {
           if (slug === 'verdict') setCanReadDecisions(false);
           setModuleMessage(error?.message || ''); setModuleStatus('refused');
@@ -1020,7 +1031,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}
