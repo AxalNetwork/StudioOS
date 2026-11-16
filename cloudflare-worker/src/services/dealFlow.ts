@@ -17,6 +17,7 @@ import type { Env, User } from '../types';
 import { PASS_REASON_KEYS, PASS_TAXONOMY } from './dealPassTaxonomy';
 import { dealAudience, dealAudiences } from './dealAccess';
 import { notifyInvitationAnswer } from './dealInvitationAnswer';
+import { dealHiddenFrom } from './dealPreparation';
 
 export const STAGES = ['sourcing', 'screening', 'diligence', 'commit', 'closing', 'passed'] as const;
 export type Stage = typeof STAGES[number];
@@ -78,6 +79,8 @@ async function liveDeal(env: Env, dealId: number) {
   const row = await env.DB.prepare('SELECT d.id FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND p.deleted_at IS NULL')
     .bind(dealId).first<{ id: number }>();
   if (!row) throw new FlowError('deal_not_found', 404, 'No deal has that number.');
+  // D5454: a deal that is not listed is answered as one that does not exist.
+  if (await dealHiddenFrom(env, dealId, 'discovery')) throw new FlowError('deal_not_found', 404, 'No deal has that number.');
 }
 
 /** Closing follows a commitment: this investor's, or a seat's in the same firm, not withdrawn. */

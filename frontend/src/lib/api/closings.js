@@ -24,6 +24,9 @@ export const closingsApi = {
   /** {kind, source_ref}: the source names a stored record by its id (mercury:<id>, deal_transfer:<uid>, file:<key>). */
   addEvidence: (uid, lineUid, body) => post(`${line(uid, lineUid)}/evidence`, body),
   withdrawEvidence: (uid, evidenceUid, reason) => post(`${at(uid)}/evidence/${encodeURIComponent(evidenceUid)}/withdraw`, { reason }),
+  /** D6198: the investor's own "I have sent it", {sent_on, amount_cents, reference?}: Sent, not yet confirmed, never Received. */
+  declareSent: (uid, lineUid, body) => post(`${line(uid, lineUid)}/declaration`, body),
+  withdrawDeclaration: (uid, lineUid) => post(`${line(uid, lineUid)}/declaration/withdraw`),
   acceptCaptable: (uid) => post(`${at(uid)}/captable/accept`),
   dismissCaptable: (uid) => post(`${at(uid)}/captable/dismiss`),
   complete: (uid) => post(`${at(uid)}/complete`),

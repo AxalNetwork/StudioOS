@@ -11,7 +11,8 @@
  */
 import React from 'react';
 import {
-  NOT_INSTRUMENTED, NOT_ON_LEDGER, attentionCell, notInstrumentedCell, renewalCell, requestsCell, territoryCell,
+  ATTENTION_FILTERS, NOT_INSTRUMENTED, NOT_ON_LEDGER, RENEWAL_WINDOWS, TERRITORY_NONE, attentionCell, notInstrumentedCell,
+  renewalCell, requestsCell, territoryCell,
 } from '../licenceLedgerModel';
 import { STATUS_TONE, Chip } from './licenceShared';
 
@@ -106,6 +107,35 @@ export function CountsAndNeeds({ counts, countsUnavailable, onRetry, needs, chos
 }
 
 const COLUMNS = ['Licence / studio', 'Territory', 'Status', 'Renewal', 'Agreement', 'Branch', 'Requests', 'Billing', 'Attention'];
+
+const MENU = 'min-h-[32px] rounded-md border border-gray-300 bg-white px-2 text-xs font-semibold text-gray-800 '
+  + 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 '
+  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:focus-visible:outline-indigo-400';
+
+/**
+ * D5919 (#5919): the canvas's Territory, Renewal window and Attention menus (L01, L02), native selects so the
+ * keyboard and screen readers work as they do everywhere, each with a visible focus ring. They filter the loaded
+ * rows from the reads the ledger already makes; the page keeps the choice in the address.
+ */
+export function LedgerMenus({ menus, territories, onChange }) {
+  return (
+    <>
+      <select value={menus.territory} onChange={(e) => onChange({ territory: e.target.value })} aria-label="Territory" className={MENU} data-testid="licence-territory-filter">
+        <option value="">Every territory</option>
+        {territories.map((t) => <option key={t} value={t}>{t}</option>)}
+        <option value={TERRITORY_NONE}>No territory</option>
+      </select>
+      <select value={menus.renewal} onChange={(e) => onChange({ renewal: e.target.value })} aria-label="Renewal window" className={MENU} data-testid="licence-renewal-filter">
+        <option value="">Any renewal</option>
+        {RENEWAL_WINDOWS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+      </select>
+      <select value={menus.attention} onChange={(e) => onChange({ attention: e.target.value })} aria-label="Attention" className={MENU} data-testid="licence-attention-filter">
+        <option value="">Any attention</option>
+        {ATTENTION_FILTERS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+      </select>
+    </>
+  );
+}
 
 function Identity({ l, onOpen, stretch = false }) {
   return (
