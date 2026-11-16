@@ -77,7 +77,7 @@ async function mount(props, w) {
     return h(NewLicenceStep, { step, licence, onLicence: setLicence, onStep: setStep });
   }
   await act(async () => root.render(h(Host)));
-  const flush = () => act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const nodes = () => walk(container);
