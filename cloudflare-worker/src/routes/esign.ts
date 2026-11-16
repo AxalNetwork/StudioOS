@@ -39,6 +39,7 @@
  *  - The R2 bucket is private; signed PDFs are streamed through the worker
  *    via gated downloads. No presigned URLs are issued.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireStepUp, requireSuperAdmin } from '../auth';
@@ -791,8 +792,12 @@ export async function createAndSendEnvelope(
 // Reads are scoped separately, in services/tenancyScope.ts.
 esign.post('/send', async (c) => {
   const sender = await requireAuth(c);
-  await ensureSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
+  if (body?.deal_id) {
+    const previewRefusal = investorPreviewRefusal(c, sender);
+    if (previewRefusal) return previewRefusal;
+  }
+  await ensureSchema(c.env);
   const documentType = String(body?.document_type || '').trim();
   const recipientEmail = String(body?.recipient_email || '').trim().toLowerCase();
   const recipientName = String(body?.recipient_name || '').trim();
@@ -982,6 +987,8 @@ esign.post('/staged/preview', async (c) => {
 
 esign.post('/staged', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   await ensureSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const { createStaged } = await import('../services/stagedSigning');
@@ -1007,6 +1014,8 @@ esign.get('/staged/:uid', async (c) => {
 // returned to them alone.
 esign.post('/staged/:uid/countersign', async (c) => {
   const superAdmin = await requireSuperAdmin(c);
+  const previewRefusal = investorPreviewRefusal(c, superAdmin);
+  if (previewRefusal) return previewRefusal;
   await requireStepUp(c);
   await ensureSchema(c.env);
   const { releaseCountersign } = await import('../services/stagedSigning');

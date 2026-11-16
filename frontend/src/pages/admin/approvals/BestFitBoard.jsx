@@ -26,7 +26,7 @@ import {
  * Worker allows are offered, each sends the version that was read, and a 409
  * redraws from the Worker's `current` row and never says someone else
  * decided. A Confirm field's slot time is sent only with text and survives
- * every failure. Nobody is told: that waits on the owner (#5886). The report
+ * every failure. Confirm and Cancel tell the member in app (D5886); Complete tells nobody. The report
  * is Recorded or Not recorded only (option A).
  */
 
@@ -52,8 +52,8 @@ function BestFitDialog({ to, row, slot, setSlot, onClose, onDone, onStale }) {
     setBusy(true);
     setFailed(null);
     try {
-      await adminConsultationsApi.decide(row.id, decisionBody(to, row, slot));
-      onDone(to);
+      const reply = await adminConsultationsApi.decide(row.id, decisionBody(to, row, slot));
+      onDone(to, reply?.notified);
     } catch (e) {
       const r = refusalOf(e);
       setFailed(r);
@@ -137,7 +137,7 @@ function BestFitDrawer({ id, onClose, onDecided, own, step, from }) {
     setCurrent(null);
     setDialog(to);
   };
-  const done = (to) => { setDialog(null); setSlot(null); read.reload(); onDecided(doneText(to, held.current), to); };
+  const done = (to, notified) => { setDialog(null); setSlot(null); read.reload(); onDecided(doneText(to, held.current, notified), to); };
   const decisions = shown ? decisionsFor(shown.status) : [];
   return (
     <>
@@ -153,7 +153,7 @@ function BestFitDrawer({ id, onClose, onDecided, own, step, from }) {
                 ))}
               </div>
             ) : <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="bestfit-nothing-left">{NOTHING_LEFT}</p>}
-            <p className={`m-0 ${SUB}`} data-testid="bestfit-told">Nobody is told yet: the member is not notified by any decision here.</p>
+            <p className={`m-0 ${SUB}`} data-testid="bestfit-told">Confirming or cancelling tells the member in app. Completing tells nobody. Nothing is emailed.</p>
           </div>
         ) : null}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="bestfit-drawer-content">
@@ -295,7 +295,7 @@ function Board() {
               )}
             </div>
           )}
-          <p className={`m-0 px-3 py-2.5 ${SUB}`}>Members, topics, notes and slot times are the members’ own words. Nobody is told of a decision made here yet.</p>
+          <p className={`m-0 px-3 py-2.5 ${SUB}`}>Members, topics, notes and slot times are the members’ own words. Confirming or cancelling here tells the member in app.</p>
         </section>
       )}
       {at.item ? <BestFitDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={list.state === 'ready' ? boardStep(rows, String(at.item)) : null} from={from} /> : null}

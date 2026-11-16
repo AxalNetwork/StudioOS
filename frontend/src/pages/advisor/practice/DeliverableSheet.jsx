@@ -2,10 +2,11 @@ import React, { useId, useState } from 'react';
 import { Lightbox, Sheet } from '../../../ui';
 import { Field, Pill, Unrecorded, buttonClass, ghostButtonClass, inputClass } from '../expertise/kit';
 import {
-  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, readyAction, readyMark, receiptLine, recipientNote, sendConfirmation,
-  versionStatus, versionTag,
+  VERSION_STATUS_LABEL, VERSION_STATUS_TONE, readyAction, readyMark, receiptLine, recipientNote, sendConfirmation, versionDocument, versionDraft, versionStatus,
+  versionSummary, versionTag,
 } from './deliveryTrail';
-import { attachmentBody, sendPreview } from './practiceTools';
+import { sendPreview } from './practiceTools';
+import VersionFile, { FileChoice } from './VersionFile';
 
 /**
  * #4833 (D4833) — Practice v2 Delivery: one work product's detail sheet, its
@@ -21,18 +22,25 @@ import { attachmentBody, sendPreview } from './practiceTools';
  * WRITES GO THROUGH THE PAGE. The sheet and both dialogs call back into
  * `DeliveryZone`, which owns the reload and the success note; a refusal comes
  * back as a sentence and is shown in the dialog that caused it.
+ *
+ * #5961 (D4833-p3): a version shows its summary when one was recorded (D5959)
+ * and nothing for it when none was, and a stored file as its name, size and
+ * a Download (D5960). Both are facts of the version: nothing here edits them.
  */
 
-/** The document a version points at, as a link a reader can check. */
-function DocumentPreview({ link }) {
-  const href = typeof link === 'string' ? link.trim() : '';
-  let host = '';
-  let path = '';
-  try {
-    const u = new URL(href);
-    if (u.protocol === 'https:') { host = u.hostname; path = u.pathname === '/' ? '' : u.pathname; }
-  } catch { host = ''; }
-  if (!host) {
+/**
+ * The document a version points at: a stored file (name, size, Download), or
+ * a link a reader can check.
+ */
+function DocumentPreview({ version, onDownload = null, testid }) {
+  const doc = versionDocument(version);
+  if (doc?.kind === 'file') {
+    return (
+      <VersionFile name={doc.name} sizeLabel={doc.sizeLabel} testid={testid}
+        download={onDownload ? () => onDownload(version) : null} />
+    );
+  }
+  if (!doc) {
     return (
       <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
         No document attached to this version
@@ -40,11 +48,18 @@ function DocumentPreview({ link }) {
     );
   }
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener"
+    <a href={doc.href} target="_blank" rel="noreferrer noopener" data-testid={testid}
       className="block truncate rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100">
-      <span aria-hidden="true">↗ </span>{host}<span className="text-axal-faint dark:text-gray-400">{path}</span>
+      <span aria-hidden="true">↗ </span>{doc.host}<span className="text-axal-faint dark:text-gray-400">{doc.path}</span>
     </a>
   );
+}
+
+/** A version's summary (D5959) when one was recorded; nothing at all when not: the field is optional. */
+function VersionSummary({ version, testid, className }) {
+  const text = versionSummary(version);
+  if (!text) return null;
+  return <p data-testid={testid} className={className}>{text}</p>;
 }
 
 function StatusPill({ version }) {
@@ -124,7 +139,7 @@ function ReadyControl({ item, busy, onToggleReady }) {
  */
 export function DeliverableSheet({
   item, engagementName = null, busy = '', onClose, onAddVersion, onSend, onEdit, onToggleReady = null,
-  editing = false, children = null,
+  onDownloadFile = null, editing = false, children = null,
 }) {
   const latest = item.latest_version;
   const versions = Array.isArray(item.versions) ? item.versions : (latest ? [latest] : []);
@@ -145,7 +160,9 @@ export function DeliverableSheet({
             <p className="text-[13px]">
               {latest.summary ? `“${latest.summary}”` : <Unrecorded>No change note recorded</Unrecorded>}
             </p>
-            <DocumentPreview link={latest.link_url} />
+            <VersionSummary version={latest} testid={`latest-summary-${item.id}`}
+              className="text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-300" />
+            <DocumentPreview version={latest} onDownload={onDownloadFile} testid={`latest-document-${item.id}`} />
             <span className="text-[11px] tabular-nums text-axal-faint dark:text-gray-400">{receiptLine(latest)}</span>
             <ReadyMark version={latest} testid={`latest-ready-${item.id}`} />
             <RecipientNote item={item} version={latest} testid={`latest-recipient-note-${item.id}`} />
@@ -201,6 +218,15 @@ export function DeliverableSheet({
                     <p className="pl-16 text-[11.5px] text-axal-faint dark:text-gray-400">
                       {v.summary || <Unrecorded>No change note recorded</Unrecorded>}
                     </p>
+                    <div className="pl-16">
+                      <VersionSummary version={v} testid={`history-summary-${item.id}-v${v.version}`}
+                        className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-300" />
+                    </div>
+                    {versionDocument(v)?.kind === 'file' && (
+                      <div className="pl-16">
+                        <DocumentPreview version={v} onDownload={onDownloadFile} testid={`history-file-${item.id}-v${v.version}`} />
+                      </div>
+                    )}
                     <div className="pl-16"><ReadyMark version={v} testid={`history-ready-${item.id}-v${v.version}`} /></div>
                     <div className="pl-16"><RecipientNote item={item} version={v} testid={`recipient-note-${item.id}-v${v.version}`} /></div>
                   </li>
@@ -218,22 +244,27 @@ export function DeliverableSheet({
 }
 
 /**
- * PX-06 C — Add version. A change note and a document link are both
- * required: there is no one-click empty version (D4712). It saves the next
- * version unsent; sending is its own confirmed step.
+ * PX-06 C — Add version: "Change note · required", "Document or URL ·
+ * required", "Summary · optional". A change note and a document are both
+ * required: there is no one-click empty version (D4712). The document is a
+ * file or an https link, one of the two (D5960). It saves the next version
+ * unsent; sending is its own confirmed step. A file the Worker refuses (too
+ * large, not a PDF, JPEG or PNG) comes back as its sentence, and nothing is
+ * saved.
  */
 export function AddVersionDialog({ item, busy = false, onCancel, onSave }) {
-  const [draft, setDraft] = useState({ summary: '', link_url: '' });
+  const [draft, setDraft] = useState({ summary: '', link_url: '', version_summary: '', file: null });
   const [error, setError] = useState('');
   const formId = useId();
+  const fileId = useId();
   const next = Number(item.latest_version?.version || item.version_count || 0) + 1;
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
-    const res = attachmentBody(draft);
+    const res = versionDraft(draft);
     if (res.error) { setError(res.error); return; }
-    const refusal = await onSave?.(item, res.body);
+    const refusal = res.file ? await onSave?.(item, res.body, res.file) : await onSave?.(item, res.body);
     if (refusal) setError(refusal);
   };
 
@@ -253,9 +284,22 @@ export function AddVersionDialog({ item, busy = false, onCancel, onSave }) {
           <textarea rows={2} className={inputClass} value={draft.summary} data-testid={`add-version-note-${item.id}`}
             onChange={(e) => setDraft((d) => ({ ...d, summary: e.target.value }))} />
         </Field>
-        <Field label="Document link · required" hint="Where the client opens this version: a web address that starts with https://.">
-          <input className={inputClass} value={draft.link_url} placeholder="https://…" data-testid={`add-version-link-${item.id}`}
+        <div className="grid gap-1.5" role="group" aria-labelledby={`${fileId}-label`}>
+          <span id={`${fileId}-label`} className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint dark:text-gray-400">
+            Document or URL · required
+          </span>
+          <FileChoice file={draft.file} testid={`add-version-file-${item.id}`} buttonClass={ghostButtonClass}
+            onChoose={(f) => setDraft((d) => ({ ...d, file: f }))} />
+          <input className={inputClass} value={draft.link_url} placeholder="or https://…" aria-label="Document link"
+            data-testid={`add-version-link-${item.id}`} disabled={!!draft.file}
             onChange={(e) => setDraft((d) => ({ ...d, link_url: e.target.value }))} />
+          <span className="text-[11px] leading-relaxed text-axal-faint dark:text-gray-400">
+            A file, or a web address that starts with https:// where the client opens this version. One of the two.
+          </span>
+        </div>
+        <Field label="Summary · optional" hint="What this version says, for the client. Leave it empty if the note says enough.">
+          <textarea rows={2} className={inputClass} value={draft.version_summary} data-testid={`add-version-summary-${item.id}`}
+            onChange={(e) => setDraft((d) => ({ ...d, version_summary: e.target.value }))} />
         </Field>
         <p className="text-[11px] leading-relaxed text-axal-faint dark:text-gray-400">
           A version can’t be saved or sent without a note and a document. This saves <strong>v{next}, not sent</strong>;
@@ -297,10 +341,15 @@ export function SendConfirmDialog({ item, busy = false, onCancel, onConfirm }) {
           <dt className="text-axal-faint dark:text-gray-400">Document</dt>
           <dd data-testid={`send-confirm-document-${item.id}`}>
             {conf.document}
+            {conf.fileName && <span className="text-axal-faint dark:text-gray-400"> · file {conf.fileName}</span>}
             {conf.host && <span className="text-axal-faint dark:text-gray-400"> · opens {conf.host}</span>}
           </dd>
           <dt className="text-axal-faint dark:text-gray-400">Change note</dt>
           <dd>{conf.note || <Unrecorded>No change note recorded</Unrecorded>}</dd>
+          {conf.summary && <>
+            <dt className="text-axal-faint dark:text-gray-400">Summary</dt>
+            <dd data-testid={`send-confirm-summary-${item.id}`}>{conf.summary}</dd>
+          </>}
           <dt className="text-axal-faint dark:text-gray-400">After sending</dt>
           <dd>{conf.after}</dd>
         </dl>

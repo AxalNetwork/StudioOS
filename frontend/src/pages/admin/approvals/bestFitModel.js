@@ -9,8 +9,10 @@
  * `CONSULTATION_TRANSITIONS` (routes/consultations.ts), and a test reads that
  * file and holds the two to each other. Completed and Cancelled have none.
  *
- * NOBODY IS TOLD. Whether the member hears of a decision waits on the owner
- * (#5886); until then every dialog says so.
+ * WHO IS TOLD (D5886). Confirming or cancelling sends the member an in-app
+ * notice after the decision commits; completing tells nobody. The Worker
+ * answers `notified` (true, false, or null when nobody is told), and the
+ * result line says which. A failed notice never undoes the decision.
  */
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -174,7 +176,8 @@ export function decisionsFor(status) {
   }));
 }
 
-export const NOBODY_TOLD = 'Nobody yet. The member is not notified by this decision.';
+export const MEMBER_TOLD = 'The member, in app. Nothing is emailed.';
+export const NOBODY_TOLD = 'Nobody. Completion is not announced to the member.';
 export const NOTHING_LEFT = 'Nothing left to decide.';
 
 /** What a decision's dialog says: what changes, who is told and what is recorded. */
@@ -185,7 +188,7 @@ export function decisionCopy(to, row) {
     return {
       title: 'Confirm consultation', button: 'Confirm consultation',
       changes: `${who}’s consultation moves from ${from} to Confirmed. It leaves Requested.`,
-      told: NOBODY_TOLD,
+      told: MEMBER_TOLD,
       recorded: 'The decision, you and the time, in this consultation’s history and in Decided. A slot time, if you write one.',
     };
   }
@@ -200,7 +203,7 @@ export function decisionCopy(to, row) {
   return {
     title: 'Cancel consultation', button: 'Cancel consultation', dismiss: 'Keep consultation',
     changes: `${who}’s consultation moves from ${from} to Cancelled. This cannot be undone.`,
-    told: NOBODY_TOLD,
+    told: MEMBER_TOLD,
     recorded: 'The decision, you and the time, in this consultation’s history and in Decided.',
   };
 }
@@ -273,11 +276,15 @@ export function stripRows(list) {
 }
 
 /** The result line after a decision (AP-22c). */
-export function doneText(to, row) {
+export function doneText(to, row, notified) {
   const who = row?.who || 'The member';
-  if (to === 'confirmed') return `${who}’s consultation is confirmed. Moved to Confirmed. The member was not notified.`;
   if (to === 'completed') return `${who}’s consultation is marked completed. It is kept in history.`;
-  return `${who}’s consultation is cancelled. Moved to Cancelled. The member was not notified.`;
+  // D5886: the Worker's `notified`. Anything but true or false says the notice is not known, never that it went.
+  const told = notified === true ? 'The member was told in app.'
+    : notified === false ? 'The in-app notice could not be sent. The decision stands.'
+      : 'Whether the member was told is not known.';
+  if (to === 'confirmed') return `${who}’s consultation is confirmed. Moved to Confirmed. ${told}`;
+  return `${who}’s consultation is cancelled. Moved to Cancelled. ${told}`;
 }
 
 /** The empty tab (AP-26), drawn only on a read that succeeded. */

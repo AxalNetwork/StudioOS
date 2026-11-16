@@ -22,7 +22,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { readRoutesSource } from './_routesSource.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import {
-  BEST_FIT_TRANSITIONS, NOBODY_TOLD, bestFitAt, decisionBody, decisionCopy, decisionsFor, historyOf, listOf, refusalOf, rowOf, tabRows,
+  BEST_FIT_TRANSITIONS, MEMBER_TOLD, NOBODY_TOLD, bestFitAt, decisionBody, decisionCopy, decisionsFor, doneText, historyOf, listOf, refusalOf, rowOf, tabRows,
 } from '../src/pages/admin/approvals/bestFitModel.js';
 import { continueLine, reviewDestination } from '../src/pages/admin/approvals/inboxModel.js';
 import { decidedItemPath } from '../src/pages/admin/approvals/lanesDecidedModel.js';
@@ -168,8 +168,15 @@ test('history: the request, then each change with its actor and time; decided be
   assert.equal(unread.rows.length, 1, 'nothing is invented');
 });
 
-test('every dialog says nobody is told', () => {
-  for (const to of ['confirmed', 'completed', 'cancelled']) assert.equal(decisionCopy(to, rowOf(BOOKINGS[0])).told, NOBODY_TOLD, to);
+test('every dialog says who is told (D5886): the member in app on confirm and cancel, nobody on complete', () => {
+  assert.equal(decisionCopy('confirmed', rowOf(BOOKINGS[0])).told, MEMBER_TOLD);
+  assert.equal(decisionCopy('cancelled', rowOf(BOOKINGS[0])).told, MEMBER_TOLD);
+  assert.equal(decisionCopy('completed', rowOf(BOOKINGS[2])).told, NOBODY_TOLD);
+  // The result line reports the Worker's `notified`, and never claims a notice it was not told about.
+  assert.match(doneText('confirmed', rowOf(BOOKINGS[0]), true), /told in app/);
+  assert.match(doneText('cancelled', rowOf(BOOKINGS[0]), false), /could not be sent\. The decision stands/);
+  assert.match(doneText('confirmed', rowOf(BOOKINGS[0]), undefined), /not known/);
+  assert.doesNotMatch(doneText('completed', rowOf(BOOKINGS[2]), null), /told|notice/);
   assert.equal(decisionCopy('cancelled', rowOf(BOOKINGS[0])).dismiss, 'Keep consultation', 'never a second "Cancel"');
   assert.match(decisionCopy('completed', rowOf(BOOKINGS[2])).changes, /history, not a second approval/);
 });
@@ -232,19 +239,19 @@ test('mounted AP-26: an empty read that succeeded says nothing is waiting', asyn
 });
 
 test('mounted AP-21/22: a requested item offers Confirm and Cancel only, and Confirm sends the version read with the typed slot', async () => {
-  const v = await mount('/admin/approvals/best-fit/41', { post: () => json({ booking: { ...BOOKINGS[0], status: 'confirmed', version: 2 } }) });
+  const v = await mount('/admin/approvals/best-fit/41', { post: () => json({ booking: { ...BOOKINGS[0], status: 'confirmed', version: 2 }, notified: true }) });
   try {
     assert.deepEqual(v.ids('bestfit-action-'), ['bestfit-action-confirmed', 'bestfit-action-cancelled']);
     assert.match(v.of('bestfit-fact-report'), /✓ Recorded/);
     assert.match(v.of('bestfit-history'), /Requested by the member/);
     assert.match(v.of('bestfit-history-none'), /No decision yet/);
-    assert.match(v.of('bestfit-told'), /Nobody is told yet/);
+    assert.match(v.of('bestfit-told'), /tells the member in app/);
     await v.click('bestfit-action-confirmed');
-    assert.equal(v.of('bestfit-dialog-confirmed-told'), NOBODY_TOLD);
+    assert.equal(v.of('bestfit-dialog-confirmed-told'), MEMBER_TOLD);
     await v.change('bestfit-dialog-confirmed-slot', 'Thu 19 Nov, 15:00 UTC');
     await v.click('bestfit-dialog-confirmed-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/consultations/41/status', body: { status: 'confirmed', expected_version: 1, slot_at: 'Thu 19 Nov, 15:00 UTC' } }]);
-    assert.match(v.of('board-done'), /confirmed.*not notified.*View in Decided/s);
+    assert.match(v.of('board-done'), /confirmed.*told in app.*View in Decided/s);
   } finally { await v.unmount(); }
 });
 

@@ -80,7 +80,9 @@ export function slaBand(sla) {
   return { key: 'ok', label: 'Under 24 hours', tone: null };
 }
 
-const LANE_BY_KEY = Object.fromEntries([...LANES.map((l) => [l.key, l]), ...HQ_LANES.map((l) => [l.key, { ...l, group: 'hq' }])]);
+// D5880: every lane the UI names, with its group (`hq` for HQ's own), exported so
+// `approval_lanes_registry_5880.test.mjs` holds it to the Worker's registry.
+export const LANE_BY_KEY = Object.fromEntries([...LANES.map((l) => [l.key, l]), ...HQ_LANES.map((l) => [l.key, { ...l, group: 'hq' }])]);
 const groupLabel = (g) => (g === 'hq' ? HQ_GROUP.label : GROUPS.find((x) => x.key === g)?.label || null);
 export const laneLabelOf = (key, fallback) => LANE_BY_KEY[key]?.label || fallback || key;
 

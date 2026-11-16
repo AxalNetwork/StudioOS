@@ -16,6 +16,7 @@ of `.github/workflows/deck-visual.yml`.
 | `deck_editor.visual.spec.js` | The screenshots (17 structures × themes × 2 aspects, and the one-click deck) and the axe checks (light, dark, the keyboard path, the Ask dialog, phone and tablet). |
 | `__screenshots__/` | The baselines. CI writes them in the pinned container and commits them; never add one made on a laptop. |
 | `grow_overview_4862.spec.mjs` | #4862: sparse/active overview, Share lightbox, failed-read retry and read-only states at desktop and phone widths. |
+| `build_overview_6028.spec.mjs` | D6028 (#6028): Build Overview V2 at 1440, 768 and 390 in light and dark: one primary, no header Connect a tool, no horizontal scroll, and a failed part retrying alone. |
 
 | `template_previews_5218.spec.mjs` | #5218: New Deck and Gallery previews, saved versions, plan locks, template structure and visible-only loading at desktop and phone widths. |
 | `revenue_completion_5039.spec.mjs` | #5039: Stream filtering, native invoice figures, governed dispute/due-date receipts, lazy history and checkout read-back at desktop, 834, 390 and dark; unknown replay and stale-period responses. |
@@ -55,6 +56,9 @@ and StudioHome at `/raise/pitch`).
 | `_fund_admin_seed.ts` | What `server.ts` seeds for that spec, read through the real routes as HQ Security's Super Admin: one fund with three LPs, an overdue call line, fee periods, a prepared pack and two bank matches. Made-up names |
 | `hq_support_5035.spec.mjs` | D5035: keyboard decisions and focus restoration, history after reload, and the ticket queue and subsidiary matrix at 390 and 1280 pixels. |
 | `public_nav_accessibility_5512.spec.mjs` | #5512: computed module-label contrast, Network Escape focus and Tab order, pointer/native-link behavior and mobile navigation. |
+| `pricing_entitlements_4653.spec.mjs` | D4653: actual public catalogue capacity defaults in desktop/phone comparisons and FAQ, and the per-licence charging unit carried into signup; synthetic prices and no payment. |
+
+| `prospect_paging_6316.spec.mjs` | #6316: real Worker/SPA reads 250 prospects at desktop and phone widths after an edit between pages; no duplicate or skipped cards. |
 
 ### Run it
 
