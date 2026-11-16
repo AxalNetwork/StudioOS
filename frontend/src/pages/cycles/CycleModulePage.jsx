@@ -1,6 +1,8 @@
 import { Children, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
+import { BuildStateTag } from './BuildStates.jsx';
+import { cellState } from './buildSystemStates.js';
 import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
@@ -54,7 +56,10 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
   // D1327: a provenance cell is Fill with Eadwyn's one mark.
   if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
   const v = cellView(cell);
-  if (v.nr) return <span className={NR}>Not recorded</span>;
+  // D4846 part 2 (#6032, BD14 A): a cell that is a state (Not recorded, Not expected yet, Unavailable, Waiting,
+  // Needs attention, Read only) draws that state's one chip, so none carries another's weight.
+  const st = cellState(cell);
+  if (st) return <BuildStateTag state={st.state} label={st.label} />;
   // #6030: several links, each its own record (a pain theme, a hypothesis), drawn apart.
   if (!plain && v.links) {
     return <span className="flex flex-wrap gap-x-2 gap-y-0.5" data-testid="cell-links">{v.links.map((l, i) => (l.href
