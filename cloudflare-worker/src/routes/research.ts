@@ -90,6 +90,7 @@ import { createReport, fieldErrorSentence, patchReport, readIfMatch, type FieldE
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, projectNdaActive, logAccess } from './data_room';
+import { reconcileRoomRefs } from '../services/roomLibrary';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { investorHasDealRelationship } from '../services/dealAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
@@ -177,7 +178,31 @@ interface DocRow {
  * which is true, and is a sharper version of the artboard's own point that index
  * state is Ask's reach. D37 is untouched.
  */
-const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null) => ({
+/**
+ * D6869: a Library row that is a data-room reference carries its room: the room's name and uid, when it was added,
+ * and, once its grant no longer reaches the file, when and why (`revoked`, `expired`, `nda_lapsed`, `removed`,
+ * `moved`, `library_off`). It is read only, and it is never downloaded from here: the room's own download, with its
+ * log and its NDA gate, is the one path to its bytes.
+ */
+type RoomRef = { project_uid: string | null; project_name: string | null; added_at: string; lost_at: string | null; lost_reason: string | null };
+const roomDto = (ref: RoomRef | null | undefined) => (ref ? {
+  project_uid: ref.project_uid, project_name: ref.project_name, added_at: ref.added_at, lost_at: ref.lost_at, lost_reason: ref.lost_reason,
+} : null);
+async function roomRefsOf(env: Env, userId: number): Promise<Map<number, RoomRef>> {
+  const rows = await env.DB.prepare(
+    `SELECT r.document_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
+       FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.owner_user_id = ?`,
+  ).bind(userId).all<any>().catch(() => ({ results: [] as any[] }));
+  return new Map((rows.results || []).map((x: any) => [Number(x.document_id), x as RoomRef]));
+}
+async function roomRefOfDoc(env: Env, documentId: number): Promise<RoomRef & { project_id: number; file_id: number } | null> {
+  return env.DB.prepare(
+    `SELECT r.project_id, r.file_id, r.added_at, r.lost_at, r.lost_reason, p.uid AS project_uid, p.name AS project_name
+       FROM research_room_refs r LEFT JOIN projects p ON p.id = r.project_id WHERE r.document_id = ?`,
+  ).bind(documentId).first<any>().catch(() => null);
+}
+
+const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | null = null, room: RoomRef | null = null) => ({
   uid: r.uid,
   title: r.title,
   kind: r.kind,
@@ -197,7 +222,9 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   // route's — a shared document's uid is not in the caller's own set, so every
   // write path 404s on it already — and a second copy of it in the client would
   // be the place the two disagree.
-  read_only: source === 'client',
+  read_only: source === 'client' || Boolean(room),
+  // D6869: where a data-room reference came from, and whether its grant still reaches it.
+  room: roomDto(room),
   // What Ask can actually reach. An own document is answerable when it is
   // indexed; a shared one never is, because it is indexed somewhere else.
   // D4605: a partly indexed document answers from the passages it has.
@@ -297,6 +324,9 @@ async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row
 
 research.get('/documents', async (c) => {
   const user = await requireAuth(c);
+  // D6869: lapse any data-room reference whose grant no longer reaches its file before the list is read.
+  await reconcileRoomRefs(c.env, user.id).catch(() => 0);
+  const refs = await roomRefsOf(c.env, user.id);
   const rows = await c.env.DB.prepare(
     `SELECT * FROM research_documents WHERE owner_user_id = ? ORDER BY created_at DESC LIMIT 500`
   ).bind(user.id).all<DocRow>();
@@ -345,7 +375,7 @@ research.get('/documents', async (c) => {
   ).bind(user.id).all<DocRow & { project_name: string | null }>();
 
   const items = [
-    ...(rows.results || []).map((r) => dto(r, 'own')),
+    ...(rows.results || []).map((r) => dto(r, 'own', null, refs.get(Number(r.id)) ?? null)),
     ...(shared.results || []).map((r) => dto(r, 'client', r.project_name ? `From ${r.project_name}` : 'From client')),
   ];
   return c.json({
@@ -378,6 +408,8 @@ research.get('/documents', async (c) => {
     // means: this is provenance (migration 222), NOT `kind = 'client'`, which
     // is what a document is about.
     from_clients: items.filter((i) => i.source === 'client').length,
+    // D6869 (RS-14): the From data rooms source, live and lapsed alike.
+    from_rooms: items.filter((i) => i.room).length,
     score_floor: SCORE_FLOOR,
   });
 });
@@ -403,6 +435,8 @@ research.post('/documents/:uid/reindex', async (c) => {
   // Already queued. Re-queuing would put a second job behind the first for the
   // same file, and the page would report "reading" either way.
   if (doc.index_state === 'pending') return c.json({ detail: 'already_queued' }, 409);
+  // D6869: a lapsed data-room reference is not indexed again; its grant no longer reaches the file.
+  if ((await roomRefOfDoc(c.env, doc.id))?.lost_at) return c.json({ detail: 'source_no_longer_available', message: 'Your access no longer reaches this file, so it cannot be read again.' }, 409);
   await c.env.DB.prepare(
     `UPDATE research_documents
         SET index_state = 'pending', index_note = NULL, updated_at = datetime('now')
@@ -499,6 +533,8 @@ research.patch('/documents/:uid', async (c) => {
   const user = await requireAuth(c);
   const row = await ownDoc(c.env, user.id, c.req.param('uid'));
   if (!row) return c.json({ detail: 'not_found' }, 404);
+  // D6869: a data-room reference is read only; its name is the room's.
+  if (await roomRefOfDoc(c.env, row.id)) return c.json({ detail: 'room_reference_read_only', message: 'This file is the room’s. You can remove it from your Library; you cannot edit it.' }, 409);
   const body = await c.req.json().catch(() => null);
   if (!body || !['title', 'kind', 'source_year'].some((key) => Object.prototype.hasOwnProperty.call(body, key))) {
     return c.json({ detail: 'metadata_required' }, 400);
@@ -530,6 +566,11 @@ research.get('/documents/:uid/download', async (c) => {
   const readable = await readableDoc(c.env, user.id, c.req.param('uid'));
   if (!readable) return c.json({ detail: 'Not found' }, 404);
   const row = readable.row;
+  // D6869: a data-room reference is opened in the room, through its own download, log and NDA gate; never from here.
+  const room = readable.source === 'own' ? await roomRefOfDoc(c.env, row.id) : null;
+  if (room) {
+    return c.json({ detail: 'open_in_room', message: 'Open this file in the data room it came from.', project_uid: room.lost_at ? null : room.project_uid }, 409);
+  }
   // The shipped, audited path: one-time HMAC token, TTL clamped to 300s, jti
   // consumed in KV, every hit written to activity_logs by routes/files.ts.
   // Deliberately NOT an S3 presigned URL — wrangler.toml says why for this
@@ -573,6 +614,20 @@ research.delete('/documents/:uid', async (c) => {
   // every other write path in this file, by construction. There is nothing to
   // guard because there is nothing to reach.
   if (!row) return c.json({ detail: 'Not found' }, 404);
+
+  // D6869: removing a data-room reference never deletes the room's file. Its index entries and the row go, and
+  // the room's activity records the Remove while the room still has the file.
+  const room = await roomRefOfDoc(c.env, row.id);
+  if (room) {
+    await deleteChunkedEntity(c.env, 'research_doc', row.id, row.chunk_count);
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM research_room_refs WHERE document_id = ?').bind(row.id),
+      c.env.DB.prepare('DELETE FROM research_documents WHERE id = ?').bind(row.id),
+    ]);
+    const still = await c.env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(room.file_id, room.project_id).first();
+    await logAccess(c.env, Number(room.project_id), user.id, 'library_remove', still ? Number(room.file_id) : null);
+    return c.json({ ok: true });
+  }
 
   // VECTORS FIRST, and the order is the point: if the row went first, its
   // `chunk_count` would be gone and the chunk ids could never be named again,
@@ -1132,6 +1187,8 @@ export function citationOf(p: EligiblePassage, documentUid: string) {
 
 research.post('/ask', async (c) => {
   const user = await requireAuth(c);
+  // D6869: a data-room reference whose grant no longer reaches its file is unindexed before Ask searches.
+  await reconcileRoomRefs(c.env, user.id).catch(() => 0);
   const body = await c.req.json().catch(() => ({} as any));
   const question = String(body?.question || '').trim().slice(0, 1000);
   if (!question) return c.json({ detail: 'question_required' }, 400);
