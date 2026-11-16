@@ -24,8 +24,9 @@ import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
+import { SEARCH_CONSOLE_READ_SCOPES } from './searchConsoleOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
-import { TIKTOK_FEEDS } from './tiktokFeeds';
+import { TIKTOK_BUILT_FEEDS, TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
@@ -639,6 +640,14 @@ export const REGISTRY: ProviderDescriptor[] = [
     audience_rule: 'venture', docs_url: 'https://developers.tiktok.com/docs/en/login-kit-web',
     icon: 'Video', oauth_scopes: [...TIKTOK_READ_SCOPES],
   },
+  // D5839 (#5839): Search Console, read only, through its own Google OAuth client; one chosen property per venture.
+  {
+    key: 'google_search_console', display_name: 'Google Search Console', integration_type: 'data_feed',
+    description: 'Your Search Console properties, read only, through Google’s own sign-in: each company reads one property you choose. It never changes a property, its owners or its settings.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developers.google.com/webmaster-tools/v1/how-tos/authorizing',
+    icon: 'Search', oauth_scopes: [...SEARCH_CONSOLE_READ_SCOPES],
+  },
   {
     key: 'beehiiv', display_name: 'Beehiiv', integration_type: 'data_feed',
     description: 'Your newsletter on Beehiiv, read only, through Beehiiv’s own sign-in: each company reads one publication you choose. It reads audience and post figures, never your subscribers’ addresses.',
@@ -653,8 +662,10 @@ export const REGISTRY: ProviderDescriptor[] = [
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   facebook: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
-  tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
+  tiktok: { category: 'Social', verified: false, pulls: TIKTOK_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })), sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
+  google_search_console: { category: 'Analytics', verified: false, pulls: [], sends: [], feeds: [],
+    permissions: ['Read your Search Console properties, your permission level on each, and the data of the property you choose. Axal VC never changes a property, its users or its settings.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },

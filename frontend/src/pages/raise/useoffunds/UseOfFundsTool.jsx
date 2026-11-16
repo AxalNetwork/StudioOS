@@ -10,7 +10,7 @@ import MercuryRaiseFeed from '../../cycles/MercuryRaiseFeed';
 import {
   FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, dayText,
   forecastHref, historyRows, homeTiles, initials, money, monthsText, needsRows, planEmpty, planVsActual, runwayCandidates,
-  runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
+  planViewer, runwayTodayView, sectionOf, sectionRows, sectionSheetSearch, sheetSectionFrom, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
   AddHireDialog, AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditMilestoneDialog, EditSplitDialog,
@@ -59,7 +59,7 @@ function useSectionSheet() {
  */
 function SectionSheetHost({ plan, projectId, sheet, api, onSaved }) {
   const [adding, setAdding] = useState(false);
-  const founder = plan?.viewer?.mercury !== false;
+  const founder = planViewer(plan)?.mercury !== false;
   const mod = useModule(founder && sheet.open ? projectId : null);
   if (!sheet.open) return null;
   const base = baseOf(plan);
@@ -111,7 +111,7 @@ function PlanFrame({ read, children, testId }) {
   const plan = read.data;
   return (
     <div className="flex flex-col gap-3">
-      <AdminBanner viewer={plan?.viewer} />
+      <AdminBanner viewer={planViewer(plan)} />
       {plan?.runway_today?.partial ? (
         <BlockError tone="amber" testId="uof-mercury-partial"
           text={plan.runway_today.chosen ? 'Mercury could not be read. Runway today falls back to your metrics snapshot. The rest of the page reads as usual.' : 'Mercury could not be read. The rest of the page reads as usual.'}
@@ -205,7 +205,7 @@ function NeedsCard({ plan, onAct }) {
             <li key={r.code} className="flex flex-col gap-1 border-t border-axal-hairline pt-2 first:border-0 first:pt-0 dark:border-gray-800" data-testid={`uof-need-${r.code}`}>
               <Pill tone={r.pill.startsWith('!') ? 'amber' : 'dashed'}>{r.pill}</Pill>
               <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{r.text}</span>
-              {r.button && plan?.viewer?.can_write ? <button type="button" className={`${BTN_GHOST} w-fit`} onClick={() => onAct(r.button.act)} data-testid={`uof-need-${r.code}-act`}>{r.button.text}</button> : null}
+              {r.button && planViewer(plan)?.can_write ? <button type="button" className={`${BTN_GHOST} w-fit`} onClick={() => onAct(r.button.act)} data-testid={`uof-need-${r.code}-act`}>{r.button.text}</button> : null}
             </li>
           ))}
         </ul>
@@ -258,11 +258,11 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                       <span aria-hidden="true" className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-50 text-axal-violet dark:bg-violet-950 dark:text-violet-300">○</span>
                       <h3 className={H3}>Set your raise and split to see what it buys.</h3>
                       <p className={`m-0 text-[12.5px] ${MUTED}`}>Start with Edit split.</p>
-                      {plan.viewer?.can_write ? <button type="button" className={BTN} onClick={() => setDialog('split')} data-testid="uof-empty-edit">Edit split</button> : null}
+                      {planViewer(plan)?.can_write ? <button type="button" className={BTN} onClick={() => setDialog('split')} data-testid="uof-empty-edit">Edit split</button> : null}
                     </div>
                   </Card>
                 </div>
-                {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
+                {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={planViewer(plan)} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               </>
             );
           }
@@ -270,8 +270,8 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <Pill tone="violet">Base · {base?.name || 'Base'}</Pill>
-                {plan.viewer?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
-                {!phone ? <ExportMenu projectId={projectId} capabilities={plan.viewer?.capabilities} api={api} /> : null}
+                {planViewer(plan)?.can_write ? <button type="button" className={`${BTN} max-md:flex-1`} onClick={() => setDialog('split')} data-testid="uof-edit-split-open">Edit split</button> : null}
+                {!phone ? <ExportMenu projectId={projectId} capabilities={plan.capabilities} api={api} /> : null}
               </div>
               {notice ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="uof-notice">{notice}</p> : null}
               <Tiles plan={plan} />
@@ -281,7 +281,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                     <StackBar rows={rows} currency={base?.currency} />
                     {!phone ? <SectionTable rows={rows} base={base} sheetTo={sheet.to} /> : null}
                   </Card>
-                  {!phone ? (plan.viewer?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'
+                  {!phone ? (planViewer(plan)?.mercury === false && plan.runway_today?.sources?.mercury?.state === 'founder_only'
                     ? <p className={`m-0 rounded-lg border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-800`} data-testid="uof-cash-founder-only">Cash over time uses the founder’s own figures. Mercury figures are visible to the founder only.</p>
                     : <CashCard base={base} title="Cash over time" testId="uof-cash" />) : null}
                 </div>
@@ -290,7 +290,7 @@ export function UseOfFundsHome({ projectId, search = '', api = useOfFundsApi }) 
                   <NeedsCard plan={plan} onAct={act} />
                 </div>
               </div>
-              {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
+              {dialog === 'split' ? <EditSplitDialog projectId={projectId} base={base} viewer={planViewer(plan)} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               {dialog === 'ties' ? <WhereUsedDialog plan={plan} rows={tiesRows(plan)} onClose={() => setDialog(null)} onRound={() => setDialog('round')} /> : null}
               {dialog === 'round' ? <RoundSizeDialog projectId={projectId} plan={plan} api={api} onClose={() => setDialog(null)} onSaved={saved} /> : null}
               <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={saved} />
@@ -409,7 +409,7 @@ function Allocation({ projectId, search, api, phone }) {
                               <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{r.hires == null ? <span className={MUTED}>Unreadable</span> : r.hires || <span className={MUTED}>None</span>}</td>
                               <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800">{!r.hires ? <span className={MUTED}>No hires</span>
                                 : <span className={r.overBudget ? 'font-bold text-amber-800 dark:text-amber-300' : ''}>{money(r.hireCostCents, base?.currency) || NOT_RECORDED} of {money(r.amountCents, base?.currency) || NOT_RECORDED}<span className={`block text-[11px] ${MUTED}`}>a year</span></span>}</td>
-                              <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`} data-testid={`uof-actual-${r.key}`}>{a?.actual != null ? <>{`${a.actual}%`}<span className={`block text-[11px] ${MUTED}`}>⇄ Connector · Mercury</span></> : <span className={MUTED}>{plan.viewer?.mercury === false ? 'Founder only' : NOT_RECORDED}</span>}</td>
+                              <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`} data-testid={`uof-actual-${r.key}`}>{a?.actual != null ? <>{`${a.actual}%`}<span className={`block text-[11px] ${MUTED}`}>⇄ Connector · Mercury</span></> : <span className={MUTED}>{planViewer(plan)?.mercury === false ? 'Founder only' : NOT_RECORDED}</span>}</td>
                             </tr>
                           );
                         })}</tbody>
@@ -426,10 +426,10 @@ function Allocation({ projectId, search, api, phone }) {
               <Card title="Edit split" testId="uof-edit-card">
                 <p className={`m-0 text-[12.5px] ${MUTED}`}>Change the raise, the five shares and your target runway in one dialog. The deck’s Ask slide is marked out of sync when you save.</p>
                 <div className="flex items-center justify-between text-[12.5px]"><span>Your target runway</span><span className={MONO}>{base?.target_runway_months ? `${base.target_runway_months} months` : NOT_RECORDED}</span></div>
-                {plan.viewer?.can_write ? <button type="button" className={BTN_GHOST} onClick={() => setDialog(true)} data-testid="uof-edit-split-open">Edit split</button> : null}
+                {planViewer(plan)?.can_write ? <button type="button" className={BTN_GHOST} onClick={() => setDialog(true)} data-testid="uof-edit-split-open">Edit split</button> : null}
               </Card>
             </div>
-            {dialog ? <EditSplitDialog projectId={projectId} base={base} viewer={plan.viewer} api={api} onClose={() => setDialog(false)} onSaved={(t) => { setDialog(false); setNotice(t); read.reload(); }} /> : null}
+            {dialog ? <EditSplitDialog projectId={projectId} base={base} viewer={planViewer(plan)} api={api} onClose={() => setDialog(false)} onSaved={(t) => { setDialog(false); setNotice(t); read.reload(); }} /> : null}
             <SectionSheetHost plan={plan} projectId={projectId} sheet={sheet} api={api} onSaved={(t) => { setNotice(t); read.reload(); }} />
           </>
         );
@@ -470,7 +470,7 @@ function Milestones({ projectId, search, api }) {
           <>
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="uof-ms-summary">
               <span className={`${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`}>{(base?.milestones || []).length} milestones · {hiresOk ? base.hires.items.length : '—'} hires · {outMonth ? `cash out ${outMonth}` : 'cash out not modelled'}</span>
-              {plan.viewer?.can_write ? (
+              {planViewer(plan)?.can_write ? (
                 <span className="flex flex-wrap gap-2 max-md:w-full max-md:[&>*]:flex-1">
                   <button type="button" className={BTN} onClick={() => setAdding(true)} data-testid="uof-add-milestone-open">Add milestone</button>
                   {hiresOk ? <button type="button" className={BTN_GHOST} onClick={() => setAddingHire(true)} data-testid="uof-add-hire-open">Add a hire</button> : null}
@@ -493,7 +493,7 @@ function Milestones({ projectId, search, api }) {
               <Card title="Milestones" testId="uof-ms-table">
                 {ms.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-ms-none">{(base?.milestones || []).length ? 'No milestone matches.' : 'No milestones yet.'}</p> : (
                   <div className="overflow-x-auto"><table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]">
-                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source', ...(plan.viewer?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+                    <thead><tr>{['Milestone', 'Section', 'By', 'Cost', 'State', 'Source', ...(planViewer(plan)?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                     <tbody>{ms.map((m) => {
                       const st = states.get(String(m.id)) || (m.cost_cents == null ? 'Not costed' : NOT_RECORDED);
                       return (
@@ -504,7 +504,7 @@ function Milestones({ projectId, search, api }) {
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{m.cost_cents == null ? <Pill tone="dashed">○ Not costed</Pill> : money(m.cost_cents, base.currency)}</td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Pill tone={st === 'Funded' ? 'green' : st === 'At risk' ? 'amber' : 'dashed'}>{st === 'Funded' ? '✓ Funded' : st === 'At risk' ? '! At risk' : st === 'Not costed' ? '○ Not costed' : st}</Pill></td>
                           <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><Source source={m.source} /></td>
-                          {plan.viewer?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingMs(m)} aria-label={`Edit ${m.label}`} data-testid="uof-ms-edit-open">Edit</button></td> : null}
+                          {planViewer(plan)?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingMs(m)} aria-label={`Edit ${m.label}`} data-testid="uof-ms-edit-open">Edit</button></td> : null}
                         </tr>
                       );
                     })}</tbody>
@@ -513,9 +513,9 @@ function Milestones({ projectId, search, api }) {
               </Card>
               <Card title="Hires" testId="uof-hires-table">
                 {!hiresOk ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} onRetry={read.reload} />
-                  : hires.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-hires-none">{base.hires.items.length ? 'No hire in this section.' : `No hires planned.${plan.viewer?.can_write ? ' Add a hire to plan its payroll.' : ''}`}</p> : (
+                  : hires.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="uof-hires-none">{base.hires.items.length ? 'No hire in this section.' : `No hires planned.${planViewer(plan)?.can_write ? ' Add a hire to plan its payroll.' : ''}`}</p> : (
                     <div className="overflow-x-auto"><table className="w-full min-w-[440px] border-collapse text-left text-[12.5px]">
-                      <thead><tr>{['Role', 'Section', 'From', 'Cost a year', 'A month', ...(plan.viewer?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+                      <thead><tr>{['Role', 'Section', 'From', 'Cost a year', 'A month', ...(planViewer(plan)?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                       <tbody>{hires.map((h) => (
                         <tr key={h.id} data-testid="uof-hire-row">
                           <td className="border-b border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-800">{h.role || NOT_RECORDED}</td>
@@ -523,7 +523,7 @@ function Milestones({ projectId, search, api }) {
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{h.start_month || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(h.annual_cents, h.currency) || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{typeof h.annual_cents === 'number' ? money(Math.round(h.annual_cents / 12), h.currency) : <NotRecorded />}</td>
-                          {plan.viewer?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingHire(h)} data-testid="uof-hire-edit-open">Edit</button></td> : null}
+                          {planViewer(plan)?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingHire(h)} data-testid="uof-hire-edit-open">Edit</button></td> : null}
                         </tr>
                       ))}</tbody>
                     </table></div>
@@ -550,7 +550,7 @@ function Runway({ projectId, search, api }) {
     <PlanFrame read={read} testId="uof-runway">
       {(plan) => {
         const base = baseOf(plan);
-        const today = runwayTodayView(plan.runway_today, plan.viewer);
+        const today = runwayTodayView(plan.runway_today, planViewer(plan));
         const after = afterRaiseView(base);
         const others = runwayCandidates(plan.runway_today, plan.forecast);
         const burn = base?.model?.burn?.value;
@@ -622,7 +622,7 @@ function Actuals({ projectId, api }) {
       {(plan) => {
         const base = baseOf(plan);
         const mercury = mod.data?.parts?.mercury;
-        if (plan.viewer?.mercury === false) {
+        if (planViewer(plan)?.mercury === false) {
           return <Card testId="uof-actuals-founder-only"><p className={`m-0 text-[12.5px] ${MUTED}`}>Actual spend comes from the founder’s own Mercury. It is visible to the founder only.</p></Card>;
         }
         if (mod.status === 'loading' && !mod.data) return <Skeleton lines={4} testId="uof-actuals-reading" />;

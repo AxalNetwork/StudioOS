@@ -56,6 +56,8 @@ export const AI_SURFACE = {
   mailDraft: '/email',
   /** D1241: Deal flow · Compare — Eadwyn's comparison note from SCORING's bands, saved only on press (`POST /api/deals/flow/compare-note`). */
   dealsCompare: '/deals/compare',
+  /** D6183: a deal's References — Eadwyn's summary of the investor's typed reference-call notes (`POST /api/references/:id/summarize`). */
+  dealReferences: '/deals',
   /** Grow · Publish to… — Eadwyn's post text for the ticked places (`POST /api/publish/ask`), #4046. It writes nothing. */
   growPublish: '/grow',
   /** D4488: Distribution draft proposals. */

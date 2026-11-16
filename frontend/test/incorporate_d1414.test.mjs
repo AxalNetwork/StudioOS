@@ -183,6 +183,18 @@ test('mounted: ?project= prefills from your own projects ("From [name]"); never 
   } finally { await v.close(); }
 });
 
+// D6683 (#6683): the Worker's jurisdictions carry no cost, time or tax claim; the compare step reads Not recorded, never 0.
+test('mounted: a jurisdiction with no recorded cost or timeline reads Not recorded on the compare step, never 0', async () => {
+  const bare = { jurisdictions: [{ id: 'us_de_ccorp', label: 'Delaware C-Corp', country: 'United States', est_cost_usd: null, time_to_form_days: null, tax_summary: null, fundraising_friendly: true, summary: 'The default for VC-backed startups.', pros: ['Universally accepted by US VCs'], cons: [] }] };
+  const v = await mount('/incorporate?project=2', { handle: worker({ 'GET /api/legal/jurisdictions': () => response(bare) }) });
+  try {
+    await v.click('incorporate-primary');
+    const card = v.of('incorporate-compare');
+    assert.match(card, /Cost\s*Not recorded.*Timeline\s*Not recorded/s);
+    assert.doesNotMatch(card, /\$0|0–0|\b0 days/);
+  } finally { await v.close(); }
+});
+
 test('mounted: a project that is not yours says so (INC5f), and nothing is picked', async () => {
   const v = await mount('/incorporate?project=4');
   try {

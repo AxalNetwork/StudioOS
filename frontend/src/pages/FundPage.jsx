@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { readableFund, useFundReport } from '../hooks/useFundReport';
 import { fundDraftsApi } from '../lib/api/fundDrafts.js';
 import FundDraftBand from './FundDraftBand';
+import { fundFactsEditHref } from './admin/fundAdmin/fundAdminModel';
 import './fundPage.css';
 
 export function fundMoney(cents) {
@@ -16,6 +17,33 @@ export function fundMoney(cents) {
 export function Recorded({ value, reason }) {
   return value !== null && value !== undefined && value !== '' ? <span>{value}</span>
     : <span><b>Not recorded</b><small>{reason}</small></span>;
+}
+/** #6247: a period's line says when it was issued, or that it is a draft (only a manager reads drafts). */
+export function periodIssue(period) {
+  if (period.status === 'draft') return 'Draft · not issued';
+  return period.issued_at ? `Issued ${String(period.issued_at).slice(0, 10)}` : 'Issued · date not recorded';
+}
+/**
+ * #6247: where this page hands its reader next. Each link is shown only to a reader its destination admits:
+ * a manager (can_manage, so `requireFundGp` passed: the GP of record on the institutional tier, or an admin)
+ * gets the fund's working zones, each opened on this fund with `?fund=`; an LP gets their own commitment and
+ * statements; everyone who can read the fund gets its performance (#6245, owner answer C: LPs and GPs both).
+ * Editing fund facts is the admin console's dialog; a GP who is not an admin has no edit page, so it says so.
+ */
+export function fundHandoffs(page, role) {
+  const id = page.fund.id;
+  const links = page.can_manage ? [
+    { to: `/funds/${id}/reporting/new`, label: 'New reporting period', testid: 'link-fund-new-period' },
+    { to: `/funds/reporting?fund=${id}`, label: 'Reporting archive', testid: 'link-fund-reporting' },
+    { to: `/funds/lps?fund=${id}`, label: 'Open LPs', testid: 'link-fund-lps' },
+    { to: `/funds/calls?fund=${id}`, label: 'Capital calls', testid: 'link-fund-calls' },
+    { to: `/funds/ledger?fund=${id}`, label: 'Ledger and distributions', testid: 'link-fund-ledger' },
+  ] : [{ to: '/spinout-lab/investor-workspace', label: 'My commitment and statements', testid: 'link-fund-my-commitment' }];
+  links.push({ to: '/funds/performance', label: 'Fund performance', testid: 'link-fund-performance' });
+  const edit = !page.can_manage ? null : role === 'admin'
+    ? { to: fundFactsEditHref(id), label: 'Edit fund facts', testid: 'link-fund-edit-facts' }
+    : { unavailable: 'Edit fund facts: Not available. Fund facts are edited in Fund administration, which is for Axal admins.' };
+  return { links, edit };
 }
 export function FundReadState({ reading }) {
   if (reading.loading) return <div className="fd-card" aria-busy="true">Loading fund records…</div>;
@@ -62,11 +90,11 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
     {reading.loading || reading.error || !page ? <FundReadState reading={reading} /> : <>
       <section className="fd-facts" aria-label="Fund facts">
         <Fact label="Size · USD" value={fundMoney(page.fund.size_cents)} reason="The fund size has not been recorded." />
-        <Fact label="Status" value={page.fund.status} reason="The fund status has not been recorded." />
+        <Fact label="Status" value={page.fund.status} pill reason="The fund status has not been recorded." />
         <Fact label="LPs · live count" value={page.fund.lp_count} />
         <Fact label="Vintage" value={page.fund.vintage_year} reason="The vintage year has not been recorded." />
       </section>
-      {page.fund.lp_count === 0 && <p>No LP has committed yet.</p>}
+      {page.fund.lp_count === 0 && <p className="fd-empty" data-testid="text-fund-no-lp">No LP has committed yet.{page.can_manage && <> <Link to={`/funds/lps?fund=${page.fund.id}`} data-testid="link-fund-empty-lps">Open LPs</Link></>}</p>}
       <section className="fd-two" aria-label="Fund totals">
         <Fact label="Committed · USD" value={fundMoney(page.totals.committed_cents)} reason={page.totals.committed_reason} note="Sum of this fund’s recorded LP commitments." />
         <Fact label="Invested · USD" value={fundMoney(page.totals.invested_cents)} reason={page.totals.invested_reason} note="Original invested amounts on positions attributed to this fund." />
@@ -76,13 +104,13 @@ export default function FundPage({ role = 'investor', reading: supplied }) {
         <article className="fd-card"><h2>Limited partnership agreement</h2>{page.lpa ? <><dl><div><dt>Status</dt><dd><Recorded value={page.lpa.status} reason="The LPA status has not been recorded." /></dd></div><div><dt>Version</dt><dd><Recorded value={page.lpa.version} reason="The LPA version has not been recorded." /></dd></div><div><dt>Updated</dt><dd><Recorded value={page.lpa.updated_at} reason="The LPA update date has not been recorded." /></dd></div></dl><button type="button" disabled={download.busy} onClick={openLpa}>{download.busy ? 'Opening…' : 'Open LPA'}</button>{download.error && <p role="alert">{download.error}</p>}</> : <Recorded value={null} reason="No LPA is attached to this fund." />}</article>
       </section>
       <article className="fd-card"><h2>Service providers</h2><dl>{[['fund_admin', 'Fund administrator'], ['auditor', 'Auditor'], ['legal_counsel', 'Legal counsel'], ['custodian', 'Custodian'], ['valuation_policy', 'Valuation policy']].map(([key, label]) => <div key={key}><dt>{label}</dt><dd><Recorded value={page.fund.providers[key]} reason={`${label} has not been recorded for this fund.`} /></dd></div>)}</dl></article>
-      <article className="fd-card"><h2>Reporting periods</h2>{page.periods.length ? <ul>{page.periods.map(period => <li key={period.id}><Link to={`/funds/${page.fund.id}/reporting/${period.id}`}>{period.period}</Link> · {period.status}</li>)}</ul> : <p>{page.can_manage ? 'No reporting period has been recorded.' : 'No issued reporting period is recorded.'}</p>}</article>
+      <article className="fd-card"><h2>Reporting periods</h2>{page.periods.length ? <ul>{page.periods.map(period => <li key={period.id} data-testid={`row-fund-period-${period.id}`}><Link to={`/funds/${page.fund.id}/reporting/${period.id}`}>{period.period}</Link> · <span className={period.status === 'draft' ? 'fd-pill fd-pill-draft' : 'fd-pill'}>{periodIssue(period)}</span></li>)}</ul> : <p>{page.can_manage ? 'No reporting period has been recorded.' : 'No issued reporting period is recorded.'}</p>}</article>
       {page.can_manage && <FundDraftBand testId="fund-brief-band" title="Fund brief" run="Draft the brief"
         body="Draft a one-paragraph description of this fund from its recorded facts."
         writes="Accept writes a note. It changes no fund record."
         onRun={() => fundDraftsApi.brief(page.fund.id)} onAccept={keepBrief} />}
       {page.can_manage && <FundNote reading={note} />}
-      {page.can_manage && <div className="fd-actions"><Link to={`/funds/${page.fund.id}/reporting/new`}>New reporting period</Link><Link to={`/funds/reporting?fund=${page.fund.id}`}>Reporting archive</Link><Link to={`/funds/lps?fund=${page.fund.id}`}>Open LPs</Link></div>}
+      <FundHandoffs page={page} role={role} />
     </>}
   </WorkspaceShell></div>;
 }
@@ -97,6 +125,18 @@ function FundNote({ reading }) {
     {Array.isArray(n.sources) ? n.sources.length > 0 && <><h3>Drawn from</h3><ol className="fd-draft-sources">{n.sources.map((s) => <li key={s.n} value={s.n}>{s.label}{s.date ? ` · ${s.date}` : ''}</li>)}</ol></> : <p><b>Not recorded</b><small>The note's sources could not be read.</small></p>}
   </article>;
 }
-function Fact({ label, value, reason, note }) {
-  return <article className="fd-card"><h2>{label}</h2><div className="fd-number"><Recorded value={value} reason={reason} /></div>{note && <small>{note}</small>}</article>;
+function FundHandoffs({ page, role }) {
+  const { links, edit } = fundHandoffs(page, role);
+  return <nav className="fd-actions" aria-label="Next steps for this fund">
+    {links.map(link => <Link key={link.testid} to={link.to} data-testid={link.testid}>{link.label}</Link>)}
+    {edit?.to && <Link to={edit.to} data-testid={edit.testid}>{edit.label}</Link>}
+    {edit?.unavailable && <span className="fd-unavailable" data-testid="text-fund-edit-unavailable">{edit.unavailable}</span>}
+  </nav>;
+}
+// #6247: the status is drawn as a pill, as the canvas draws it (fd-page, ops-data.js); a missing one stays Not recorded.
+function Fact({ label, value, reason, note, pill = false }) {
+  const recorded = value !== null && value !== undefined && value !== '';
+  return <article className="fd-card"><h2>{label}</h2><div className={pill && recorded ? undefined : 'fd-number'}>{pill && recorded
+    ? <span className="fd-pill fd-pill-status" data-testid="pill-fund-status">{value}</span>
+    : <Recorded value={value} reason={reason} />}</div>{note && <small>{note}</small>}</article>;
 }
