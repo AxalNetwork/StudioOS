@@ -20,6 +20,10 @@ export const BTN_S = `${BTN} border-axal-hairline bg-white text-axal-ink hover:b
 export const BTN_L = `${BTN} border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50`;
 export const BTN_P = `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:hover:bg-violet-500`;
 export const BTN_D = `${BTN} border-red-200 bg-white text-red-700 hover:bg-red-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40`;
+/** D6048 (#6048), RA-26: on a phone every target is at least 44px tall; from `sm` up, the desktop's 36. */
+export const TAP_P = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-axal-violet bg-axal-violet px-3 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:opacity-50 sm:min-h-[36px] dark:hover:bg-violet-500';
+export const TAP_S = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 disabled:opacity-50 sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+export const TAP_L = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-axal-lavender-edge bg-axal-lavender px-3 text-[12.5px] font-semibold text-axal-violet-deep hover:bg-violet-100 disabled:opacity-50 sm:min-h-[36px] dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300 dark:hover:bg-violet-900/50';
 export const LINK = 'text-[12.5px] font-semibold text-axal-violet underline-offset-2 hover:underline dark:text-violet-300 dark:hover:text-violet-200';
 
 const PILL = 'inline-flex w-fit items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold';

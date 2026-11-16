@@ -18,6 +18,7 @@ import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
+import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
 import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
@@ -155,7 +156,14 @@ const validate = {
   Mount: ValidateMount,
   action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
   tools: toFnMap({
-    'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
+    // D6010 (#6010): Size the market opens the sizing tool for this venture, to any founder of it.
+    'market-intelligence': (q) => {
+      const venture = new URLSearchParams(projectSearch(q)).get('project_id');
+      return [
+        { label: 'Open the competitor tracker', href: '/build/competitors' },
+        { label: 'Size the market', href: venture ? sizingHref(venture) : '/validate/market-intelligence/sizing' },
+      ];
+    },
     'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
   }),
   add: toFnMap({
@@ -193,11 +201,13 @@ const validate = {
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
       </>
     ),
+    // D6010 (#6010): the stored positioning and assumptions marks and the sources, under the table.
     // D1087 (#2952): research pages from Notion, as sources (title and link).
     // D6019 (#6019): each of the next three modules' parts opens with its Export.
     'market-intelligence': (data, ctx) => (
       <>
         <ModuleExport slug="market-intelligence" projectId={ctx.projectId} />
+        <MarketReadiness projectId={ctx.projectId} />
         <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
         {/* D6011 (#6011): every change to the three figures, with who and when. */}
         <MarketFigureHistory part={data?.parts?.market_history} />

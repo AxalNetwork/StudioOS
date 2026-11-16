@@ -203,3 +203,15 @@ test('a failed source is reported as failed, never dropped and never an empty li
   assert.ok(ids(res.body).includes('distribution:d7') && ids(res.body).includes('investment:pos7a'));
   assert.equal(res.body.sources.filter((s: any) => s.state === 'failed').length, 1);
 });
+
+test('linked founder ask notes and amendments show only to their recorder', async t => {
+  const db = fixture();
+  t.after(() => db.close());
+  db.prepare('UPDATE portfolio_support_entries SET ask_uid = ? WHERE id = 31').run('private-ask');
+  const other = await call(db, HOLDER, '/positions/p7/activity');
+  assert.equal(other.status, 200);
+  assert.doesNotMatch(JSON.stringify(other.body), /Intro to a bank|sup1|sev1/);
+  const owner = await call(db, OTHER, '/positions/p7/activity');
+  assert.equal(owner.status, 200);
+  assert.match(JSON.stringify(owner.body), /Intro to a bank/);
+});

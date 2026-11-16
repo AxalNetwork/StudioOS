@@ -240,10 +240,13 @@ private registries, destination checks, canary receipts and rollback.
 - [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
       `/status` reads. Only the independent observer receives this credential.
 
+- [ ] `WORKGRAPH_INGEST_TOKEN` – the HQ WorkGraph snapshot ingest (D5580 part 4, #5580). The hourly `pr-overlap.yml` job posts its advisory snapshot to `POST /api/admin/workgraph/snapshots` with this value as a bearer token, compared in constant time. Generate 48+ random characters (`openssl rand -hex 32`) and set the **same** value in two places: the Worker (`npx wrangler secret put WORKGRAPH_INGEST_TOKEN --config wrangler.toml --env production`) and the GitHub Actions secret of the same name (below). Unset on the Worker, the ingest answers 503 `workgraph_ingest_not_configured`; unset in Actions, the job skips the post with a notice. Either way the snapshot stays in the run's artifact, and `GET /api/admin/workgraph/in-flight` (Super Admin) says no scan has been posted. Rotation: put the new value in both places; a post between the two answers 401 and the next hourly run succeeds. Rollback: delete the Worker secret. Never logged.
+
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] `WORKGRAPH_INGEST_TOKEN` – optional, the same value as the Worker secret of that name (above); `pr-overlap.yml` posts each hourly snapshot with it (D5580 part 4).
 - [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
       independent receiver's observer secret. It is neither the Slack token nor
       the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`

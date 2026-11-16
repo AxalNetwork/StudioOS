@@ -138,6 +138,8 @@ and citations by number keep working.
 | `D5606-p3.md` | Treat both coexisting CI summary gates as summaries so required-shard infrastructure failures remain diagnosable; independent of ruleset cutover (#5606). |
 | `D6024.md` | Confirmed Build feature removal and must-have demotion, protected references, atomic audit and honest Build Plan history without stale links (#6024). |
 | `D6381.md` | Bound unused-import usage blanking to the import clause/module literal so import attributes and side-effect imports cannot erase real uses (#6381). |
+
+| `D6495.md` | Exact synthetic D5074 fixture exception, real-scanner history replay and adversarial boundary proof (#6495). |
 | `D6115.md` | Remove a Grow partner, market or obligation added by mistake: a hard delete, refused for a partner with revenue or deals and a held obligation; the compliance delete runs the same writer (#6115). |
 | `D6027.md` | Build Overview V2's Worker read: the canvas's next-action order, material-blocker attention and the Build Plan preview, one statement more (#6027). |
 
@@ -147,5 +149,6 @@ and citations by number keep working.
 | `D5919.md` | Territory, Renewal window and Attention menus for loaded licence-ledger rows (#5919). |
 | `D6202.md` | #6202: the support ledger's lifecycle: due dates, in progress and cancelled states, an introduction's meeting, and the totals that count them (Worker and migration). |
 | `D6514.md` | Bound verbose CodeQL SARIF independently of compact event/state JSON, retaining fail-closed reporting. |
+| `D6028.md` | Build Overview V2 page: `/build` drawn to BD1 and BD2 from D6027's read, one primary action, the header's Connect a tool removed on `/build` only (#6028). |
 | `D4838-p2.md` | Pipeline v2 PP03: Leads, reasons before the score and structured pass (#5935). |
 | `D5937.md` | Pipeline v2 PP04: Proposals as a follow-up list (#5937). |

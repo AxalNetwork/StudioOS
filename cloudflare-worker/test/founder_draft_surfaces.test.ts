@@ -713,7 +713,7 @@ test('D778: a shared band does not borrow a founder-only inventory label', async
 // committed schemas, a stubbed provider, and only synthetic member content.
 function sharedDraftDb() {
   const db = freshDb();
-  for (const name of ['213_research_library.sql', '221_research_ask_sessions.sql', '224_partner_book.sql', '465_ai_rail_preferences.sql']) {
+  for (const name of ['213_research_library.sql', '221_research_ask_sessions.sql', '202611151315_6272_ask_history_cleared.sql', '224_partner_book.sql', '465_ai_rail_preferences.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   for (const user of [MINE.user, THEIRS.user]) {

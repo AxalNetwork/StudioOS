@@ -49,6 +49,7 @@ function fixture() {
   db.exec(migration('489_interview_findings.sql'));
   db.exec(migration('228_research_company_directory.sql'));
   db.exec(migration('249_project_metrics.sql'));
+  db.exec(migration('202611152333_6006_theme_problem_statement.sql')); // D6006: the theme's problem statement
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
     [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {
@@ -386,7 +387,7 @@ function seeded() {
 }
 
 const RECORDS: Record<string, { a: string; b: string; main: string[]; side: string[] }> = {
-  'problem-discovery': { a: '11', b: '22', main: ['Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
+  'problem-discovery': { a: '11', b: '22', main: ['Problem statement', 'Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
   // D757 (#1924) adds Summary after the placements.
   'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'From this conversation', 'Cost', 'Session'] },
   'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
@@ -452,7 +453,8 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   assert.equal(JSON.stringify(partner.body).includes('We miss jobs'), false);
   assert.equal(founder.body.main[0].rows[0].b, '"We miss jobs every week."');
   assert.equal(founder.body.main[0].rows[0].c, '→ Theme One');
-  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main[0].rows.map((r: any) => r.a);
+  // D6006: the Problem statement leads the record; Quotes follow it.
+  const quotes = async (who: number) => (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.main.find((x: any) => x.key === 'quotes').rows.map((r: any) => r.a);
   assert.deepEqual((await quotes(10)).sort(), ['"Theme One"', '"Theme One"']);
   assert.deepEqual((await quotes(40)).sort(), ['"Theme One"', QUOTE_WITHHELD].sort());
   for (const slug of Object.keys(RECORDS)) {
