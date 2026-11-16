@@ -235,7 +235,7 @@ export default function InvestorFundCalls() {
           ? <Unreadable what="The wire trail" claim="This is not a claim that no money has arrived." onRetry={load} />
           : receipts.length === 0 ? <div className="i6-empty">No receipt has been recorded on this fund.</div>
             : <div className="if2-table-wrap"><table><thead><tr><th>Received</th><th>LP</th><th>Call</th><th className="right">Amount</th><th>Reference</th><th>Recorded by</th></tr></thead><tbody>
-              {receipts.map((r) => <tr key={r.id} data-testid={`row-receipt-${r.id}`}><td>{r.received_on}</td><td>{r.lp_name || `LP #${r.limited_partner_id}`}</td><td>{r.call_number != null ? `Call ${r.call_number}` : 'Before numbering'}</td><td className="right">{money(r.amount_cents)}</td><td>{r.reference || 'No reference recorded'}</td><td>{r.recorded_by_name || 'Not recorded'}{r.source === 'mark_paid' ? ' · marked paid' : ''}</td></tr>)}
+              {receipts.map((r) => <tr key={r.id} data-testid={`row-receipt-${r.id}`}><td data-label="Received">{r.received_on}</td><td data-label="LP">{r.lp_name || `LP #${r.limited_partner_id}`}</td><td data-label="Call">{r.call_number != null ? `Call ${r.call_number}` : 'Before numbering'}</td><td className="right" data-label="Amount">{money(r.amount_cents)}</td><td data-label="Reference">{r.reference || 'No reference recorded'}</td><td data-label="Recorded by">{r.recorded_by_name || 'Not recorded'}{r.source === 'mark_paid' ? ' · marked paid' : ''}</td></tr>)}
             </tbody></table></div>}
       </section>
     </>}
@@ -273,17 +273,17 @@ export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave
   </tr></thead><tbody>
     {lines.map((line) => [
       <tr key={line.id} data-testid={`row-call-line-${line.id}`}>
-        {showCall && <td>{line.call_number != null ? `Call ${line.call_number}` : 'Before numbering'}</td>}
+        {showCall && <td data-label="Call">{line.call_number != null ? `Call ${line.call_number}` : 'Before numbering'}</td>}
         <td>{lpHref && line.limited_partner_id != null
           // D6236: the LP's name opens their record on Fund · LPs.
           ? <Link to={lpHref(line.limited_partner_id)} className="if2-lp-link" data-testid={`link-lp-record-${line.id}`}><strong>{line.lp_name || line.lp_email || `LP #${line.limited_partner_id}`}</strong></Link>
           : <strong>{line.lp_name || line.lp_email || `LP #${line.limited_partner_id}`}</strong>}<small>{kycLabel(line)}</small></td>
-        <td className="right">{money(line.commitment_cents)}</td>
-        <td className="right">{money(line.owed_cents)}</td>
-        <td className="right">{money(line.received_cents)}</td>
-        <td><span className={`if2-pill ${line.state}`}>{lineStateLabel(line)}</span></td>
-        <td>{lineAge(line)}</td>
-        <td>{line.state !== 'paid' && <>
+        <td className="right" data-label="Commitment">{money(line.commitment_cents)}</td>
+        <td className="right" data-label="Owed">{money(line.owed_cents)}</td>
+        <td className="right" data-label="Received">{money(line.received_cents)}</td>
+        <td data-label="State"><span className={`if2-pill ${line.state}`}>{lineStateLabel(line)}</span></td>
+        <td data-label="Age">{lineAge(line)}</td>
+        <td className="if2-actions">{line.state !== 'paid' && <>
           <button type="button" className="if2-row-action" data-testid={`button-record-receipt-${line.id}`} onClick={() => onOpen(line)}>Record receipt</button>
           <button type="button" className="if2-row-action" data-testid={`button-draft-reminder-${line.id}`} onClick={() => onDraft(line)}>Draft reminder</button>
           <button type="button" className="if2-row-action" data-testid={`button-log-sent-${line.id}`} onClick={() => onLog(line)}>Log as sent</button>
@@ -351,7 +351,7 @@ function CallComposer({ composer, setComposer, onPreview, onIssue, acts }) {
         <p>Call {preview.next_call_number}: {money(preview.amount_cents)} across {plural(preview.lines.length, 'LP')}.
           {preview.residual_cents > 0 ? ` The ${preview.residual_cents}-cent rounding residual goes to the largest commitment.` : ' The split is exact.'}</p>
         <div className="if2-table-wrap"><table><thead><tr><th>LP</th><th className="right">Commitment</th><th className="right">Share</th><th>KYC</th></tr></thead><tbody>
-          {preview.lines.map((l) => <tr key={l.lp_id}><td>{l.name || l.email || `LP #${l.lp_id}`}{l.residual ? ' · carries the residual' : ''}</td><td className="right">{money(l.commitment_cents)}</td><td className="right">{money(l.share_cents)}</td><td>{kycLabel(l)}</td></tr>)}
+          {preview.lines.map((l) => <tr key={l.lp_id}><td>{l.name || l.email || `LP #${l.lp_id}`}{l.residual ? ' · carries the residual' : ''}</td><td className="right" data-label="Commitment">{money(l.commitment_cents)}</td><td className="right" data-label="Share">{money(l.share_cents)}</td><td data-label="KYC">{kycLabel(l)}</td></tr>)}
         </tbody></table></div>
         {preview.excluded.length > 0 && <p className="if2-note">Not billed, for want of a recorded commitment: {preview.excluded.map((x) => x.name || x.email || `LP #${x.lp_id}`).join(', ')}.</p>}
         <FundActControl access={acts} act="capital_call.issue" testId="text-issue-call-refused" className="if2-note">

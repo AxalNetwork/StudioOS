@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleGrow from '../src/routes/cycle_grow.ts';
-import { putCampaignCreative } from '../src/services/growCampaigns.ts';
+import { campaigns, putCampaignCreative } from '../src/services/growCampaigns.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -152,6 +152,30 @@ test('explicit activation, paused end, audience validation and channel budget/da
     assert.equal(g.budget_type, budget_type); assert.equal(g.starts_on, '2026-12-01'); assert.equal(g.ends_on, '2026-12-31'); assert.equal(g.planned_budget_cents, 4000);
   }
 });
+test('D6317: campaign and reporting dates intersect each link before reading monthly spend', async () => {
+  const f = fixture(); links(f);
+  const uid = (await create(f, { starts_on: '2026-03-15', ends_on: '2026-07-20', channel_uids: ['our-channel'] })).body.campaign.uid;
+  f.db.exec(`INSERT INTO channel_spend(channel_id,month,spend_cents) VALUES
+    (1,'2026-03',100),(1,'2026-04',200),(1,'2026-05',300),(1,'2026-06',400),(1,'2026-07',500);`);
+  const channel = async () => (await detail(f, uid)).body.campaign.channels[0];
+  const setDates = (starts_on: string | null, ends_on: string | null) =>
+    grow(f, FOUNDER, 'PUT', `/campaigns/${uid}/channels/our-channel`, { starts_on, ends_on, planned_budget_cents: null });
+  const months = (row: any) => row.spend_months.map((m: any) => m.month);
+  assert.deepEqual(months(await channel()), ['2026-03', '2026-04', '2026-05', '2026-06', '2026-07']);
+  assert.equal((await setDates('2026-04-20', '2026-05-15')).status, 200);
+  const partial = await channel();
+  assert.deepEqual(months(partial), ['2026-04', '2026-05']);
+  assert.equal(partial.spend_cents, 500);
+  const window = (await campaigns(f.env, PA, { from: '2026-05-12', to: '2026-06-30' })).campaigns[0].channels[0];
+  assert.deepEqual(months(window), ['2026-05']);
+  const missed = (await campaigns(f.env, PA, { from: '2026-05-16', to: '2026-06-30' })).campaigns[0].channels[0];
+  assert.deepEqual([missed.spend_cents, missed.spend_months, missed.spend_reason], [null, [], 'Not recorded: this channel has no months in this campaign']);
+  assert.equal((await setDates(null, '2026-04-30')).status, 200);
+  assert.deepEqual(months(await channel()), ['2026-03', '2026-04']);
+  assert.equal((await setDates('2026-07-21', null)).status, 200);
+  assert.equal((await channel()).spend_reason, 'Not recorded: this channel has no months in this campaign');
+});
+
 test('Mercury wins within campaign months, sources and nulls are honest; funnels share one scoped scan', async () => {
   const f = fixture(); links(f);
   const uid = (await create(f, { starts_on:'2026-03-15', ends_on:'2026-05-01', utm_campaign:'launch', budget_cents:1000, channel_uids:['our-channel'] })).body.campaign.uid;

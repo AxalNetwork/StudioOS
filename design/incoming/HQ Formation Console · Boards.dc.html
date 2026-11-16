@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HQ Formation Console · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">HQ · Programs · Formation · #6721 · new canvas HQ Formation (HQI-01 onward)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · HQ Formation — the case queue, the case, filings, the partner directory, the catalogue and its rules</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">Formation (/admin/formation, HQ only, reached from Programs, an Approvals lane, the command palette and Lab › Formation) is where Axal VC Management LLC runs every incorporation case between the founder, the partner and the registry: who has it now, what is late and what evidence exists. It also keeps the partner directory (partners are HQ records, not accounts) and the country catalogue and rules, edited in drafts with sources and published by a second Super Admin. The registry is never a user: a filing, a registration number or “Registered” appears only when a named person records it with a document, and Axal VC is never shown as filer, agent, secretary or nominee. Ages use the Approvals bands (24h, 72h); amounts stay in their own currency with no cross-currency total. States follow Platform States (D5129). Violet dashed ◇ tags name the build issue each value needs; amber ⚑ tags mark owner questions of the brief, #6681 and #6682, drawn as option A. Each board says Worker or Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 15 Nov 2026, 10:30 UTC · checked against main 992bd74ad6 · [Company B] to [Company R], [Partner A] to [Partner E], [Founder B], [Handler A1], Admin A, Admin B, licence and registration numbers, places and every [amount] are fictional bracketed samples; Companies House, ACRA and the Delaware Division of Corporations are named as public registries only</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="HQ Formation Console Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['HQI-01', 'Cases, the queue · desktop 1440 · Worker ◇ #6697', 'Saved views as tabs with exact counts (14 open, one view each), filters for country, partner, route and track, and the table: company and subject, country and form, stage, waiting on, age with its band in word and glyph, HQ owner, partner. Only the HQ owner is named; no email. [Company E] carries Legacy order. One primary action: open the oldest case waiting on HQ. Second frame: Eadwyn open with “Summarise what is late”, a proposal that changes nothing.', [F('HFC01', false, 1480), F('HFC01B', 'Eadwyn open · Summarise what is late', 1060)]],
+      ['HQI-02', 'Case · desktop 1440 · Worker ◇ #6697 · #6698', '[Company B]: intent, country and form, route, “Waiting on [Partner A] for 2 days”, the three columns of responsibility (Founder, Partner, Registry), the eleven-stage grid with responsible role, named owner, evidence and date, and the Timeline tab. Then “Not your case” for Admin B (counts only, Ask Admin A), the owner’s other tabs, a legacy order whose Partner column reads “No partner · recorded by the formation desk”, and Eadwyn’s case summary.', [F('HFC02', false, 1470), F('HFC02B', 'Not your case · Admin B', 900), C('HFC02C', 'Tabs · people, requests, filings, documents, fee lines, choice record', 1400, 933), C('HFC02D', 'Legacy order · [Company E]', 1300, 400), C('HFC02E', 'Eadwyn · Summarise this case', 400, 723)]],
+      ['HQI-03', 'Case actions · sheets · Worker ◇ #6698 · #6710', 'Offer to a partner over the queue: eligible partners by coverage, licence, data agreement, open cases and turnaround; an expired licence and a missing data agreement are disabled with the reason. Then assign, reassign (the founder must agree to share), open a request, record for the partner (Submitted disabled until the pack is approved and every appointee consented; Accepted with number, date and certificate), confirm registration with the four questions, screening review, hold, cancel, refund review and Record registry facts.', [F('HFC03', 'Offer to a partner', 1000), C('HFC03A', 'Assign · Reassign', 1180, 513), C('HFC03B', 'Open a request · Record for the partner, blocked and Accepted', 1400, 802), C('HFC03C', 'Confirm registration · Screening review', 1240, 752), C('HFC03D', 'Hold · Cancel result · Refund review · Record registry facts', 1180, 797)]],
+      ['HQI-04', 'Filings board · desktop 1440 · Worker ◇ #6697 · #6694', 'All filings by state: Prepared 2, Submitted 3, Registry question 1, Accepted 1 and Rejected 0 in the last 30 days (a measured 0). Each card: company, authority, kind, days since submitted, last event and who recorded it. Nothing is fetched from a registry.', [F('HFC04', false, 1000)]],
+      ['HQI-05', 'Partners, the directory · desktop 1440 · Worker ◇ #6692', 'Five partners with status, countries, services, data agreement (Signed or Missing), next licence expiry, next review and open cases; above the table the four forms with one eligible partner only. One primary action: add a partner from an existing partner firm.', [F('HFC05', false, 900)]],
+      ['HQI-06', 'Partner page · desktop 1440 · Worker ◇ #6692', '[Partner A]: verified by Admin A with what was checked, contract, data agreement, licences, coverage by country and service, founder-facing price and cost (Super Admin only), turnaround Not recorded under 5 cases, HQ confirmation 2 of 5, open cases. Then Verify disabled for [Partner D] with “No signed data agreement”, and Suspend through Scope, Review and Result, naming the 2 forms it takes offline.', [F('HFC06', false, 1180), C('HFC06B', 'Verify blocked · Suspend review and result', 1400, 571)]],
+      ['HQI-07', 'Catalogue · desktop 1440 · Worker ◇ #6689 · #6693 · #6699', 'Version bar (Published v3 · Draft v4 with 12 changes), countries and forms with state and the seven gates as words with a tick or a struck cross; legacy forms show “Legacy gate: price only”. Review due (stale, disputed, provisional) and Restricted places with source and checked date. Primary: Open the draft. Instant action: Pause a form.', [F('HFC07', false, 1180), C('HFC07B', 'Pause a form · and a paused form', 1180, 369)]],
+      ['HQI-08', 'Country and form editor · desktop 1440 · Worker ◇ #6699', 'Singapore Pte Ltd in draft v4: facts with value, state, source and checked by and on, where Recorded cannot be saved without a source and a date; fee lines, pack items by phase, people requirements, templates with counsel review for Singapore, a reason on every save, and the changes against published v3.', [F('HFC08', false, 1240)]],
+      ['HQI-09', 'Rules and scenarios · desktop 1440 · Worker ◇ #6696 · #6700', 'The 13 scenarios with route and waiver, the rules in order, and the rule set’s counsel sign-off. Draft v4 changes a rule and a scenario, so Publish is blocked with “Counsel has not signed off this rule set”. The variant publishes a facts-only draft by a different Super Admin with code and reason; the editor is refused.', [F('HFC09', false, 1240), C('HFC09B', 'Publish by a second Super Admin · refused and blocked', 1180, 480)]],
+      ['HQI-10', 'Approvals lane and Lab link · crops at 1180 · Worker ◇ #6698 and frontend only', 'The Approvals lane “Formation cases waiting on HQ” (7, read and assign only), and SL10 as drawn with the one new link “Open in Formation”.', [C('HFC10A', 'Approvals lane · Worker', 1180, 502), C('HFC10B', 'SL10 link · frontend only', 1180, 206)]],
+      ['HQI-11', 'States · Worker ◇ #6697', 'Loading; empty (“No formation cases yet”, “No partner covers Germany yet”); Not recorded never drawn as 0; one block Unavailable while the stage grid works; the catalogue read only for an HQ admin without Super Admin rights; Refused for a non-HQ admin and on a branch studio; Conflict; Saving, Save failed and Offline; and the legacy order with “Registration number not recorded”.', [C('HFC11A', 'Loading · Empty', 1240, 198), C('HFC11B', 'Not recorded · one block unavailable', 1240, 320), F('HFC11C', 'Read only · HQ admin without Super Admin', 1180), C('HFC11D', 'Refused · Conflict · Saving · Save failed · Offline', 1240, 330), C('HFC11E', 'Legacy order · Record registry facts', 1180, 450)]],
+      ['HQI-12', 'Phone 390 · read and assign only · Worker ◇ #6697', 'The queue as cards, the case header with the three columns stacked, the stage grid as a list, Assign as a bottom sheet, and the catalogue read only. 44px targets; no table wider than the screen.', [P('HFC12A', 'Queue'), P('HFC12B', 'Case'), P('HFC12C', 'Stages'), P('HFC12D', 'Assign'), P('HFC12E', 'Catalogue · read only')]],
+      ['HQI-13', 'Dark · desktop 1440 · Worker ◇ #6697', 'HQI-01, HQI-02 and HQI-07 on the dark tokens. Age bands, gate ticks and fact states keep their words and glyphs.', [F('HFC13A', 'Queue', 1480), F('HFC13B', 'Case', 1470), F('HFC13C', 'Catalogue', 1180)]],
+      ['HQI-14', 'Handoff', 'What was checked on main, what needs engineering by issue, the owner questions drawn as option A, frontend only, accessibility and what is still open.', [W('HFC14')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

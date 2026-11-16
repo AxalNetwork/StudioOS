@@ -13,6 +13,10 @@ import { buildModuleExportApi } from '../../../lib/api/buildModuleExport.js';
 import MvpSummary from '../MvpSummary';
 import { mvpPhoneRow } from '../mvpTable';
 import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
+import { lazyStep } from '../lazyStep.jsx';
+
+// D6028 (#6028, BD1, BD2): Build Overview V2, behind its own lazy boundary.
+const BuildOverview = lazyStep(() => import('../BuildOverview'));
 
 /**
  * Build's read (#1475, D662) is already in D661's shape (chart specs,
@@ -26,6 +30,7 @@ import { BUILD_ASKS, BUILD_RAIL_NOTES } from '../buildEadwyn';
  * the pages that edit them today.
  */
 const build = {
+  Overview: BuildOverview,
   modules: MODULES.build,
   // THE ONE PLACE A STARTUP IS CREATED. `/projects` is retired and the Build
   // desk inherited the only `api.createProject` caller; sixteen links,
