@@ -153,17 +153,80 @@ test('timeline parsing keeps the ending event, the merged commit and only a stri
 test('the Markdown counts rows per class and the request plan fits under the stated cap', () => {
   const md = m.report({ runs, prs, start: T0, now: T0 + 86_400_000, requests: 0, rows, deadline: 90 });
   assert.match(md, /\| Merge-group candidates by outcome \| deadline-expired 1, failed-check 1, cancelled-or-superseded 1, merged 1, missing-evidence 1 \(n=5\); deadline 90 min;/);
+  // D5973 part 2: one plan for D5973's candidates and D6678's queue listing.
   const b = m.BUDGET;
-  assert.equal(b.cap, 200);
-  assert.ok(b.runPages + b.rules <= b.jobsUntil);
-  assert.ok(b.jobsUntil + b.prPages <= b.timelinesUntil);
-  assert.ok(b.timelinesUntil + b.commentPages + b.writes <= b.cap, 'the comment always fits');
+  const plan = m.requestPlan();
+  assert.equal(b.cap, 385);
+  // Listings before the sample: 10 run pages + 3 queue workflows x 5 pages + 1 rules read = 26.
+  assert.equal(plan.listings, 26);
+  // The sample: 32 SHAs x 3 queue workflows + (74 - 32) more ci.yml queue runs + 3 events x 12 = 174 job reads,
+  // inside 210 - 26 = 184, so 10 are left for prior-attempt reads.
+  assert.equal(plan.sample, 174);
+  assert.equal(plan.jobRoom, 184);
+  assert.ok(plan.sample <= plan.jobRoom, 'the whole job sample fits before jobsUntil');
+  // Timelines and head listings keep D6678's room: 370 - 210 - 2 PR-list pages = 158.
+  assert.equal(plan.timelineRoom, 158);
+  // Worst case: a timeline step starts at 369 and takes 3 pages + 1 head listing (373), then 10 comment pages + 1 write = 384.
+  assert.equal(plan.worst, 384);
+  assert.ok(plan.worst <= b.cap, 'the comment always fits');
   const cli = readFileSync(new URL('../../scripts/ci-scorecard.mjs', import.meta.url), 'utf8');
   assert.match(cli, /const \{ cap \} = BUDGET;/);
   assert.doesNotMatch(cli, /requests [<>]=? \d/, 'every phase line comes from BUDGET');
-  // Every page limit comes from BUDGET but a timeline's one page, which counts against timelinesUntil.
-  assert.deepEqual(cli.match(/await pages\([^)]*, \d+\)/g), ['await pages(`issues/${number}/timeline`, 1)']);
+  // Every page limit and sample size comes from BUDGET.
+  assert.equal(cli.match(/await pages\([^)]*, \d+\)/g), null);
+  assert.doesNotMatch(cli, /evenlySpaced\([^)]*, \d+\)|slice\(0, \d+\)/);
+  assert.match(cli, /actions\/workflows\/\$\{file\}\/runs\?event=merge_group&created=\$\{created\}`, BUDGET\.queuePages,/);
   const yml = readFileSync(new URL('../../.github/workflows/ci-scorecard.yml', import.meta.url), 'utf8');
   assert.match(yml, /CI_SCORECARD_ROWS: \$\{\{ runner\.temp \}\}\/ci-scorecard-candidates\.json\n/);
   assert.match(yml, /if: always\(\)\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: ci-scorecard-candidates\n\s+path: \$\{\{ runner\.temp \}\}\/ci-scorecard-candidates\.json\n/);
+});
+
+test('the rows read every listing: a candidate split across the queue listing and the all-workflow listing is classified whole', () => {
+  // D5973 part 2: ci.yml's queue run from its own listing, the other two from the capped all-workflow listing.
+  const ids = (list, base) => list.map((r, i) => ({ ...r, id: base + i }));
+  const [ci, gitleaks, migrations] = ids(candidate('f', 106, 0, n => n === 'frontend (build)' ? [20, 30, 'failure'] : [20, 25]), 60);
+  const split = pr(106, [removed(-2, 31)]);
+  // A prior attempt pushed beside its run (same id) never stands in for it.
+  const union = m.unionRuns([gitleaks, migrations], [{ ...ci, priorAttempt: true, jobs: [] }], [ci]);
+  assert.deepEqual(union.map(r => r.id), [61, 62, 60]);
+  assert.equal(m.candidateRows({ runs: union, prs: [split], deadline: 90 })[0].outcome, 'failed-check');
+  // The report's own default reads both listings too.
+  assert.match(m.report({ runs: [gitleaks, migrations], queueRuns: [ci], prs: [split], start: T0, now: T0 + 86_400_000, requests: 0 }),
+    /\| Merge-group candidates by outcome \| deadline-expired 0, failed-check 1, cancelled-or-superseded 0, merged 0, missing-evidence 0 \(n=1\)/);
+  // A row with jobs wins over the same id without; a candidate missing one workflow's run is missing evidence, never guessed.
+  const bare = { ...gitleaks, jobs: undefined };
+  assert.equal(m.unionRuns([bare], [gitleaks])[0], gitleaks);
+  const [eci, egl] = ids(candidate('7', 107, 0, n => n === 'test:drift (full suite)' ? [80, null] : [30, 60], { status: 'in_progress', conclusion: null }), 70);
+  const partial = m.candidateRows({ runs: m.unionRuns([egl], [eci]), prs: [pr(107, [removed(-1, 91)])], deadline: 90 })[0];
+  assert.equal(partial.outcome, 'missing-evidence');
+  assert.match(partial.evidence, /required jobs not sampled/);
+});
+
+test('the job sample takes whole SHAs first, listed ones first, then more ci.yml queue runs, then the other events', () => {
+  // D5973 part 2: queue runs of four head SHAs, three workflows each; only SHA 1's ci.yml run is in the capped listing.
+  const q = (c, path, id) => ({ id, event: 'merge_group', path: `.github/workflows/${path}`, head_sha: sha(c) });
+  const queueRuns = ['4', '3', '2', '1'].flatMap((c, i) => ['migration-immutability.yml', 'ci.yml', 'gitleaks.yml'].map((p, j) => q(c, p, 10 * i + j)));
+  const listedCi = queueRuns.find(r => r.head_sha === sha('1') && r.path.endsWith('/ci.yml'));
+  const other = (event, id) => ({ id, event, path: '.github/workflows/x.yml', head_sha: sha('0') });
+  const runs = [listedCi, other('pull_request', 100), other('pull_request', 101), other('push', 102), other('schedule', 103),
+    queueRuns.find(r => r.head_sha === sha('2') && r.path.endsWith('gitleaks.yml'))];
+  const budget = { ...m.BUDGET, wholeShas: 2, queueCiRuns: 3, perEvent: 1 };
+  const pick = m.jobSample({ runs, queueRuns, budget }).map(r => `${r.head_sha[0]}:${r.path.split('/').pop()}:${r.event}`);
+  assert.deepEqual(pick, [
+    // The listed SHA first, whole; then the rest, evenly spaced (one slot: the first, SHA 4), whole.
+    '1:ci.yml:merge_group', '1:gitleaks.yml:merge_group', '1:migration-immutability.yml:merge_group',
+    '4:ci.yml:merge_group', '4:gitleaks.yml:merge_group', '4:migration-immutability.yml:merge_group',
+    // One more ci.yml queue run brings ci.yml to queueCiRuns = 3.
+    '3:ci.yml:merge_group',
+    // One each of pull_request, push and other; SHA 2's listed gitleaks queue run is not "other".
+    '0:x.yml:pull_request', '0:x.yml:push', '0:x.yml:schedule',
+  ]);
+  // At the stated sizes a busy day fills the plan exactly: 32 x 3 + (74 - 32) + 3 x 12 = 174.
+  const busy = Array.from({ length: 100 }, (_, i) => String(i).padStart(2, '0')).flatMap((c, i) =>
+    ['ci.yml', 'gitleaks.yml', 'migration-immutability.yml'].map((p, j) => ({ ...q('a', p, 1000 + 3 * i + j), head_sha: c.repeat(20) })));
+  const events = ['pull_request', 'push', 'schedule'].flatMap((e, i) => Array.from({ length: 20 }, (_, k) => other(e, 5000 + 100 * i + k)));
+  const full = m.jobSample({ runs: events, queueRuns: busy });
+  assert.equal(full.length, m.requestPlan().sample);
+  assert.equal(full.filter(r => r.event === 'merge_group' && r.path.endsWith('/ci.yml')).length, 74);
+  assert.equal(new Set(full.filter(r => r.event === 'merge_group' && !r.path.endsWith('/ci.yml')).map(r => r.head_sha)).size, 32);
 });
