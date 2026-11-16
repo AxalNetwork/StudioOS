@@ -16,6 +16,7 @@ import type { Env } from '../types';
 import { SEARCH_INDEX_MODEL, searchIndexAccepts } from './ai/shapes';
 import { run as aiRun } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { dealHiddenFrom } from './dealPreparation';
 
 // D761 PR 2: the one model whose vectors `axal-search` holds. A rail's
 // embedding (bge-m3, EmbeddingGemma, …) is never written here: the index
@@ -394,6 +395,8 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
     });
   }
   if (type === 'deal') {
+    // D5454: a deal that is not listed (an unreleased, unknown, withdrawn or archived preparation) leaves the index.
+    if (await dealHiddenFrom(env, id, 'discovery')) { await deleteEntity(env, type, id); return false; }
     const row = await env.DB.prepare(
       `SELECT d.id, d.status, d.notes, d.amount, p.name AS project_name, p.sector
          FROM deals d LEFT JOIN projects p ON p.id = d.project_id

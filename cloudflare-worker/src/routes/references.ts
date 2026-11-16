@@ -12,10 +12,10 @@
  * open is a 404, the same as a missing one, so its existence does not leak.
  * The cross-deal list is gone: `GET /` requires `deal_id`.
  *
- * SCOPE CUT (vs FastAPI): audio recording upload/download, transcription, and
- * AI summarization are STUBBED to 501 Not Implemented in this worker port.
- * The frontend will see the missing-recording state. Schedule + consent
- * capture + manual notes flow is fully functional.
+ * D6183 (#6183): the owner chose B. A reference call keeps typed notes, and
+ * Eadwyn summarises those notes on press (`POST /:id/summarize`). There is no
+ * audio: no recording upload or URL and no transcription, so those routes do
+ * not exist (the 501 stubs are gone).
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
@@ -23,6 +23,9 @@ import { requireAuth } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { userMayReadDeal } from './deals';
 import { logDealRoomAction } from '../services/dealRoomAudit';
+import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -86,6 +89,8 @@ function dto(r: Row, includeTranscript = false): any {
     recording_uploaded_at: r.recording_uploaded_at,
     has_transcript: !!r.transcript, transcribed_at: r.transcribed_at,
     summary, summarized_at: r.summarized_at,
+    // D6183: the notes changed after the summary was written, so it may no longer match them.
+    summary_stale: !!summary && typeof summary.notes_digest === 'string' && summary.notes_digest !== notesDigest(r.notes),
     status: r.status, notes: r.notes,
     created_at: r.created_at, updated_at: r.updated_at,
   };
@@ -213,10 +218,71 @@ r.post('/:id/consent', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// Stubs (R2 + AI integration not in this worker port).
-r.post('/:id/recording', (c) => c.json({ detail: 'Recording upload not yet supported in worker; use the FastAPI dev backend' }, 501));
-r.get('/:id/recording-url', (c) => c.json({ detail: 'Recording URL not yet supported in worker' }, 501));
-r.post('/:id/transcribe', (c) => c.json({ detail: 'Transcription not yet supported in worker' }, 501));
-r.post('/:id/summarize', (c) => c.json({ detail: 'AI summarization not yet supported in worker' }, 501));
+/** The model runner, replaced in tests so no test reaches a provider. */
+export const summaryDeps = { run: runAI };
+
+/** Notes shorter than this are not worth a charged run; the member is told why. */
+export const MIN_NOTES_CHARS = 40;
+const MAX_NOTES_CHARS = 12_000;
+
+const SUMMARY_PROMPT = [
+  'You summarise an investor\'s own notes from a reference call about a startup founder.',
+  'Use only what the notes say. Never add facts, names or judgements the notes do not contain.',
+  'Answer with JSON only: {"summary": string (2-4 sentences), "strengths": string[], "concerns": string[]}.',
+  'Each list item is one short phrase taken from the notes. An empty list is fine.',
+].join(' ');
+
+/** A non-cryptographic fingerprint of the notes, to tell whether a summary still matches them. */
+function notesDigest(notes: string | null): string {
+  const s = String(notes ?? '');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return `${s.length}:${(h >>> 0).toString(16)}`;
+}
+
+/** The model's JSON, held to its shape; anything else is null and nothing is stored. */
+export function parseSummary(raw: string): { summary: string; strengths: string[]; concerns: string[] } | null {
+  const m = String(raw ?? '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let v: any;
+  try { v = JSON.parse(m[0]); } catch { return null; }
+  if (!v || typeof v.summary !== 'string' || !v.summary.trim()) return null;
+  const list = (x: unknown) => (Array.isArray(x) ? x : []).filter((s): s is string => typeof s === 'string' && !!s.trim())
+    .map((s) => s.trim().slice(0, 200)).slice(0, 6);
+  return { summary: v.summary.trim().slice(0, 1200), strengths: list(v.strengths), concerns: list(v.concerns) };
+}
+
+// D6183: Eadwyn summarises the typed notes, on press, for the reference's author or an admin.
+r.post('/:id/summarize', async (c) => {
+  try {
+    const user = await requireAuth(c); gate(user);
+    const row = await loadReference(c, user, c.req.param('id'));
+    if (!row) return c.json(NOT_FOUND, 404);
+    if (user.role !== 'admin' && Number(row.created_by) !== user.id) return c.json({ detail: 'Forbidden' }, 403);
+    const notes = String(row.notes ?? '').trim();
+    if (notes.length < MIN_NOTES_CHARS) {
+      return c.json({ code: 'notes_required', detail: `Write at least ${MIN_NOTES_CHARS} characters of notes from the call first. Eadwyn summarises your notes only.` }, 409);
+    }
+    const out = await summaryDeps.run(c.env, {
+      task: 'workspace_explain', userId: user.id, systemPrompt: SUMMARY_PROMPT,
+      messages: [{ role: 'user', content: `Notes from the reference call:\n${notes.slice(0, MAX_NOTES_CHARS)}` }],
+      maxTokens: 600, temperature: 0.1,
+      surface: AI_SURFACE.dealReferences, rail: railFor(c, { page: 'Deal · References', option: 'summarise:reference-notes' }),
+    });
+    const refused = refuseRun(c, { refusal: out.refusal });
+    if (refused) return refused;
+    if (!out.ok) return c.json({ code: 'summary_unreadable', detail: 'Eadwyn could not summarise these notes. Try again.' }, 503);
+    const parsed = parseSummary(String(out.output ?? ''));
+    if (!parsed) return c.json({ code: 'summary_unreadable', detail: 'The summary could not be read, so it was not saved. The run may still be charged.' }, 503);
+    const at = nowIso();
+    const summary = { ...parsed, from: 'notes', model: out.usage?.model ?? null, notes_digest: notesDigest(row.notes) };
+    await c.env.DB.prepare(
+      "UPDATE reference_checks SET summary_json = ?, summarized_at = ?, status = CASE WHEN status = 'cancelled' THEN status ELSE 'summarized' END, updated_at = ? WHERE id = ?",
+    ).bind(JSON.stringify(summary), at, at, row.id).run();
+    await logDealRoomAction(c.env, user, 'reference_summarized', Number(row.deal_id), { reference_id: row.id });
+    const fresh = await c.env.DB.prepare('SELECT * FROM reference_checks WHERE id = ?').bind(row.id).first<Row>();
+    return c.json(dto(fresh!, true));
+  } catch (e) { return mapError(c, e); }
+});
 
 export default r;

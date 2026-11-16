@@ -81,7 +81,13 @@ async function main(candidate, mode) {
     await delay(60_000);
   } while (Date.now() < deadline);
   console.log(JSON.stringify(report));
-  if (report.status === 'superseded') console.log('::notice title=StudioOS release admission::superseded');
+  const stage = process.env.STUDIOOS_RELEASE_CHECK;
+  const run = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT;
+  if (report.status === 'superseded' && report.candidate === process.env.GITHUB_SHA &&
+      /^[a-z-]+$/.test(stage ?? '') && /^[1-9][0-9]*$/.test(run ?? '') && /^[1-9][0-9]*$/.test(attempt ?? '')) {
+    console.log('::notice title=StudioOS release outcome v1::' +
+      ['superseded', stage, run, attempt, report.candidate, report.main].join(' '));
+  }
   if (report.status !== 'verified') process.exitCode = 1;
 }
 

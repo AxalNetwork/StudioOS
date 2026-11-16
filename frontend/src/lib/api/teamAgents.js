@@ -137,6 +137,8 @@ export const teamAgentsApi = {
   extendSkill: (uid, { company, reason, version, name } = {}) =>
     request(`/teams/skills/${enc(uid)}/extend`, { method: 'POST', body: JSON.stringify({ company, reason, ...(version != null ? { version } : {}), ...(name != null ? { name } : {}) }) }),
   skillBase: (uid) => request(`/teams/skills/${enc(uid)}/base`),
+  // D4538 part 5 (#5965), SK-20: explicit per-conflict choices create a draft; never publish or change pins.
+  rebaseSkill: (uid, body) => request(`/teams/skills/${enc(uid)}/rebase`, { method: 'POST', body: JSON.stringify(body) }),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

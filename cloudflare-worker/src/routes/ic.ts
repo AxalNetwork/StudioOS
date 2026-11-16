@@ -24,6 +24,7 @@
  * `requireOwnEngagement` and `requireOwnQuote`, whose own comment says it: a
  * 403 confirms to a non-owner that the row exists.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
 import { findableBy } from '../services/investorFindable';
 import type { Env, User } from '../types';
@@ -669,6 +670,11 @@ r.get('/:uid', async (c) => {
 r.put('/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
+    const body = await c.req.json().catch(() => ({} as any));
+    if (body?.status !== undefined || body?.decision !== undefined || body?.outcome !== undefined) {
+      const previewRefusal = investorPreviewRefusal(c, user);
+      if (previewRefusal) return previewRefusal;
+    }
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
     const d = await loadDecision(c.env, user, c.req.param('uid'));
     if (!d) return c.json({ detail: 'Not found' }, 404);
@@ -678,7 +684,6 @@ r.put('/:uid', async (c) => {
     // a rule about authorship inside a firm, not a tenancy boundary, and
     // telling a colleague the row exists gives away nothing they cannot read.
     if (d.created_by !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const body = await c.req.json().catch(() => ({} as any));
     const title = body.title !== undefined ? (body.title ? String(body.title).slice(0, 300) : d.title) : d.title;
     const memo = body.memo !== undefined ? (body.memo ? String(body.memo).slice(0, 20000) : null) : d.memo;
     const termsJson = body.terms !== undefined ? (body.terms != null ? JSON.stringify(body.terms) : null) : d.terms_json;
@@ -714,6 +719,8 @@ r.put('/:uid', async (c) => {
 r.post('/:uid/vote', async (c) => {
   try {
     const user = await requireAuth(c);
+    const previewRefusal = investorPreviewRefusal(c, user);
+    if (previewRefusal) return previewRefusal;
     if (!canUseIc(user)) return c.json({ detail: 'Forbidden' }, 403);
     const d = await loadDecision(c.env, user, c.req.param('uid'));
     if (!d) return c.json({ detail: 'Not found' }, 404);

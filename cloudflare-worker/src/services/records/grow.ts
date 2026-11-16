@@ -36,8 +36,8 @@ import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
-  updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
+  markHeld, obligationKind, obligationState, openMinutes, removeEntryStep, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
 import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
@@ -356,7 +356,7 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
       .bind(rc.projectId, since).all<{ utm_json: string }>();
     const signups = (res.results || []).filter((c) => utmSource(c.utm_json) === ch.utm_source).length;
     return { rows: [
-      notRecorded('Visits', 'No page-visit store'),
+      notRecorded('Visits', 'No per-channel visit count'), // D6107: PostHog visits are venture-wide, on the Distribution card
       { a: 'Sign-ups', b: 'contacts from this channel, last 30 days', c: String(signups) },
       { a: 'Paying', b: 'customers from this channel this month', c: String(row?.customers ?? 0) },
     ] };
@@ -415,11 +415,13 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
 // ── Revenue and traction — id: the KPI key ──────────────────────────────────
 
 /** Worked out by the platform, never typed (decision 4). */
-const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway']);
+const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
 const DERIVED_REASON: Record<string, string> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export function kpiValueText(value: number | null, unit: string | null): string | null {
@@ -428,6 +430,7 @@ export function kpiValueText(value: number | null, unit: string | null): string 
   if (unit === 'usd_cents') return money(value);
   if (unit === 'pct') return `${Math.round(value * 100) / 100}%`;
   if (unit === 'months') return `${Math.round(value * 10) / 10} months`;
+  if (unit === 'multiple') return `${Math.round(value * 100) / 100}×`;
   return Number(value).toLocaleString('en-US');
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
@@ -913,6 +916,11 @@ async function marketGeographies(rc: RecordContext) {
   return (res?.results ?? []).map(({ code, name }) => ({ value: code, label: name }));
 }
 
+/** D6113 (#6113): an entry step's Edit sends these keys only. */
+const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
+/** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
+const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
+
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
   if (!m) throw vanished();
@@ -928,10 +936,20 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
     const { m } = loadedOf(record);
-    const res = await rc.env.DB.prepare('SELECT text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
+    const res = await rc.env.DB.prepare('SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
       .bind(m.id).all<Any>();
-    return { rows: (res.results || []).map((s) => ({ a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb' })),
-      empty: 'No entry step recorded.', action: 'add-entry-step' };
+    // D6113 (#6113): each step names itself by uid, so Mark done or Reopen, Edit and Remove address it.
+    return { rows: (res.results || []).map((s) => {
+      const step = { step: String(s.uid) };
+      return {
+        a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb',
+        action: { key: s.done_at ? 'reopen-entry-step' : 'mark-entry-step-done', body: step },
+        actions: [
+          { key: 'edit-entry-step', body: step, values: { text: String(s.text), owner_name: s.owner_name ?? '', due_on: s.due_on ?? '' } },
+          { key: 'remove-entry-step', body: step },
+        ],
+      };
+    }), empty: 'No entry step recorded.', action: 'add-entry-step' };
   }),
   section('localisation', 'Localisation', async (rc, _id, record) => {
     const { m } = loadedOf(record);
@@ -972,6 +990,29 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addEntryStep(c.env, c.projectId, userOf(c), id, plain(body)) })),
+  }, {
+    key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: true }) })),
+  }, {
+    key: 'reopen-entry-step', label: 'Reopen', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: false }) })),
+  }, {
+    key: 'edit-entry-step', label: 'Edit', kind: 'form', row_only: true,
+    references: stepRef,
+    form: { title: 'Edit entry step', cta: 'Save', fields: [
+      { key: 'text', label: 'Step', kind: 'T', required: true },
+      { key: 'owner_name', label: 'Owner', kind: 'T' },
+      { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), pick(body, ENTRY_STEP_EDIT)) })),
+  }, {
+    key: 'remove-entry-step', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+    confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
   }, {
     key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
