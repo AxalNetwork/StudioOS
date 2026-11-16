@@ -37,6 +37,74 @@ permissions:
   pull-requests: write
 
 jobs:
+  delete-merged-branch:
+    name: Delete the merged PR branch
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.draft == false &&
+      github.ref == 'refs/heads/main' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.id == github.event.repository.id
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      # Use only the merged workflow and the built-in token.
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { repository, pull_request: pr } = context.payload;
+            const branch = pr.head.ref;
+            const mergedHead = pr.head.sha;
+            if (branch === 'main' || branch === repository.default_branch ||
+                branch.startsWith('claim/') || branch.startsWith('gh-readonly-queue/')) {
+              return core.info('Keeping a reserved branch.');
+            }
+
+            const { owner, repo } = context.repo;
+            const currentBranch = async () => {
+              try {
+                const response = await github.rest.repos.getBranch({ owner, repo, branch });
+                return response.data;
+              } catch (error) {
+                if (error.status === 404) return null;
+                throw error;
+              }
+            };
+            const current = await currentBranch();
+            if (!current || current.name !== branch || current.commit.sha !== mergedHead) {
+              return core.info('Branch already removed, renamed, or updated since merge.');
+            }
+            if (current.protected !== false) return core.info('Keeping a protected branch.');
+
+            const open = { owner, repo, state: 'open', per_page: 1 };
+            const [asHead, asBase] = await Promise.all([
+              github.rest.pulls.list({ ...open, head: owner + ':' + branch }),
+              github.rest.pulls.list({ ...open, base: branch }),
+            ]);
+            if (asHead.data.length || asBase.data.length) return core.info('An open PR uses this branch.');
+
+            // GitHub compares the original PR head with the ref inside the deletion itself.
+            // This also works when squash or queue merges give main a different SHA.
+            try {
+              await github.graphql(`
+                mutation($input: UpdateRefsInput!) {
+                  updateRefs(input: $input) { clientMutationId }
+                }`, {
+                input: { repositoryId: repository.node_id, refUpdates: [{
+                  name: 'refs/heads/' + branch, beforeOid: mergedHead, afterOid: '0'.repeat(40),
+                }] },
+              });
+            } catch (error) {
+              const latest = await currentBranch();
+              if (latest && latest.name === branch && latest.commit.sha === mergedHead) throw error;
+              return core.info('Branch already removed, renamed, or updated during cleanup.');
+            }
+            core.info('Deleted the merged PR branch.');
+
   deploy:
     name: deploy the preview Worker
     if: >-

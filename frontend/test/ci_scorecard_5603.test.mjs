@@ -30,7 +30,7 @@ test('nearest rank, time distributions and queue-to-merge include sample sizes',
   assert.deepEqual(m.prFeedback(runs).p50, { value: 8, n: 1 });
   assert.deepEqual(m.runnerWait(runs).suite.p90, { value: 7, n: 2 });
   assert.deepEqual(m.queueToMerge(prs).p50, { value: 9, n: 1 });
-  assert.deepEqual(m.runsPerQueuedPr(runs, prs), { value: 0.5, n: 2 });
+  assert.deepEqual(m.runsPerQueuedPr(runs, prs, Date.parse(at(0))), { value: 0.5, n: 2 });
 });
 
 test('queue overlap counts once and concurrency includes jobs from other events', () => {
@@ -55,9 +55,9 @@ test('failure classes distinguish infra, later success, inherited, PR-specific, 
   assert.deepEqual(results, { n: 5, counts: { pr: 1, inherited: 1, unknown: 1, infra: 1, flaky: 1 } });
 });
 
-test('empty report has ten unavailable metrics and excludes untrusted job names', () => {
+test('empty report has eleven unavailable metrics and excludes untrusted job names', () => {
   const output = m.report({ runs: [], prs: [], start: Date.parse(at(0)), now: Date.parse(at(13)), requests: 0 });
-  assert.equal(output.match(/n\/a/g).length, 12);
+  assert.equal(output.match(/n\/a/g).length, 23);
   assert.deepEqual(m.runnerWait([run('pull_request', 'x', [job('unsafe | <b>', 1, 2)])]), {});
 });
 

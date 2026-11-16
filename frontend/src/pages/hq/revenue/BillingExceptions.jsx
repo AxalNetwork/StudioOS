@@ -6,6 +6,7 @@ import { Figure, StateMark, Section, When, Why, TABLE, TD, TH, NUM } from './Rev
 import {
   UNAVAILABLE, dayOf, evidenceDueSoon, evidenceOverdue, isReady, money, openDisputes,
 } from './revenueModel.js';
+import { AdvisoryRefundsBlock, AdvisoryRefundsTile } from './AdvisoryRefundsDue.jsx';
 
 /**
  * D5039 (canvas RV08) — Billing exceptions: actionable anomalies only. Open
@@ -19,6 +20,11 @@ import {
  * Pure over its props so every state renders in a test: `refunds` and
  * `disputes` are each null (loading), UNAVAILABLE (the read failed) or the
  * endpoint's payload.
+ *
+ * D5305 (#5305, boards RV16 to RV21): advisory refunds due get a third tile and
+ * their own block under the table (`AdvisoryRefundsDue.jsx`), read on their
+ * own (`advisoryRefunds`: null, UNAVAILABLE, HIDDEN for a viewer who is not a
+ * Super Admin, or the payload), so their failure leaves the two above standing.
  */
 /** A Stripe or refund status as itself: glyph and word, not one of the value states. */
 function Status({ glyph, children }) {
@@ -29,7 +35,10 @@ function Status({ glyph, children }) {
   );
 }
 
-export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, onRetryDisputes, onWhy, refundForm = null }) {
+export function BillingExceptions({
+  refunds, disputes, nowSec, onRetryRefunds, onRetryDisputes, onWhy, refundForm = null,
+  advisoryRefunds, onRetryAdvisoryRefunds, onMarkAdvisoryRefund,
+}) {
   const refundsReady = isReady(refunds) && refunds.available;
   const open = openDisputes(disputes);
 
@@ -83,6 +92,7 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
             : { state: refunds && refunds !== UNAVAILABLE && !refunds.available ? 'unavailable' : (refunds === UNAVAILABLE ? 'unavailable' : 'loading'), text: null }} />
           {refundsReady && refunds.by_currency.length > 0 && <span>· {refunds.by_currency.map((b) => money(b.amount_cents, b.currency)).join(' · ')}</span>}
         </span>
+        {advisoryRefunds !== undefined && <AdvisoryRefundsTile read={advisoryRefunds} />}
         <Why source="refunds" onOpen={onWhy} label="Sources" />
       </div>
 
@@ -149,6 +159,9 @@ export function BillingExceptions({ refunds, disputes, nowSec, onRetryRefunds, o
           <summary className="cursor-pointer text-[13px] font-bold text-axal-ink dark:text-gray-100">Refund a payment… · step-up</summary>
           {refundForm}
         </details>
+      )}
+      {advisoryRefunds !== undefined && (
+        <AdvisoryRefundsBlock read={advisoryRefunds} onRetry={onRetryAdvisoryRefunds} onMark={onMarkAdvisoryRefund} />
       )}
     </Section>
   );
