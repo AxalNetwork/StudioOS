@@ -72,7 +72,7 @@ async function mounted(url, user, handler = handlerWith()) {
     h(Routes, null,
       h(Route, { path: '/deals/:dealId', element: h(DealRoomPage) }),
       h(Route, { path: '/deals/:dealId/:tab', element: h(DealRoomPage) }))))));
-  const settle = async () => { await act(async () => { for (let i = 0; i < 14; i += 1) await new Promise((r) => setTimeout(r, 0)); }); };
+  const settle = async () => { await act(async () => { for (let i = 0; i < 14; i += 1) await new Promise((r) => setImmediate(r)); }); };
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const nodes = () => walk(document.body);
