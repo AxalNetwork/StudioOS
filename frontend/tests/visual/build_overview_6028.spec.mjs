@@ -53,7 +53,9 @@ async function open(page, request, width, theme, mode = 'ready') {
   if (theme === 'dark') await page.route('**/api/settings/appearance', (route) => (route.request().method() === 'GET' ? route.fulfill({ json: { theme: 'dark' } }) : route.continue()));
   await page.route('**/api/cycles/build/overview*', (route) => route.fulfill({ json: overview(m.oneClick.projectId, mode) }));
   await page.goto(`/build?project_id=${m.oneClick.projectId}`);
-  await expect(page.getByTestId(width < 1024 ? 'phone-root' : 'build-overview-v2')).toBeVisible();
+  // D4846 part 2 (#6032): Build draws its desktop overview from 768px (its
+  // tablet tier, ui/phone/tabletTier.js); the phone page is below 768px only.
+  await expect(page.getByTestId(width < 768 ? 'phone-root' : 'build-overview-v2')).toBeVisible();
   if (theme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
   return m;
 }
@@ -64,7 +66,7 @@ for (const width of [1440, 768, 390]) {
       await open(page, request, width, theme);
       await expect(page.getByTestId('cycle-action')).toHaveCount(0);
       await expect(page.getByText('Connect a tool')).toHaveCount(0);
-      if (width < 1024) {
+      if (width < 768) {
         await expect(page.getByTestId('phone-focus-cta')).toHaveText('Set target');
         await expect(page.getByTestId('build-attention-must_haves')).toBeVisible();
         await expect(page.getByTestId('phone-index-build-plan')).toContainText('4 accepted · 2 waiting for decision');
