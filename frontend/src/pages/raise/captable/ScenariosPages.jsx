@@ -18,7 +18,7 @@ import {
   draftFromScenario, engineNotes, exitPanels, founderPanels, fromToday, inputsFromDraft, nameError,
   newScenarioInputs, nextName, notModelled, paymentReadBack, roundEvents, roundReadBack, runRequest,
   sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
-  isChangedSinceOpen, toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
+  isChangedSinceOpen, toggleCompare, usedByLine, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
 } from './scenariosModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -538,6 +538,11 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                 </span>
               ) : null}
             </div>
+            {usedByLine(scenario.used_by_plans) ? (
+              <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-used-by">
+                {usedByLine(scenario.used_by_plans)} <Link className={LINK} to={`/raise/use-of-funds${tabSearch(search)}`}>Open Use of funds</Link>
+              </p>
+            ) : null}
             {model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-model-locked">{MODEL_LOCKED}</p> : null}
             {!plan ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-plan">{PLAN_LINE} Everything here still reads.</p>
               : !writes && !model ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-scenario-read-only">{READ_ONLY}</p> : null}
