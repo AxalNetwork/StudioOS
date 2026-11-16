@@ -44,8 +44,9 @@ import { DeployStep } from './DeployStep';
 import { NoticesEditor } from './NoticesEditor';
 import { LicenceSyncStrip } from './LicenceSyncStrip';
 import { TerritoryEditor } from './TerritoryEditor';
-import OutcomeNotice from '../../../components/OutcomeNotice';
-import { describeOutcome, outcomeFromError, outcomeOfError } from '../../../lib/mutationOutcome';
+import LicenceOutcomeCard from '../LicenceOutcomeCard';
+import { licenceWriteOutcome } from '../licenceOutcomeModel';
+import { outcomeOfError } from '../../../lib/mutationOutcome';
 import { BELOW_MD_QUERY, usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 
 /* ------------------------------------------------------------------ *
@@ -98,16 +99,19 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   // terminate) says how it ended. An unknown outcome re-reads the licence
   // before anything is offered again, so the status shown is the one the
   // server holds, not the one the operator hoped for.
-  const [actNotice, setActNotice] = useState(null);
-  async function act(fn, ...args) {
-    setBusy(true); setActNotice(null);
+  // D4819 part 5 (#5928, L18): the write's outcome is kept as what happened (`action`, `phase`, `result`,
+  // `error`) and drawn against the licence's `sync` as last read, so a partial outcome says what the branch
+  // holds now. Pending, completed, partial, refused and unknown each look different (`LicenceOutcomeCard`).
+  const [actOutcome, setActOutcome] = useState(null);
+  async function act(action, fn, ...args) {
+    setBusy(true); setActOutcome({ action, phase: 'pending' });
     try {
-      await fn(...args);
-      setActNotice(describeOutcome('committed', { fallback: 'Done. The licence below is as the server now holds it.' }));
+      const result = await fn(...args);
+      setActOutcome({ action, phase: 'done', result });
       refresh();
     } catch (e) {
       reportError('licence_action_failed', e);
-      setActNotice(outcomeFromError(e, 'That was refused. The licence is unchanged.'));
+      setActOutcome({ action, phase: 'failed', error: e });
       if (outcomeOfError(e) === 'unknown') refresh();
     } finally { setBusy(false); }
   }
@@ -136,11 +140,11 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
 
   // D4819 part 4 — what each lifecycle action writes, once its sheet is confirmed.
   const WRITES = {
-    activate: () => act(api.licenceActivate, d.uid),
-    reinstate: () => act(api.licenceReinstate, d.uid),
-    renew: () => act(api.licenceRenew, d.uid, {}),
-    suspend: (reason) => act(api.licenceSuspend, d.uid, reason),
-    terminate: (reason) => act(api.licenceTerminate, d.uid, reason),
+    activate: () => act('activate', api.licenceActivate, d.uid),
+    reinstate: () => act('reinstate', api.licenceReinstate, d.uid),
+    renew: () => act('renew', api.licenceRenew, d.uid, {}),
+    suspend: (reason) => act('suspend', api.licenceSuspend, d.uid, reason),
+    terminate: (reason) => act('terminate', api.licenceTerminate, d.uid, reason),
   };
   const runAction = async (action) => {
     if (busy) return;
@@ -279,7 +283,11 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   return (
     <div>
       {consequenceSheet}
-      <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
+      <LicenceOutcomeCard
+        outcome={actOutcome ? licenceWriteOutcome({ ...actOutcome, sync: d.sync }) : null} busy={busy}
+        onRetrySync={() => act('syncRetry', api.licenceSyncRetry, d.uid)} onReread={refresh}
+        onDismiss={() => setActOutcome(null)} testId="licence-action-outcome"
+      />
       <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
       <AttentionStrip licence={d} facts={facts} />
       {phone && step === OVERVIEW_STEP && <PhoneTriage facts={facts} retry={retry} onOpenTab={(key) => onTab?.(key)} />}
@@ -294,7 +302,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       {/* The unfinished-termination notice stays above the sections: its Resume cannot wait for a tab.
           The sync figures moved to Operations › Branch and domain, and the old figures grid
           (territory, seats, fee, shares, renewal) to the header and the Overview's facts. */}
-      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="termination" />
+      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act('terminate', api.licenceTerminate, d.uid)} part="termination" />
 
       {d.blockers?.length > 0 && d.status !== 'active' && (
         <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
@@ -423,8 +431,9 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 5 && <LicenceAgreements licence={d} />}
         {step === 6 && (
           <div>
-            <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip"
-              deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load} />
+            <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act('terminate', api.licenceTerminate, d.uid)} part="strip"
+              deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load}
+              onRetry={() => act('syncRetry', api.licenceSyncRetry, d.uid)} />
             {domainStrip}
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
