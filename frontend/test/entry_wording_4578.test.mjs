@@ -78,7 +78,9 @@ test('the sign-in card and the site nav say "create an account", not "apply"', a
   assert.match(card, /Free\. Your membership is reviewed after you sign up\./);
   assert.match(card, /Create an account →/);
   assert.doesNotMatch(card, /Apply to Axal VC/);
-  assert.match(src('pages/LoginPage.jsx'), /applyLabel="Create an account →"/);
+  // #6958 (Sign In v2): /login no longer uses the separate card; the same words sit inside the sign-in card.
+  assert.match(src('pages/LoginPage.jsx'), /New to Axal VC\? <Link to=\{context\?\.registerHref \|\| '\/register'\}>Create an account<\/Link>/);
+  assert.doesNotMatch(src('pages/LoginPage.jsx'), /\bApply\b/);
   const { default: PublicNav } = await import('../src/components/PublicNav.jsx');
   const nav = text(renderToStaticMarkup(h(MemoryRouter, null, h(PublicNav))));
   assert.match(nav, /Create account →/);

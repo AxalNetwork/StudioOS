@@ -43,7 +43,18 @@ export default function AuthShell({
    * seam where the two meet.
    */
   plain = false,
+  /**
+   * #6958 — Sign In v2 (canvas D6956). /login's scene: the artwork full-bleed
+   * under a flat scrim (not the gradient above), the wordmark kept, and the
+   * children laid out by the page itself (a centred card on desktop, a bottom
+   * sheet on a phone, components/auth/SignInSurface.jsx) instead of in the
+   * 404px column. Opt-in, because registration and onboarding share this
+   * shell and keep their own layout.
+   */
+  signInScene = false,
 }) {
+  if (signInScene) return <SignInScene platformNote={platformNote} backgroundSrc={backgroundSrc}>{children}</SignInScene>;
+
   const shellStyle = plain
     ? undefined
     : backgroundSrc
@@ -106,6 +117,35 @@ export default function AuthShell({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** #6958 — the /login scene AuthShell renders for `signInScene` (see there). */
+function SignInScene({ children, platformNote, backgroundSrc }) {
+  return (
+    <div
+      className="signin-root relative min-h-screen flex flex-col"
+      style={{
+        minHeight: '100dvh',
+        backgroundColor: '#241f38',
+        backgroundImage: 'linear-gradient(rgba(36,31,56,.34), rgba(36,31,56,.34))'
+          + (backgroundSrc ? `, url(${backgroundSrc})` : ''),
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
+      <header
+        className="flex items-center justify-between gap-3 px-5 sm:px-8"
+        style={{ paddingTop: 'max(20px, env(safe-area-inset-top))', paddingBottom: 20 }}
+      >
+        <Link to="/" aria-label="Axal VC home" className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
+          <AxalLogo size="sm" onDark />
+        </Link>
+        <span className="hidden sm:inline font-mono text-[10px] uppercase tracking-widest text-white/85">{platformNote}</span>
+      </header>
+      {children}
     </div>
   );
 }

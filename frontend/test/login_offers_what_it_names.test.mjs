@@ -40,20 +40,25 @@ test('the card does not carry a hard-coded list of sign-in methods', () => {
   );
 });
 
-test('the blurb is derived from the live methods, and the derivation is the one rendered', () => {
-  assert.match(src, /alsoAvailable/, 'expected a derived list of available methods');
-  // Each entry must sit behind the SAME condition as its control. A derivation
-  // that hard-codes 'Google' into the list is the original bug with extra steps.
-  const decl = src.slice(src.indexOf('const alsoList'), src.indexOf('const alsoAvailable'));
-  assert.ok(decl.length > 0, 'could not find the alsoList derivation');
-  // 2026-09-21: Google moved from conditional to UNCONDITIONAL, so naming it is
-  // true by construction rather than by a probe agreeing. The property this file
-  // exists for — never name a method that is not offered — is unchanged and now
-  // holds more strongly: the sentence and the control are both unconditional.
-  assert.match(decl, /^\s*'Google',\s*$/m, "'Google' is always offered, so it is always named");
-  assert.match(decl, /passkeySupported/, "'passkey' must be named only when the browser supports one");
-  // ...and the sentence must actually consume it.
-  assert.match(src, /\{`? ?\$\{alsoAvailable\}/, 'the rendered sentence must interpolate alsoAvailable');
+test('every method the page names is a control rendered under the same condition (#6958)', () => {
+  // Sign In v2 (D6956) removed the sentence: the first view shows the three
+  // buttons themselves, and the Email chooser shows one row per method. The
+  // promise and the control are now the same element, so they cannot drift.
+  assert.ok(!/alsoAvailable/.test(src), 'a separate sentence naming methods is back');
+  // The passkey row is offered only where the browser has WebAuthn...
+  const chooser = src.slice(src.indexOf("(step === 'email') {"), src.indexOf("(step === 'link') {"));
+  const pk = chooser.indexOf('Use a passkey');
+  assert.ok(pk > 0, 'the passkey row is gone');
+  assert.match(chooser.slice(Math.max(0, pk - 400), pk), /\{passkeySupported && \(/, "the passkey row must sit behind passkeySupported");
+  // ...and the other two rows are always there, because their methods always are.
+  for (const row of ['Email me a sign-in link', 'Use an authenticator code']) {
+    const at = chooser.indexOf(row);
+    assert.ok(at > 0, `${row} is gone`);
+  }
+  // Apple is named only by its button, which renders only once configured.
+  const first = src.slice(src.lastIndexOf('} else {\n    body = ('));
+  assert.match(first, /\{appleConfigured && \(/);
+  assert.equal((src.match(/Continue with Apple/g) || []).length, 1, 'Apple is named outside its button');
 });
 
 test('there is NO pre-flight probe — the Google button is never gated on one', () => {
@@ -140,24 +145,6 @@ test('a server that genuinely refuses Google still says so — at click time', (
     catchBody, /setError\(/,
     'a refused click must put the server\'s reason on screen, from the catch',
   );
-});
-
-test('the list reads as English at every length', () => {
-  // Two items take "a and b"; three take the serial comma. A single join for
-  // both produced "passkey, and authenticator codes", which rendering caught and
-  // no source assertion would have.
-  const decl = src.slice(src.indexOf('const joined'), src.indexOf('const alsoAvailable'));
-  assert.match(decl, /alsoList\.length > 2/, 'the serial comma must be conditional on three items');
-  assert.match(decl, /join\(' and '\)/, 'two items must join with a bare "and"');
-  // The list opens a sentence, so its first letter is capitalised — otherwise
-  // dropping Google leaves ". passkey and authenticator codes".
-  assert.match(src, /charAt\(0\)\.toUpperCase\(\)/, 'the list opens a sentence and must be capitalised');
-});
-
-test('the collapsed toggle does not name a passkey the browser cannot offer', () => {
-  assert.match(src, /altFactorsLabel/, 'the toggle label must be derived too');
-  const decl = src.slice(src.indexOf('const altFactorsLabel'));
-  assert.match(decl.slice(0, 200), /passkeySupported \?/);
 });
 
 test('/magic/verify’s limiter-unavailable code has copy, and it does not blame the user', () => {
