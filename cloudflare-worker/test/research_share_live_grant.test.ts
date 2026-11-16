@@ -47,6 +47,7 @@ function fixture() {
   db.exec(sql('migrations/213_research_library.sql'));
   db.exec(sql('migrations/218_advisor_client_grants.sql'));
   db.exec(sql('migrations/221_research_ask_sessions.sql'));
+  db.exec(sql('migrations/202611151315_6272_ask_history_cleared.sql'));
   db.exec(sql('migrations/222_research_brief_notes.sql'));
   db.exec(sql('migrations/385_research_disposition_collections.sql'));
   db.exec(AI_LOG_SCHEMA + AI_BUDGET_MIGRATION);

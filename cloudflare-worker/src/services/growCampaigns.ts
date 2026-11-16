@@ -100,6 +100,20 @@ export function reportingWindow(from: unknown, to: unknown): ReportingWindow | n
   if (a > b) throw new Refused(400, 'from cannot be after to', 'from');
   return { from: a, to: b };
 }
+/** D6317: intersect recorded dates before rounding the overlap to whole spend months. */
+export function campaignChannelMonths(campaign: Pick<Campaign, 'starts_on' | 'ends_on'>, link: Pick<Campaign, 'starts_on' | 'ends_on'>, window: ReportingWindow | null = null) {
+  if (!campaign.starts_on || !campaign.ends_on) return { reason: 'incomplete_campaign' } as const;
+  const from = window && window.from > campaign.starts_on ? window.from : campaign.starts_on;
+  const to = window && window.to < campaign.ends_on ? window.to : campaign.ends_on;
+  if (from > to) return { reason: 'outside_window' } as const;
+  const start = link.starts_on && link.starts_on > from ? link.starts_on : from;
+  const end = link.ends_on && link.ends_on < to ? link.ends_on : to;
+  if (start > end) return { reason: 'outside_link' } as const;
+  return { start: start.slice(0, 7), end: end.slice(0, 7), reason: null };
+}
+
+export const NO_CHANNEL_MONTHS = 'Not recorded: this channel has no months in this campaign';
+
 /** Demos are qualified through active; customers are active (contacts.ts CONTACT_STATUSES). */
 export const isDemo = (status: string) => status === 'qualified' || status === 'active';
 export const isCustomer = (status: string) => status === 'active';
@@ -152,20 +166,18 @@ async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnT
   const links = await env.DB.prepare('SELECT g.id, g.uid, g.name, l.planned_budget_cents, l.budget_type, l.starts_on, l.ends_on FROM grow_campaign_channels l JOIN growth_channels g ON g.id = l.channel_id WHERE l.campaign_id = ? AND g.project_id = ? ORDER BY g.name, g.uid').bind(c.id, c.project_id).all<{ id: number; uid: string; name: string; planned_budget_cents: number | null; budget_type: string | null; starts_on: string | null; ends_on: string | null }>();
   const channels = await Promise.all((links.results ?? []).map(async (g) => {
     let spend_cents: number | null = null;
-    let spend_reason: string | null = 'Not recorded: this campaign has no complete date window';
+    let spend_reason: string | null;
     let spend_source: 'mercury' | 'manual' | 'mixed' | null = null;
     const spend_months: { month: string; spend_cents: number; source: 'mercury' | 'manual' }[] = [];
-    if (c.starts_on && c.ends_on) {
-      // D4491: a window narrows the campaign's own months to the months both share.
-      const start = window && window.from.slice(0, 7) > c.starts_on.slice(0, 7) ? window.from.slice(0, 7) : c.starts_on.slice(0, 7);
-      const end = window && window.to.slice(0, 7) < c.ends_on.slice(0, 7) ? window.to.slice(0, 7) : c.ends_on.slice(0, 7);
-      if (start > end) spend_reason = 'Not recorded: this campaign has no months in this window';
-      else try {
-        const read = await channelSpend(env, c.project_id, g, start, end);
-        spend_cents = read.spend_cents; spend_source = read.spend_source; spend_months.push(...read.spend_months);
-        spend_reason = spend_cents == null ? 'Not recorded: no spend entered for these months' : null;
-      } catch { spend_reason = 'Unreadable: channel spend could not be read'; }
-    }
+    const range = campaignChannelMonths(c, g, window);
+    if (range.reason === 'incomplete_campaign') spend_reason = 'Not recorded: this campaign has no complete date window';
+    else if (range.reason === 'outside_window') spend_reason = 'Not recorded: this campaign has no months in this window';
+    else if (range.reason === 'outside_link') spend_reason = NO_CHANNEL_MONTHS;
+    else try {
+      const read = await channelSpend(env, c.project_id, g, range.start, range.end);
+      spend_cents = read.spend_cents; spend_source = read.spend_source; spend_months.push(...read.spend_months);
+      spend_reason = spend_cents == null ? 'Not recorded: no spend entered for these months' : null;
+    } catch { spend_reason = 'Unreadable: channel spend could not be read'; }
     return { uid: g.uid, name: g.name, planned_budget_cents: g.planned_budget_cents, budget_type: g.budget_type, starts_on: g.starts_on, ends_on: g.ends_on,
       planned_budget_reason: g.planned_budget_cents == null ? 'Not recorded: no channel budget entered' : null, spend_cents, spend_reason, spend_source, spend_months,
       budget_used_pct: spend_cents == null || g.planned_budget_cents == null || g.planned_budget_cents === 0 ? null : spend_cents / g.planned_budget_cents * 100 };
