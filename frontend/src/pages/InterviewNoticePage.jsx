@@ -144,6 +144,16 @@ export const PUBLISHED_INTERVIEW_NOTICES = MEETING_BOT_NOTICE_PUBLISHED
   ? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES;
 export const CURRENT_INTERVIEW_NOTICE_VERSION = MEETING_BOT_NOTICE_PUBLISHED ? MEETING_BOT_NOTICE_VERSION : INTERVIEW_NOTICE_VERSION;
 
+/**
+ * #7002: the current notice's version and date, as this page prints them ("Last updated <updated> · Notice
+ * version <n>"); the trust center's documents register reads them here. A notice not yet published has no date.
+ */
+export function currentInterviewNotice(notices = PUBLISHED_INTERVIEW_NOTICES, current = CURRENT_INTERVIEW_NOTICE_VERSION) {
+  const n = notices[current];
+  const updated = n && typeof n.updated === 'string' && n.updated !== 'not yet published' ? n.updated : null;
+  return { version: current, updated };
+}
+
 export default function InterviewNoticePage({ contactEmail = INTERVIEW_CONTACT_EMAIL, notices = PUBLISHED_INTERVIEW_NOTICES, current = CURRENT_INTERVIEW_NOTICE_VERSION }) {
   const [params] = useSearchParams();
   const { shown, asked } = noticeVersionFrom(params.toString(), Object.keys(notices).map(Number), current);
