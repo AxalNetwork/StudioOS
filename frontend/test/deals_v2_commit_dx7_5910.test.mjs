@@ -91,8 +91,24 @@ test('a recusal looks and reads differently from an abstention', () => {
   assert.doesNotMatch(abstain, /border-dashed|⊘/);
   // And the row says what each does to the tally.
   const card = html(h(DecisionCard, { decision: OPEN }));
-  const row = (vote) => new RegExp(`data-testid="commit-vote-${vote}"[\\s\\S]*?(?=data-testid="commit-vote-|$)`).exec(card)[0];
-  const rowClass = (vote) => new RegExp(`data-testid="commit-vote-${vote}" class="([^"]*)"`).exec(card)[1];
+  // Plain string slicing, not a RegExp built from the vote name.
+  const rowStart = (vote) => {
+    const at = card.indexOf(`data-testid="commit-vote-${vote}"`);
+    assert.ok(at >= 0, `no ${vote} row`);
+    return at;
+  };
+  const row = (vote) => {
+    const at = rowStart(vote);
+    const next = card.indexOf('data-testid="commit-vote-', at + 1);
+    return card.slice(at, next < 0 ? card.length : next);
+  };
+  const rowClass = (vote) => {
+    const prefix = `data-testid="commit-vote-${vote}" class="`;
+    const at = card.indexOf(prefix);
+    assert.ok(at >= 0, `no ${vote} row class`);
+    const from = at + prefix.length;
+    return card.slice(from, card.indexOf('"', from));
+  };
   assert.match(row('recused'), /Board seat at a competitor/);
   assert.match(row('recused'), /Conflict declared · not counted in the tally/);
   assert.match(rowClass('recused'), /bg-gray-50 dark:bg-gray-800\/40/, 'the recused row is not muted');
