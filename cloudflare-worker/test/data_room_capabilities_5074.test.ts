@@ -66,6 +66,8 @@ function freshDb() {
   addColumnsFrom(db, stripForeignKeys(MIG('463_raise_record_stores.sql')), 'data_room_files');
   addColumnsFrom(db, MIG('596_data_room_file_source.sql'), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(MIG('442_raise_cycle_stores.sql')), 'data_room_files');
+  // D6073: the Trash columns, and one file in Trash for the restore probe.
+  addColumnsFrom(db, stripForeignKeys(MIG('202611152333_6073_data_room_trash.sql')), 'data_room_files');
   db.exec(stripForeignKeys(splitStatements(MIG('463_raise_record_stores.sql')).find((s: string) => s.includes('CREATE TABLE IF NOT EXISTS data_room_file_versions'))));
   db.exec(stripForeignKeys(MIG595.slice(0, MIG595.indexOf('INSERT OR IGNORE'))));
   withGrantFolders(db);
@@ -89,6 +91,8 @@ function freshDb() {
     VALUES (?,?,7,?,?,?,?,?, 'open', ?)`);
   f.run(31, 'f-deck', 51, 'Deck.pdf', 'data-room/p-room/deck-v2', 'application/pdf', 20, FOUNDER);
   f.run(32, 'f-model', 51, 'Model.xlsx', 'data-room/p-room/model', 'application/vnd.ms-excel', 20, FOUNDER);
+  f.run(33, 'f-old', 51, 'Old.pdf', 'data-room/p-room/old', 'application/pdf', 20, FOUNDER);
+  db.prepare("UPDATE data_room_files SET removed_at = '2026-11-10T00:00:00.000Z' WHERE id = 33").run();
   db.prepare(`INSERT INTO data_room_file_versions (file_id, version, r2_key, content_type, size_bytes, uploaded_by) VALUES (31, 1, 'data-room/p-room/deck-v1', 'application/pdf', 10, ?)`).run(FOUNDER);
   db.prepare(`INSERT INTO data_room_access_requests (uid, project_id, investor_user_id, source, state) VALUES ('rq-open', 7, ?, 'deal_page', 'open')`).run(INVESTOR);
   return db;
@@ -132,6 +136,7 @@ const PROBES: Record<string, [string, string, unknown?]> = {
   make_current: ['POST', '/p-room/files/f-deck/versions/1/current'],
   export: ['GET', '/p-room/activity.csv'],
   search_index: ['POST', '/p-room/search/index'],
+  restore: ['POST', '/p-room/trash/f-old/restore'],
 };
 const REFUSED_CODES = new Set(['owner_only', 'founder_only']);
 const refusedAsOwners = (r: { status: number; body: any }) => r.status === 403 && REFUSED_CODES.has(r.body?.code);
