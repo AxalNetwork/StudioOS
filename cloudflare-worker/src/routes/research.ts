@@ -1,3 +1,4 @@
+import { liveFiles } from '../services/dataRoomTrash';
 import { heldLicences } from '../services/accountLicences';
 import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
@@ -3405,13 +3406,13 @@ const DRAFT_SURFACES: Record<string, {
       if (pid == null) return [];
       const folders = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
-                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id) AS files
+                (SELECT COUNT(*) FROM data_room_files x WHERE x.folder_id = f.id${await liveFiles(c.env.DB, 'x')}) AS files
            FROM data_room_folders f WHERE f.project_id = ? ORDER BY f.display_order, f.name LIMIT 60`
       ).bind(pid).all<{ name: string; visibility: string; files: number }>();
       const files = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
                 (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
-           FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
+           FROM data_room_files f WHERE f.project_id = ?${await liveFiles(c.env.DB, 'f')} ORDER BY f.name LIMIT 120`
       ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
       const grants = await c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
@@ -4989,7 +4990,7 @@ async function roomMaterial(env: Env, userId: number, grantUid: string): Promise
   const pid = room.grant.project_id;
   const files = await env.DB.prepare(
     `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — only what the tier and expiry admit is described, or
   // counted. D1103 — and only what the grant's folders hold.
@@ -5019,7 +5020,7 @@ research.get('/diligence/:grantUid', async (c) => {
 
   const tiered = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`
+       FROM data_room_files WHERE project_id = ?${await liveFiles(c.env.DB)} ORDER BY name`
   ).bind(pid).all<any>();
   // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
   // counted. D1103 — nor is one outside the grant's folders.
@@ -5116,7 +5117,7 @@ research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
 
   const found = await c.env.DB.prepare(
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE uid = ? AND project_id = ?`
+       FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`
   ).bind(c.req.param('fileUid'), pid).first<any>();
   const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
   // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.
