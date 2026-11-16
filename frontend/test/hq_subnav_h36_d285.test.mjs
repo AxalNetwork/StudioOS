@@ -65,6 +65,8 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Promo codes') + 1, 0, ['Decks
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Decks') + 1, 0, ['Meeting bots', '/admin/platform/meeting-bots']);
 // D1172 (#3085, STG20) — HQ › Storage joins the Platform row after AI usage.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'AI usage') + 1, 0, ['Storage', '/admin/platform/storage']);
+// D5580 part 5 (#5580) — WorkGraph joins Infrastructure after Meeting bots, at the owner's route A.
+PLATFORM.push(['WorkGraph', '/admin/workgraph/in-flight']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   // D997 (#2378): Personas is now Persona segments, at its own address.
@@ -82,7 +84,7 @@ for (const list of [PLATFORM, CONTENT]) for (const p of list) if (MOVED[p[1]]) p
 // D4860 part 5 (#4860, findings 12 and 13) — the same fifteen, grouped by
 // domain in the overview's Detailed consoles order: Overview, then
 // Infrastructure, Payments, AI, Integrations, Controls and Product.
-const DOMAIN_ORDER = ['Overview', 'Monitoring', 'Topology', 'Storage', 'Meeting bots', 'Payments', 'Bank accounts', 'Promo codes',
+const DOMAIN_ORDER = ['Overview', 'Monitoring', 'Topology', 'Storage', 'Meeting bots', 'WorkGraph', 'Payments', 'Bank accounts', 'Promo codes',
   'AI allowances', 'AI usage', 'Scoring', 'Telegram', 'Switches', 'Product testing', 'Decks'];
 assert.deepEqual([...PLATFORM.map(([l]) => l)].sort(), [...DOMAIN_ORDER].sort(), 'the regrouping added or dropped an item');
 PLATFORM.sort((a, b) => DOMAIN_ORDER.indexOf(a[0]) - DOMAIN_ORDER.indexOf(b[0]));

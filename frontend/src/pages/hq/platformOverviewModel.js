@@ -740,7 +740,7 @@ export function activity({ data, deps, UNAVAILABLE, limit = 8 }) {
 /* ── detailed consoles, grouped by domain (PL-07, finding 12) ─────────── */
 
 export const CONSOLE_GROUPS = [
-  ['Infrastructure', [['Monitoring', '/monitoring', 'telemetry'], ['Topology', '/admin/platform/topology'], ['Storage', '/admin/platform/storage'], ['Meeting bots', '/admin/platform/meeting-bots'], ['Deployments & licences', '/admin/licences', 'branches']]],
+  ['Infrastructure', [['Monitoring', '/monitoring', 'telemetry'], ['Topology', '/admin/platform/topology'], ['Storage', '/admin/platform/storage'], ['Meeting bots', '/admin/platform/meeting-bots'], ['WorkGraph', '/admin/workgraph/in-flight'], ['Deployments & licences', '/admin/licences', 'branches']]],
   ['Payments', [['Payments & webhooks', '/admin/platform/payments', 'webhook'], ['Promo codes', '/admin/platform/promo-codes'], ['Bank accounts', '/admin/platform/bank-accounts'], ['Credit rules', '/admin/credit-rules']]],
   ['AI', [['AI allowances', '/admin/platform/allowances'], ['AI usage', '/admin/platform/ai-usage'], ['Scoring', '/admin/platform/scoring']]],
   ['Integrations', [['Integration keys', '/admin/integration-keys', 'keys'], ['GitHub sync', '/admin/integration-keys#github', 'sync'], ['Telegram', '/admin/telegram', 'broadcast'], ['X', '/admin/x']]],
