@@ -101,6 +101,22 @@ export function compareHref(ids = []) {
   return clean.length ? `${COMPARE}?ids=${clean.join(',')}` : COMPARE;
 }
 
+/**
+ * D6149 (#6149): the picks Compare carries back to the table, `&pick=`, read by
+ * the same rule as `?ids=` (digits only, no repeats, at most four, in order).
+ */
+export const picksOf = (search = '') => compareIds(`ids=${new URLSearchParams(String(search)).get('pick') || ''}`);
+
+/**
+ * D6149: Compare's "Add a venture" — the table under All deals (Compare reads
+ * every listed round, so each pick has a row there), with the current picks
+ * ticked.
+ */
+export function addVentureHref(ids = []) {
+  const picks = compareIds(`ids=${ids.join(',')}`);
+  return `${BASE}?view=table&scope=all${picks.length ? `&pick=${picks.join(',')}` : ''}`;
+}
+
 /** SCORING's eleven scopes (#2428), in its order, from the scorecard's one list (D1253). There is no Overall. */
 export const SCOPES = SCOPE_LABELS;
 
