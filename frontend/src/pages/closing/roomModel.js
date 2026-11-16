@@ -49,7 +49,8 @@ export const ROOM_FAILED = Object.freeze({
 /** What the room draws that no mounted route serves. Never a zero, never "none". */
 export const ROOM_WAITS = Object.freeze({
   account: 'Your company’s receiving account is not read here yet: its route (D1217) is not mounted yet (#3214). Investors see no payment instructions until it is.',
-  sentWord: 'Your word that you sent it is recorded when you accept a match from your Mercury. No route records it without one yet.',
+  // D6198: the investor's own declaration; accepting a Mercury match records it too.
+  sentWord: 'Record the day you sent it and the amount. It reads Sent, not yet confirmed. Accepting a match from your Mercury records it too.',
   clause: 'Eadwyn’s summary of a clause and the comments on this paper are not read here yet. Eadwyn summarises and never gives advice; your counsel decides.',
   modelled: 'The fully diluted before and after is not read here yet: no read models a closing line’s change. Accepting records your decision; Raise › Cap table writes the holder (#2432).',
   // D6199: the investor's own duties now come with their closing read; these are the honest states around them.
@@ -133,6 +134,17 @@ export function paperState(line, envelopes) {
   return closingPaperLifecycle(envelopes);
 }
 
+/**
+ * D6198: the investor's active declaration that they sent it, or null. It is
+ * their word, Sent, not yet confirmed: never a receipt.
+ */
+export function declarationOf(line, currency = 'USD') {
+  const list = Array.isArray(line?.sender_declarations) ? line.sender_declarations : [];
+  const d = [...list].reverse().find((x) => x && !x.withdrawn_at);
+  if (!d) return null;
+  return { uid: d.uid, sentOn: d.sent_on, amount: moneyCents(d.amount_cents, line.currency || currency), reference: d.reference || null };
+}
+
 /** The lines the room draws: words for status, route, paper, next, and the line's own figure. */
 export function roomLines(closing, papers, viewer, names = {}) {
   const lines = Array.isArray(closing?.lines) ? closing.lines : [];
@@ -150,6 +162,7 @@ export function roomLines(closing, papers, viewer, names = {}) {
       paperState: paperState(l, envelopes),
       next: nextOnLine(l, envelopes, closing, viewer, names),
       evidence: Array.isArray(l.evidence) ? l.evidence : [],
+      declaration: declarationOf(l, currency),
       withdrawn: l.status === 'withdrawn',
     };
   });

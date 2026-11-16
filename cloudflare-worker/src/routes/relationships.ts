@@ -31,6 +31,7 @@
  * Private by default: the access rule is in each statement (`services/relationships.ts`).
  * A support session is refused: what a member shares is theirs to choose.
  */
+import { networkActivity } from '../services/networkActivity';
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
@@ -80,6 +81,18 @@ relationships.get('/summary', async (c) => {
     if (unreadable) return refuse(c, 503, { code: 'relationships_unreadable', message: 'Relationships could not be read. Try again.', extra: summary });
     return c.json(summary);
   } catch (e) { return failure(c, e); }
+});
+
+// D6557: partial activity remains usable, with each failed source explicitly unreadable.
+relationships.get('/activity', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const raw = c.req.query('limit');
+  const limit = raw === undefined ? 10 : Number(raw);
+  if (!raw && raw !== undefined || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+    return refuse(c, 400, { code: 'invalid_limit', message: 'Choose an activity limit from 1 to 50.' });
+  }
+  return c.json(await networkActivity(c.env, user.id, limit));
 });
 
 relationships.get('/sharing', async (c) => {

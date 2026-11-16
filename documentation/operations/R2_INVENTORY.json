@@ -950,16 +950,16 @@
       "classes": [
         "files-deck-reviews"
       ],
-      "review_hash": "dd82694c6c6c012c3dc4a98d79ec6f5768fdf5d96c0f05d11ff8a373cc6253d8",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173"
+      "review_hash": "f2cf8ff5ae52767dcf641e7495b26d20f7fb5cf48d206f4e2b318d2ce16c2f0b",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/deck_reviewer.ts | delete /:id | delete | String(row.r2_key)",
       "classes": [
         "files-deck-reviews"
       ],
-      "review_hash": "157dfb6c3a502506f879490a6bbb38150a382d17c04d09f0b1933727ff384c44",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173"
+      "review_hash": "9f51414f3c5c7967be31ba955163cccd020b677757e458de052061a1d98f463b",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_reviewer.ts:173; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/grow_sequences.ts | delete /:uid | delete | k.recording_asset",
@@ -998,56 +998,56 @@
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "e85bcf9ed3497e145498a6f3b50f23c729b04f05ef6c26b5c62591ccd8ea14ca",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "f4ff8ea18bd7b57333077874ebc5047d23fde690dd426d6777868897140f312e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | put /items/:uid/video/uploads/part | uploadPart | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "e85bcf9ed3497e145498a6f3b50f23c729b04f05ef6c26b5c62591ccd8ea14ca",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "f4ff8ea18bd7b57333077874ebc5047d23fde690dd426d6777868897140f312e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | complete | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "7e5297ec46d3b2e5e09d665eb4de247c1a0ff3630051d9efeaab717b65bff242",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | resumeMultipartUpload | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "7e5297ec46d3b2e5e09d665eb4de247c1a0ff3630051d9efeaab717b65bff242",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/complete | delete | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "d8df48debb880f5388b601face39a711cba19eb989cd1e78087ffc39725a8330",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "7e5297ec46d3b2e5e09d665eb4de247c1a0ff3630051d9efeaab717b65bff242",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | abort | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "fbd73373b98c04de34414121a58a66babf83c76cfa3811ae626fbe1369fe9bba",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "66228312f288a756666b3d2977e8c81a8975ae3eaf735d52ed09ceda14b9aefe",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/learning_video.ts | post /items/:uid/video/uploads/abort | resumeMultipartUpload | ref.key!",
       "classes": [
         "files-learning-videos"
       ],
-      "review_hash": "fbd73373b98c04de34414121a58a66babf83c76cfa3811ae626fbe1369fe9bba",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96"
+      "review_hash": "66228312f288a756666b3d2977e8c81a8975ae3eaf735d52ed09ceda14b9aefe",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/learning_video.ts:96; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/news.ts | post /:id/cover | delete | row.cover_r2_key",
@@ -1070,24 +1070,24 @@
       "classes": [
         "files-headshots"
       ],
-      "review_hash": "dc3736293774f7e7ad392633c44be0fffe0a773b843e23673b14c7f9f8636466",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132"
+      "review_hash": "4baab5119ce6bcab75c8a8e99b6b37a1c4a791166bbf86cbe1af544754e1a101",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/settings.ts | post /profile/linkedin-import/apply | delete | oldKey",
       "classes": [
         "files-headshots"
       ],
-      "review_hash": "a7f564826f355d308b18f0730d9cff722701bd2bfdad5a464a514df475559e0d",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132"
+      "review_hash": "c64b0e5432d7a67cf1becc606784f2cd1d9f0445b8f699438f4f4fd09fbc7cc6",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/r2.ts:132; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/wellbeing_expert_review.ts | delete /experts/me/credentials/files/:fileUid | delete | file.file_key",
       "classes": [
         "files-wellbeing-credentials"
       ],
-      "review_hash": "a35574e99ba7b829d7a693f41564c95c1d54cc5e854e161a2758d56051d31cd3",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing_expert_review.ts:113"
+      "review_hash": "d228968c28567b7038b76c6e84e8e9930b7e59115b86b491997d27d3192d962c",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/wellbeing_expert_review.ts:113; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/routes/wellbeing.ts | delete /resources/:id | delete | file.file_key",
@@ -1142,8 +1142,8 @@
       "classes": [
         "files-deck-audio"
       ],
-      "review_hash": "111c36cfb87be97d8d78f62c59212f468059ae946feca2f85446cdcffb1e79b3",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70"
+      "review_hash": "e30d03e184a8db745ea35fa89649bb022987d02ada5ad2870bc12eedb3bbf5e2",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/decks/cardAudio.ts:70; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/services/decks/cardAudio.ts | sweepOrphanAudio | delete | o.key",
@@ -1166,8 +1166,8 @@
       "classes": [
         "files-deck-images"
       ],
-      "review_hash": "3389f1e890cc1e8c330f9c0809e48c7cb6cb92018979e0e01851f7184d15140a",
-      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164"
+      "review_hash": "69e32255ef41702db6a2131ef263013abc393ae05bfc1f02dd10d8d54311449e",
+      "evidence": "Writer/prefix provenance: cloudflare-worker/src/routes/deck_image_edits.ts:212; cloudflare-worker/src/routes/deck_image_edits.ts:329; cloudflare-worker/src/routes/deck_images.ts:478; cloudflare-worker/src/services/decks/imageCopy.ts:145; cloudflare-worker/src/services/decks/imageDraw.ts:164; selector and named writer reviewed against main 321c9d5eb5; prefix unchanged"
     },
     {
       "site": "cloudflare-worker/src/services/decks/recordings.ts | deleteTake | delete | row.media_r2_key",
@@ -1280,6 +1280,14 @@
       ],
       "review_hash": "a1df5ba9897630f23a02d05fcd974eceb0ea646217a355329c1408479109c2f9",
       "evidence": "Writer/prefix provenance: cloudflare-worker/src/services/workGraphBlobs.ts:301"
+    },
+    {
+      "site": "cloudflare-worker/src/routes/cycle_build.ts | deleteFormationStep | delete | existing.proof_file_key",
+      "classes": [
+        "files-build-proof"
+      ],
+      "review_hash": "085a127f6bb77e97937e2455851e2c77d42aa60ec11a78718c736666a8be9c16",
+      "evidence": "formation_steps.proof_file_key selected for the owned project in deleteFormationStep; records/build.ts uploadProof writes build-proof/ and stores that key on formation_steps (reviewed at main 321c9d5eb5)"
     }
   ],
   "planned_formation_records": [

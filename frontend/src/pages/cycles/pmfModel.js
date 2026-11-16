@@ -256,7 +256,7 @@ export function gainWords(gain) {
  * the checklist below. Scope is 'pmf' or 'kit', for the chips.
  */
 /** An address inside the app, or null: never a protocol-relative or absolute URL. */
-const appPath = (v) => (typeof v === 'string' && /^\/[^/\\]/.test(v) ? v : null);
+export const appPath = (v) => (typeof v === 'string' && /^\/[^/\\]/.test(v) ? v : null);
 
 export function gapRows(part, records, search = '') {
   const pmf = (Array.isArray(part?.steps) ? part.steps : []).map((s) => ({

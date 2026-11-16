@@ -61,6 +61,10 @@ export const GROUPS = [
  *   isNew   one of the nine lanes this redesign adds.
  * The door's address is written as a literal link in AdminApprovals.jsx
  * (`LaneDoor`), so the reachability walk sees every one.
+ * D5880: key, label, group and scope (this list is `studio`, `HQ_LANES` is
+ * `hq`) must match the Worker's `services/approvalLaneRegistry.ts`, and each
+ * door must be a registered route; `approval_lanes_registry_5880.test.mjs`
+ * fails on any difference it does not list with a reason.
  */
 export const LANES = [
   { key: 'kyc', group: 'people', label: 'KYC', glance: 'kyc', door: 'KYC & KYB' },
