@@ -102,7 +102,7 @@ test('no user-facing link is still built from the hardcoded apex (D106, L9)', ()
   const ABSOLUTE_AXAL_URL = /(?:https?:)?\/\/[\w.-]*axal\.vc/;
   const files = [
     'frontend/src/pages/ReferralsPage.jsx',
-    'frontend/src/pages/SettingsPage.jsx',
+    'frontend/src/pages/account/ProfileSections.jsx',
     'frontend/src/pages/ArticleAuthorPage.jsx',
     'frontend/src/pages/admin/AdminTeam.jsx',
   ];

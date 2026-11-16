@@ -246,11 +246,22 @@ const present = (rows: Row[], key: string): Option[] =>
 export const ROLE_STATUSES = ['draft', 'pending_review', 'published', 'rejected'] as const;
 export const DUE_WINDOWS = ['overdue', 'next_30', 'next_90', 'later'] as const;
 
-/** An obligation's Due filter: overdue, the next 30 or 90 days, or later; a past one already done is in none. */
+/**
+ * An obligation's Due filter: overdue, the next 30 or 90 days, or later. A done or snoozed one is in
+ * none (D6122, GR-21: "1 snoozed (in no due window)"), whatever its date.
+ */
 export function dueWindow(due: string, status: string, on: string): string | null {
+  if (status === 'done' || status === 'snoozed') return null;
   if (due < on) return status === 'overdue' ? 'overdue' : null;
   const days = (Date.parse(`${due}T00:00:00Z`) - Date.parse(`${on}T00:00:00Z`)) / 86_400_000;
   return days <= 30 ? 'next_30' : days <= 90 ? 'next_90' : 'later';
+}
+
+/** D6122 (GR-21): how many obligations sit in each due window; `none` counts the done and snoozed ones. */
+export function dueCounts(rows: Row[]): Record<string, number> {
+  const out: Record<string, number> = { overdue: 0, next_30: 0, next_90: 0, later: 0, none: 0 };
+  for (const r of rows) out[typeof r.due_window === 'string' && r.due_window in out ? r.due_window : 'none'] += 1;
+  return out;
 }
 
 /** A partner's terms as the row reads them: the typed terms, or the old free text when none are typed. */
@@ -348,13 +359,16 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
   const ev = await env.DB.prepare(
     `SELECT id, title, kind, event_type, due_date, owner_name, completion_status, recurrence FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
   ).bind(projectId).all<Row>();
-  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: (ev.results || []).map((event) => {
-      const kind = obligationKind(event);
-      const status = obligationState(event.completion_status, kind, String(event.due_date), today(x));
-      return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name, status,
-        repeats: REPEATS_OF[String(event.recurrence)] ?? null, due_window: dueWindow(String(event.due_date), status, today(x)) };
-    }),
-    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) },
+  const obligations = (ev.results || []).map((event) => {
+    const kind = obligationKind(event);
+    const status = obligationState(event.completion_status, kind, String(event.due_date), today(x));
+    return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name, status,
+      repeats: REPEATS_OF[String(event.recurrence)] ?? null, due_window: dueWindow(String(event.due_date), status, today(x)) };
+  });
+  // D6122 (GR-21): the due strip's counts, over every obligation whatever the page's filter, and the day they are counted from.
+  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State', 'Repeats'], rows: obligations,
+    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)),
+      due_counts: dueCounts(obligations), due_on: today(x) },
     filters: [{ key: 'kind', label: 'Kind', options: fixed(OBLIGATION_KINDS) }, { key: 'due_window', label: 'Due', options: fixed(DUE_WINDOWS) }],
     sorts: [{ key: 'due_at', label: 'Due' }, { key: '-due_at', label: 'Due latest' }] };
 }
