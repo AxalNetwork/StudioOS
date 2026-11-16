@@ -358,6 +358,12 @@ async function ventureFor(c: Ctx, projectId: number, user: AuthUser): Promise<Pr
  * provider's answer, and second-guessing it here would put two different
  * vested numbers in front of the same founder. `as_of` reports when the row was
  * last written so the UI can say how fresh the answer is.
+ *
+ * D6086 (#6086): a schedule StudioOS holds (a grant recorded with its vesting,
+ * a founder's from Add holder) has no provider and no stored count, so its
+ * vested shares are worked out from its dates on today's date
+ * (`vested_basis: 'schedule'`, `vested_as_of`) in `equityPlanBody`. A row with
+ * a stored count, Carta's above all, keeps it.
  */
 captable.get('/equity-plan', async (c) => {
   const user = await requireAuth(c) as AuthUser;
@@ -377,7 +383,7 @@ captable.get('/equity-plan', async (c) => {
   }
   // D1020: totals are sums of what is recorded, nothing modelled, and null
   // unless every row records the figure (`knownSum`).
-  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting), elections: plan.elections });
+  return c.json({ scope: scopeBody(scope), ...equityPlanBody(plan.pools, plan.vesting, today()), elections: plan.elections });
 });
 
 captable.post('/simulate', async (c) => {
