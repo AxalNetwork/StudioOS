@@ -28,7 +28,6 @@ const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 
 const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
 const KEY = ['fixture', 'key', 'for', 'd6006', 'tests'].join('-');
 const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring', 70: 'advisor' };
-const TODAY = new Date().toISOString().slice(0, 10);
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -76,10 +75,10 @@ function seeded() {
       (1, 11, 'dispatch is slow', 'Dispatch is slow'), (1, 11, 'we wait on dispatch', 'We wait on dispatch'),
       (1, 12, 'paper forms everywhere', 'Paper forms everywhere'), (2, 22, 'theirs', 'Theirs');
     INSERT INTO discovery_interviews (id, project_id, interviewee_name, interviewee_company, pains_json, quote_consent, icp_fit, interview_date) VALUES
-      (1, 1, 'Iris Example', 'Northwind', '["Dispatch is slow", "dispatch  is slow", "We wait on dispatch", "Secret pricing pain"]', 0, 'strong', '${TODAY}'),
-      (2, 1, 'Jon Example', 'Northwind', '["Dispatch is slow", "Paper forms everywhere"]', 1, 'strong', '${TODAY}'),
-      (3, 1, '', NULL, '["we wait on dispatch"]', 1, NULL, '${TODAY}'),
-      (4, 1, 'Kim Example', 'Southwind', '["Paper forms everywhere"]', 1, NULL, '${TODAY}');
+      (1, 1, 'Iris Example', 'Northwind', '["Dispatch is slow", "dispatch  is slow", "We wait on dispatch", "Secret pricing pain"]', 0, 'strong', date('now')),
+      (2, 1, 'Jon Example', 'Northwind', '["Dispatch is slow", "Paper forms everywhere"]', 1, 'strong', date('now')),
+      (3, 1, '', NULL, '["we wait on dispatch"]', 1, NULL, date('now')),
+      (4, 1, 'Kim Example', 'Southwind', '["Paper forms everywhere"]', 1, NULL, date('now'));
     INSERT INTO hypotheses (id, project_id, code, claim, sort_order) VALUES (5, 1, 'H1', 'Fleets pay', 1), (6, 1, 'H2', 'Ops buy alone', 2);
     INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction) VALUES (5, 11, 'supports'), (6, 11, 'contradicts'), (6, 12, 'supports');
   `);
