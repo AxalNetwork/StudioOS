@@ -3,6 +3,7 @@ import type { Env } from '../../types';
 import type { Store } from './types';
 import { FUND_SECTIONS, READINESS_KEYS } from '../raiseCycle';
 import { KPI_KEYS as GROW_KPI_KEYS } from '../growKpis';
+import { liveFiles } from '../dataRoomTrash';
 
 export const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 
@@ -237,7 +238,8 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     }
     case 'data_room_files': {
       const n = numeric(value);
-      return n !== null && !!await db.prepare('SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+      // D6073 — a file in Trash is not the venture's record until it is restored.
+      return n !== null && !!await db.prepare(`SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(db)}`).bind(n, projectId).first();
     }
     case 'cap_table_scenarios':
       return capEntryOwned(env, value, projectId);

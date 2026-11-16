@@ -15,13 +15,17 @@
  * Not recorded; one that fails is Unreadable with a Retry of its own. Neither
  * is drawn, and nothing is drawn between two reads.
  *
+ * D6208 (#6208): the header's Export writes the quarter-end series (a gap
+ * written as Not recorded or Unreadable, never 0) or the vintage cohorts,
+ * through `exportView`; over nothing loaded it is disabled with its reason.
+ *
  * D6867 (#6867, canvas D6217 PF-13): the Statement action opens the
  * statement sheet, and `?as_of=` (a quarter-end) reads the summary as of that
  * date, so the sheet's "Open Performance as of …" lands on the figures its
  * page 1 printed. The methodology is `METHODOLOGY`, the one list the
  * statement prints word for word.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, FileText, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -36,8 +40,9 @@ import { QuarterEndPlot, QuarterEndTable } from '../portfolio/QuarterEndChart';
 import StatementSheet from '../portfolio/StatementSheet';
 import { METHODOLOGY } from '../portfolio/statementModel';
 import {
-  NOT_RECORDED, SHAPES, cohortsOf, day, isQuarterEnd, performanceOf, quarterSeriesOf, quarterShape, quarterWindowOf,
+  NOT_RECORDED, SHAPES, cohortExportOf, cohortsOf, day, isQuarterEnd, performanceOf, quarterExportOf, quarterSeriesOf, quarterShape, quarterWindowOf,
 } from '../portfolio/portfolioModel';
+import PortfolioExport from '../portfolio/PortfolioExport';
 
 /** The page's reads; the summary is cut at `asOf` when the address names a quarter-end. */
 const sourcesFor = (asOf) => ({
@@ -51,14 +56,19 @@ const sourcesFor = (asOf) => ({
 const SOURCE_NAMES = { analytics: 'Performance', positions: 'Positions', compliance: 'Reporting' };
 
 
-/** NAV at each quarter-end: one read per quarter-end, each committed and retried on its own. */
-function QuarterEndSeries({ dates, view }) {
+/**
+ * NAV at each quarter-end: one read per quarter-end, each committed and
+ * retried on its own. The series is handed up (`onSeries`) because the
+ * header's Export writes it (D6208).
+ */
+function QuarterEndSeries({ dates, view, onSeries }) {
   const sources = useMemo(
     () => Object.fromEntries(dates.map((d) => [d, { call: () => api.positionsAnalytics(d), shape: quarterShape(d) }])),
     [dates],
   );
   const { reads, retry } = usePortfolioReads(sources);
   const series = useMemo(() => quarterSeriesOf(dates, reads), [dates, reads]);
+  useEffect(() => { onSeries(series); }, [series, onSeries]);
   const failed = series.points.filter((p) => p.state === 'unreadable');
   const missing = series.points.filter((p) => p.state === 'not_recorded');
   return (
@@ -82,7 +92,7 @@ function QuarterEndSeries({ dates, view }) {
   );
 }
 
-function QuarterEnds({ window: win, retry, refresh }) {
+function QuarterEnds({ window: win, retry, refresh, onSeries }) {
   const [view, setView] = useState('chart');
   let body;
   if (win.state === 'loading') body = <Skeleton rows={3} />;
@@ -91,7 +101,7 @@ function QuarterEnds({ window: win, retry, refresh }) {
   } else if (win.state !== 'ok') {
     body = <p className="pf-note" data-testid="perf-quarters-not-recorded"><span className="pf-not-recorded">{NOT_RECORDED}</span> · {win.reason}</p>;
   } else {
-    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} />;
+    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} onSeries={onSeries} />;
   }
   return (
     <section className="pf-card" aria-labelledby="pf-quarters-title" data-testid="perf-quarters">
@@ -188,6 +198,13 @@ function PerformanceBody({ asOf }) {
   const win = useMemo(() => quarterWindowOf(reads.positions, reads.compliance), [reads.positions, reads.compliance]);
   const cohorts = useMemo(() => cohortsOf(reads.positions), [reads.positions]);
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
+  const [series, setSeries] = useState(null);
+  // A series belongs to the window it was read for; a new window waits for its own.
+  const current = series && win.state === 'ok' && series.points.map((p) => p.date).join(',') === win.dates.join(',') ? series : null;
+  const exports = [
+    { key: 'quarters', label: 'Quarter-end series', zone: 'performance-quarter-ends', plan: quarterExportOf(win, current, reads.analytics) },
+    { key: 'cohorts', label: 'Vintage cohorts', zone: 'performance-cohorts', plan: cohortExportOf(cohorts) },
+  ];
 
   return (
     <PortfolioFrame
@@ -197,6 +214,7 @@ function PerformanceBody({ asOf }) {
       context={perf.asOf ? `Gross of fees and carry · ${perf.asOf.replace(/^As of/, 'as of')}` : null}
       tools={(
         <ZoneHeaderTools role="investor">
+          <PortfolioExport choices={exports} testid="button-export-portfolio-performance" />
           <button type="button" className="pf-btn" onClick={() => setStatement(true)} data-testid="button-open-statement"><FileText size={14} aria-hidden="true" /> Statement</button>
           <button type="button" className="pf-icon-button" onClick={() => { reload(); setRefresh((n) => n + 1); }} aria-label="Refresh performance" data-testid="button-refresh-investor-performance"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
@@ -221,7 +239,7 @@ function PerformanceBody({ asOf }) {
       ) : null}
       <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} methodologyTo="#portfolio-methodology" />
       <div className="pf-perf-grid">
-        <QuarterEnds window={win} retry={retry} refresh={refresh} />
+        <QuarterEnds window={win} retry={retry} refresh={refresh} onSeries={setSeries} />
         <Methodology />
       </div>
       <Cohorts cohorts={cohorts} onRetry={() => retry('positions')} />
