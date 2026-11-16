@@ -442,8 +442,16 @@ test('founder asks require both a holding and a delivery; promises remain privat
 
   const second = await promise(mine, 'ask-two');
   const secondUid = (await second.json() as any).item.uid;
+  const started = await call(db, mine, `/${item.uid}`, { method: 'PATCH', body: JSON.stringify({ state: 'in_progress', expected_revision: 1 }) });
+  assert.equal(started.status, 200, await started.clone().text());
+  const openMine = await call(db, mine, '/?state=open');
+  const openItems = (await openMine.json() as any).entries;
+  assert.ok(openItems.some((row: any) => row.uid === item.uid && row.state === 'in_progress'));
+  assert.ok(openItems.some((row: any) => row.uid === secondUid && row.state === 'promised'));
+  const openColleague = await call(db, other, '/?state=open');
+  assert.doesNotMatch(await openColleague.text(), /Private request|ask-one|ask-two/);
   for (const [uid, state] of [[item.uid, 'delivered'], [secondUid, 'withdrawn']]) {
-    const moved = await call(db, mine, `/${uid}`, { method: 'PATCH', body: JSON.stringify({ state, expected_revision: 1 }) });
+    const moved = await call(db, mine, `/${uid}`, { method: 'PATCH', body: JSON.stringify({ state, expected_revision: uid === item.uid ? 2 : 1 }) });
     assert.equal(moved.status, 200, await moved.clone().text());
   }
   const states = (await (await read(MINE, 'sent-update')).json() as any).asks.map((a: any) => a.support_state);
