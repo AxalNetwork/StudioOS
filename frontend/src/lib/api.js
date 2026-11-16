@@ -3867,8 +3867,6 @@ export const api = {
   licenceSuspend: (uid, note) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/suspend`, { method: 'POST', body: JSON.stringify({ note }) }),
   licenceReinstate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/reinstate`, { method: 'POST' }),
-  // D4819 part 5 (#5928): push the licence's current copy to its branch again ("Retry branch sync").
-  licenceSyncRetry: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/sync/retry`, { method: 'POST' }),
   licenceRenew: (uid, data) =>
     request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
   licenceTerminate: (uid, note) =>

@@ -21,6 +21,7 @@ import LicenceFeeInvoices from '../LicenceFeeInvoices';
 import LicenceHistory from '../LicenceHistory';
 import { AlertCircle } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { adminLicenceSyncApi } from '../../../lib/api/adminLicenceSync';
 import { reportError } from '../../../lib/log';
 import { useConsequenceSheet } from '../LicenceConsequenceSheet';
 import { ACTION_LABELS, lifecycleActionsFor } from '../licenceConsequenceModel';
@@ -285,7 +286,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
       {consequenceSheet}
       <LicenceOutcomeCard
         outcome={actOutcome ? licenceWriteOutcome({ ...actOutcome, sync: d.sync }) : null} busy={busy}
-        onRetrySync={() => act('syncRetry', api.licenceSyncRetry, d.uid)} onReread={refresh}
+        onRetrySync={() => act('syncRetry', adminLicenceSyncApi.retry, d.uid)} onReread={refresh}
         onDismiss={() => setActOutcome(null)} testId="licence-action-outcome"
       />
       <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
@@ -433,7 +434,7 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           <div>
             <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act('terminate', api.licenceTerminate, d.uid)} part="strip"
               deployment={d.deployment ?? null} deploymentAvailable={d.deployment_available} onReread={load}
-              onRetry={() => act('syncRetry', api.licenceSyncRetry, d.uid)} />
+              onRetry={() => act('syncRetry', adminLicenceSyncApi.retry, d.uid)} />
             {domainStrip}
             <div className="mt-4"><DeployStep licence={d} /></div>
           </div>
