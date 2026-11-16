@@ -24,6 +24,7 @@ import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
+import { SEARCH_CONSOLE_READ_SCOPES } from './searchConsoleOAuth';
 import { TYPEFORM_READ_SCOPES } from './typeformOAuth';
 import { FACEBOOK_READ_SCOPES } from './facebookScopes';
 import { TIKTOK_FEEDS } from './tiktokFeeds';
@@ -640,6 +641,14 @@ export const REGISTRY: ProviderDescriptor[] = [
     audience_rule: 'venture', docs_url: 'https://developers.tiktok.com/docs/en/login-kit-web',
     icon: 'Video', oauth_scopes: [...TIKTOK_READ_SCOPES],
   },
+  // D5839 (#5839): Search Console, read only, through its own Google OAuth client; one chosen property per venture.
+  {
+    key: 'google_search_console', display_name: 'Google Search Console', integration_type: 'data_feed',
+    description: 'Your Search Console properties, read only, through Google’s own sign-in: each company reads one property you choose. It never changes a property, its owners or its settings.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developers.google.com/webmaster-tools/v1/how-tos/authorizing',
+    icon: 'Search', oauth_scopes: [...SEARCH_CONSOLE_READ_SCOPES],
+  },
   // D5827 (#5827): Typeform, read only; one chosen form per venture, in the member's data center.
   {
     key: 'typeform', display_name: 'Typeform', integration_type: 'data_feed',
@@ -664,6 +673,8 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     permissions: ['List the Pages you manage.', 'Read Page engagement.', 'Read Page insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
+  google_search_console: { category: 'Analytics', verified: false, pulls: [], sends: [], feeds: [],
+    permissions: ['Read your Search Console properties, your permission level on each, and the data of the property you choose. Axal VC never changes a property, its users or its settings.'] },
   typeform: { category: 'Data', verified: false, pulls: [], sends: [], feeds: [],
     permissions: ['Read your forms and their fields.', 'Read the responses to the form you choose.', 'Keep the connection when you are away, so responses can sync.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },

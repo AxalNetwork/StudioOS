@@ -33,6 +33,7 @@ export type ManagedProviderKey =
   | 'telegram'
   | 'gcip'
   | 'tiktok'
+  | 'google_search_console'
   | 'typeform';
 
 export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
@@ -51,6 +52,7 @@ export const MANAGED_PROVIDERS: ManagedProviderKey[] = [
   'telegram',
   'gcip',
   'tiktok',
+  'google_search_console',
   'typeform',
 ];
 
@@ -67,6 +69,8 @@ export interface ProviderEnvVarPair {
  */
 export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret: string }> = {
   tiktok:     { id: 'TIKTOK_CLIENT_KEY', secret: 'TIKTOK_CLIENT_SECRET' },
+  // D5839 — Search Console's own Google OAuth client, never the Workspace or Calendar one.
+  google_search_console: { id: 'GOOGLE_SEARCH_CONSOLE_CLIENT_ID', secret: 'GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET' },
   // D5827 — the Typeform developer app registered by the owner for the pilot.
   typeform:   { id: 'TYPEFORM_CLIENT_ID',      secret: 'TYPEFORM_CLIENT_SECRET' },
   slack:      { id: 'SLACK_CLIENT_ID',         secret: 'SLACK_CLIENT_SECRET' },

@@ -798,6 +798,7 @@ integrations.delete('/:uid', async (c) => {
     try { await impl.disconnect(c, user, row); }
     catch (e) {
       if (row.provider_key === 'tiktok') return c.json({ error: 'tiktok_revocation_failed' }, 503);
+      if (row.provider_key === 'google_search_console') return c.json({ error: 'search_console_revocation_failed' }, 503);
       if (row.provider_key === 'facebook') return c.json({ error: 'facebook_revocation_failed' }, 503);
       console.warn('[integrations] provider disconnect threw:', (e as Error).message);
     }

@@ -1,5 +1,9 @@
 export interface Env {
   TIKTOK_APP_APPROVED?: string;
+  /** D5839: '1' once the owner's Google Cloud project serves Search Console sign-in. */
+  GOOGLE_SEARCH_CONSOLE_APPROVED?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
   /** D5827: '1' once the owner's Typeform app is registered and a callback verified. */
   TYPEFORM_APP_APPROVED?: string;
   TYPEFORM_CLIENT_ID?: string;
