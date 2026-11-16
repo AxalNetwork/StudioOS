@@ -173,6 +173,104 @@ export function filterByNeeds(rows, reads, keys) {
   return list.filter((l) => chosen.every((n) => n.matches(l, reads?.[l.uid])));
 }
 
+/* ------------------------------------------------------------------ *
+ * D5919 (#5919): the Territory, Renewal window and Attention menus (L01, L02)
+ * ------------------------------------------------------------------ */
+
+/** A row with no country: the Territory menu's "None", as the Territory column says it. */
+export const TERRITORY_NONE = 'none';
+
+/** `?territory=`: a two-letter code, `none`, or '' for every territory. */
+export function territoryFromParam(param) {
+  const v = String(param || '').trim();
+  if (v.toLowerCase() === TERRITORY_NONE) return TERRITORY_NONE;
+  return /^[A-Za-z]{2}$/.test(v) ? v.toUpperCase() : '';
+}
+
+/**
+ * The Territory menu's countries: every code the loaded rows hold, sorted, plus
+ * the chosen one if no loaded row holds it, so a link that names it reopens the
+ * view it named rather than silently dropping the filter.
+ */
+export function territoryOptions(rows, chosen = '') {
+  const codes = new Set();
+  for (const l of Array.isArray(rows) ? rows : []) {
+    if (Array.isArray(l?.territories)) for (const t of l.territories) if (t) codes.add(String(t).toUpperCase());
+  }
+  if (chosen && chosen !== TERRITORY_NONE) codes.add(chosen);
+  return [...codes].sort();
+}
+
+/** The Renewal window menu, in its order. Overdue and the windows read only running licences, as Renewal does. */
+export const RENEWAL_WINDOWS = Object.freeze([
+  ['overdue', 'Overdue'],
+  ['next_30', 'Next 30 days'],
+  ['next_90', 'Next 90 days'],
+  ['later', 'Later than 90 days'],
+  ['not_recorded', 'Not recorded'],
+]);
+const RENEWAL_KEYS = RENEWAL_WINDOWS.map(([k]) => k);
+export const renewalFromParam = (param) => (RENEWAL_KEYS.includes(param) ? param : '');
+
+/**
+ * The Attention menu. `clear` is a row whose reads all answered and that needs
+ * nothing; a row whose requests could not be read (or are still being read)
+ * and has no known item is `unknown`, never `clear`.
+ */
+export const ATTENTION_FILTERS = Object.freeze([
+  ['needs', 'Needs HQ'],
+  ['clear', 'Nothing needed'],
+  ['unknown', 'Unknown'],
+]);
+const ATTENTION_KEYS = ATTENTION_FILTERS.map(([k]) => k);
+export const attentionFromParam = (param) => (ATTENTION_KEYS.includes(param) ? param : '');
+
+function territoryMatches(l, territory) {
+  if (!territory) return true;
+  if (!Array.isArray(l?.territories)) return false; // unreadable: neither a country nor None
+  if (territory === TERRITORY_NONE) return l.territories.length === 0;
+  return l.territories.some((t) => String(t).toUpperCase() === territory);
+}
+
+function renewalMatches(l, window) {
+  if (!window) return true;
+  if (window === 'not_recorded') return !l?.renews_on;
+  const d = renewalDays(l);
+  if (d === null) return false;
+  if (window === 'overdue') return d < 0;
+  if (window === 'next_30') return d >= 0 && d <= 30;
+  if (window === 'next_90') return d >= 0 && d <= RENEWAL_WINDOW_DAYS;
+  return d > RENEWAL_WINDOW_DAYS; // later
+}
+
+function attentionMatches(l, read, attention) {
+  if (!attention) return true;
+  const a = attentionOf(l, read);
+  if (attention === 'needs') return a.items.length > 0;
+  if (attention === 'clear') return a.complete && a.items.length === 0;
+  return !a.complete && a.items.length === 0; // unknown
+}
+
+/** The menu keys a page has chosen, as `{ territory, renewal, attention }`, each '' when not chosen. */
+export function menusFromParams(get) {
+  return {
+    territory: territoryFromParam(get('territory')),
+    renewal: renewalFromParam(get('renewal')),
+    attention: attentionFromParam(get('attention')),
+  };
+}
+
+export const menusChosen = (m) => Boolean(m?.territory || m?.renewal || m?.attention);
+
+/** The loaded rows every chosen menu matches (all of them, so two menus narrow), from the reads already made. */
+export function filterByMenus(rows, reads, menus) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!menusChosen(menus)) return list;
+  return list.filter((l) => territoryMatches(l, menus.territory)
+    && renewalMatches(l, menus.renewal)
+    && attentionMatches(l, reads?.[l.uid], menus.attention));
+}
+
 /**
  * The counts line from the summary's `counts`: "12 licences · 9 active ·
  * 1 suspended · 2 draft". Active, suspended and draft are always said (the

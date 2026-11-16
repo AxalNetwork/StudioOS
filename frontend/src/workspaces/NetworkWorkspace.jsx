@@ -16,6 +16,8 @@ import { legacyZonePath } from '../lib/introDestination';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const NetworkContacts = lazy(() => import('../pages/NetworkContacts'));
+// #5310 part 2 (NW2, NW2.1): a founder's own book as the canvas's table, with the Person Sheet.
+const FounderRelationshipBook = lazy(() => import('../pages/founder/FounderRelationshipBook'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
 // D1357 (#3572): relationship intelligence — the team introductions desk (RI4–RI6) and the sharing setting (RI1).
 const IntroductionsDesk = lazy(() => import('../pages/relationships/IntroductionsDesk'));
@@ -367,7 +369,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
           D569 — on the partner shell each accepted record links to its log. */}
       {slug === 'relationships' && <RelationshipRequests logPath={role === 'partner' ? relationshipLogPath : undefined} />}
       {/* D1352 (#3567): the member's own contacts, with their source chips, notes and follow-ups. */}
-      {slug === 'relationships' && <Suspense fallback={null}><NetworkContacts /></Suspense>}
+      {slug === 'relationships' && <Suspense fallback={null}>{role === 'founder' ? <FounderRelationshipBook /> : <NetworkContacts />}</Suspense>}
       {/* D1357 (#3572, RI1): "Let my team see who I know", Network's own setting for it. */}
       {slug === 'relationships' && <Suspense fallback={null}><SharingCard testId="network-sharing" /></Suspense>}
       {/* D1357 (#3572, RI4–RI6): what teammates asked of you, follow-ups, and every introduction asked or made. */}

@@ -92,7 +92,15 @@ export function requestRows(detail, nowMs = Date.now()) {
       return { id: r.id, title: r.title, tone: 'wait', state: `${days == null ? 'Waiting · asked on a date not recorded' : `Waiting ${days} day${days === 1 ? '' : 's'}`}${due}` };
     }
     const answered = dayOf(r.responded_at);
-    return { id: r.id, title: r.title, tone: 'done', state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}` };
+    return {
+      id: r.id, title: r.title, tone: 'done',
+      state: r.state === 'reviewed' ? `Reviewed${answered ? ` · answered ${answered}` : ''}` : `Answered${answered ? ` ${answered}` : ''}`,
+      answer: {
+        note: r.response_note || null,
+        url: r.response_url || null,
+        files: Array.isArray(r.files) ? r.files : null,
+      },
+    };
   });
 }
 
@@ -299,6 +307,39 @@ export function myCommitment(read, currency = 'USD', dealId = undefined) {
     row: live,
     history,
   };
+}
+
+/**
+ * D6191 (#6191): the one commitment action an investor is offered, from the deal's status and their
+ * own commitment (`myCommitment`). `commit` only on an active deal with no live commitment;
+ * `change` with a Pending one on an active deal; nothing with a Confirmed one (it changes only by
+ * withdrawing) or while the read is loading or unreadable. A deal that is not open offers nothing and says why.
+ */
+export function commitAction(deal, mine) {
+  if (!deal || mine?.state === 'loading' || mine?.state === 'unreadable' || !mine) return { kind: null, reason: null };
+  if (deal.status !== 'active') return { kind: null, reason: closedReason(deal) };
+  if (mine.state === 'ready') return mine.confirmed ? { kind: null, reason: null } : { kind: 'change', reason: null, row: mine.row };
+  return { kind: 'commit', reason: null };
+}
+/** Why a deal takes no commitment now, in the deal page's own status word. */
+export function closedReason(deal) {
+  const status = deal?.status ? String(deal.status).replace(/_/g, ' ') : null;
+  return status
+    ? `This deal is not open for commitments: its status is ${status}.`
+    : 'This deal is not open for commitments: its status is not recorded.';
+}
+/** D6191: the Worker's refusals of `POST /api/deals/:id/commitments`, each as a sentence. Nothing was recorded on any of them. */
+export function commitRefusal(e, deal) {
+  const said = String(e?.message || e?.detail || '');
+  const minimum = deal?.minimum_check ? dealMoney(deal.minimum_check, deal.currency || 'USD') : null;
+  if (/KYC required/i.test(said)) return 'Finish identity verification (KYC) before you commit. Nothing was recorded.';
+  if (/must be invited/i.test(said)) return 'You need an invitation to this deal before you can commit. Nothing was recorded.';
+  if (/below the deal minimum/i.test(said)) return minimum ? `The minimum check is ${minimum}. Nothing was recorded.` : 'That amount is below the deal minimum. Nothing was recorded.';
+  if (/not open for commitments/i.test(said)) return 'This deal is no longer open for commitments. Nothing was recorded.';
+  if (/Withdraw the confirmed commitment/i.test(said)) return 'Your commitment is confirmed. Withdraw it before committing a new amount. Nothing was recorded.';
+  if (/changed; refresh/i.test(said)) return 'This deal or your commitment changed while you were editing. Close and open it again. Nothing was recorded.';
+  if (/must be positive/i.test(said)) return 'Enter a positive amount.';
+  return 'Your commitment could not be recorded. Try again.';
 }
 
 /** Who reads a commitment's note: since D1155 the Worker returns it to you alone (DL15); the founder and the studio see the amount and status. */
