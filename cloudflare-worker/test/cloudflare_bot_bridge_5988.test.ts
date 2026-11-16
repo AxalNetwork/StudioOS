@@ -7,7 +7,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { runBotSourceBridge, storedBotEpisodes, cfBotDeliveryPort, botSourceKey, BOT_REPEAT_MS } from '../src/services/cloudflareBotBridge.ts';
 import { botEpisodeKey } from '../src/services/cloudflareBotHealth.ts';
 import { cfReceiptSchema, type CfDeliveryPort } from '../src/services/cloudflareSourceReceipt.ts';
-import { receiveCloudflare } from '../../engineering-notifications/cloudflare-receiver-5671.mjs';
+import { BOT_RECEIPT_PATH, receiveBotReceipt, receiveCloudflare } from '../../engineering-notifications/cloudflare-receiver-5671.mjs';
 
 const T = 1900000000000, H = 3_600_000, A = 'a'.repeat(40), B = 'b'.repeat(40);
 const SECRET = 's'.repeat(40), URL_ = 'https://cf-notify.example.invalid/';
@@ -133,11 +133,87 @@ test('port down, non-durable or probe acknowledgements and an unset port all lea
     const r = await runBotSourceBridge(f.env(), { now: T + 60000, port });
     assert.equal(r.delivery, 'pending'); assert.equal(r.forwarded, 0); assert.equal(f.rows().filter(x => x.forwarded_ms === null).length, 1);
   }
-  // Today's #5671 receiver authenticates the header and refuses an unregistered (non-policy) event: still pending, nothing invented.
+  // The native-policy route still refuses these receipts.
   const toReceiver = (async (url: string, init: RequestInit) => receiveCloudflare(new Request(url, init), { secret: SECRET, config: null, accept: () => { throw Error('must not accept'); } })) as unknown as typeof fetch;
   const r = await runBotSourceBridge(f.env(), { now: T + 120000, port: cfBotDeliveryPort({ CF_BOT_DELIVERY_URL: URL_, CF_BOT_DELIVERY_SECRET: SECRET }, toReceiver) });
   assert.equal(r.delivery, 'pending'); assert.equal(f.rows().filter(x => x.forwarded_ms === null).length, 1);
   f.db.close();
+});
+
+test('D6734: pending receipts reach the real receiver and replays enter the outbox once', async (t) => {
+  const f = fixture();
+  t.after(() => f.db.close());
+  const { CloudflareDelivery } = await import('../../engineering-notifications/cloudflare-outbox-5671.mjs');
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  const sql = { exec(query: string, ...params: any[]) {
+    const rows = db.prepare(query).all(...params);
+    return { toArray: () => rows };
+  } };
+  const transaction = (fn: () => unknown) => {
+    db.exec('BEGIN');
+    try { const result = fn(); db.exec('COMMIT'); return result; }
+    catch (error) { db.exec('ROLLBACK'); throw error; }
+  };
+  const channel = (id: string, routeRole: string) => ({ id, routeRole, private: true, enabled: true, retentionDays: 90, publisher: 'internal-bot' });
+  const registry = {
+    schema: 1, version: 1, reviewedBy: 'guillaumelauzier', approvedAt: new Date(T).toISOString(), purpose: 'cloudflare-notifications',
+    teamId: 'TFIXTURE', enabled: true, slackConnect: false, recipientAccessVerified: true,
+    channels: {
+      health: channel('CFHEALTH', 'cloudflare-health'),
+      activity: channel('CFACTIVITY', 'cloudflare-activity'),
+      prs: channel('CFPREVIEW', 'cloudflare-preview'),
+    },
+  };
+  const delivery = new CloudflareDelivery({ sql, transaction, registry, now: () => T, deliver: async () => { throw Error('no transport'); } });
+  const opts = {
+    prodSecret: SECRET, previewSecret: 'fixture-preview-authentication-6734',
+    accept: (event: unknown) => delivery.accept(event), now: () => T,
+  };
+  const url = new URL(BOT_RECEIPT_PATH, URL_).href;
+  const requests: Request[] = [];
+  const port = cfBotDeliveryPort({ CF_BOT_DELIVERY_URL: url, CF_BOT_DELIVERY_SECRET: SECRET },
+    (async (input: string, init: RequestInit) => {
+      const request = new Request(input, init);
+      requests.push(request.clone());
+      return receiveBotReceipt(request, opts);
+    }) as unknown as typeof fetch)!;
+  f.bot({ status: 'failed', at: T - 60000, failure_code: 'recording_failed' });
+  const pending = await runBotSourceBridge(f.env(), { now: T });
+  assert.equal(pending.stored, 1);
+  assert.equal(f.rows()[0].forwarded_ms, null);
+  const result = await runBotSourceBridge(f.env(), { now: T + 60000, port });
+  assert.equal(result.forwarded, 1);
+  assert.equal(f.rows()[0].forwarded_ms, T + 60000);
+  assert.equal(delivery.summary().eligible, 1);
+  const saved = db.prepare('SELECT event_key, payload FROM cf_events').get() as { event_key: string; payload: string };
+  assert.equal(saved.event_key, f.rows()[0].id);
+  assert.equal(JSON.parse(saved.payload).component, 'recording');
+  assert.deepEqual(JSON.parse(saved.payload).botStage, {
+    component: f.rows()[0].component, code: f.rows()[0].code, provider: f.rows()[0].provider,
+  });
+  const health = db.prepare("SELECT 1 FROM outbox WHERE json_extract(payload,'$.role')='health'").get();
+  assert.ok(health);
+  const before = delivery.summary();
+  assert.equal((await receiveBotReceipt(requests[0].clone(), opts)).status, 202);
+  assert.deepEqual(delivery.summary(), before);
+
+  const body = await requests[0].json();
+  const requestFor = (value: unknown, secret: string) => new Request(url, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-webhook-auth': secret }, body: JSON.stringify(value),
+  });
+  for (const [value, secret, status, code] of [
+    [body, 'bad signature', 401, 'unauthorized'],
+    [body, opts.previewSecret, 403, 'bot_audience_mismatch'],
+    [{ receipt: { id: 'bad' } }, SECRET, 422, 'invalid_bot_receipt'],
+    [{ account_id: 'a'.repeat(32), policy_id: 'b'.repeat(32), alert_event: 'START' }, SECRET, 422, 'invalid_bot_receipt'],
+    [{ ...body, destination: 'preview' }, SECRET, 422, 'invalid_bot_receipt_route'],
+  ] as const) {
+    const response = await receiveBotReceipt(requestFor(value, secret), opts);
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).code, code);
+  }
+  assert.deepEqual(delivery.summary(), before);
 });
 
 test('the forwarded payload is the route plus schema fields only, authenticated, with no session, recording, URL or tenant', async () => {

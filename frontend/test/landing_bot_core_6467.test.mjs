@@ -222,7 +222,10 @@ test('order: the owner\'s queued PRs, then ready, then draft', () => {
 test('dispatchable is a fixed list of bot workflow files, one per kind', () => {
   assert.ok(Object.isFrozen(dispatchable));
   assert.equal(dispatchable.length, Object.keys(KINDS).length);
-  for (const f of dispatchable) assert.match(f, /^\.github\/workflows\/landing-bot-[\w-]+\.yml$/);
+  for (const kind of Object.keys(KINDS)) {
+    const file = kind === 'feeder' ? 'landing-feeder' : `landing-bot-${kind}`;
+    assert.ok(dispatchable.includes(`.github/workflows/${file}.yml`));
+  }
 });
 
 test('the sticky comment is display only and trusted only from the App', () => {
