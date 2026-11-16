@@ -234,3 +234,15 @@ test('#5305: an unreadable store is 503 on the read and the write, never an empt
   assert.equal(w.status, 503, JSON.stringify(w.body));
   assert.equal(audits(db).length, 0);
 });
+
+test('D5305: open rows newest recorded first, then resolved rows most recently resolved first', async () => {
+  const db = freshDb();
+  // Resolved in the opposite order to the one they were recorded in.
+  db.exec(`INSERT INTO advisory_refunds_due (id, booking_id, booking_uid, booking_status, amount_cents, currency, created_at, resolved_at, resolved_by, resolution_reason)
+    VALUES (3, 13, 'bk-old-late', 'cancelled', 100, 'eur', '2026-11-01 00:00:00', '2026-11-12 09:00:00', ${HOLDER}, 'Refunded in Stripe, late.'),
+           (4, 14, 'bk-new-early', 'no_show', 200, 'eur', '2026-11-04 00:00:00', '2026-11-08 09:00:00', ${HOLDER}, 'Refunded in Stripe, early.')`);
+  const l = await list(envFor(db));
+  assert.equal(l.status, 200, JSON.stringify(l.body));
+  assert.deepEqual(l.body.items.map((x: any) => x.booking_uid), ['bk-open', 'bk-other', 'bk-old-late', 'bk-new-early']);
+  assert.equal(l.body.open, 2);
+});
