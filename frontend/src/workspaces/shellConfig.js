@@ -269,16 +269,11 @@ export const SHELLS = {
         ] },
       { kind: 'bucket', label: 'Portfolio', prefix: '/portfolio', tagline: 'Know how my investments are doing',
         zones: [
-          // Three names still point at two pages — "Positions" (canvas),
-          // "Health" (route) and "Cap Table" (the generic tab bar) — and
-          // settling that vocabulary is a content decision. What is settled:
-          // `/portfolio` is the OVERVIEW, `/portfolio/positions` is the book,
-          // and `/portfolio/health` is the overview's legacy alias. So
-          // `positions` carries no `legacy` — it used to name
-          // `/portfolio/health`, which is the overview, not this zone.
+          // #6211: the root is Overview. Performance is a zone of its own.
           { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
           // D1056 (#2427): the canvas names this zone Reports; the address stays.
           { slug: 'updates', label: 'Reports', archetype: A.FEED },
+          { slug: 'performance', label: 'Performance', archetype: A.ANALYTICS },
           { slug: 'value-add', label: 'Value-add', archetype: A.FEED },
         ] },
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on

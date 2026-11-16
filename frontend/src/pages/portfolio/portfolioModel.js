@@ -294,9 +294,16 @@ export function valueAddSummaryOf(support) {
   const s = support.value;
   if (!s.totals) return { state: 'unreadable', reason: 'The support ledger\'s figures could not be read.' };
   const t = s.totals;
+  // D6203 (#6203): the Worker's introduction figures over the whole scope (D6202 `by_kind.intro`); a figure the
+  // read did not carry is null, never 0.
+  const intro = t.by_kind && typeof t.by_kind === 'object' && t.by_kind.intro && typeof t.by_kind.intro === 'object' ? t.by_kind.intro : {};
+  const count = (v) => (isNum(v) ? Number(v) : null);
   return {
     state: 'ok',
-    open: t.promised,
+    // D6203: open is both open states (promised and in progress), as the Value-add page counts it.
+    open: isNum(t.outstanding) ? Number(t.outstanding) : t.promised,
+    introductions: count(intro.delivered),
+    meetings: count(intro.meetings_held),
     delivered: t.delivered,
     withdrawn: t.withdrawn,
     supported: t.companies_supported,
