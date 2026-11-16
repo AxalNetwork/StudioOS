@@ -15,7 +15,10 @@ import { holdsLicence } from '../services/accountLicences';
  *   DELETE /:projectUid/folders/:uid          delete (files inside are orphaned, not lost)
  *   POST   /:projectUid/files                 upload (base64 data URI → R2)
  *   PATCH  /:projectUid/files/:uid            rename / move / change visibility
- *   DELETE /:projectUid/files/:uid            delete row + object
+ *   DELETE /:projectUid/files/:uid            Remove: to Trash for 30 days (D6073), the owner only
+ *   GET    /:projectUid/trash                 the room's Trash, with days left (owner, co-founder)
+ *   POST   /:projectUid/trash/:uid/restore    back to its folder, gate and versions (owner, co-founder)
+ *   DELETE /:projectUid/trash/:uid            Delete now: the objects and rows, the owner only
  *   POST   /:projectUid/grants                open the room to an investor, with an
  *                                             end date and the folders it opens
  *   PATCH  /:projectUid/grants/:uid           change a grant's end date or folders
@@ -120,10 +123,11 @@ import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
 import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileKind, enableSource, resetSourceStatements } from '../services/decks/dataroomExtract';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
-import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
+import { defaultDeps as searchDeps, filesToIndex, indexFile, searchRoom } from '../services/dataRoomSearch';
 import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
 import { hasActiveVentureNda } from '../services/dealAccess';
 import { roomCan, roomCapabilities } from '../services/dataRoomCapabilities';
+import { liveFiles, purgeFile, readTrash, restoreFile, trashCount, trashFile, PurgeIncomplete, TrashUnavailable } from '../services/dataRoomTrash';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -363,7 +367,7 @@ r.post('/shared/:projectUid/search', async (c) => {
     const view = await investorView(c.env, project, grant, user.id);
     const uids = (view.files || []).map((f: any) => String(f.uid));
     const ids = uids.length
-      ? await c.env.DB.prepare('SELECT id FROM data_room_files WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))')
+      ? await c.env.DB.prepare(`SELECT id FROM data_room_files WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))${await liveFiles(c.env.DB)}`)
         .bind(project.id, JSON.stringify(uids)).all<{ id: number }>()
       : { results: [] as Array<{ id: number }> };
     const allowed = new Set((ids.results || []).map((x) => Number(x.id)));
@@ -440,9 +444,10 @@ async function investorView(env: Env, project: ProjectRow, grant: GrantRow, inve
     `SELECT uid, name, parent_id, id, visibility, display_order
        FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
   ).bind(project.id).all<any>();
+  // D6073 — a file in Trash is not in the room: never listed, counted or hidden-counted.
   const files = await env.DB.prepare(
     `SELECT uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
-       FROM data_room_files WHERE project_id = ? ORDER BY name`,
+       FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} ORDER BY name`,
   ).bind(project.id).all<any>();
 
   // D691 decision 6 — the tier and expiry first: a file they hide is neither
@@ -489,7 +494,7 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
     if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
 
     const file = await c.env.DB.prepare(
-      'SELECT id, uid, name, r2_key, visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE uid = ? AND project_id = ?',
+      `SELECT id, uid, name, r2_key, visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)}`,
     ).bind(c.req.param('uid'), project.id).first<any>();
     // D691 decision 6 — a file the tier or its expiry hides answers as one that
     // is not there: its existence is not confirmed. D1103 — so does a file
@@ -535,7 +540,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
               f.access_tier, f.access_expires_at, f.source_kind, f.source_ref,
               (SELECT COUNT(*) FROM data_room_access_log l
                 WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
-         FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
+         FROM data_room_files f WHERE f.project_id = ?${await liveFiles(env.DB, 'f')} ORDER BY f.name`,
     ).bind(project.id).all<any>();
     const grants = await env.DB.prepare(
       `SELECT g.id, g.uid, g.status, g.created_at, g.expires_at, g.folders_scoped,
@@ -595,7 +600,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
     const scopes = await grantScopesOf(env, project.id);
 
     const deckSourcesAvailable = await deckSourceReady(env);
-    const deckFiles = deckSourcesAvailable ? await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(project.id).all<any>() : null;
+    const deckFiles = deckSourcesAvailable ? await env.DB.prepare(`SELECT * FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)}`).bind(project.id).all<any>() : null;
     const states = new Map((deckFiles?.results || []).map(f => [f.uid, sourceState(f)]));
     return {
       deck_sources_available: deckSourcesAvailable,
@@ -604,6 +609,8 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
       // write below asks (`services/dataRoomCapabilities.ts`); the page draws controls from this, never from `role`.
       role,
       capabilities: roomCapabilities(role, user),
+      // D6073 — how many files wait in Trash, for those who may open it; null when it could not be read.
+      ...(roomCapabilities(role, user).restore ? { trash_count: await trashCount(env, project.id) } : {}),
       folders: folders.results || [],
       files: (files.results || []).map(f => ({ ...f, ...(states.get(f.uid) || {}) })),
       grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
@@ -640,7 +647,7 @@ export async function roomSummary(env: Env, project: { id: number; uid: string }
   const [files, folders, grants] = await Promise.all([
     summaryBlock(async () => {
       const result: { success?: boolean; results?: { visibility: string; checklist_item: string | null; n: number }[] } = await env.DB.prepare(
-        'SELECT visibility, checklist_item, COUNT(*) AS n FROM data_room_files WHERE project_id = ? GROUP BY visibility, checklist_item',
+        `SELECT visibility, checklist_item, COUNT(*) AS n FROM data_room_files WHERE project_id = ?${await liveFiles(env.DB)} GROUP BY visibility, checklist_item`,
       ).bind(project.id).all();
       if (result.success === false || !Array.isArray(result.results)) throw new Error('Summary unavailable');
       let total = 0, open = 0, nda = 0, matched = 0;
@@ -850,7 +857,7 @@ r.patch('/:projectUid/folders/:uid', async (c) => {
              SELECT f.id FROM data_room_folders f JOIN tree t ON f.parent_id = t.id WHERE f.project_id = ?
            )
            UPDATE data_room_files SET visibility = ?, updated_at = ?
-             WHERE project_id = ? AND folder_id IN (SELECT id FROM tree)`,
+             WHERE project_id = ? AND folder_id IN (SELECT id FROM tree)${await liveFiles(c.env.DB)}`,
         ).bind(c.req.param('uid'), project.id, project.id, vis, nowIso(), project.id),
       ]);
       if (!(res as any).meta?.changes) return c.json({ detail: 'Folder not found' }, 404);
@@ -1012,7 +1019,7 @@ export async function replaceDataRoomFile(
   if (!(a.bytes instanceof Uint8Array) || a.bytes.byteLength === 0) throw new WriterError(400, 'The file is empty');
   if (a.bytes.byteLength > MAX_FILE_BYTES) throw new WriterError(413, 'too_large');
   const file = await env.DB.prepare(
-    'SELECT id, r2_key, content_type, size_bytes, uploaded_by_user_id FROM data_room_files WHERE id = ? AND project_id = ?',
+    `SELECT id, r2_key, content_type, size_bytes, uploaded_by_user_id FROM data_room_files WHERE id = ? AND project_id = ?${await liveFiles(env.DB)}`,
   ).bind(a.fileId, project.id).first<{ id: number; r2_key: string; content_type: string | null; size_bytes: number | null; uploaded_by_user_id: number | null }>();
   if (!file) throw new WriterError(404, 'File not found');
   const last = await env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM data_room_file_versions WHERE file_id = ?')
@@ -1055,7 +1062,8 @@ r.put('/:projectUid/files/:uid/deck-source', async (c) => {
     if (!roomCan(room.role, 'deck_source', user)) return c.json(OWNER_ONLY, 403);
     if (!await deckSourceReady(c.env)) return c.json({ code: 'deck_sources_unavailable', detail: 'Deck sources are not available yet.' }, 503);
     const file = await sourceFile(c.env, room.project.id, c.req.param('uid'));
-    if (!file) return c.json({ detail: 'File not found' }, 404);
+    // D6073 — a file in Trash is restored before it is a deck source again.
+    if (!file || (file as any).removed_at != null) return c.json({ detail: 'File not found' }, 404);
     const body = await c.req.json().catch(() => null);
     if (!body || typeof body.enabled !== 'boolean') return c.json({ code: 'invalid_enabled', detail: 'Choose whether this file is a deck source.' }, 400);
     if (!body.enabled) {
@@ -1118,7 +1126,7 @@ r.patch('/:projectUid/files/:uid', async (c) => {
     sets.push('updated_at = ?'); params.push(nowIso());
 
     const res = await c.env.DB.prepare(
-      `UPDATE data_room_files SET ${sets.join(', ')} WHERE uid = ? AND project_id = ? RETURNING id`,
+      `UPDATE data_room_files SET ${sets.join(', ')} WHERE uid = ? AND project_id = ?${await liveFiles(c.env.DB)} RETURNING id`,
     ).bind(...params, c.req.param('uid'), project.id).first<{ id: number }>();
     if (!res) return c.json({ detail: 'File not found' }, 404);
     // D1248 — a file matched to a request answers it.
@@ -1140,8 +1148,63 @@ r.delete('/:projectUid/files/:uid', async (c) => {
     if (!roomCan(room.role, 'delete', user)) return c.json(OWNER_ONLY, 403);
     const removed = await removeDataRoomFile(c.env, { project, userId: Number(user.id), uid: c.req.param('uid') });
     if (!removed) return c.json({ detail: 'File not found' }, 404);
-    return c.json({ ok: true });
+    return c.json({ ok: true, in_trash: true, removed_at: removed.removed_at, purge_at: removed.purge_at });
+  } catch (e) {
+    if (e instanceof TrashUnavailable) return c.json(TRASH_UNAVAILABLE, 503);
+    return mapError(c, e);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * D6073 (#6073) — Trash: read, Restore, Delete now                     *
+ * ------------------------------------------------------------------ */
+
+const TRASH_UNAVAILABLE = { code: 'trash_unavailable', detail: 'Trash is not available yet. Nothing was removed.' } as const;
+
+/** The owner and a co-founder read Trash (`restore`); anyone else gets 404, as every room route. */
+r.get('/:projectUid/trash', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'restore', user)) return c.json(OWNER_ONLY, 403);
+    let trash;
+    try { trash = await readTrash(c.env, room.project.id); }
+    catch (e) {
+      console.warn('[data_room] trash unreadable:', e instanceof Error ? e.message : 'error');
+      return c.json({ code: 'trash_unreadable', detail: 'Trash could not be read. Files still work. Nothing in Trash was changed.' }, 503);
+    }
+    return c.json({ ...trash, can_delete_now: roomCan(room.role, 'delete', user) });
   } catch (e) { return mapError(c, e); }
+});
+
+/** Restore: the file returns with its folder (or to the top level, said so), gate, matches and versions. */
+r.post('/:projectUid/trash/:uid/restore', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'restore', user)) return c.json(OWNER_ONLY, 403);
+    const out = await restoreFile(c.env, { project: room.project, userId: Number(user.id), uid: c.req.param('uid') });
+    if (!out) return c.json({ code: 'not_in_trash', detail: 'That file is not in Trash.' }, 404);
+    return c.json({ ok: true, uid: out.uid, folder_uid: out.folder_uid, returned_to_top_level: out.returned_to_top_level });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Delete now: the owner only. The objects go first; a failed delete keeps the file in Trash (503). */
+r.delete('/:projectUid/trash/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'delete', user)) return c.json(OWNER_ONLY, 403);
+    const out = await purgeFile(c.env, { project: room.project, userId: Number(user.id), uid: c.req.param('uid'), reason: 'delete_now' });
+    if (!out) return c.json({ code: 'not_in_trash', detail: 'That file is not in Trash.' }, 404);
+    return c.json({ ok: true, deleted_versions: out.versions, trash_count: await trashCount(c.env, room.project.id) });
+  } catch (e) {
+    if (e instanceof PurgeIncomplete) return c.json({ code: 'delete_incomplete', detail: 'The file could not be deleted now. It is still in Trash.' }, 503);
+    return mapError(c, e);
+  }
 });
 
 /* ------------------------------------------------------------------ *
@@ -1154,7 +1217,7 @@ type FileRow = { id: number; uid: string; name: string; r2_key: string; content_
 async function roomFile(env: Env, projectId: number, uid: string): Promise<FileRow | null> {
   return (await env.DB.prepare(
     `SELECT id, uid, name, r2_key, content_type, size_bytes, uploaded_by_user_id, updated_at
-       FROM data_room_files WHERE uid = ? AND project_id = ?`,
+       FROM data_room_files WHERE uid = ? AND project_id = ?${await liveFiles(env.DB)}`,
   ).bind(uid, projectId).first<FileRow>()) || null;
 }
 
@@ -1322,48 +1385,16 @@ r.get('/:projectUid/preview', async (c) => {
 });
 
 /**
- * D691 (#1700) — Remove: the delete above and the Raise file record's
- * `remove` action, one writer. The file is named by its uid (this route) or
- * its id (the record), always with its venture. Its earlier versions go with
- * it. Null when it is not this venture's file.
+ * D691 (#1700) — Remove: the route above and the Raise file record's `remove`
+ * action, one writer. D6073 — it moves the file to Trash for 30 days
+ * (`services/dataRoomTrash.ts`); nothing is deleted until Delete now or the
+ * daily sweep. The file is named by its uid (the route) or its id (the record),
+ * always with its venture. Null when it is not this venture's file in the room.
  */
 export async function removeDataRoomFile(
   env: Env, a: { project: { id: number; uid: string }; userId: number | null; uid?: string; fileId?: number },
-): Promise<{ id: number } | null> {
-  const { project } = a;
-  const file = await env.DB.prepare(
-    'SELECT id, r2_key FROM data_room_files WHERE (uid = ? OR id = ?) AND project_id = ?',
-  ).bind(a.uid ?? null, a.fileId ?? null, project.id).first<{ id: number; r2_key: string }>();
-  if (!file) return null;
-  const versions = await env.DB.prepare('SELECT r2_key FROM data_room_file_versions WHERE file_id = ?')
-    .bind(file.id).all<{ r2_key: string }>();
-
-  // Row first. A deleted object with a surviving row is a broken download;
-  // a surviving object with no row is unreachable, which is merely waste.
-  // D1 may run with foreign keys off, so the versions' rows go by hand.
-  const deckReady = await deckSourceReady(env);
-  await env.DB.batch([
-    ...(deckReady ? [env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN (SELECT uid FROM data_room_files WHERE id = ?)').bind(project.id, file.id)] : []),
-    env.DB.prepare('DELETE FROM data_room_file_versions WHERE file_id = ?').bind(file.id),
-    env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(file.id),
-  ]);
-  // Only an object inside this project's prefix is ever deleted.
-  if (env.FILES && file.r2_key.startsWith(`data-room/${project.uid}/`)) {
-    try { await env.FILES.delete(file.r2_key); }
-    catch (e) { console.error('[data_room] R2 delete failed', e); }
-  }
-  for (const version of versions.results || []) {
-    if (env.FILES && version.r2_key.startsWith(`data-room/${project.uid}/`)) {
-      try { await env.FILES.delete(version.r2_key); }
-      catch (e) { console.error('[data_room] R2 delete failed', e); }
-    }
-  }
-  // #3938: the file's passages and vectors go with it.
-  try { await forgetFile(env, { index: (env.DATAROOM_INDEX as any) ?? null }, file.id); }
-  catch (e) { console.error('[data_room] search index delete failed', e instanceof Error ? e.message : 'error'); }
-  await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
-    entityId: file.id, action: 'file_removed', summary: `File removed with ${(versions.results || []).length} earlier versions` });
-  return { id: file.id };
+): Promise<{ id: number; removed_at: string; purge_at: string | null } | null> {
+  return trashFile(env, a);
 }
 
 /** D1103 — each scoped grant's named folders, by grant id; null when the store cannot be read. */
@@ -1589,6 +1620,14 @@ r.post('/:projectUid/grants', async (c) => {
     if (!investor) return c.json({ ok: true }, 201);
     if (investor.id === user.id) return c.json({ ok: true }, 201);
 
+    // D6072 (#6072): whether the investor could already open this room. Only a grant that becomes open now
+    // (new, revoked or expired before) tells them; re-sharing an open room, or changing its folders, does not.
+    const before = await c.env.DB.prepare(
+      `SELECT 1 AS open FROM data_room_grants
+        WHERE project_id = ? AND investor_user_id = ? AND status = 'active'
+          AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`,
+    ).bind(project.id, investor.id).first<{ open: number }>();
+
     const uid = newUid();
     // Re-granting a revoked investor reactivates the existing row rather than
     // failing on the UNIQUE(project_id, investor_user_id) constraint. A
@@ -1604,9 +1643,35 @@ r.post('/:projectUid/grants', async (c) => {
       ).bind(uid, project.id, investor.id, user.id, fields.values.expires_at ?? null, nowIso(), nowIso()),
       ...(fields.values.folders !== undefined ? scopeStatements(c.env, 'investor', [project.id, investor.id], fields.values.folders) : []),
     ]);
+    if (!before) await tellRoomShared(c.env, project, investor.id);
+    // The same answer whether or not the address has an account, and whether or not a notice went out.
     return c.json({ ok: true }, 201);
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * D6072 (#6072) — the member investor's one notice that a room was shared with
+ * them, linking to the room in Research › Diligence. Best effort: the grant is
+ * written whether or not the notice lands. An address with no account gets
+ * nothing (D1101 §5 answer 6, kept by the owner on 2026-11-15).
+ */
+async function tellRoomShared(env: Env, project: { id: number; name?: string | null }, investorId: number) {
+  try {
+    const grant = await env.DB.prepare('SELECT uid FROM data_room_grants WHERE project_id = ? AND investor_user_id = ?')
+      .bind(project.id, investorId).first<{ uid: string }>();
+    if (!grant) return;
+    const { notify } = await import('../services/notify');
+    await notify(env, {
+      userId: investorId, type: 'data_room_shared', category: 'deals',
+      title: 'A data room was shared with you',
+      body: `${project.name || 'A venture'} shared its data room with you. Open it in Research › Diligence.`,
+      link: `/research/diligence/${encodeURIComponent(grant.uid)}`,
+      payload: { project_id: project.id, grant_uid: grant.uid },
+    });
+  } catch (e) {
+    console.warn('[data_room] share notice not sent:', (e as Error)?.message);
+  }
+}
 
 /**
  * D1107 (DR7) — whom Share offers: this venture's prospects in Capital
@@ -1724,7 +1789,7 @@ async function diligenceOf(env: Env, projectId: number) {
       ORDER BY r.created_at DESC, r.id DESC LIMIT 100`,
   ).bind(projectId).all<{ id: number; title: string; state: string | null; due_date: string | null; created_at: string; responded_at: string | null; reviewed_at: string | null }>()).results || [];
   const files = (await env.DB.prepare(
-    'SELECT uid, name, dd_request_id FROM data_room_files WHERE project_id = ? AND dd_request_id IS NOT NULL ORDER BY name',
+    `SELECT uid, name, dd_request_id FROM data_room_files WHERE project_id = ? AND dd_request_id IS NOT NULL${await liveFiles(env.DB)} ORDER BY name`,
   ).bind(projectId).all<{ uid: string; name: string; dd_request_id: number }>()).results || [];
   return reqs.map((r) => ({
     id: Number(r.id), title: r.title, state: r.state || 'requested', due_date: r.due_date ?? null, created_at: r.created_at,

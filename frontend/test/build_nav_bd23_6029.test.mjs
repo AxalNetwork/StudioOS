@@ -89,5 +89,6 @@ test('each Build module\'s subtitle is its founder outcome (BD23); no Build modu
   assert.equal(moduleSubtitle('build', 'operating-systems', null), 'Run the company on connected systems and a weekly rhythm.');
   for (const m of MODULES.build) assert.ok(!moduleSubtitle('build', m.slug, 'x').includes(OLD), m.slug);
   assert.equal(moduleSubtitle('raise', 'pitch-deck', 'Your deck.'), `Your deck. ${OLD}`, 'other cycles keep theirs');
-  assert.match(readFileSync('frontend/src/pages/cycles/CycleModulePage.jsx', 'utf8'), /sub=\{sub !== undefined \? sub : moduleSubtitle\(meta\.key, slug, card\?\.caption\)\}/);
+  // A tool page that owns the module (D5081 `owned`) keeps its own subtitle; every other module reads moduleSubtitle.
+  assert.match(readFileSync('frontend/src/pages/cycles/CycleModulePage.jsx', 'utf8'), /sub=\{sub !== undefined \? sub : owned \? owned\.sub : moduleSubtitle\(meta\.key, slug, card\?\.caption\)\}/);
 });

@@ -667,7 +667,7 @@ function insertAt(groups, { gi, at }, row) {
 }
 
 export function withDiligenceRow(groups, role, involved) {
-  if (involved !== true || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
+  if ((role !== 'investor' && involved !== true) || !DILIGENCE_ROLES.includes(role) || !Array.isArray(groups) || !groups.length) return groups;
   if (groups.some((g) => (g.items || []).some((it) => it.to === DILIGENCE_ROW.to))) return groups;
   const licenceSpot = beforeLicenceFoot(groups, [INFLUENCER_ROW.to, '/trust/me']);
   if (licenceSpot) return insertAt(groups, licenceSpot, DILIGENCE_ROW);
@@ -810,8 +810,7 @@ export const INVESTOR_FULL_BLEED = [
   // Legacy mounts the shell config does not claim, each still live and still
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
-  '/portfolio/health', '/portfolio/performance',
-  '/portfolio/waterfall',
+  '/portfolio/health', '/portfolio/waterfall',
 ];
 
 /**

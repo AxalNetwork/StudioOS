@@ -68,13 +68,13 @@ test('a week-window prepare() failure uses the same existing error response', t 
 
 test('a successfully read empty shelf keeps real zero counts', async t => {
   const f = await fixture(t), r = await shelf(f);
-  assert.deepEqual([r.status, r.body], [200, { items: [], page: { offset: 0, limit: 100, total: 0, next_offset: null }, counts: { published: 0, drafts: 0, best_reach: null, total_reach: null, talk_reach: null } }]);
+  assert.deepEqual([r.status, r.body], [200, { items: [], page: { offset: 0, limit: 100, total: 0, next_offset: null }, counts: { total: 0, needs_you: 0, with_editors: 0, published: 0, drafts: 0, best_reach: null, total_reach: null, talk_reach: null } }]);
 });
 test('a successful shelf counts only the caller’s writing and published reach', async t => {
   const f = await fixture(t);
   f.db.exec("INSERT INTO articles(slug,title,author_user_id,status,views) VALUES('one','One',1,'published',7),('two','Two',1,'published',0),('draft','Draft',1,'draft',400),('other','Other',2,'published',999)");
   const r = await shelf(f);
-  assert.deepEqual([r.status, r.body.items.map((a: any) => a.slug).sort(), r.body.counts], [200, ['draft', 'one', 'two'], { published: 2, drafts: 1, best_reach: 7, total_reach: 7, talk_reach: null }]);
+  assert.deepEqual([r.status, r.body.items.map((a: any) => a.slug).sort(), r.body.counts], [200, ['draft', 'one', 'two'], { total: 3, needs_you: 1, with_editors: 0, published: 2, drafts: 1, best_reach: 7, total_reach: 7, talk_reach: null }]);
 });
 
 test('successfully missing week windows stay absent; recorded windows feed real calendar counts', async t => {

@@ -272,7 +272,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
-  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
+  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction, defCtx\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
@@ -394,7 +394,8 @@ test('the five card states (variant=states and variant=new), each with its sente
   const fresh = text(html(h(FigureTile, { fig: figure('p', 'Pain themes', null, 'count', { delta_30d: null }) })));
   assert.match(fresh, /Pain themes Not recorded nothing recorded yet/);
   assert.doesNotMatch(html(h(FigureTile, { fig: figure('p', 'Pain themes', 2, 'count', { spark: [1, 2] }) })), /<svg/, 'a two-point sparkline is not drawn');
-  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Stripe could not be read/);
+  // D4846 part 2 (#6032): the failed source says Unavailable (D5129's chip) before naming it, in muted ink, not red.
+  assert.match(text(html(h(FigureTile, { fig: figure('m', 'MRR', 5, 'usd', { state: 'unreadable', source: 'Stripe' }) }))), /MRR Unavailable Stripe could not be read/);
 });
 
 test('the overview while loading and when the whole read fails', () => {
