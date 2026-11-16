@@ -35,6 +35,7 @@
  *
  * All SQL is bound; none is interpolated.
  */
+import { liveFiles } from '../dataRoomTrash';
 import type { Env } from '../../types';
 import { claimsOf, loadHypotheses, loadInterviews } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel } from '../painGroups';
@@ -673,7 +674,7 @@ export const dataroom: Adapter = {
     const rows = await env.DB.prepare(`SELECT v.* FROM dataroom_deck_values v
       JOIN data_room_files f ON f.uid = v.file_uid AND f.project_id = v.project_id
       WHERE v.project_id = ? AND f.deck_source = 1 AND f.deck_extract_state = 'done'
-        AND v.file_version = f.deck_source_revision
+        AND v.file_version = f.deck_source_revision${await liveFiles(env.DB, 'f')}
       ORDER BY v.as_of DESC, v.file_uid ASC`).bind(projectId).all<any>();
     const out: Partial<Record<string, Read>> = {};
     for (const row of rows.results || []) {

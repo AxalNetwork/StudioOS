@@ -2,7 +2,6 @@ import ResponsiveRecords, { RecordLabel } from './ResponsiveRecords.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PIPELINE_FILTERS, clearFilters, useTabFilters } from './capRelUrlFilters';
-import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { RecordFacts, RecordSection } from '../../cycles/RecordView';
@@ -17,7 +16,8 @@ import { pipelineCsv } from './capRelExports.js';
 import { CLEAR_PATCH, PIPELINE_OPTIONS, activeFilters, pipelineView, sortedColumns } from './capRelPipelineFilters.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
-import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { useProspects } from './capRelHomeRead.js';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -54,27 +54,8 @@ const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[
 export const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : userFacingRaiseError(e, { fallback }));
 export const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : null].filter(Boolean).join(' · ') || 'Investor';
 
-/** The prospects read, with a reload. */
-export function useProspects(projectId) {
-  const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', items: null, projectId });
-  useEffect(() => {
-    let alive = true;
-    // D5073: a re-read of the SAME venture keeps its investors drawn until the new answer lands; another venture's never are.
-    setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
-    Promise.resolve().then(() => api.raiseProspects(projectId))
-      // D6077: whether the read carried Fit, Source and last contact, and whether round calls are on.
-      .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId, signals: typeof d?.signals === 'string' ? d.signals : 'not_read', roundCalls: d?.round_calls === true }); })
-      // D5079 (#5079): a refusal is not a failed read. Mapping a 403 to
-      // `unreadable` told the founder the pipeline "could not be read", which
-      // is a claim about the store rather than about access.
-      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) }); });
-    return () => { alive = false; };
-  }, [projectId, n]);
-  // The frame before the effect runs still holds the previous venture's state: never draw it.
-  const own = read.projectId === projectId ? read : { status: 'loading', items: null };
-  return { status: own.status, items: own.items, message: own.message ?? '', signals: own.signals ?? 'not_read', roundCalls: own.roundCalls === true, reload: () => setN((x) => x + 1) };
-}
+// D5081 part 2 (#5081): the prospects read lives in `capRelHomeRead.js`, so CycleRoute holds it without this step.
+export { useProspects };
 
 /* ------------------------------------------------------------------ *
  * Dialogs (CRL6, CRL5)
@@ -551,6 +532,14 @@ export default function CapRelPipeline({ projectId, search = '' }) {
   // D5377: whether the Passed column is open is the address's too (`?passed=1`); a venture switch closes it.
   const [board, setBoard] = useTabFilters(PIPELINE_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
+  // D5081 part 2 (#5081): Overview's and the header's Add investor and Import pipeline arrive here as
+  // `?open=add` or `?open=import`; the dialog opens once and the word leaves the address.
+  const opening = params.get('open');
+  useEffect(() => {
+    if (opening !== 'add' && opening !== 'import') return;
+    setDialog({ kind: opening });
+    setParams((p) => { const n = new URLSearchParams(p); n.delete('open'); return n; }, { replace: true });
+  }, [opening, setParams]);
   const reload = useCallback(() => read.reload(), [read]);
   const items = read.items || [];
   const byId = useMemo(() => new Map(items.map((p) => [p.id, p])), [items]);
