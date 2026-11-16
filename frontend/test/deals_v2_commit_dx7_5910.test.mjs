@@ -180,7 +180,7 @@ test('long method text sits under How this works, not on the record', () => {
   assert.match(how, /An abstention is a vote cast/);
   const record = html(h(DecisionCard, { decision: OPEN })) + html(h(ConditionsCard, { conditions: [] }));
   assert.doesNotMatch(record, /An abstention is a vote cast|No voting roster/);
-  assert.match(codeOnly(ZONE), /<MinutesCard minutes=\{minutesBlock\} forDecision=\{sameMeeting\}>[\s\S]*?<HowThisWorks \/>/);
+  assert.match(codeOnly(ZONE), /<MinutesCard minutes=\{minutesBlock\} forDecision=\{sameMeeting\} decisionLabel=\{minutesDecision\}>[\s\S]*?<HowThisWorks \/>/);
 });
 
 test('dates print in UTC, as D1 stores them, and an absent one is null', () => {
@@ -193,4 +193,42 @@ test('none of DE07’s sample names reaches the page', () => {
   for (const sample of ['Acme Robotics', 'Name A', 'Customer reference calls', 'Updated cap table', 'Strong team; pilots convert']) {
     assert.ok(!ZONE.includes(sample), `the zone ships DE07's sample "${sample}"`);
   }
+});
+
+// Review on #6876 (2026-11-16): the three things it asked for.
+test('review #6876 (1): every place that prints a decision\'s rationales counts them as the card does', () => {
+  // The fixture's Worker summary says 2 of 3 (the recusal and its declaration counted); the card says 1 of 2.
+  assert.equal(`${OPEN.rationales} of ${OPEN.votes_cast}`, '2 of 3');
+  assert.equal(`${ballotOf(OPEN).rationales} of ${ballotOf(OPEN).voted}`, '1 of 2');
+  const code = codeOnly(ZONE);
+  assert.doesNotMatch(code, /\$\{r\.rationales\} of \$\{r\.votes_cast\}/, 'a table or export still prints the Worker\'s count');
+  assert.equal((code.match(/`\$\{ballotOf\(r\)\.rationales\} of \$\{ballotOf\(r\)\.voted\}`/g) || []).length, 2, 'the table and the export');
+});
+
+test('review #6876 (2): the current decision\'s strip and card count its own open conditions, and the cross-decision list says so', () => {
+  const conds = [
+    { uid: 'c1', decision_uid: 'd-open', status: 'open', text: 'Reference calls' },
+    { uid: 'c2', decision_uid: 'd-other', status: 'open', text: 'Another deal' },
+    { uid: 'c3', decision_uid: 'd-other', status: 'open', text: 'Another deal again' },
+  ];
+  const strip = html(h(CommitStrip, { room: room({ current: OPEN, conditions: { available: true, rows: conds } }), decision: OPEN }));
+  assert.match(strip, /data-testid="commit-tile-conditions".*?>1<\/span>/s, 'another decision\'s conditions counted under Current decision');
+  const none = html(h(CommitStrip, { room: room({ current: OPEN, conditions: { available: true, rows: conds.slice(1) } }), decision: OPEN }));
+  assert.match(none, /data-testid="commit-tile-conditions".*?>0<\/span>.*?nothing blocks Closing/s);
+  const across = html(h(ConditionsCard, { conditions: conds, across: true }));
+  assert.match(across, /3 open across your decisions · each blocks its own deal’s Closing/);
+  assert.doesNotMatch(across, />3 open · blocking Closing</);
+  // The current view hands the card only this decision's conditions.
+  assert.match(codeOnly(ZONE), /<ConditionsCard conditions=\{conditions\.filter\(\(cond\) => cond\.decision_uid === current\.uid\)\}/);
+  assert.match(codeOnly(ZONE), /<ConditionsCard conditions=\{conditions\} more=\{more\} control=\{resolveControl\} error=\{condActionError\} across \/>/);
+});
+
+test('review #6876 (3): the minutes say whose meeting they are, and the export is off when they are another decision\'s', () => {
+  const minutes = { available: true, recorded: true, meeting_title: 'IC', minutes: 'The room concluded.', recorded_at: '2026-11-10 12:00:00' };
+  assert.match(html(h(MinutesCard, { minutes, decisionLabel: 'Older decision' })), /For the decision Older decision/);
+  assert.doesNotMatch(html(h(MinutesCard, { minutes, forDecision: false, decisionLabel: 'Older decision' })), /For the decision/);
+  const code = codeOnly(ZONE);
+  assert.match(code, /if \(view === 'current' && current && !sameMeeting\) \{\s*return \{ onClick: \(\) => \{\}, disabled: true,/);
+  assert.match(code, /header: \['Decision', 'Meeting', 'Recorded', 'Recorded by', 'Minutes'\]/);
+  assert.match(code, /<MinutesCard minutes=\{minutesBlock\} decisionLabel=\{minutesDecision\}>/, 'the Minutes view names the decision');
 });

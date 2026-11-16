@@ -328,8 +328,12 @@ export function DecisionCard({ decision }) {
 
 const CONDITION_WORDS = { open: 'Open', met: 'Met', waived: 'Waived' };
 
-/** Conditions: Condition, Status, Owner, Decision, Recorded. Open blocks Closing. */
-export function ConditionsCard({ conditions, more = {}, control, error }) {
+/**
+ * Conditions: Condition, Status, Owner, Decision, Recorded. Open blocks Closing.
+ * `across` is the Conditions view's list over every decision this account may see: an open condition there blocks its
+ * own deal's Closing, not the one on the card, so the chip says whose (review on #6876).
+ */
+export function ConditionsCard({ conditions, more = {}, control, error, across = false }) {
   const open = conditions.filter((cond) => cond.status === 'open').length;
   return (
     <section className="rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="commit-conditions">
@@ -337,10 +341,10 @@ export function ConditionsCard({ conditions, more = {}, control, error }) {
         <h2 className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Conditions</h2>
         {open > 0 ? (
           <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300" data-testid="commit-conditions-blocking">
-            {open} open · blocking Closing
+            {across ? `${open} open across your decisions · each blocks its own deal’s Closing` : `${open} open · blocking Closing`}
           </span>
         ) : (
-          <span className="text-[11px] text-gray-600 dark:text-gray-400">None open · nothing here blocks Closing</span>
+          <span className="text-[11px] text-gray-600 dark:text-gray-400">{across ? 'None open across your decisions' : 'None open · nothing here blocks Closing'}</span>
         )}
       </div>
       {error ? <p className="mb-2 text-[11px] text-red-700 dark:text-red-400" role="alert" data-testid="status-condition-error">{error}</p> : null}
@@ -396,7 +400,7 @@ export function ConditionsCard({ conditions, more = {}, control, error }) {
  * false when the meeting the route read belongs to another decision than the
  * one on the card.
  */
-export function MinutesCard({ minutes, forDecision = true, children }) {
+export function MinutesCard({ minutes, forDecision = true, decisionLabel = '', children }) {
   let body;
   if (!forDecision) {
     body = (
@@ -430,6 +434,11 @@ export function MinutesCard({ minutes, forDecision = true, children }) {
   return (
     <section className="rounded-[10px] border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="commit-minutes">
       <h2 className="mb-2 text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">Minutes</h2>
+      {/* The committee read's minutes follow its most recently changed decision, which need not be the one on the card:
+          say which decision this meeting belongs to (review on #6876). */}
+      {forDecision && decisionLabel ? (
+        <p className="mb-2 text-[11px] text-gray-600 dark:text-gray-400" data-testid="commit-minutes-decision">For the decision {decisionLabel}</p>
+      ) : null}
       {body}
       {forDecision ? children : null}
     </section>
@@ -439,7 +448,8 @@ export function MinutesCard({ minutes, forDecision = true, children }) {
 /** The five tiles over the decision on the card (DE07). */
 export function CommitStrip({ room, decision }) {
   const ballot = ballotOf(decision);
-  const conditions = room.conditions?.available ? room.conditions.rows : [];
+  // The tile sits under "Current decision": only this decision's conditions block its Closing (review on #6876).
+  const conditions = room.conditions?.available ? room.conditions.rows.filter((cond) => cond.decision_uid === decision.uid) : [];
   const open = conditions.filter((cond) => cond.status === 'open').length;
   const sameMeeting = room.current?.uid === decision.uid;
   const meeting = sameMeeting && room.room?.available ? room.room : null;
@@ -689,7 +699,13 @@ export default function InvestorCommitZone() {
    * export is disabled with the reason when there are none.
    */
   const minutesBlock = ready ? room.minutes : null;
+  const sameMeeting = Boolean(current) && room?.current?.uid === current.uid;
+  // Whose meeting the minutes are: the committee read's `current`, the most recently changed decision.
+  const minutesDecision = ready ? (room.current?.title || room.current?.uid || '') : '';
   const exportMinutes = useMemo(() => {
+    if (view === 'current' && current && !sameMeeting) {
+      return { onClick: () => {}, disabled: true, title: 'The minutes the committee read carries belong to another decision than the one on the card.' };
+    }
     if (!minutesBlock?.available) {
       return { onClick: () => {}, disabled: true, title: minutesBlock?.reason || 'No IC meeting is linked to this decision’s deal.' };
     }
@@ -700,12 +716,12 @@ export default function InvestorCommitZone() {
       onClick: () => exportView({
         scope: 'deals',
         zone: 'commit-minutes',
-        header: ['Meeting', 'Recorded', 'Recorded by', 'Minutes'],
+        header: ['Decision', 'Meeting', 'Recorded', 'Recorded by', 'Minutes'],
         rows: [minutesBlock],
-        cells: (m) => [m.meeting_title || '', day(m.recorded_at) || '', m.recorded_by || '', m.minutes || ''],
+        cells: (m) => [minutesDecision, m.meeting_title || '', day(m.recorded_at) || '', m.recorded_by || '', m.minutes || ''],
       }),
     };
-  }, [minutesBlock]);
+  }, [minutesBlock, minutesDecision, view, current, sameMeeting]);
 
   async function submitMinutes() {
     if (!minutesBlock?.meeting_uid || !minutesForm) return;
@@ -770,17 +786,16 @@ export default function InvestorCommitZone() {
     view: {
       header: ['Decision', 'Stage', 'Votes', 'Rationales', 'Outcome'],
       rows: decisionRows,
+      // Rationales count as the card counts them (ballotOf): a recusal is not a vote cast nor its declaration a rationale.
       cells: (r) => [
         r.title || r.uid,
         r.status || '',
         `${r.tally?.yes || 0}/${r.tally?.no || 0}/${r.tally?.abstain || 0}`,
-        `${r.rationales} of ${r.votes_cast}`,
+        `${ballotOf(r).rationales} of ${ballotOf(r).voted}`,
         r.decision || '',
       ],
     },
   });
-
-  const sameMeeting = Boolean(current) && room?.current?.uid === current.uid;
 
   return (
     <>
@@ -896,10 +911,10 @@ export default function InvestorCommitZone() {
                 <DecisionCard decision={current} />
                 <div className="grid gap-4 lg:grid-cols-12">
                   <div className="min-w-0 lg:col-span-8">
-                    <ConditionsCard conditions={conditions} more={more} control={resolveControl} error={condActionError} />
+                    <ConditionsCard conditions={conditions.filter((cond) => cond.decision_uid === current.uid)} more={more} control={resolveControl} error={condActionError} />
                   </div>
                   <div className="min-w-0 lg:col-span-4">
-                    <MinutesCard minutes={minutesBlock} forDecision={sameMeeting}>{minutesControl}</MinutesCard>
+                    <MinutesCard minutes={minutesBlock} forDecision={sameMeeting} decisionLabel={minutesDecision}>{minutesControl}</MinutesCard>
                   </div>
                 </div>
                 <HowThisWorks />
@@ -910,11 +925,11 @@ export default function InvestorCommitZone() {
           )}
 
           {view === 'conditions' && (
-            <ConditionsCard conditions={conditions} more={more} control={resolveControl} error={condActionError} />
+            <ConditionsCard conditions={conditions} more={more} control={resolveControl} error={condActionError} across />
           )}
 
           {view === 'minutes' && (
-            <MinutesCard minutes={minutesBlock}>{minutesControl}</MinutesCard>
+            <MinutesCard minutes={minutesBlock} decisionLabel={minutesDecision}>{minutesControl}</MinutesCard>
           )}
 
           {/* ══ EVERY DECISION ══ */}
@@ -942,8 +957,8 @@ export default function InvestorCommitZone() {
                   r.votes_cast
                     ? { text: `${r.tally.yes} · ${r.tally.no} · ${r.tally.abstain}`, sub: r.tally.recused ? `yes · no · abstain · ${r.tally.recused} recused beside` : 'yes · no · abstain' }
                     : { nr: true, sub: 'nobody has voted' },
-                  r.votes_cast
-                    ? { text: `${r.rationales} of ${r.votes_cast}` }
+                  ballotOf(r).voted
+                    ? { text: `${ballotOf(r).rationales} of ${ballotOf(r).voted}` }
                     : { nr: true },
                   r.decision
                     ? { text: '', pill: r.decision, pillTone: r.decision === 'invest' ? 'ok' : 'neutral', sub: day(r.decided_at) || undefined }
