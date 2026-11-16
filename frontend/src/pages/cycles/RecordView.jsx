@@ -64,8 +64,8 @@ function runOf(action, { onLink, onForm, onWrite, onClient }) {
 }
 
 /** A group of phone rows inside the body's gutter: `PhoneRows` draws its own. */
-function PhoneGroup({ id, testid, label, rows }) {
-  return <section id={id} className="-mx-[22px] scroll-mt-[1rem]" data-testid={testid}><PhoneRows groups={[{ label, rows }]} /></section>;
+function PhoneGroup({ id, testid, label, rows, note }) {
+  return <section id={id} className="-mx-[22px] scroll-mt-[1rem]" data-testid={testid}><PhoneRows groups={[{ label, rows, note }]} /></section>;
 }
 const danger = (label) => <span className="text-red-700 dark:text-red-300">{label}</span>;
 
@@ -91,7 +91,8 @@ export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
   const { emailTo, onEmail } = useRecordHeader();
   if (phone) {
-    const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
+    // D6101: a `row_only` action (a KPI entry's Remove) runs from its section row alone.
+    const rows = actions.filter((action) => dispatchOf(action) && !action.row_only).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
     // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
@@ -99,7 +100,7 @@ export function RecordActions({ actions = [], ...handlers }) {
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">
-    {actions.map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
+    {actions.filter((action) => !action.row_only).map((action) => <RecordAction key={action.key} action={action} {...handlers} />)}
   </div>;
 }
 
@@ -120,7 +121,7 @@ export function RecordFacts({ facts = [], declarations = new Map(), handlers = {
         : { key: index, title: fact.label, description: fact.reason || undefined, notRecorded: true, notRecordedReason: fact.reason || undefined };
     })} />;
   }
-  return <div className="grid auto-rows-fr grid-cols-1 gap-2.5 @[760px]/cycle:grid-cols-4" data-testid="record-facts">
+  return <div className={`grid auto-rows-fr grid-cols-1 gap-2.5 ${facts.length === 3 ? '@[760px]/cycle:grid-cols-3' : '@[760px]/cycle:grid-cols-4'}`} data-testid="record-facts">
     {facts.map((fact, index) => {
       const action = actionOf(fact);
       return <div key={index} className="flex h-full min-w-0 flex-col gap-1 rounded-xl border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900">
@@ -159,7 +160,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     // D1082 (LV8a): an experiment's Build in Lovable below its group on the phone; the dialog is a full-height sheet there.
     const lovable = rows.map((raw) => rowView(raw)).filter((row) => row.lovable && (row.lovable.can_launch || row.lovable.opened_at));
     return <>
-      <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} />
+      <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} note={section.note} />
       {lovable.map((row, index) => <div key={`lovable-${index}`} className="flex flex-col gap-1 text-[12.5px]" data-testid="record-lovable-row">
         <p className="m-0 text-axal-ink dark:text-gray-200">{text(row.a)}</p><BuildInLovable lovable={row.lovable} /></div>)}
     </>;
@@ -187,6 +188,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
           {row.lovable && <BuildInLovable lovable={row.lovable} />}</div>}
       </div>;
     })}
+    {section.note && <p className="m-0 px-4 pb-3 pt-2 text-[12px] text-axal-muted dark:text-gray-400">{section.note}</p>}
   </section>;
 }
 
