@@ -263,13 +263,17 @@ export type SecurityEventCounts =
  * different claims, and only the first is a statement about the platform.
  */
 export async function loadSecurityEventCounts(env: Env): Promise<SecurityEventCounts> {
+  // D4708 part 2 — both figures fall inside the last 24 hours (midnight UTC is never more than a day ago),
+  // so the read names that window and the time index (`idx_security_events_feed_at`) serves it, rather than
+  // the whole ledger being read on every Overview load. The aggregate still answers one row when it is empty.
   try {
     const row = await env.DB.prepare(
       `SELECT
          COALESCE(SUM(CASE WHEN datetime(occurred_at) >= datetime('now', 'start of day') THEN 1 ELSE 0 END), 0) AS today,
          COALESCE(SUM(CASE WHEN kind = 'signin' AND outcome = 'refused'
                             AND datetime(occurred_at) >= datetime('now', '-1 day') THEN 1 ELSE 0 END), 0) AS failed_signins_24h
-       FROM security_events`,
+       FROM security_events
+      WHERE datetime(occurred_at) >= datetime('now', '-1 day')`,
     ).first<{ today: number; failed_signins_24h: number }>();
     if (!row) return { available: false, reason: 'The security_events ledger answered no row.' };
     return {

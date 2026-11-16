@@ -212,6 +212,8 @@ export function formatValue(value, unit) {
   if (unit === 'usd') return v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   if (unit === 'pct') return `${Math.round(v * 10) / 10}%`;
   if (unit === 'months') return `${Math.round(v * 10) / 10} mo`;
+  // D6104: burn multiple.
+  if (unit === 'multiple') return `${Math.round(v * 100) / 100}×`;
   return v.toLocaleString('en-US');
 }
 
