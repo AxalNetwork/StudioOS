@@ -8,6 +8,7 @@
  * row is built field by field, so an investor's note, score or decision never
  * reaches the screen even if a later read carried one.
  */
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { NOT_RECORDED, dayLabel, versionLabel } from './pitchStudioModel';
 
 /** The four switches a grant carries (D902), in the share dialog's order. */
@@ -128,4 +129,4 @@ export function grantBody({ deckId, investorId, ticks }) {
 }
 
 /** A refusal in the Worker's words; a bare failure says so plainly. */
-export const refusalText = (e, fallback) => String(e?.message || '').trim() || fallback;
+export const refusalText = (e, fallback) => userFacingRaiseError(e, { fallback, scope: 'raise:pitch:deck-grants' });
