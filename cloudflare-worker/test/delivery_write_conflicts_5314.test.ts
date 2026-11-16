@@ -137,6 +137,8 @@ function freshDb() {
   db.exec(migration('202611111141_5314_delivery_write_versions'));
   // #5314 part 2: the status report's Blocked section and the client review history.
   db.exec(migration('202611111140_5314_status_report_blocked_history'));
+  // #4709: blockers kept at send, report amendments and deliverable corrections.
+  db.exec(migration('202611152339_4709_delivery_history'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');

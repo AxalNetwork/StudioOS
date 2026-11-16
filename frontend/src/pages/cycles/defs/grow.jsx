@@ -7,6 +7,7 @@ import { cyclesWrite } from '../../../lib/api/cycles';
 import ShareUpdateLightbox from '../../founder/ShareUpdateLightbox';
 import { distributionPrimary } from '../distribution/distributionModel.js';
 import DurabilityChecklist from '../DurabilityChecklist';
+import DurableDueStrip from '../DurableDueStrip';
 import GrowFromMercury from '../GrowFromMercury';
 import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';
 import FromNotion from '../FromNotion';
@@ -52,6 +53,12 @@ const grow = {
     'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
   }),
   add: toFnMap({}),
+  // D6122 (#6122, GR-21): Company's due strip above the obligations, filtering them by window.
+  aboveRecords: toFnMap({
+    'durable-company-building': (data, ctx) => (
+      <DurableDueStrip counts={data?.parts?.due_counts} on={data?.parts?.due_on} query={ctx.query} onQuery={ctx.onQuery} search={ctx.search} />
+    ),
+  }),
   fills: { 'product-improvement': 'feedback_theme' },
   // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
   // applicant ranking on Team expansion. D4493 retired Distribution's
@@ -69,7 +76,9 @@ const grow = {
   parts: toFnMap({
     // D686 §5.8: the Updates history (#updates) above the checklist.
     'durable-company-building': (data, ctx) => (<>
-      <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction} />
+      {/* D6122 (GR-21): the last five, and where the next one is written. */}
+      <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction}
+        limit={5} more={{ text: 'Write the update in Reporting →', href: `/grow/reporting${ctx.projectId ? `?project_id=${ctx.projectId}` : ''}` }} />
       <DurabilityChecklist items={data?.parts?.checklist}
         onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
       {fromMercury('durable-company-building', data, ctx)}
