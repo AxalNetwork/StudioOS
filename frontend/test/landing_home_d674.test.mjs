@@ -110,3 +110,32 @@ test('every image the page asks for ships in frontend/public/site', () => {
     assert.ok(existsSync(resolve(ROOT, `frontend/public/site/${n}.webp`)), `frontend/public/site/${n}.webp is missing`);
   }
 });
+
+// #6988 (X6): lines that were untrue today. Scans these four source files only; "30-second" used for anything else
+// elsewhere (for example lib/api/adminLearning.js) is not this test's business.
+test('#6988 the homepage, its title and its share cards say nothing untrue', async () => {
+  const UNTRUE = [/30-second intake/i, /idea to funded/i, /from idea to funded company/i, /funded in 30 days/i, /warm investor intros/i, /every invoice/i];
+  for (const f of ['frontend/src/pages/LandingPage.jsx', 'frontend/index.html', 'frontend/src/lib/ogRegistry.js', 'frontend/src/data/productPages.js']) {
+    const text = read(f);
+    for (const re of UNTRUE) assert.doesNotMatch(text, re, `${f} says ${re}`);
+  }
+  // No homepage button opens /directory, which may list nobody; the hero's second button is the platform page.
+  // The site-wide nav's Directory link (lib/siteLinks.js) is not a homepage button; the page's own <main> is checked.
+  const html = render(React.createElement(LandingPage));
+  const main = html.slice(html.indexOf('<main'), html.indexOf('</main>'));
+  assert.ok(main.length > 0, 'the page has a <main>');
+  assert.doesNotMatch(main, /href="\/directory"/);
+  assert.match(html, /<a class="ax-btn ax-btn-lg ax-btn-quiet" href="\/platform"[^>]*>See the platform</);
+  assert.match(html, /Create an account\. Your membership is reviewed after you sign up\./);
+  assert.match(html, /Founder, partner, investor or advisor: create an account and choose your role\./);
+  // The prerendered home card (scripts/prerender-og.mjs writes ogTagsFor('/')) carries the new title and description.
+  const { ogTagsFor } = await import('../src/lib/ogRegistry.js');
+  const home = ogTagsFor('/');
+  assert.equal(home.title, 'StudioOS, the founder workspace — Axal VC StudioOS');
+  assert.match(home.description, /^Axal VC is a venture studio platform: founders validate an idea with customer interviews/);
+  const index = read('frontend/index.html');
+  assert.match(index, /<title>Axal VC — StudioOS, the founder workspace<\/title>/);
+  const meta = (attr) => index.match(new RegExp(`<meta (?:name|property)="${attr}" content="([^"]*)"`))[1];
+  assert.equal(meta('og:description'), meta('description'), 'og:description takes the meta description');
+  assert.equal(meta('twitter:description'), meta('description'), 'twitter:description takes the meta description');
+});
