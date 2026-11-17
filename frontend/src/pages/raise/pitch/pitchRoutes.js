@@ -30,6 +30,20 @@
 export const PITCH_PATH = '/raise/pitch';
 export const PITCH_SHARE_PATH = '/raise/pitch/share';
 
+export const PITCH_TABS = Object.freeze([
+  { id: 'overview', label: 'Overview', path: PITCH_PATH },
+  { id: 'decks', label: 'Decks', path: `${PITCH_PATH}/decks` },
+  { id: 'script', label: 'Script & rehearsal', path: `${PITCH_PATH}/script` },
+  { id: 'review', label: 'Review', path: `${PITCH_PATH}/review` },
+  { id: 'analytics', label: 'Share & analytics', path: PITCH_SHARE_PATH },
+  { id: 'notes', label: 'Notes', path: `${PITCH_PATH}/notes` },
+]);
+
+/** Editor and Present retain their own controls and the workspace's auth and venture context. */
+export function pitchFocusMode(pathname) {
+  return /^\/raise\/pitch\/(?:edit|present)\/?$/.test(pathname);
+}
+
 /** The legacy addresses and where each one lands. */
 export const LEGACY_PITCH_PATHS = Object.freeze({
   '/raise/pitch-deck': PITCH_PATH,

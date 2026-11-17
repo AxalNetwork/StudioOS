@@ -1,20 +1,25 @@
 /**
- * D1152 (#3057) — DL14: your firm's notes on this deal (part 2's store), the
- * slot for Eadwyn's draft summary, and the deal's activity without other
- * investors' names (the Worker withholds them, D1152).
+ * D1152 (#3057) — DL14: your firm's notes on this deal (part 2's store),
+ * Eadwyn's draft summary (#6194: drafted on request, from what this investor
+ * may read, "Not saved" until Save as my note), and the deal's activity
+ * without other investors' names (the Worker withholds them, D1152).
  *
  * WHO WRITES. Every member of your firm reads the notes; only a note's
  * author edits or deletes it (`author_user_id`, D1150). A new note is saved
  * from the form; an edit and a delete each open an in-page dialog that says
  * what changes. Nothing is ever a browser pop-up.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
-import { ACTIVITY_FILTERS, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, activityEmpty, activityShown, noteError } from './dealFrameModel';
+import { ACTIVITY_FILTERS, EADWYN_DRAFT, EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, activityEmpty, activityShown, draftSourceRows, noteError } from './dealFrameModel';
+import { fillsApi } from '../../lib/api/fills.js';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
+import { refusalView } from '../../lib/fillSheet.js';
+import { NOTES_PAGE, NOTE_FILTER_ALL, noteByline, notesHaveMore } from './dealNotesModel';
 import Sheet from '../../ui/Sheet.jsx';
 import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../../lib/fillScoped.js';
@@ -80,9 +85,117 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
   );
 }
 
-function Notes({ dealId, userId }) {
+const STATE_TONE = {
+  used: 'text-axal-ink dark:text-gray-100',
+  none: 'text-axal-muted dark:text-gray-400',
+  not_shared: 'text-axal-muted dark:text-gray-400',
+  unreadable: 'text-axal-destructive dark:text-red-300',
+};
+
+/** #6194: the sources a draft read, each with its state: Used, None on record, Not shared or Unreadable. */
+function DraftSources({ sources }) {
+  const rows = draftSourceRows(sources);
+  if (!rows.length) return null;
+  return (
+    <div className="flex flex-col gap-1" data-testid="deal-eadwyn-draft-sources">
+      <span className={EYE}>Sources</span>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {rows.map((r) => (
+          <li key={r.key} className="text-[12.5px] leading-[1.45]" data-state={r.state} data-testid={`deal-eadwyn-draft-source-${r.key}`}>
+            <span className="font-bold text-axal-ink dark:text-gray-100">{r.label}</span>
+            <span className={STATE_TONE[r.state]}> · {r.word}</span>
+            {r.note && <span className="text-axal-muted dark:text-gray-400"> · {r.note}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * #6194 — DL14's "Draft: deal summary". Asked for by the investor, never on load: the deal note's own
+ * scoped fill (`input.draft: 'deal_summary'`), so the hold, the charge and the guard are the fill's.
+ * The draft is Eadwyn's and "Not saved" until Save as my note, which saves it through the notes route
+ * and then records the kept proposal. Discard discards the proposal and writes no note.
+ */
+function EadwynDraft({ dealId, fill, onSaved }) {
+  const [state, setState] = useState({ step: 'idle' });
+  const [busy, setBusy] = useState(false);
+  const can = fill.status === 'ready' && fill.canFill && !fill.aiOff;
+  const ask = async () => {
+    if (!can) return;
+    setState({ step: 'running' });
+    try {
+      const events = await fillsApi.run({ page: SCOPED_FORMS.dealNote.page, option: `form:${SCOPED_FORMS.dealNote.form}`, parent: Number(dealId), input: { draft: 'deal_summary', values: { body: '' } } });
+      const end = events.find((e) => e.event === 'done')?.data || null;
+      if (!end || end.refusal) { setState({ step: 'refused', text: refusalView(end?.refusal ?? null, { charged: end?.charged_microusd ?? null }).text }); return; }
+      const draft = (end.proposals || []).find((p) => p.field === 'body' && String(p.value || '').trim());
+      setState(draft ? { step: 'draft', uid: draft.uid, text: String(draft.value), sources: end.sources || [] } : { step: 'empty', sources: end.sources || [] });
+    } catch (e) {
+      reportError('DealNotes:draft', e);
+      setState({ step: 'refused', text: refusalView({ code: e?.code, message: e?.message }).text });
+    }
+  };
+  const save = async () => {
+    if (state.step !== 'draft' || busy) return;
+    setBusy(true);
+    try {
+      const created = await dealContextApi.addNote(dealId, { body: state.text.trim(), tag: null });
+      if (Number(created?.id) > 0) {
+        try { await fillsApi.record({ page: SCOPED_FORMS.dealNote.page, form: SCOPED_FORMS.dealNote.form, record: Number(created.id), proposals: [state.uid] }); }
+        catch (e) { reportError('DealNotes:draft-record', e); }
+      }
+      setState({ step: 'idle' });
+      onSaved();
+    } catch (e) {
+      setState((s) => ({ ...s, error: e?.message || 'That did not save. Try again.' }));
+    } finally { setBusy(false); }
+  };
+  const discard = async () => {
+    const uid = state.uid;
+    setState({ step: 'idle' });
+    // The proposal is marked discarded; no note is written. A failed mark leaves the proposal unused, never saved.
+    if (uid) railProposalsApi.decide(uid, 'discard').catch((e) => reportError('DealNotes:draft-discard', e));
+  };
+  const why = fill.status === 'loading' ? null
+    : fill.status === 'unreadable' ? EADWYN_DRAFT.unreadable
+      : fill.aiOff ? EADWYN_DRAFT.aiOff
+        : fill.offLine || (!can ? EADWYN_DRAFT.unavailable : null);
+  return (
+    <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="deal-eadwyn-draft" data-step={state.step}>
+      <span className={EYE}>{EADWYN_DRAFT.eye}</span>
+      <h3 className={H3}>{EADWYN_DRAFT.title}</h3>
+      {(state.step === 'idle' || state.step === 'refused' || state.step === 'empty') && (
+        <>
+          <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT.line}</p>
+          <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT_WAITS}</p>
+          {state.step === 'refused' && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="deal-eadwyn-draft-refused">{state.text}</p>}
+          {state.step === 'empty' && <p className={`m-0 ${SUB}`} data-testid="deal-eadwyn-draft-empty">{EADWYN_DRAFT.empty}</p>}
+          {state.step === 'empty' && <DraftSources sources={state.sources} />}
+          {why && <p className={`m-0 ${SUB}`} data-testid="deal-eadwyn-draft-why">{why}</p>}
+          <div><button type="button" className={BTN_S} disabled={!can} onClick={ask} data-testid="deal-eadwyn-draft-ask">{state.step === 'idle' ? EADWYN_DRAFT.ask : EADWYN_DRAFT.again}</button></div>
+        </>
+      )}
+      {state.step === 'running' && <p className={`m-0 ${SUB}`} aria-busy="true" data-testid="deal-eadwyn-draft-running">{EADWYN_DRAFT.running}</p>}
+      {state.step === 'draft' && (
+        <>
+          <span className="inline-flex w-fit items-center rounded-axal-pill border border-axal-lavender-edge bg-white px-2.5 py-0.5 text-[11.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-gray-900 dark:text-violet-300" data-testid="deal-eadwyn-draft-mark">{EADWYN_DRAFT.mark}</span>
+          <p className="m-0 whitespace-pre-line text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100" data-testid="deal-eadwyn-draft-text">{state.text}</p>
+          <DraftSources sources={state.sources} />
+          {state.error && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{state.error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={actionPrimary} disabled={busy} onClick={save} data-testid="deal-eadwyn-draft-save">{EADWYN_DRAFT.save}</button>
+            <button type="button" className={actionGhost} disabled={busy} onClick={discard} data-testid="deal-eadwyn-draft-discard">{EADWYN_DRAFT.discard}</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function Notes({ dealId, userId, evidenceNote }) {
   const [read, setRead] = useState({ status: 'loading' });
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(() => typeof evidenceNote === 'string' ? evidenceNote.slice(0, NOTE_MAX) : '');
   const [tag, setTag] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -93,10 +206,34 @@ function Notes({ dealId, userId }) {
     scope: SCOPED_FORMS.dealNote, parent: Number(dealId) > 0 ? Number(dealId) : null, enabled: Number(dealId) > 0,
     values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
   });
-  const load = () => {
-    dealContextApi.notes(dealId).then((data) => setRead({ status: 'ready', data }))
-      .catch((e) => { reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
+  // #6192: the list pages in NOTES_PAGE steps until the total is reached, and a tag chip narrows it
+  // (the Worker's `?tag=`, so the count is the filtered one). A later page that fails says Unreadable
+  // beside the rows already shown; a stale answer (an older tag, an older load) is dropped.
+  const [filter, setFilter] = useState(NOTE_FILTER_ALL);
+  const [more, setMore] = useState({ busy: false, failed: false });
+  const gen = useRef(0);
+  const load = (tagNow = filter) => {
+    const mine = ++gen.current;
+    setMore({ busy: false, failed: false });
+    dealContextApi.notes(dealId, { limit: NOTES_PAGE, offset: 0, tag: tagNow })
+      .then((data) => { if (mine === gen.current) setRead({ status: 'ready', data: { items: data?.items || [], total: data?.total } }); })
+      .catch((e) => { if (mine !== gen.current) return; reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
   };
+  const loadMore = () => {
+    if (read.status !== 'ready' || more.busy) return;
+    const mine = gen.current;
+    const have = read.data.items;
+    setMore({ busy: true, failed: false });
+    dealContextApi.notes(dealId, { limit: NOTES_PAGE, offset: have.length, tag: filter })
+      .then((data) => {
+        if (mine !== gen.current) return;
+        const seen = new Set(have.map((n) => n.uid));
+        setRead({ status: 'ready', data: { items: [...have, ...(data?.items || []).filter((n) => !seen.has(n.uid))], total: data?.total ?? read.data.total } });
+        setMore({ busy: false, failed: false });
+      })
+      .catch((e) => { if (mine !== gen.current) return; reportError('DealNotes:more', e); setMore({ busy: false, failed: true }); });
+  };
+  const pick = (t) => { setFilter(t); setRead({ status: 'loading' }); load(t); };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
   const save = async () => {
     const bad = noteError(body);
@@ -128,15 +265,23 @@ function Notes({ dealId, userId }) {
           <button type="button" className={BTN_S} disabled={busy} onClick={save} data-testid="deal-note-save">Save</button>
         </div>
       </section>
-      <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40" data-testid="deal-eadwyn-draft">
-        <span className={EYE}>Eadwyn · draft</span>
-        <p className={`m-0 ${SUB}`}>{EADWYN_DRAFT_WAITS}</p>
-      </section>
+      <EadwynDraft dealId={dealId} fill={fill} onSaved={load} />
       <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-notes">
-        <h3 className={H3}>Notes</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className={H3}>Notes</h3>
+          {read.status === 'ready' && <span className={SUB} data-testid="deal-notes-count">{filter ? `${read.data.total ?? items.length} tagged ${filter}` : `${read.data.total ?? items.length}`}</span>}
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter by tag" data-testid="deal-notes-filter">
+          {[NOTE_FILTER_ALL, ...NOTE_TAGS].map((t) => (
+            <button key={t || 'all'} type="button" role="radio" aria-checked={filter === t} className={TAG(filter === t)} onClick={() => pick(t)} data-testid={`deal-notes-filter-${t || 'all'}`}>{t || 'All'}</button>
+          ))}
+        </div>
         {read.status === 'loading' && <p className={`m-0 ${SUB}`}>Reading…</p>}
         {read.status === 'unreadable' && <Unreadable what="Your firm’s notes" claim="That is not a claim that there are none." onRetry={load} />}
-        {read.status === 'ready' && !items.length && (
+        {read.status === 'ready' && !items.length && filter && (
+          <p className={`m-0 py-2 ${SUB}`} data-testid="deal-notes-empty">No note is tagged {filter}.</p>
+        )}
+        {read.status === 'ready' && !items.length && !filter && (
           <div className="flex flex-col gap-1 py-2" data-testid="deal-notes-empty">
             <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{EMPTY.notes.title}</p>
             <p className={`m-0 ${SUB}`}>{EMPTY.notes.line}</p>
@@ -146,7 +291,7 @@ function Notes({ dealId, userId }) {
           const own = Number(n.author_user_id) === Number(userId);
           return (
             <article key={n.uid} className="flex flex-col gap-1 border-t border-axal-hairline py-2.5 dark:border-gray-700" data-testid={`deal-note-${n.uid}`}>
-              <span className={EYE}>{String(n.created_at || '').slice(0, 10) || 'Date not recorded'} · {own ? 'You' : 'Your firm'}{n.tag ? ` · ${n.tag}` : ''}</span>
+              <span className={EYE} data-testid={`deal-note-byline-${n.uid}`}>{noteByline(n, userId)}</span>
               <p className="m-0 whitespace-pre-line text-[13px] leading-[1.5] text-axal-ink dark:text-gray-100">{n.body}</p>
               {own && (
                 <div className="flex gap-3">
@@ -157,6 +302,12 @@ function Notes({ dealId, userId }) {
             </article>
           );
         })}
+        {more.failed && <Unreadable what="The older notes" claim="The notes above are still shown; that is not a claim that there are no more." onRetry={loadMore} />}
+        {read.status === 'ready' && notesHaveMore(items, read.data.total) && !more.failed && (
+          <button type="button" className={`${actionGhost} self-start`} disabled={more.busy} onClick={loadMore} data-testid="deal-notes-more">
+            {more.busy ? 'Reading…' : `Show more (${items.length} of ${read.data.total})`}
+          </button>
+        )}
       </section>
       {dialog && <NoteDialog {...dialog} dealId={dealId} onClose={() => setDialog(null)} onDone={() => { setDialog(null); load(); }} />}
     </>
@@ -201,10 +352,10 @@ export function DealActivity({ dealId, mineFilter = false }) {
 }
 
 /** DL14: the notes on the left, the activity beside them. */
-export default function DealNotes({ dealId, userId }) {
+export default function DealNotes({ dealId, userId, evidenceNote = null }) {
   return (
     <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-notes-tab">
-      <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2"><Notes dealId={dealId} userId={userId} /></div>
+      <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2"><Notes dealId={dealId} userId={userId} evidenceNote={evidenceNote} /></div>
       <div className="min-w-0"><DealActivity dealId={dealId} mineFilter /></div>
     </div>
   );

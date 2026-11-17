@@ -26,21 +26,22 @@ import type { Env, User } from '../../types';
 import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 import { canAccessProject } from '../projectAccess';
 import { ensureProjectMetricsSchema } from '../../routes/progress';
-import { channelRows, readiness, utmSource, MARKET_PARTS, type Ctx as GrowCtx, type MarketRow } from '../growCycle';
+import { APPLICATION_STAGES, channelRows, readiness, utmSource, MARKET_PARTS, type Ctx as GrowCtx, type MarketRow } from '../growCycle';
 import { billingPeriods, computeMovements, movementGap, readRecurring } from '../revenueMovements';
 import { runwayMonths } from '../saasMetrics';
 import {
-  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiRows, type KpiAlert, type KpiRow,
+  CUSTOM_PREFIX, CUSTOM_UNITS, KPI_KEYS, KPI_LABEL, KpiRefused, alertText, customKpis, enterKpi, kpiEntries, kpiRows, removeKpiEntry, type KpiAlert, type KpiRow,
 } from '../growKpis';
 import {
   ALERT_MEASURES, ALERT_OPS, CHANNEL_KINDS, CHANNEL_STATES, DECISIONS, FEEDBACK_SOURCES, FEEDBACK_STATUS, LOCALISATION_KEYS,
   MARKET_STATES, OBLIGATION_KINDS, OBLIGATION_STATES, PARTNER_STAGES, PARTNER_TYPES, REPEATS, REPEATS_OF, ROLE_TYPES, Refused,
   TERMS_KINDS, TOLD_VIA, addAgendaItem, addEntryStep, addExperiment, addPartnerDeal, closeRole, logGrowWrite, markFeedbackTold,
-  markHeld, obligationKind, obligationState, openMinutes, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
-  updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
+  markHeld, obligationKind, obligationState, openMinutes, removeEntryStep, removeMarket, removeObligation, removePartner, setApplicationStage, setFeedbackTheme, setKpiAlert, setLocalisation, updateChannel,
+  updateEntryStep, updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
-import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
+import { partnerRevenueSource, setPartnerRevenue } from '../growWriters';
+import { parseMinor, plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -95,7 +96,8 @@ function money(cents: unknown, currency: unknown = 'usd'): string | null {
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
   try { return await work(); } catch (err) {
     if (err instanceof Refused || err instanceof KpiRefused) {
-      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}) }),
+      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.field ? { field: err.field } : {}),
+        ...(err instanceof KpiRefused && err.code ? { code: err.code } : {}) }),
         { status: err.status, headers: { 'Content-Type': 'application/json' } });
     }
     throw err;
@@ -103,6 +105,16 @@ async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult
 }
 /** `ownedRow` passed before the spec ran, so a missing row is a race with a delete. */
 const vanished = () => new Response(JSON.stringify({ detail: 'Record not found.' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+
+/**
+ * D6115 (#6115): Remove, a danger write behind a confirmation, for a record
+ * added by mistake. The writer deletes it or refuses (409) with what to do
+ * instead; the page's re-read then 404s and goes back to the list.
+ */
+const remove = (title: string, body: string, run: (c: RecordContext) => Promise<unknown>): RecordAction => ({
+  key: 'remove', label: 'Remove', kind: 'write', tone: 'danger', confirm: { title, body, cta: 'Remove' },
+  execute: (c) => refusing(async () => ({ ok: true, record: await run(c) })),
+});
 
 /** What a record read loaded, for its sections and actions; never sent (the route spreads the record). */
 const loaded = new WeakMap<RecordContent, Any>();
@@ -344,7 +356,7 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
       .bind(rc.projectId, since).all<{ utm_json: string }>();
     const signups = (res.results || []).filter((c) => utmSource(c.utm_json) === ch.utm_source).length;
     return { rows: [
-      notRecorded('Visits', 'No page-visit store'),
+      notRecorded('Visits', 'No per-channel visit count'), // D6107: PostHog visits are venture-wide, on the Distribution card
       { a: 'Sign-ups', b: 'contacts from this channel, last 30 days', c: String(signups) },
       { a: 'Paying', b: 'customers from this channel this month', c: String(row?.customers ?? 0) },
     ] };
@@ -403,11 +415,13 @@ const distribution = spec('growth_channels', 'distribution', GROW_OLD_ROWS.distr
 // ── Revenue and traction — id: the KPI key ──────────────────────────────────
 
 /** Worked out by the platform, never typed (decision 4). */
-const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway']);
+const DERIVED = new Set(['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
 const DERIVED_REASON: Record<string, string> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
   expansion_mrr: 'Expansion MRR is worked out from the revenue ledger.',
   runway: 'Runway is worked out from cash and burn.',
+  arr: 'ARR is worked out as 12 × MRR.',
+  burn_multiple: 'Burn multiple is worked out from burn and the ledger\'s net new ARR.',
 };
 
 export function kpiValueText(value: number | null, unit: string | null): string | null {
@@ -416,6 +430,7 @@ export function kpiValueText(value: number | null, unit: string | null): string 
   if (unit === 'usd_cents') return money(value);
   if (unit === 'pct') return `${Math.round(value * 100) / 100}%`;
   if (unit === 'months') return `${Math.round(value * 10) / 10} months`;
+  if (unit === 'multiple') return `${Math.round(value * 100) / 100}×`;
   return Number(value).toLocaleString('en-US');
 }
 const signed = (text: string | null, v: number) => (text == null ? null : v > 0 ? `+${text}` : v < 0 ? `−${text.replace(/^-/, '')}` : text);
@@ -461,6 +476,37 @@ async function kpiHistory(rc: RecordContext, row: KpiRow): Promise<Array<{ month
     .map(([month, v]) => ({ month, text: kpiValueText(v, unit) ?? '' }));
 }
 
+/** A typed KPI's own unit, for an entry when the KPI row reads Not recorded. */
+const ENTRY_UNIT: Record<string, string> = { mrr: 'usd', paying_accounts: 'count', churn: 'pct', net_burn: 'usd' };
+/** What a KPI's History lists entries of: a typed or custom KPI, unless Churn reads the ledger. */
+const listsEntries = (row: KpiRow) => (row.id in ENTRY_UNIT && !(row.id === 'churn' && row.unit === 'usd_cents')) || row.id.startsWith(CUSTOM_PREFIX);
+const HISTORY_ROWS = 24;
+
+/**
+ * D6101 (#6101): History as entries, newest first, for a KPI a person can type:
+ * each hand entry with its day and a Remove, and a connected source's last
+ * figure each month (it writes one a day). Null for a derived or PostHog KPI,
+ * which keeps its months.
+ */
+async function historyEntries(rc: RecordContext, row: KpiRow): Promise<Row[] | null> {
+  if (!listsEntries(row)) return null;
+  const unit = row.unit ?? ENTRY_UNIT[row.id] ?? (await customKpis(rc.env, rc.projectId)).find((k) => `${CUSTOM_PREFIX}${k.uid}` === row.id)?.unit ?? null;
+  const shown = unit === 'money' ? 'usd_cents' : unit;
+  const months = new Set<string>();
+  const rows: Row[] = [];
+  for (const e of await kpiEntries(rc.env, rc.projectId, row.id)) {
+    if (!e.manual) {
+      const month = `${e.source}:${e.day.slice(0, 7)}`;
+      if (months.has(month)) continue;
+      months.add(month);
+    }
+    rows.push({ a: e.day, b: kpiValueText(e.value, shown) ?? '', c: e.manual ? 'By hand' : e.source, tone: e.manual ? 'grey' : 'vio',
+      ...(e.manual ? { action: { key: 'remove-entry', body: { entry: e.entry } } } : {}) });
+    if (rows.length >= HISTORY_ROWS) break;
+  }
+  return rows;
+}
+
 const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, id) => {
   await ensureProjectMetricsSchema(rc.env);
   const row = (await kpiRows(rc.env, rc.projectId, Date.now())).find((r) => r.id === id);
@@ -482,6 +528,8 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
 }, [
   section('history', 'History', async (rc, _id, record) => {
     const { row } = loadedOf(record);
+    const entries = await historyEntries(rc, row);
+    if (entries) return { rows: entries, empty: 'Not recorded yet.' };
     const months = await kpiHistory(rc, row);
     return { rows: months.map((m) => ({ a: m.month, b: m.text })), empty: 'Not recorded yet.' };
   }),
@@ -532,6 +580,21 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
       }),
     });
   }
+  // D6101 (#6101): a hand entry's Remove, run from its History row (`row_only`: no header button).
+  if (listsEntries(row)) {
+    actions.push({
+      key: 'remove-entry', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+      confirm: { title: `Remove this ${row.kpi} entry?`, cta: 'Remove',
+        body: `For a figure typed with the wrong value: ${row.kpi} then reads the next latest value, here, on the Overview and in a report draft. A report already sent keeps its figures.` },
+      execute: (c, _id, body) => refusing(async () => {
+        await ensureProjectMetricsSchema(c.env);
+        const out = await removeKpiEntry(c.env, c.projectId, id, field(body, 'entry'));
+        await logGrowWrite(c.env, c.projectId, Number(c.user.id), { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entry_removed',
+          summary: `Hand entry removed: ${kpiValueText(out.value, ENTRY_UNIT[out.id] ?? row.unit) ?? out.value} for ${out.as_of}` });
+        return { ok: true, record: out };
+      }),
+    });
+  }
   actions.push({
     key: 'set-alert', label: 'Set an alert', kind: 'form',
     form: { title: `Alert on ${row.kpi}`, cta: 'Set alert', foot: 'You are told in the app once when it crosses, and again only after it crosses back.', fields: [
@@ -573,6 +636,10 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
 // ── Team expansion — id: the posting's id ───────────────────────────────────
 
 const ROLE_TEAMS = ['Engineering', 'Product', 'Go-to-market', 'Operations'];
+/** #6110: how many applicants the record lists; the rest are on the jobs board's own page. */
+export const APPLICANTS_SHOWN = 50;
+/** A non-host's count line: "1 at interview · 1 at offer · 2 hired". */
+const COUNT_WORD: Record<string, string> = { applied: 'applied', screen: 'at screen', interview: 'at interview', offer: 'at offer', hired: 'hired', declined: 'declined' };
 const ROLE_EDIT = ['title', 'team', 'target_start', 'type', 'comp_min_cents', 'comp_max_cents', 'comp_currency', 'equity_pct'] as const;
 
 const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team-expansion'], async (rc, id) => {
@@ -594,22 +661,36 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     createdBy: p.host_user_id, createdAt: p.created_at,
   }, { p, stages });
 }, [
+  // #6110 (D6110): every stage of APPLICATION_STAGES, Hired and Declined included, so a move shows in the counts.
   section('pipeline', 'Pipeline', async (_rc, _id, record) => {
     const { stages } = loadedOf(record);
-    return { rows: (['applied', 'screen', 'interview', 'offer'] as const).map((s) => ({ a: label(s), c: String(stages.get(s) ?? 0) })) };
+    return { rows: APPLICATION_STAGES.map((s) => ({ a: label(s), c: String(stages.get(s) ?? 0) })) };
   }),
+  // #6110 (D6110): every applicant the host may see, each with Move to… (`move-applicant`). Names stay the host's.
   section('shortlist', 'Shortlist', async (rc, _id, record) => {
     const { p, stages } = loadedOf(record);
-    const interview = Number(stages.get('interview') ?? 0); const offer = Number(stages.get('offer') ?? 0);
-    if (!interview && !offer) return { rows: [], empty: 'Nobody is at interview or offer yet.' };
+    const total = [...(stages as Map<string, number>).values()].reduce((a, b) => a + Number(b), 0);
+    if (!total) return { rows: [], empty: 'Nobody has applied yet.' };
     // Applicant names follow the jobs board's canManage (decision 9); everyone else sees counts.
     if (!managesPosting(rc, p.host_user_id)) {
-      return { rows: [{ a: joined(interview ? `${interview} at interview` : null, offer ? `${offer} at offer` : null), b: 'names are for the role\'s host' }] };
+      const counts = APPLICATION_STAGES.filter((s) => Number(stages.get(s) ?? 0) > 0).map((s) => `${stages.get(s)} ${COUNT_WORD[s]}`);
+      return { rows: [{ a: joined(...counts), b: 'names are for the role\'s host' }] };
     }
     const res = await rc.env.DB.prepare(
-      "SELECT name, stage FROM job_applications WHERE posting_id = ? AND stage IN ('interview', 'offer') ORDER BY stage DESC, stage_changed_at DESC, id DESC LIMIT 20",
-    ).bind(p.id).all<{ name: string | null; stage: string }>();
-    return { rows: (res.results || []).map((a) => ({ a: a.name || 'An applicant with no name', c: label(a.stage), tone: a.stage === 'offer' ? 'ok' : 'vio' })) };
+      `SELECT id, name, stage FROM job_applications WHERE posting_id = ?
+        ORDER BY CASE stage WHEN 'offer' THEN 0 WHEN 'interview' THEN 1 WHEN 'screen' THEN 2 WHEN 'applied' THEN 3 WHEN 'hired' THEN 4 ELSE 5 END,
+                 stage_changed_at DESC, id DESC LIMIT ?`,
+    ).bind(p.id, APPLICANTS_SHOWN + 1).all<{ id: number; name: string | null; stage: string }>();
+    const all = res.results || [];
+    const rows: Row[] = all.slice(0, APPLICANTS_SHOWN).map((a) => ({
+      a: a.name || 'An applicant with no name',
+      // On Hired, the way to the team roster; nothing is written there on its own.
+      ...(a.stage === 'hired' ? { b: 'Add to the team roster', href: '/build/team' } : {}),
+      c: label(a.stage), tone: a.stage === 'offer' || a.stage === 'hired' ? 'ok' : a.stage === 'declined' ? 'grey' : 'vio',
+      action: { key: 'move-applicant', body: { application_id: Number(a.id) } },
+    }));
+    if (all.length > APPLICANTS_SHOWN) rows.push({ a: `${total - APPLICANTS_SHOWN} more applicants`, b: 'on the jobs board', href: `/jobs/${p.id}/manage` });
+    return { rows };
   }),
   section('compensation', 'Compensation', async (_rc, _id, record) => {
     const { p } = loadedOf(record);
@@ -634,6 +715,32 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     actions.push({ key: 'close-role', label: 'Close role', kind: 'write', tone: 'danger',
       confirm: { title: `Close ${p.title}?`, body: 'It leaves the jobs board.', cta: 'Close role' },
       execute: (c) => refusing(async () => ({ ok: true, record: await closeRole(c.env, c.projectId, userOf(c), Number(id)) })) });
+  }
+  // #6110 (D6110): the host moves one applicant, from that applicant's row. The row sends its id; the stage is chosen here.
+  if (manages) {
+    // The applicant is a field too, as Update an experiment's is, so the action also runs from the record's own
+    // action row; a row's Move to… arrives with its applicant chosen (`recordFormFor` fills it from the row's body).
+    const applicants = (await rc.env.DB.prepare(
+      'SELECT id, name, stage FROM job_applications WHERE posting_id = ? ORDER BY name, id LIMIT 200',
+    ).bind(p.id).all<{ id: number; name: string | null; stage: string }>()).results || [];
+    if (applicants.length) actions.push({
+      key: 'move-applicant', label: 'Move to…', kind: 'form',
+      form: { title: 'Move an applicant', cta: 'Move', fields: [
+        { key: 'application_id', label: 'Applicant', kind: 'CH', required: true,
+          options: applicants.map((a) => ({ value: String(a.id), label: `${a.name || 'An applicant with no name'} · ${label(a.stage)}` })) },
+        { key: 'stage', label: 'Move to', kind: 'CH', required: true, options: opts(APPLICATION_STAGES, LABEL) },
+      ] },
+      execute: (c, _id, body) => refusing(async () => {
+        const applicationId = Number(field(body, 'application_id'));
+        // The writer checks the venture only; the applicant must be on THIS role.
+        const own = Number.isSafeInteger(applicationId) && applicationId > 0
+          ? await c.env.DB.prepare('SELECT 1 AS ok FROM job_applications WHERE id = ? AND posting_id = ?').bind(applicationId, Number(id)).first()
+          : null;
+        if (!own) throw new Refused(404, 'That applicant is not on this role.', 'application_id');
+        await setApplicationStage(c.env, c.projectId, userOf(c), applicationId, { stage: field(body, 'stage') });
+        return { ok: true };
+      }),
+    });
   }
   const canPublish = manages && (p.status === 'draft' || p.status === 'rejected');
   const hasBand = p.comp_min_cents != null || p.comp_max_cents != null;
@@ -683,6 +790,23 @@ export function termsText(g: Any): string | null {
   return amount ? `${label(g.terms_kind)} · ${amount}` : label(g.terms_kind);
 }
 
+/** "Oct 2026" for a stored YYYY-MM. */
+function monthYear(raw: unknown): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(raw ?? ''));
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined;
+  return m && month ? `${month} ${m[1]}` : String(raw ?? '');
+}
+
+/**
+ * D6112: Enter revenue's amount, in US dollars as typed ("1,200", "$40.50"), to cents through the money
+ * layer (D5373); partner revenue carries no currency, and every reader shows it in dollars.
+ */
+function typedRevenueCents(v: unknown): number {
+  const parsed = parseMinor(String(v ?? '').trim().replace(/^\$/, ''), 'USD');
+  if (!parsed.ok) throw new Refused(400, 'Type an amount in US dollars, 0 or more', 'amount');
+  return parsed.minor;
+}
+
 const PARTNER_EDIT = ['name', 'type', 'stage', 'terms', 'terms_kind', 'terms_pct', 'terms_amount_cents', 'terms_currency', 'renewal_on', 'contact_name', 'contact_email'] as const;
 
 const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS['partner-network'], async (rc, id) => {
@@ -713,6 +837,14 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     return { rows: (res.results || []).map((d) => ({ a: writer ? String(d.customer) : 'A deal', b: dMon(d.closed_on) ?? '', c: money(d.amount_cents, d.currency) ?? '' })),
       empty: 'No deal recorded.', action: 'add-deal' };
   }),
+  // D6112 (#6112): each month's partner-sourced revenue with where it came from; a month no one entered has no row.
+  section('revenue', 'Revenue by month', async (rc, _id, record) => {
+    const { g } = loadedOf(record);
+    const res = await rc.env.DB.prepare('SELECT month, amount_cents, source FROM partner_revenue WHERE partner_id = ? ORDER BY month DESC LIMIT 24')
+      .bind(g.id).all<Any>();
+    return { rows: (res.results || []).map((r) => ({ a: monthYear(r.month), b: partnerRevenueSource(r.source), c: money(r.amount_cents) ?? '' })),
+      empty: 'No month entered.', action: 'enter-revenue' };
+  }),
   section('terms', 'Terms', async (_rc, _id, record) => {
     const { g } = loadedOf(record);
     const terms = termsText(g);
@@ -735,6 +867,16 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
     actions.push({ key: 'pause', label: 'Pause', kind: 'write', confirm: { title: `Pause ${g.name}?`, cta: 'Pause' },
       execute: (c) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, { stage: 'paused' }) })) });
   }
+  actions.push({
+    key: 'enter-revenue', label: 'Enter revenue', kind: 'form',
+    form: { title: 'Enter revenue', sub: 'Revenue this partner sourced in one month.', cta: 'Save',
+      foot: 'A month already typed is replaced. A month that came from another source keeps its figure.', fields: [
+        { key: 'month', label: 'Month', kind: 'T', placeholder: 'YYYY-MM', value: new Date().toISOString().slice(0, 7), required: true },
+        { key: 'amount', label: 'Amount', kind: 'T', input: 'money', required: true, note: 'US dollars.' },
+      ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setPartnerRevenue(c.env, c.projectId, userOf(c), id,
+      String(field(body, 'month') ?? '').trim(), { amount_cents: typedRevenueCents(field(body, 'amount')) }) })),
+  });
   actions.push({
     key: 'add-deal', label: 'Add deal', kind: 'form',
     form: { title: 'Add deal', cta: 'Add', fields: [
@@ -759,7 +901,8 @@ const partnerNetwork = spec('growth_partners', 'partner-network', GROW_OLD_ROWS[
       { key: 'contact_email', label: 'Contact email', kind: 'T', input: 'email', value: g.contact_email ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updatePartner(c.env, c.projectId, userOf(c), id, pick(body, PARTNER_EDIT)) })),
-  });
+  }, remove(`Remove ${g.name}?`, 'For a partner added by mistake: it leaves the partner list, its card and its counts. A partner with revenue or deals stays; end it instead.',
+    (c) => removePartner(c.env, c.projectId, userOf(c), id)));
   return actions;
 }, async () => ({ types: opts(PARTNER_TYPES, LABEL), stages: opts(PARTNER_STAGES, LABEL), terms_kinds: opts(TERMS_KINDS, LABEL) }));
 
@@ -772,6 +915,11 @@ async function marketGeographies(rc: RecordContext) {
   const res = await rc.env.DB.prepare('SELECT code, name FROM research_countries ORDER BY name').all<{ code: string; name: string }>().catch(() => null);
   return (res?.results ?? []).map(({ code, name }) => ({ value: code, label: name }));
 }
+
+/** D6113 (#6113): an entry step's Edit sends these keys only. */
+const ENTRY_STEP_EDIT = ['text', 'owner_name', 'due_on'] as const;
+/** The step a row names is checked in its own store (the venture's), then against this market by the writer. */
+const stepRef = (body: Body): Array<{ store: Store; id: string | number }> => [{ store: 'market_entry_steps', id: refOf(field(body, 'step')) }];
 
 const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['market-expansion'], async (rc, id) => {
   const m = await rc.env.DB.prepare('SELECT * FROM markets WHERE uid = ? AND project_id = ?').bind(id, rc.projectId).first<Any>();
@@ -788,10 +936,20 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
 }, [
   section('entry-plan', 'Entry plan', async (rc, _id, record) => {
     const { m } = loadedOf(record);
-    const res = await rc.env.DB.prepare('SELECT text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
+    const res = await rc.env.DB.prepare('SELECT uid, text, owner_name, due_on, done_at FROM market_entry_steps WHERE market_id = ? ORDER BY COALESCE(due_on, created_at), id LIMIT 30')
       .bind(m.id).all<Any>();
-    return { rows: (res.results || []).map((s) => ({ a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb' })),
-      empty: 'No entry step recorded.', action: 'add-entry-step' };
+    // D6113 (#6113): each step names itself by uid, so Mark done or Reopen, Edit and Remove address it.
+    return { rows: (res.results || []).map((s) => {
+      const step = { step: String(s.uid) };
+      return {
+        a: String(s.text), b: joined(s.owner_name, dMon(s.due_on)), c: s.done_at ? 'Done' : 'Open', tone: s.done_at ? 'ok' : 'amb',
+        action: { key: s.done_at ? 'reopen-entry-step' : 'mark-entry-step-done', body: step },
+        actions: [
+          { key: 'edit-entry-step', body: step, values: { text: String(s.text), owner_name: s.owner_name ?? '', due_on: s.due_on ?? '' } },
+          { key: 'remove-entry-step', body: step },
+        ],
+      };
+    }), empty: 'No entry step recorded.', action: 'add-entry-step' };
   }),
   section('localisation', 'Localisation', async (rc, _id, record) => {
     const { m } = loadedOf(record);
@@ -833,7 +991,30 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await addEntryStep(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
-    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write',
+    key: 'mark-entry-step-done', label: 'Mark done', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: true }) })),
+  }, {
+    key: 'reopen-entry-step', label: 'Reopen', kind: 'write', row_only: true,
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), { done: false }) })),
+  }, {
+    key: 'edit-entry-step', label: 'Edit', kind: 'form', row_only: true,
+    references: stepRef,
+    form: { title: 'Edit entry step', cta: 'Save', fields: [
+      { key: 'text', label: 'Step', kind: 'T', required: true },
+      { key: 'owner_name', label: 'Owner', kind: 'T' },
+      { key: 'due_on', label: 'Due', kind: 'T', input: 'date' },
+    ] },
+    execute: (c, _id, body) => refusing(async () => ({ ok: true,
+      record: await updateEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step'), pick(body, ENTRY_STEP_EDIT)) })),
+  }, {
+    key: 'remove-entry-step', label: 'Remove', kind: 'write', tone: 'danger', row_only: true,
+    confirm: { title: 'Remove this entry step?', body: 'It leaves the entry plan. Activity keeps a line that a step was removed.', cta: 'Remove' },
+    references: stepRef,
+    execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await removeEntryStep(c.env, c.projectId, userOf(c), id, field(body, 'step')) })),
+  }, {
+    key: 'localisation-check', label: 'Tick a localisation check', kind: 'write', row_only: true,
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await setLocalisation(c.env, c.projectId, userOf(c), id, plain(body)) })),
   }, {
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
@@ -848,7 +1029,8 @@ const marketExpansion = spec('markets', 'market-expansion', GROW_OLD_ROWS['marke
       { key: 'size_source', label: 'Size source', kind: 'T', value: m.size_source ?? '' },
     ] },
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await updateMarket(c.env, c.projectId, userOf(c), id, pick(body, MARKET_EDIT)) })),
-  }];
+  }, remove(`Remove ${m.name}?`, 'For a market added by mistake: it leaves the market list, its card and its counts, with its entry plan and localisation checks.',
+    (c) => removeMarket(c.env, c.projectId, userOf(c), id))];
 }, async (rc) => {
   return { states: opts(MARKET_STATES, LABEL), decisions: opts(DECISIONS, LABEL),
     geographies: await marketGeographies(rc) };
@@ -928,7 +1110,7 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
   }];
   if (hasMinutes) {
     actions.push({
-      key: 'open-minutes', label: 'Open minutes', kind: 'write',
+      key: 'open-minutes', label: 'Open minutes', kind: 'write', row_only: true,
       // The occurrence is checked in its own store, then against this obligation by the writer.
       references: (body) => [{ store: 'obligation_occurrences', id: refOf(field(body, 'occurrence')) }],
       execute: (c, _id, body) => refusing(async () => ({ ok: true, ...(await openMinutes(c.env, c.projectId, userOf(c), Number(id), Number(field(body, 'occurrence')))) })),
@@ -954,7 +1136,8 @@ const durable = spec('compliance_events', 'durable-company-building', GROW_OLD_R
       if (remind !== undefined) b.remind_days = (Array.isArray(remind) ? remind : remind == null || remind === '' ? [] : [remind]).map(Number);
       return { ok: true, record: await updateObligation(c.env, c.projectId, userOf(c), Number(id), b) };
     }),
-  });
+  }, remove(`Remove ${e.title}?`, 'For an obligation added by mistake: it leaves the list, its card and its counts, with its agenda. One that has been held stays; mark it done instead.',
+    (c) => removeObligation(c.env, c.projectId, userOf(c), Number(id))));
   return actions;
 }, async () => ({
   kinds: opts(OBLIGATION_KINDS, LABEL),

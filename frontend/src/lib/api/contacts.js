@@ -13,10 +13,14 @@ const fileBody = (file) => { const fd = new FormData(); fd.append('file', file);
 export const contactsBookApi = {
   // D1352/D4464: own book; optional third argument { source: linkedin_csv|csv|typed, follow_up: open }.
   book: (q = '', page = 1, filters = {}) => request(`/contacts/book?${new URLSearchParams({ ...(filters.source !== undefined ? { source: filters.source } : {}), ...(filters.follow_up !== undefined ? { follow_up: filters.follow_up } : {}), ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) })}`),
+  // D6558: add to the own book only; a URL/email match returns a pending review, never an invitation.
+  add: (person) => request('/contacts/book', { method: 'POST', body: JSON.stringify(person) }),
   previewLinkedinCsv: (file) => request('/contacts/import/linkedin-csv?preview=1', { method: 'POST', body: fileBody(file) }),
   importLinkedinCsv: (file) => request('/contacts/import/linkedin-csv', { method: 'POST', body: fileBody(file) }),
   reviews: () => request('/contacts/import/reviews'),
   decideReview: (uid, decision) => request(`/contacts/import/reviews/${enc(uid)}/${enc(decision)}`, { method: 'POST' }),
+  // #5310 (NW1): overdue open follow-ups on the own book, oldest due first, and their total.
+  followUpsDue: (limit = 5) => request(`/contacts/book/follow-ups-due?limit=${enc(limit)}`),
   notes: (contactId) => request(`/contacts/book/${enc(contactId)}/notes`),
   addNote: (contactId, body) => request(`/contacts/book/${enc(contactId)}/notes`, { method: 'POST', body: JSON.stringify({ body }) }),
   tasks: (contactId) => request(`/contacts/book/${enc(contactId)}/tasks`),

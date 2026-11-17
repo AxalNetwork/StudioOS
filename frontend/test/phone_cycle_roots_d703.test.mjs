@@ -334,7 +334,8 @@ test('5: "Set a target" on the root: a zero is never sent, the refusal in the Wo
   let changed = 0;
   let refuse = null;
   const api2 = { setInterviewsTarget: async (pid, v) => { calls.push([pid, v]); if (refuse) throw new Error(refuse); return { ok: true }; } };
-  const raw = { ...READS.validate, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
+  // #5999: a writer, as the Worker's read now says (`can_write`).
+  const raw = { ...READS.validate, can_write: true, meter: { ...READS.validate.meter, target: null, display: '14', target_reason: 'No target set' } };
   const m = await mount({ cycle: 'validate', raw, projectId: 3, api: api2, onChanged: () => { changed += 1; } });
   try {
     assert.ok(m.text().includes('Set a target'));
@@ -384,6 +385,8 @@ test('14: the root has no md: rule and reads no width of its own; every light cl
 async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] } = {}) {
   // Grow V2 is a lazy cycle-owned overview on both widths (#4862).
   if (cycle === 'grow') await import('../src/pages/cycles/GrowOverview.jsx');
+  // Build V2 is a lazy cycle-owned overview too (D6028, #6028); below 1024px it draws the phone root.
+  if (cycle === 'build') await import('../src/pages/cycles/BuildOverview.jsx');
   resetStores();
   const restore = installDocument();
   const unstub = stubReads();
@@ -437,7 +440,8 @@ for (const cycle of Object.keys(READS)) {
         assert.equal(desk.all('grow-overview-v2').length, 1);
         assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
       } else {
-        assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
+        // D6028 (#6028): Build's desktop overview is its own (BD1), mounted through `def.Overview`.
+        assert.ok(ids.includes(cycle === 'build' ? 'build-overview-v2' : 'cycle-overview'), 'the desktop overview');
         assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
       }
       assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
@@ -464,7 +468,8 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   assert.throws(() => readFileSync('frontend/src/pages/cycles/ValidatePhoneFocus.jsx', 'utf8'), /ENOENT/);
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.doesNotMatch(route, /ValidatePhoneFocus/);
-  assert.match(route, /const phone = usePhoneWidth\(\);/);
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) keeps its desktop pages from 768px.
+  assert.match(route, /const tablet = useTabletWidth\(def\?\.tabletPages === true\);\n\s+const phone = usePhoneWidth\(\) && !tablet;/);
   assert.match(route, /body = def\?\.Overview \?/, 'a cycle-owned overview can serve both widths');
   assert.match(route, /<\/> : phone \? \(\n\s+<PhoneCycleRoot /, 'other cycles retain their phone root below 1024px');
   const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');

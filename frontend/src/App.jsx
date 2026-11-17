@@ -16,7 +16,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
-import ViewModeContext from './contexts/ViewModeContext';
+import { ViewModeProvider } from './contexts/ViewModeContext';
 import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // Single source of truth for "which role is this session browsing as". The
 // shell picks the sidebar from it and the router picks route elements from it;
@@ -43,7 +43,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { collectRouteModules } from './lib/routeModules';
 const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import { useRedirectBeacon } from './lib/redirectBeacon';
-import { ventureSearch } from './pages/raise/pitch/pitchRoutes';
+import { pitchFocusMode, ventureSearch } from './pages/raise/pitch/pitchRoutes';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -990,6 +990,18 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
+// D4817 part 8 (#5311, PF-08): the Portfolio boards that draw their own Investor
+// preview banner. App.jsx's imports are frozen (D5615), so this mirrors
+// `pages/portfolio/previewModel.js`'s `pageOwnsPreviewBanner`; the PF-08 test
+// holds the two to the same addresses.
+const PREVIEW_BANNER_BOARDS = /^\/portfolio(?:\/(?:health|positions|updates|performance|value-add))?\/?$/;
+// D4817 part 10 (#5311): the company workspace and its tabs draw the same one
+// banner (`previewModel.js`' `previewCompanyTabOf`; the part 10 test holds the two together).
+const PREVIEW_BANNER_COMPANY = /^\/portfolio\/companies\/[^/]+(?:\/(?:reports|terms|financials|support|activity))?\/?$/;
+function pageOwnsPreviewBanner(pathname, selectedKey) {
+  return selectedKey === 'investor' && (PREVIEW_BANNER_BOARDS.test(String(pathname || '')) || PREVIEW_BANNER_COMPANY.test(String(pathname || '')));
+}
+
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
   // D288 / H38 — "View as" is Preview shell. "HQ" is a VIEW of the admin
@@ -1003,6 +1015,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
   const selected = PREVIEW_SHELLS.find((o) => o.key === selectedKey) || null;
   const home = PREVIEW_SHELLS.find((o) => o.key === homePreviewKey(superAdmin));
   const previewing = selected && home && selected.key !== home.key;
+  // D4817 part 8 (#5311, PF-08): a Portfolio board previewed as Investor draws
+  // the one preview banner itself (read-only, with this same way back), so the
+  // shell-level strip stands down there.
+  const { pathname } = useLocation();
+  const pageBanner = pageOwnsPreviewBanner(pathname, selectedKey);
   const choose = (key) => {
     if (key === 'hq') onViewModeChange('admin', { hq: true });
     else if (key === 'admin') onViewModeChange('admin', { hq: false });
@@ -1076,10 +1093,10 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, superAdmi
       {/* H38's strip: while a shell other than the viewer's own is previewed,
           the chip, the sentence about whose name the writes carry — "the
           Super Admin" to the holder, "you" to anyone else — and the way back. */}
-      {!isImpersonating && previewing && (
+      {!isImpersonating && previewing && !pageBanner && (
         <div className="ml-2 flex flex-wrap items-center gap-2 text-xs" data-testid="preview-shell-strip">
           <span className="rounded-full bg-white/20 px-2 py-0.5 font-semibold">{previewChip(selected.label)}</span>
-          <span className="opacity-90">{previewNote(superAdmin)}</span>
+          <span className="opacity-90">{previewNote(superAdmin, selectedKey)}</span>
           <button
             type="button"
             onClick={() => choose(home.key)}
@@ -1201,7 +1218,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // `.main { padding }`, so a workspace route wants `p-0` here on every
   // licence — including `/research/*`, which was carved out of both lists
   // precisely because the shell had no padding of its own.
+  const pitchFocused = pitchFocusMode(location.pathname);
+  const appScroll = useRef(null);
+  useLayoutEffect(() => {
+    if (pitchFocused && appScroll.current) appScroll.current.scrollTop = 0;
+  }, [pitchFocused, location.pathname]);
   const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
+    || pitchFocused
     || SHARED_FULL_BLEED.includes(location.pathname)
     // D631's two fund child pages carry WorkspaceShell's own inset and rail.
     || /^\/funds\/[1-9][0-9]*(?:\/reporting\/(?:new|[1-9][0-9]*))?$/.test(location.pathname)
@@ -1272,6 +1295,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <HqSubNavStrip label="Licences">
           <StripLink to="/admin/licences">Ledger</StripLink>
           <StripLink to="/admin/licences/programs">Program access by licence</StripLink>
+          <StripLink to="/admin/licences/packages">Axal VC packages</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -1312,9 +1336,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   // Memoize the context value so consumers of `useViewMode()` don't re-render
   // on every App render. Stable identity unless one of the three inputs changes.
+  // D4817 part 8 (#5311, PF-08): a page that draws its own preview banner
+  // offers the strip's way back, so the context carries it and the elevation.
+  const viewModeChangeRef = useRef(onViewModeChange);
+  viewModeChangeRef.current = onViewModeChange;
+  const exitPreview = useCallback(() => viewModeChangeRef.current?.('admin', { hq: superAdmin === true }), [superAdmin]);
   const viewModeContextValue = useMemo(
-    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole }),
-    [activeRole, isAdmin, isImpersonating, shellRole],
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole, superAdmin: superAdmin === true, exitPreview }),
+    [activeRole, isAdmin, isImpersonating, shellRole, superAdmin, exitPreview],
   );
 
   // D153 / H12 — the view-as scope, held in the SHELL rather than on a page,
@@ -1341,7 +1370,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
 
   return (
     <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
-    <ViewModeContext.Provider value={viewModeContextValue}>
+    <ViewModeProvider value={viewModeContextValue}>
     <ViewAsBranchContext.Provider value={viewAsBranchContextValue}>
       {/* D504 — `viewport-fit=cover` is live (D425), so the installed app draws
           under a phone's status bar. The shell's root reserves the top inset,
@@ -1417,7 +1446,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
             and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
-        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
+        {!pitchFocused && <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1527,10 +1556,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <Link
                 to="/email"
                 data-testid="email-door"
-                className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+                aria-label="Email"
+                title="Email"
+                className="hidden sm:inline-flex items-center justify-center rounded-lg p-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
               >
-                <Mail size={14} />
-                Email
+                <Mail size={18} aria-hidden="true" />
               </Link>
             )}
             {/* D563 — no Workspaces launcher. Its 28 pages each light the
@@ -1550,10 +1580,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
-        </HeaderForWidth>
+        </HeaderForWidth>}
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className={`
+          {!pitchFocused && <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
             inset-y-0 left-0 z-50 ${effectiveCollapsed ? 'w-20' : 'w-64'} bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800
             flex flex-col
@@ -1561,9 +1591,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
             <SidebarNav groups={sidebarGroups} role={shellRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
-          </aside>
+          </aside>}
 
-          {sidebarOpen && (
+          {!pitchFocused && sidebarOpen && (
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
           {/* D504 — the phone's tab bar (D425): four tabs and More below 1024px,
@@ -1571,7 +1601,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               resolved, without the sidebar's `|| 'founder'` fallback, so a
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
-          <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />
+          {!pitchFocused && <MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />}
           {/* D699 — the founder's last opened cycle per company, for the
               company sheet. Never while an operator acts as someone else. */}
           <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
@@ -1588,6 +1618,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               at the end of the scroll. */}
           <main
             data-app-scroll
+            ref={appScroll}
             {...(onboardingCanvas ? { 'data-onboarding-canvas': '' } : {})}
             className={`flex flex-1 flex-col overflow-y-auto ${onboardingCanvas ? '' : 'bg-gray-50 dark:bg-gray-950'}`}
           >
@@ -1608,7 +1639,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               </div>
             </RailStripSlot.Provider>
             </RailPageProvider>
-            {!onboardingCanvas && (
+            {!onboardingCanvas && !pitchFocused && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 <span>
@@ -1637,7 +1668,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <StepUpModal phoneSheet={location.pathname.startsWith('/admin/fund-admin')} />
       </Suspense>
     </ViewAsBranchContext.Provider>
-    </ViewModeContext.Provider>
+    </ViewModeProvider>
     </ActiveCompanyContext.Provider>
   );
 }
@@ -2536,6 +2567,11 @@ function AppInner() {
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
       : component
+  );
+  const investorRoundCall = (Component) => (
+    user?.role === 'investor' && effectiveRole === 'investor'
+      ? investorWorkspace('deals', <Component embedded />)
+      : <Component />
   );
   const trustCenter = user
     ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
@@ -3646,8 +3682,8 @@ function AppInner() {
           redirects' `mode=workspace` is kept only so old links stay stable. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderWorkspace('grow', founderEditor(<FounderTeamPage />)))} />
       {/* D654 — a sent "Share an update": the author's replies and opens, or what a recipient's audience may read. */}
-      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], <RoundCallIndex />)} />
-      <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], <RoundCallPage />)} />
+      <Route path="/round-calls" element={guard(['founder', 'investor', 'exploring'], investorRoundCall(RoundCallIndex))} />
+      <Route path="/round-calls/:uid" element={guard(['admin', 'founder', 'investor', 'exploring'], investorRoundCall(RoundCallPage))} />
       {/* D668 (#1498): approve an AI assistant for the companies ticked. Outside
           the shell's guard on purpose: the assistant's OAuth flow lands here,
           and a signed-out visitor goes to sign-in and back to this request. */}
@@ -3968,7 +4004,8 @@ function AppInner() {
           founder's board and the partner's bucket root with it. */}
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
+      {/* #6245 (owner: C): the Worker's gate, so no tier here. An LP reads their funds and a GP of record theirs (#6246). */}
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? <FundPerformancePage fundUnlocked={hasInvestorTier(user, 'institutional')} /> : effectiveRole !== 'admin' ? <FundPerformancePage locked /> : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

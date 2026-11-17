@@ -49,18 +49,28 @@ const zonePath = (bucket, zone) => (zone.to || (zone.root ? bucket.prefix : shel
  * first under that label, current on the root; `row.order` is the canvas's
  * slug order; `row.scroll` keeps the row on one line that scrolls sideways
  * below 1024px instead of wrapping, with 44px targets there.
- *
- * D4817 part 1 (#5311): `row.extra` adds items that are routes of the bucket
- * without being zones of it (`{ slug, label, to }`), placed by `row.order`.
- * Portfolio's local navigation names Performance beside its three zones, and
- * Performance is not a sidebar zone; nothing else passes it.
  */
-export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row = null }) {
+/**
+ * #6232: `carry` adds query values every pill keeps (`{ fund: 12 }` on the Fund
+ * overview, so each zone opens on the chosen fund). Without it the pills carry
+ * the project, as before.
+ */
+export function zoneSearch(search, carry) {
+  const base = projectSearch(search);
+  const extra = Object.entries(carry || {}).filter(([, v]) => v != null && v !== '');
+  if (!extra.length) return base;
+  const q = new URLSearchParams(base.replace(/^\?/, ''));
+  for (const [k, v] of extra) q.set(k, String(v));
+  return `?${q.toString()}`;
+}
+
+export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row = null, carry = null }) {
   const location = useLocation();
+  const search = zoneSearch(location.search, carry);
   if (!bucket || !bucket.zones?.length) return null;
 
   const accent = ACCENT[role] || ACCENT.founder;
-  const zones = row?.extra?.length ? [...bucket.zones, ...row.extra] : bucket.zones;
+  const { zones } = bucket;
   const active = activeSlug === undefined
     ? zoneForPath(bucket, location.pathname)
     : (activeSlug === null ? null : zones.find((z) => z.slug === activeSlug) || null);
@@ -75,7 +85,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
   const zonePill = (zone) => (
     <Pill
       key={zone.slug}
-      to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
+      to={`${zonePath(bucket, zone)}${search}`}
       on={zone.slug === active?.slug}
       testid={`link-zone-${zone.slug}`}
       accent={accent}
@@ -102,7 +112,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
         className={`flex flex-wrap items-end gap-x-4 gap-y-2 ${className}`}
         data-testid="zone-nav-grouped"
       >
-        <Pill to={`${bucket.prefix}${projectSearch(location.search)}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
+        <Pill to={`${bucket.prefix}${search}`} end on={activeSlug === null} testid="link-zone-overview" accent={accent}>
           Overview
         </Pill>
         {groups.map((g) => (
@@ -129,7 +139,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
         return (
           <LensNavLink
             key={zone.slug}
-            to={`${zonePath(bucket, zone)}${projectSearch(location.search)}`}
+            to={`${zonePath(bucket, zone)}${search}`}
             // D4817 part 3: the root item matches its own address only. Without
             // `end`, NavLink also matched it under every route of the bucket and
             // set aria-current="page" on Overview beside the current item.

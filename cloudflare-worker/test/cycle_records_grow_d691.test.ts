@@ -167,7 +167,7 @@ const CANVAS: Array<[string, string, string[], string[], string[]]> = [
   ['distribution', 'cha1', ['Spend · 30 d', 'Customers', 'CAC', 'Bar'], ['Funnel', 'Experiments'], ['Customers acquired']],
   ['revenue-and-traction', 'mrr', ['Value', 'Change · 30 d', 'Source', 'As of'], ['History', 'Split'], ['Alerts', 'Shared']],
   ['team-expansion', '31', ['Team', 'Applicants', 'In interview', 'Target start'], ['Pipeline', 'Shortlist'], ['Compensation', 'Posted on']],
-  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Terms'], ['Contact', 'Introductions']],
+  ['partner-network', 'pta1', ['Type', 'Stage', 'Terms', 'Revenue sourced'], ['Deals sourced', 'Revenue by month', 'Terms'], ['Contact', 'Introductions']],
   ['market-expansion', 'mka1', ['Demand evidence', 'Regulation', 'Partners', 'Cost to enter'], ['Entry plan', 'Localisation'], ['Attached', 'Sizing']],
   ['durable-company-building', '51', ['Kind', 'Due', 'Owner', 'Repeats'], ['Agenda', 'Past meetings'], ['Reminders', 'Documents']],
 ];
@@ -201,16 +201,21 @@ test('6: each of the seven reads is in the canvas shape', async () => {
   assert.deepEqual(ob.body.pills.map((p: any) => p.text), ['Scheduled', 'Quarterly']);
   assert.deepEqual(sectionOf(ob, 'reminders').rows[0], { a: '14 days before', c: 'Sent', tone: 'grey' });
   assert.deepEqual(sectionOf(ob, 'documents').rows.map((r: any) => [r.a, r.c ?? null]), [['Minutes', null], ['Resolutions', 'Not recorded']]);
+  // D6113 follow-up: Open minutes and Tick a localisation check run from their rows only (row_only), never as header buttons.
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'open-minutes').row_only, true);
+  assert.equal(market.body.actions.find((a: any) => a.key === 'localisation-check').row_only, true);
+  assert.equal(ob.body.actions.find((a: any) => a.key === 'edit').row_only, undefined);
   // A custom KPI is a record too; another venture's is not.
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpa1')).body.title, 'NPS');
   assert.equal((await rec(db, 'revenue-and-traction', 'custom-kpb1')).status, 404);
-  assert.equal((await rec(db, 'revenue-and-traction', 'arr')).status, 404);
+  // D6104: arr is now a derived KPI; a KPI the platform does not know is still a 404.
+  assert.equal((await rec(db, 'revenue-and-traction', 'ltv')).status, 404);
 });
 
 test('6: Visits and Shared are Not recorded, with the reason', async () => {
   const db = fixture();
   const ch = await rec(db, 'distribution', 'cha1');
-  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No page-visit store', c: 'Not recorded', tone: 'grey' });
+  assert.deepEqual(sectionOf(ch, 'funnel').rows[0], { a: 'Visits', b: 'No per-channel visit count', c: 'Not recorded', tone: 'grey' });
   assert.equal(sectionOf(ch, 'funnel').rows[2].c, '1');
   const kpi = await rec(db, 'revenue-and-traction', 'mrr');
   assert.deepEqual(sectionOf(kpi, 'shared').rows[0], { a: 'Metrics page', b: 'There is no public metrics page', c: 'Not recorded', tone: 'grey' });
@@ -574,7 +579,7 @@ test('7: form-options answer each module\'s chips to writers only', async () => 
   assert.equal(fb.status, 200);
   assert.deepEqual(fb.body.themes, [{ value: 'Speed', label: 'Speed', count: 2 }]);
   const kpi = (await fo('revenue-and-traction')).body;
-  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway']);
+  assert.deepEqual(kpi.kpis.filter((k: any) => k.disabled).map((k: any) => k.value), ['new_mrr', 'expansion_mrr', 'runway', 'arr', 'burn_multiple']);
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom-kpa1'));
   assert.ok(kpi.kpis.some((k: any) => k.value === 'custom'));
   assert.equal(kpi.kpis.some((k: any) => k.value === 'custom-kpb1'), false);
@@ -633,6 +638,62 @@ test('9: its apply writes the row PATCH /feedback/:uid writes, and refuses anoth
   // A theme that no longer exists, or a row themed meanwhile, is refused on accept.
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Gone', body: '' }, 'x'), /no longer exists/);
   await assert.rejects(kind.apply(ctx(viaFill), { uid: 'fba3', theme: 'Speed', body: '' }, 'x'), /already has a theme/);
+});
+
+// ---------------------------------------------------------------------------
+// #6110 (D6110): the role's host moves an applicant between stages from the record.
+// ---------------------------------------------------------------------------
+
+// Mutation checked: the posting check dropped (Omar on posting 33 moves from posting 31, fails); the host gate on the
+// action dropped (the co-founder sees and runs it, fails); the pipeline back to four stages (fails).
+test('#6110 the host moves an applicant through every stage, and the counts follow on re-read', async () => {
+  const db = fixture();
+  const read = async (who = FOUNDER) => rec(db, 'team-expansion', 31, { who });
+  const r = await read();
+  const rows = sectionOf(r, 'shortlist').rows;
+  assert.deepEqual(rows.map((x: any) => [x.a, x.c]), [['Sol Ito', 'Offer'], ['Lena Park', 'Interview']]);
+  assert.deepEqual(rows.map((x: any) => x.action), [{ key: 'move-applicant', body: { application_id: 43 } }, { key: 'move-applicant', body: { application_id: 41 } }]);
+  const move = r.body.actions.find((a: any) => a.key === 'move-applicant');
+  assert.equal(move.kind, 'form');
+  assert.deepEqual(move.form.fields.map((f: any) => f.key), ['application_id', 'stage']);
+  assert.deepEqual(move.form.fields[0].options, [{ value: '41', label: 'Lena Park · Interview' }, { value: '43', label: 'Sol Ito · Offer' }],
+    'only this role’s applicants, so the action also runs from the record’s own action row');
+  assert.deepEqual(move.form.fields[1].options.map((o: any) => o.value), ['applied', 'screen', 'interview', 'offer', 'hired', 'declined']);
+  assert.deepEqual(sectionOf(r, 'pipeline').rows.map((x: any) => x.a), ['Applied', 'Screen', 'Interview', 'Offer', 'Hired', 'Declined']);
+
+  for (const stage of ['screen', 'interview', 'offer', 'hired']) {
+    const done = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage });
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+  }
+  const after = await read();
+  const pipeline = Object.fromEntries(sectionOf(after, 'pipeline').rows.map((x: any) => [x.a, x.c]));
+  assert.deepEqual(pipeline, { Applied: '0', Screen: '0', Interview: '0', Offer: '1', Hired: '1', Declined: '0' });
+  const hired = sectionOf(after, 'shortlist').rows.find((x: any) => x.a === 'Lena Park');
+  assert.deepEqual([hired.c, hired.b, hired.href], ['Hired', 'Add to the team roster', '/build/team'], 'Hired links the roster and writes nothing there');
+
+  // The applicant must be on THIS role: Omar applied to posting 33.
+  const wrong = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 42, stage: 'hired' });
+  assert.equal(wrong.status, 404);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 42').get() as any).stage, 'applied');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'nowhere' })).status, 400);
+});
+
+test('#6110 a non-host sees counts only and no Move to…; the move is logged without the applicant’s name', async () => {
+  const db = fixture();
+  // On the role the co-founder hosts (33, Omar), they are the host and are offered Move to….
+  assert.equal(actionKeys(await rec(db, 'team-expansion', 33, { who: COFOUNDER })).includes('move-applicant'), true);
+  const co = await rec(db, 'team-expansion', 31, { who: COFOUNDER });
+  assert.equal(actionKeys(co).includes('move-applicant'), false);
+  assert.deepEqual(sectionOf(co, 'shortlist').rows, [{ a: '1 at interview · 1 at offer', b: 'names are for the role\'s host' }]);
+  const refused = await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'hired' }, { who: COFOUNDER });
+  assert.ok([403, 404].includes(refused.status), `refused with ${refused.status}`);
+  assert.equal((db.prepare('SELECT stage FROM job_applications WHERE id = 41').get() as any).stage, 'interview');
+  assert.equal((await act(db, 'team-expansion', 31, 'move-applicant', { application_id: 41, stage: 'declined' })).status, 200);
+  const log = db.prepare("SELECT details FROM activity_logs WHERE action = 'grow_application_stage' ORDER BY id DESC LIMIT 1").get() as any;
+  assert.ok(log, 'the move is logged');
+  assert.ok(!String(log.details).includes('Lena'), 'the log does not name the applicant');
+  const counts = sectionOf(await rec(db, 'team-expansion', 31, { who: COFOUNDER }), 'shortlist').rows[0].a;
+  assert.equal(counts, '1 at offer · 1 declined');
 });
 
 // ---------------------------------------------------------------------------

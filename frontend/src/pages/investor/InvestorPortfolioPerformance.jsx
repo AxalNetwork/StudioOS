@@ -14,20 +14,26 @@
  * browser's), at most two years. A quarter-end that answers with no book is
  * Not recorded; one that fails is Unreadable with a Retry of its own. Neither
  * is drawn, and nothing is drawn between two reads.
+ *
+ * D6208 (#6208): the header's Export writes the quarter-end series (a gap
+ * written as Not recorded or Unreadable, never 0) or the vintage cohorts,
+ * through `exportView`; over nothing loaded it is disabled with its reason.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
+import ZoneDraft from '../../workspaces/ZoneDraft';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
 import { PerformanceSummary, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import { QuarterEndPlot, QuarterEndTable } from '../portfolio/QuarterEndChart';
 import {
-  DEFINITIONS, NOT_RECORDED, SHAPES, cohortsOf, performanceOf, quarterSeriesOf, quarterShape, quarterWindowOf,
+  DEFINITIONS, NOT_RECORDED, SHAPES, cohortExportOf, cohortsOf, performanceOf, quarterExportOf, quarterSeriesOf, quarterShape, quarterWindowOf,
 } from '../portfolio/portfolioModel';
+import PortfolioExport from '../portfolio/PortfolioExport';
 
 const SOURCES = {
   analytics: { call: () => api.positionsAnalytics(), shape: SHAPES.analytics },
@@ -51,14 +57,19 @@ const METHODOLOGY = [
   ['Basis', 'Gross of fees and carry: management fees, carry and fund expenses are not deducted, so these are not net returns.'],
 ];
 
-/** NAV at each quarter-end: one read per quarter-end, each committed and retried on its own. */
-function QuarterEndSeries({ dates, view }) {
+/**
+ * NAV at each quarter-end: one read per quarter-end, each committed and
+ * retried on its own. The series is handed up (`onSeries`) because the
+ * header's Export writes it (D6208).
+ */
+function QuarterEndSeries({ dates, view, onSeries }) {
   const sources = useMemo(
     () => Object.fromEntries(dates.map((d) => [d, { call: () => api.positionsAnalytics(d), shape: quarterShape(d) }])),
     [dates],
   );
   const { reads, retry } = usePortfolioReads(sources);
   const series = useMemo(() => quarterSeriesOf(dates, reads), [dates, reads]);
+  useEffect(() => { onSeries(series); }, [series, onSeries]);
   const failed = series.points.filter((p) => p.state === 'unreadable');
   const missing = series.points.filter((p) => p.state === 'not_recorded');
   return (
@@ -82,7 +93,7 @@ function QuarterEndSeries({ dates, view }) {
   );
 }
 
-function QuarterEnds({ window: win, retry, refresh }) {
+function QuarterEnds({ window: win, retry, refresh, onSeries }) {
   const [view, setView] = useState('chart');
   let body;
   if (win.state === 'loading') body = <Skeleton rows={3} />;
@@ -91,7 +102,7 @@ function QuarterEnds({ window: win, retry, refresh }) {
   } else if (win.state !== 'ok') {
     body = <p className="pf-note" data-testid="perf-quarters-not-recorded"><span className="pf-not-recorded">{NOT_RECORDED}</span> · {win.reason}</p>;
   } else {
-    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} />;
+    body = <QuarterEndSeries key={`${win.dates.join(',')}#${refresh}`} dates={win.dates} view={view} onSeries={onSeries} />;
   }
   return (
     <section className="pf-card" aria-labelledby="pf-quarters-title" data-testid="perf-quarters">
@@ -177,6 +188,13 @@ export default function InvestorPortfolioPerformance() {
   const win = useMemo(() => quarterWindowOf(reads.positions, reads.compliance), [reads.positions, reads.compliance]);
   const cohorts = useMemo(() => cohortsOf(reads.positions), [reads.positions]);
   const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
+  const [series, setSeries] = useState(null);
+  // A series belongs to the window it was read for; a new window waits for its own.
+  const current = series && win.state === 'ok' && series.points.map((p) => p.date).join(',') === win.dates.join(',') ? series : null;
+  const exports = [
+    { key: 'quarters', label: 'Quarter-end series', zone: 'performance-quarter-ends', plan: quarterExportOf(win, current, reads.analytics) },
+    { key: 'cohorts', label: 'Vintage cohorts', zone: 'performance-cohorts', plan: cohortExportOf(cohorts) },
+  ];
 
   return (
     <PortfolioFrame
@@ -186,6 +204,7 @@ export default function InvestorPortfolioPerformance() {
       context={perf.asOf ? `Gross of fees and carry · ${perf.asOf.replace(/^As of/, 'as of')}` : null}
       tools={(
         <ZoneHeaderTools role="investor">
+          <PortfolioExport choices={exports} testid="button-export-portfolio-performance" />
           <button type="button" className="pf-icon-button" onClick={() => { reload(); setRefresh((n) => n + 1); }} aria-label="Refresh performance" data-testid="button-refresh-investor-performance"><RefreshCw size={15} aria-hidden="true" /></button>
         </ZoneHeaderTools>
       )}
@@ -204,10 +223,21 @@ export default function InvestorPortfolioPerformance() {
     >
       <PerformanceSummary perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} methodologyTo="#portfolio-methodology" />
       <div className="pf-perf-grid">
-        <QuarterEnds window={win} retry={retry} refresh={refresh} />
+        <QuarterEnds window={win} retry={retry} refresh={refresh} onSeries={setSeries} />
         <Methodology />
       </div>
       <Cohorts cohorts={cohorts} onRetry={() => retry('positions')} />
+      {/* D6212 (#6212): a departure from D4817's PFA17, which draws no band here. */}
+      <ZoneDraft
+        surface="portfolio/performance"
+        railOption="draft:performance-note"
+        label="Proposal · what moved across the quarter-ends"
+        accept="Accept note"
+        run="Draft the note"
+        foot="Built from the quarter-end reads above and the marks, distributions and cheques dated in each quarter. Accepting keeps the note here; nothing is sent."
+        empty="A short note on what moved, citing each quarter-end and event by its date. A quarter-end with no recorded book, or a quarter with nothing recorded, is named as a gap."
+        nothingToDraft="No position is recorded at a completed quarter-end, so there is nothing to explain."
+      />
       <section className="pf-card" aria-labelledby="pf-tools-title">
         <div className="pf-card-head"><h2 id="pf-tools-title">Company history and other tools</h2></div>
         <p className="pf-foot">A company’s marks, with their dates and basis, are on Positions. Exit Waterfall models proceeds at an exit value you choose.</p>

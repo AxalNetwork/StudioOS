@@ -126,6 +126,20 @@ export function pillClick(event, { phone, ctx, to, state, onClick }) {
   }
 }
 
+/**
+ * What a zone picker that is not a link (a phone `<select>`, #5310 NW8) does
+ * with a choice: switch the lens on a phone, as a pill would, and navigate
+ * anywhere else or outside a LensProvider.
+ */
+export function useLensGo() {
+  const ctx = useContext(LensContext);
+  const navigate = useNavigate();
+  return useCallback((to, state = null) => {
+    if (ctx && isPhoneWidth()) ctx.switchLens(to, state);
+    else navigate(to, { state });
+  }, [ctx, navigate]);
+}
+
 function useLensClick(to, state, onClick) {
   const ctx = useContext(LensContext);
   return (event) => pillClick(event, { phone: isPhoneWidth(), ctx, to, state, onClick });

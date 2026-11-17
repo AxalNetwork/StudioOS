@@ -174,6 +174,8 @@ const PROFILES = {
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
     withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // #6276 adds a visible-row CSV beside the original canvas controls.
+    offCanvas: { 'research/benchmarking': ['Export'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -182,7 +184,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -237,7 +239,17 @@ const PROFILES = {
     //
     // FIFTEENTH: `funds/calls`'s `New call` — migration 312 built the call
     // header and receipts, and D371 put the form on the Calls page.
-    handlers: 16,
+    //
+    // SEVENTEENTH (#6230): `funds/reporting`'s `New reporting period`, which
+    // replaced `Build pack`. That gap was never real: `FundReportPeriodPage`
+    // drafts and issues a period at `/funds/:fundId/reporting/new`.
+    // EIGHTEENTH: `funds/lps`'s `Comms log` (#6232) — migration 387 (D553)
+    // stores the log and the page draws it; the op scrolls to that card.
+    // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
+    // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
+    // and `Show cleared` reads it back.
+    // D6276 also supplies New benchmark from the page.
+    handlers: 20,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -278,6 +290,8 @@ const PROFILES = {
     // silently drop out of this check.
     canvasDirs: ['design/canvases/integrated', 'design/incoming'],
     canvas: /^Pages · Partner /,
+    // #5935 (D4838): Leads' header is the Pipeline v2 canvas's (PP03).
+    v2Ops: [['pipeline/leads', 'design/incoming/Pipeline v2 Page.dc.html', 'leads']],
     // `/pipeline` IS IN SCOPE NOW, and the comment that used to sit here is the
     // reason it was not: it said `Pages · Partner Pipeline` "carries no `ops:`
     // on any artboard, so `canvasOps` finds nothing there and this pattern must
@@ -801,6 +815,18 @@ function canvasOps(profile) {
   // in `backlog/` — reading it for intent is not promoting it — and an entry
   // here is a claim that THIS zone's ops come from THAT artboard, checkable
   // because a route the file does not contain fails immediately.
+  // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
+  // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
+  // that call, and they override the older artboard's row for the same route.
+  for (const [zone, file, section] of profile.v2Ops || []) {
+    const src = read(file);
+    const at = src.indexOf(`const ${section} = () => hdr(`);
+    assert.ok(at >= 0, `${file} has no ${section} section builder`);
+    const call = src.slice(at, src.indexOf('+ zones(', at));
+    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
+    out[zone] = ops;
+  }
   for (const [zone, file] of profile.alsoZones || []) {
     const ops = headerOps(read(file), zone);
     assert.ok(ops.length, `${file}'s ${zone} artboard parsed with no ops`);
@@ -1680,7 +1706,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasOps(profile);
     const table = tableEntries(SRC);
     const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
-    assert.equal(primaries.length, { founder: 0, investor: 6, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    assert.equal(primaries.length, { founder: 0, investor: 7, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
     for (const e of primaries) {
       const zone = e.zone;
       // `canvas:` is the artboard's word where the rendered label differs.

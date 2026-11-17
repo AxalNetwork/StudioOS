@@ -6,6 +6,7 @@ import { RECENTLY_MOVED_DAYS, daysBefore, historyReaches, startOfMonth } from '.
 import { placementText } from '../founder/InterviewReview';
 import { NO_SUGGESTIONS, acceptAllBatches, heardLine, suggestionLine, suggestionsView } from './validatePhone';
 import { affectsLine, draftFrom, editableKind, payloadFrom, visibleFields } from './suggestionForms';
+import { ventureSearch } from './ventureQuery';
 
 /**
  * D697 (#1659) — Validate's three bottom sections: what the Interviews, Pain
@@ -97,7 +98,18 @@ function ExportButton({ label, run, testid }) {
 /** `?log=` values that open Log an interview, as FVW's `?new=` did. */
 const LOG_INTENTS = ['notes', 'upload'];
 
-export function InterviewsSection({ parts, openDialog, onLog, onExport }) {
+/**
+ * `path` with the venture's `project_id` added to whatever query it already
+ * carries (#6005), so a founder with more than one venture stays on this one.
+ * With no venture the path is returned unchanged.
+ */
+export function withVenture(path, projectId) {
+  const q = ventureSearch(projectId);
+  if (!q) return path;
+  return path.includes('?') ? `${path}&${q.slice(1)}` : `${path}${q}`;
+}
+
+export function InterviewsSection({ parts, projectId = null, openDialog, onLog, onExport }) {
   const stats = parts?.stats || {};
   const writer = parts?.can_write === true;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -140,9 +152,61 @@ export function InterviewsSection({ parts, openDialog, onLog, onExport }) {
       {/* Decision 15: neither finds interviewees, so the card says what each is. */}
       <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="validate-more-tools">
         <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100">More tools</span>
-        <Link to="/build/marketplace" className={LINK}>Marketplace: partners' services, and the needs you post</Link>
-        <Link to="/build/team?mode=workspace&tab=advisors" className={LINK}>Team › Advisors: the advisor directory</Link>
+        <Link to={`/build/marketplace${ventureSearch(projectId)}`} className={LINK} data-testid="validate-link-marketplace">Marketplace: partners' services, and the needs you post</Link>
+        <Link to={withVenture('/build/team?mode=workspace&tab=advisors', projectId)} className={LINK} data-testid="validate-link-advisors">Team › Advisors: the advisor directory</Link>
       </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ideal customer profile
+// ---------------------------------------------------------------------------
+
+const SEGMENT_FIT = new Map([['strong', 'Strong fit'], ['partial', 'Partial fit'], ['none', 'No fit']]);
+
+function UnassignedInterview({ interview, segments, onAssign }) {
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const assign = async (event) => {
+    const segmentId = event.target.value;
+    if (!segmentId) return;
+    setBusy(true);
+    setError('');
+    try { await onAssign(interview.id, Number(segmentId)); }
+    catch (err) { setError(err?.message || 'The interview could not be assigned.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <li className="flex flex-col gap-1.5 border-t border-axal-hairline py-2 first:border-t-0 lg:flex-row lg:items-center lg:justify-between dark:border-gray-800">
+      <span className="text-[12.5px] text-axal-ink dark:text-gray-100">
+        {interview.interviewee || 'Interviewee not recorded'} · {interview.date || 'Date not recorded'} · {SEGMENT_FIT.get(interview.fit) || 'Fit not recorded'}
+      </span>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-[11px] text-axal-muted dark:text-gray-400">
+          Assign to a segment
+          <select className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+            value="" onChange={assign} disabled={busy || !segments.length}>
+            <option value="">{segments.length ? 'Choose a segment' : 'No segment yet'}</option>
+            {segments.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </label>
+        {error && <span role="alert" className={ERROR}>{error}</span>}
+      </div>
+    </li>
+  );
+}
+
+export function SegmentsSection({ parts, onAssign }) {
+  if (parts?.can_write !== true || !Array.isArray(parts.unassigned)) return null;
+  const { unassigned, unassigned_total: total, segments } = parts;
+  return (
+    <section className={SECTION} aria-label="Interviews without a segment">
+      <h2 className="m-0 text-[12px] font-extrabold text-axal-ink dark:text-gray-100">Interviews without a segment · {total}</h2>
+      {unassigned.length
+        ? <ul className="m-0 list-none p-0">{unassigned.map((interview) => <UnassignedInterview key={interview.id} interview={interview} segments={segments} onAssign={onAssign} />)}</ul>
+        : <p className={NOTE}>No interviews are waiting for a segment.</p>}
+      {total > unassigned.length && <p className={NOTE}>Showing the newest {unassigned.length} of {total}.</p>}
     </section>
   );
 }
@@ -185,7 +249,7 @@ function UnthemedQuote({ quote, themes, onAssign }) {
   );
 }
 
-export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = null }) {
+export function PainThemesSection({ parts, projectId = null, onExport, onAssign, newThemeHref = null }) {
   const stats = parts?.stats || {};
   const writer = parts?.can_write === true;
   const unthemed = Array.isArray(parts?.unthemed) ? parts.unthemed : null;
@@ -210,7 +274,7 @@ export function PainThemesSection({ parts, onExport, onAssign, newThemeHref = nu
       ]} />
       {writer && (
         <div className="flex flex-wrap items-start gap-2">
-          <Link to="/raise/pitch/edit" title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
+          <Link to={`/raise/pitch/edit${ventureSearch(projectId)}`} title={PROBLEM_SLIDE_NOTE} className={BUTTON} data-testid="validate-problem-slide">Open the Problem slide</Link>
           <ExportButton label="Export map" run={onExport} testid="validate-export-map" />
         </div>
       )}

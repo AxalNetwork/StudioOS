@@ -6,8 +6,9 @@
  *
  * WHAT IS STORED. Only the deployment-wide metrics the capacity read returns
  * (`SNAPSHOT_KEY`): D1 size and its ratio to the limit, each queue's backlog
- * and oldest age, and (part 3) the agent sweep's counts and ages and the last
- * verified restore's age. Each row is a number, a unit, an availability and a
+ * and oldest age, and (part 3) the agent sweep's counts and ages, the last
+ * verified restore's age and the count of settled AI charges without a usage
+ * row. Each row is a number, a unit, an availability and a
  * level. No member, company, tenant, file name, SQL or secret reaches either
  * table, and nothing here is tenant usage, so the HQ view leaks none.
  *
@@ -43,8 +44,9 @@ import { branchOf } from '../util/branch';
 import { levelFor, readPlatformCapacity, type Level, type Metric } from './platformCapacity';
 
 /** The metrics the snapshot keeps: the capacity read's own fixed keys, nothing else. */
-// Part 3 adds the agent sweep (#4592, #4593) and the last verified restore (#4558).
-export const SNAPSHOT_KEY = /^(d1\.size_bytes|d1\.size_ratio|queue\.(job|agent)\.(backlog_messages|backlog_bytes|oldest_age_seconds)|agents\.sweep\.(eligible|examined|admitted|refused|resent|oldest_eligible_age_seconds)|agents\.repair\.(pending|unresolved|oldest_age_seconds)|dr\.restore\.last_verified_age_seconds)$/;
+// Part 3 adds the agent sweep (#4592, #4593) and the last verified restore (#4558),
+// then settled AI charges without a usage row (D4569).
+export const SNAPSHOT_KEY = /^(d1\.size_bytes|d1\.size_ratio|queue\.(job|agent)\.(backlog_messages|backlog_bytes|oldest_age_seconds)|agents\.sweep\.(eligible|examined|admitted|refused|resent|oldest_eligible_age_seconds)|agents\.repair\.(pending|unresolved|oldest_age_seconds)|dr\.restore\.last_verified_age_seconds|ai\.settlement\.without_usage_row)$/;
 
 /** Days of history the trend reads and the projection may fit. */
 export const HISTORY_DAYS_DEFAULT = 90;
@@ -308,7 +310,24 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
       delivery = 'unavailable';
     }
   }
-  return { ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
+  let incidentDelivery: 'checked' | 'unconfigured' | 'unavailable';
+  try {
+    const { drainSectionIncidents } = await import('./sectionIncidentOutbox');
+    incidentDelivery = await drainSectionIncidents(env, now);
+  } catch {
+    console.warn('[section-incident-outbox] drain unavailable');
+    incidentDelivery = 'unavailable';
+  }
+  // D5984: off unless AXAL_SECTION_INCIDENT_GITHUB is 'enabled'; only then does it call GitHub.
+  if (env.AXAL_SECTION_INCIDENT_GITHUB) {
+    try {
+      const { syncSectionIncidentIssues } = await import('./sectionIncidentIssue');
+      await syncSectionIncidentIssues(env, now);
+    } catch {
+      console.warn('[section-incident-issue] pass unavailable');
+    }
+  }
+  return { section_incident_delivery: incidentDelivery, ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
 }
 
 /** History for the trend view, with the D1 projection. An unreadable store says so; it is not an empty history. */

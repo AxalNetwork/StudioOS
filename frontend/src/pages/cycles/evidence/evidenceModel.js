@@ -67,6 +67,8 @@ export function viewOf(pathname = '') {
   const rest = String(pathname).startsWith(BASE) ? String(pathname).slice(BASE.length) : '';
   if (/^\/review\/?$/.test(rest)) return { page: 'review', drawer: null, id: null };
   if (/^\/preview\/?$/.test(rest)) return { page: 'preview', drawer: null, id: null };
+  // D6864 (RA-29): Shared links, the record of every evidence pack that left Axal.
+  if (/^\/shared\/?$/.test(rest)) return { page: 'shared', drawer: null, id: null };
   const m = /^\/(item|claim)\/([^/]+)\/?$/.exec(rest);
   if (m && ID.test(m[2])) return { page: 'view', drawer: m[1], id: m[2] };
   return { page: 'view', drawer: null, id: null };
@@ -75,6 +77,7 @@ export const itemHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BAS
 export const claimHref = (id, search = '') => (ID.test(String(id ?? '')) ? `${BASE}/claim/${id}${search}` : `${BASE}${search}`);
 export const reviewHref = (search = '') => `${BASE}/review${search}`;
 export const previewHref = (search = '') => `${BASE}/preview${search}`;
+export const sharedHref = (search = '') => `${BASE}/shared${search}`;
 
 export const NOT_YET = 'Not read here yet';
 
@@ -166,6 +169,27 @@ export function investorView(read) {
     stage: 'after', coverage, items: items.ok ? { ok: true, rows, areas } : items, claims, partial: !!read.partial,
     tally: items.ok ? `${rows.length} shared ${rows.length === 1 ? 'item' : 'items'}: ${withValue} with ${withValue === 1 ? 'its figure' : 'their figures'}, ${rows.length - withValue} without.` : null,
   };
+}
+
+/** Filter choices and counts come only from evidence the viewer received. */
+export function evidenceChoices(rows) {
+  return {
+    area: [...new Set(rows.map((item) => item.area))].filter(Boolean),
+    source: [...new Set(rows.map((item) => item.source_label))].filter(Boolean),
+    claim: [...new Set(rows.flatMap((item) => item.claims.map((claim) => claim.state)))].filter(Boolean),
+  };
+}
+
+export function evidenceMatches(item, { area, source, claim }) {
+  return (!area || item.area === area) && (!source || item.source_label === source)
+    && (!claim || item.claims.some((row) => row.state === claim));
+}
+
+export function sharedClaimTally(items, claims) {
+  if (!items.ok || !claims.ok) return null;
+  const visible = new Map(items.rows.flatMap((item) => item.claims.map((claim) => [claim.uid, claim.state])));
+  const backed = [...visible.values()].filter((state) => state === 'backed').length;
+  return `${backed} of ${visible.size} shared ${visible.size === 1 ? 'claim is' : 'claims are'} backed by a record.`;
 }
 
 /** A coverage tile: area, kind, Source, count and the newest date. No value. */

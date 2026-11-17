@@ -179,6 +179,7 @@ jobs:
           SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
           QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
           QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
+          QUEUE_ALERT_IGNORE_BEFORE: ${{ vars.QUEUE_ALERT_IGNORE_BEFORE }}
 
   future-clock-plan:
     name: suite plan
@@ -204,19 +205,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: |
-          artifact=''
-          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
-            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
-          fi
-          if [ -n "$artifact" ]; then
-            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
-              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
-            fi
-          fi
-          if [ ! -f test-timings.json ]; then
-            echo "::notice::No main timings artifact available; using equal weights."
-          fi
+        run: bash scripts/ci/download-test-timings.sh
       - name: Generate the exact-once plan
         id: plan
         run: |

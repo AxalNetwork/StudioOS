@@ -18,18 +18,21 @@ import { dismissHealthEvent } from '../services/vercel/health';
 import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
-import { buildPhone } from '../services/cycleFocus';
-import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
+import { buildPhone, part } from '../services/cycleFocus';
+import { buildAttention, buildSignals, readPlanPreview, unreadableAttention, unreadablePlan } from '../services/buildAttention';
+import { addHolder, updateHolder, removeFounderHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { posthogKpiTexts } from '../services/posthog/build';
 import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
-import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
+import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, deleteRoadmapItem, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
+import { csvCell } from '../services/capTableRegister';
+import { csvResponse, stamp } from '../services/csv';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -540,19 +543,26 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > ''
                 AND delivery_status IS NOT 'Done' ORDER BY due_date, sort_order, id LIMIT 1),
               (SELECT json_array(title, delivery_status) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status IS NOT 'Done'
-                ORDER BY sort_order, id LIMIT 1)) AS missing
+                ORDER BY sort_order, id LIMIT 1)) AS missing,
+            (SELECT COUNT(*) FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND due_date > '' AND due_date < ?
+                AND delivery_status IS NOT 'Done') AS overdue
        FROM (SELECT delivery_status AS status, hypothesis_id,
                     CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
                     COUNT(*) AS n
                FROM mvp_features WHERE project_id = ? AND is_must_have = 1
               GROUP BY delivery_status, hypothesis_id, month) g
        LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
-  ).bind(p.id, p.id, p.id, p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null }>());
+  ).bind(p.id, p.id, p.id, p.id, new Date().toISOString().slice(0, 10), p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null; overdue: number | null }>());
   const total = groups.reduce((t, g) => t + number(g.n), 0);
   const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
   const blockedCount = groups.filter(g => g.status === 'Blocked').reduce((t, g) => t + number(g.n), 0);
   const nextMust = ((raw) => { try { const v = raw ? JSON.parse(raw) : null; return Array.isArray(v) && typeof v[0] === 'string' ? { title: v[0], blocked: v[1] === 'Blocked' } : null; } catch { return null; } })(groups[0]?.missing);
   const nextText = nextMust ? `${nextMust.blocked ? 'Unblock' : 'Complete'} ${nextMust.title}` : null;
+  // #6027 (D6027): overdue must-haves (not Done, a due date before today, UTC) for the overview's Needs attention
+  // and focus: a scalar subquery of this statement, so no statement is added. `due_date < today` equals comparing its
+  // first ten characters with today's ten; the range walks D6031's `idx_mvp_features_must_due`, so only must-haves
+  // dated before today are read.
+  const overdue = number(groups[0]?.overdue);
   // Done must-haves per month of completion.
   const history = new Map<string, number>();
   for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
@@ -604,7 +614,7 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     ...(paged ? { paged } : {}),
     // D6031: `blocked` is the summary line's third figure ("N of M must-haves complete · target <date> · N blocked");
     // `can_set_target` (the module page only) offers its Set control to a writer of `PATCH /project/target`.
-    facts: { done: doneCount, total, blocked: blockedCount, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
+    facts: { done: doneCount, total, blocked: blockedCount, overdue, target_date: p.mvp_target_date, ...(opts.pageFacts ? { can_set_target: canWrite(p, viewer) } : {}) },
     ...(parts ? { parts } : {}) };
 }
 
@@ -1009,7 +1019,10 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
-      filings: combined.length, next_filing_due: nextFilingDue },
+      filings: combined.length, next_filing_due: nextFilingDue,
+      // #6027 (D6027): the card's next filing, for the overview's Needs attention and focus. Null with none open.
+      next_filing: nextFiling ? { title: typeof nextFiling.cells.filing === 'string' ? nextFiling.cells.filing : null, due: nextFiling.keys!.due ?? null,
+        state: nextFiling.keys!.state, text: typeof nextFiling.cells.state === 'string' ? nextFiling.cells.state : null } : null },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -1149,6 +1162,10 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   // that says it needs reconnecting.
   const failedSince = failing && stateOf(failing) === 'failing' ? failedSystem?.last_error_at : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
+  // #6027 (D6027): the failing system or tool the card's Reconnect names, as a fact for Needs attention and focus.
+  const reconnectFact = failedSystem
+    ? { name: getDescriptor(failedSystem.provider_key)?.display_name ?? SYSTEM_LABEL[failing!], since: failureDate(failedSince), href: connectHref(failedSystem.provider_key, p.id), failing: stateOf(failing!) === 'failing' }
+    : failingTool ? { name: getDescriptor(failingTool.provider_key)!.display_name, since: failureDate(failingTool.last_error_at), href: connectHref(failingTool.provider_key, p.id), failing: true } : null;
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
@@ -1159,7 +1176,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
       orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
-      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
+      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null, reconnect: p.company_id == null ? null : reconnectFact },
     ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
@@ -1300,9 +1317,17 @@ app.get('/overview', async c => {
       : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
         : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   const cards = results.map(r => r.card);
-  // D692 (#1701): the phone's focus, meter and index, each failing on its own.
-  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards,
-    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected])) });
+  // D6027 (#6027): each figure names the module it comes from (BD1's status strip).
+  const figures = ([[must, 'prototype-mvp'], [mvp, 'prototype-mvp'], [shipped, 'product-roadmap'], [connected, 'operating-systems']] as const)
+    .map(([f, module]) => ({ ...f, module }));
+  // D6027: the Build Plan preview (the founders' and an admin's, as D1065 reads it), then the
+  // signals focus and Needs attention share. Each part fails on its own, as focus, meter and index do.
+  const plan = (await part('build plan', () => readPlanPreview(c.env, project.id, ownsVenture(project, viewer) || viewer.role === 'admin'))) ?? unreadablePlan(project.id);
+  const signals = await part('build signals', async () => buildSignals(project, results, plan));
+  const attention = (signals && await part('build attention', async () => buildAttention(project.id, canWrite(project, viewer), signals))) ?? unreadableAttention();
+  // D692 (#1701): the phone's focus, meter and index, each failing on its own. Desktop and phone read the same focus.
+  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures, cards, attention, plan,
+    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected], signals)) });
 });
 
 app.get('/modules/:slug', async c => {
@@ -1322,6 +1347,45 @@ app.get('/modules/:slug', async c => {
   return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
     ...(result.paged ? { rows: result.rows, ...result.paged } : pageBuildRows(result.rows, query, PAGE_SIZE, { orders: list?.orders, defaultSort: list?.sort.key })), filters, sorts,
     ...(result.add ? { add: result.add } : {}), linkable: hasRecords('build') }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
+});
+
+/**
+ * D6043 (#6043): the most rows one export writes. Past it the export refuses
+ * with 413 and the matching count, so a file is never silently short; a
+ * search or a filter narrows it. #4603 bounds what a read pulls per page; an
+ * export is the one read that wants every matching row, so it is bounded
+ * here instead, at a size well past any venture's list today.
+ */
+export const EXPORT_ROW_CAP = 5000;
+const NOT_RECORDED = 'Not recorded';
+/** A cell as the export writes it: its words, never a file; an empty cell is Not recorded. */
+function exportText(cell: Cell): string {
+  const t = cell == null ? '' : typeof cell === 'object' ? cell.text : String(cell);
+  return t === '' ? NOT_RECORDED : t;
+}
+
+/**
+ * D6043 (#6043): a module's records list as CSV. The page read's columns, its
+ * search, filters and sort (`pageBuildRows`, the in-memory path D4603's SQL
+ * pages agree with), and its access gate (`context`). Every matching row up to
+ * EXPORT_ROW_CAP; proof files are never read, the Proof column says their state.
+ */
+app.get('/modules/:slug/export', async c => {
+  const slug = c.req.param('slug') as Slug;
+  if (!Object.hasOwn(READS, slug)) return c.json({ detail: 'Module not found' }, 404);
+  const project = await context(c);
+  if (project instanceof Response) return project;
+  // The page's own read (its parts too: Prototype / MVP's Built column is drawn from GitHub and
+  // Vercel), with no `query`, so the reader returns every row and the page's paging filters them.
+  const result = await safeRead(slug, c.env, project, await requireAuth(c), FULL);
+  if (result.card.state === 'unreadable') return c.json({ detail: `${MODULES.find(m => m[0] === slug)![1]} is unreadable. Try again later.` }, 503);
+  const list = result.cols.length ? result.list : undefined;
+  const query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: '1' };
+  const matched = pageBuildRows(result.rows, query, EXPORT_ROW_CAP, { orders: list?.orders, defaultSort: list?.sort.key });
+  if (matched.total > EXPORT_ROW_CAP) return c.json({ detail: `This list has ${matched.total} matching rows; an export writes at most ${EXPORT_ROW_CAP}. Narrow it with a search or a filter.`, total: matched.total, cap: EXPORT_ROW_CAP }, 413);
+  const body = [result.cols.map(col => csvCell(col.label)).join(','),
+    ...matched.rows.map(row => result.cols.map(col => csvCell(exportText(row.cells[col.key] ?? null))).join(','))].join('\r\n');
+  return csvResponse(body, `${slug}-${project.id}-${stamp()}.csv`, { 'Cache-Control': 'no-store', 'X-Export-Rows': String(matched.total) });
 });
 
 // The existing MVP, OKR, cap table and obligation writers remain canonical for
@@ -1685,6 +1749,9 @@ async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 app.patch('/risks/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchRisk(c, ctx);
+});
+async function patchRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare('SELECT title, severity, mitigation, state, feature_id FROM venture_risks WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Risk not found' }, 404);
@@ -1698,7 +1765,7 @@ app.patch('/risks/:id', async c => {
     logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', existing.feature_id ?? 'project', 'build_risk_changed', `Risk changed: ${severity} severity, ${state}`),
   ]);
   return c.json({ ok: true, id });
-});
+}
 
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
@@ -1986,6 +2053,63 @@ async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response>
   return c.json({ id: Number(row.id), ...(created ? {} : { replayed: true }) }, created ? 201 : 200);
 }
 
+// #6041: remove a roadmap item added by mistake. The PATCH's gate (`writeContext`) and its ownership check (the
+// item must be this venture's); the delete itself, with the item's dependency edges, is progress.ts' one.
+app.delete('/roadmap/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteRoadmap(c, ctx);
+});
+async function deleteRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(c.req.param('id'));
+  const existing = id && await c.env.DB.prepare('SELECT objective FROM roadmap_okrs WHERE id = ? AND project_id = ?')
+    .bind(id, ctx.project.id).first<{ objective: string }>();
+  if (!existing) return c.json({ detail: 'Roadmap item not found' }, 404);
+  await deleteRoadmapItem(c.env, { projectId: ctx.project.id, id: id!, objective: existing.objective, userId: ctx.user.id });
+  return c.json({ ok: true, deleted: id });
+}
+
+// #6041 (owner's answer A): remove a founder added by mistake, through the cap table's own code
+// (`removeFounderHolder`): only one with nothing attached; otherwise a 409 naming what is attached.
+app.delete('/founders/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteFounder(c, ctx);
+});
+async function deleteFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
+  const existing = id && await c.env.DB.prepare("SELECT name FROM cap_table_holders WHERE id = ? AND project_id = ? AND (kind = 'founder' OR founder_role IS NOT NULL)")
+    .bind(id, ctx.project.id).first<{ name: string }>();
+  if (!existing) return c.json({ detail: 'Holder not found' }, 404);
+  try { await removeFounderHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, id: `h-${id}` }); }
+  catch (e) { return holderFailed(c, e); }
+  await logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_deleted', `Founder removed: ${existing.name}`).run();
+  return c.json({ ok: true, deleted: `h-${id}` });
+}
+
+// #6041: remove a filing the venture added by mistake. Only the venture's own steps (formation_steps): a Lab
+// order's step and an entity obligation are never in that table, so they cannot be named here. The step's
+// checklist rows go in the same batch; its proof file is removed from storage after the row is gone, best effort,
+// as a replaced proof is (records/build.ts).
+app.delete('/formation-steps/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return deleteFormationStep(c, ctx);
+});
+async function deleteFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(c.req.param('id'));
+  const existing = id && await c.env.DB.prepare('SELECT title, proof_file_key FROM formation_steps WHERE id = ? AND project_id = ?')
+    .bind(id, ctx.project.id).first<{ title: string; proof_file_key: string | null }>();
+  if (!existing) return c.json({ detail: 'Formation step not found' }, 404);
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM formation_step_checks WHERE step_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM formation_steps WHERE id = ? AND project_id = ?').bind(id, ctx.project.id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_deleted', `Filing deleted: ${existing.title}`),
+  ]);
+  if (existing.proof_file_key && c.env.FILES) {
+    try { await c.env.FILES.delete(existing.proof_file_key); }
+    catch (e) { console.warn('[cycle_build] deleted filing proof not removed:', (e as Error)?.message); }
+  }
+  return c.json({ ok: true, deleted: id });
+}
+
 app.patch('/formation-steps/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   return patchFormationStep(c, ctx);
@@ -2201,7 +2325,7 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
-export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
+export { patchFeature, postRisk, patchRisk, postRoadmap, patchRoadmap, deleteRoadmap, patchFounder, deleteFounder, postFormationStep, patchFormationStep, deleteFormationStep, putSystem };
 
 // D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
 // "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.

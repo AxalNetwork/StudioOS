@@ -33,7 +33,7 @@ import { holdsLicence } from '../services/accountLicences';
  * Gotchas for the rationale.
  */
 import { logAdminAction } from '../services/adminAudit';
-import { logCycleWrite } from '../services/cycleActivity';
+import { logCycleWrite, logCycleWriteStatement } from '../services/cycleActivity';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
@@ -59,7 +59,7 @@ import {
   normPhrase,
   type PainGroupRow,
 } from '../services/painGroups';
-import { upsertPainAlias } from './_founder_validate_writes';
+import { upsertPainAlias, upsertPainAliasStatement } from './_founder_validate_writes';
 import { syncStripeForUser } from '../integrations/providers/stripe';
 // `/build/kpi`'s CSV importer (#176 FB5). The parser is a service so it can be
 // exercised without a database — every rejection reason is a unit test.
@@ -311,6 +311,9 @@ function asQuoteConsent(raw: unknown): number | null {
   return 0;
 }
 
+/** D6001: the channels a lead may name, as the interview stores them (`video` is "Call", `manual` typed notes). */
+const LEAD_CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
+
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
@@ -401,7 +404,19 @@ progress.post('/discovery/:projectId', async (c) => {
     return c.json({ detail: 'interviewee_name is required' }, 400);
   }
   const intervieweeRole = asStringOrNull(body.interviewee_role);
-  const interviewDate = asStringOrNull(body.interview_date) || todayIso();
+  // D6001 (#6001): Add a lead makes the interview at stage `lead`, the only
+  // stage a create takes (a later stage is a move, which stamps its date). A
+  // lead has not been held, so it gets no interview date unless one is typed.
+  // With no stage the row is stored as before: no stage, which reads as Done.
+  const lead = body.stage === 'lead';
+  if (body.stage != null && body.stage !== '' && !lead) {
+    return c.json({ detail: 'A new interview takes stage lead, or no stage.' }, 400);
+  }
+  const channel = body.channel == null || body.channel === '' ? null : String(body.channel);
+  if (channel != null && !(LEAD_CHANNELS as readonly string[]).includes(channel)) {
+    return c.json({ detail: `channel must be one of ${LEAD_CHANNELS.join(', ')}` }, 400);
+  }
+  const interviewDate = asStringOrNull(body.interview_date) || (lead ? null : todayIso());
   const notes = asStringOrNull(body.notes) ?? '';
   const hypotheses = normalizeHypotheses(body.hypotheses);
   const pains = normalizePains(body.pains);
@@ -420,20 +435,34 @@ progress.post('/discovery/:projectId', async (c) => {
   // 215's columns are named in INTERVIEW_SELECT, so a database without them
   // fails the whole read rather than degrading. Bootstrapped beside 211's.
   await ensureDiscoveryRecordingColumns(c.env);
-  const res = await c.env.DB.prepare(
-    `INSERT INTO discovery_interviews
-       (project_id, interviewee_name, interviewee_role, interview_date,
-        notes, hypotheses_json, pains_json, featured,
-        validation_rating, validation_comment, icp_fit,
-        quote_consent, interviewee_company,
-        created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  const values = [
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
     featured, validationRating, validationComment, icpFit,
     quoteConsent, intervieweeCompany,
     nowIso, nowIso,
+  ];
+  // One statement either way, so a lead is never stored without its stage.
+  // The stage and channel columns (migration 440) are named only when sent.
+  const res = await (lead || channel != null
+    ? c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at, stage, channel)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, lead ? 'lead' : null, channel)
+    : c.env.DB.prepare(
+      `INSERT INTO discovery_interviews
+         (project_id, interviewee_name, interviewee_role, interview_date,
+          notes, hypotheses_json, pains_json, featured,
+          validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
+          created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values)
   ).run();
 
   const newId = lastInsertId(res);
@@ -1015,6 +1044,73 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
 });
 
 // Rename a pain group. Body: { title }
+// D6006 (#6006, V17): Assign several phrases at once — the selection bar's "Assign to theme" and "New theme
+// from selected", and Eadwyn's grouping accepted as a set. Body:
+//   { phrases: string[], group_id }   — move every phrase into an existing theme
+//   { phrases: string[], new_title }  — create the theme and move every phrase into it
+// All the aliases land in one batch with one activity row, or none do. The same gate as Assign.
+export const MAX_BULK_ASSIGN = 100;
+progress.post('/pain-groups/:projectId/assign-many', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return refuse(c, 400, { code: 'invalid_project_id', message: 'That venture id is not valid.' });
+
+  const project = await loadProject(c, projectId, user);
+  if (!project) return refuse(c, 404, { code: 'project_not_found', message: 'Venture not found.' });
+  ensureCanEdit(project, user);
+
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const raw = body && Array.isArray(body.phrases) ? body.phrases : null;
+  if (!raw || raw.length === 0) return refuse(c, 400, { code: 'phrases_required', message: 'Choose at least one quote to assign.' });
+  if (raw.length > MAX_BULK_ASSIGN) return refuse(c, 400, { code: 'too_many_phrases', message: `Assign at most ${MAX_BULK_ASSIGN} quotes at once.` });
+  const byNorm = new Map<string, string>();
+  for (const p of raw) {
+    const display = (typeof p === 'string' ? p : '').trim().slice(0, MAX_PAIN_PHRASE);
+    const norm = normPhrase(display);
+    if (!display || !norm) return refuse(c, 400, { code: 'invalid_phrase', message: 'Every quote to assign needs its wording.' });
+    if (!byNorm.has(norm)) byNorm.set(norm, display);
+  }
+
+  await ensurePainGroupsSchema(c.env);
+  const newTitle = cleanPainTitle(body!.new_title);
+  const hasGroupId = Object.prototype.hasOwnProperty.call(body, 'group_id') && body!.group_id != null;
+  if (!newTitle === !hasGroupId) return refuse(c, 400, { code: 'target_required', message: 'Choose one theme, or name a new one.' });
+
+  let groupId: number;
+  let groupTitle: string;
+  if (newTitle) {
+    const nowIso = new Date().toISOString();
+    const sort = await nextPainSort(c.env, projectId);
+    const res = await c.env.DB.prepare(
+      `INSERT INTO pain_groups (project_id, title, sort_order, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, newTitle, sort, nowIso, nowIso, user.id).run();
+    groupId = lastInsertId(res);
+    groupTitle = newTitle;
+  } else {
+    groupId = Number(body!.group_id);
+    if (!Number.isFinite(groupId)) return refuse(c, 400, { code: 'invalid_group_id', message: 'That theme id is not valid.' });
+    const g = await loadPainGroup(c.env, groupId);
+    if (!g || g.project_id !== projectId) return refuse(c, 404, { code: 'theme_not_found', message: 'Theme not found on this venture.' });
+    groupTitle = g.title;
+  }
+
+  const n = byNorm.size;
+  try {
+    await c.env.DB.batch([
+      ...[...byNorm.values()].map((display) => upsertPainAliasStatement(c.env, projectId, groupId, display)!),
+      logCycleWriteStatement(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+        entityId: groupId, action: newTitle ? 'pain_group_created' : 'pain_group_assigned',
+        summary: newTitle ? `${groupTitle} created with ${n} ${n === 1 ? 'quote' : 'quotes'}` : `${n} ${n === 1 ? 'quote' : 'quotes'} assigned to ${groupTitle}` }),
+    ]);
+  } catch (error) {
+    // The new theme would hold nothing; take it back so a retry does not leave an empty one behind.
+    if (newTitle) await c.env.DB.prepare('DELETE FROM pain_groups WHERE id = ? AND project_id = ?').bind(groupId, projectId).run();
+    return refuse(c, 503, { code: 'assign_failed', message: 'The quotes could not be assigned. Nothing was saved; try again.', raw: error });
+  }
+  return c.json({ ...(await getPainGroupsView(c.env, projectId)), assigned: n, group_id: groupId });
+});
+
 progress.patch('/pain-groups/:groupId', async (c) => {
   const user = await requireAuth(c);
   const groupId = Number(c.req.param('groupId'));
@@ -1303,11 +1399,26 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
-  await c.env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ?').bind(id).run();
-  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
-    entityId: id, action: 'roadmap_deleted', summary: `${existing.objective} deleted` });
+  await deleteRoadmapItem(c.env, { projectId: existing.project_id, id, objective: existing.objective, userId: user.id });
   return c.json({ deleted: id });
 });
+
+/**
+ * #6041: remove one roadmap item and what hangs on it, then log it. The one delete both routes call
+ * (`DELETE /api/progress/roadmap/okr/:id` and Build's `DELETE /api/cycles/build/roadmap/:id`), each after its own
+ * ownership and write gate. The item's dependency edges go with it, in either direction, in the same batch, so the
+ * Dependencies view never draws an edge to an item that is gone. The table is migration 254's; a database that
+ * never created it has no edges to remove.
+ */
+export async function deleteRoadmapItem(env: Env, a: { projectId: number; id: number; objective: string; userId: number }): Promise<void> {
+  const edges = await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'okr_dependencies'").first();
+  await env.DB.batch([
+    ...(edges ? [env.DB.prepare('DELETE FROM okr_dependencies WHERE project_id = ? AND (okr_id = ? OR blocks_okr_id = ?)').bind(a.projectId, a.id, a.id)] : []),
+    env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(a.id, a.projectId),
+  ]);
+  await logCycleWrite(env, { projectId: a.projectId, userId: a.userId, cycle: 'build', module: 'product-roadmap',
+    entityId: a.id, action: 'roadmap_deleted', summary: `${a.objective} deleted` });
+}
 
 /**
  * Migration 252's log, bootstrapped at runtime like its siblings.

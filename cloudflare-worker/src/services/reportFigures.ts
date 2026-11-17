@@ -4,7 +4,8 @@
  *   REPORT_FIGURES   each figure a report can carry: its key, label, Grow
  *                    module, unit, the sources it may come from, and the
  *                    other keys it is known by. It unifies Share an update's
- *                    five keys (`METRIC_KEYS`, `updateShare.ts`) with the KPI
+ *                    shared keys (`METRIC_KEYS`, `updateShare.ts`), including
+ *                    ARR and net_retention (#6178), with the KPI
  *                    rule keys of `portfolio_kpi_definitions` (migration 168),
  *                    so `burn` and `net_burn`, `runway` and `runway_months` are
  *                    one figure each. A test holds the assembler to it.
@@ -30,8 +31,9 @@
 import type { Env } from '../types';
 import { sha256Hex } from './fundReportDrafts';
 import { shippedItems } from '../routes/portfolio_updates';
+import { computeMovements, readRecurring } from './revenueMovements';
 
-export type FigureUnit = 'usd' | 'pct' | 'count' | 'months';
+export type FigureUnit = 'usd' | 'pct' | 'count' | 'months' | 'multiple';
 export type GrowSlug = 'product-improvement' | 'distribution' | 'revenue-and-traction' | 'team-expansion'
   | 'partner-network' | 'market-expansion' | 'durable-company-building';
 export type SourceWord = 'Connector' | 'Document' | 'Recorded' | 'Signed' | 'Typed';
@@ -65,6 +67,8 @@ export const REPORT_FIGURES: readonly FigureDef[] = Object.freeze([
   { key: 'gross_margin', label: 'Gross margin', module: 'revenue-and-traction', unit: 'pct', sources: [], aliases: [],
     unstored: 'Not recorded: no Grow store records gross margin yet' },
   { key: 'net_burn', label: 'Net burn', module: 'revenue-and-traction', unit: 'usd', sources: ['stripe', 'manual', 'mercury'], aliases: ['burn'] },
+  // D6104: worked out, never typed. Net burn ÷ that month's net new ARR from the revenue ledger.
+  { key: 'burn_multiple', label: 'Burn multiple', module: 'revenue-and-traction', unit: 'multiple', sources: ['stripe', 'manual', 'mercury'], aliases: [] },
   { key: 'cash_balance', label: 'Cash', module: 'revenue-and-traction', unit: 'usd', sources: ['manual', 'mercury'], aliases: ['cash'] },
   { key: 'headcount', label: 'Headcount', module: 'team-expansion', unit: 'count', sources: ['manual', 'roster'], aliases: [] },
   { key: 'open_roles', label: 'Open roles', module: 'team-expansion', unit: 'count', sources: ['job_postings'], aliases: [] },
@@ -189,7 +193,7 @@ export async function assembleReport(env: Env, projectId: number, period: { star
   ).bind(projectId, period.start, period.end).all<{ kind: string; value: number | null; amount_cents: number | null; as_of: string }>()).results || []);
 
   if (!snaps.ok) {
-    for (const k of ['mrr', 'growth', 'customers', 'arr', 'net_retention', 'net_burn', 'cash_balance']) out.set(k, unread(def(k), 'Unreadable: Revenue and traction could not be read'));
+    for (const k of ['mrr', 'growth', 'customers', 'arr', 'net_retention', 'net_burn', 'burn_multiple', 'cash_balance']) out.set(k, unread(def(k), 'Unreadable: Revenue and traction could not be read'));
     unreadable.add('revenue-and-traction');
   } else {
     const rows = snaps.value.inPeriod;
@@ -206,6 +210,29 @@ export async function assembleReport(env: Env, projectId: number, period: { star
     out.set('growth', mrr.value != null && prev && Number(prev.mrr) > 0
       ? read(def('growth'), Math.round(((mrr.value - Number(prev.mrr)) / Number(prev.mrr)) * 1000) / 10, { ...mrr.source!, computed: true }, mrr.as_of)
       : unread(def('growth'), `${NOT_RECORDED}: growth needs MRR recorded in this period and before it`));
+    // D6104: with no ARR recorded in the period, ARR is 12 × the period's MRR, marked computed.
+    if (out.get('arr')!.value == null && mrr.value != null) {
+      out.set('arr', read(def('arr'), mrr.value * 12, { ...mrr.source!, computed: true }, mrr.as_of));
+    }
+    // D6104: burn multiple, from the period's net burn and the ledger's net new ARR in that burn's month.
+    {
+      const burn = out.get('net_burn')!;
+      const month = burn.as_of?.slice(0, 7) ?? null;
+      const ledger = await attempt(async () => computeMovements(await readRecurring(env, projectId)));
+      if (burn.value == null || !month) out.set('burn_multiple', unread(def('burn_multiple'), `${NOT_RECORDED}: burn multiple needs net burn recorded in this period`));
+      else if (!ledger.ok) out.set('burn_multiple', unread(def('burn_multiple'), 'Unreadable: the revenue ledger could not be read'));
+      else if (!(burn.value > 0)) out.set('burn_multiple', unread(def('burn_multiple'), `${NOT_RECORDED}: burn is zero or negative`));
+      else {
+        const inMonth = ledger.value.filter((m) => m.month === month);
+        const sum = (k: string) => inMonth.filter((m) => m.kind === k).reduce((n, m) => n + m.amount_cents, 0);
+        const netNewCents = sum('new') + sum('expansion') + sum('unsplit') - sum('churned');
+        out.set('burn_multiple', inMonth.length === 0
+          ? unread(def('burn_multiple'), `${NOT_RECORDED}: the revenue ledger has no movements for ${month}`)
+          : netNewCents > 0
+            ? read(def('burn_multiple'), Math.round((burn.value / (netNewCents * 12 / 100)) * 100) / 100, { ...burn.source!, computed: true }, burn.as_of)
+            : unread(def('burn_multiple'), `${NOT_RECORDED}: net new ARR for ${month} is zero or negative`));
+      }
+    }
     // Cash from Mercury, when no typed balance is recorded (Mercury's own rows never hold a balance).
     if (out.get('cash_balance')!.value == null && mercury.ok) {
       const cash = mercury.value.find((m) => m.kind === 'cash' && m.amount_cents != null);

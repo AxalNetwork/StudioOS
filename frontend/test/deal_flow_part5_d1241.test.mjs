@@ -206,8 +206,9 @@ test('Compare’s rules: a bar is a band’s rank; the strongest alone is marked
   assert.match(sum, /Copperline Energy has not shared its scorecard\./);
   assert.match(sum, /Northwind Labs has 9 scopes without a score\./);
   const csv = compareCsv(vs);
-  assert.match(csv.split('\n')[1], /^Team,Strong · High,Fair · Low,Locked$/);
-  assert.doesNotMatch(csv.split('\n').slice(1).join('\n'), DIGIT, 'no score is a number');
+  // D6149 (#6149): the CSV carries every section; a scorecard row is under Scorecard.
+  assert.match(csv, /^Scorecard,Team,Strong · High,Fair · Low,Locked$/m);
+  assert.doesNotMatch(csv.split('\n').filter((l) => l.startsWith('Scorecard,')).join('\n'), DIGIT, 'no score is a number');
 });
 
 // ---------------------------------------------------------------- mounted

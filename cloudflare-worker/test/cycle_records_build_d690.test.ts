@@ -472,7 +472,7 @@ const pillText = (body: any) => body.pills.map((p: any) => (typeof p === 'string
 const RECORD_CANVAS: Record<string, { id: string | number; facts: string[]; main: string[]; side: string[] }> = {
   'solution-design': { id: 1, facts: ['Pain theme', 'Hypothesis', 'Impact', 'Effort'], main: ['Description', 'Risks'], side: ['Appears in', 'Brief'] },
   'prototype-mvp': { id: 1, facts: ['Owner', 'Due', 'Hypothesis', 'Tests run'], main: ['Test sessions', 'Findings'], side: ['Linked', 'Release checklist'] },
-  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub', 'Public roadmap'] },
+  'product-roadmap': { id: 3, facts: ['Column', 'Moves', 'Answers', 'Date'], main: ['Dependencies', 'Feedback it answers'], side: ['GitHub'] },
   'founding-team': { id: 'h-1', facts: ['Role', 'Equity', 'Vesting', 'Vested today'], main: ['Vesting timeline', 'Contributions'], side: ['Documents', 'Cap table'] },
   'company-creation': { id: 'step-2', facts: ['Filing', 'Jurisdiction', 'Due', 'Proof'], main: ['Steps', 'Reminders'], side: ['Linked'] },
   'operating-systems': { id: 'crm', facts: ['State', 'Last sync', 'Sync', 'Feeds'], main: ['Sync log', 'Permissions'], side: ['Companies'] },
@@ -501,7 +501,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   const solution = (await one(db, 'solution-design', 1)).body;
   assert.deepEqual(pillText(solution), ['High impact', 'Low effort']);
   assert.deepEqual(pillText((await one(db, 'solution-design', 2)).body), ['Low impact', 'High effort', 'Out of scope'], 'a NULL scope with Low impact reads Out of scope');
-  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Tomas Reyes', c: 'High', tone: 'bad' }]);
+  // D6023 (#6023): owner, state and mitigation beside the severity; a writer's row opens Edit a risk.
+  assert.deepEqual(section(solution, 'risks').rows, [{ a: 'Bank API rate limits', b: 'Owner: Tomas Reyes · State: Open · Mitigation: Not recorded',
+    c: 'High', tone: 'bad', action: { key: 'edit-risk', body: { risk_id: 1 } } }]);
   assert.deepEqual(section(solution, 'appears_in').rows.map((r: any) => [r.a, r.b, r.href]), [
     ['Prototype / MVP', 'Must-have', `/build/prototype-mvp/1?project=${P}`], ['Roadmap', 'Bank coverage · Now', `/build/product-roadmap/3?project=${P}`]]);
   assert.equal(section(solution, 'brief').rows[0].a, 'Not recorded');
@@ -524,7 +526,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
   // D782 (#2111): the panel also names the issue's milestone and the release that shipped the item.
   assert.deepEqual(section(item, 'github').rows.map((r: any) => [r.a, r.b]), [['Issue #7', 'synced 12 Oct 2026'], ['State', 'Not recorded: the sync stores no issue state.'],
     ['Milestone', 'In no milestone'], ['Shipped', 'Not shipped: no release names it or closes it.']]);
-  assert.equal(section(item, 'public').rows[0].a, 'Not recorded');
+  // D6044 (#6044): the owner removed the Public roadmap section; no section claims a page that does not exist.
+  assert.equal(section(item, 'public'), undefined);
+  assert.doesNotMatch(JSON.stringify(item), /public roadmap/i);
   db.close();
 });
 

@@ -30,6 +30,7 @@
 import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
+import type { PromoIssuedOutcome, PromoIssuedReport } from '../services/promoIssuedReport';
 import { verifySecret } from './secret';
 import { allocateRevision, assembleLicenceRecord } from '../services/licencePush';
 import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../services/slaWindow';
@@ -631,7 +632,36 @@ export type UsageFigure = {
   estimate_basis?: string;
   available?: boolean;
   reason?: string;
+  /**
+   * D5947 — what the branch says about the figure: `complete`, `incomplete`,
+   * `not_recorded`, `not_available` or `unreadable` (`StreamState`, rpc/branchOps.ts).
+   * A build before D5947 sends none, and HQ stores NULL.
+   */
+  state?: string;
+  /** D5947 — what the figure was read from on the branch, or `none`. */
+  source?: string;
+  /** D5947 — when the branch read that source (ISO). `reported_at` stays HQ's stamp of the report. */
+  source_as_of?: string;
 };
+
+/** D5947 — the states a stored figure may carry. Only the first two may carry an amount. */
+export const USAGE_FIGURE_STATES: readonly string[] = Object.freeze([
+  'complete', 'incomplete', 'not_recorded', 'not_available', 'unreadable',
+]);
+const FIGURE_STATES_WITH_AMOUNT = new Set(['complete', 'incomplete']);
+
+/** D5947 — an ISO instant, normalised, or null for anything that does not parse. */
+function isoOrNull(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/** D5947 — a short stored text, trimmed and capped, or null when empty. */
+function textOrNull(v: unknown, max: number): string | null {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return t ? t.slice(0, max) : null;
+}
 
 /**
  * A branch reports what it billed in a period (D.8).
@@ -642,11 +672,16 @@ export type UsageFigure = {
  * remembered. `reported_at` is the BRANCH's own stamp, so a statement built
  * from a three-week-old report shows the age of its evidence.
  *
- * A FIGURE THE BRANCH COULD NOT MEASURE IS STORED AS NULL, NOT 0. Measured
- * against the schema: no branch can total subscription revenue locally
- * (`account_subscriptions` has a plan and no amount; the charges are in
- * Stripe), so this is the normal case and not an edge one. A zero there would
- * make a statement drawn from it read as a complete quarter that earned less.
+ * A FIGURE THE BRANCH COULD NOT MEASURE IS STORED AS NULL, NOT 0. A branch
+ * measures subscriptions only from its own financial ledger (D5947), which is
+ * empty while it receives no Stripe webhooks, so this is the normal case and
+ * not an edge one. A zero there would make a statement drawn from it read as a
+ * complete quarter that earned less. A figure whose state is neither
+ * `complete` nor `incomplete` is stored NULL whatever number came with it.
+ *
+ * D5947: each row also keeps the branch's `state` and `reason`, the `source`
+ * it read, and `source_as_of`, when it read it. The currency is the figure's
+ * own, as sent; nothing here converts or sums one.
  */
 export async function reportUsage(
   env: Env, callerCode: string, secret: string,
@@ -662,27 +697,89 @@ export async function reportUsage(
     // A value that is not a finite number is as unmeasured as a null one, so
     // it is stored as NULL too. `Number(x) || 0` used to turn it into a zero,
     // which is the one reading this function exists to refuse.
+    const state = typeof f.state === 'string' && USAGE_FIGURE_STATES.includes(f.state) ? f.state : null;
     const n = f.available === false || f.gross_cents === null || f.gross_cents === undefined
+      || (state !== null && !FIGURE_STATES_WITH_AMOUNT.has(state))
       ? NaN
       : Number(f.gross_cents);
     const gross = Number.isFinite(n) ? Math.trunc(n) : null;
     await env.DB.prepare(
       `INSERT INTO subsidiary_usage_reports
          (licence_uid, branch_code, period, stream, gross_cents, currency,
-          is_estimate, estimate_basis, reported_at)
-       VALUES (?,?,?,?,?,?,?,?,?)
+          is_estimate, estimate_basis, reported_at, state, reason, source, source_as_of)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(licence_uid, period, stream) DO UPDATE SET
          gross_cents = excluded.gross_cents, currency = excluded.currency,
          is_estimate = excluded.is_estimate, estimate_basis = excluded.estimate_basis,
-         reported_at = excluded.reported_at`,
+         reported_at = excluded.reported_at, state = excluded.state, reason = excluded.reason,
+         source = excluded.source, source_as_of = excluded.source_as_of`,
     ).bind(
       who.licence_uid, who.code, p, String(f.stream).trim().slice(0, 40),
       gross, String(f.currency || 'EUR').toUpperCase().slice(0, 3),
       f.is_estimate ? 1 : 0, f.estimate_basis ? String(f.estimate_basis).slice(0, 300) : null,
-      now,
+      now, state, textOrNull(f.reason, 600), textOrNull(f.source, 60), isoOrNull(f.source_as_of),
     ).run();
   }
   return { ok: true, period: p, streams: rows.length };
+}
+
+/**
+ * D5949 (#5949): a branch reports what it has issued and spent against its
+ * promo ceiling. Authenticated like `reportUsage`, before any read or write.
+ *
+ * The report is always RECORDED (`licence_promo_issued_reports`, one row per
+ * licence, the newest by the branch's own time). It is WRITTEN into HQ's
+ * ceiling row only when HQ has a ceiling for that licence and period in that
+ * currency. Otherwise it is filed as `no_ceiling` or `currency_mismatch`: a
+ * figure is never written into another period's or another currency's row.
+ * An older report than the one already held changes nothing.
+ */
+export async function reportPromoIssued(
+  env: Env, callerCode: string, secret: string, report: PromoIssuedReport, now: Date = new Date(),
+): Promise<{ ok: true; outcome: PromoIssuedOutcome; written: boolean }> {
+  const who = await authenticateBranch(env, callerCode, secret);
+  const r = (report && typeof report === 'object' ? report : {}) as Record<string, unknown>;
+  const keys = ['period', 'currency', 'issued_cents', 'spent_cents', 'reported_at'];
+  const period = String(r.period ?? '');
+  const currency = String(r.currency ?? '');
+  const issued = r.issued_cents;
+  const spent = r.spent_cents;
+  const at = String(r.reported_at ?? '');
+  const atMs = Date.parse(at);
+  if (Object.keys(r).length !== keys.length || !keys.every((k) => Object.hasOwn(r, k))
+    || !PERIOD_RE.test(period) || !/^[A-Z]{3}$/.test(currency)
+    || typeof issued !== 'number' || !Number.isSafeInteger(issued) || issued < 0
+    || typeof spent !== 'number' || !Number.isSafeInteger(spent) || spent < 0 || spent > issued
+    || !Number.isFinite(atMs) || new Date(atMs).toISOString() !== at || atMs > now.getTime() + 300_000) {
+    throw new Error('rpc: promo issued report is not one HQ reads');
+  }
+  const ceiling = await env.DB.prepare(
+    'SELECT upper(currency) AS currency FROM licence_promo_ceilings WHERE licence_uid = ? AND period = ?',
+  ).bind(who.licence_uid, period).first<{ currency: string }>();
+  const outcome: PromoIssuedOutcome = !ceiling ? 'no_ceiling' : ceiling.currency !== currency ? 'currency_mismatch' : 'written';
+  const received = now.toISOString();
+  const statements = [
+    env.DB.prepare(
+      `INSERT INTO licence_promo_issued_reports
+         (licence_uid, branch_code, period, currency, issued_cents, spent_cents, reported_at, received_at, outcome)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(licence_uid) DO UPDATE SET branch_code = excluded.branch_code, period = excluded.period,
+         currency = excluded.currency, issued_cents = excluded.issued_cents, spent_cents = excluded.spent_cents,
+         reported_at = excluded.reported_at, received_at = excluded.received_at, outcome = excluded.outcome
+       WHERE excluded.reported_at > licence_promo_issued_reports.reported_at`,
+    ).bind(who.licence_uid, who.code, period, currency, issued, spent, at, received, outcome),
+  ];
+  if (outcome === 'written') {
+    statements.push(env.DB.prepare(
+      `UPDATE licence_promo_ceilings
+          SET issued_cents = ?, spent_cents = ?, issued_currency = ?, issued_reported_at = ?, updated_at = ?
+        WHERE licence_uid = ? AND period = ? AND upper(currency) = ?
+          AND (issued_reported_at IS NULL OR issued_reported_at < ?)`,
+    ).bind(issued, spent, currency, at, received, who.licence_uid, period, currency, at));
+  }
+  const results = await env.DB.batch(statements);
+  const written = outcome === 'written' && Number(results[1]?.meta?.changes ?? 0) > 0;
+  return { ok: true, outcome, written };
 }
 
 /* ------------------------------------------------------------------ *

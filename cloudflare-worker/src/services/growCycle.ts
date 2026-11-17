@@ -8,7 +8,8 @@
  *   Product improvement      product_feedback
  *   Distribution             growth_channels + channel_spend; customers by UTM
  *                            source from contacts.utm_json (migration 166);
- *                            sign-ups from waitlist_signups
+ *                            sign-ups from waitlist_signups; visits from a
+ *                            tracked PostHog `visits` metric, team only (D6107)
  *   Revenue and traction     project_metrics (Stripe import or typed);
  *                            movements and cohorts computed from the ledger
  *                            when the card is read
@@ -27,6 +28,7 @@ import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
 import { founderHasMercury } from './mercury/growPresence';
+import { visitStage } from './posthog/visits';
 import { billingPeriods, byMonth, cohortRetention, computeMovements, movementGap, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
 export const GROW_QUESTION = 'How does this venture become larger and more enduring?';
@@ -87,7 +89,8 @@ const monthsBack = (now: number, n: number) => {
 };
 const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
 
-export interface Ctx { env: Env; projectId: number; now: number; href: (slug: GrowSlug) => string }
+/** `team` (D6107): whether the viewer is on the venture's team (`isTeamViewer`); only then does a team-only figure (PostHog visits) show. Absent is not the team. */
+export interface Ctx { env: Env; projectId: number; now: number; href: (slug: GrowSlug) => string; team?: boolean }
 
 // ── Figures ─────────────────────────────────────────────────────────────────
 
@@ -261,7 +264,8 @@ export async function distributionCard(x: Ctx): Promise<CardBody> {
   ).bind(x.projectId, month).first<{ n: number }>();
   const paying = (await readSnapshots(x.env, x.projectId)).filter((s) => s.paying_accounts != null).pop();
   const funnel = [
-    { stage: 'Visit', value: null, reason: 'Not recorded: no page-visit store yet' },
+    // D6107: a tracked PostHog `visits` metric, for the team only; its own sourced value, never merged with sign-ups.
+    await visitStage(x.env, x.projectId, x.team === true),
     { stage: 'Sign-up', value: Number(signups?.n ?? 0), source: 'Waitlist sign-ups' },
     { stage: 'Paying', value: paying ? paying.paying_accounts : null, source: paying ? snapSource(paying.source) : null,
       reason: paying ? null : 'Not recorded: no snapshot records paying customers' },
@@ -461,7 +465,8 @@ export async function checklist(env: Env, projectId: number) {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
     const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;
-    return { key: i.key, label: i.label, done: byLab || byHand || byMercury,
+    // D6122 (GR-24): what ticks an item, so an open one can say so ("Ticks from the Spin-Out Lab", "Tick by hand").
+    return { key: i.key, label: i.label, ticks: i.lab ? 'lab' : i.mercury === 'runway' ? 'mercury' : 'hand', done: byLab || byHand || byMercury,
       source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : byMercury ? `From Mercury, as of ${runway!.as_of}` : null,
       done_at: byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : byMercury ? runway!.as_of : null };
   });

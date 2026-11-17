@@ -62,7 +62,8 @@ function useRead(key, call) {
 
 export default function ReviewTile({ reads, readOnly, projectId }) {
   const versions = reads.versions.status === 'ok' ? asList(reads.versions.data, 'versions', 'decks') : [];
-  const deckId = currentVersion(versions)?.id ?? null;
+  const current = reads.selectedDeck === undefined ? currentVersion(versions) : reads.selectedDeck;
+  const deckId = current?.id ?? null;
   const slides = reads.deck.status === 'ok' && Array.isArray(reads.deck.data?.slides) ? reads.deck.data.slides : [];
   if (deckId == null) return null;
   return (

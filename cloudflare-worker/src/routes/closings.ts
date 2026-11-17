@@ -6,7 +6,9 @@
  * Reads (`requireAuth`; who reads what is decided per closing):
  *   GET  /                                   the closings this caller reads
  *   GET  /:uid                               one closing: every line for an admin or the founder,
- *                                            the caller's own lines and the round's total for anyone else
+ *                                            the caller's own lines and the round's total for anyone else,
+ *                                            with `for_investor` (D6199): what waits on them, a count of the rest,
+ *                                            and after Closed their own summary and reporting duties
  *
  * An Admin (`requireAdmin`; a support session is refused):
  *   POST /                                   {deal_id, round_label?, instrument?, template_slug?, deadline?, owner_user_id?}
@@ -17,6 +19,10 @@
  *   POST /:uid/lines/:lineUid/evidence       {kind, source_ref}                 closing.evidence
  *   POST /:uid/evidence/:evidenceUid/withdraw {reason}: 10 to 200 characters   closing.evidence
  *   POST /:uid/complete                      every line settled and the cap-table proposal decided
+ *
+ * The investor of a line, on their own line only (D6198; a support session is refused):
+ *   POST /:uid/lines/:lineUid/declaration          {sent_on, amount_cents, reference?}: "Sent, not yet confirmed"
+ *   POST /:uid/lines/:lineUid/declaration/withdraw
  *
  * The founder of the closing's venture:
  *   POST /:uid/captable/accept
@@ -29,7 +35,9 @@
  * `closing_events` row in the same batch. Every refusal goes through `refuse()`
  * with a code and echoes no input.
  */
+import { investorPreviewRefusal } from '../util/investorPreview';
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import type { Env } from '../types';
 import { requireAdmin, requireAuth } from '../auth';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
@@ -37,11 +45,12 @@ import { refuse } from '../util/refusal';
 import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, auditFundAct, isSupportSession } from '../services/fundAdminAccess';
 import {
   ClosingRefusal, addEvidence, addLine, adminDesk, completeClosing, decideCaptable, listClosings, openClosing, readClosing,
-  setRoute, withdrawEvidence, withdrawLine,
+  setRoute, withdrawEvidence, withdrawLine, declareSent, withdrawDeclaration,
 } from '../services/closings';
 
 const onError = (error: any, c: any) => {
   if (error instanceof Response) return error;
+  if (error instanceof HTTPException) return error.getResponse();
   if (error instanceof ClosingRefusal) return refuse(c, error.status, { code: error.code, message: error.sentence });
   if (error?.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error), 403);
   const status = AUTH_ERROR_STATUSES[error?.message];
@@ -57,6 +66,8 @@ const body = async (c: any) => {
 /** An Admin in their own session: a support session never writes a closing. */
 async function admin(c: any) {
   const user = await requireAdmin(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) throw new HTTPException(403, { res: previewRefusal });
   if (await isSupportSession(c)) {
     throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot change a closing.');
   }
@@ -119,8 +130,29 @@ r.post('/:uid/evidence/:evidenceUid/withdraw', async (c) => {
   return c.json({ ok: true });
 });
 
+/** D6198: the line's own investor, in their own session. */
+async function lineInvestor(c: any) {
+  const user = await requireAuth(c);
+  if (await isSupportSession(c)) throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot change a closing.');
+  return user;
+}
+
+r.post('/:uid/lines/:lineUid/declaration', async (c) => {
+  const user = await lineInvestor(c);
+  const out = await declareSent(c.env, user, c.req.param('uid'), c.req.param('lineUid'), await body(c));
+  return c.json(out, 201);
+});
+
+r.post('/:uid/lines/:lineUid/declaration/withdraw', async (c) => {
+  const user = await lineInvestor(c);
+  await withdrawDeclaration(c.env, user, c.req.param('uid'), c.req.param('lineUid'));
+  return c.json({ ok: true });
+});
+
 r.post('/:uid/captable/accept', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (await isSupportSession(c)) throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot decide a cap-table change.');
   await decideCaptable(c.env, user, c.req.param('uid'), 'accepted');
   return c.json({ ok: true, state: 'accepted' });
@@ -128,6 +160,8 @@ r.post('/:uid/captable/accept', async (c) => {
 
 r.post('/:uid/captable/dismiss', async (c) => {
   const user = await requireAuth(c);
+  const previewRefusal = investorPreviewRefusal(c, user);
+  if (previewRefusal) return previewRefusal;
   if (await isSupportSession(c)) throw new ClosingRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot decide a cap-table change.');
   await decideCaptable(c.env, user, c.req.param('uid'), 'dismissed');
   return c.json({ ok: true, state: 'dismissed' });

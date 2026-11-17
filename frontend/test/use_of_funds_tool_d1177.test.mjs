@@ -20,9 +20,10 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { useOfFundsApi } from '../src/lib/api/useOfFunds.js';
 import {
   afterRaiseView, centsFromTyped, historyRows, homeTiles, money, monthsText, needsRows, planEmpty, planVsActual,
-  raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
+  committedView, raiseView, roundSourceRows, runwayCandidates, runwayTodayView, sectionRows, splitCheck, tiesRows,
   hireBody, sectionSheet, sectionSheetSearch, sheetSectionFrom, tabSearch, // D6083
 } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { capsForViewer } from './_uof_capabilities.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -72,7 +73,8 @@ function planFixture({ viewer = { kind: 'founder', can_write: true, mercury: tru
       : { state: 'not_recorded', chosen: null, candidates: [], partial: false, sources: { mercury: { state: 'founder_only' }, metrics: { state: 'ok' } }, reason: 'No measured cash and positive burn are recorded. A forecast never supplies runway today.' };
   const chosenRound = { value: raise, source: 'Document', ref: 'round_calls:3', as_of: '2026-10-14', kind: 'round_call', name: 'Seed', currency: 'usd', eligible: true };
   return {
-    project_id: 3, viewer,
+    // D5074 slice 5: the page reads only the capability map the Worker sends this viewer.
+    project_id: 3, viewer, capabilities: capsForViewer(viewer),
     base: empty ? { state: 'ok', value: base, reason: null } : { state: 'ok', value: base, reason: null },
     round: empty ? { chosen: null, candidates: [], disagreements: [], reason: 'No approved round call, active round target or plan raise is recorded.', sources: {} } : {
       chosen: chosenRound, precedence: ['round_call', 'round_record', 'plan'],
@@ -134,8 +136,8 @@ test('a missing input is Not recorded, never a zero', () => {
   assert.equal(rows[0].hires, null, 'hires not read are not none');
   const tiles = homeTiles(planFixture({ empty: true }));
   assert.equal(tiles.find((t) => t.key === 'raise').value, null);
-  assert.equal(tiles.find((t) => t.key === 'committed').value, null);
-  assert.ok(tiles.find((t) => t.key === 'committed').sub.includes('not read here yet'));
+  // D6081: a plan read without its committed block reads Unavailable, never a figure.
+  assert.equal(tiles.find((t) => t.key === 'committed').value, 'Unavailable');
   assert.equal(planEmpty(planFixture({ empty: true })), true);
   assert.equal(planEmpty(planFixture()), false);
   assert.equal(centsFromTyped(''), null);
@@ -253,10 +255,12 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
     assert.equal(v.text('uof-tile-today-value'), '9.4 months');
     assert.equal(v.text('uof-tile-after-value'), 'at least 18 months');
     assert.notEqual(v.text('uof-tile-today-value'), v.text('uof-tile-after-value'));
-    assert.equal(v.text('uof-tile-committed-value'), 'Not recorded');
+    assert.equal(v.text('uof-tile-committed-value'), 'Unavailable', 'D6081: this fixture carries no committed block');
     assert.equal(v.all('uof-section-row').length, 5);
     assert.ok(v.text('uof-cash').includes('Modelled'));
-    assert.ok(v.text('uof-ties').includes('! Different raise'));
+    // D5081 (RA-21): where the plan is used is its Dependencies card, each row marked; a different raise is Stale.
+    assert.equal(v.text('uof-dep-cap'), 'Stale');
+    assert.ok(v.text('uof-tie-cap').includes('This plan raises $1,500,000'));
     assert.ok(v.by('uof-need-round_disagreement'));
     assert.ok(v.sent.some((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3'));
     assert.equal(v.by('uof-admin-banner'), undefined, 'the founder has no banner');
@@ -266,7 +270,10 @@ test('UF1 Home: the four tiles, where the money goes, cash over time, where the 
 test('UF3 Edit split: a total other than 100 waits; a good split saves the raise, the shares and the target', async () => {
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': () => response({ ok: true }) } });
   try {
-    await v.click('uof-edit-split-open');
+    // D5081 (RA-14): on a desktop Home, Edit split opens from the header's Set raise & allocation, drawn once.
+    assert.equal(v.text('cycle-action'), 'Set raise & allocation');
+    assert.equal(v.by('uof-edit-split-open'), undefined, 'the action is not drawn twice');
+    await v.click('cycle-action');
     assert.equal(v.pr(v.by('uof-edit-split')).role, 'dialog', 'D1317: Edit split opens as the shared Sheet');
     assert.ok(v.pr(v.by('uof-edit-split'))['aria-labelledby']);
     assert.equal(v.pr(v.by('uof-edit-split'))['data-width'], 640);
@@ -292,7 +299,7 @@ test('D5069 a split refused because the plan changed keeps the dialog, says so, 
   const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': conflict } });
   try {
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     await v.type('uof-split-amount', '2000000');
     await v.click('uof-split-save');
     assert.match(v.text('uof-split-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
@@ -346,7 +353,7 @@ test('UF16: an admin works under the banner, their writes say so, and Mercury fi
     assert.ok(v.text('uof-admin-banner').includes('as an Admin. Changes are logged under your name.'));
     assert.equal(v.text('uof-tile-today-value'), 'Founder only');
     assert.ok(v.by('uof-cash-founder-only'));
-    await v.click('uof-edit-split-open');
+    await v.click('cycle-action');
     assert.ok(v.text('uof-split-admin').includes('logged under your name'));
   } finally { await v.close(); }
   const a = await mounted('/raise/use-of-funds/actuals?project_id=3', { plan: planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }) });
@@ -360,7 +367,8 @@ test('UF17–UF19: empty, error and Mercury partial each say what they are', asy
   let v = await mounted('/raise/use-of-funds?project_id=3', { plan: planFixture({ empty: true }) });
   try {
     assert.ok(v.text('uof-empty').includes('Set your raise and split to see what it buys.'));
-    assert.equal(v.text('uof-tile-raise-value'), 'Not recorded');
+    // D5081 (RA-14): first use collapses the analytics to its set-up actions; no tile draws Not recorded four times.
+    assert.equal(v.by('uof-tile-raise-value'), undefined);
   } finally { await v.close(); }
   v = await mounted('/raise/use-of-funds?project_id=3', { plan: null });
   try {
@@ -460,6 +468,109 @@ test('UF21 the phone: tiles two across, the sections as a list with a 44px opene
   assert.match(src, /max-md:min-h-\[44px\]/);
   assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, 'no browser pop-up');
   assert.doesNotMatch(src, /EadwynPanel|aiRouter|railProposals|useRailOption|FillProposals/, 'Eadwyn fills nothing here');
+});
+
+// D5074 slice 5 (#5074): every control reads the plan's capability map, never its old `viewer` field.
+test('D5074: the edit controls, the admin banner and the Mercury states follow the capability map, and the map wins over the viewer field', async () => {
+  // Mutation checked: `planViewer` reading `plan.viewer` → the disagreeing case below draws Edit split and loses the banner.
+  const cases = [
+    ['founder', { edit: true, mercury: true, admin_logged: false }, { edit: true, banner: false }],
+    ['admin', { edit: true, mercury: false, admin_logged: true }, { edit: true, banner: true }],
+    ['support session', { edit: false, mercury: false, admin_logged: false }, { edit: false, banner: false }],
+    ['no map', undefined, { edit: false, banner: false }],
+  ];
+  for (const [label, capabilities, want] of cases) {
+    // The old field says founder-who-writes every time; only the map changes.
+    const plan = { ...planFixture({ viewer: { kind: 'founder', can_write: true, mercury: true } }), capabilities };
+    if (capabilities === undefined) delete plan.capabilities;
+    const v = await mounted('/raise/use-of-funds/allocation?project_id=3', { plan });
+    try {
+      assert.equal(Boolean(v.by('uof-edit-split-open')), want.edit, `${label}: Edit split`);
+      assert.equal(Boolean(v.by('uof-admin-banner')), want.banner, `${label}: the admin banner`);
+      assert.ok(v.sent.every((s) => s.line.startsWith('GET ')), `${label}: mounting writes nothing`);
+    } finally { await v.close(); }
+  }
+});
+
+// D6082 (#6082): a milestone can be changed or removed. The scenario's revision goes with both; an emptied
+// cost is sent as null and stays Not costed; a reader or a support session (can_write false) sees no Edit.
+test('D6082 Edit milestone saves name, section, by and cost with the scenario revision, and reloads the plan', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    assert.equal(v.all('uof-ms-edit-open').length, 2, 'one Edit per milestone row');
+    const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    const before = reads();
+    await v.click('uof-ms-edit-open');
+    assert.ok(v.by('uof-edit-milestone'));
+    assert.equal(v.pr(v.by('uof-ms-label')).value, 'SOC 2 Type I');
+    assert.equal(v.pr(v.by('uof-ms-cost')).value, '60000.00', 'the recorded cost is shown in major units');
+    await v.type('uof-ms-label', 'SOC 2 Type II');
+    await v.type('uof-ms-edit-section', 'operations');
+    await v.type('uof-ms-by', '2027-06');
+    await v.type('uof-ms-cost', '75000');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.deepEqual(patch.body, { label: 'SOC 2 Type II', category_key: 'operations', due_on: '2027-06', cost_cents: 7500000, expected_revision: 4 });
+    assert.equal(v.by('uof-edit-milestone'), undefined, 'the dialog closes on save');
+    assert.equal(v.text('uof-notice'), 'The milestone is saved.');
+    assert.ok(reads() > before, 'the plan is read again');
+  } finally { await v.close(); }
+});
+
+test('D6082 an emptied cost is sent as null and stays Not costed', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': () => response({ id: 1 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.type('uof-ms-cost', '');
+    await v.click('uof-ms-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/milestones/1'));
+    assert.equal(patch.body.cost_cents, null, 'never 0');
+    assert.ok(v.text('uof-notice').includes('stays Not costed'));
+  } finally { await v.close(); }
+  const w = await mounted('/raise/use-of-funds/milestones?project_id=3');
+  try {
+    const rows = w.all('uof-ms-edit-open');
+    await act(async () => w.pr(rows[1]).onClick()); await w.flush();
+    assert.equal(w.pr(w.by('uof-ms-cost')).value, '', 'a Not costed milestone opens with an empty cost');
+    await w.type('uof-ms-cost', 'abc');
+    assert.equal(w.pr(w.by('uof-ms-save')).disabled, true, 'an unreadable cost cannot be saved');
+  } finally { await w.close(); }
+});
+
+test('D6082 Remove milestone sends the scenario revision in the query and reloads', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'DELETE /cycles/raise/use-of-funds/milestones/1': () => response({ ok: true, scenario_revision: 5 }) } });
+  try {
+    await v.click('uof-ms-edit-open');
+    await v.click('uof-ms-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/milestones/1') && s.line.includes('expected_revision=4')));
+    assert.equal(v.text('uof-notice'), 'The milestone is removed.');
+    assert.equal(v.by('uof-edit-milestone'), undefined);
+  } finally { await v.close(); }
+});
+
+test('D6082 a milestone refused because the plan changed keeps the dialog and offers Review latest', async () => {
+  const stale = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This plan was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const raced = () => response({ code: 'scenario_changed', error: 'scenario_changed', detail: 'The scenario changed. Read it again.' }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/milestones/1': stale, 'DELETE /cycles/raise/use-of-funds/milestones/1': raced } });
+  try {
+    for (const press of ['uof-ms-save', 'uof-ms-remove']) {
+      await v.click('uof-ms-edit-open');
+      await v.click(press);
+      assert.ok(v.by('uof-ms-error'), 'the refusal is said');
+      assert.ok(v.by('uof-edit-milestone'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      await v.click('uof-review-latest');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
+  } finally { await v.close(); }
+});
+
+test('D6082 a reader or a support session sees no milestone Edit', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { plan: planFixture({ viewer: { kind: 'founder', can_write: false, mercury: true } }) });
+  try {
+    assert.equal(v.all('uof-ms-row').length, 2);
+    assert.equal(v.all('uof-ms-edit-open').length, 0);
+  } finally { await v.close(); }
 });
 
 /* ------------------------------------------------------------------ *
@@ -619,4 +730,79 @@ test('D6083 UF21c: on a phone the sheet is a bottom sheet and Add a hire a botto
   assert.match(src, /testId="uof-section-sheet"/);
   assert.match(src, /<Sheet label=\{v\.label\}[^>]*phone="sheet"/);
   assert.match(src, /<Lightbox label="Add a hire"[^>]*phone="sheet"/);
+});
+
+/* ------------------------------------------------------------------ *
+ * D6081 (#6081): Committed, from the round
+ * ------------------------------------------------------------------ */
+
+const COMMITTED = {
+  state: 'ok', source: 'Capital relationships', href: '/raise/capital-relationships/commitments?project_id=3', reason: null,
+  value: { round_name: 'Seed', currency: 'USD', counted_cents: 145000000, target_cents: 150000000, amount_not_recorded: 0, remaining_cents: 5000000,
+    received_cents: null, statuses: [{ status: 'signed', label: 'Signed', investors: 2 }] },
+};
+
+test('D6081 committedView: a read is "$X of $Y · Signed · from the round" with Remaining; nothing unread is a figure', () => {
+  const read = committedView(COMMITTED);
+  assert.equal(read.value, '$1,450,000');
+  assert.equal(read.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(read.foot, 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+  assert.equal(read.tie, 'Committed $1,450,000 · Signed');
+  const two = committedView({ ...COMMITTED, value: { ...COMMITTED.value, received_cents: 25000000, statuses: [{ label: 'Received' }, { label: 'Signed' }, { label: 'Wired' }] } });
+  assert.equal(two.sub, 'of $1,500,000 · Received, Signed, Wired · from the round');
+  assert.equal(two.tie, 'Committed $1,450,000 · received $250,000 · Received, Signed, Wired');
+  const over = committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 160000000, remaining_cents: -10000000 } });
+  assert.match(over.foot, /over the target by \$100,000$/);
+  const noAmount = committedView({ ...COMMITTED, value: { ...COMMITTED.value, amount_not_recorded: 1, remaining_cents: null } });
+  assert.equal(noAmount.foot, null, 'a sum missing an amount gives no Remaining');
+  assert.match(noAmount.sub, /1 with no amount/);
+  assert.match(noAmount.footReason, /has no amount recorded/);
+  const noTarget = committedView({ ...COMMITTED, value: { ...COMMITTED.value, target_cents: null, remaining_cents: null } });
+  assert.equal(noTarget.foot, null);
+  assert.match(noTarget.sub, /^no target recorded/);
+  // A real zero, read, is a zero.
+  assert.equal(committedView({ ...COMMITTED, value: { ...COMMITTED.value, counted_cents: 0, remaining_cents: 150000000, statuses: [] } }).value, '$0');
+
+  const unavailable = committedView({ state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' });
+  assert.equal(unavailable.value, 'Unavailable'); assert.equal(unavailable.foot, undefined);
+  assert.equal(committedView(undefined).value, 'Unavailable', 'no block is never a figure');
+  const none = committedView({ state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: COMMITTED.href });
+  assert.equal(none.value, null); assert.equal(none.href, COMMITTED.href); assert.equal(none.link, 'Capital relationships › Commitments');
+  const refused = committedView({ state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders.' });
+  assert.equal(refused.value, 'Refused'); assert.equal(refused.muted, true);
+  for (const b of [unavailable, none, refused]) assert.ok(!/\$/.test(String(b.value ?? '')), `${b.state} draws no amount`);
+
+  // The tile and the round tie use the same read.
+  const plan = { ...planFixture(), committed: COMMITTED };
+  const tile = homeTiles(plan).find((t) => t.key === 'committed');
+  assert.equal(tile.value, '$1,450,000'); assert.equal(tile.sub, 'of $1,500,000 · Signed · from the round');
+  assert.equal(tiesRows(plan).find((r) => r.key === 'round').sub, 'Committed $1,450,000 · Signed');
+});
+
+test('D6081 UF1 Home: Committed from the round with Remaining; Unavailable hides Remaining; no round links Commitments', async () => {
+  const ok = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: COMMITTED } });
+  try {
+    assert.equal(ok.text('uof-tile-committed-value'), '$1,450,000');
+    assert.ok(ok.text('uof-tile-committed').includes('of $1,500,000 · Signed · from the round'));
+    assert.equal(ok.text('uof-remaining'), 'Target $1,500,000 · committed $1,450,000 · remaining $50,000');
+    assert.equal(ok.by('uof-committed-unavailable'), undefined);
+  } finally { await ok.close(); }
+  const down = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'unavailable', reason: 'The commitments could not be read, so Remaining is not shown. It is not $0.' } } });
+  try {
+    assert.equal(down.text('uof-tile-committed-value'), 'Unavailable');
+    assert.equal(down.by('uof-remaining'), undefined, 'Remaining is not shown');
+    assert.match(down.text('uof-committed-unavailable'), /Remaining is not shown\. It is not \$0\./);
+    assert.ok(!/\$[1-9]/.test(down.text('uof-tile-committed')), 'no amount is drawn');
+  } finally { await down.close(); }
+  const none = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture(), committed: { state: 'not_recorded', reason: 'No active round is recorded, so there is no target to count against.', href: '/raise/capital-relationships/commitments?project_id=3' } } });
+  try {
+    assert.equal(none.text('uof-tile-committed-value'), 'Not recorded');
+    assert.equal(none.pr(none.by('uof-tile-committed-link')).href, '/raise/capital-relationships/commitments?project_id=3');
+    assert.equal(none.by('uof-remaining'), undefined);
+  } finally { await none.close(); }
+  const admin = await mounted('/raise/use-of-funds?project_id=3', { plan: { ...planFixture({ viewer: { kind: 'admin', can_write: true, mercury: false } }), committed: { state: 'refused', reason: 'Commitments are read in Capital relationships by the venture’s founders. Staff give a reason for a support read there.' } } });
+  try {
+    assert.equal(admin.text('uof-tile-committed-value'), 'Refused');
+    assert.equal(admin.by('uof-remaining'), undefined);
+  } finally { await admin.close(); }
 });

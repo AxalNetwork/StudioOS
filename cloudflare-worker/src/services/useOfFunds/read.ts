@@ -2,6 +2,8 @@
 import type { Env } from '../../types';
 import { exponentOf, majorToMinor } from '../../../../frontend/src/lib/money.js';
 import { runwayMonths } from '../raiseCycle';
+import { capitalCanWork, capitalStaff } from '../capRelAccess';
+import { COMMIT_STATUSES, COUNTED, STATUS_WORDS, commitmentsRead } from '../capRelReads';
 import { base, json, obj, scenario, view, PlanError, type Scope } from './store';
 
 export async function block<T>(read: () => Promise<T>) {
@@ -25,7 +27,13 @@ export async function roundSources(env: Env, s: Scope, baseRow: any) {
         AND rc.counsel_approved_hash=rc.terms_hash AND rc.counsel_approved_at IS NOT NULL
       ORDER BY rc.updated_at DESC,rc.id DESC`).bind(s.projectId).all<any>()).results ?? []),
     block(() => env.DB.prepare("SELECT id,name,target_cents,target_amount,currency,updated_at FROM raise_rounds WHERE project_id=? AND status='active' ORDER BY updated_at DESC,id DESC LIMIT 1").bind(s.projectId).first<any>()),
-    block(() => env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE project_id=? AND COALESCE(is_variant,0)=0 ORDER BY updated_at DESC,id DESC LIMIT 1').bind(s.projectId).first<any>()),
+    // D6085: the scenario the plan names, from this project only; without a link (or with a broken one), the latest model, unlinked.
+    block(async () => {
+      const linked = baseRow?.cap_table_scenario_uid
+        ? await env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE uid=? AND project_id=?').bind(baseRow.cap_table_scenario_uid,s.projectId).first<any>()
+        : null;
+      return linked ? { ...linked, linked: true } : env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE project_id=? AND COALESCE(is_variant,0)=0 ORDER BY updated_at DESC,id DESC LIMIT 1').bind(s.projectId).first<any>();
+    }),
   ]);
   const candidates: any[] = [];
   for (const c of calls.value ?? []) candidates.push({ ...fact(integer(c.amount_cents),'Document',`round_calls:${c.id}`,c.counsel_approved_at), kind:'round_call',name:c.name,currency:(c.currency??'USD').toLowerCase(),eligible:true });
@@ -47,8 +55,13 @@ export async function roundSources(env: Env, s: Scope, baseRow: any) {
       const rounds=Array.isArray(input.rounds)?input.rounds:[];
       return { id:cap.value.id,uid:cap.value.uid,name:cap.value.name,source:'Modelled',as_of:cap.value.updated_at,
         rounds:rounds.map((r:any,i:number)=>({ ...fact(cents(r.investment),'Modelled',`cap_table_scenarios:${cap.value.id}:round:${i}`,cap.value.updated_at),name:typeof r.name==='string'?r.name:null })),
-        // No scenario link column exists in migration 606. Do not invent one.
-        link_state:'not_recorded',link_reason:'No explicit link between a Use of funds scenario and a cap-table scenario is stored.',result };
+        // D6085: `linked` when the plan names this scenario; otherwise the latest model, shown unlinked.
+        ...(cap.value.linked
+          ? {link_state:'linked',link_reason:null}
+          : baseRow?.cap_table_scenario_uid
+            ? {link_state:'deleted',link_reason:'The linked scenario no longer exists. The latest scenario is shown, unlinked.'}
+            : {link_state:'not_recorded',link_reason:'No cap-table scenario is linked. The latest scenario is shown, unlinked.'}),
+        result };
     });
     for (const c of capTable.value?.rounds??[]) candidates.push({...c,kind:'cap_table',currency:'usd',eligible:false});
   }
@@ -85,9 +98,40 @@ export async function runwayToday(env:Env,s:Scope,mercuryAllowed:boolean) {
   return {state:chosen?'recorded':mercury.state==='unreadable'||metrics.state==='unreadable'?'unreadable':'not_recorded',chosen,candidates,
     partial:mercury.state==='unreadable'||metrics.state==='unreadable',sources:{mercury,metrics},reason:chosen?null:'No measured cash and positive burn are recorded. A forecast never supplies runway today.'};
 }
+/**
+ * D6081 (#6081): Committed, from the round. The figures `GET /cycles/raise/capital-relationships/commitments`
+ * serves (`commitmentsRead`), under its access rules (`capRelAccess.ts`): staff, investors, a support
+ * session and anyone `capitalCanWork` refuses are Refused, never a figure. A read with any source
+ * unreadable is Unavailable, never a partial sum or $0. Remaining is only given when every counted
+ * commitment has an amount and the round records a target.
+ */
+export async function committedRead(env:Env,s:Scope,mercuryAllowed:boolean) {
+  const source='Capital relationships',href=`/raise/capital-relationships/commitments?project_id=${s.projectId}`;
+  const out=(state:'ok'|'not_recorded'|'unavailable'|'refused',reason:string|null,value:any=null)=>({state,source,href,reason,value});
+  const refused=()=>out('refused','Commitments are read in Capital relationships by the venture’s founders. Staff give a reason for a support read there.');
+  const unavailable=(reason='The commitments could not be read, so Remaining is not shown. It is not $0.')=>out('unavailable',reason);
+  if (s.readOnly||capitalStaff(s.user)) return refused();
+  try { if (!await capitalCanWork(env,{id:s.projectId,founder_id:null},s.user)) return refused(); }
+  catch { return unavailable('Access to the commitments could not be checked. Try again.'); }
+  let r:Awaited<ReturnType<typeof commitmentsRead>>;
+  try { r=await commitmentsRead(env,s.projectId,mercuryAllowed?Number(s.user.id):null); }
+  catch { return unavailable(); }
+  if (r.totals.partial) return unavailable();
+  if (!r.round) return out('not_recorded',r.round_reason);
+  const t=r.totals,target=r.round.target_cents;
+  const statuses=COMMIT_STATUSES.filter(k=>COUNTED.has(k)&&t.by_status[k].investors>0);
+  const complete=t.counted_amount_not_recorded===0;
+  return out('ok',null,{
+    round_name:r.round.name,currency:r.currency,counted_cents:t.counted_cents,target_cents:target,
+    // Some counted commitment has no amount: the sum is a floor, so Remaining is not given.
+    amount_not_recorded:t.counted_amount_not_recorded,remaining_cents:complete&&target!=null?target-t.counted_cents:null,
+    received_cents:t.by_status.received.investors>0&&t.by_status.received.amount_not_recorded===0?t.by_status.received.cents:null,
+    statuses:statuses.map(k=>({status:k,label:STATUS_WORDS[k],investors:t.by_status[k].investors})),
+  });
+}
 export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   const baseBlock=await block(async ()=>scenario(env,s,await base(env,s)));
-  const [round,runway,deck,forecast,projection]=await Promise.all([
+  const [round,runway,deck,forecast,projection,committed]=await Promise.all([
     roundSources(env,s,baseBlock.value), runwayToday(env,s,mercuryAllowed),
     block(async ()=>{
       const deck=await env.DB.prepare('SELECT id,version FROM pitch_decks WHERE project_id=? ORDER BY version DESC,id DESC LIMIT 1').bind(s.projectId).first<any>();
@@ -101,6 +145,7 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
       return r?{source:'Modelled',as_of:r.updated_at,assumptions:json(r.assumptions_json),computed:json(r.computed_json),reason:'A forecast is never runway today.'}:null;
     }),
     baseBlock.value?block(()=>view(env,s,baseBlock.value)):Promise.resolve(baseBlock),
+    committedRead(env,s,mercuryAllowed),
   ]);
   const needs_you:{code:string;reason:string}[]=[];
   if (baseBlock.state==='unreadable') needs_you.push({code:'plan_unreadable',reason:baseBlock.reason!});
@@ -113,6 +158,9 @@ export async function planRead(env:Env,s:Scope,mercuryAllowed:boolean) {
   if (model?.milestones.value?.some((m:any)=>m.state==='Not costed')) needs_you.push({code:'milestones_not_costed',reason:'Some milestones are Not costed. Their affordability is unknown.'});
   if (model?.milestones.value?.some((m:any)=>m.state==='At risk')) needs_you.push({code:'milestones_at_risk',reason:'Some milestone costs exceed their section allocation.'});
   if (model?.runway.value?.relation==='exact'&&model.runway.value.months<baseBlock.value.target_runway_months) needs_you.push({code:'target_shortfall',reason:'The modelled cash runs out before your target.'});
-  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:!s.readOnly,mercury:mercuryAllowed},base:projection,round,
-    runway_today:runway,forecast,ties:{deck,cap_table:round.sources.cap_table},needs_you};
+  const exportable=baseBlock.state==='ok'&&projection.state==='ok'&&(projection.value as any)?.hires?.state==='ok';
+  return {project_id:s.projectId,viewer:{kind:s.user.role==='admin'?'admin':'founder',can_write:!s.readOnly,mercury:mercuryAllowed,
+    // D6084 (#6084), in #5074's capability names: the plan's Export, off while the base is not readable; filing to the data room is a write.
+    capabilities:{export:exportable,add_to_data_room:exportable&&!s.readOnly}},base:projection,round,
+    runway_today:runway,committed,forecast,ties:{deck,cap_table:round.sources.cap_table},needs_you};
 }

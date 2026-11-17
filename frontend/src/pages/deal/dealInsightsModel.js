@@ -158,6 +158,8 @@ export function sizingView(block) {
         value: value == null ? null : usd0.format(value),
         source: sourceText(f.source),
         reason: value == null ? (f.reason || NOT_RECORDED) : (f.source ? null : f.reason || 'No source recorded for this figure'),
+        // D6171 (#6171): the day the figure was set, when `market_figures` holds one.
+        asOf: value != null && dateText(f.as_of) ? `As of ${dateText(f.as_of)}` : null,
       };
     }),
   };
@@ -170,21 +172,39 @@ export function safeUrl(u) {
 
 const DECISIONS = { go: 'Entering', enter: 'Entering', entering: 'Entering', served: 'Served', serve: 'Served', hold: 'On hold', no_go: 'Not entering', exit: 'Leaving' };
 
-/** A company market: its name, where it stands, and when it was decided. */
+/** D6171 (#6171): the four readiness parts the read returns for each market (Grow MG6), in the canvas's order. */
+export const READINESS = [['demand', 'Demand'], ['regulation', 'Regulation'], ['partners', 'Partners'], ['cost', 'Cost']];
+
+/** One readiness part: its score out of 10 with its source, or Not recorded. A recorded 0 stays 0. */
+export function readinessPart(m, key, label) {
+  const n = m?.[`${key}_score`];
+  const score = typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 10 ? n : null;
+  if (score == null) return { key, label, score: null, source: null, text: `${label} ${NOT_RECORDED}` };
+  const source = sourceText(m?.[`${key}_source`]);
+  return { key, label, score, source, text: `${label} ${score}/10${source ? ` · ${source}` : ''}` };
+}
+
+/** A company market: its name, where it stands, when it was decided, and its readiness. */
 export function marketRow(m) {
   const where = DECISIONS[String(m.decision ?? '').toLowerCase()] || (m.state ? String(m.state).replace(/_/g, ' ') : null);
-  return { name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null };
+  const readiness = READINESS.map(([key, label]) => readinessPart(m, key, label));
+  return {
+    name: m.name || NOT_RECORDED, where: where || NOT_RECORDED, decided: m.decided_on ? dateText(m.decided_on) : null,
+    readiness, readinessText: readiness.map((p) => p.text).join(' · '),
+  };
 }
 
 // ---------------------------------------------------------------- DL6 Traction
 
-/** The tiles, in the canvas's order. ARR and NRR are the read's own Not recorded. */
+/** The sourced founder-shared tiles, including recorded ARR and net_retention (#6178). */
 export const TRACTION_TILES = [
   { key: 'mrr', label: 'MRR' },
   { key: 'growth', label: 'Growth', suffix: ' a month' },
   { key: 'burn', label: 'Net burn', suffix: ' a month' },
   { key: 'runway', label: 'Runway' },
   { key: 'customers', label: 'Paying accounts' },
+  { key: 'arr', label: 'ARR' },
+  { key: 'net_retention', label: 'Net revenue retention' },
 ];
 
 /** The charts, each one figure across the twelve months. */
@@ -212,20 +232,43 @@ export function tractionView(read) {
   }));
   const tiles = TRACTION_TILES.map((t) => {
     const latest = [...series[t.key]].reverse().find((p) => p.value != null);
-    if (!latest) return { ...t, value: null, reason: history ? 'Not shared in the last twelve months' : NOT_RECORDED };
+    if (!latest) return { ...t, value: null, reason: t.key === 'arr'
+      ? read?.arr?.reason || 'No founder-shared ARR recorded; MRR is not annualised'
+      : t.key === 'net_retention' ? read?.net_retention?.reason || read?.nrr?.reason || 'No founder-shared NRR recorded'
+        : history ? 'Not shared in the last twelve months' : NOT_RECORDED };
     const asOf = dateText(latest.as_of) || dateText(latest.month);
     return { ...t, value: `${figureText(latest.value, latest.unit)}${t.suffix || ''}`, source: sourceText(latest.source), asOf: asOf ? `As of ${asOf}` : null };
   });
-  const extra = [
-    { key: 'arr', label: 'ARR', value: null, reason: read?.arr?.reason || NOT_RECORDED },
-    { key: 'nrr', label: 'Net revenue retention', value: null, reason: read?.nrr?.reason || NOT_RECORDED },
-  ];
   return {
     state: history ? 'recorded' : b.state,
     months,
     reported: history ? history.filter((m) => m.state === 'reported').length : 0,
+    lastShared: history ? history.filter((m) => m.state === 'reported').map((m) => m.month).sort().at(-1) || null : null,
     series,
-    tiles: [...tiles, ...extra],
+    tiles,
+  };
+}
+
+/**
+ * D6187 (#6187): the request an investor may send the founder about the gaps
+ * in the shared figures. The owner chose A: it is a diligence request on the
+ * deal's case (`POST /api/dd/cases/:uid/requests`), pre-filled with each
+ * figure and the months it was not reported, and editable before it is sent.
+ * Null when nothing is missing: there is nothing to ask for.
+ */
+export function askDraft(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const lines = TRACTION_CHARTS.map((c) => {
+    const gaps = (view.series?.[c.key] || []).filter((p) => p.value == null).map((p) => dateText(p.month)).filter(Boolean);
+    return gaps.length ? { figure: c.title.replace(' by month', ''), gaps } : null;
+  }).filter(Boolean);
+  if (!lines.length) return null;
+  const figures = lines.map((l) => l.figure);
+  const named = figures.length === 1 ? figures[0] : `${figures.slice(0, -1).join(', ')} and ${figures[figures.length - 1]}`;
+  return {
+    title: `An update on ${named}`.slice(0, 200),
+    details: ['Could you share the figures for the months not reported yet?', ...lines.map((l) => `${l.figure}: ${l.gaps.join(', ')}.`)].join('\n'),
+    lines,
   };
 }
 
@@ -260,3 +303,35 @@ export function slotOf(slot, block) {
 
 /** Words for the team values band, advisors and geography the read holds no figure for. */
 export const ADVISORS_LINE = 'No advisor count is read for this deal yet.';
+
+
+/** D6177 (#6177): each chart names its sources and each source's newest recorded as-of. */
+export function tractionSources(points) {
+  const sources = new Map();
+  for (const point of points) {
+    if (point.value == null) continue;
+    const source = sourceText(point.source) || NOT_RECORDED;
+    const asOf = dateText(point.as_of) ? point.as_of : null;
+    if (!sources.has(source) || (asOf && (!sources.get(source) || asOf > sources.get(source)))) sources.set(source, asOf);
+  }
+  return [...sources].map(([source, asOf]) => `${source} · As of ${dateText(asOf) || NOT_RECORDED}`);
+}
+
+/** D6177: RFC 4180 cells; source text cannot become a spreadsheet formula. Numeric values stay numeric. */
+function tractionCsvCell(value) {
+  let text = String(value ?? '');
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
+
+/** Export only the axis and figures already read, including every successful gap as Not reported. */
+export function tractionCsv(view) {
+  const rows = [['month', 'figure', 'value', 'unit', 'source']];
+  for (const figure of TRACTION_TILES) {
+    const points = view.series[figure.key] || [];
+    const unit = points.find(p => p.unit)?.unit || '';
+    for (const point of points) rows.push([point.month, figure.label, point.value == null ? NOT_REPORTED : point.value,
+      point.unit || unit, point.value == null ? '' : point.source || NOT_RECORDED]);
+  }
+  return rows.map(row => row.map(tractionCsvCell).join(',')).join('\r\n') + '\r\n';
+}

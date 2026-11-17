@@ -3,24 +3,25 @@
 // Port of the Claude Design export `Fund Brief OnePager.dc.html`, whose
 // `renderVals()` carried its own private `F = { target: 20, committed: 6.8,
 // lps: 31, graduates: 37, deployed: 1.9, reserveHeld: 2.7, followOns: 2, … }`
-// object. That is correct for a design file and wrong for a document a fund
-// actually hands to an LP: the same figures already live in the LP & Investor
-// Workspace, so two copies would silently diverge the moment either moved, and
-// every brief downloaded after that point would misstate the raise.
+// object. A document a fund hands to an LP must not carry its own copy.
 //
-// So there is no `F` here. Every number is read from `spinoutFundModel.js` —
-// the module the workspace itself renders from — or derived from it by
-// `fundModel()`. Editing a fund fact in one place therefore updates the
-// workspace and every brief downloaded afterwards, which is the whole contract
-// of this file. `fund_brief_model.test.mjs` fails if a literal creeps back in.
+// D6137 (#6137): the brief prints the same figures as the page it is downloaded
+// from. Every fund figure (the target and the close status, and for a committed
+// LP the raise and the portfolio) comes from the viewer's own read of
+// GET /api/spinout-lab/fund-metrics through `fundFigures()` in
+// spinoutFundFigures.js, which the workspace and the investor page also draw
+// from. A figure with no record prints "Not recorded"; a visitor's read has no
+// LP field, so a visitor's brief prints none. No store records the Cohort 4
+// list, so the pipeline prints "Not recorded" until one does. Terms, tiers,
+// thesis and providers still come from `spinoutFundModel.js`.
 //
-// Pure and framework-free on purpose: it takes a clock and a recipient and
-// returns data, so the document can be asserted in Node without a browser or a
-// PDF engine.
+// Pure and framework-free on purpose: it takes a clock, a recipient and the
+// read and returns data, so the document can be asserted in Node without a
+// browser or a PDF engine.
 import {
-  fundModel, money, FUND, PROGRAM, THESIS, fundTerms, TIERS, COHORT_4,
-  SERVICE_PROVIDERS, PROCESS_STEPS,
+  FUND, THESIS, fundTerms, TIERS, SERVICE_PROVIDERS, PROCESS_STEPS,
 } from './spinoutFundModel.js'; // explicit extension: node --test imports this directly
+import { fundFigures, programFigures, LP_ONLY_PHRASE } from './spinoutFundFigures.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -33,14 +34,6 @@ export function briefDate(d) {
 
 const INK = '#18181b';
 const VIOLET = '#6d28d9';
-const MUTED = '#71717a';
-
-const SCORE_TONE = (score) => (score >= 70 ? '#15803d' : score >= 55 ? '#b45309' : MUTED);
-const IC_PILL = {
-  Advance: { bg: '#dcfce7', fg: '#15803d' },
-  Watch: { bg: '#fef3c7', fg: '#92400e' },
-  Track: { bg: '#f4f4f5', fg: '#52525b' },
-};
 
 /** The one line naming who a download was prepared for, or null when unknown. */
 function recipientLine(recipient) {
@@ -58,60 +51,71 @@ function recipientLine(recipient) {
  * @param {object}  [opts.recipient]    { name, email, standing } — the viewer the
  *                                      download was produced for. Optional: the
  *                                      brief is complete without it.
+ * @param {object|null} [opts.metrics]  the viewer's GET /fund-metrics body, the
+ *                                      one the page drew. Null (not read, or the
+ *                                      read failed) prints Unreadable figures.
+ * @param {string}  [opts.today]        UTC `YYYY-MM-DD`, for tests
  * @returns {object} sections mirroring the design's `renderVals()`
  */
-export function fundBriefModel({ generatedAt, recipient } = {}) {
-  const M = fundModel();
-  const pctRaised = Math.round((FUND.committed / FUND.target) * 100);
+export function fundBriefModel({ generatedAt, recipient, metrics = null, today } = {}) {
+  const F = fundFigures(metrics, { today });
+  const P = programFigures(metrics);
 
   const meta = {
     issuer: 'Axal VC',
     fundName: 'Axal VC Spin-Out Fund I',
     kicker: 'Fund brief · confidential',
     subtitle: `${FUND.stage} · Vintage ${FUND.vintage} · ${FUND.domicile}`,
-    status: FUND.status,
+    status: F.close.status,
     generated: `Generated ${briefDate(generatedAt)}`,
     preparedFor: recipientLine(recipient),
     headline: THESIS.headline,
     thesis: THESIS.brief,
   };
 
-  const raise = [
-    { k: 'Target / hard cap', v: `$${FUND.target}M / $${FUND.hardCap}M`, note: `${FUND.domicile} · ${FUND.termYears}-yr term`, tone: INK },
-    { k: 'Committed', v: money.m(FUND.committed * 1000), note: `${pctRaised}% of target · ${FUND.lpCount} LPs`, tone: VIOLET },
-    { k: 'Soft-circled', v: money.m(FUND.softCircled * 1000), note: 'Indications, not commitments', tone: INK },
-    { k: 'Capacity remaining', v: `$${M.capacityRemainingM}M`, note: `Median ticket ${money.k(FUND.medianTicketK)}`, tone: INK },
-    { k: 'First close', v: FUND.firstClose, note: `$${FUND.minCloseM}M minimum · rolling after`, tone: INK },
-  ];
+  // The headline every reader sees: the target and the close status. A
+  // committed LP's read adds the raise, in the page's own words.
+  const targetCell = { k: 'Target', v: F.target.text, note: `${FUND.domicile} · ${FUND.termYears}-yr term`, tone: INK };
+  const closeCell = {
+    k: 'First close',
+    v: F.close.label.replace(/ \(.*$/, ''),
+    note: F.close.passed ? 'Date passed; outcome not recorded' : 'Scheduled',
+    tone: INK,
+  };
+  const raise = F.raise
+    ? [
+      targetCell,
+      {
+        k: 'Committed',
+        v: F.raise.committed,
+        note: `${F.raise.pctOfTarget != null ? `${F.raise.pctOfTarget}% of target · ` : ''}${F.raise.lpCount} LPs`,
+        tone: VIOLET,
+      },
+      { k: 'Soft-circled', v: F.raise.softCircled, note: 'Indications, not commitments', tone: INK },
+      { k: 'Capacity remaining', v: F.raise.capacity, note: `Median ticket ${F.raise.median}`, tone: INK },
+      closeCell,
+    ]
+    : [targetCell, closeCell];
 
-  // Twelve rows; Target/hard cap is excluded upstream because the raise strip
-  // above already states it.
+  // Twelve rows; the target is page-only in the term list because the raise
+  // strip above already states it.
   const terms = fundTerms().filter((t) => t.brief).map(({ k, v }) => ({ k, v }));
 
   const tiers = TIERS.map((t) => ({ name: t.name, amount: t.amount, rights: t.rights, hl: !!t.hl }));
 
-  // The workspace's own hero stats and underwriting KPIs, in the design's
-  // six-tile grid. `deployed`, `reserve` and `followOns` were literals in the
-  // export (1.9 / 2.7 / 2) and are derived from the position list here, so a
-  // new position or follow-on moves them without anyone editing the brief.
+  // The workspace's hero stats, and for a committed LP its underwriting KPIs.
   const record = [
-    { k: 'Graduates to date', v: String(PROGRAM.graduates) },
-    { k: 'Incorporated on time', v: `${PROGRAM.onTimeIncorpPct}%` },
-    { k: 'Raised by alumni', v: money.m(PROGRAM.alumniRaisedM * 1000) },
-    { k: 'Capital deployed', v: money.m(M.investedK) },
-    { k: 'Reserve remaining', v: `$${M.reserveCloseM}M` },
-    { k: 'Follow-ons completed', v: String(M.followOnCount) },
+    { k: 'Graduates to date', v: P.graduates },
+    { k: 'Incorporated on time', v: P.onTime },
+    { k: 'Raised by alumni', v: P.alumni },
+    ...(F.portfolio
+      ? [
+        { k: 'Capital deployed', v: F.portfolio.invested },
+        { k: 'Reserve remaining', v: F.portfolio.reserve },
+        { k: 'Follow-ons completed', v: F.portfolio.followOns },
+      ]
+      : []),
   ];
-
-  const pipeline = COHORT_4.map((p) => ({
-    company: p.company,
-    sector: p.sector,
-    score: String(p.score),
-    scoreTone: SCORE_TONE(p.score),
-    revenue: p.revenueK == null ? '—' : `$${p.revenueK}K`,
-    ic: p.ic,
-    icPill: IC_PILL[p.ic] || IC_PILL.Track,
-  }));
 
   const providers = SERVICE_PROVIDERS.map(({ k, v }) => ({ k, v }));
 
@@ -126,9 +130,10 @@ export function fundBriefModel({ generatedAt, recipient } = {}) {
       + "through the fund's subscription documents and private placement memorandum.",
     gpName: 'Guillaume Lauzier · General Partner',
     gpContact: 'guillaume.lauzier@axal.vc · Responds within one business day',
-    // The workspace states this about its fund-level figures; a document that
-    // leaves the building has more need of it, not less.
-    provenance: 'Fund-level figures are operator-maintained, not live telemetry.',
+    // A document that leaves the building says where its figures came from.
+    provenance: F.portfolio
+      ? "Fund figures come from the fund's records; a figure with no record reads Not recorded."
+      : `Fund figures come from the fund's records. Committed capital, positions and marks are ${LP_ONLY_PHRASE}.`,
   };
 
   return {
@@ -138,7 +143,9 @@ export function fundBriefModel({ generatedAt, recipient } = {}) {
     terms,
     tiers,
     record,
-    pipeline,
+    // No store records the Cohort 4 pipeline (D6137), so the brief names no company.
+    pipeline: [],
+    pipelineEmpty: 'Not recorded — no store holds a Cohort 4 pipeline yet.',
     pipelineHeading: 'Current pipeline · Cohort 4',
     pipelineNote: `Demo day ${FUND.demoDay}`,
     providers,

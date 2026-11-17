@@ -1,84 +1,60 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Loader2, Save } from 'lucide-react';
-import { api } from '../../lib/api.js';
+import InvestorProfileReadState from './InvestorProfileReadState.jsx';
 import Card from './AccountCard.jsx';
+import InvestorProfileDetails from './InvestorProfileDetails.jsx';
 
-// The investor-profile PUT is full-replace on these JSON columns, so we resend
-// the fields this card doesn't edit (investor_type, ticket_band, contribute,
-// anti-thesis, value_weights). Onboarding-only fields (firm/accreditation/
-// LP intent/notes) are preserved server-side by the PUT's preserve-if-absent
-// path since we omit them here. Only investors (or anyone with a completed
-// profile) see it.
-export default function InvestorMyThesisCard({ flash, role, linked = false }) {
+// Positive thesis for investors and members with a completed investor profile.
+export default function InvestorMyThesisCard({ flash, role, investorProfile, linked = false }) {
   const { search } = useLocation();
   const from = new URLSearchParams(search).get('from');
   const returnLink = from === 'home' ? { to: '/studio', label: 'Back to Investor Home' }
     : from === 'deal-flow' ? { to: '/deals', label: 'Back to Deal flow' } : null;
   const cardRef = useRef(null);
   const [saved, setSaved] = useState(false);
-  const [profile, setProfile] = useState(undefined);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
+  const { profile, error, busy, saving, reload, save } = investorProfile;
+  const [draft, setDraft] = useState({});
 
   useEffect(() => {
     if (linked) cardRef.current?.scrollIntoView?.({ block: 'start' });
   }, [linked]);
 
-  useEffect(() => {
-    let cancelled = false;
-    api.getInvestorProfile()
-      .then(r => { if (!cancelled) setProfile(r.profile ?? null); })
-      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load'); });
-    return () => { cancelled = true; };
-  }, []);
-
   const isInvestor = String(role || '').toLowerCase() === 'investor';
   if (!linked && !isInvestor && !profile?.completed_at) return null;
-  if (err) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (profile === undefined) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><p role="status">Loading…</p></Card>;
+  if (error || profile === undefined) return (
+    <Card cardRef={cardRef} id="my-thesis" title="My thesis"><InvestorProfileReadState error={error} reload={reload} /></Card>
+  );
   if (!profile || (!isInvestor && !profile.completed_at)) return <Card cardRef={cardRef} id="my-thesis" title="My thesis"><p>No investor thesis is available for this account.</p></Card>;
 
   const SECTOR_OPTIONS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
   const STAGE_OPTIONS  = ['Pre-seed','Seed','Series A','Series B+','Growth'];
   const GEO_OPTIONS    = ['North America','Europe','LATAM','APAC','MENA','Africa'];
 
-  const sectors = profile.sectors || [];
-  const stages = profile.stages || [];
-  const geos = profile.geos || [];
+  const sectors = draft.sectors ?? profile.sectors ?? [];
+  const stages = draft.stages ?? profile.stages ?? [];
+  const geos = draft.geos ?? profile.geos ?? [];
   const antiSectors = profile.anti_thesis_sectors || [];
   const antiStages = profile.anti_thesis_stages || [];
 
   const toggle = (key, val) => {
-    const arr = (profile[key] || []).includes(val)
-      ? (profile[key] || []).filter(x => x !== val)
-      : [...(profile[key] || []), val];
     setSaved(false);
-    setProfile({ ...profile, [key]: arr });
+    setDraft((prev) => {
+      const selected = prev[key] ?? profile[key] ?? [];
+      const values = selected.includes(val) ? selected.filter(x => x !== val) : [...selected, val];
+      return { ...prev, [key]: values };
+    });
   };
 
-  const save = async () => {
-    setBusy(true);
+  const saveThesis = async () => {
     try {
-      const r = await api.saveInvestorProfile({
-        investor_type: profile.investor_type,
-        sectors: profile.sectors || [],
-        stages: profile.stages || [],
-        geos: profile.geos || [],
-        ticket_band: profile.ticket_band,
-        thesis_text: profile.thesis_text,
-        contribute_to_signals: profile.contribute_to_signals !== false,
-        anti_thesis_sectors: profile.anti_thesis_sectors || [],
-        anti_thesis_stages: profile.anti_thesis_stages || [],
-        value_weights: profile.value_weights || {},
-      });
-      setProfile(r.profile);
-      setSaved(true);
-      flash('Thesis saved');
-    } catch (e) {
-      flash(e.message || 'Failed to save', 'error');
-    } finally {
-      setBusy(false);
+      if (await save('thesis', draft)) {
+        setDraft({});
+        setSaved(true);
+        flash('Thesis saved');
+      }
+    } catch (err) {
+      flash(err.message || 'Failed to save', 'error');
     }
   };
 
@@ -100,7 +76,7 @@ export default function InvestorMyThesisCard({ flash, role, linked = false }) {
       cardRef={cardRef}
       id="my-thesis"
       title="My thesis"
-      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches."
+      description="The sectors, stages, geographies and free-text thesis we use to source deal flow and score founder matches, and the onboarding answers you can correct."
     >
       <div className="space-y-5">
         <div>
@@ -117,8 +93,12 @@ export default function InvestorMyThesisCard({ flash, role, linked = false }) {
         </div>
         <div>
           <label className="text-xs font-medium text-gray-700 block mb-1 dark:text-gray-300">Thesis (free text)</label>
-          <textarea rows={3} value={profile.thesis_text || ''} disabled={busy}
-            onChange={e => { setSaved(false); setProfile({ ...profile, thesis_text: e.target.value }); }}
+          <textarea rows={3} value={draft.thesis_text ?? profile.thesis_text ?? ''} disabled={busy}
+            onChange={e => {
+              const thesis_text = e.target.value;
+              setSaved(false);
+              setDraft((prev) => ({ ...prev, thesis_text }));
+            }}
             placeholder="What do you look for? What's your edge?"
             className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100" />
         </div>
@@ -131,12 +111,13 @@ export default function InvestorMyThesisCard({ flash, role, linked = false }) {
         )}
         <div className="flex flex-wrap items-center justify-end gap-2">
           {saved && returnLink && <Link className="text-sm font-medium text-violet-700 underline dark:text-violet-300" to={returnLink.to}>{returnLink.label}</Link>}
-          <button onClick={save} disabled={busy}
+          <button type="button" onClick={saveThesis} disabled={busy}
             className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
-            {busy ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-            {busy ? 'Saving…' : 'Save thesis'}
+            {saving === 'thesis' ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+            {saving === 'thesis' ? 'Saving…' : 'Save thesis'}
           </button>
         </div>
+        <InvestorProfileDetails profile={profile} busy={busy} saving={saving} save={save} flash={flash} />
       </div>
     </Card>
   );

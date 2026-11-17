@@ -5,8 +5,10 @@
  * bands, the three bottom sections (D697) and its record pages.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { cyclesApi } from '../../../lib/api/cycles';
+import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
+import { cycleValidateApi } from '../../../lib/api/cycleValidate';
 import { validateExportsApi } from '../../../lib/api/founderValidateExports';
 import { useRailOption } from '../../../ui/railCrumbs';
 import Lightbox from '../../../ui/Lightbox';
@@ -17,13 +19,19 @@ import RecordView from '../RecordView';
 import FromLovable from '../FromLovable';
 import ValidateFromGoogle from '../ValidateFromGoogle';
 import FromNotion from '../FromNotion';
+import MarketReadiness, { sizingHref } from '../ValidateMarketReadiness';
+import MarketFigureHistory from '../MarketFigureHistory';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from '../ValidatePosthog';
 import NotionInterviewImport from '../NotionInterviewImport';
-import { InterviewsSection, PainThemesSection, HypothesesSection } from '../ValidateSections';
+import { InterviewsSection, PainThemesSection, HypothesesSection, SegmentsSection } from '../ValidateSections';
 import { formFor } from '../forms';
 import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
+import WaitlistBar from '../ValidateWaitlistBar.jsx';
+import { PrepareQuestions } from '../InterviewGuide.jsx';
+import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
+import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 
 // D4574 (#4574, H5): Validate's steps, each behind its own lazy boundary.
 const InterviewRecord = lazyStep(() => import('../../founder/InterviewReviewPage'));
@@ -149,10 +157,25 @@ const validate = {
   Mount: ValidateMount,
   action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
   tools: toFnMap({
-    'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
+    // D6010 (#6010): Size the market opens the sizing tool for this venture, to any founder of it.
+    'market-intelligence': (q) => {
+      const venture = new URLSearchParams(projectSearch(q)).get('project_id');
+      return [
+        { label: 'Open the competitor tracker', href: '/build/competitors' },
+        { label: 'Size the market', href: venture ? sizingHref(venture) : '/validate/market-intelligence/sizing' },
+      ];
+    },
+    'demand-signals': (search) => ({ label: 'Open the landing-page builder', href: '/build/brand' + projectSearch(search) }),
   }),
   add: toFnMap({
-    'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
+    // D6001 (#6001): Record a session stays first (the zero state's one action); a writer also gets Add a lead.
+    'customer-research': (q, open, ctx) => [{ text: 'Record a session', href: `/validate/record${q}`, onOpen: open },
+      addLeadButton(ctx, cyclesWrite)].filter(Boolean),
+  }),
+  // D6001 (#6001): Move stage on each interview row, the record's `set-stage`, so the move is in its activity.
+  rowActions: toFnMap({
+    'customer-research': (row, ctx) => moveStageAction(row, ctx,
+      (projectId, id, body) => cyclesApi.recordAction('validate', projectId, 'customer-research', id, 'set-stage', body)),
   }),
   // The AI fill bands the Validate desk carried, on the module they fill.
   fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
@@ -164,30 +187,48 @@ const validate = {
     // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
     'customer-research': (data, ctx) => (
       <>
+        {/* D6008 (#6008): Prepare questions, the interview guide as a sheet (D5995 V27 B). */}
+        <PrepareQuestions projectId={ctx.projectId} />
         <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
           onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
           onExport={() => api.exportValidateInterviews(ctx.projectId)} />
+        {/* D6001 (#6001): the customer waitlist's sign-ups, where the card's "Invite the N new waitlist leads" lands. */}
+        <WaitlistLeads projectId={ctx.projectId} canWrite={data?.parts?.can_write === true} projectSearch={ctx.projectId ? `?project_id=${encodeURIComponent(ctx.projectId)}` : ''}
+          load={() => api.listWaitlistCustomers(ctx.projectId)}
+          invite={(id) => api.inviteWaitlistCustomer(ctx.projectId, id)}
+          followUp={(id) => api.followUpWaitlistCustomer(ctx.projectId, id)} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
         <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
       </>
     ),
+    // D6010 (#6010): the stored positioning and assumptions marks and the sources, under the table.
     // D1087 (#2952): research pages from Notion, as sources (title and link).
     // D6019 (#6019): each of the next three modules' parts opens with its Export.
-    'market-intelligence': (_data, ctx) => (
+    'market-intelligence': (data, ctx) => (
       <>
         <ModuleExport slug="market-intelligence" projectId={ctx.projectId} />
+        <MarketReadiness projectId={ctx.projectId} />
         <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />
+        {/* D6011 (#6011): every change to the three figures, with who and when. */}
+        <MarketFigureHistory part={data?.parts?.market_history} />
       </>
     ),
     'demand-signals': (data, ctx) => (
       <>
+        <WaitlistBar key={ctx.projectId} projectId={ctx.projectId}
+          value={data?.parts?.waitlist_bar ?? null} unreadable={data?.parts?.waitlist_bar_unreadable === true}
+          canWrite={data?.parts?.can_write === true} reload={ctx.reload} />
+        {data?.parts?.lovable_connected && <Link className={`${MODULE_LINK_CLASS} min-h-11 content-center`}
+          to={'/validate/experiments' + projectSearch(ctx.search)}>Open Lovable sign-ups</Link>}
         <ModuleExport slug="demand-signals" projectId={ctx.projectId} />
         <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
         {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}
         <ValidateDemandPosthog projectId={ctx.projectId} />
       </>
     ),
+    'ideal-customer-profile': (data, ctx) => <SegmentsSection key={ctx.projectId} parts={data?.parts}
+      onAssign={(interviewId, segmentId) => cycleValidateApi.setInterviewSegment(ctx.projectId, interviewId, segmentId).then(ctx.reload)} />,
     'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
       onExport={() => api.exportValidatePainMap(ctx.projectId)}
       // #1692's `attach` on the theme record, so the theme's activity logs it.
