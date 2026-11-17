@@ -560,6 +560,30 @@ export const REVENUE_PER_SUBSIDIARY_UNAVAILABLE = {
     + 'total per subsidiary.',
 } as const;
 
+/**
+ * D5947 — the same field, worded for what a coverage read found. The sentence
+ * above says every stream arrives unmeasured, which stays true for a period in
+ * which no licence reported a measured stream (every branch today: none
+ * receives Stripe webhooks) and is kept for it word for word. Once one licence
+ * reports a measured stream it is false, and this returns the coverage read's
+ * own sentence instead. Revenue per subsidiary stays `available: false` either
+ * way: a measured stream is not a revenue total, and none is summed.
+ */
+export function revenuePerSubsidiaryUnavailable(
+  coverage: {
+    available: boolean; revenue_reason?: string; by_licence?: { streams_measurable: number }[];
+  } | null | undefined,
+): { revenue_per_subsidiary_available: false; revenue_per_subsidiary_reason: string } {
+  const measured = !!coverage?.available && !!coverage.revenue_reason
+    && (coverage.by_licence ?? []).some((l) => l.streams_measurable > 0);
+  return {
+    revenue_per_subsidiary_available: false,
+    revenue_per_subsidiary_reason: measured
+      ? String(coverage!.revenue_reason)
+      : REVENUE_PER_SUBSIDIARY_UNAVAILABLE.revenue_per_subsidiary_reason,
+  };
+}
+
 export const MTD_REVENUE_UNAVAILABLE = {
   mtd_revenue_available: false,
   mtd_revenue_reason:

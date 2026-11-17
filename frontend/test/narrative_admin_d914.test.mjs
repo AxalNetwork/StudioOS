@@ -303,10 +303,11 @@ test('merged Versions keeps reads visible to admins and creation controls for fo
 
 
 // #3712: the actual New version form, loader and recovery shared with CycleRoute.
-function versionDialog(user, onSubmit = () => {}) {
+// D5074 part 7: `caps` is the module read's narrative map; without one the account words the dialog.
+function versionDialog(user, onSubmit = () => {}, caps = undefined) {
   const form = formsFor('raise', 'investor-narrative')[0];
   return h(FormLightbox, { form, cycle: 'raise', slug: 'investor-narrative',
-    ...narrativeFormAccess(1, user), loadOptions: () => form.loadOptions(cyclesWrite, 1), onSubmit, onClose() {} });
+    ...narrativeFormAccess(1, caps, user), loadOptions: () => form.loadOptions(cyclesWrite, 1), onSubmit, onClose() {} });
 }
 
 test('#3712 founder New version reads choices without a reason, including a founder shell preview', async () => {
@@ -351,4 +352,17 @@ test('#3712 admin New version collects a reason, retries the read and never perm
       assert.equal(submitted, 0);
     } finally { await page.close(); }
   }
+});
+
+
+test('D5074 part 7: the module read\'s map decides the New version dialog over the account; no map falls back to it', () => {
+  const FOUNDER_MAP = { edit: true, check: true, note: true, end_read: false, admin_reason_required: false };
+  const ADMIN_MAP = { edit: false, check: false, note: true, end_read: true, admin_reason_required: true };
+  assert.deepEqual(narrativeFormAccess(1, FOUNDER_MAP, { role: 'admin' }), {}, 'a founder\'s map opens the dialog, whatever the account');
+  assert.ok(narrativeFormAccess(1, ADMIN_MAP, { role: 'founder' }).readOnly, 'an admin\'s map makes it read only, whatever the account');
+  assert.ok(narrativeFormAccess(1, { edit: 'true' }, { role: 'founder' }).readOnly, 'a map without a true edit allows nothing');
+  assert.deepEqual(narrativeFormAccess(1, undefined, { role: 'founder' }), {}, 'no map: a founder\'s account is as before');
+  assert.ok(narrativeFormAccess(1, undefined, { role: 'admin' }).readOnly, 'no map: an admin\'s refused read words the dialog');
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  assert.match(route, /narrativeFormAccess\(projectId, module\?\.parts\?\.narrative\?\.capabilities, user\)/);
 });

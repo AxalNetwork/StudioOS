@@ -213,6 +213,7 @@ type EventRow = {
   recurrence: string; source: string;
   reminders_sent_json: string;
   created_by_user_id: number | null;
+  kind?: string | null;
   created_at: string; updated_at: string;
 };
 
@@ -389,6 +390,8 @@ compliance.post('/events', async (c) => {
   }
   if (!jurisdiction) jurisdiction = 'Unspecified';
   const eventType = String(body?.event_type || 'other');
+  // D6872: a compliance or other deadline records its kind, so Grow reads it back as that kind.
+  const kind = eventType === 'compliance' || eventType === 'other' ? eventType : null;
   const description = body?.description ?? null;
   const recurrence = String(body?.recurrence || 'annual');
 
@@ -397,9 +400,9 @@ compliance.post('/events', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO compliance_events
          (project_id, entity_id, jurisdiction, event_type, title, description,
-          due_date, recurrence, source, created_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?)`,
-    ).bind(projectId, entityId, jurisdiction, eventType, title, description, due, recurrence, user.id).run();
+          due_date, recurrence, source, created_by_user_id, kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+    ).bind(projectId, entityId, jurisdiction, eventType, title, description, due, recurrence, user.id, kind).run();
   } catch (e: any) {
     // Duplicate — fall through to read existing.
   }
@@ -479,12 +482,12 @@ compliance.patch('/events/:id', async (c) => {
       await c.env.DB.prepare(
         `INSERT INTO compliance_events
            (project_id, entity_id, jurisdiction, event_type, title, description,
-            due_date, recurrence, source, created_by_user_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            due_date, recurrence, source, created_by_user_id, kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         event.project_id, event.entity_id, event.jurisdiction, event.event_type,
         event.title, event.description, nextIso, event.recurrence, event.source,
-        event.created_by_user_id ?? user.id,
+        event.created_by_user_id ?? user.id, event.kind ?? null,
       ).run();
     } catch {
       // Already seeded for next year — ignore the UNIQUE collision.
