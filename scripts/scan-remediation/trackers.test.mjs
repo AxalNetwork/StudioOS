@@ -74,7 +74,8 @@ test('new issues contain only the opaque alert link; repeat runs converge throug
   const { issue, created, actionable } = await trackers.ensure(42)
   assert.ok(created && actionable)
   assert.deepEqual(issue.labels, [{ name: 'bug' }])
-  assert.ok(issue.body.includes(url))
+  // The exact link as a whole token of the body: not a substring test (CodeQL: incomplete URL sanitization).
+  assert.ok(issue.body.split(/[\s()<>\[\]]/).includes(url))
   await trackers.markReady(issue)
   await trackers.linkPull(issue, 99)
   await trackers.linkPull(issue, 99)
@@ -177,7 +178,7 @@ test('a prepared branch receives one safe comparison link and becomes ready when
     await t.linkPrepared(issue, branch)
     const comments = f.comments.get('/issues/123/comments')
     assert.equal(comments.length, 1)
-    assert.ok(comments[0].body.includes('https://github.com/AxalNetwork/StudioOS/compare/main...' + branch + ')'))
+    assert.ok(comments[0].body.split(/[\s()<>\[\]]/).includes('https://github.com/AxalNetwork/StudioOS/compare/main...' + branch))
     assert.ok(comments[0].body.includes('later run'))
     assert.deepEqual(f.issues.get(123).labels.map(label => label.name), ['bug', 'state:ready'])
     assert.equal(f.issues.get(123).state, 'open')
