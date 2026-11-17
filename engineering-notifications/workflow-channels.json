@@ -252,6 +252,11 @@
       "channel": "#axalvc-actions-runner-benchmark"
     },
     {
+      "id": null,
+      "path": ".github/workflows/scan-remediation.yml",
+      "channel": "#axalvc-actions-scan-remediation"
+    },
+    {
       "id": 412401690,
       "path": ".github/workflows/schema-rehearsal.yml",
       "channel": "#axalvc-actions-schema-rehearsal"
