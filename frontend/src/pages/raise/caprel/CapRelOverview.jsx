@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { derivedSummary, summarySource } from '../../../lib/derivedSummary.js';
-import { raiseReadState, raiseToolRefusal } from '../../../lib/raiseErrors.js';
+import { raiseToolRefusal } from '../../../lib/raiseErrors.js';
 import { Unreadable } from '../../../ui';
-import { useProspects } from './CapRelPipeline';
-import { HOME_PATH, MOVED, NOT_YET, REFUSED_LINE, ROUND_REFUSED_LINE, TABS, centsText, needsYou, overviewFigures, tabSearch } from './capRelModel';
+import { useCommitments, useProspects } from './capRelHomeRead.js';
+import {
+  HOME_PATH, MOVED, REFUSED_LINE, ROUND_REFUSED_LINE, START_LINE, START_READER, START_TITLE, TABS, centsText, isFirstUse, needsYou,
+  overviewFigures, setupActions, tabSearch,
+} from './capRelModel';
 
 /**
  * D1192 (#3126) — Capital relationships' Overview blocks (CRL1, CRL19 in the
@@ -13,6 +15,10 @@ import { HOME_PATH, MOVED, NOT_YET, REFUSED_LINE, ROUND_REFUSED_LINE, TABS, cent
  * notice (CRL13). The round at a glance comes from D1190's commitments read;
  * Needs you, the pipeline by stage and the follow-ups from the prospects.
  * Each block answers alone: one that fails says so with Try again.
+ *
+ * D5081 part 2 (#5081, RA-22): these blocks are the page. CycleRoute draws no generic "at a glance",
+ * This venture, stage counts or records under them (`owned`), hands them its one pair of reads
+ * (`useCapRelHome`, `home`), and on first use they collapse to the start card and its set-up actions.
  */
 
 const CARD = 'flex min-w-0 flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900';
@@ -20,6 +26,8 @@ const H3 = 'm-0 text-[13px] font-bold text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
 const LINK = 'font-semibold text-axal-violet hover:underline dark:text-violet-300';
+const BTN_P = 'inline-flex min-h-11 items-center rounded-lg bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:bg-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 lg:min-h-9 no-underline dark:bg-violet-600 dark:hover:bg-violet-500';
+const BTN_S = 'inline-flex min-h-11 items-center rounded-lg border border-axal-hairline bg-white px-3.5 text-[13px] font-semibold text-axal-ink hover:bg-axal-ground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600 lg:min-h-9 no-underline dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const NR = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
 const hrefOf = (tab, search) => `${HOME_PATH}${TABS.find((t) => t.id === tab)?.path || ''}${tabSearch(search)}`;
@@ -36,21 +44,6 @@ export function MovedNotice() {
       <button type="button" className={`${LINK} text-[12px]`} onClick={() => setGone(true)} data-testid="caprel-moved-dismiss">Dismiss</button>
     </div>
   );
-}
-
-function useCommitments(projectId) {
-  const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', data: null, projectId });
-  useEffect(() => {
-    let alive = true;
-    setRead((current) => ({ status: 'loading', data: current.projectId === projectId ? current.data : null, projectId }));
-    Promise.resolve().then(() => capitalRelationshipsApi.commitments(projectId))
-      .then((data) => { if (alive) setRead({ status: 'ready', data, projectId }); })
-      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), data: null, projectId }); });
-    return () => { alive = false; };
-  }, [projectId, n]);
-  const own = read.projectId === projectId ? read : { status: 'loading', data: null };
-  return { ...own, reload: () => setN((x) => x + 1) };
 }
 
 function RoundBlock({ read }) {
@@ -81,9 +74,12 @@ function RoundBlock({ read }) {
 }
 
 /** Overview's blocks, under its tab bar. */
-export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused = null }) {
-  const read = useProspects(projectId);
-  const commitments = useCommitments(projectId);
+export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused = null, home = null, works = false }) {
+  // D5081 part 2: CycleRoute's reads when it holds them, so the header's action and these blocks read once.
+  const ownProspects = useProspects(home ? null : projectId);
+  const ownCommitments = useCommitments(home ? null : projectId);
+  const read = home ? home.prospects : ownProspects;
+  const commitments = home ? home.commitments : ownCommitments;
   const f = read.items ? overviewFigures(read.items, today) : null;
   const needs = f ? needsYou(f) : [];
   const needsSummary = [read.status, commitments.status].includes('loading') ? null : derivedSummary(needs, [
@@ -106,6 +102,30 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
       <div className="flex flex-col gap-3.5" data-testid="caprel-overview">
         <p className={`m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3 text-[13px] ${INK} dark:border-gray-800 dark:bg-gray-900`}
           role="status" data-testid="caprel-overview-refused">{REFUSED_LINE}</p>
+      </div>
+    );
+  }
+  // D5081 part 2 (RA-22 B): no investor and no amount recorded is first use: the start card and its set-up
+  // actions, and no zero-filled block. Until the commitments read answers, one placeholder, not the blocks.
+  if (read.status === 'ready' && read.items?.length === 0 && commitments.status === 'loading') {
+    return <div className="flex flex-col gap-3.5" data-testid="caprel-overview"><div className="h-28 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="caprel-ov-start-loading" /></div>;
+  }
+  if (isFirstUse({ prospects: read, commitments })) {
+    const actions = setupActions({ works, search });
+    return (
+      <div className="flex flex-col gap-3.5" data-testid="caprel-overview">
+        <section className={`${CARD} items-start gap-2.5 px-6 py-6`} data-testid="caprel-ov-start">
+          <h2 className={`m-0 text-[18px] font-extrabold ${INK}`}>{START_TITLE}</h2>
+          <p className={`m-0 text-[13px] ${MUTED}`}>{actions.length ? START_LINE : START_READER}</p>
+          {actions.length ? (
+            <div className="flex flex-wrap gap-2">
+              {actions.map((a, i) => (
+                <Link key={a.key} to={a.href} data-testid={`caprel-ov-start-${a.key}`}
+                  className={i === 0 ? BTN_P : BTN_S}>{a.label}</Link>
+              ))}
+            </div>
+          ) : null}
+        </section>
       </div>
     );
   }
@@ -154,11 +174,10 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
               ))}
             </ul>
           ) : null}
-          {f && f.total ? <p className={`m-0 text-[12px] ${MUTED}`}>Against 30 days ago: not recorded. The pipeline’s stage history is not read here yet.</p> : null}
         </section>
       </div>
       <div className="grid gap-3.5 lg:grid-cols-3">
-        <section className={`${CARD} lg:col-span-2`} data-testid="caprel-ov-followups">
+        <section className={`${CARD} lg:col-span-3`} data-testid="caprel-ov-followups">
           <h3 className={H3}>Follow-ups</h3>
           {failed ? <Unreadable what="Your follow-ups" claim="This is not a claim that none are due." onRetry={read.reload} /> : null}
           {f && !f.followUps.length ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No next step has a date yet.</p> : null}
@@ -172,11 +191,6 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
               ))}
             </ul>
           ) : null}
-        </section>
-        <section className={CARD} data-testid="caprel-ov-waits">
-          <h3 className={H3}>The next meetings, recent activity, and fit</h3>
-          <span className={NR}>{NOT_YET}</span>
-          <p className={`m-0 text-[12.5px] ${MUTED}`}>Upcoming meetings are on your Calendar as investor meetings. One timeline across every investor, and fit across the pipeline, come with Activity and Match.</p>
         </section>
       </div>
     </div>

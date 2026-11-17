@@ -187,6 +187,35 @@ export function articleStage(a) {
 }
 
 /**
+ * D4826 part 2 (#4826): THE SHELF'S FILTER CHIPS, as EX-11 draws them —
+ * `All · Needs you · With editors · Published`. Each chip is a set of the
+ * states above, so a chip only collects pieces whose own pill says why they
+ * are there:
+ *
+ *   · Needs you     — the writer's move: Draft, Changes requested;
+ *   · With editors  — an editor's move: Submitted, In review, and Approved with
+ *                     no time set (an editor publishes it);
+ *   · Published     — Published.
+ *
+ * Scheduled (it goes public by itself), Not accepted (closed until the writer
+ * chooses to revise) and a state this page has no words for are under All
+ * only. The Worker counts the same sets over the whole shelf
+ * (`GET /api/advisors/me/thinking`, `counts`), so a chip's figure is never
+ * the loaded page's.
+ */
+export const THINKING_VIEWS = Object.freeze({
+  needs_you: Object.freeze(['draft', 'changes_requested']),
+  with_editors: Object.freeze(['submitted', 'in_review', 'approved']),
+  published: Object.freeze(['published']),
+});
+
+/** Whether one piece belongs under a chip. `all` keeps every piece. */
+export function inThinkingView(a, view) {
+  const keys = THINKING_VIEWS[view];
+  return keys ? keys.includes(stageKey(a)) : true;
+}
+
+/**
  * D4826 (#4826): the state an EXPORT row carries — the same words the shelf's
  * pill shows. The export used to send the column value (`changes_requested`,
  * `in_review`), so the one artefact a writer takes away named states in the

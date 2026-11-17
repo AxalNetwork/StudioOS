@@ -6,15 +6,33 @@
 // drawing code from lib/fundBriefPdf.js against a measuring stub (see
 // _pdf-stub.mjs) and assert the page still closes.
 //
-// They also pin the things that would push it over: a longer thesis, an extra
-// Cohort 4 company, an extra service provider. Each of those is a plausible
-// edit, and each is caught here rather than in someone's inbox.
+// They also pin the things that would push it over: a longer thesis, a
+// committed LP's full raise strip and six record tiles (D6137), an extra
+// service provider. Each of those is a plausible edit, and each is caught here
+// rather than in someone's inbox.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPdfStub } from './_pdf-stub.mjs';
 import { renderFundBrief, BRIEF_BOARD } from '../src/lib/fundBriefPdf.js';
 import { fundBriefModel } from '../src/lib/fundBriefViewModel.js';
-import { COHORT_4, SERVICE_PROVIDERS } from '../src/lib/spinoutFundModel.js';
+import { SERVICE_PROVIDERS } from '../src/lib/spinoutFundModel.js';
+
+/** A committed LP's read (D6137): every LP key present, every figure recorded. */
+const fig = (value) => ({ available: true, value });
+const LP_READ = {
+  program: { available: false },
+  fund: {
+    available: true,
+    target: fig(12_000_000),
+    close: { first_close_date: '2026-09-15', date_passed: true, outcome_recorded: false, outcome: null },
+    raise: { available: true, committed: 3_000_000, soft_circled: 500_000, lp_count: 7, median_commitment: 250_000 },
+    portfolio: {
+      available: true, positions: fig(3), invested: fig(450_000), held: fig(600_000),
+      follow_ons: { available: true, count: 1, amount: 50_000 }, reserve: { available: false, value: null },
+      gross_moic: fig(1.33), as_of: { available: true, value: '2026-09-30' },
+    },
+  },
+};
 
 const PT = 0.75;                    // one design px, in points
 const PAGE_H_PT = BRIEF_BOARD.h * PT; // 792 — letter portrait
@@ -107,15 +125,22 @@ test('nothing is drawn off the left edge or above the page', () => {
 
 /* -------------------------------------------------- the edits that would break it */
 
-test('one more Cohort 4 company still fits', () => {
-  COHORT_4.push({ company: 'Northgate Fabrication', sector: 'Advanced manufacturing', score: 66, revenueK: 7.4, ic: 'Watch', allocDefault: 5 });
-  try {
-    const { contentBottom, bottom, footerTop } = layout();
-    assert.ok(contentBottom <= PAGE_H_PT, 'a seventh pipeline row overflows the page');
-    assert.ok(bottom < footerTop, 'a seventh pipeline row pushes the process row into the footer');
-  } finally {
-    COHORT_4.pop();
-  }
+test('D6137: a committed LP\'s brief (five raise cells, six record tiles) still fits', () => {
+  const { doc, vm, contentBottom, bottom, footerTop } = layout({ metrics: LP_READ });
+  assert.equal(vm.raise.length, 5);
+  assert.equal(vm.record.length, 6);
+  assert.ok(contentBottom <= PAGE_H_PT, 'the LP brief overflows the page');
+  assert.ok(bottom < footerTop, 'the LP brief pushes the process row into the footer');
+  const drawn = doc.calls.filter((c) => c.op === 'text').map((c) => c.text).join(' | ');
+  for (const r of [...vm.raise, ...vm.record]) assert.ok(drawn.includes(r.v), `"${r.k}: ${r.v}" was never drawn`);
+});
+
+test('D6137: the empty pipeline is drawn as its Not recorded sentence', () => {
+  const { doc, vm } = layout();
+  const drawn = doc.calls.filter((c) => c.op === 'text').map((c) => c.text).join(' ');
+  assert.deepEqual(vm.pipeline, []);
+  assert.ok(drawn.includes('Not recorded'), 'the pipeline says it is not recorded');
+  assert.ok(!drawn.includes('COMPANY'), 'no empty table header is drawn');
 });
 
 test('one more service provider still fits', () => {

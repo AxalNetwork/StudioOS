@@ -516,3 +516,41 @@ test('5: an advisor reads the lists, but feedback rows carry no from_name for a 
   // D889 (#2438): a partner with no tie is refused like any outsider.
   for (const who of [OTHER, PARTNER]) assert.equal((await list(f, 'product-improvement', '', who)).status, 403, `outsider ${who}`);
 });
+
+// ---------------------------------------------------------------------------
+// D6122 (#6122, GR-21, GR-24) — Company's due strip, Repeats, and how a checklist item ticks
+// ---------------------------------------------------------------------------
+
+test('D6122: a done or snoozed obligation is in no due window; the strip counts every row whatever the filter', async () => {
+  const f = fixture();
+  const add = (title: string, at: number) => grow(f, FOUNDER, 'POST', '/obligations', { title, kind: 'compliance', due_at: day(at) });
+  await add('Missed', -3);
+  await add('Soon', 5);
+  const snoozed = (await add('Snoozed soon', 6)).body.id;
+  const finished = (await add('Done soon', 7)).body.id;
+  await add('Quarter', 60);
+  await add('Later', 120);
+  assert.equal((await grow(f, FOUNDER, 'PATCH', `/obligations/${snoozed}`, { status: 'snoozed' })).status, 200);
+  assert.equal((await grow(f, FOUNDER, 'PATCH', `/obligations/${finished}`, { status: 'done' })).status, 200);
+  const all = (await list(f, 'durable-company-building')).body;
+  assert.deepEqual(all.records.cols, ['Obligation', 'Kind', 'Due', 'Owner', 'State', 'Repeats']);
+  const win = Object.fromEntries(all.records.rows.map((r: any) => [r.title, r.due_window]));
+  assert.deepEqual(win, { Missed: 'overdue', Soon: 'next_30', 'Snoozed soon': null, 'Done soon': null, Quarter: 'next_90', Later: 'later' });
+  assert.deepEqual(all.parts.due_counts, { overdue: 1, next_30: 1, next_90: 1, later: 1, none: 2 });
+  assert.equal(all.parts.due_on, day(0));
+  // The strip's counts are the whole list's, never the filtered page's.
+  const filtered = (await list(f, 'durable-company-building', `&filter=${encodeURIComponent('due_window:overdue')}`)).body;
+  assert.deepEqual(filtered.records.rows.map((r: any) => r.title), ['Missed']);
+  assert.deepEqual(filtered.parts.due_counts, all.parts.due_counts);
+});
+
+test('D6122: each checklist item says what ticks it: the Lab, Mercury or a hand', async () => {
+  const f = fixture();
+  const items = (await list(f, 'durable-company-building')).body.parts.checklist;
+  const by = Object.fromEntries(items.map((i: any) => [i.key, i.ticks]));
+  assert.equal(by.ein_received, 'lab');
+  assert.equal(by.data_room_built, 'lab');
+  assert.equal(by.key_person_cover, 'hand');
+  assert.equal(by.board_cadence, 'hand');
+  assert.ok(items.every((i: any) => ['lab', 'hand', 'mercury'].includes(i.ticks)), 'every item names what ticks it');
+});

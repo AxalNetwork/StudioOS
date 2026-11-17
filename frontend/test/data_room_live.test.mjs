@@ -112,8 +112,11 @@ test('the R2 key is derived, never taken from the request', () => {
   assert.match(w, /const key = `data-room\/\$\{project\.uid\}\/\$\{uid\}`/);
   assert.ok(!/body\.r2_key|body\.key\b/.test(w),
     'a caller-supplied key is a path-traversal write into another project');
-  // And deletion only touches an object inside this project's prefix.
-  assert.match(w, /file\.r2_key\.startsWith\(`data-room\/\$\{project\.uid\}\/`\)/);
+  // And deletion only touches an object inside this project's prefix. D6073: deletion is the
+  // Trash purge (Delete now and the 30-day sweep), in services/dataRoomTrash.ts.
+  const purge = read('cloudflare-worker/src/services/dataRoomTrash.ts');
+  assert.match(purge, /const prefix = `data-room\/\$\{a\.project\.uid\}\/`;/);
+  assert.match(purge, /\.filter\(\(k\) => typeof k === 'string' && k\.startsWith\(prefix\)\)/);
 });
 
 test('the UI does not claim a watermark', () => {

@@ -169,7 +169,8 @@ export function closingRows(reads, checklists = {}) {
     return {
       id,
       name: d.project_name || `Deal #${id}`,
-      href: `/deals/${id}`,
+      // D6866: Open lands on the deal's closing workspace (DX17 to DX22).
+      href: `/deals/closing?deal=${id}`,
       investment: investmentOf(d),
       progress: progressOf(checklists[id]),
       signatures,
