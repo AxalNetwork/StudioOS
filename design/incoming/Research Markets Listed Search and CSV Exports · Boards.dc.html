@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Listed Search and CSV Exports · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Markets · #7037 · Research v2 addendum to RS-03, beside #7036</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Markets — find a listed company by ticker, see which source each record came from, and export exactly the rows in view</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">The Listed companies tab of /research/markets and the CSV export it shares with the Market directory tab. It continues the Research v2 canvas (RS-03 shell: one breadcrumb, one title, one purpose line, Ask Eadwyn as the secondary, the one Eadwyn rail, the company switcher top-left) and its sibling #7036, which owns the directory layout. One labelled name or ticker search, a source choice (All sources, Signal companies, SEC EDGAR), a sort, a stated count of listing records and Previous / Next paging, all kept in the URL; any change returns to page 1. A ticker held by both stores is two rows, each labelled with its source and never merged. SEC EDGAR rows say Not recorded for what EDGAR does not hold. Export says what it writes: “Export this page · 14 rows” for listings, “Export filtered markets · 6 rows” for the directory, in the order shown; a view with no rows or a failed read offers no file. States follow Platform States (D5129; a failed read says Unavailable). Violet dashed ◇ tags mark Worker work on #7037; amber ⚑ tags mark the two owner questions, drawn as option A. Tags are annotations, not product copy.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · [Halden Grid], [Halden Storage Holdings], every bracketed company and ticker, every CIK, the 412 / 7,184 / 7,596 counts, the 186 markets and every date are fictional sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Markets Listed Search and CSV Exports Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RML-00', 'Journey, URL and annotation key', 'The main task frame by frame (the clickable path), the URL contract for tab, search, source, sort, country, sector and page, and the annotation key.', [W('RMLJ')]],
+      ['RML-02', 'Listed companies · default · desktop 1440', 'Markets with the two tabs, government ownership as a Not recorded note, the labelled search, the Source radio group and Sort. 7,596 listing records with the split by source and the 38 tickers in both. Rows 1–50, page 1 of 152, Export this page · 50 rows, and both source captions with EDGAR’s licence and link.', [F('RML02', false, 1240)]],
+      ['RML-03', 'A ticker in both sources', '“HLDN” returns 2 listing records: the signal company with its bands and the SEC EDGAR row with its CIK, each with its source and “Same ticker, 2 sources”. Details open on the EDGAR row shows CIK, other listings (None), the read date, licence and the source file link. The crop sets the two records side by side.', [F('RML03', false, 1080), C('RML03B', 'What each source records', 1240, 545)]],
+      ['RML-04', 'Page 2 after a search and a source filter', '“energy” · SEC EDGAR · name A to Z · page 2: rows 51–64 of 64. Columns Not recorded on every row fold into one line. Focus lands on the result heading after Next. Export this page · 14 rows, and its ready, completed, error, loading, zero-row and failed-read states.', [F('RML04', false, 1500), C('RML04B', 'Export states', 1380, 502)]],
+      ['RML-05', 'Country or sector filter', 'If offered, a country filter leaves SEC EDGAR out and the page says why: EDGAR records no country. The SEC EDGAR option is struck through with the reason, and Clear filters brings it back.', [C('RML05', false, 1380, 526)]],
+      ['RML-06', 'Market directory export after a sector search', '“storage”, company count highest first: 6 of 186 markets, 3,280 companies as the taxonomy counts them (not market size). Export filtered markets · 6 rows writes those rows in that order; the crop shows the file.', [F('RML06', false, 940), C('RML06B', 'The market file', 1040, 344)]],
+      ['RML-07', 'CSV column mapping', 'Both mappings field by field, with what each source row writes when a value is missing, and the page-2 listing file row for row.', [W('RML07'), C('RML07B', 'The listing file from page 2', 1520, 528)]],
+      ['RML-08', 'States', 'Default, loading, matches, no matches with Clear filters, failed read with Retry, nothing recorded yet and retrying on Listed companies; no match and failed read on the Market directory. Each marked Existing data.', [C('RML08', false, 1480, 815)]],
+      ['RML-09', 'Keyboard and focus', 'Tab order through tabs, search, source, sort, export, rows and paging; arrow keys inside the tabs and the source group; focus to the result heading after paging, Retry and Clear filters.', [C('RML09', false, 1380, 510)]],
+      ['RML-10', 'Phone 390', 'A · “HLDN” with company, ticker and source first and one record expanded. B · page 2 with a sticky pager and the export. C · the filters sheet, which returns to page 1 on Apply. D · the Market directory after “storage” with its export.', [P('RML10A', 'A · Ticker in both sources'), P('RML10B', 'B · Page 2'), P('RML10C', 'C · Filters sheet'), P('RML10D', 'D · Directory export')]],
+      ['RML-11', 'Dark', 'RML-04 and RML-10A on the dark tokens. Source labels, None, Not recorded and the focus ring keep their words and shapes.', [F('RML11', 'Page 2 · dark', 1500), P('RML11B', 'Phone · dark')]],
+      ['RML-H', 'Handoff', 'Checked on main, preserved, frontend only, the one Worker change, the two owner questions drawn as A, and accessibility.', [W('RMLH')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>
