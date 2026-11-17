@@ -208,10 +208,11 @@ export default function DealRoomPage() {
 
       {tabRow(deal.id)}
 
-      {tab === 'overview' && isInvestor && <YourPosition position={viewerCommitment(mine, { userId: user?.id, dealId: deal.id, firmId }, deal.currency || 'USD')} dealId={deal.id} onRetry={loadMine} />}
       {tab === 'overview' && (
         <>
-          <DealOverview deal={deal} investor={isInvestor} />
+          {/* D4815 part 41 (#5904): Your position sits in the Overview's grid, beside the investment case (DE04). */}
+          <DealOverview deal={deal} investor={isInvestor}
+            position={isInvestor ? <YourPosition position={viewerCommitment(mine, { userId: user?.id, dealId: deal.id, firmId }, deal.currency || 'USD')} dealId={deal.id} onRetry={loadMine} /> : null} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
