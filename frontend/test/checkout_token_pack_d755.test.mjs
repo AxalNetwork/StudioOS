@@ -368,20 +368,22 @@ async function pricingPacks() {
 async function pricingReadStates() {
   await withWorld(async w => {
     await w.mount(PACKS, '/pricing/products');
-    assert.match(w.text(), /Top-up isn't available yet\./);
+    // #7000: an empty list says no pack is offered, in its own words.
+    assert.match(w.text(), /No token packs are offered yet\./);
     assert.ok(!w.nodes().some(n => n.tagName==='A'));
   },{publicPacks:async()=>({packs:[]})});
   let n=0;
   await withWorld(async w => {
     await w.mount(PACKS, '/pricing/products');
-    assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
-    await w.click('Retry');
+    assert.match(w.text(), /Prices unavailable\./); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
+    assert.doesNotMatch(w.text(), /Loading token packs/);
+    await w.click('Try again');
     assert.match(w.text(), /\$25 of tokens/);
     assert.ok(w.nodes().some(n=>n.tagName==='A' && props(n).href==='/pricing?for=models&pack=pack25#add-tokens'));
   },{publicPacks:async()=>{if(n++===0)throw new Error('unavailable');return {packs:[PACK]};}});
   await withWorld(async w => {
     await w.mount(PACKS, '/pricing/products');
-    assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
+    assert.match(w.text(), /Prices unavailable\./); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
   },{publicPacks:async()=>({packs:[{...PACK,currency:'eur'}]})});
 }
 async function pricingVisitor() {
@@ -405,8 +407,8 @@ const mutations = [
   {name:"pack links lose their identifier",file:PACKS,before:"addTokensHref(pack.uid || pack.price_id)",after:"addTokensHref('wrong_pack')",check:pricingPacks},
   {name:"pack price becomes hardcoded",file:PACKS,before:"packLabel(pack.unit_amount)",after:"'$5 of tokens'",check:pricingPacks},
   {name:"pack price is admitted to the shared cart",file:PACKS,before:"packs.some(pack => pack.price_id === price.id)",after:"false",check:pricingPacks},
-  {name:"no packs are called unreadable",file:PACKS,before:"<p>{TOPUP_UNAVAILABLE}</p>",after:"<p>Unreadable</p>",check:pricingReadStates},
-  {name:"failed read is called empty",file:PACKS,before:"setReading({ status: 'unreadable', packs: [] });",after:"setReading({ status: 'ready', packs: [] });",check:pricingReadStates},
+  {name:"no packs are called unavailable",file:PACKS,before:"data-testid=\"token-packs-empty\">{PACKS_EMPTY}</p>",after:"data-testid=\"token-packs-empty\">{PACKS_UNAVAILABLE}</p>",check:pricingReadStates},
+  {name:"failed read is called empty",file:PACKS,before:"if (!stopped) setReading({ status: 'unavailable', packs: [], custom: null });",after:"if (!stopped) setReading({ status: 'empty', packs: [], custom: null });",check:pricingReadStates},
   {name:"retry never retries",file:PACKS,before:"setAttempt(n => n + 1)",after:"setAttempt(n => n)",check:pricingReadStates},
   {name:"visitor buys without signing in",file:PACKS,before:"href={user ?",after:"href={true ?",check:pricingVisitor},
   {name:"seller disappears",file:PACKS,before:"Sold by Axal VC Management LLC.",after:"",check:pricingPacks},

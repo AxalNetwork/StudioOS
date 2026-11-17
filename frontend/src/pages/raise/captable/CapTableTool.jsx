@@ -17,7 +17,7 @@ import InstrumentsTab from './InstrumentsTab';
 import OptionPoolTab from './OptionPoolTab';
 import { ScenarioRoute, ScenariosList } from './ScenariosPages';
 import {
-  HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, PHONE_ROOT, SLUG, TABS, TITLE,
+  HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, OWNED_NOTE, PHONE_ROOT, SLUG, TABS, TITLE,
   recordStanding, tabHref, tabSearch,
 } from './capTableModel';
 import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
@@ -79,9 +79,14 @@ export function CapTableMovedNotice() {
 /**
  * Overview's tab bar, the line that says which figures are the record's, and
  * (D1022) the record's blocks: the tool bar, Needs you, Who owns and the side
- * column. The module page's own Holders list and Planned round card follow, Modelled.
+ * column.
+ *
+ * D5081 part 3 (#5081, RA-20): the tool owns its page. CycleRoute passes `home`, the record read it holds for
+ * the header's Record an issuance (`useCapTableHome`), and draws no generic Holders list or Planned round card
+ * under the blocks, so the line names neither. Without `home` (a caller that is not CycleRoute's module page)
+ * the line is the old one.
  */
-export function CapTableHomeNav({ search = '', projectId = null, onRefused = null }) {
+export function CapTableHomeNav({ search = '', projectId = null, onRefused = null, home = null }) {
   // D1028 (CT23a): below 1024px every control here is a 44px target (`capTable.css`).
   const phone = usePhoneWidth();
   // D5079 (#5079): the note names the Holders list and the Planned round card
@@ -95,10 +100,10 @@ export function CapTableHomeNav({ search = '', projectId = null, onRefused = nul
       <CapTableTabBar active="overview" search={search} />
       {refused ? null : (
         <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
-          <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
+          <Tag kind="record" /> <Tag kind="modelled" /> {home ? OWNED_NOTE : HOME_NOTE}
         </p>
       )}
-      <CapTableOverview projectId={projectId} search={search} onRefused={report} />
+      <CapTableOverview projectId={projectId} search={search} onRefused={report} home={home} headerActs={!!home} />
     </div>
   );
 }
@@ -176,7 +181,8 @@ export function Table({ cols, rows, testId }) {
   );
 }
 
-export function CapTableTabPage({ tab, proposal = null, instrument = null, scenario = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+/** D5081 part 3: `home` is CycleRoute's record read; the drawers and dialogs over Overview draw from it too. */
+export function CapTableTabPage({ tab, proposal = null, instrument = null, scenario = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, home = null }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const overlay = tab === 'new' || tab === 'proposal';
@@ -190,10 +196,10 @@ export function CapTableTabPage({ tab, proposal = null, instrument = null, scena
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="captable-loading" />;
-  else if (holder != null) body = <CapTableOverview projectId={projectId} search={search} holderId={holder} />;
+  else if (holder != null) body = <CapTableOverview projectId={projectId} search={search} holderId={holder} home={home} headerActs={!!home} />;
   // D1025: `/new` is Record an issuance and `/proposal/<id>` a proposal's drawer, each over Overview.
-  else if (tab === 'new') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'record' }} />;
-  else if (tab === 'proposal') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'proposal', id: proposal }} />;
+  else if (tab === 'new') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'record' }} home={home} headerActs={!!home} />;
+  else if (tab === 'proposal') body = <CapTableOverview projectId={projectId} search={search} open={{ kind: 'proposal', id: proposal }} home={home} headerActs={!!home} />;
   else if (tab === 'history') body = <HistoryPage projectId={projectId} reload={reload} retry={retry} />;
   else if (tab === 'instruments' || onInstruments) body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} openUid={onInstruments ? instrument : null} />;
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
@@ -206,7 +212,7 @@ export function CapTableTabPage({ tab, proposal = null, instrument = null, scena
   // D1028 (CT23b): on a phone a holder is a page of its own, under a bar back to
   // the Cap table, with no tabs and nothing of Overview behind it.
   if (phone && holder != null && projectId && projectStatus !== 'unreadable') {
-    return <div className={root} data-testid="captable-holder-page"><CapTableOverview projectId={projectId} search={search} holderId={holder} /></div>;
+    return <div className={root} data-testid="captable-holder-page"><CapTableOverview projectId={projectId} search={search} holderId={holder} home={home} headerActs={!!home} /></div>;
   }
   return (
     <div className={root} data-testid={holder != null ? 'captable-holder-page' : overlay ? `captable-${tab}-over-overview` : onInstruments ? 'captable-instrument-over-instruments' : `captable-${tab}-page`}>

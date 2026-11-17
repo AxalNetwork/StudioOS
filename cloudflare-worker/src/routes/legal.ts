@@ -143,7 +143,40 @@ legal.get('/name-check', async (c) => {
 // Concise stub bodies for jurisdiction-specific docs. The richer drafts
 // live in the FastAPI backend; this worker variant keeps prod parity so
 // the wizard never silently fails for the user.
-const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
+/**
+ * Each jurisdiction's next steps after the documents (the wizard's handoff). D6690: exported so the
+ * catalogue's version 1 seed is generated from it (`scripts/build-formation-seed.mjs`); the text is
+ * unchanged. Delaware C-Corp has none.
+ */
+export const HANDOFF_NEXT_STEPS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  us_wy_ccorp: [
+    'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
+    'Appoint a Wyoming registered agent',
+    'Apply for an EIN with the IRS once the state approves the filing',
+  ],
+  uk_ltd: [
+    'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
+    'Register for Corporation Tax with HMRC within 3 months',
+    'Open a UK business bank account',
+  ],
+  sg_pte: [
+    'Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)',
+    'Engage a Singapore-resident director (or nominee director service)',
+    'Appoint a company secretary within 6 months',
+  ],
+  ee_oy: [
+    "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
+    'Engage a Company Service Provider for the registered address',
+    'File the OÜ via the Estonian Business Register e-portal',
+  ],
+  us_de_llc: [
+    'File the Certificate of Formation with the Delaware Division of Corporations',
+    'Apply for an EIN via IRS Form SS-4 (kit included)',
+    'Open a US business bank account',
+  ],
+});
+
+export const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
   certificate_of_incorporation_de: { title: 'Certificate of Incorporation (Delaware C-Corp)' },
   articles_of_incorporation_wy: { title: 'Articles of Incorporation (Wyoming C-Corp)' },
   bylaws: { title: 'Corporate Bylaws' },
@@ -167,7 +200,7 @@ const JURISDICTION_TEMPLATES: Record<string, { title: string }> = {
 // the D1 template store holds a counsel-approved, active body
 // (`templates/legal/LEGAL_REVIEW.md`). Until then the wizard lists them under
 // `pending_counsel` and writes no document row.
-const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
+export const COUNSEL_REQUIRED_TEMPLATES = new Set(['articles_of_incorporation_wy']);
 
 // Map our template keys → existing documenttype enum values (anything
 // not in the enum is stored as 'other' with the real key in
@@ -304,38 +337,7 @@ legal.post('/incorporate/wizard', async (c) => {
   }
 
   // D6683: no Atlas handoff (D4677 removed the call; no jurisdiction is atlas_supported).
-  const handoff: any = { type: 'documents_only', next_steps: [] };
-  if (j.id === 'us_wy_ccorp') {
-    handoff.next_steps = [
-      'File Articles of Incorporation with the Wyoming Secretary of State (https://wyobiz.wyo.gov)',
-      'Appoint a Wyoming registered agent',
-      'Apply for an EIN with the IRS once the state approves the filing',
-    ];
-  } else if (j.id === 'uk_ltd') {
-    handoff.next_steps = [
-      'File IN01 on Companies House (https://www.gov.uk/limited-company-formation)',
-      'Register for Corporation Tax with HMRC within 3 months',
-      'Open a UK business bank account',
-    ];
-  } else if (j.id === 'sg_pte') {
-    handoff.next_steps = [
-      'Submit incorporation via ACRA BizFile+ (https://www.bizfile.gov.sg)',
-      'Engage a Singapore-resident director (or nominee director service)',
-      'Appoint a company secretary within 6 months',
-    ];
-  } else if (j.id === 'ee_oy') {
-    handoff.next_steps = [
-      "Apply for e-Residency (https://e-resident.gov.ee) if you don't already have it",
-      'Engage a Company Service Provider for the registered address',
-      'File the OÜ via the Estonian Business Register e-portal',
-    ];
-  } else if (j.id === 'us_de_llc') {
-    handoff.next_steps = [
-      'File the Certificate of Formation with the Delaware Division of Corporations',
-      'Apply for an EIN via IRS Form SS-4 (kit included)',
-      'Open a US business bank account',
-    ];
-  }
+  const handoff: any = { type: 'documents_only', next_steps: [...(HANDOFF_NEXT_STEPS[j.id] ?? [])] };
 
   await sql.end();
 

@@ -174,6 +174,8 @@ const PROFILES = {
     // mark-history Sheet). Each label here must still be on its artboard and
     // must not be in the table.
     withheld: { 'portfolio/positions': ['Add follow-on'] },
+    // #6276 adds a visible-row CSV beside the original canvas controls.
+    offCanvas: { 'research/benchmarking': ['Export'] },
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -182,7 +184,7 @@ const PROFILES = {
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
     // 14 since D1243: `deals/pipeline`'s Export left with its zone.
-    exports: 14,
+    exports: 15,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -246,7 +248,12 @@ const PROFILES = {
     // NINETEENTH: `research/ask`'s `Clear history` (D6272) — the owner chose
     // hide over delete on #6274 (question 4 B); the Worker stamps `cleared_at`
     // and `Show cleared` reads it back.
-    handlers: 19,
+    // D6276 also supplies New benchmark from the page.
+    //
+    // TWENTY-FIRST: `funds/calls`'s `Send reminders` (#6238, D6238) — it opens
+    // the call's chase: one Eadwyn draft per line behind, each logged as sent
+    // only when the GP confirms it.
+    handlers: 21,
     // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
     // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
     // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
@@ -1454,7 +1461,7 @@ test('a gap note describes the screen, never a capability the API already has', 
   assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall', primary: true \}/,
     'New call is neither a handler nor a stated gap — it is unaccounted for');
   const page = read('frontend/src/pages/investor/InvestorFundCalls.jsx');
-  assert.match(page, /handlers: \{ newCall \}/, 'the Calls page does not supply the New call handler');
+  assert.match(page, /handlers: \{ newCall, sendReminders \}/, 'the Calls page does not supply the New call and Send reminders handlers');
   assert.match(api, /\n  fundsCapitalCallV2:/, 'api.js no longer declares fundsCapitalCallV2');
   assert.match(api, /\n  fundsCallPreview:/, 'api.js no longer declares the preview the form reads first');
   assert.ok(worker.includes("post('/:id/capital-call'"), "funds.ts no longer serves post('/:id/capital-call'");
@@ -1468,15 +1475,11 @@ test('a gap note describes the screen, never a capability the API already has', 
     'the call job no longer writes through the ledger, so the queued path and the form can disagree');
   assert.doesNotMatch(handler, /SET deployed_capital = deployed_capital \+/,
     'the call job bumps deployed_capital again, which double-counts against the receipts');
-  // The zone's one remaining gap must not deny what exists either: a notice IS
-  // logged per LP account when a call is issued, so "nothing sends" or "no
-  // notice is stored" would be this test's original error in a new place.
-  const at = table.indexOf("'funds/calls'");
-  const entry = table.slice(at, table.indexOf('],', at));
-  const reminders = entry.match(/\{ label: 'Send reminders', unbuilt: '([^']*)'/);
-  assert.ok(reminders, "funds/calls' Send reminders is no longer a stated gap — if it was wired, assert the handler");
-  assert.doesNotMatch(reminders[1], /nothing on this desk sends|no (call )?notice is (stored|sent|logged)/i,
-    `Send reminders denies the notice the call already logs: "${reminders[1]}"`);
+  // D6238 (#6238): Send reminders was the zone's last gap and is wired: it
+  // opens the chase, which drafts and logs, and sends nothing itself.
+  assert.match(table, /\{ label: 'Send reminders', kind: 'handler', handler: 'sendReminders' \}/,
+    "funds/calls' Send reminders is neither a handler nor a stated gap");
+  assert.match(page, /export function ReminderQueue\(/, 'the chase Send reminders opens is gone');
 });
 
 test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {
