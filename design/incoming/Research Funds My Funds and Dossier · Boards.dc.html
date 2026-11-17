@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Funds My Funds and Dossier · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Funds · FND-S · #7033 · Research Funds 3 of 5</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC Research · My funds and the private fund dossier — a shortlist past 500, identity by catalogue id, and a note that is never lost</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">My funds (/research/funds) and one private dossier (/research/funds/:uid) for a founder preparing a meeting. Continues the approved Research v2 canvas (RS-01 to RS-12) in the founder shell, after briefs 1 and 2 (Directory and vehicle identity); the quarterly report editor is brief 4 and appears here only as an entry point. Stage fit, route in and status are three independent decisions. Each saved fund shows its vehicle and manager and one of three identities: a linked catalogue record, a record you created, or a legacy entry that needs a choice. Public source evidence is read-only and kept apart from the founder’s thesis, note, reads and pass reason. The cheque comparison names what it compares with: the existing whole-round test, and a proposed intended-allocation test. A note is a field of its own: dirty, saving, saved, failed with the draft kept, and a conflict compared before choosing. Write into the note writes the private note only; the fund receives no message. States follow the Platform States vocabulary (Unavailable on screen). Violet dashed ◇ tags mark backend work (#7033); amber ⚑ tags mark owner decisions, option A drawn.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · [Lumen Robotics], [Atlas A-I], [Atlas AI], every bracketed fund, person, note and figure and the 1,284 saved funds are fictional and illustrative; Dawn Capital · Opp (dawncapital, €75m, fund date 25 Sep 2023, EuroTech VC Funds (public spreadsheet), as of 4 Oct 2026) is committed public directory data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Funds My Funds and Dossier Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['FND-S00', 'Journey, routes and annotation key', 'Routes and states per board, the three independent decisions, the three identities, the first-use path and the recovery path.', [W('RFM00')]],
+      ['FND-S01', 'My funds · populated shortlist and paging', 'The existing All funds filter kept. Counts state their scope (all 1,284 saved). Each row: vehicle, manager, identity and uid; cheque; stage fit, route in and status in three columns; your note. Page 1 of 26. Search and paging past the first 500 (◇), and the shortlist states.', [F('RFM01', false, 1180), C('RFM01B', 'Search past the newest 500', 1300, 481), C('RFM01C', 'Shortlist states', 1400, 521)]],
+      ['FND-S02', 'Linked dossier', '[Atlas A-I] linked to catalogue id atlas-a-i, with Open catalogue vehicle. The public record is read-only and separate from your private dossier. Three decisions, each saved on its own. The cheque card names what it compares: the whole-round test (works today) and the allocation test (◇). Quarterly reports as an entry point; the existing brief draft.', [F('RFM02', false, 1450), C('RFM02B', 'What a cheque range is compared with', 1300, 528), C('RFM02C', 'Dossier states', 1400, 415)]],
+      ['FND-S03', 'Manual and ambiguous match', '[Atlas AI] was saved before catalogue links; two vehicles share its normalized name. The chooser Sheet shows identifying evidence for each, refuses the vehicle already linked to [Atlas A-I], and offers Keep as my own record. Results, a record created by hand, and the Directory opening each Atlas by id.', [F('RFM03', 'Legacy entry · chooser Sheet', 1000), C('RFM03B', 'After the choice', 1300, 413), C('RFM03D', 'A record you created', 1300, 563), C('RFM03C', 'Directory to dossier: by name on main, by id proposed', 1300, 281)]],
+      ['FND-S04', 'Unsaved note, save failure and conflict recovery', 'Prototype: type a note, change stage, return and save the original note. Dirty, saving and saved. Save failed with the draft kept, offline, the leave guard, and a conflicting edit compared side by side before choosing what to keep (◇ conflict detection).', [C('RFM04', 'Type, change stage, save the note', 1400, 530), C('RFM04B', 'Failed, offline, leaving', 1400, 360), F('RFM04C', 'Conflict · compare both versions', 1000)]],
+      ['FND-S05', 'Meeting-brief acceptance', 'An existing pre-meeting brief draft with Write into the note, scoped to the private note; the fund receives no message. While the note is unsaved the accept waits. Accepted, refused (note full), failed, nothing to draft, removed and out of tokens.', [C('RFM05', 'Existing draft', 1300, 627), C('RFM05B', 'Feedback on acceptance', 1400, 522)]],
+      ['FND-S06', 'Phone 390', 'Shortlist cards with the three reads and paging; the dossier with a dirty note after a stage save; the chooser as a bottom Sheet; the conflict as two tabs; the brief accepted.', [P('RFM06A', 'My funds'), P('RFM06B', 'Dossier · note unsaved'), P('RFM06C', 'Legacy chooser'), P('RFM06D', 'Conflict'), P('RFM06E', 'Brief accepted')]],
+      ['FND-S07', 'Dark mode', 'The shortlist, the linked dossier and the phone conflict Sheet on the dark tokens.', [F('RFM07', 'My funds · dark', 1180), F('RFM07B', 'Dossier · dark', 1450), P('RFM07P', 'Conflict · phone dark')]],
+      ['FND-S08', 'Keyboard, focus and announcements', 'The focus sequence on the dossier and the shortlist, where focus returns when each Sheet closes, and the words each status change announces.', [W('RFM08')]],
+      ['FND-S09', 'Handoff', 'What main does today, backend required (◇ #7033), frontend only and the owner’s open questions.', [W('RFM09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

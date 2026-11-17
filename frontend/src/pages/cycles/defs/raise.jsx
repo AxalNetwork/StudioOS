@@ -129,7 +129,7 @@ const raise = {
       sub: coverageLine(data?.records),
       // D5081 part 5 (RA-12, RA-14): the header's action is the page's own, Fix next priority, or none.
       action: nextPriorityAction(data?.records),
-      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} />,
+      body: (p) => <ReadinessHome {...p} part={data?.parts?.pmf} projectId={ctx.projectId} reload={ctx.reload} role={ctx.role} />,
       Bands: ReadinessBands,
     }),
   }),

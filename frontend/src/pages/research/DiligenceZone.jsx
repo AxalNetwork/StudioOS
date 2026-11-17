@@ -4,6 +4,7 @@ import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from '../advisor/expertise/kit';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import RoomDeals from './RoomDeals';
 
 /**
  * Research · Diligence — the rooms you have been let into, and how far.
@@ -23,10 +24,10 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * two asks. What is absent from a room is diligence information too, and a
  * ratio hides which rooms are thin.
  *
- * DEAL STAGE IS ON THE CANVAS AND IS NOT HERE. A grant is between a founder and
- * an investor; a deal is a separate record that may or may not exist for the
- * same company, and there is no key between them. Joining on a company name
- * would attach a stage to the wrong room, so the column is absent and says why.
+ * DEAL STAGE (D6266). A room and a deal share their company (`project_id`), so
+ * each room shows the deals on it that you may open, by the deal page's own
+ * rule (invited or committed), with their stage and Open the deal. A room with
+ * none says so in plain words; a deal you cannot open is never named.
  */
 
 const day = (v) => {
@@ -121,17 +122,13 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
                     : 'Everything in this room is open to you.'}
                   {r.expires_at ? ` Access expires ${day(r.expires_at)}.` : ''}
                 </p>
+                <div className="mt-1"><RoomDeals deals={r.deals} note={r.deal_stage_note} /></div>
                 <p className="mt-1 text-[11px]">
                   <Link to={`/research/diligence/${encodeURIComponent(r.grant_uid)}`} className="text-indigo-700 underline dark:text-indigo-300">Open the room →</Link>
                 </p>
               </li>
             ))}
           </ul>
-          {data?.deal_stage_note && (
-            <p className="mt-3 border-t border-axal-ground pt-3 text-[11px] leading-relaxed text-gray-600 dark:border-gray-800 dark:text-gray-300">
-              {data.deal_stage_note}
-            </p>
-          )}
         </Card>
       </ZoneBody>
 
