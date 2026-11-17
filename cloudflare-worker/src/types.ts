@@ -105,6 +105,9 @@ export interface Env {
   X_CLIENT_ID?: string;
   X_CLIENT_SECRET?: string;
   X_BEARER_TOKEN?: string;
+  // D2403 — the second HQ-owned "founders" X app (owner decision 2B): members' own X connections, never HQ's posting.
+  X_FOUNDERS_CLIENT_ID?: string;
+  X_FOUNDERS_CLIENT_SECRET?: string;
   X_DAILY_CAP?: string;
   STUDIOOS_ENV?: string;
   // Set by wrangler.toml in production deploys (`ENVIRONMENT = "production"`).
