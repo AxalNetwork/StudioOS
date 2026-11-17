@@ -19,7 +19,13 @@
  * WHAT IS MISSING SAYS SO. A scope the member did not grant is not read, and its figures read "Not recorded" with
  * that reason; a count TikTok did not give is `null`. Never 0. Logs carry counts only: no figure, title or open_id.
  *
- * DISCONNECT (decision E): `purgeTikTokConnection` deletes the connection's facts, their ledger rows and its link.
+ * THE CHANNEL PROPOSAL (D5864, part 2b). A sync raises "Add TikTok as a channel" when the venture has no Distribution
+ * channel whose `utm_source` is 'tiktok'. Accept creates that channel through the existing writer the route hands in
+ * (`addChannel`); Dismiss is final. `tiktok_proposals` is unique on (project, kind, subject), so a decided proposal
+ * never returns on a re-sync. There is no KPI proposal (owner decision H (a)).
+ *
+ * DISCONNECT (decision E): `purgeTikTokConnection` deletes the connection's facts, their ledger rows, its proposals
+ * and its link.
  */
 import type { Env } from '../../types';
 import type { TikTokAccount, TikTokReads, TikTokVideo } from './client';
@@ -43,7 +49,13 @@ export const SENTENCES = Object.freeze({
   video_scope: 'Not recorded: you did not let Axal VC read your public TikTok videos.',
   not_revenue: 'Your TikTok audience, shown beside revenue and never as revenue.',
   public_only: 'Your public TikTok videos only. A view is not a visit to your site.',
+  add_channel: 'Add TikTok as a Distribution channel? Customers who arrive with utm_source=tiktok are then counted for it.',
 });
+
+/** The one proposal kind, and the UTM source the channel it proposes carries. */
+export const ADD_CHANNEL = 'add_channel';
+export const CHANNEL_UTM = 'tiktok';
+export const CHANNEL_NAME = 'TikTok';
 
 const fromTikTok = (asOf: string | null) => (asOf ? `From TikTok, as of ${asOf.slice(0, 10)}` : null);
 
@@ -132,6 +144,8 @@ export interface TikTokCounts {
   partial: boolean;
   /** 'Partly synced' when the video list stopped at its budget or a read failed. */
   outcome: 'Synced' | 'Partly synced';
+  /** 1 when this sync raised "Add TikTok as a channel"; 0 when a channel exists or it was raised or decided before. */
+  proposals: number;
 }
 
 interface SyncCtx { integrationId: number; projectId: number; today: string; scopes: string[]; cursor: string | null }
@@ -194,7 +208,7 @@ async function landVideo(env: Env, x: SyncCtx, v: TikTokVideo, counts: TikTokCou
  * nothing landed) throws the first failure.
  */
 export async function syncTikTok(env: Env, reads: TikTokReads, x: SyncCtx): Promise<TikTokCounts> {
-  const counts: TikTokCounts = { snapshots: 0, videos: 0, kept_deleted: 0, scopes_missing: [], partial: false, outcome: 'Synced' };
+  const counts: TikTokCounts = { snapshots: 0, videos: 0, kept_deleted: 0, scopes_missing: [], partial: false, outcome: 'Synced', proposals: 0 };
   let first: unknown = null;
   let accountRead = false, videosRead = false;
   if (x.scopes.includes(STATS_SCOPE)) {
@@ -222,8 +236,84 @@ export async function syncTikTok(env: Env, reads: TikTokReads, x: SyncCtx): Prom
   } else counts.scopes_missing.push(VIDEO_SCOPE);
 
   if (first && !accountRead && !videosRead) throw first;
+  counts.proposals = await raiseChannelProposal(env, x.integrationId, x.projectId);
   counts.outcome = counts.partial ? 'Partly synced' : 'Synced';
   return counts;
+}
+
+// ═════════════════════════════════════════════════════════════ the channel proposal
+
+/** The venture's channel with utm_source 'tiktok', or null. `growth_channels` holds UTM sources lowercased. */
+async function tiktokChannel(env: Env, projectId: number) {
+  return env.DB.prepare('SELECT id, uid, name FROM growth_channels WHERE project_id = ? AND utm_source = ?')
+    .bind(projectId, CHANNEL_UTM).first<{ id: number; uid: string; name: string }>();
+}
+
+/**
+ * Raise "Add TikTok as a channel" once, only while the venture has no TikTok channel. A proposal already there, in any
+ * state, is left as it is: the unique key makes a dismissed one final. Returns 1 when one was raised.
+ */
+export async function raiseChannelProposal(env: Env, integrationId: number, projectId: number): Promise<number> {
+  const r = await env.DB.prepare(
+    `INSERT INTO tiktok_proposals (integration_id, project_id, kind, subject)
+       SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM growth_channels WHERE project_id = ? AND utm_source = ?)
+     ON CONFLICT(project_id, kind, subject) DO NOTHING`,
+  ).bind(integrationId, projectId, ADD_CHANNEL, CHANNEL_UTM, projectId, CHANNEL_UTM).run();
+  return Number(r.meta?.changes ?? 0);
+}
+
+/**
+ * The proposal as Distribution shows it. Pending and no TikTok channel yet: the question, with whether this viewer may
+ * decide it. Accepted: the channel it created. Dismissed, none, or a TikTok channel the founder added another way: null.
+ */
+async function proposalOf(env: Env, projectId: number, canDecide: boolean) {
+  const p = await env.DB.prepare('SELECT id, state, growth_channel_id FROM tiktok_proposals WHERE project_id = ? AND kind = ? AND subject = ?')
+    .bind(projectId, ADD_CHANNEL, CHANNEL_UTM).first<{ id: number; state: string; growth_channel_id: number | null }>();
+  if (!p || p.state === 'dismissed') return null;
+  const ch = await tiktokChannel(env, projectId);
+  if (p.state === 'pending') {
+    if (ch) return null;
+    return { id: Number(p.id), kind: ADD_CHANNEL, state: 'pending' as const, can_decide: canDecide, sentence: SENTENCES.add_channel, channel: null };
+  }
+  return { id: Number(p.id), kind: ADD_CHANNEL, state: 'accepted' as const, can_decide: false, sentence: null,
+    channel: ch && p.growth_channel_id === Number(ch.id) ? { uid: ch.uid, name: ch.name } : null };
+}
+
+export type DecideOutcome = 'ok' | 'not_found' | 'decided' | 'channel_exists';
+
+async function pendingProposal(env: Env, projectId: number, id: number): Promise<DecideOutcome> {
+  const p = await env.DB.prepare('SELECT state FROM tiktok_proposals WHERE id = ? AND project_id = ?').bind(id, projectId).first<{ state: string }>();
+  if (!p) return 'not_found';
+  return p.state === 'pending' ? 'ok' : 'decided';
+}
+
+/**
+ * Accept: `create` (the route's call to the existing channel writer) makes the one TikTok channel, then the proposal
+ * records it. A TikTok channel already on the venture is `channel_exists` and nothing is created: `growth_channels` is
+ * unique on (project, utm_source), so two Accepts at once still leave exactly one row.
+ */
+export async function acceptTikTokProposal(env: Env, projectId: number, id: number, userId: number,
+  create: () => Promise<string>): Promise<DecideOutcome> {
+  const state = await pendingProposal(env, projectId, id);
+  if (state !== 'ok') return state;
+  if (await tiktokChannel(env, projectId)) return 'channel_exists';
+  const uid = await create();
+  const ch = await env.DB.prepare('SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?').bind(uid, projectId).first<{ id: number }>();
+  const r = await env.DB.prepare(
+    `UPDATE tiktok_proposals SET state = 'accepted', growth_channel_id = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND project_id = ? AND state = 'pending'`,
+  ).bind(ch ? ch.id : null, userId, id, projectId).run();
+  return Number(r.meta?.changes ?? 0) ? 'ok' : 'decided';
+}
+
+/** Dismiss: final. The row stays, so no later sync raises it again. */
+export async function dismissTikTokProposal(env: Env, projectId: number, id: number, userId: number): Promise<DecideOutcome> {
+  const r = await env.DB.prepare(
+    `UPDATE tiktok_proposals SET state = 'dismissed', decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND project_id = ? AND state = 'pending'`,
+  ).bind(userId, id, projectId).run();
+  if (Number(r.meta?.changes ?? 0)) return 'ok';
+  return (await pendingProposal(env, projectId, id)) === 'not_found' ? 'not_found' : 'decided';
 }
 
 // ═════════════════════════════════════════════════════════════ the reads
@@ -248,7 +338,7 @@ function accountFigures(rows: Snapshot[], scoped: boolean) {
 
 const videoReason = (scoped: boolean) => (scoped ? 'Not recorded: TikTok gave no figure for this video' : SENTENCES.video_scope);
 
-export interface PartViewer { userId: number; support: boolean; writer: boolean }
+export interface PartViewer { userId: number; support: boolean; writer: boolean; /** The venture's founder, who alone decides a proposal (D5864). */ founder: boolean }
 
 /**
  * A module's "From TikTok" part for one viewer. No link and nothing landed: how to connect. A link and nothing
@@ -279,9 +369,11 @@ export async function tiktokPart(env: Env, projectId: number, slug: TikTokSlug, 
     ...r, as_of: String(r.as_of), source: fromTikTok(String(r.as_of)),
     reasons: Object.fromEntries((['views', 'likes', 'comments', 'shares'] as const).filter((k) => r[k] == null).map((k) => [k, videoReason(videoScoped)])),
   }));
-  if (!videos.length) return empty(link, common, videoScoped ? null : SENTENCES.video_scope);
+  // D5864: Distribution carries the channel proposal whether or not any video has landed.
+  const proposal = await proposalOf(env, projectId, viewer.founder && viewer.writer && !viewer.support);
+  if (!videos.length) return { ...empty(link, common, videoScoped ? null : SENTENCES.video_scope), proposal };
   const asOf = videos.map((v) => v.as_of).sort().at(-1) ?? null;
-  return { state: 'ok' as const, ...common, as_of: asOf, source: fromTikTok(asOf), videos };
+  return { state: 'ok' as const, ...common, as_of: asOf, source: fromTikTok(asOf), videos, proposal };
 }
 
 function empty(link: TikTokLink | null, common: Record<string, unknown>, scopeReason: string | null) {
@@ -303,7 +395,8 @@ export async function deleteTikTokRow(env: Env, kind: 'account' | 'video', proje
 }
 
 /**
- * Decision E: a disconnect removes the connection's TikTok facts, their ledger rows and its venture link. The same
+ * Decision E: a disconnect removes the connection's TikTok facts, their ledger rows, its proposals (D5864) and its
+ * venture link. The same
  * statements, by an open_id and a cutoff, are `purgeByOpenIdStatements`, which the deauthorization webhook batches
  * with its own deletes.
  */
@@ -312,6 +405,7 @@ export function purgeStatements(env: Env, integrationId: number) {
     env.DB.prepare("DELETE FROM connector_fed_items WHERE integration_id = ? AND kind IN ('tiktok_account_snapshot', 'tiktok_video')").bind(integrationId),
     env.DB.prepare('DELETE FROM tiktok_account_facts WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM tiktok_video_facts WHERE integration_id = ?').bind(integrationId),
+    env.DB.prepare('DELETE FROM tiktok_proposals WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM tiktok_account_links WHERE integration_id = ?').bind(integrationId),
   ];
 }
@@ -331,6 +425,8 @@ export function purgeByOpenIdStatements(env: Env, openId: string, cutoff: number
     env.DB.prepare(`DELETE FROM tiktok_account_facts WHERE integration_id IN (SELECT id FROM integrations
                      WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`).bind(openId, cutoff),
     env.DB.prepare(`DELETE FROM tiktok_video_facts WHERE integration_id IN (SELECT id FROM integrations
+                     WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`).bind(openId, cutoff),
+    env.DB.prepare(`DELETE FROM tiktok_proposals WHERE integration_id IN (SELECT id FROM integrations
                      WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`).bind(openId, cutoff),
     env.DB.prepare(`DELETE FROM tiktok_account_links WHERE integration_id IN (SELECT id FROM integrations
                      WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`).bind(openId, cutoff),

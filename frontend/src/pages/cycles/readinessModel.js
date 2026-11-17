@@ -185,3 +185,19 @@ export function coverageLine(records) {
     last ? `last assessed ${last}` : 'last assessed: Not recorded',
   ].join(' · ');
 }
+
+/** D5081 part 5 (#5081, RA-12, RA-14): the header's words for Fundraising readiness' own primary. */
+export const FIX_NEXT = 'Fix next priority';
+
+/**
+ * Fundraising readiness' header action (RA-14): Fix next priority, opening the workflow of the first priority the
+ * page lists (`priorities`), never Raise's global Build your deck. None while the read is not here or failed, and
+ * none when no assessed area needs attention, so the header never offers a fix the read does not name.
+ */
+export function nextPriorityAction(records) {
+  if (!records || records.state === 'unreadable') return null;
+  const areas = areasOf(records);
+  if (areas.state !== 'ready') return null;
+  const first = priorities(areas.rows)[0];
+  return first?.action?.href ? { label: FIX_NEXT, href: first.action.href } : null;
+}

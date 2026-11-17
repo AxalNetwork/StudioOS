@@ -7,7 +7,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, Unreadable } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { Tag } from './CapTableTag';
-import { HOME_PATH, PHONE_HOLDERS, harbour, recordStanding, tabSearch } from './capTableModel';
+import { HOME_PATH, PHONE_HOLDERS, harbour, isFirstUse, recordStanding, setupActions, tabSearch } from './capTableModel';
 import HolderDrawer from './HolderDrawer';
 import ProposalDrawer from './ProposalDrawer';
 import { AskForAccess } from './InvestorCapTablePanel';
@@ -130,7 +130,7 @@ function Seg({ options, value, onChange, label, testId }) {
 
 // ─────────────────────────────────────────────────────────── the tool bar
 
-function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord, phone = false }) {
+function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord, phone = false, noAction = false }) {
   const failed = record.status === 'error';
   const loading = record.status === 'loading';
   const chips = loading
@@ -152,7 +152,10 @@ function ToolBar({ record, harbourRead, cartaRead, need, role, plan, onRecord, p
         <Link className={GHOST} to={PLANS_PATH}>See plans</Link>
       </>
     );
-  } else if (onRecord && role === 'owner') actions = <button type="button" className={`${PRIMARY}${phone ? ' flex-1' : ''}`} onClick={() => onRecord('record')} data-testid="captable-record">Record an issuance</button>;
+  // D5081 part 3 (#5081): where the page's one primary is drawn elsewhere (`noAction`), the tool bar does not
+  // draw it again; the plan gate and the blocked save still say why nothing can be recorded.
+  } else if (noAction) actions = null;
+  else if (onRecord && role === 'owner') actions = <button type="button" className={`${PRIMARY}${phone ? ' flex-1' : ''}`} onClick={() => onRecord('record')} data-testid="captable-record">Record an issuance</button>;
   else if (onRecord && role === 'cofounder') actions = <button type="button" className={`${PRIMARY}${phone ? ' flex-1' : ''}`} onClick={() => onRecord('propose')} data-testid="captable-propose">Propose an issuance</button>;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2" data-testid="captable-toolbar">
@@ -456,15 +459,22 @@ function FromModel({ projectId, scenario, recordCurrency, onClose, onDone }) {
   );
 }
 
-export function CapTableOverview({ projectId, search = '', holderId = null, open = null, onRefused = null }) {
+/**
+ * D5081 part 3 (#5081, RA-20): `home` is the record read CycleRoute holds (`useCapTableHome`), so the module
+ * header's action and these blocks read once; without it the block reads the record itself. `headerActs` says the
+ * header carries Record an issuance, so the tool bar does not draw it twice on a desktop.
+ */
+export function CapTableOverview({ projectId, search = '', holderId = null, open = null, onRefused = null, home = null, headerActs = false }) {
   const { user } = useAuth() || {};
   const navigate = useNavigate();
   const phone = usePhoneWidth();
   const [reload, setReload] = useState(0);
-  const retry = useCallback(() => setReload((n) => n + 1), []);
   const explorer = String(user?.role || '').toLowerCase() === 'exploring';
   const key = explorer ? null : projectId || null;
-  const record = useRead(readRecord, key, reload);
+  const ownRecord = useRead(readRecord, home ? null : key, reload);
+  const record = home ? home.record : ownRecord;
+  const homeRetry = home?.retry;
+  const retry = useCallback(() => { setReload((n) => n + 1); homeRetry?.(); }, [homeRetry]);
   const compare = useRead(readCompare, key, reload);
   const harbourRead = useRead(read409a, key, reload);
   const cartaRead = useRead(readIntegrations, key, reload);
@@ -500,6 +510,10 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   const closeDrawer = () => navigate(`${HOME_PATH}${tabSearch(search)}`);
   const onRecord = () => navigate(`${HOME_PATH}/new${tabSearch(search)}`);
   const writes = standing.writes;
+  // D5081 part 3: on a desktop the module header carries Record an issuance; on first use the empty card's set-up
+  // actions are the page's one primary (D5076). Either way the tool bar draws none. On a phone the header is the
+  // bar, with no action, so Record an issuance stays in the tool bar, full width.
+  const noAction = headerActs && (!phone || isFirstUse(record));
   const recordMode = role === 'cofounder' ? 'propose' : 'record';
   const done = () => { setVoiding(null); setCorrecting(null); retry(); };
   const leave = () => { closeDrawer(); retry(); };
@@ -557,7 +571,10 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
             </Center>
           ) : (
             <Center mark="+" title={EMPTY_TITLE} line={EMPTY_LINE} testId="captable-empty">
-              {role === 'owner' && plan ? <button type="button" className={PRIMARY} onClick={onRecord} data-testid="captable-record-founding">Record founding shares</button> : null}
+              {/* D5081 part 3 (#5081): first use collapses to its set-up actions, the first the page's one primary (D5076). */}
+              {setupActions(record, { search }).map((a, i) => (
+                <Link key={a.key} className={i === 0 ? PRIMARY : GHOST} to={a.href} data-testid={`captable-setup-${a.key}`}>{a.label}</Link>
+              ))}
             </Center>
           )
         ) : (
@@ -578,7 +595,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
           Carta state, and offers Record an issuance. None of that belongs
           above a refusal: it is the record speaking, and a write on a record
           this viewer may not read. */}
-      {refused ? null : <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} />}
+      {refused ? null : <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} noAction={noAction} />}
       {body}
       {open?.kind === 'record' && record.status === 'ready' && writes ? (
         <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin} onClose={closeDrawer} onDone={leave} />
