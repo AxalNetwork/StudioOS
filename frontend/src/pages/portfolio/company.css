@@ -21,6 +21,16 @@
 .pf-co-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--pf-hair);border:1px solid var(--pf-hair);border-radius:9px;overflow:hidden}
 .pf-co-rights{display:flex;flex-direction:column;gap:12px;padding:16px 18px;border:1px solid var(--pf-hair);border-radius:12px;background:var(--pf-raised);outline:none}
 .pf-co-rights:focus-visible{outline:2px solid var(--pf-vi);outline-offset:2px}
+/* D6222 (#6222): the investor's own notes on the company (Overview). */
+.pf-co-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pf-co-note{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--pf-hair);font-size:12.5px}
+.pf-co-note:first-child{border-top:0}
+.pf-co-note-body{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--pf-ink)}
+.pf-co-note-form{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.pf-co-note-box{width:100%;box-sizing:border-box;min-height:84px;padding:8px 10px;border:1px solid var(--pf-hair2);border-radius:8px;background:var(--pf-card);color:var(--pf-ink);font:inherit;font-size:13px;resize:vertical}
+.pf-co-note-box:focus-visible{outline:2px solid var(--pf-vi);outline-offset:1px}
+.pf-co-note-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pf-co-note-error{margin:0;padding:6px 10px;border:1px solid var(--pf-negE);border-radius:8px;background:var(--pf-negBg);color:var(--pf-neg);font-size:12.5px}
 @media(max-width:1300px){.pf-co-facts{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:1499px){.pf-co-fin{grid-template-columns:1fr}.pf-co-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:850px){.pf-co-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -29,6 +39,7 @@
   .pf-co-tab{min-height:44px}
   .pf-co-list li{flex-direction:column;align-items:stretch}
   .pf-co-list li .pf-btn{justify-content:center;min-height:44px}
+  .pf-co-note-acts .pf-btn{flex:1;justify-content:center;min-height:44px}
   .pf-co-rights{padding:14px 12px}
   .pf-co-fin .pf-table tbody th{white-space:normal}
 }
