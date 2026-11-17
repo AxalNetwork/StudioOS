@@ -6,7 +6,7 @@ Part 2a of #2401. The sign-in, refresh and revoke are `integrations/tiktokOAuth.
 | File | What it holds |
 | --- | --- |
 | `client.ts` | The only file that calls TikTok's Display API: the account's counts (`/v2/user/info/`) and the public videos (`/v2/video/list/`). One host, no redirects, a 10-second deadline, errors as codes, field-by-field parsing. |
-| `grow.ts` | The one venture a connection serves (`tiktok_account_links`), the sync through `connector_fed_items`, the "From TikTok" module parts, delete, and the disconnect purge. |
+| `grow.ts` | The one venture a connection serves (`tiktok_account_links`), the sync through `connector_fed_items`, the "From TikTok" module parts, delete, the "Add TikTok as a channel" proposal (D5864: raised by a sync, accepted through the existing channel writer, dismissed for good), and the disconnect purge. |
 
 ## Rules for adding to it
 
