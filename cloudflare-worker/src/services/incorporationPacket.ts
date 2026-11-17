@@ -150,7 +150,8 @@ interface CertificateInputs {
   date: string;
 }
 
-const JURISDICTION_CERT_TITLES: Record<string, string> = {
+/** D6690: exported for the catalogue's version 1 seed; Wyoming has none (the generic title applies). */
+export const JURISDICTION_CERT_TITLES: Record<string, string> = {
   us_de_ccorp: 'Certificate of Formation — Delaware C-Corporation',
   us_de_llc: 'Certificate of Formation — Delaware Limited Liability Company',
   uk_ltd: 'Certificate of Incorporation — United Kingdom Private Limited Company',

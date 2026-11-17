@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Markets Directory and Investor View · board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+body{margin:0}
+.cv{--mo:'Roboto Mono',ui-monospace,monospace;--sg:'Space Grotesk',system-ui,sans-serif;font-family:var(--sg);background:var(--bg);color:var(--ink);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;position:relative;font-size:13px;line-height:1.45;overflow:hidden}
+.cv *{box-sizing:border-box}
+.cv a{color:var(--vt);text-decoration:none}
+.cv button{font-family:var(--sg);cursor:pointer}
+.cv :focus-visible,.cv .fv{outline:2px solid var(--vi);outline-offset:2px}
+.cv h1,.cv h2,.cv h3,.cv p,.cv ol,.cv ul,.cv dl,.cv dd,.cv dt{margin:0;padding:0}
+.cv ol,.cv ul{list-style:none}
+.mo{font-family:var(--mo)}
+.mu{color:var(--mu)}
+.eye{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.sh{display:grid;grid-template-columns:196px minmax(0,1fr) 44px}
+.sd{background:var(--card);border-right:1px solid var(--hair);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+.sd .lg{padding:4px 16px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:#7c3aed;flex:none}
+.sd .grp{padding:6px 20px 4px}
+.sd nav{display:flex;flex-direction:column;gap:2px}
+.sd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.sd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.mn{min-width:0;display:flex;flex-direction:column}
+.tb{height:52px;border-bottom:1px solid var(--hair);background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:14px}
+.srch{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--hair);border-radius:7px;background:var(--card);color:var(--mu);font-size:12.5px;width:280px}
+.bdg{padding:4px 9px;border-radius:999px;font:700 10px var(--mo);letter-spacing:.06em;color:#fff;background:#334155}
+.ib{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;border:1px solid var(--hair);background:var(--card);color:var(--ink);padding:0}
+.av{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 10px var(--mo)}
+.sp{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 0}
+.sp .e{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-weight:800;font-size:13px;border:0;padding:0}
+.sp .vt{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.bd{padding:24px 30px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.hd{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+.hd h1{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.hd p{font-size:13px;color:var(--mu);margin-top:4px}
+.hr{display:flex;flex-direction:column;align-items:flex-end;gap:7px;position:relative}
+.meta{display:flex;align-items:center;gap:8px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.lk{background:none;border:0;padding:0 2px;color:var(--vt);font:700 12px var(--sg);min-height:24px}
+.info{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font:700 10px var(--mo);padding:0}
+.seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.seg button{min-height:28px;padding:0 12px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12px var(--sg);white-space:nowrap}
+.seg button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:700;box-shadow:0 0 0 1px var(--hair)}
+.kp{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.k{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px 13px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.k.att{border-color:var(--amE);box-shadow:inset 3px 0 0 var(--amD)}
+.kv{font:700 26px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.kv.un{font:700 15px var(--sg);color:var(--mu);letter-spacing:0;line-height:1.95}
+.ks{font-size:12px;color:var(--mu);line-height:1.45}
+.dl{font:700 12px var(--mo)}
+.up{color:var(--pos)}
+.dn{color:var(--mu)}
+.g{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.cd{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.ch{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ch h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ch .sm{font:500 12px var(--mo);color:var(--mu)}
+.ins{font-size:14.5px;font-weight:600;line-height:1.45;letter-spacing:-.005em}
+.ins b{font-family:var(--mo);font-weight:700}
+.sub{font-size:12.5px;color:var(--mu);line-height:1.5}
+.cf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--hair);flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 13px;border-radius:9px;font:700 12.5px var(--sg);white-space:nowrap;border:1px solid var(--hair);background:var(--card);color:var(--ink)!important}
+.btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.btn.t{border-color:transparent;background:transparent;color:var(--vt)!important;padding:0 4px}
+.btn[aria-disabled=true]{opacity:.6;cursor:default}
+.foot{font-size:11.5px;color:var(--mu);line-height:1.5}
+.pl{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.pl.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.pl.g{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.pl.v{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.pl.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--amD);flex:none}
+.kt{display:inline-flex;justify-content:center;min-width:64px;padding:2px 6px;border-radius:5px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised);border:1px solid var(--hair)}
+.q li+li{border-top:1px solid var(--hair)}
+.qr{display:grid;grid-template-columns:70px minmax(0,1fr) auto 12px;gap:12px;align-items:center;padding:9px 6px;margin:0 -6px;border-radius:8px;color:var(--ink)!important}
+.qr:hover{background:var(--raised)}
+.qt{display:block;font-size:13px;font-weight:700;line-height:1.35}
+.qs{display:block;font-size:12px;color:var(--mu)}
+.qa{font:600 12px var(--mo);color:var(--mu);white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.qa.o{color:var(--amT)}
+.chev{color:var(--mu);font-size:15px;line-height:1}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px}
+.lgd>span{display:inline-flex;align-items:center;gap:7px}
+.lgd b{font:700 12px var(--mo)}
+.sw{width:16px;height:0;border-top:3px solid;flex:none}
+.br{display:grid;grid-template-columns:128px minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.trk{display:block;height:10px;border-radius:3px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.fil{display:block;height:100%;background:var(--vi)}
+.bv{font:600 12px var(--mo);text-align:right;white-space:nowrap}
+.bv span{color:var(--mu);font-weight:500}
+.st{display:grid;gap:14px 18px}
+.st dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.st dd{font:700 19px var(--mo);letter-spacing:-.02em;margin-top:3px;line-height:1.2}
+.st dd small{display:block;font:500 11.5px var(--sg);color:var(--mu);letter-spacing:0;margin-top:2px}
+.nu{display:grid;grid-template-columns:44px minmax(0,1fr);gap:11px;align-items:start;padding:9px 0;border-top:1px solid var(--hair)}
+.db{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--hair);border-radius:8px;background:var(--raised);line-height:1.15}
+.db b{font:700 16px var(--mo)}
+.db span{font:700 9px var(--mo);letter-spacing:.06em;color:var(--mu);text-transform:uppercase}
+.ar{display:grid;grid-template-columns:78px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair)}
+.ar .w{font:500 12px var(--mo);color:var(--mu);white-space:nowrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{min-height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.chips button[aria-checked=true]{color:var(--vt);background:var(--lav);border-color:var(--lavE);font-weight:700}
+.chips button span{font-family:var(--mo);color:var(--mu);font-weight:500;margin-left:4px}
+.mg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.mi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:13px 16px;color:var(--ink)!important;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.mi:nth-child(3n){border-right:0}
+.mi:nth-last-child(-n+3){border-bottom:0}
+.mi:hover{background:var(--raised)}
+.mi b{font-size:13.5px;font-weight:800}
+.mi .d{grid-column:1;font-size:12px;color:var(--mu)}
+.mi .o{grid-row:1/3;grid-column:2;align-self:center;display:flex;align-items:center;gap:10px;font:700 12.5px var(--sg);color:var(--vt)}
+.s2{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.s2 h2{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.ai{display:flex;align-items:center;gap:12px;width:100%;min-height:44px;padding:10px 16px;border:1px dashed var(--hair2);border-radius:12px;background:transparent;color:var(--ink);text-align:left;font:500 13px var(--sg)}
+.ai b{font-weight:700}
+.ai .x{margin-left:auto;color:var(--vt);font-weight:700;white-space:nowrap}
+.aix{border:1px dashed var(--hair2);border-radius:12px;padding:4px 16px 12px}
+.aix .ai{border:0;padding:10px 0;border-radius:0}
+.aix dl{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0 18px}
+.aix dt,.aix dd{padding:9px 0;border-top:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.aix dt{font-weight:700}
+.aix dd{color:var(--mu)}
+.nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:10px;background:var(--raised);border:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.nt.r{background:var(--negBg);border-color:var(--negE)}
+.nt.a{background:var(--amBg);border-color:var(--amE)}
+.nt.g{background:var(--posBg);border-color:var(--posE)}
+.ic{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;flex:none;font:800 11px var(--sg);background:var(--mu);color:var(--card);margin-top:1px}
+.nt.r .ic{background:var(--neg)}
+.nt.a .ic{background:var(--amT)}
+.nt.g .ic{background:var(--pos)}
+.nt .bt{margin-left:auto;flex:none}
+.sk{display:block;border-radius:6px;background:var(--skel)}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.tbl .n{text-align:right;font-family:var(--mo)}
+.tbl td.n{font-weight:600}
+.tbl td.na{color:var(--mu);font-weight:500}
+.tbl tr.cur td{background:var(--raised)}
+.tbl td b{font-weight:700}
+.tbl td small{display:block;color:var(--mu);font-size:11.5px}
+.dim{position:absolute;inset:0;background:var(--dim);z-index:3}
+.dlg{position:absolute;left:50%;top:40px;transform:translateX(-50%);width:1060px;z-index:4;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.28);display:flex;flex-direction:column}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 14px;border-bottom:1px solid var(--hair)}
+.dh h2{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.dc{padding:16px 22px;display:flex;flex-direction:column;gap:14px}
+.df{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 22px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 16px 16px}
+.strip{display:grid;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.strip>div{padding:10px 14px;border-right:1px solid var(--hair);min-width:0}
+.strip>div:last-child{border-right:0}
+.strip b{display:block;font:700 18px var(--mo);letter-spacing:-.02em;margin-top:2px}
+.strip small{display:block;font-size:11px;color:var(--mu)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inp{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--mu);font-size:12.5px;min-width:260px}
+.dd{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);color:var(--ink);font:600 12px var(--sg);white-space:nowrap}
+.dd.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.pg{display:flex;justify-content:space-between;align-items:center;gap:10px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.pg .pb{display:flex;gap:5px;align-items:center}
+.pg button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 6px}
+.pg button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.tabs{display:flex;gap:22px;border-bottom:1px solid var(--hair)}
+.tabs button{border:0;background:none;padding:8px 0 9px;font:600 13px var(--sg);color:var(--mu);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);font-weight:800;border-color:var(--vi)}
+.tabs button span{font-family:var(--mo);font-weight:500;color:var(--mu);margin-left:4px}
+.tip{position:absolute;right:0;top:calc(100% + 8px);z-index:5;width:320px;padding:12px 14px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.55;box-shadow:0 10px 30px rgba(0,0,0,.25);text-align:left}
+.tip b{display:block;margin-bottom:3px}
+.ph{width:390px;display:flex;flex-direction:column}
+.pt{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 4px;border-bottom:1px solid var(--hair);background:var(--card)}
+.pi{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:44px;height:44px;border:0;background:transparent;color:var(--ink);font:700 18px var(--sg);padding:0 8px}
+.pbd{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px}
+.ph .hd h1{font-size:22px}
+.ph .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.ph .seg button{min-height:40px}
+.ph .kp{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ph .k{padding:12px 13px}
+.ph .kv{font-size:22px}
+.ph .btn{min-height:44px}
+.ph .lk{min-height:44px}
+.ph .info{width:44px;height:44px;border:0;background:transparent}
+.ph .qr{grid-template-columns:minmax(0,1fr) auto 12px;min-height:56px}
+.ph .chips{flex-wrap:nowrap;overflow:hidden}
+.ph .chips button{min-height:40px}
+.ph .ar{grid-template-columns:minmax(0,1fr) auto;min-height:52px}
+.disc{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;width:100%;min-height:58px;padding:9px 0;border:0;border-top:1px solid var(--hair);background:none;color:var(--ink);text-align:left}
+.disc b{font-size:14px;font-weight:700}
+.disc span{grid-column:1;font-size:12px;color:var(--mu)}
+.disc i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--mu);font-size:16px}
+.pl2{display:flex;flex-direction:column}
+.pl2 a{display:grid;grid-template-columns:minmax(0,1fr) auto 12px;gap:10px;align-items:center;min-height:52px;padding:6px 0;border-top:1px solid var(--hair);color:var(--ink)!important}
+.pl2 a:first-child{border-top:0}
+.pl2 a b{font-size:13.5px}
+.pl2 a small{display:block;font-size:12px;color:var(--mu)}
+.pbar{position:absolute;left:0;right:0;bottom:0;padding:10px 16px 14px;background:var(--card);border-top:1px solid var(--hair);display:flex}
+.pbar .btn{flex:1}
+  
+.scp{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;border:1px solid var(--hair);background:var(--card);font:600 11px var(--mo);color:var(--mu)}
+.ptabs{display:flex;gap:24px;border-bottom:1px solid var(--hair)}
+.ptabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 0 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px}
+.ptabs a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.ptabs a span{font:600 11px var(--mo);color:var(--mu);padding:0 7px;border-radius:999px;background:var(--raised);border:1px solid var(--hair)}
+.us{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.us>div{padding:11px 16px;border-right:1px solid var(--hair);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.us>div:last-child{border-right:0}
+.us .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.1}
+.us .s{font-size:12px;color:var(--mu)}
+.us .ov .v{color:var(--neg)}
+.us .ow{background:var(--amBg);box-shadow:inset 0 -2px 0 var(--amD)}
+.us .un .v{font:700 13px var(--sg);color:var(--neg);letter-spacing:0}
+.wvr{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.wv{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:var(--raised);border:1px solid var(--hair)}
+.wv button{display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 13px;border-radius:7px;border:0;background:transparent;color:var(--mu);font:600 12.5px var(--sg);white-space:nowrap}
+.wv button[aria-checked=true]{background:var(--card);color:var(--ink);font-weight:800;box-shadow:0 0 0 1px var(--hair)}
+.wv button span{font:600 11px var(--mo);color:var(--mu)}
+.wv button .r{color:var(--neg)}
+.qc{background:var(--card);border:1px solid var(--hair);border-radius:12px;min-width:0;position:relative}
+.qtb{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.qtb .inp{min-width:340px}
+.fchips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);background:var(--raised)}
+.fc{display:inline-flex;align-items:center;gap:6px;min-height:26px;padding:0 4px 0 10px;border-radius:999px;border:1px solid var(--lavE);background:var(--lav);color:var(--vt);font:600 12px var(--sg)}
+.fc button{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:0;background:transparent;color:var(--vt);padding:0;font-size:12px}
+.aq{width:100%;border-collapse:collapse;font-size:13px}
+.aq th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--card)}
+.aq td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.aq td:first-child,.aq th:first-child{padding-left:14px;width:34px}
+.aq td:last-child,.aq th:last-child{padding-right:12px;width:44px;text-align:right}
+.aq input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#7c3aed;vertical-align:middle}
+.aq .rq a{display:block;color:var(--ink);font-weight:700;font-size:13.5px;line-height:1.3}
+.aq .rq small{display:block;font-size:12px;color:var(--mu);margin-top:1px}
+.aq .wt{white-space:nowrap}
+.aq .wt b{font:600 12.5px var(--mo);margin-right:7px}
+.aq tr.band th{background:var(--raised);font:700 10px var(--mo);letter-spacing:.07em;color:var(--mu);padding:7px 14px}
+.aq tr.band.o th{color:var(--neg);background:var(--negBg)}
+.aq tr.band.d th{color:var(--amT);background:var(--amBg)}
+.aq tr.sel td{background:var(--lav)}
+.aq tr.open td{background:var(--lav)}
+.aq tr.open td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.aq tr:hover td{background:var(--raised)}
+.own{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.ava{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 9px var(--mo);flex:none}
+.ava.me{background:#7c3aed;color:#fff}
+.noown{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.noown em{font-style:normal;color:var(--amT);font-weight:700;font-size:12.5px}
+.bsm{min-height:26px!important;padding:0 9px!important;font-size:12px!important;border-radius:7px!important}
+.mo3{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--mu);font-size:16px;padding:0;margin-left:auto}
+.mo3[aria-expanded=true]{border-color:var(--hair);background:var(--raised);color:var(--ink)}
+.pop{position:absolute;z-index:6;background:var(--card);border:1px solid var(--hair);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:5px;min-width:180px;display:flex;flex-direction:column}
+.pop button,.pop a{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--ink)!important;font:600 12.5px var(--sg);text-align:left}
+.pop button:hover,.pop .fv{background:var(--raised)}
+.qft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font:500 12px var(--mo);color:var(--mu);flex-wrap:wrap}
+.qft .pb{display:flex;gap:5px;align-items:center}
+.qft button{min-width:30px;height:30px;border-radius:7px;border:1px solid var(--hair);background:var(--card);color:var(--ink);font:600 12px var(--mo);padding:0 8px}
+.qft button[aria-current=page]{background:var(--lav);border-color:var(--lavE);color:var(--vt)}
+.bulk{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:12px;background:#18181b;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.28);font:600 13px var(--sg)}
+.bulk b{font-family:var(--mo)}
+.bulk .btn{min-height:32px}
+.bulk .gh{background:transparent;border-color:rgba(255,255,255,.25);color:#fff!important}
+.ownc{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--amE);background:var(--amBg);font-size:12.5px}
+.ownc b{font-family:var(--mo)}
+.ownc .ic{background:var(--amT)}
+.drw{position:absolute;top:0;right:0;bottom:0;width:600px;z-index:5;background:var(--card);border-left:1px solid var(--hair);border-radius:16px 0 0 16px;box-shadow:-20px 0 60px rgba(0,0,0,.16);display:flex;flex-direction:column}
+.drh{padding:16px 22px 14px;border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:8px}
+.drh .tr{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.drh h2{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.drh .mt{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.drb{padding:16px 22px;display:flex;flex-direction:column;gap:18px;overflow:hidden;flex:1}
+.drb h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.fx{display:grid;grid-template-columns:140px minmax(0,1fr);border-top:1px solid var(--hair)}
+.fx dt,.fx dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.fx dt{color:var(--mu)}
+.fx dd{font-weight:600}
+.fx dd .mo{font-weight:600}
+.hist li{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--hair)}
+.hist li span:first-child{font:500 11.5px var(--mo);color:var(--mu)}
+.drf{padding:14px 22px 16px;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;background:var(--card);border-radius:0 0 0 16px}
+.drf .ln{font-size:12px;color:var(--mu);line-height:1.5}
+.ownbox{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--raised)}
+.mdl{position:absolute;left:50%;top:90px;transform:translateX(-50%);z-index:8;width:540px;background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.mdh{padding:18px 22px 12px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.mdh h2{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.mdb{padding:0 22px 16px;display:flex;flex-direction:column;gap:12px}
+.mdf{padding:12px 22px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px;background:var(--raised);border-radius:0 0 16px 16px}
+.dim2{position:absolute;inset:0;background:var(--dim);z-index:7}
+.dim1{position:absolute;inset:0;background:var(--dim);opacity:.45;z-index:4}
+.rv{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rv label{display:grid;grid-template-columns:20px 26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer}
+.rv label:last-child{border-bottom:0}
+.rv label.on{background:var(--lav)}
+.rv input{accent-color:#7c3aed;width:16px;height:16px;margin:0}
+.rv small{font:500 11.5px var(--mo);color:var(--mu)}
+.ex{display:grid;grid-template-columns:130px minmax(0,1fr);border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.ex dt,.ex dd{padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.5}
+.ex dt{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);background:var(--raised)}
+.ex dt:nth-last-child(2),.ex dd:last-child{border-bottom:0}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12.5px;font-weight:700}
+.fld label span{font-weight:500;color:var(--mu)}
+.ta{min-height:76px;padding:9px 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;color:var(--ink);line-height:1.5}
+.selb{display:flex;justify-content:space-between;align-items:center;min-height:36px;padding:0 11px;border:1px solid var(--hair);border-radius:8px;background:var(--card);font-size:12.5px;font-weight:600}
+.ack{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--lavE);background:var(--lav);border-radius:10px;font-size:12.5px;line-height:1.5}
+.ack input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.btn.dg{background:var(--neg);border-color:var(--neg);color:#fff!important}
+.fpan{position:absolute;z-index:6;width:560px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.2);display:flex;flex-direction:column}
+.fpan .fb{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;padding:16px 18px}
+.fpan fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.fpan legend{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;padding:0}
+.ck{display:flex;align-items:center;gap:9px;min-height:28px;font-size:12.5px}
+.ck input{accent-color:#7c3aed;width:15px;height:15px;margin:0}
+.ck small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.fpan .ff{display:flex;justify-content:space-between;align-items:center;padding:11px 18px;border-top:1px solid var(--hair);background:var(--raised);border-radius:0 0 12px 12px}
+.toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px;border-radius:12px;background:#18181b;color:#fff;font:600 13px var(--sg);box-shadow:0 14px 40px rgba(0,0,0,.28);white-space:nowrap}
+.toast .ok{display:grid;place-items:center;width:20px;height:20px;border-radius:999px;background:#10b981;color:#fff;font-size:12px}
+.toast a{color:#c4b5fd!important}
+.lane{width:100%;border-collapse:collapse;font-size:13px}
+.lane th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 14px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.lane td{padding:10px 14px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.lane tr:last-child td{border-bottom:0}
+.lane td b{font-weight:700}
+.lane .n{font-family:var(--mo);white-space:nowrap}
+.lane small{display:block;font-size:11.5px;color:var(--mu);font-family:var(--sg)}
+.lane tr.fail td{background:var(--negBg)}
+.lc{display:inline-flex;gap:5px;margin-left:6px;vertical-align:1px}
+.stp{display:flex;align-items:center;gap:0;font-size:12px}
+.stp span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--hair);background:var(--card);color:var(--mu);font-weight:600}
+.stp span:first-child{border-radius:999px 0 0 999px}
+.stp span:last-child{border-radius:0 999px 999px 0}
+.stp span+span{border-left:0}
+.stp span.on{background:var(--lav);color:var(--vt);border-color:var(--lavE);font-weight:800}
+.stp span.nx{border-style:dashed}
+.cred{border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.cred li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:10px 12px;border-bottom:1px solid var(--hair);align-items:center}
+.cred li:last-child{border-bottom:0}
+.cred b{font-size:13px}
+.cred small{grid-column:1;font-size:12px;color:var(--mu)}
+.cred .act{grid-row:1/3;grid-column:2}
+.eadx{width:340px!important;align-items:stretch!important;padding:0!important;gap:0!important}
+.pcard{padding:13px 0;border-top:1px solid var(--hair);display:flex;flex-direction:column;gap:6px}
+.pcard:first-child{border-top:0}
+.pcard .r1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.pcard b{font-size:14px}
+.pcard .r3{display:flex;gap:8px;align-items:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-radius:16px 16px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:760px}
+.grab{width:40px;height:4px;border-radius:999px;background:var(--hair2);margin:8px auto 0}
+.ph .ck{min-height:44px;font-size:14px}
+.ph .ck input{width:20px;height:20px}
+
+.otag{display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font:700 9.5px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);border:1px solid var(--hair2);background:var(--card);white-space:nowrap}
+.otag.tpl{border-style:dashed}
+.otag.gov{color:var(--ink)}
+.otag.rev{color:var(--vt);border-color:var(--lavE)}
+.pl.dash{border-style:dashed}
+.pl.seal{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.pl.ovr{background:var(--card);border:1.5px solid var(--ink);color:var(--ink)}
+.pl.inc{border-style:dashed;border-color:var(--amD);color:var(--amT);background:var(--card)}
+.pl.miss{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.pl.void{text-decoration:line-through}
+.sline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.sline b{color:var(--ink);font-weight:600}
+.rep{display:inline-flex;align-items:center;gap:4px;padding:0 6px;min-height:22px;border-radius:6px;border:1px dashed var(--hair2);background:transparent;color:var(--mu);font:600 11.5px var(--sg)}
+.rep:hover{color:var(--vt);border-color:var(--lavE)}
+.wrn{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;background:var(--amBg);border:1px solid var(--amE);color:var(--amT);font:700 11.5px var(--sg)}
+.ctab{width:100%;border-collapse:collapse;font-size:12.5px}
+.ctab th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.ctab td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+.ctab tr:last-child td{border-bottom:0}
+.ctab td.mo{font-size:12px;white-space:nowrap}
+.ctab .tt{display:block;font-weight:700;font-size:13px;color:var(--ink);line-height:1.35}
+.ctab .ts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--mu);margin-top:2px}
+.ctab tr.sel td{background:var(--lav)}
+.ctab tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.ctab tr.inc td{background:var(--amBg)}
+.mx{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));background:var(--card);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.mx a{display:flex;flex-direction:column;gap:3px;padding:11px 14px;border-right:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.mx a:last-child{border-right:0}
+.mx a:hover{background:var(--raised)}
+.mx .v{font:700 22px var(--mo);letter-spacing:-.03em;line-height:1.15}
+.mx .s{font-size:11.5px;color:var(--mu)}
+.mx .go{font:700 11.5px var(--sg);color:var(--vt);margin-top:2px}
+.lib{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:0 0 9px;font:600 12.5px var(--sg);color:var(--mu)}
+.org{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 0}
+.org .nd{padding:8px 14px;border:1px solid var(--hair2);border-radius:8px;background:var(--card);text-align:center;min-width:200px}
+.org .nd b{display:block;font-size:13px}
+.org .nd small{font:500 11px var(--mo);color:var(--mu)}
+.org .vl{width:1px;height:14px;background:var(--hair2)}
+.org .hz{display:grid;grid-template-columns:1fr 1fr;gap:28px;position:relative;padding-top:14px}
+.org .hz:before{content:'';position:absolute;top:0;left:25%;right:25%;height:1px;background:var(--hair2)}
+.org .br2{display:flex;flex-direction:column;align-items:center;position:relative}
+.org .br2:before{content:'';position:absolute;top:-14px;left:50%;width:1px;height:14px;background:var(--hair2)}
+.org .pc{font:700 11px var(--mo);color:var(--ink);background:var(--raised);border:1px solid var(--hair);border-radius:999px;padding:0 7px;margin-bottom:6px}
+.ef{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ef>div{padding:11px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.ef>div:last-child{border-right:0}
+.ef b{font-size:13px;line-height:1.35}
+.ef small{font-size:11.5px;color:var(--mu)}
+.ws{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.kv2{display:grid;grid-template-columns:170px minmax(0,1fr);border-top:1px solid var(--hair)}
+.kv2 dt,.kv2 dd{padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px;line-height:1.45}
+.kv2 dt{color:var(--mu)}
+.kv2 dd{font-weight:600}
+.ai2{border:1px dashed var(--lavE);border-radius:10px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.cs2{border:1.5px solid var(--ink);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.vh li{display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:12px;align-items:start;padding:11px 0;border-top:1px solid var(--hair)}
+.vh .vn{font:700 13px var(--mo)}
+.tree{display:flex;flex-direction:column}
+.tree li{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--hair)}
+.tree .tl{font:500 13px var(--mo);color:var(--mu);text-align:center}
+.optc{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--hair);border-radius:10px}
+.optc.on{border:1.5px solid var(--vi);background:var(--lav)}
+.optc input{accent-color:#7c3aed;width:16px;height:16px;margin:2px 0 0;flex:none}
+.srch2{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 14px;border:1.5px solid var(--vi);border-radius:9px;background:var(--card);font-size:15px;font-weight:600}
+.res li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 14px;padding:11px 14px;border-top:1px solid var(--hair)}
+.res li:first-child{border-top:0}
+.res .t{font-size:14px;font-weight:700;color:var(--ink)}
+.res .m{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mu)}
+.res mark{background:var(--lav);color:var(--vt);padding:0 1px;border-radius:2px}
+.dk{background:#fff;color:#18181b;width:1200px;padding:40px 48px;font-family:var(--sg)}
+.dk h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.dk h2{font-size:16px;font-weight:800;margin:26px 0 8px;letter-spacing:-.01em}
+.dk p{font-size:13px;line-height:1.6;color:#3f3a49;margin:0 0 8px;max-width:980px}
+.dt{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.5}
+.dt th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:8px 10px;border-bottom:1.5px solid #18181b;background:#fafafb}
+.dt td{padding:9px 10px;border-bottom:1px solid #ececf1;vertical-align:top}
+.dt td:first-child{font-weight:700;width:200px}
+.dt code{font:500 11.5px var(--mo);background:#f4f3f7;padding:1px 4px;border-radius:4px}
+.dk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.btn.p{background:var(--ink);border-color:var(--ink);color:var(--card)!important}
+.pl.unk{border-style:dashed;color:var(--mu);background:var(--card)}
+.pl.nc{border-style:dashed;color:var(--mu);background:transparent}
+.pl.rf{background:var(--neg);border-color:var(--neg);color:#fff}
+.hb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 24px;align-items:center;padding:16px 20px;background:var(--card);border:1px solid var(--hair);border-radius:12px;position:relative}
+.hb:before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--hbc)}
+.hb .st{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hb h2{font-size:20px;font-weight:800;letter-spacing:-.02em}
+.hb .sv{font:800 20px var(--sg);letter-spacing:-.02em;color:var(--hbt)}
+.hb .ln2{grid-column:1/-1;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--mu)}
+.hb .ln2 span{display:inline-flex;align-items:center;gap:6px}
+.hb .ln2 b{color:var(--ink);font-family:var(--mo);font-weight:600}
+.ver{display:flex;gap:6px 14px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.ver b{color:var(--ink);font-weight:600}
+.scope{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;border:1px solid var(--hair2);font:600 10.5px var(--mo);color:var(--mu);white-space:nowrap}
+.na li{display:grid;grid-template-columns:78px minmax(0,1fr) 120px auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.na li:first-child{border-top:0}
+.na .t{font-size:13px;font-weight:700;line-height:1.35}
+.na .d{font-size:12px;color:var(--mu);line-height:1.45}
+.na .o{font:500 11.5px var(--mo);color:var(--mu);line-height:1.5}
+.sev{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:70px;padding:2px 7px;border-radius:6px;font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--hair2);color:var(--mu);background:var(--card)}
+.sev.c{background:var(--neg);border-color:var(--neg);color:#fff}
+.sev.h{color:var(--neg);border-color:var(--negE);background:var(--negBg)}
+.sev.m{color:var(--amT);border-color:var(--amE);background:var(--amBg)}
+.sys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.sb{background:var(--card);border:1px solid var(--hair);border-radius:12px;display:flex;flex-direction:column;min-width:0}
+.sb .h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 8px}
+.sb .h h3{font-size:14px;font-weight:800;letter-spacing:-.01em}
+.sb .km{padding:0 14px 10px;display:flex;flex-direction:column;gap:2px}
+.sb .km b{font:700 20px var(--mo);letter-spacing:-.02em}
+.sb .km span{font-size:12px;color:var(--mu)}
+.kvs{display:flex;flex-direction:column;border-top:1px solid var(--hair)}
+.kvs>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.kvs>div:last-child{border-bottom:0}
+.kvs>div>span:first-child{color:var(--mu)}
+.kvs>div>span:last-child{text-align:right;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.kvs .m{font-family:var(--mo)}
+.sb .f{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid var(--hair);font:500 11px var(--mo);color:var(--mu)}
+.fr{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mo);color:var(--mu);white-space:nowrap}
+.fr i{width:7px;height:7px;border-radius:999px;display:inline-block}
+.fr.ok i{background:var(--pos)}
+.fr.st i{background:var(--amD)}
+.fr.un i{background:transparent;border:1.5px dashed var(--mu)}
+.feed li{display:grid;grid-template-columns:96px 120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--hair);font-size:12.5px}
+.feed li:first-child{border-top:0}
+.feed .w{font:500 11.5px var(--mo);color:var(--mu)}
+.cov{display:flex;flex-direction:column}
+.cov>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--hair);align-items:center}
+.cov>div:first-child{border-top:0}
+.cov b{font-size:13px}
+.cov small{grid-column:1;font-size:11.5px;color:var(--mu)}
+.cov .v{grid-row:1/3;grid-column:2;font:700 14px var(--mo);text-align:right}
+.cov .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--raised);overflow:hidden;border:1px solid var(--hair)}
+.cov .bar i{display:block;height:100%;background:var(--pos)}
+.cg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.cg section{padding:12px 14px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:2px}
+.cg h3{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin-bottom:4px}
+.cg a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;color:var(--ink)!important;font-size:13px;font-weight:600}
+.cg a:hover{color:var(--vt)!important}
+.disc2{font:600 12px var(--sg);color:var(--vt);background:none;border:0;padding:0;display:inline-flex;gap:5px;align-items:center}
+.how{border:1px dashed var(--hair2);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--mu);background:var(--raised)}
+.how b{color:var(--ink)}
+.whk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.whk>div{padding:10px 12px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);display:flex;flex-direction:column;gap:3px;min-width:0}
+.whk>div:nth-child(4n){border-right:0}
+.whk>div:nth-last-child(-n+4){border-bottom:0}
+.whk b{font:600 13px var(--mo)}
+.whk small{font-size:11px;color:var(--mu)}
+.days{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:70px}
+.days>div{display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end;height:100%}
+.days i{display:block;width:100%;border-radius:2px 2px 0 0;background:var(--pos)}
+.days i.z{height:2px!important;background:var(--neg)}
+.days span{font:500 9.5px var(--mo);color:var(--mu)}
+.sw3{display:grid;grid-template-columns:minmax(0,1.2fr) 150px minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font-size:12.5px}
+.sw3.hd{border-top:0;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--hair)}
+.sw3 b{font-size:13px}
+.sw3 .im{color:var(--mu);font-size:12px;line-height:1.45}
+.prev{border:1px dashed var(--hair2);border-radius:12px;padding:12px 14px;background:transparent}
+
+.wst{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-top:-4px}
+.wst a{display:inline-flex;align-items:center;gap:7px;padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.wst a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:var(--vi)}
+.wst a .n{font:700 10.5px var(--mo);padding:0 6px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.wst a .n.r{color:var(--neg);background:var(--negBg);border-color:var(--negE)}
+.wst a .n.a{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu)}
+.stt svg{flex:none}
+.stt.ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.stt.xar{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.stt.fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.stt.xst{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed}
+.stt.un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed}
+.stt.ni{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted}
+.stt.na{color:var(--mu);background:transparent;border-color:transparent}
+.stt.mz{color:var(--ink);background:var(--card);border-color:var(--hair2)}
+.stt.pd{color:var(--vt);background:var(--lav);border-color:var(--lavE)}
+.arq{display:flex;flex-direction:column}
+.arq li{display:grid;grid-template-columns:118px minmax(0,1fr) 150px auto;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--hair)}
+.arq li:first-child{border-top:0}
+.arq .t{font-weight:800;font-size:13.5px}
+.arq .d{font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45}
+.arq .w{font:500 11.5px var(--mo);color:var(--mu)}
+.ops{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.ops>a{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);color:var(--ink)!important;min-width:0}
+.ops>a:nth-child(4n){border-right:0}
+.ops>a:nth-last-child(-n+4){border-bottom:0}
+.ops .h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ops .h b{font-size:12.5px;font-weight:800}
+.ops .v{font-size:13px;font-weight:600;line-height:1.4}
+.ops .v .mo{font-weight:700}
+.ops .f{font:500 11px var(--mo);color:var(--mu)}
+.srcl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.srcl .dots{display:inline-flex;gap:3px}
+.srcl .dots i{width:8px;height:8px;border-radius:2px;background:var(--pos)}
+.srcl .dots i.x{background:transparent;border:1.5px solid var(--neg)}
+.raw{font:500 11px var(--mo);color:var(--mu)}
+.code{font:500 11.5px var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:6px;padding:8px 10px;line-height:1.55;white-space:pre-wrap;word-break:break-all;color:var(--ink)}
+.etb{width:100%;border-collapse:collapse;font-size:12.5px}
+.etb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 12px;border-bottom:1px solid var(--hair);white-space:nowrap;background:var(--raised)}
+.etb td{padding:9px 12px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.etb td.w{font:500 11.5px var(--mo);color:var(--mu);white-space:nowrap}
+.etb td b{font-weight:700}
+.etb td small{display:block;color:var(--mu);font-size:11.5px}
+.etb tr.sel td{background:var(--lav)}
+.etb tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.etb tr.day th{background:var(--card);color:var(--ink);font:700 11px var(--mo);letter-spacing:.02em;text-transform:none;padding:10px 12px 6px}
+.lo{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--hair)}
+.lo small{font:500 11.5px var(--mo);color:var(--mu)}
+.scopebox{border:1.5px solid var(--ink);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5}
+.scopebox b{font-size:13px}
+.scopebox ul{display:flex;flex-direction:column;gap:3px}
+.scopebox li{display:flex;gap:8px}
+.scopebox li span:first-child{width:16px;flex:none;text-align:center;font-weight:800}
+.you{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);font-size:12.5px;line-height:1.5}
+.steps3{display:flex;gap:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.steps3 span{display:inline-flex;align-items:center;gap:5px}
+.steps3 span i{display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1px solid var(--hair2);font-style:normal;font-size:10px}
+.steps3 span.on{color:var(--ink)}
+.steps3 span.on i{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.steps3 span.dn i{background:var(--pos);color:#fff;border-color:var(--pos)}
+.rz{display:flex;flex-direction:column;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.rz li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:9px 12px;border-bottom:1px solid var(--hair);font-size:12.5px;align-items:center}
+.rz li:last-child{border-bottom:0}
+.rz li small{grid-column:1;color:var(--mu);font-size:11.5px}
+.rz li .stt{grid-row:1/3;grid-column:2}
+.dl3{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.dl3>div{padding:12px 14px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:3px}
+.dl3>div:last-child{border-right:0}
+.dl3 b{font:700 15px var(--mo);letter-spacing:-.01em}
+.dl3 small{font-size:11.5px;color:var(--mu)}
+.life{display:flex;align-items:center;gap:0;font-size:11.5px;font-weight:700}
+.life span{padding:4px 10px;border:1px solid var(--hair);color:var(--mu);background:var(--card)}
+.life span+span{border-left:0}
+.life span:first-child{border-radius:999px 0 0 999px}
+.life span:last-child{border-radius:0 999px 999px 0}
+.life span.dn{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.life span.on{color:#fff;background:var(--ink);border-color:var(--ink)}
+.diff{border:1px solid var(--hair);border-radius:10px;overflow:hidden;font-size:12.5px;line-height:1.55}
+.diff .hd2{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--raised);border-bottom:1px solid var(--hair);font-weight:700}
+.diff .ln{display:grid;grid-template-columns:22px minmax(0,1fr);padding:3px 12px}
+.diff .ln.del{background:var(--negBg);color:var(--neg)}
+.diff .ln.add{background:var(--posBg);color:var(--pos)}
+.diff .ln.del span:last-child{text-decoration:line-through}
+.diff .ln span:first-child{font:700 12px var(--mo)}
+.frac{display:flex;flex-direction:column;gap:4px}
+.frac b{font:700 15px var(--mo);letter-spacing:-.01em}
+.frac b span{color:var(--mu);font-weight:500}
+.frac small{font-size:12px;color:var(--mu);line-height:1.45}
+.sam{display:inline-flex;gap:5px;align-items:center;font:600 11px var(--mo);color:var(--amT)}
+.ev2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.fail{border:1.5px solid var(--neg);border-radius:12px;background:var(--card);overflow:hidden}
+.fail .top{background:var(--negBg);padding:14px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--negE)}
+.fail .pipe{display:flex;align-items:center;gap:0;padding:14px 16px}
+.fail .pipe span{flex:1;text-align:center;padding:7px 4px;font-size:11.5px;font-weight:700;border:1px solid var(--hair);background:var(--card);color:var(--pos)}
+.fail .pipe span+span{border-left:0}
+.fail .pipe span.x{background:var(--neg);color:#fff;border-color:var(--neg)}
+.fail .pipe span.sk2{color:var(--mu);border-style:dashed}
+.prm{display:flex;flex-direction:column;gap:6px}
+.prm button{text-align:left;min-height:34px;padding:6px 11px;border-radius:9px;border:1px solid var(--hair);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.prm button:hover{border-color:var(--lavE);background:var(--lav)}
+.mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.mc .r1{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mc b{font-size:14px}
+.mc small{font-size:12px;color:var(--mu)}
+.ph .wst{overflow:hidden}
+.ph .wst a{padding:12px 10px;min-height:44px}
+.ph .arq li{grid-template-columns:minmax(0,1fr);gap:6px}
+.stx{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.stx>div{padding:12px 10px;border-right:1px solid var(--hair);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.stx>div:last-child{border-right:0}
+.stx small{font-size:11px;color:var(--mu);line-height:1.4}
+.lim{border-left:3px solid var(--hair2);padding:4px 0 4px 10px;font-size:12px;color:var(--mu);line-height:1.5}
+.lim b{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cv .btn.p{background:#7c3aed;border-color:#7c3aed;color:#fff!important}
+.stx{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;border:0!important;background:none!important;overflow:visible!important}
+.stx>div{border:1px solid var(--hair)!important;border-radius:10px;background:var(--card)}
+.acts{display:flex;justify-content:flex-end;align-items:center;gap:4px;white-space:nowrap}
+.ops .h{flex-wrap:wrap;align-items:flex-start}
+.ph .wst{flex:none}
+
+.rsh{display:grid;grid-template-columns:200px minmax(0,1fr) 44px}
+.rsh.wr{grid-template-columns:200px minmax(0,1fr) 340px}
+.crumb{font:600 12px var(--sg);color:var(--mu);display:flex;gap:6px;align-items:center}
+.crumb a{color:var(--mu)!important}
+.crumb b{color:var(--ink);font-weight:700}
+.ph1{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ph1 h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.ph1 p{font-size:13.5px;color:var(--mu);margin-top:4px;max-width:640px}
+.ph1 .acts{display:flex;gap:8px;align-items:center}
+.btn.ea{gap:7px}
+.btn.ea i{display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:#7c3aed;color:#fff;font:800 10px var(--sg);font-style:normal}
+.qbox{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--hair);border-radius:14px;background:var(--card)}
+.qbox label{font:700 12.5px var(--sg)}
+.qin{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 8px 0 14px;border:1.5px solid var(--hair2);border-radius:12px;background:var(--card);font-size:14px;color:var(--mu)}
+.qin.big{min-height:96px;align-items:flex-start;padding-top:14px}
+.qin .btn{margin-left:auto}
+.sug{display:flex;gap:8px;flex-wrap:wrap}
+.sug button{min-height:30px;padding:0 12px;border-radius:999px;border:1px dashed var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink)}
+.pcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.pc{border:1px solid var(--hair);border-radius:14px;background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.pc h3{font-size:14.5px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.pc .m{display:flex;gap:10px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.pc .f{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:6px;border-top:1px solid var(--hair)}
+.prog{height:6px;border-radius:999px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.prog i{display:block;height:100%;background:#7c3aed}
+.rail{border-left:1px solid var(--hair);background:var(--card);display:flex;flex-direction:column}
+.rail .rh{padding:14px 16px;border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;align-items:center}
+.rail .rb{padding:14px 16px;display:flex;flex-direction:column;gap:16px;flex:1}
+.rail h4{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);margin:0 0 6px}
+.rail ul{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.45}
+.rail .rf{padding:12px 16px;border-top:1px solid var(--hair)}
+.ptab{display:flex;gap:4px;border-bottom:1px solid var(--hair)}
+.ptab a{padding:9px 12px 10px;font:600 13px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.ptab a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.ptab a span{font:600 10.5px var(--mo);color:var(--mu)}
+.pbar2{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.pbar2 .meta{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu);margin-top:6px;align-items:center}
+.fd{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.fd .kk{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fd p{font-size:13px;line-height:1.55}
+.fk{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:6px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase}
+.fk.src{background:var(--posBg);color:var(--pos);border:1px solid var(--posE)}
+.fk.ea2{background:var(--lav);color:var(--vt);border:1px dashed var(--lavE)}
+.fk.hu{background:var(--ink);color:var(--card);border:1px solid var(--ink)}
+.fd.ea2{border-style:dashed;border-color:var(--lavE)}
+.cite{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:var(--lav);color:var(--vt);font:700 10.5px var(--mo);vertical-align:1px;border:1px solid var(--lavE)}
+.cite.on{background:#7c3aed;color:#fff}
+.pass{border-left:3px solid #7c3aed;background:var(--raised);padding:8px 12px;font-size:12.5px;line-height:1.55;border-radius:0 8px 8px 0}
+.pass mark{background:#ede4ff;color:var(--ink);padding:0 2px}
+.nr{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu);font-style:italic}
+.nr:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px}
+.cmp{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp th,.cmp td{padding:9px 12px;border-bottom:1px solid var(--hair);text-align:left;vertical-align:top}
+.cmp thead th{font:700 13px var(--sg);background:var(--raised)}
+.cmp tbody th{font:600 12px var(--sg);color:var(--mu);width:200px}
+.prop{border:1.5px dashed #a78bfa;border-radius:12px;background:var(--lav);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--vt)}
+.prop b{color:var(--ink)}
+.ptag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed #a78bfa;font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--vt);background:var(--lav)}
+.vstep{display:flex;flex-direction:column;gap:0;border:1px solid var(--hair);border-radius:12px;overflow:hidden;background:var(--card)}
+.vstep li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--hair);font-size:12.5px}
+.vstep li:last-child{border-bottom:0}
+.vstep li i{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;border:1px solid var(--hair2);font:700 11px var(--mo);font-style:normal;color:var(--mu)}
+.vstep li.dn i{background:var(--pos);border-color:var(--pos);color:#fff}
+.vstep li.on{background:var(--lav)}
+.vstep li.on i{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.brief{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:28px 34px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.6}
+.brief h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.brief h3{font-size:15px;font-weight:800;margin-top:6px}
+.brief .rv2{display:flex;align-items:center;gap:8px;font:600 11.5px var(--mo);color:var(--mu)}
+.dest{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.dest label{border:1px solid var(--hair);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;font-size:12px;background:var(--card)}
+.dest label.on{border:2px solid #7c3aed;background:var(--lav)}
+.dest label.off{opacity:.6;border-style:dashed}
+.dest b{font-size:13.5px}
+.dark-fix .stt.ok{background:transparent}
+.pc>.stt,.pc>.nr,.cd>.stt{align-self:flex-start}
+
+.dsh{display:grid;grid-template-columns:212px minmax(0,1fr) 44px}
+.dsh.wr{grid-template-columns:212px minmax(0,1fr) 320px}
+.dsd{background:var(--card);border-right:1px solid var(--hair);padding:12px 0;display:flex;flex-direction:column;gap:2px}
+.dsd .co{margin:2px 12px 12px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid var(--hair);border-radius:9px;font:700 12.5px var(--sg)}
+.dsd .co i{width:20px;height:20px;border-radius:6px;background:#0f766e;flex:none}
+.dsd .co span{margin-left:auto;color:var(--mu);font-weight:500}
+.dsd nav a{display:flex;align-items:center;min-height:34px;padding:0 12px;margin:0 8px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink)}
+.dsd nav a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.dsd .sep{height:1px;background:var(--hair);margin:6px 14px}
+.zn{display:flex;gap:2px;border-bottom:1px solid var(--hair)}
+.zn a{padding:9px 14px 10px;font:600 13.5px var(--sg);color:var(--mu)!important;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;gap:6px;align-items:center}
+.zn a[aria-current=page]{color:var(--ink)!important;font-weight:800;border-color:#7c3aed}
+.zn a span{font:600 10.5px var(--mo);color:var(--mu)}
+.fco{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;border:1px solid var(--hair2);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--card);white-space:nowrap}
+.fco:before{content:"CO";color:var(--mu);font-weight:600;margin-right:2px}
+.fme{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:999px;background:var(--lav);color:var(--vt);font:700 11px var(--sg);border:1px solid var(--lavE);white-space:nowrap}
+.fme:before{content:"";width:6px;height:6px;border-radius:999px;background:#7c3aed}
+.ftx{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:6px;border:1px solid var(--hair2);border-left:3px solid #0f766e;font:700 11px var(--sg);color:#0f766e;background:var(--card);white-space:nowrap}
+.ftx.w{border-left-color:var(--amD);color:var(--amT)}
+.ab{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--sg);white-space:nowrap}
+.ab.anr{color:var(--mu);font-style:italic}
+.ab.anp{color:var(--mu);text-decoration:underline dashed;text-underline-offset:3px}
+.ab.ane{color:var(--mu);opacity:.8}
+.ab.aur{color:var(--neg)}
+.ab.alk{color:var(--ink)}
+.scs{display:flex;gap:2px;height:8px;border-radius:3px;overflow:hidden}
+.scs i{flex:1;background:var(--hair)}
+.scs i.h{background:#7c3aed}.scs i.m{background:#a78bfa}.scs i.l{background:#ddd6fe}.scs i.x{background:repeating-linear-gradient(45deg,var(--hair) 0 3px,transparent 3px 6px)}
+.sc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sc3>div{border:1px solid var(--hair);border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.sc3 small{font-size:10.5px;color:var(--mu)}
+.sc3 b{font:700 15px var(--mo)}
+.sc3 em{font-style:normal;font-size:10.5px;color:var(--mu)}
+.sc3 .dlt{color:var(--pos);font:700 10.5px var(--mo)}
+.board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;align-items:start}
+.col{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.col h3{font-size:13px;font-weight:800;display:flex;justify-content:space-between;align-items:baseline}
+.col h3 span{font:500 11px var(--mo);color:var(--mu)}
+.dcard{background:var(--card);border:1px solid var(--hair);border-radius:10px;padding:10px 11px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+.dcard .t{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.dc b.n{font-size:13.5px;font-weight:800}
+.dcard .mt{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.dcard .ft{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:6px}
+.dcard.stale{border-color:var(--amE)}
+.dcard.pass{opacity:.7;border-style:dashed}
+.prog8{display:flex;gap:0}
+.prog8 span{flex:1;text-align:center;padding:7px 2px;font:600 11px var(--sg);border:1px solid var(--hair);background:var(--card);color:var(--mu)}
+.prog8 span+span{border-left:0}
+.prog8 span:first-child{border-radius:8px 0 0 8px}.prog8 span:last-child{border-radius:0 8px 8px 0}
+.prog8 span.dn{color:var(--ink);background:var(--raised)}
+.prog8 span.on{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800}
+.fin5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--hair);border-radius:12px;background:var(--card);overflow:hidden}
+.fin5>div{padding:11px 14px;border-right:1px solid var(--hair)}
+.fin5>div:last-child{border-right:0}
+.fin5 small{display:block;font-size:11.5px;color:var(--mu)}
+.fin5 b{font:700 18px var(--mo)}
+.s11{display:grid;grid-template-columns:repeat(11,minmax(0,1fr));gap:4px}
+.s11>div{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.s11 i{display:block;width:100%;height:30px;border-radius:5px;background:var(--hair);position:relative}
+.s11 i b{position:absolute;inset:auto 0 0 0;border-radius:5px}
+.s11 small{font-size:10px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.s11 span{font:700 12px var(--mo)}
+.cmpb{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:8px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid var(--hair)}
+.cmpb .br{height:12px;border-radius:3px}
+.cmpb .bw{display:flex;align-items:center;gap:6px}
+.stk{position:sticky;left:0;background:var(--card)}
+.dv{display:flex;justify-content:space-between;gap:10px}
+.sc3 em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc3 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsd .co{justify-content:flex-start;text-align:left}
+.rz li>.fco,.rz li>.fme,.rz li>.ftx,.rz li>.ab{justify-self:start}
+.dsd .co{background:var(--card);color:var(--ink)}
+/* RSB · Investor Research v2 (#6273) — Benchmarking, theses on Markets, Library */
+.rsb-w{position:relative}
+.dsd nav .rsb-zn{display:flex;flex-direction:column;gap:1px;margin:2px 8px 4px 22px;border-left:1px solid var(--hair);padding-left:6px}
+.dsd nav .rsb-zn a{min-height:28px;margin:0;padding:0 10px;font-size:12.5px;font-weight:600;color:var(--mu);border-radius:8px}
+.dsd nav .rsb-zn a[aria-current=page]{background:var(--lav);color:var(--vt);font-weight:800}
+.dsd nav a.rsb-open{font-weight:800;background:transparent;color:var(--ink)}
+.dsd .co i.rsb-ind{background:#4338ca}
+.rsb-lic{font:700 9.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:#4338ca;border:1px solid #c7d2fe;border-radius:4px;padding:0 4px;margin-left:4px}
+.rsb-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.rsb-tile{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rsb-tile small{font:600 12px var(--sg);color:var(--ink)}
+.rsb-tile em{font-style:normal;font-size:11px;color:var(--mu);line-height:1.35}
+.rsb-tile b{font:700 20px var(--mo);letter-spacing:-.02em;margin:2px 0}
+.rsb-tile b .nr{font-size:13px}
+.rsb-tile.sk2 b{height:22px;width:60px;border-radius:6px;background:var(--skel);display:block}
+.rsb-tb{width:100%;border-collapse:collapse;font-size:12.5px}
+.rsb-tb th{font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);text-align:left;padding:9px 10px;border-bottom:1px solid var(--hair);background:var(--raised);white-space:nowrap}
+.rsb-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+.rsb-tb tr:last-child td{border-bottom:0}
+.rsb-tb td.n,.rsb-tb th.n{text-align:right}
+.rsb-tb .m{font-family:var(--mo);font-weight:600;white-space:nowrap}
+.rsb-tb td small{display:block;font-size:11px;color:var(--mu);margin-top:2px}
+.rsb-tb tr.sel td{background:var(--lav)}
+.rsb-tb tr.rsb-tr td{background:var(--raised)}
+.rsb-tb td.rsb-trkc{color:var(--mu);font-style:italic;font-size:12px}
+.rsb-rd{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.rsb-k{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:6px;font:700 11px var(--sg);white-space:nowrap}
+.rsb-k.cp{border:1.5px solid var(--ink);color:var(--ink);background:var(--card)}
+.rsb-k.tk{border:1.5px dashed var(--hair2);color:var(--mu);background:transparent}
+.rsb-ts{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);white-space:nowrap;border:1px solid var(--hair2);color:var(--ink);background:var(--card)}
+.rsb-ts.act{border-color:var(--posE);color:var(--pos);background:var(--posBg)}
+.rsb-ts.prk{border-style:dashed;color:var(--amT);border-color:var(--amE)}
+.rsb-ts.ret{color:var(--mu);text-decoration:line-through;text-decoration-thickness:1px}
+.rsb-mk{display:inline-flex;align-items:center;gap:4px;font:700 11px var(--sg);color:var(--vt);border:1px solid var(--lavE);border-radius:6px;padding:0 6px;white-space:nowrap;background:var(--card)}
+.rsb-mk.anti{color:var(--mu);border-style:dashed;border-color:var(--hair2)}
+.rsb-flag{display:inline-flex;align-items:center;gap:4px;padding:0 7px;border-radius:999px;border:1px dashed var(--amD);font:700 10px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--amT);background:var(--amBg);white-space:nowrap}
+.rsb-fig{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rsb-fig>div{border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.rsb-fig small{font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu)}
+.rsb-fig b{font:700 24px var(--mo);letter-spacing:-.02em}
+.rsb-fig span{font-size:12px;color:var(--mu);line-height:1.45}
+.rsb-fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rsb-fld label{font:700 12px var(--sg)}
+.rsb-fld .rsb-in{min-height:36px;border:1.5px solid var(--hair2);border-radius:9px;padding:7px 10px;font-size:13px;background:var(--card);color:var(--ink);display:flex;align-items:center}
+.rsb-fld .rsb-in.ta{min-height:70px;align-items:flex-start}
+.rsb-fld .rsb-in.err{border-color:var(--neg)}
+.rsb-fld .rsb-in.ph2{color:var(--mu)}
+.rsb-fld em{font-style:normal;font-size:11px;color:var(--mu)}
+.rsb-fg{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.rsb-dim{position:absolute;inset:0;background:var(--dim);z-index:5}
+.rsb-drw{position:absolute;top:0;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--hair);z-index:6;display:flex;flex-direction:column;box-shadow:-20px 0 50px rgba(0,0,0,.15)}
+.rsb-dlg{background:var(--card);border:1px solid var(--hair);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.12);display:flex;flex-direction:column}
+.rsb-step{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.btn.rsb-del{background:var(--neg);border-color:var(--neg);color:#fff}
+.rsb-menu{border:1px solid var(--hair);border-radius:10px;background:var(--card);box-shadow:0 12px 30px rgba(0,0,0,.12);display:flex;flex-direction:column;padding:4px;width:200px}
+.rsb-menu button{text-align:left;min-height:34px;padding:0 10px;border-radius:7px;border:0;background:transparent;font:600 12.5px var(--sg);color:var(--ink)}
+.rsb-menu button.d{color:var(--neg)}
+.rsb-menu button.f{background:var(--lav)}
+.rsb-prop{border:1.5px dashed var(--lavE);border-radius:12px;background:var(--lav);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rsb-prop p{font-size:12.5px;line-height:1.55;color:var(--ink)}
+.rsb-sm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rsb-sm>div{border:1px solid var(--hair);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.rsb-sm h3{font-size:12.5px;font-weight:800;display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.rsb-sm h3 span{font:600 11px var(--mo);color:var(--mu)}
+.rsb-bars{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;align-items:end;height:60px}
+.rsb-bars i{display:block;background:#7c3aed;border-radius:3px 3px 0 0;min-height:2px}
+.rsb-bars i.gap{height:100%!important;background:repeating-linear-gradient(45deg,var(--hair2) 0 2px,transparent 2px 6px);border:1px dashed var(--hair2);border-radius:3px}
+.rsb-ml{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;font:600 9.5px var(--mo);color:var(--mu);text-align:center}
+.rsb-gapn{font-size:11px;color:var(--mu);line-height:1.4}
+.rsb-gapn b{color:var(--ink);font-weight:700}
+.rsb-mix{display:flex;flex-direction:column;gap:6px}
+.rsb-mix div{display:grid;grid-template-columns:110px minmax(0,1fr) 46px;gap:8px;align-items:center;font-size:12px}
+.rsb-mix i{display:block;height:10px;border-radius:3px;background:#a78bfa}
+.rsb-mix span{font:600 11.5px var(--mo);text-align:right}
+.rsb-cnt{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rsb-cnt>div{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 14px;display:flex;flex-direction:column;gap:2px}
+.rsb-cnt small{font:600 12px var(--sg)}
+.rsb-cnt b{font:700 20px var(--mo)}
+.rsb-cnt em{font-style:normal;font-size:11px;color:var(--mu);font-family:var(--mo)}
+.rsb-ml2{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.rsb-ml2 div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--hair2);padding-bottom:4px}
+.rsb-ml2 div b{font:600 12px var(--mo)}
+.rsb-match{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;text-transform:uppercase;padding:0 6px;border-radius:5px;border:1px solid var(--hair2);color:var(--ink)}
+.rsb-match.rg{border-style:dashed;color:var(--mu)}
+.rsb-half{border:1px solid var(--hair);border-radius:16px;background:var(--card);padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.rsb-half h2{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.rsb-ab{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--ink);color:var(--card);font:800 13px var(--sg);margin-right:8px;vertical-align:-3px}
+.rsb-mini{display:grid;grid-template-columns:190px minmax(0,1fr);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-height:330px}
+.rsb-mini .dsd{border-right:1px solid var(--hair)}
+.rsb-mini>div{padding:12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--bg);min-width:0}
+.rsb-path{display:flex;flex-direction:column;gap:6px;counter-reset:p}
+.rsb-path li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;font-size:12.5px;line-height:1.45;counter-increment:p}
+.rsb-path li:before{content:counter(p);display:grid;place-items:center;width:20px;height:20px;border-radius:999px;border:1px solid var(--hair2);font:700 10.5px var(--mo);color:var(--mu)}
+.rsb-chip{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:600 12px var(--sg);color:var(--ink);white-space:nowrap}
+.rsb-chip[aria-pressed=true],.rsb-chip[aria-checked=true]{background:var(--lav);border-color:var(--lavE);color:var(--vt);font-weight:800}
+.rsb-chip span{font:600 10.5px var(--mo);color:var(--mu)}
+.rsb-chip.pp{border-style:dashed}
+.rsb-kw{display:flex;gap:6px;flex-wrap:wrap}
+.rsb-kw span{font:600 11.5px var(--sg);padding:1px 8px;border-radius:6px;background:var(--raised);border:1px solid var(--hair)}
+.rsb-kw span.anti{border-style:dashed;color:var(--mu);text-decoration:line-through}
+.rsb-th{border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.rsb-th.ret{opacity:.75}
+.rsb-th h3{font-size:14px;font-weight:800;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.rsb-th p{font-size:12.5px;line-height:1.5;color:var(--ink)}
+.rsb-th .m{display:flex;gap:12px;flex-wrap:wrap;font:500 11.5px var(--mo);color:var(--mu)}
+.rsb-ss{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.rsb-ss>section{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.rsb-ss h3{font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.rsb-ss p{font-size:12px;line-height:1.5}
+.rsb-skr{display:flex;flex-direction:column;gap:6px}
+.rsb-skr i{display:block;height:12px;border-radius:5px;background:var(--skel)}
+.rsb-ua{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);color:var(--ink);border:1.5px dashed var(--hair2);border-radius:6px;padding:0 7px;background:var(--card)}
+.rsb-rf{display:inline-flex;align-items:center;gap:5px;font:700 11.5px var(--sg);color:var(--neg);border:1.5px solid var(--negE);border-radius:6px;padding:0 7px;background:var(--negBg)}
+.rsb-none{display:inline-flex;align-items:center;gap:5px;font:600 12px var(--sg);color:var(--mu)}
+.rsb-none:before{content:"∅";font-family:var(--mo);font-size:11px}
+.rsb-sb{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 22px;background:var(--card);border-top:1px solid var(--hair);display:flex;gap:8px}
+.rsb-mc{border:1px solid var(--hair);border-radius:12px;background:var(--card);padding:11px 13px;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.rsb-mc .r1{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.rsb-mc small{font-size:11.5px;color:var(--mu)}
+.rsb-mc .mo{font-family:var(--mo);font-weight:600}
+.rsb-tile.ph3{padding:9px 11px}
+.rsb-tile.ph3 b{font-size:17px}
+.rsb-toast{display:flex;gap:10px;align-items:center;border-radius:10px;background:var(--ink);color:var(--card);padding:10px 14px;font-size:12.5px;align-self:flex-start}
+.rsb-toast a{color:#c4b5fd!important;font-weight:700}
+.rsb-cost{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--amE);background:var(--amBg);color:var(--amT);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.45}
+.rsb-pick{display:flex;gap:4px;flex-wrap:wrap}
+.rsb-pick button{min-height:44px;padding:0 12px;border-radius:999px;border:1px solid var(--hair2);background:var(--card);font:600 12.5px var(--sg);color:var(--ink)}
+.rsb-pick button[aria-checked=true]{background:var(--lav);border-color:var(--lavE);color:var(--vt);font-weight:800}
+.rsb-view{display:flex;gap:10px;align-items:center;padding:7px 12px;border:1px dashed var(--amD);background:var(--amBg);color:var(--amT);border-radius:9px;font:600 12px var(--sg)}
+.rsb-ss .rsb-ua,.rsb-ss .rsb-rf,.rsb-ss .rsb-view,.rsb-ss .rsb-none,.rsb-ss .nr{align-self:flex-start}
+.rsb-mc>.rsb-mk,.rsb-mc>.rsb-k{align-self:flex-start}
+.rsb-tb td,.rsb-tb td b{color:var(--ink)}.rsb-tb td small,.rsb-tb td.rsb-trkc{color:var(--mu)}.cv{color:var(--ink)}
+
+.st-bh{display:flex;gap:14px;align-items:flex-start}
+.st-bh h1{font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.st-bh p{font-size:13px;color:var(--mu);margin-top:4px;max-width:1060px;line-height:1.55}
+.st-id{font:700 11px var(--mo);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--bg);white-space:nowrap;margin-top:2px}
+.st-sec{display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+.st-sh{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap}
+.st-note{font-size:12px;color:var(--mu)}
+.st-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.st-sep{width:1px;height:20px;background:var(--hair2);margin:0 6px}
+.st-gray{filter:grayscale(1)}
+/* chips */
+.st-c{display:inline-flex;align-items:center;gap:5px;padding:1px 8px 1px 6px;border-radius:999px;font:700 11px var(--sg);line-height:1.6;white-space:nowrap;border:1px solid var(--hair);background:var(--raised);color:var(--mu);vertical-align:middle}
+.st-c svg{flex:none}
+.st-nr{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-na{color:var(--mu);background:transparent;border-color:transparent;padding-left:2px}
+.st-un{color:var(--ink);background:var(--card);border-color:var(--hair2);border-style:dashed;border-width:1.5px}
+.st-un svg{color:var(--neg)}
+.st-rf{color:var(--ink);background:var(--raised);border-color:var(--ink);border-width:1px}
+.st-stale{color:var(--amT);background:transparent;border-color:var(--amE);border-style:dashed;border-width:1.5px}
+.st-part{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-pv{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dashed;border-width:1.5px;font-style:italic}
+.st-nc{color:var(--mu);background:transparent;border-color:var(--hair2);border-style:dotted;border-width:1.5px}
+.st-l-ok{color:var(--pos);background:var(--posBg);border-color:var(--posE)}
+.st-l-am{color:var(--amT);background:var(--amBg);border-color:var(--amE)}
+.st-l-mu{color:var(--mu);background:var(--raised);border-color:var(--hair2)}
+.st-l-fl{color:#fff;background:var(--neg);border-color:var(--neg)}
+.st-retry{display:inline-flex;align-items:center;gap:4px;font:700 11.5px var(--sg);color:var(--vt);background:transparent;border:0;padding:2px 4px;border-radius:6px;vertical-align:middle}
+.st-unin{display:inline-flex;align-items:center;gap:4px;color:var(--neg);font-weight:800}
+.st-nrin{color:var(--mu);font-style:italic;font-weight:600}
+.st-nain{color:var(--mu)}
+.st-why{display:block;font-size:12px;color:var(--mu);line-height:1.45}
+.st-route{font:700 12px var(--sg)}
+.st-zero{color:var(--ink)!important;font-weight:800}
+.st-cellnr{color:var(--mu)}
+.st-stack{font:800 20px var(--mo);letter-spacing:-.02em}
+.st-eng{display:inline-flex;font:700 11px var(--mo);color:var(--vt);background:var(--lav);border:1px dashed var(--lavE);border-radius:6px;padding:1px 6px}
+.st-spec{font:500 11px var(--mo)}
+/* tiles */
+.st-tiles{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px}
+.st-t5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.st-tw{display:flex;flex-direction:column;gap:6px;min-width:0}
+.st-cap2{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.st-tile{display:flex;flex-direction:column;gap:6px;background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:14px;min-height:150px;align-items:flex-start}
+.st-tl{font-size:12px;color:var(--mu);font-weight:600}
+.st-tv{font:800 26px var(--mo);letter-spacing:-.03em;line-height:1.1;color:var(--ink)}
+.st-ts{display:flex;flex-direction:column;gap:5px;align-items:flex-start;font-size:12px}
+.st-tna{opacity:1}
+.st-big-nr{color:var(--mu);font-weight:500}
+.st-big-un{display:inline-grid;place-items:center;width:30px;height:30px;border:1.5px dashed var(--hair2);border-radius:8px;font:800 18px var(--sg);color:var(--neg)}
+.st-big-rf{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid var(--ink);border-radius:8px;font:700 18px var(--sg);color:var(--ink);background:var(--raised)}
+.st-provv{color:var(--mu);font-style:italic}
+.st-wh{font:700 15px var(--sg);color:var(--mu);font-style:italic}
+.st-withheld{border-style:dashed}
+.st-mini{min-height:120px}
+.st-sk{display:inline-block;height:12px;border-radius:5px;background:var(--skel)}
+/* prose */
+.st-prose{font-size:14px;line-height:1.7;padding:6px 0;border-bottom:1px solid var(--hair)}
+.st-prose:last-child{border-bottom:0}
+/* tables */
+.st-tb{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.45}
+.st-tb th{text-align:left;font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--mu);padding:8px 10px;border-bottom:1.5px solid var(--ink)}
+.st-tb td{padding:9px 10px;border-bottom:1px solid var(--hair);vertical-align:middle}
+.st-tb .n{text-align:right;font-family:var(--mo)}
+.st-tb code,.st-dict code,.st-sec code,.st-bh code,.st-rules code,.st-opt code,.st-foot2 code{font:500 11px var(--mo);background:var(--raised);border:1px solid var(--hair);padding:0 4px;border-radius:4px}
+.st-dict{background:var(--card);border-radius:12px;overflow:hidden}
+.st-dict td:first-child{font-weight:800;white-space:nowrap}
+.st-dict td:first-child small{display:block;font:600 10px var(--mo);color:var(--mu);text-transform:uppercase;letter-spacing:.05em}
+.st-dict td:nth-child(4){font:700 13px var(--mo);color:var(--mu);white-space:nowrap}
+.st-modrow td{background:var(--raised)}
+.st-in th{border-bottom:1px solid var(--hair2)}
+.st-none-ex{font-size:12px;color:var(--mu)}
+.st-foot2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;font-size:12px;color:var(--mu);line-height:1.5}
+.st-foot2 b{color:var(--ink)}
+/* lists */
+.st-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--hair)}
+.st-list li:first-child{border-top:0}
+.st-list li>span:first-child{display:flex;flex-direction:column}
+.st-list small{font-size:12px;color:var(--mu)}
+.st-g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.st-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.st-lb{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-height:190px}
+.st-lbh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-lbh b{font-size:14px}
+.st-cnt{font:700 11px var(--mo);padding:1px 7px;border-radius:999px;border:1px solid var(--hair);background:var(--raised);color:var(--ink)}
+.st-none{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border-radius:9px;background:var(--raised);font-size:13px}
+.st-unbox,.st-rfbox{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+.st-unbox{border:1.5px dashed var(--hair2);background:var(--card)}
+.st-unbox svg{color:var(--neg);margin-top:3px}
+.st-unbox div,.st-rfbox div{display:flex;flex-direction:column;gap:3px;flex:1}
+.st-unbox span,.st-rfbox span{color:var(--mu)}
+.st-rfbox{border:1px solid var(--ink);background:var(--raised)}
+.st-rfbox svg{margin-top:3px}
+.st-pb{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;background:var(--amBg);border:1px solid var(--amE);color:var(--ink);font-size:12.5px;line-height:1.45}
+.st-pb svg{color:var(--amT);flex:none}
+.st-pb>span{flex:1}
+.st-skl>div{display:flex;gap:14px;align-items:center;padding:10px 0;border-top:1px solid var(--hair)}
+.st-skl>div:first-child{border-top:0}
+/* charts */
+.st-ch{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.st-chh{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.st-chh b{font-size:14px}
+.st-ch svg{font-family:var(--sg)}
+.st-rule{font:700 13px var(--sg);padding:12px 14px;border-left:3px solid var(--vi);background:var(--card);border-radius:0 9px 9px 0}
+/* composite */
+.st-comp{background:var(--card);border:1px solid var(--hair);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.st-ch2{display:flex;justify-content:space-between;align-items:flex-end}
+.st-ch2 h2{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.st-comp .st-tile{background:var(--raised)}
+.st-rules{display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.5;list-style:disc!important;padding-left:18px!important}
+.st-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:500 11.5px var(--mo);color:var(--mu)}
+/* phone */
+.st-pt{display:flex;justify-content:space-between;padding:12px 18px 8px;font:700 12px var(--sg);border-bottom:1px solid var(--hair);background:var(--card)}
+.st-plist{background:var(--card);border:1px solid var(--hair);border-radius:12px}
+.st-plist>div{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:12px;border-top:1px solid var(--hair)}
+.st-plist>div:first-child{border-top:0}
+.st-plist span{font-size:12.5px}
+/* do / don't */
+.st-dd{display:flex;flex-direction:column;gap:8px}
+.st-ddt{font:800 14px var(--sg)}
+.st-ddp{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-dn,.st-do{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px}
+.st-dn{border:1.5px solid var(--negE);background:var(--negBg)}
+.st-do{border:1.5px solid var(--posE);background:var(--posBg)}
+.st-ddl{display:inline-flex;align-items:center;gap:5px;font:800 11px var(--mo);text-transform:uppercase;letter-spacing:.05em}
+.st-dn .st-ddl{color:var(--neg)}
+.st-do .st-ddl{color:var(--pos)}
+/* options */
+.st-opt{background:var(--card);border:1px solid var(--hair);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.st-opt p{font-size:12.5px;line-height:1.55;color:var(--mu)}
+.st-opt b{font-size:15px}
+.st-on{border:2px solid var(--vi)}
+.st-ol{font:700 10px var(--mo);letter-spacing:.07em;text-transform:uppercase;color:var(--vt)}
+.st-code{font:500 12px/1.6 var(--mo);background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:12px 14px;white-space:pre-wrap;margin:0;color:var(--ink)}
+.st-whyi{font-size:12px;color:var(--mu)}
+.st-ch svg text{font-family:'Space Grotesk',system-ui,sans-serif}
+.st-ch svg text[font-family]{font-family:'Roboto Mono',ui-monospace,monospace}
+.st-plist~.st-lb{min-height:0}
+/* RMD · Research Markets · Directory and Investor View (#7036) */
+.rmd-lbl{display:flex;flex-direction:column;gap:4px;font:700 12px var(--sg);color:var(--ink)}
+.rmd-in{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);color:var(--ink);font:500 13px var(--sg);min-width:320px}
+.rmd-in.ph2{color:var(--mu)}
+.rmd-in .x{margin-left:auto;font-size:12px;color:var(--mu)}
+.rmd-bar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.rmd-sel{display:flex;flex-direction:column;gap:4px;font:700 12px var(--sg);color:var(--ink)}
+.rmd-sel span.v{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;padding:0 12px;border:1px solid var(--hair2);border-radius:9px;background:var(--card);font:600 12.5px var(--sg);color:var(--ink);white-space:nowrap}
+.rmd-sel span.v.on{border-color:var(--lavE);background:var(--lav);color:var(--vt)}
+.rmd-sum{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.rmd-sum b{font-size:13.5px}
+.rmd-sum .raw{max-width:none}
+.rmd-cov{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border:1px solid var(--hair);border-radius:10px;background:var(--raised);font-size:12.5px;line-height:1.5;color:var(--ink)}
+.rmd-cov b{font-weight:800}
+.rmd-cov .rmd-ic{flex:none;display:grid;place-items:center;width:18px;height:18px;border-radius:999px;border:1.5px solid var(--mu);color:var(--mu);font:800 11px var(--sg);margin-top:1px}
+.rmd-cov a{color:var(--vt);font-weight:700}
+.rmd-tbw{padding:0;gap:0;overflow:hidden}
+.rmd-tb{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.rmd-tb th{font:700 10.5px var(--mo);letter-spacing:.05em;text-transform:uppercase;color:var(--mu);text-align:left;padding:9px 10px;border-bottom:1px solid var(--hair);background:var(--raised);white-space:normal;vertical-align:bottom;line-height:1.3}
+.rmd-tb th button{all:unset;cursor:pointer;color:var(--ink)}
+.rmd-tb td{padding:10px 10px;border-bottom:1px solid var(--hair);vertical-align:top;color:var(--ink)}
+.rmd-tb td.n,.rmd-tb th.n{text-align:right}
+.rmd-tb .m{font-family:var(--mo);font-weight:600;white-space:nowrap}
+.rmd-tb td small{display:block;font-size:11px;color:var(--mu);margin-top:2px;line-height:1.35}
+.rmd-tb td b a{color:var(--ink)}
+.rmd-tb tr.rmd-op td{background:var(--lav)}
+.rmd-tb tr.rmd-op td:first-child{box-shadow:inset 3px 0 0 var(--vi)}
+.rmd-tb tr.rmd-exr td{background:var(--card);padding:0 10px 14px}
+.rmd-tb tr.rmd-gapr td{color:var(--mu);font:500 11.5px var(--mo);text-align:center;border-style:dashed;background:var(--raised)}
+.rmd-xb{all:unset;display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;border:1px solid var(--hair2);color:var(--ink);font-size:11px;cursor:pointer;background:var(--card)}
+.rmd-xb.on{border-color:var(--vi);color:var(--vt);background:var(--lav)}
+.rmd-cc{display:flex;flex-wrap:wrap;gap:4px}
+.rmd-cc span{font:600 11px var(--mo);padding:0 6px;border-radius:5px;border:1px solid var(--hair);background:var(--raised);color:var(--ink);white-space:nowrap}
+.rmd-nr{display:inline-flex;flex-direction:column;gap:1px}
+.rmd-nr i{font:600 12px var(--sg);color:var(--mu);font-style:italic;display:inline-flex;align-items:center;gap:5px}
+.rmd-nr i:before{content:"";width:10px;height:10px;border:1.5px dashed var(--hair2);border-radius:3px;flex:none}
+.rmd-nr em{font:500 11px var(--sg);color:var(--mu);font-style:normal;line-height:1.35}
+.rmd-age{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--sg);padding:0 6px;border-radius:6px;border:1.5px dashed var(--amE);color:var(--amT);white-space:nowrap;margin-top:3px}
+.rmd-agei{display:inline-flex;align-items:center;gap:4px;font:600 11px var(--sg);padding:0 6px;border-radius:6px;border:1px solid var(--hair2);color:var(--mu);white-space:nowrap;margin-top:3px}
+.rmd-kind{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--sg);padding:0 6px;border-radius:5px;white-space:nowrap}
+.rmd-kind.sec{border:1px solid var(--hair2);color:var(--mu);background:var(--raised)}
+.rmd-kind.mk{border:1px solid var(--lavE);color:var(--vt);background:var(--lav)}
+.rmd-cnt{font:700 10.5px var(--mo);color:var(--mu);margin-left:4px}
+.rmd-ex{display:grid;grid-template-columns:1.1fr 1.5fr 1fr;gap:14px;padding:14px;border:1px solid var(--lavE);border-radius:10px;background:var(--card)}
+.rmd-ex h4{margin:0 0 6px;font:700 10.5px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.rmd-ex ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.rmd-ex li{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.rmd-ex li small{color:var(--mu);font:500 11px var(--mo);white-space:nowrap}
+.rmd-ex p{margin:0;font-size:12px;line-height:1.5;color:var(--mu)}
+.rmd-ex .acts2{grid-column:1/-1;display:flex;gap:8px;align-items:center;border-top:1px solid var(--hair);padding-top:10px}
+.rmd-pg{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--hair);font:500 12px var(--mo);color:var(--mu)}
+.rmd-pg div{display:flex;gap:6px}
+.rmd-url{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:9px;border:1px dashed var(--hair2);background:var(--card);font:500 11.5px var(--mo);color:var(--ink);overflow:hidden;white-space:nowrap}
+.rmd-url b{font-weight:700;color:var(--vt)}
+.rmd-url span.rmd-uk{font:700 10px var(--mo);letter-spacing:.06em;text-transform:uppercase;color:var(--mu)}
+.rmd-ann{display:inline-flex;align-items:center;gap:6px;font:600 11px var(--mo);color:var(--vt);border:1px dashed var(--lavE);border-radius:6px;padding:2px 7px;background:var(--card)}
+.rmd-eng{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;color:#6d28d9;border:1.5px dashed #a78bfa;border-radius:6px;padding:1px 7px;background:transparent;white-space:nowrap}
+.rmd-flag{display:inline-flex;align-items:center;gap:4px;font:700 10.5px var(--mo);letter-spacing:.04em;color:#92400e;border:1.5px dashed #f59e0b;border-radius:6px;padding:1px 7px;background:#fffbeb;white-space:nowrap}
+.rmd-thp{display:flex;flex-direction:column;gap:10px}
+.rmd-thp p{margin:0;font-size:13px;line-height:1.55}
+.rmd-xw{display:inline-flex;flex-direction:column;gap:2px}
+.rmd-xw small{font:500 10.5px var(--mo);color:var(--mu)}
+.rmd-nm{font:600 11.5px var(--sg);color:var(--mu)}
+.rmd-pop{position:absolute;z-index:4;width:300px;padding:14px;border:1px solid var(--hair2);border-radius:12px;background:var(--card);box-shadow:0 10px 28px rgba(24,24,27,.14);display:flex;flex-direction:column;gap:10px}
+.rmd-pop h4{margin:0;font:800 13px var(--sg)}
+.rmd-opt{display:flex;align-items:center;gap:8px;min-height:30px;font-size:12.5px;color:var(--ink)}
+.rmd-opt i{flex:none;width:16px;height:16px;border-radius:4px;border:1.5px solid var(--hair2);display:grid;place-items:center;font-style:normal;font-size:11px;color:#fff}
+.rmd-opt i.r{border-radius:999px}
+.rmd-opt.on i{background:var(--vi);border-color:var(--vi)}
+.rmd-opt.on i.r{background:var(--card);box-shadow:inset 0 0 0 3px var(--vi)}
+.rmd-opt small{margin-left:auto;font:500 11px var(--mo);color:var(--mu)}
+.rmd-opt.dis{color:var(--mu)}
+.rmd-sk{display:grid;grid-template-columns:2.6fr 1.4fr 1fr 1.6fr 1.4fr 2fr;gap:12px;padding:12px 14px;border-bottom:1px solid var(--hair)}
+.rmd-sk i{display:block;height:12px;border-radius:5px;background:var(--skel)}
+.rmd-box{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rmd-box h3{margin:0;font:800 14px var(--sg)}
+.rmd-box p{margin:0;font-size:12.5px;line-height:1.5;color:var(--mu)}
+.rmd-box .eye{color:var(--mu)}
+.rmd-ua{border-style:dashed;border-width:1.5px;border-color:var(--hair2)}
+.rmd-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.rmd-grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.rmd-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rmd-card{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rmd-card h3{margin:0;font:800 14.5px var(--sg)}
+.rmd-card dl{display:grid;grid-template-columns:108px minmax(0,1fr);gap:5px 8px;margin:0;font-size:12px}
+.rmd-card dt{color:var(--mu)}
+.rmd-card dd{margin:0;color:var(--ink)}
+.rmd-card .f{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--hair);padding-top:8px;margin-top:auto}
+.rmd-hb{display:grid;grid-template-columns:200px minmax(0,1fr) 56px;gap:10px;align-items:center;font-size:12.5px;min-height:28px}
+.rmd-hb .b{display:block;height:10px;border-radius:3px;background:var(--raised);border:1px solid var(--hair);overflow:hidden}
+.rmd-hb .b i{display:block;height:100%;background:var(--vi)}
+.rmd-hb .b i.nr{background:transparent;border-right:2px dashed var(--hair2)}
+.rmd-hb span.n{text-align:right;font:600 12px var(--mo)}
+.rmd-fo{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 4px;border-radius:999px;background:#18181b;color:#fff;font:700 10.5px var(--mo);margin-right:4px;vertical-align:middle}
+.rmd-ring{outline:2px solid var(--vi);outline-offset:2px}
+.rmd-back{display:inline-flex;align-items:center;gap:6px;font:700 12.5px var(--sg);color:var(--vt)}
+.rmd-back small{font:500 11px var(--mo);color:var(--mu)}
+.rmd-toast{display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:9px;border:1px solid var(--lavE);background:var(--lav);font-size:12.5px;color:var(--ink)}
+/* phone */
+.rmd-pc{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rmd-pc .r1{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.rmd-pc b{font-size:14px}
+.rmd-pc .ln{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mu)}
+.rmd-pc .ln span:last-child{color:var(--ink);font-family:var(--mo);font-weight:600;text-align:right}
+.rmd-sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;border-radius:18px 18px 0 0;background:var(--card);border-top:1px solid var(--hair2);box-shadow:0 -10px 30px rgba(24,24,27,.16);padding:14px 16px 18px;display:flex;flex-direction:column;gap:10px}
+.rmd-sheet .grab{align-self:center;width:40px;height:4px;border-radius:4px;background:var(--hair2)}
+.rmd-sheet .bar2{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;position:sticky;bottom:0;padding-top:8px;border-top:1px solid var(--hair)}
+.rmd-scrim{position:absolute;inset:0;background:var(--dim);z-index:4}
+.rmd-thc{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--hair);border-radius:12px;background:var(--card)}
+.rmd-thc button.h{all:unset;display:flex;justify-content:space-between;align-items:center;min-height:44px;font:800 14px var(--sg);color:var(--ink);cursor:pointer}
+.rmd-thc p{margin:0;font-size:12.5px;line-height:1.5}
+.rmd-xw .rsb-mk{white-space:normal;line-height:1.3;padding:2px 6px;align-items:flex-start}
+.rmd-xw .rsb-mk span{margin-top:1px}
+</style>
+</helmet>
+<div dangerouslySetInnerHTML="{{ html }}"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "RMD01", "options": ["RMD01", "RMD02", "RMD03", "RMD03B", "RMD04", "RMD05", "RMD05B", "RMD06", "RMD06B", "RMD07", "RMD08", "RMD08B", "RMD08C", "RMD09", "RMD09B", "RMD10", "RMD12", "RMD12B", "RMD11A", "RMD11B", "RMD11C", "RMD11D", "RMD11E", "RMD11F", "RMD11G", "RMD12C", "RMD00", "RMD13", "RMD14"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = this.props.board || 'RMD01';
+    const dark = ['RMD12', 'RMD12B', 'RMD12C'].indexOf(B) >= 0;
+    const P = dark
+      ? { bg: '#0b1220', card: '#111827', raised: '#1f2937', ink: '#e5e7eb', mu: '#9ca3af', hair: '#374151', hair2: '#4b5563', vi: '#a78bfa', vt: '#c4b5fd', lav: 'rgba(167,139,250,.12)', lavE: 'rgba(167,139,250,.4)', pos: '#34d399', posBg: 'rgba(52,211,153,.1)', posE: 'rgba(52,211,153,.4)', neg: '#f87171', negBg: 'rgba(248,113,113,.1)', negE: 'rgba(248,113,113,.45)', amT: '#fcd34d', amBg: 'rgba(245,158,11,.1)', amE: 'rgba(245,158,11,.45)', amD: '#f59e0b', dim: 'rgba(3,7,18,.66)', skel: '#1f2937' }
+      : { bg: '#f4f3f7', card: '#ffffff', raised: '#f8f7fb', ink: '#18181b', mu: '#6b6577', hair: '#ececf1', hair2: '#d6d3df', vi: '#7c3aed', vt: '#6d28d9', lav: '#f4f0fe', lavE: '#ddd2fb', pos: '#047857', posBg: '#ecfdf5', posE: '#a7f3d0', neg: '#b91c1c', negBg: '#fef2f2', negE: '#fecaca', amT: '#92400e', amBg: '#fffbeb', amE: '#fcd34d', amD: '#d97706', dim: 'rgba(24,24,27,.42)', skel: '#ececf1' };
+    const VARS = Object.keys(P).map(k => '--' + k + ':' + P[k]).join(';');
+    const J = (a) => a.join('');
+    const bell = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+    const ENG = (t) => '<span class="rmd-eng" title="Needs backend work">◇ ' + (t || '#7036') + '</span>';
+    const FL = (t) => '<span class="rmd-flag" title="Owner decision">⚑ ' + t + '</span>';
+    const ANN = (t) => '<span class="rmd-ann">' + t + '</span>';
+
+    /* ---------- Platform States (D5129) glyphs and chips, after st.js ---------- */
+    const SV = (d) => '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 12 12">' + d + '</svg>';
+    const G = {
+      nr: SV('<path d="M2 6h8" stroke="currentColor" stroke-width="1.8"/>'),
+      un: SV('<path d="M6 1.6v6" stroke="currentColor" stroke-width="2.2"/><circle cx="6" cy="10.2" r="1.2" fill="currentColor"/>'),
+      stale: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+      part: SV('<circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.4a4.6 4.6 0 0 1 0 9.2z" fill="currentColor"/>'),
+      re: SV('<path d="M9.8 4.4A4.2 4.2 0 1 0 10 7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.4 1.6v3.2H7.2" fill="none" stroke="currentColor" stroke-width="1.6"/>'),
+      ok: SV('<path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/>')
+    };
+    const K = { nr: ['st-nr', 'nr', 'Not recorded'], na: ['st-na', '', 'Not applicable'], un: ['st-un', 'un', 'Unavailable'], stale: ['st-stale', 'stale', 'Stale'], part: ['st-part', 'part', 'Partial'] };
+    const chip = (k, label) => { const x = K[k]; return '<span class="st-c ' + x[0] + '">' + (x[1] ? G[x[1]] : '') + (label || x[2]) + '</span>'; };
+    const retry = (s) => '<button type="button" class="st-retry">' + G.re + (s || 'Retry') + '</button>';
+    const NRr = (why) => '<span class="rmd-nr"><i>Not recorded</i>' + (why ? '<em>' + why + '</em>' : '') + '</span>';
+    const MATCH = (via) => '<span class="rmd-xw"><span class="rsb-mk"><span aria-hidden="true">✓</span>Matches your thesis sectors</span>' + (via ? '<small>' + via + '</small>' : '') + '</span>';
+    const NOMATCH = '<span class="rmd-nm">Not a thesis sector</span>';
+    const NOSEC = '<span class="rmd-xw"><span class="rmd-nm">No tracked sector</span><small>no match is possible</small></span>';
+
+    /* ---------- reasons, as the Worker words them (research_markets.ts) ---------- */
+    const R_NOCO = 'No company in the directory is placed in this market';
+    const R_NOPLACE = 'No company in this market records a country the crosswalk can place';
+    const R_NOSRC = 'No live source yet: no live market-intelligence row for its tracked sector and no evidence behind an active signal that names this market';
+
+    /* ---------- sample data · fictional · one set used on every board ---------- */
+    // tracked sector: [name, sector-level sources, newest sector-level date, age in days, markets in sector]
+    const SEC = {
+      ce: ['[Climate & energy]', 4, '12 Nov 2026', 4, 9],
+      lg: ['[Logistics]', 2, '2 Nov 2026', 14, 6],
+      rb: ['[Robotics]', 2, '9 Nov 2026', 7, 5],
+      dt: ['[Developer tools]', 3, '13 Nov 2026', 3, 7],
+      di: ['[Data infrastructure]', 2, '18 Jun 2026', 151, 4],
+      bio: ['[Bio]', 0, null, null, 6],
+      dp: ['[Deep tech]', 0, null, null, 3]
+    };
+    // market: slug, name, sector key|null, taxonomy count, countries|reason, directory companies, names-market sources, their newest date, age, sample company
+    const MK = {
+      dev: ['developer-tools', '[Developer tools]', 'dt', 455, [['US', 2], ['GB', 1]], 3, 2, '13 Nov 2026', 3, '[Quarry AI]'],
+      dat: ['data-infrastructure', '[Data infrastructure]', 'di', 390, [['US', 1], ['IE', 1]], 2, 0, null, null, '[Orchard Data]'],
+      es: ['energy-storage', '[Energy storage]', 'ce', 312, [['DE', 4], ['NL', 2], ['DK', 1]], 7, 2, '10 Nov 2026', 6, '[Halden Grid]'],
+      ls: ['logistics-software', '[Logistics software]', 'lg', 268, [['GB', 3], ['NL', 1]], 4, 0, null, null, '[Northwind Labs]'],
+      ir: ['industrial-robotics', '[Industrial robotics]', 'rb', 241, [['JP', 2], ['DE', 1]], 3, 2, '9 Nov 2026', 7, '[Kestrel Robotics]'],
+      tp: ['therapeutics-platforms', '[Therapeutics platforms]', 'bio', 187, R_NOPLACE, 2, 1, '30 Oct 2026', 17, '[Larkspur Bio]'],
+      fm: ['freight-marketplaces', '[Freight marketplaces]', 'lg', 158, [['GB', 2], ['DE', 1]], 3, 0, null, null, null],
+      gs: ['grid-software', '[Grid software]', 'ce', 140, [['DE', 1], ['DK', 1]], 2, 0, null, null, null],
+      ca: ['carbon-accounting', '[Carbon accounting]', null, 96, [['NO', 1]], 1, 0, null, null, '[Tidewater Systems]'],
+      sh: ['space-hardware', '[Space hardware]', 'dp', 80, R_NOCO, 0, 0, null, null, null],
+      ev: ['ev-charging', '[EV charging]', 'ce', 77, [['NL', 2], ['GB', 1]], 3, 1, '24 Aug 2026', 84, null],
+      et: ['energy-trading', '[Energy trading]', 'ce', 64, [['FR', 1], ['ES', 1]], 2, 0, null, null, null],
+      he: ['hydrogen-equipment', '[Hydrogen equipment]', 'ce', 51, R_NOPLACE, 1, 0, null, null, null],
+      ee: ['energy-efficiency-services', '[Energy efficiency services]', null, 38, [['DE', 1]], 1, 1, '3 Jul 2026', 136, null]
+    };
+    const DEF = ['dev', 'dat', 'es', 'ls', 'ir', 'tp', 'fm', 'gs', 'ca', 'sh'];
+    const SRCH = ['es', 'gs', 'ev', 'et', 'he', 'ee'];
+    const FILT = ['es', 'gs'];
+    const CN = { DE: 'Germany', NL: 'Netherlands', DK: 'Denmark', GB: 'United Kingdom', US: 'United States', IE: 'Ireland', JP: 'Japan', NO: 'Norway', FR: 'France', ES: 'Spain' };
+    const THESIS_SEC = { ce: 'Climate, Energy → [Climate & energy]', rb: 'Robotics → [Robotics]' };
+    const mk = (k) => { const m = MK[k]; const s = m[2] ? SEC[m[2]] : null; const secN = s ? s[1] : 0; const tot = secN + m[6];
+      let age = null, date = null, kind = null;
+      if (s && s[2]) { age = s[3]; date = s[2]; kind = 'sector-level'; }
+      if (m[7] && (age === null || m[8] < age)) { age = m[8]; date = m[7]; kind = 'names this market'; }
+      return { k, slug: m[0], name: m[1], sk: m[2], sec: s, count: m[3], co: m[4], dir: m[5], secN, mkN: m[6], mkDate: m[7], mkAge: m[8], tot, date, age, kind, cmp: m[9] }; };
+
+    /* ---------- cells ---------- */
+    const coCell = (x, full) => typeof x.co === 'string' ? NRr(x.co) : '<div class="rmd-cc">' + J(x.co.map(c => '<span title="' + CN[c[0]] + '">' + (full ? CN[c[0]] : c[0]) + ' ' + c[1] + '</span>')) + '</div><small>' + x.co.length + (x.co.length === 1 ? ' country' : ' countries') + '</small>';
+    const srcCell = (x, c) => x.tot === 0 ? NRr('No live source yet') : '<span class="m">' + x.tot + '</span><small>' + (c ? x.secN + ' sector · ' + x.mkN + ' named' : x.secN + ' sector-level · ' + x.mkN + ' name' + (x.mkN === 1 ? 's' : '') + ' it') + '</small>';
+    const ageTag = (a) => a > 90 ? '<span class="rmd-age">' + G.stale + 'Stale · ' + a + ' days</span>' : '';
+    const dateCell = (x, c) => !x.date ? NRr(x.tot === 0 ? 'No source to date' : 'No source row records a date') : '<span class="m">' + x.date + '</span><small>' + x.age + ' days ago' + (c ? '' : ' · ' + x.kind) + '</small>' + ageTag(x.age);
+    const mkCell = (x) => '<b><a href="#">' + x.name + '</a></b><small>' + (x.sec ? 'Tracked sector ' + x.sec[0] : '<span style="font-style:italic">Not mapped yet · no tracked sector</span>') + '</small>';
+    const thCell = (x, th) => th === 'none' || th === 'ua' ? '' : (x.sk && THESIS_SEC[x.sk] ? MATCH('via ' + THESIS_SEC[x.sk].split(' → ')[0]) : x.sk ? NOMATCH : NOSEC);
+
+    /* ---------- expanded row ---------- */
+    const SRCLIST = {
+      ce: [['[Grid operator filings]', '12 Nov 2026'], ['[Energy capex survey]', '6 Nov 2026'], ['[Storage tender feed]', '1 Nov 2026'], ['[Power price index]', '28 Oct 2026']],
+      esMk: [['[Signal · German storage auctions]', '10 Nov 2026'], ['[Signal · battery permit filings]', '2 Nov 2026']]
+    };
+    const expand = (x, cols) => '<tr class="rmd-exr"><td colspan="' + cols + '"><div class="rmd-ex" id="ex-' + x.slug + '" role="region" aria-label="' + x.name + ' details">'
+      + '<div><h4>Countries represented</h4><ul>' + J(x.co.map(c => '<li><span>' + CN[c[0]] + '</span><small>' + c[1] + (c[1] === 1 ? ' company' : ' companies') + '</small></li>')) + '</ul><p style="margin-top:8px">' + x.dir + ' companies in the company directory are placed in this market, and all ' + x.dir + ' record a country. One of them is ' + x.cmp + '.</p></div>'
+      + '<div><h4>Sources · ' + x.tot + ' distinct</h4><div style="display:flex;flex-direction:column;gap:8px"><div><span class="rmd-kind sec">Sector-level<span class="rmd-cnt">' + x.secN + '</span></span><ul style="margin-top:6px">' + J(SRCLIST.ce.map(s => '<li><span>' + s[0] + '</span><small>' + s[1] + '</small></li>')) + '</ul></div>'
+      + '<div><span class="rmd-kind mk">Names this market<span class="rmd-cnt">' + x.mkN + '</span></span><ul style="margin-top:6px">' + J(SRCLIST.esMk.map(s => '<li><span>' + s[0] + '</span><small>' + s[1] + '</small></li>')) + '</ul></div>'
+      + '<p>Sector-level sources describe the whole tracked sector ' + x.sec[0] + ' and are shared by its ' + x.sec[4] + ' markets. Evidence that names a market comes from active signals tagged with it, so it is the evidence about ' + x.name + ' itself.</p></div></div>'
+      + '<div><h4>Taxonomy company count</h4><div class="mo" style="font-size:20px;font-weight:700">' + x.count + '</div><p>Companies the Axal sector taxonomy lists in this market, supplied for discovery and not independently verified. It is a count of companies, not the size of the market. Taxonomy as of 1 Oct 2026.</p><h4 style="margin-top:10px">Market size and growth</h4>' + NRr('No source we hold records market size or growth') + '</div>'
+      + '<div class="acts2"><a class="btn bsm" href="#" style="border-color:var(--vi);color:var(--vt)">Open sector ' + x.sec[0] + ' →</a><button type="button" class="btn t bsm">Copy link to this view</button><span class="raw" style="margin-left:auto">Sources are listed up to 20; the count includes all of them</span></div>'
+      + '</div></td></tr>';
+
+    /* ---------- the directory table ---------- */
+    const table = (keys, o) => { o = o || {}; const inv = o.inv && o.th !== 'none' && o.th !== 'ua'; const cols = inv ? 7 : 6;
+      const head = '<colgroup><col style="width:44px"><col style="width:' + (inv ? '22%' : '25%') + '"><col style="width:' + (inv ? '10%' : '12%') + '"><col style="width:' + (inv ? '16%' : '21%') + '"><col style="width:' + (inv ? '11%' : '15%') + '"><col style="width:' + (inv ? '15%' : '21%') + '">' + (inv ? '<col style="width:21%">' : '') + '</colgroup>'
+        + '<thead><tr><th scope="col"><span class="sr" style="position:absolute;left:-9999px">Expand</span></th><th scope="col">Market<br><span style="text-transform:none;letter-spacing:0;font-weight:500">and tracked sector</span></th><th scope="col" class="n" aria-sort="' + (o.sortName ? 'none' : 'descending') + '"><button type="button">Taxonomy company count' + (o.sortName ? '' : ' ▾') + '</button><br><span style="text-transform:none;letter-spacing:0;font-weight:500">not market size</span></th><th scope="col">Countries represented</th><th scope="col" class="n">Distinct sources</th><th scope="col">Latest source</th>' + (inv ? '<th scope="col">Your thesis</th>' : '') + '</tr></thead>';
+      const rows = J(keys.map(k => { const x = mk(k); const isOpen = o.open === k;
+        return '<tr' + (isOpen || o.hi === k ? ' class="rmd-op"' : '') + '><td><button type="button" class="rmd-xb' + (isOpen ? ' on' : '') + (o.ring === k ? ' rmd-ring' : '') + '" aria-expanded="' + isOpen + '" aria-controls="ex-' + x.slug + '" aria-label="' + (isOpen ? 'Collapse ' : 'Expand ') + x.name + '">' + (isOpen ? '▾' : '▸') + '</button></td><td>' + mkCell(x) + '</td><td class="n"><span class="m">' + x.count + '</span></td><td>' + coCell(x) + '</td><td class="n">' + srcCell(x, o.inv) + '</td><td>' + dateCell(x, o.inv) + '</td>' + (inv ? '<td>' + thCell(x, o.th) + '</td>' : '') + '</tr>' + (isOpen ? expand(x, cols) : ''); }));
+      return '<table class="rmd-tb">' + head + '<tbody>' + rows + (o.gap ? '<tr class="rmd-gapr"><td colspan="' + cols + '">' + o.gap + '</td></tr>' : '') + '</tbody></table>'; };
+
+    /* ---------- founder shell (Research v2, rs.js) ---------- */
+    const NAV = ['Home', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+    const RNAV = ['Overview', 'My Research', 'Markets', 'Companies', 'Funds', 'Library', 'Ask'];
+    const rnav = (cur) => '<nav aria-label="Research" style="display:flex;flex-direction:column;gap:2px;margin:2px 0 0 18px;border-left:1px solid var(--hair);padding-left:6px">' + J(RNAV.map(t => '<a href="#" style="min-height:30px;font-size:12.5px;font-weight:' + (t === cur ? '800' : '600') + ';color:' + (t === cur ? 'var(--vt)' : 'var(--mu)') + ';display:flex;align-items:center;padding:0 10px;border-radius:8px' + (t === cur ? ';background:var(--lav)' : '') + '"' + (t === cur ? ' aria-current="page"' : '') + '>' + t + '</a>')) + '</nav>';
+    const side = (cur) => '<aside class="sd"><div class="lg"><span class="logo" aria-hidden="true"></span>Axal VC</div><div style="padding:0 12px 10px"><button type="button" class="selb" style="font-size:12px;width:100%" aria-label="Company or project: [Halden Grid]"><span>[Halden Grid]</span><span aria-hidden="true">▾</span></button></div><nav aria-label="Workspace">' + J(NAV.map(t => '<a href="#"' + (t === 'Research' ? ' style="color:var(--ink);font-weight:800"' : '') + '>' + t + '</a>' + (t === 'Research' ? rnav(cur) : ''))) + '</nav></aside>';
+    const topF = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">HG</button></div></div>';
+    const railC = '<aside class="sp" aria-label="Eadwyn"><button type="button" class="e" aria-label="Open Eadwyn" aria-expanded="false">E</button><span class="vt" aria-hidden="true">Eadwyn</span></aside>';
+    const pageF = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="rsh" style="position:relative;min-height:' + (o.h || 900) + 'px">' + side(o.cur || 'Markets') + '<div class="mn">' + topF + '<main class="bd" style="gap:16px">' + body + '</main></div>' + railC + (o.overlay || '') + '</div></div>'; };
+
+    /* ---------- investor shell (rsb.js, RS-17) ---------- */
+    const INAV = ['Home', 'Deals', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust', 'Firm Settings'];
+    const ZA = ['Ask', 'Diligence', 'Benchmarking', 'Markets', 'Geographies', 'Library'];
+    const sideI = (cur) => '<aside class="dsd"><div class="lg" style="padding:4px 16px 10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px"><span class="logo" aria-hidden="true"></span>Axal VC</div><button type="button" class="co" aria-label="Company or project: [Northlake Capital]"><i class="rsb-ind" aria-hidden="true"></i>[Northlake Capital]<span>▾</span></button><nav aria-label="Workspace">'
+      + J(INAV.map(t => (t === 'Trust' ? '<div class="sep"></div>' : '') + (t === 'Research'
+        ? '<a href="#" class="rsb-open" aria-expanded="true">Research</a><div class="rsb-zn" role="list" aria-label="Research">' + J(ZA.map(z => '<a href="#" role="listitem"' + (z === cur ? ' aria-current="page"' : '') + '>' + z + '</a>')) + '</div>'
+        : '<a href="#">' + t + '</a>'))) + '</nav></aside>';
+    const topI = '<div class="tb"><div class="srch"><span aria-hidden="true">⌕</span>Search StudioOS</div><div style="display:flex;align-items:center;gap:12px"><button type="button" class="ib" aria-label="Notifications">' + bell + '</button><button type="button" class="av" aria-label="Account menu: Portfolio, Companies, Licences" aria-haspopup="menu">NA</button></div></div>';
+    const pageI = (body, o) => { o = o || {}; return '<div class="cv" style="' + VARS + ';width:1440px' + (o.h ? ';height:' + o.h + 'px' : '') + '"><div class="dsh rsb-w" style="min-height:' + (o.h || 900) + 'px">' + sideI('Markets') + '<div class="mn">' + topI + '<main class="bd" style="gap:16px">' + body + '</main></div>' + railC + '</div></div>'; };
+    const crop = (inner, w) => '<div class="cv" style="' + VARS + ';width:' + (w || 900) + 'px;padding:20px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box">' + inner + '</div>';
+
+    /* ---------- page parts ---------- */
+    const askBtn = '<button type="button" class="btn ea"><i aria-hidden="true">E</i>Ask Eadwyn</button>';
+    const header = (inv) => '<div class="crumb"><a href="#">Research</a>/<b>Markets</b></div><header class="ph1"><div><h1>Markets</h1><p>' + (inv ? 'Which markets have recent evidence, and which of them match your thesis.' : 'Find the markets with recent evidence in the countries you care about.') + '</p></div><div class="acts">' + askBtn + '<button type="button" class="btn">Export view</button>' + (inv ? '<button type="button" class="btn p">Edit thesis</button>' : '<button type="button" class="btn p">New market research</button>') + '</div></header>';
+    const dests = (cur, n) => '<nav class="ptab" aria-label="Markets"><a href="#"' + (cur === 'dir' ? ' aria-current="page"' : '') + '>Market directory<span>' + (n || '82') + '</span></a><a href="#"' + (cur === 'listed' ? ' aria-current="page"' : '') + '>Listed companies<span>1,240</span></a></nav>';
+    const covNote = () => '<div class="rmd-cov" role="note"><span class="rmd-ic" aria-hidden="true">i</span><div><b>Coverage.</b> Markets and their company counts come from the Axal sector taxonomy (as of 1 Oct 2026). Countries come from the company directory; sources from live market-intelligence rows and signal evidence. <b>Government ownership is not available:</b> no source we hold records who owns a company, so StudioOS cannot count or name government-owned companies. ' + chip('nr') + ' <a href="#">About these sources</a></div></div>';
+    const sel = (label, v, on) => '<div class="rmd-sel">' + label + '<span class="v' + (on ? ' on' : '') + '" role="button" aria-haspopup="dialog">' + v + '<span aria-hidden="true">▾</span></span></div>';
+    const bar = (o) => { o = o || {}; return '<div class="rmd-bar"><label class="rmd-lbl">Search markets or sectors<span class="rmd-in' + (o.q ? '' : ' ph2') + (o.ringQ ? ' rmd-ring' : '') + '"><span aria-hidden="true">⌕</span>' + (o.q ? o.q + '<span class="x" aria-label="Clear search">✕</span>' : 'Energy storage, robotics, logistics…') + '</span></label>'
+      + sel('Country', o.country || 'Any country', !!o.country) + sel('Source freshness', o.fresh || 'Any date', !!o.fresh) + sel('Source type', 'Any source', false) + sel('Sort', o.sortName ? 'Name, A to Z' : 'Taxonomy count, highest first', false)
+      + '<div class="rmd-sel">View<div class="seg" role="radiogroup" aria-label="View" style="min-height:38px;box-sizing:border-box">' + J(['Table', 'Cards', 'Analysis'].map(v => '<button type="button" role="radio" aria-checked="' + ((o.view || 'Table') === v) + '">' + v + '</button>')) + '</div></div></div>'; };
+    const fchips = (list, n) => '<div class="fchips" style="border:1px solid var(--hair);border-radius:10px">' + J(list.map(f => '<span class="fc">' + f + '<button type="button" aria-label="Remove ' + f + '">✕</button></span>')) + '<button type="button" class="btn t bsm">Clear filters</button><span class="raw" style="margin-left:auto">' + n + '</span></div>';
+    const summary = (lead, tail) => '<div class="rmd-sum" role="status" aria-live="polite"><b>' + lead + '</b><span class="raw">' + tail + '</span></div>';
+    const pager = (txt, prevOff, nextOff) => '<div class="rmd-pg"><span>' + txt + '</span><div><button type="button" class="btn bsm"' + (prevOff ? ' disabled style="opacity:.45"' : '') + '>Previous</button><button type="button" class="btn bsm"' + (nextOff ? ' disabled style="opacity:.45"' : '') + '>Next</button></div></div>';
+    const tcard = (inner) => '<section class="cd rmd-tbw">' + inner + '</section>';
+
+    /* ---------- RMD01 default ---------- */
+    const dirDefault = (o) => { o = o || {}; return header(o.inv) + dests('dir') + covNote() + bar() + summary('82 markets · 9,640 companies as the taxonomy counts them', 'Count and sort cover all 82 markets, then the page shows 25') + tcard(table(DEF, { inv: o.inv, th: o.th, gap: 'Rows 11 to 25 continue on this page · not drawn' }) + pager('1–25 of 82', true)); };
+
+    /* ---------- RMD02 sector search ---------- */
+    const dirSearch = () => header() + dests('dir') + covNote() + bar({ q: 'energy' }) + fchips(['Search: energy'], '6 of 82 markets')
+      + summary('6 markets match “energy”', 'Matched on the market name (3) or its tracked sector (3) · sorted by taxonomy count')
+      + tcard(table(SRCH, {}) + pager('1–6 of 6', true, true))
+      + '<p class="foot">' + ANN('Matched on tracked sector') + ' [Grid software], [EV charging] and [Hydrogen equipment] carry “energy” only in their tracked sector, [Climate & energy]. The Worker’s <code>q</code> matches market names only today ' + ENG('#7036 · q over tracked sector') + '</p>';
+
+    /* ---------- RMD03 country + freshness ---------- */
+    const dirFilter = (o) => { o = o || {}; return header() + dests('dir') + covNote() + bar({ q: 'energy', country: 'Germany', fresh: 'Last 30 days' }) + fchips(['Search: energy', 'Country: Germany', 'Newest source: last 30 days'], '2 of 82 markets')
+      + summary('2 markets match', '3 of the 6 “energy” markets have a company in Germany; 1 of those has no source in the last 30 days')
+      + tcard(table(FILT, { hi: o.hi, ring: o.ring }) + pager('1–2 of 2', true, true))
+      + '<div class="nt"><span class="ic" aria-hidden="true">i</span><div><b>What the filters leave out, and why.</b> [Energy efficiency services] is in Germany, but its newest source is 3 Jul 2026 (136 days). [Hydrogen equipment] matches “energy”, but its countries are Not recorded, so no country filter can include it. A market without a recorded country is never treated as being in none.</div></div>'; };
+    const popCountry = '<div class="rmd-pop" style="left:560px;top:390px" role="dialog" aria-label="Country"><h4>Country</h4><span class="raw">Markets with a directory company there · over the 6 “energy” markets</span>'
+      + J([['Germany', '3', 1], ['Netherlands', '2'], ['Denmark', '2'], ['United Kingdom', '1'], ['France', '1'], ['Spain', '1']].map(c => '<div class="rmd-opt' + (c[2] ? ' on' : '') + '"><i aria-hidden="true">' + (c[2] ? '✓' : '') + '</i>' + c[0] + '<small>' + c[1] + '</small></div>')) + '<div class="rmd-opt dis"><i aria-hidden="true"></i>Countries not recorded<small>1</small></div><span class="raw">A market with no recorded country is listed here, never under a country.</span><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn bsm">Reset</button><button type="button" class="btn p bsm">Apply</button></div></div>';
+    const popFresh = '<div class="rmd-pop" style="left:20px;top:20px;position:relative" role="dialog" aria-label="Source freshness"><h4>Source freshness</h4><span class="raw">By the newest source of any kind</span>'
+      + J([['Any date', '6'], ['Last 30 days', '5', 1], ['31 to 90 days', '0'], ['Older than 90 days (Stale)', '1'], ['No source recorded', '0']].map(c => '<div class="rmd-opt' + (c[2] ? ' on' : '') + '"><i class="r" aria-hidden="true"></i>' + c[0] + '<small>' + c[1] + '</small></div>')) + '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn bsm">Reset</button><button type="button" class="btn p bsm">Apply</button></div></div>';
+    const popType = '<div class="rmd-pop" style="left:20px;top:20px;position:relative" role="dialog" aria-label="Source type"><h4>Source type</h4><span class="raw">Over the 6 “energy” markets</span>'
+      + J([['Any source', '6', 1], ['Evidence that names the market', '3'], ['Sector-level only', '3'], ['No source recorded', '0']].map(c => '<div class="rmd-opt' + (c[2] ? ' on' : '') + '"><i class="r" aria-hidden="true"></i>' + c[0] + '<small>' + c[1] + '</small></div>')) + '<p class="raw" style="line-height:1.45">Sector-level sources describe the tracked sector as a whole. Evidence that names the market is from signals tagged with it.</p><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn bsm">Reset</button><button type="button" class="btn p bsm">Apply</button></div></div>';
+
+    /* ---------- RMD04 expanded row ---------- */
+    const dirExpanded = () => header() + dests('dir') + bar({ q: 'energy', country: 'Germany', fresh: 'Last 30 days' }) + fchips(['Search: energy', 'Country: Germany', 'Newest source: last 30 days'], '2 of 82 markets')
+      + tcard(table(FILT, { open: 'es' }) + pager('1–2 of 2', true, true));
+
+    /* ---------- RMD05 sector profile and return ---------- */
+    const sectorPage = () => '<div class="crumb"><a href="#">Research</a>/<a href="#">Markets</a>/<b>[Climate & energy]</b></div><a class="rmd-back" href="#" style="align-self:flex-start">‹ Back to Markets <small>“energy” · Germany · last 30 days</small></a>'
+      + '<header class="ph1"><div><h1>[Climate & energy]</h1><p>A tracked sector: its 9 markets, its sources and six indexes, worldwide.</p></div><div class="acts">' + askBtn + '<button type="button" class="btn p">New market research</button></div></header>'
+      + '<div class="g" style="align-items:start"><section class="cd" style="grid-column:span 7"><div class="ch"><h2>Markets in this sector · 9</h2><span class="sm">taxonomy count · not market size</span></div><table class="rsb-tb"><tbody>'
+      + J([['[Energy storage]', '312', 'DE 4 · NL 2 · DK 1', 1], ['[Grid software]', '140', 'DE 1 · DK 1'], ['[EV charging]', '77', 'NL 2 · GB 1'], ['[Energy trading]', '64', 'FR 1 · ES 1'], ['[Hydrogen equipment]', '51', null], ['4 more markets', '', '']].map(r => '<tr' + (r[3] ? ' class="sel"' : '') + '><td><b>' + r[0] + '</b>' + (r[3] ? ' <span class="rmd-ann">You came from here</span>' : '') + '</td><td class="n m">' + r[1] + '</td><td>' + (r[2] === null ? NRr() : r[2]) + '</td></tr>')) + '</tbody></table></section>'
+      + '<section class="cd" style="grid-column:span 5"><div class="ch"><h2>Sector-level sources · 4</h2><span class="sm">shared by all 9 markets</span></div><table class="rsb-tb"><tbody>' + J(SRCLIST.ce.map(s => '<tr><td>' + s[0] + '</td><td class="m" style="text-align:right">' + s[1] + '</td></tr>')) + '</tbody></table><p class="foot">Evidence that names one market is on that market’s row in the directory.</p></section>'
+      + '<section class="cd" style="grid-column:span 12"><div class="ch"><h2>Indexes · worldwide · Nov 2026, month to date</h2><span class="sm">six dimensions, as in RS-18</span></div><div class="rmd-grid3">' + J([['Demand', '73', '▲ 2.8%'], ['Supply', '55', '▲ 1.9%'], ['Capital', '54', '▲ 5.9%'], ['Talent', null, ''], ['Research', '48', '▼ 1.2%'], ['Public discussion', '61', '▲ 0.4%']].map(d => '<div class="rmd-box" style="padding:12px"><span class="eye">' + d[0] + '</span>' + (d[1] ? '<div><b class="mo" style="font-size:18px">' + d[1] + '</b> <span class="mo raw">' + d[2] + ' on Oct</span></div>' : NRr('No live source yet for this sector')) + '</div>')) + '</div></section></div>';
+    const restored = () => crop('<span class="eye">Back from the sector page · the same view, restored from the URL</span>'
+      + '<div class="rmd-url"><span class="rmd-uk">URL</span>/research/markets?<b>tab=directory</b>&amp;<b>q=energy</b>&amp;<b>country=DE</b>&amp;<b>fresh=30</b>&amp;<b>sort=supplied_count:desc</b>&amp;<b>view=table</b>&amp;<b>open=energy-storage</b></div>'
+      + bar({ q: 'energy', country: 'Germany', fresh: 'Last 30 days' }) + fchips(['Search: energy', 'Country: Germany', 'Newest source: last 30 days'], '2 of 82 markets')
+      + tcard(table(FILT, { open: 'es', ring: 'es' }))
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + ANN('[Energy storage] is open again and its expand button has focus') + ANN('Scroll position kept') + ANN('Back link and browser Back give the same view') + '</div>', 1240);
+
+    /* ---------- RMD06 cards and analysis ---------- */
+    const card = (k) => { const x = mk(k); return '<article class="rmd-card"><div><h3>' + x.name + '</h3><span class="raw">' + (x.sec ? 'Tracked sector ' + x.sec[0] : 'Not mapped yet · no tracked sector') + '</span></div><dl><dt>Taxonomy count</dt><dd class="mo">' + x.count + ' <span class="raw">not market size</span></dd><dt>Countries</dt><dd>' + coCell(x) + '</dd><dt>Distinct sources</dt><dd>' + srcCell(x) + '</dd><dt>Latest source</dt><dd>' + dateCell(x) + '</dd></dl><div class="f"><button type="button" class="btn t bsm" aria-expanded="false">Details ▸</button>' + (x.sec ? '<a class="btn t bsm" href="#">Open sector →</a>' : '<span class="raw">No sector page</span>') + '</div></article>'; };
+    const cards = () => header() + dests('dir') + bar({ view: 'Cards' }) + summary('82 markets · 9,640 companies as the taxonomy counts them', 'Same order as the table · 1–12 of 82') + '<div class="rmd-cards">' + J(DEF.slice(0, 6).map(card)) + '</div>' + '<p class="foot">Cards carry the table’s hierarchy: market, tracked sector, taxonomy count, countries, distinct sources, latest source. Nothing is dropped to fit.</p>';
+    const hb = (label, n, max, nr) => '<div class="rmd-hb"><span>' + label + '</span><span class="b" aria-hidden="true"><i' + (nr ? ' class="nr"' : '') + ' style="width:' + Math.round(n / max * 100) + '%"></i></span><span class="n">' + n + '</span></div>';
+    const analysis = () => header() + dests('dir') + bar({ view: 'Analysis' })
+      + summary('Documented coverage of the 82 markets', 'Read Mon 16 Nov 2026 09:40 UTC · taxonomy as of 1 Oct 2026 · counts, not market size or growth')
+      + '<div class="rmd-grid3"><section class="cd"><div class="ch"><h2>Newest source</h2><span class="sm">markets</span></div>' + hb('Last 30 days', 48, 82) + hb('31 to 90 days', 6, 82) + hb('Older than 90 days · Stale', 7, 82) + hb('No source recorded', 21, 82, true) + '<p class="foot">48 + 6 + 7 + 21 = 82. 61 markets have at least one source.</p></section>'
+      + '<section class="cd"><div class="ch"><h2>Countries represented</h2><span class="sm">markets</span></div>' + hb('At least one country', 66, 82) + hb('No company placed', 9, 82, true) + hb('No placeable country', 7, 82, true) + '<p class="foot">23 countries appear across the 66. The two Not recorded reasons are kept apart.</p></section>'
+      + '<section class="cd"><div class="ch"><h2>Tracked sector</h2><span class="sm">markets</span></div>' + hb('Mapped to a tracked sector', 74, 82) + hb('Not mapped yet', 8, 82, true) + '<p class="foot">Unmapped markets stay in the directory with their own counts, countries and sources.</p></section></div>'
+      + '<section class="cd rmd-tbw"><div class="ch" style="padding:14px 16px 6px"><h2>By tracked sector</h2><span class="sm">sector-level sources apply to every market in the sector</span></div><table class="rsb-tb"><thead><tr><th>Tracked sector</th><th class="n">Markets</th><th class="n">Sector-level sources</th><th>Newest sector-level source</th><th class="n">Markets named by evidence</th></tr></thead><tbody>'
+      + J([['ce', '2'], ['dt', '1'], ['rb', '1'], ['lg', '0'], ['di', '0'], ['bio', '1']].map(r => { const s = SEC[r[0]]; return '<tr><td><b>' + s[0] + '</b></td><td class="n m">' + s[4] + '</td><td class="n m">' + (s[1] || '') + (s[1] ? '' : NRr('No live source yet')) + '</td><td class="m">' + (s[2] ? s[2] + ageTag(s[3]) : NRr()) + '</td><td class="n m">' + r[1] + '</td></tr>'; }))
+      + '<tr><td><b>Not mapped yet</b></td><td class="n m">8</td><td class="n">' + chip('na') + '</td><td>' + chip('na') + '</td><td class="n m">1</td></tr><tr><td colspan="5" class="raw">11 more tracked sectors hold the other 37 markets</td></tr></tbody></table></section>';
+
+    /* ---------- RMD07 listed companies ---------- */
+    const LST = [['[BRWU]', '[Brightwater Utilities]', '[XNYS]', 'United States', '[Large]', '[5,001–10,000]', 'Signal companies'], ['[NGFT]', '[Northgate Freight]', '[XLON]', 'United Kingdom', '[Mid]', '[1,001–5,000]', 'Signal companies'], ['[SORA]', '[Sora Automation]', '[XTKS]', 'Japan', '[Mid]', '[1,001–5,000]', 'Signal companies'], ['[FNWK]', '[Fenwick Therapeutics]', '[XNAS]', null, null, null, 'SEC EDGAR'], ['[RDGL]', '[Ridgeline Software]', '[XNAS]', null, null, null, 'SEC EDGAR']];
+    const listed = () => header() + dests('listed') + covNote() + '<div class="rmd-bar"><label class="rmd-lbl">Search listed companies<span class="rmd-in ph2"><span aria-hidden="true">⌕</span>Name or symbol</span></label>' + sel('Source', 'Both sources') + sel('Sort', 'Market cap band, largest first') + '</div>'
+      + summary('1,240 listed companies', '310 signal companies with bands · 930 from SEC EDGAR · the company directory does not record listing status')
+      + tcard('<table class="rsb-tb"><thead><tr><th>Symbol</th><th>Company</th><th>Exchange</th><th>Country</th><th>Market cap band</th><th>Employees band</th><th>Source</th></tr></thead><tbody>' + J(LST.map(r => '<tr><td class="m">' + r[0] + '</td><td><b>' + r[1] + '</b>' + (r[6] === 'SEC EDGAR' ? '<small class="mo">CIK [0001234567]</small>' : '') + '</td><td class="m">' + r[2] + '</td><td>' + (r[3] || NRr()) + '</td><td>' + (r[4] || NRr()) + '</td><td>' + (r[5] || NRr()) + '</td><td>' + r[6] + '</td></tr>')) + '</tbody></table>' + pager('1–50 of 1,240 · paged on the server', true))
+      + '<p class="foot">SEC EDGAR records symbol, name, exchange and CIK only, so its rows read Not recorded for country and bands, with that reason in the source line.</p>';
+
+    /* ---------- RMD08 investor ---------- */
+    const thesisPanel = () => '<section class="cd rmd-thp" aria-labelledby="th-h"><div class="ch"><div><h2 id="th-h">Your thesis</h2><span class="raw">From your investor profile · one thesis</span></div></div><p>Seed-stage software that makes European industrial companies cheaper to run: data infrastructure, robotics control and energy software sold to operators, not consumers.</p>'
+      + '<dl class="kv2" style="grid-template-columns:96px minmax(0,1fr)"><dt>Sectors</dt><dd>Climate · Energy · Robotics</dd><dt>Stages</dt><dd>Pre-seed · Seed</dd><dt>Geographies</dt><dd>Nordics · DACH</dd><dt>Anti-thesis</dt><dd><div class="rsb-kw"><span class="anti">Consumer</span></div></dd></dl>'
+      + '<div class="rmd-box" style="padding:10px;gap:4px"><b style="font-size:12.5px">How a match is made</b><p>A market matches only when its tracked sector is one of your profile sectors: Climate and Energy → [Climate & energy]; Robotics → [Robotics]. Keywords and geographies never make a match.</p></div>'
+      + '<label class="rmd-opt"><i aria-hidden="true"></i>Show only markets that match</label><span class="raw">Market readings price an advisor’s service line and are not shown to an investor (approved on #6273).</span></section>';
+    const thesisNone = () => '<section class="cd rmd-thp"><div class="ch"><div><h2>Your thesis</h2><span class="raw">From your investor profile</span></div></div><div class="st-none"><span><b>No thesis on your profile yet.</b><br><span class="raw">The directory works without one; matches appear once your profile names sectors.</span></span></div><a class="btn" href="#" style="align-self:flex-start">Add a thesis in Firm Settings</a></section>';
+    const thesisUa = () => '<section class="cd rmd-thp rmd-ua"><div class="ch"><div><h2>Your thesis</h2></div>' + chip('un') + '</div><p>Your investor profile could not be read, so no thesis matches are shown. This is not a claim that nothing matches.</p>' + retry() + '</section>';
+    const invPage = (th) => header(true) + dests('dir') + covNote() + bar() + '<div style="display:grid;grid-template-columns:264px minmax(0,1fr);gap:16px;align-items:start">' + (th === 'none' ? thesisNone() : th === 'ua' ? thesisUa() : thesisPanel())
+      + '<div style="display:flex;flex-direction:column;gap:12px">' + summary('82 markets' + (th ? '' : ' · 14 match your thesis sectors'), th ? 'No thesis column while there is no thesis to compare' : 'Matches count across all 82, before paging') + tcard(table(DEF, { inv: true, th, gap: 'Rows 11 to 25 continue · not drawn' }) + pager('1–25 of 82', true)) + '</div></div>';
+
+    /* ---------- RMD09 states ---------- */
+    const skRows = (n) => J(Array.from({ length: n }, () => '<div class="rmd-sk" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>'));
+    const statesA = () => crop('<span class="eye">States · part 1 · Loading and a successful empty directory</span><div class="rmd-grid2">'
+      + '<div class="rmd-box"><span class="eye">Loading</span>' + summary('Reading the markets…', '') + '<div class="cd rmd-tbw" role="status" aria-label="Loading markets">' + skRows(5) + '</div><p>Search, filters and the view switch stay usable; the count says nothing until the read returns.</p></div>'
+      + '<div class="rmd-box"><span class="eye">Empty directory · the read worked and holds no market</span><div class="st-none"><span><b>No markets are in the directory yet.</b><br><span class="raw">Markets arrive with the Axal sector taxonomy. Listed companies are on their own tab.</span></span></div><a class="btn" href="#" style="align-self:flex-start">Open Listed companies</a><p>Shown only for a successful read with total 0, never for a failed one.</p></div></div>', 1200);
+    const statesB = () => crop('<span class="eye">States · part 2 · Filtered to zero, missing fields and a failed read</span><div class="rmd-grid3">'
+      + '<div class="rmd-box"><span class="eye">Filters match nothing</span>' + fchips(['Search: space', 'Country: Japan'], '0 of 82') + '<div class="st-none" style="flex-direction:column;align-items:flex-start"><span><b>No market matches “space” in Japan.</b></span><span class="raw">[Space hardware] matches “space”, but its countries are Not recorded, so it cannot match a country.</span><button type="button" class="btn bsm">Clear filters</button></div></div>'
+      + '<div class="rmd-box"><span class="eye">Missing fields · Not recorded with the reason</span><table class="rsb-tb"><tbody><tr><td><b>[Space hardware]</b><small>Countries</small></td><td>' + NRr(R_NOCO) + '</td></tr><tr><td><b>[Carbon accounting]</b><small>Distinct sources</small></td><td>' + NRr(R_NOSRC) + '</td></tr><tr><td><b>[Hydrogen equipment]</b><small>Countries</small></td><td>' + NRr(R_NOPLACE) + '</td></tr></tbody></table></div>'
+      + '<div class="rmd-box rmd-ua"><span class="eye">Failed read</span><div style="display:flex;gap:8px;align-items:center">' + chip('un') + '<b style="font-size:13px">The markets could not be read.</b></div><p>This is not a sign there are none. Your search and filters are kept.</p>' + retry() + '<hr style="border:0;border-top:1px solid var(--hair);width:100%"><span class="eye">Partial · the sectors read failed</span><div>' + chip('part', 'Partial') + '</div><p>Markets are listed; tracked sector names and the sector filter wait for the sectors read. ' + retry('Retry sectors') + '</p></div></div>', 1300);
+
+    /* ---------- RMD10 focus order ---------- */
+    const fo = (n) => '<span class="rmd-fo" aria-hidden="true">' + n + '</span>';
+    const focusBoard = () => crop('<span class="eye">Keyboard focus order · desktop · the investor page adds the thesis section between 13 and 14</span>'
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' + fo(1) + '<span class="crumb"><a href="#">Research</a></span>' + fo(2) + askBtn + fo(3) + '<button type="button" class="btn">Export view</button>' + fo(4) + '<button type="button" class="btn p">New market research</button></div>'
+      + '<div style="display:flex;gap:10px;align-items:center">' + fo(5) + dests('dir') + '<span class="raw">Tabs: arrow keys move between Market directory and Listed companies</span></div>'
+      + '<div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">' + fo(6) + '<label class="rmd-lbl">Search markets or sectors<span class="rmd-in rmd-ring" style="min-width:240px">energy</span></label>' + fo(7) + sel('Country', 'Germany', true) + fo(8) + sel('Source freshness', 'Last 30 days', true) + fo(9) + sel('Source type', 'Any source') + fo(10) + sel('Sort', 'Taxonomy count') + fo(11) + '<div class="rmd-sel">View<div class="seg" role="radiogroup" aria-label="View" style="min-height:38px;box-sizing:border-box"><button type="button" role="radio" aria-checked="true">Table</button><button type="button" role="radio" aria-checked="false">Cards</button><button type="button" role="radio" aria-checked="false">Analysis</button></div></div></div>'
+      + '<div style="display:flex;gap:8px;align-items:center">' + fo(12) + '<span class="fc">Country: Germany<button type="button" aria-label="Remove Country: Germany">✕</button></span>' + fo(13) + '<button type="button" class="btn t bsm">Clear filters</button>' + fo(14) + '<span class="raw">Each row: expand button, then market link · Enter opens, Escape collapses and returns focus</span>' + fo(15) + '<span class="raw">Previous / Next</span></div>'
+      + '<div class="rmd-grid2"><div class="rmd-box"><h3>Announcements</h3><p>The result line is a polite live region: “2 markets match. Search energy, country Germany, newest source in the last 30 days.” A failed read is announced as an alert with Retry focused.</p></div><div class="rmd-box"><h3>Focus rings and targets</h3><p>2px violet ring with 2px offset on every control, visible in light and dark. Filter popovers trap focus, Apply and Reset are the last two stops, Escape closes and returns focus to the filter button. 44px targets on phone.</p></div></div>', 1300);
+
+    /* ---------- phones ---------- */
+    const phone = (title, body, extra) => '<div class="cv" style="' + VARS + ';width:390px;height:844px"><div class="ph" style="height:844px;position:relative;overflow:hidden"><div class="pt"><button type="button" class="pi" aria-label="Menu">☰</button><b style="font-size:15px">' + title + '</b><button type="button" class="pi" aria-label="Open Eadwyn">E</button></div><div class="pbd" style="overflow:hidden">' + body + '</div>' + (extra || '') + '</div></div>';
+    const pcard = (k, inv, open) => { const x = mk(k); return '<article class="rmd-pc"' + (open ? ' style="border-color:var(--vi)"' : '') + '><div class="r1"><div><b>' + x.name + '</b><div class="raw">' + (x.sec ? 'Tracked sector ' + x.sec[0] : 'Not mapped yet') + '</div></div><button type="button" class="rmd-xb' + (open ? ' on' : '') + '" style="width:44px;height:44px" aria-expanded="' + !!open + '" aria-label="Details for ' + x.name + '">' + (open ? '▾' : '▸') + '</button></div>'
+      + (inv ? '<div>' + thCell(x, '') + '</div>' : '')
+      + '<div class="ln"><span>Taxonomy count · not market size</span><span>' + x.count + '</span></div><div class="ln"><span>Countries</span><span>' + (typeof x.co === 'string' ? '<i style="font-family:var(--sg);color:var(--mu)">Not recorded</i>' : x.co.map(c => c[0] + ' ' + c[1]).join(' · ')) + '</span></div><div class="ln"><span>Sources</span><span>' + (x.tot ? x.tot + ' · ' + x.secN + ' sector · ' + x.mkN + ' named' : '<i style="font-family:var(--sg);color:var(--mu)">Not recorded</i>') + '</span></div><div class="ln"><span>Latest source</span><span>' + (x.date || '<i style="font-family:var(--sg);color:var(--mu)">Not recorded</i>') + '</span></div>' + (x.age > 90 ? ageTag(x.age) : '')
+      + (open ? '<div style="border-top:1px solid var(--hair);padding-top:8px;display:flex;flex-direction:column;gap:6px"><span class="rmd-kind sec" style="align-self:flex-start">Sector-level<span class="rmd-cnt">4</span></span><span class="raw">[Grid operator filings] 12 Nov · +3</span><span class="rmd-kind mk" style="align-self:flex-start">Names this market<span class="rmd-cnt">2</span></span><span class="raw">[Signal · German storage auctions] 10 Nov · +1</span><span class="raw" style="line-height:1.4">312 is the taxonomy’s company count, not market size. Market size: Not recorded.</span><a class="btn" href="#" style="min-height:44px;justify-content:center">Open sector [Climate & energy] →</a></div>' : '') + '</article>'; };
+    const pSearch = (q) => '<label class="rmd-lbl">Search markets or sectors<span class="rmd-in' + (q ? '' : ' ph2') + '" style="min-width:0;min-height:44px">⌕ ' + (q || 'Energy storage, robotics…') + '</span></label>';
+    const pTools = (n) => '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn" style="min-height:44px"' + ' aria-haspopup="dialog">Filters' + (n ? ' · ' + n : '') + '</button><button type="button" class="btn" style="min-height:44px" aria-haspopup="dialog">Sort · Taxonomy count</button></div>';
+    const pDest = '<div class="ptab" role="navigation" aria-label="Markets" style="min-height:40px;flex:none"><a href="#" aria-current="page">Market directory<span>82</span></a><a href="#">Listed companies</a></div>';
+    const pCov = '<div class="rmd-cov" style="padding:8px 10px;font-size:12px"><span class="rmd-ic" aria-hidden="true">i</span><div>Counts are the taxonomy’s, not market size. Government ownership is not recorded by any source. <a href="#">Coverage</a></div></div>';
+    const pHead = (inv) => '<div class="crumb">Research / Markets</div><h1 style="font-size:22px;font-weight:800;margin:0">Markets</h1>' + (inv ? '' : '');
+    const thCompact = (open) => '<section class="rmd-thc"><button type="button" class="h" aria-expanded="' + open + '">Your thesis · Climate, Energy, Robotics<span aria-hidden="true">' + (open ? '▴' : '▾') + '</span></button>' + (open ? '<p>Seed-stage software that makes European industrial companies cheaper to run: data infrastructure, robotics control and energy software sold to operators, not consumers.</p><dl class="kv2" style="grid-template-columns:88px minmax(0,1fr);font-size:12.5px"><dt>Stages</dt><dd>Pre-seed · Seed</dd><dt>Geographies</dt><dd>Nordics · DACH</dd><dt>Anti-thesis</dt><dd>Consumer</dd></dl><p class="raw" style="line-height:1.4">A market matches only when its tracked sector is one of your profile sectors.</p><a class="btn" href="#" style="min-height:44px;justify-content:center">Edit thesis</a>' : '<span class="raw">14 of 82 markets match · tap to read the thesis</span>') + '</section>';
+    const MOB = {
+      RMD11A: () => phone('Markets', pHead() + '<button type="button" class="btn p" style="min-height:48px;width:100%">New market research</button>' + pDest + pSearch() + pTools(0) + pCov + '<b style="font-size:13px">82 markets · 1–25</b>' + pcard('dev') + pcard('dat')),
+      RMD11B: () => phone('Markets', pHead() + pSearch('energy') + pTools(2) + '<b style="font-size:13px">2 markets match</b>' + pcard('es'), '<div class="rmd-scrim"></div><div class="rmd-sheet" role="dialog" aria-label="Filters"><span class="grab" aria-hidden="true"></span><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">Filters</b><button type="button" class="pi" aria-label="Close filters">✕</button></div>'
+        + '<span class="eye">Country</span>' + J([['Germany', '3', 1], ['Netherlands', '2'], ['Denmark', '2']].map(c => '<div class="rmd-opt' + (c[2] ? ' on' : '') + '" style="min-height:44px"><i aria-hidden="true">' + (c[2] ? '✓' : '') + '</i>' + c[0] + '<small>' + c[1] + '</small></div>')) + '<button type="button" class="btn t bsm" style="align-self:flex-start;min-height:44px">All 6 countries and Not recorded ▾</button>'
+        + '<span class="eye">Source freshness</span>' + J([['Any date', '6'], ['Last 30 days', '5', 1], ['Older than 90 days', '1']].map(c => '<div class="rmd-opt' + (c[2] ? ' on' : '') + '" style="min-height:44px"><i class="r" aria-hidden="true"></i>' + c[0] + '<small>' + c[1] + '</small></div>'))
+        + '<div class="bar2"><button type="button" class="btn" style="min-height:48px">Reset</button><button type="button" class="btn p" style="min-height:48px">Show 2 markets</button></div></div>'),
+      RMD11C: () => phone('Markets', pSearch('energy') + pTools(2) + '<div class="fchips" style="border:1px solid var(--hair);border-radius:10px;padding:6px 8px"><span class="fc">Germany<button type="button" aria-label="Remove Germany">✕</button></span><span class="fc">Last 30 days<button type="button" aria-label="Remove Last 30 days">✕</button></span><button type="button" class="btn t bsm">Clear</button></div><b style="font-size:13px">2 markets match</b>' + pcard('es', false, true)),
+      RMD11D: () => phone('Markets', pHead(true) + '<button type="button" class="btn p" style="min-height:48px;width:100%">Edit thesis</button>' + thCompact(false) + pSearch() + pTools(0) + '<b style="font-size:13px">82 markets · 1–25</b>' + pcard('es', true) + pcard('dev', true)),
+      RMD11E: () => phone('Markets', pHead(true) + thCompact(true) + pSearch() + pcard('ir', true)),
+      RMD11F: () => phone('Markets', pHead(true) + '<section class="rmd-thc"><b style="font-size:14px">Your thesis</b><p>No thesis on your profile yet. The directory works without one.</p><a class="btn" href="#" style="min-height:44px;justify-content:center">Add a thesis in Firm Settings</a></section>' + pSearch() + pTools(0) + '<b style="font-size:13px">82 markets · 1–25</b>' + pcard('dev') + pcard('dat')),
+      RMD11G: () => phone('[Climate & energy]', '<a class="rmd-back" href="#" style="min-height:44px">‹ Markets <small>energy · DE · 30 days</small></a><h1 style="font-size:22px;font-weight:800;margin:0">[Climate & energy]</h1><span class="raw">Tracked sector · 9 markets · 4 sector-level sources</span><section class="rmd-pc" style="border-color:var(--vi)"><b>[Energy storage]</b><div class="ln"><span>Taxonomy count</span><span>312</span></div><span class="rmd-ann" style="align-self:flex-start">You came from here</span></section><section class="rmd-pc"><b>[Grid software]</b><div class="ln"><span>Taxonomy count</span><span>140</span></div></section><p class="raw" style="line-height:1.45">Back returns to “energy”, Germany, last 30 days, with [Energy storage] open and focused.</p>'),
+      RMD12C: () => phone('Markets', pHead(true) + thCompact(false) + pSearch('energy') + pTools(2) + '<b style="font-size:13px">2 markets match</b>' + pcard('es', true, true))
+    };
+
+    /* ---------- docs ---------- */
+    const dk = (inner) => '<div class="cv" style="' + VARS + ';width:1200px"><div class="dk">' + inner + '</div></div>';
+    const tbl = (hd, rows) => '<table class="dt"><thead><tr>' + J(hd.map(h => '<th>' + h + '</th>')) + '</tr></thead><tbody>' + J(rows.map(r => '<tr>' + J(r.map(c => '<td>' + c + '</td>')) + '</tr>')) + '</tbody></table>';
+    const DOCS = {
+      RMD00: () => dk('<h1>RMD-00 · Markets directory: what it answers, routes and the URL</h1><p>Extends Research v2 RS-03 (Markets) and the approved investor board RS-17 (#6273). Founders, investors, advisors and operating partners reach <code>/research/markets</code>; every licence is admitted (<code>researchAccess.js</code>: markets ALL). Two questions: “Which markets have recent evidence in the countries I care about?” and, for an investor, “Which of these markets match my thesis?”. Sample data is fictional throughout. ◇ marks backend work on #7036; ⚑ marks an owner question.</p>'
+        + '<h2>The row</h2>' + tbl(['Shown', 'Read from (GET /api/research/markets)', 'Rule'], [
+          ['Market and tracked sector', '<code>name</code>, <code>mi_sector</code> (null → Not mapped yet)', 'An unmapped market stays in the list with its own facts'],
+          ['Taxonomy company count', '<code>supplied_count</code> + <code>supplied_label</code>', 'Labelled “not market size” in the header, the expanded row and the summary'],
+          ['Countries represented', '<code>countries</code> recorded [{code,count}] or not_recorded + reason', 'Two reasons kept apart: no company placed; no placeable country'],
+          ['Distinct sources', '<code>source_count</code>; <code>sources[]</code> with <code>kind</code> market_intel / signal_evidence (up to 20)', 'Split into sector-level and names this market'],
+          ['Latest source', '<code>newest_source_at</code> recorded or not_recorded + reason', 'Age in days; Stale past 90 days (STALE_AT); says which kind it came from']])
+        + '<h2>URL · every view is a link</h2>' + tbl(['Param', 'Today on main', 'In these boards'], [
+          ['<code>q</code>, <code>sort</code>, <code>group</code>', 'Kept (<code>readMarketQuery</code> / <code>writeMarketQuery</code>)', 'Kept; <code>sort</code> values unchanged'],
+          ['<code>tab</code>', 'Tab is component state; lost on Back', '<code>tab=directory|listed</code>'],
+          ['<code>view</code>', 'No Cards or Analysis view', '<code>view=table|cards|analysis</code>'],
+          ['<code>country</code>, <code>fresh</code>, <code>src</code>', 'No such filters', '<code>country=DE</code> (repeatable), <code>fresh=30|90|older|none</code>, <code>src=named|sector|none</code>'],
+          ['<code>page</code>, <code>open</code>', 'No paging on the directory (one read of 100); nothing expands', '<code>page=2</code>; <code>open=energy-storage</code> reopens a row'],
+          ['Back from a sector', '<code>MarketSectorProfile</code> links to plain <code>/research/markets</code>', 'Back link carries the query; focus returns to the row']]))
+      ,
+      RMD13: () => dk('<h1>RMD-13 · The main task, step by step (clickable path)</h1><p>A founder looks for energy markets with recent evidence in Germany, reads one, opens its sector and comes back to the same results. Each step names its frame and the URL after it. In the prototype every step is one click or keystroke on the frame named.</p>' + tbl(['Step', 'Action', 'Frame', 'URL after'], [
+        ['1', 'Open Research › Markets', 'RMD-01', '<code>/research/markets</code>'],
+        ['2', 'Type “energy” in Search markets or sectors', 'RMD-02', '<code>?q=energy</code>'],
+        ['3', 'Country › Germany › Apply', 'RMD-03 (popover)', '<code>?q=energy&amp;country=DE</code>'],
+        ['4', 'Source freshness › Last 30 days › Apply', 'RMD-03', '<code>…&amp;fresh=30</code>'],
+        ['5', 'Expand [Energy storage]', 'RMD-04', '<code>…&amp;open=energy-storage</code>'],
+        ['6', 'Open sector [Climate & energy] →', 'RMD-05', '<code>/research/markets/sector/climate-energy?market=energy-storage</code>'],
+        ['7', '‹ Back to Markets (or browser Back)', 'RMD-05 restored', 'the URL of step 5; focus on the [Energy storage] row'],
+        ['Investor', 'Same path; the thesis section sits beside the results; “Show only markets that match” adds <code>thesis=1</code>', 'RMD-08', '<code>?thesis=1</code>'],
+        ['Phone', 'Filters sheet: choose, Show 2 markets (apply) or Reset', 'RMD-11 B, C, G', 'same URL as desktop']])),
+      RMD14: () => dk('<h1>Handoff · Research Markets directory and investor view (#7036)</h1>'
+        + '<h2>Checked on main (87bf3ac4ac, Mon 16 Nov 2026)</h2><p><code>cloudflare-worker/src/routes/research_markets.ts</code>: <code>GET /markets</code> takes <code>q</code> (market name only, 120 chars), <code>sort</code> name | company_count | supplied_count, <code>dir</code>, <code>limit</code> (default 50, max 100) and <code>offset</code>; it sorts the whole set, then pages, and returns <code>total</code>. Per market on the page (#6421, D6284): <code>countries</code>, <code>source_count</code>, <code>newest_source_at</code> as recorded or not_recorded with the reason, and <code>sources[]</code> (kind, key, rows, newest; capped at 20). No market size or growth anywhere. <code>pages/research/MarketDirectoryZone.jsx</code>: tabs Private, Public, Government (component state); one read <code>list({ limit: 100 })</code>, then search, sort and grouping in the browser, kept in <code>?q</code>, <code>?sort</code>, <code>?group</code>; the coverage fields are not drawn; the Government tab says no source lists government-owned companies; the readings card and its form are offered to every licence. <code>MarketSectorProfile.jsx</code> links back to plain <code>/research/markets</code>. <code>investor_signals.ts</code>: <code>GET /api/investor-profile/me</code> returns one profile with <code>thesis_text</code>, <code>sectors</code> (11 options: AI/ML … Robotics, Energy), stages, geos and anti-thesis. <code>researchAccess.js</code>: Markets open to all five roles. <code>investorZoneActions.js</code> and <code>founderZoneActions.js</code>: “New deep-dive” and “Cite in …” are unbuilt; Export works.</p>'
+        + '<h2>Whole directory vs the current 100-row client read</h2>' + tbl(['Behaviour', 'Today', 'Needed'], [
+          ['Total and sort', 'Worker sorts all rows before <code>limit</code>/<code>offset</code>; the page then re-sorts the 100 it read', 'Keep sorting on the Worker; page with <code>offset</code> (25 per page); stop re-sorting in the browser'],
+          ['Search', 'Worker <code>q</code> matches market names; the page also filters the 100 it read', '◇ <code>q</code> also matches the tracked sector, so “energy” finds [Grid software]'],
+          ['Country, freshness, source type', 'Not in the Worker. With 82 markets and limit 100 a browser filter is exact today, and silently wrong past 100', '◇ <code>country</code>, <code>fresh</code>, <code>src</code> filters on <code>GET /markets</code> so <code>total</code> and the facet counts cover the whole directory before paging'],
+          ['Facet counts in the popovers', 'None', '◇ counts per country and freshness band over the filtered set'],
+          ['Analysis coverage summary', 'None', 'Frontend while total ≤ 100; ◇ a summary read when it is not'],
+          ['Sort by latest source or source count', 'Not in <code>MARKET_SORTS</code>', '◇ optional; not drawn as available'],
+          ['Newest date per kind', '<code>sources[]</code> has kind and newest, capped at 20', 'Frontend from <code>sources[]</code>; ◇ <code>newest_named_source_at</code> if a market passes 20 sources']])
+        + '<h2>Requires engineering (◇ #7036)</h2><p>Server filters <code>country</code>, <code>fresh</code>, <code>src</code> with facet counts; <code>q</code> over tracked sector; a coverage summary read once the directory can exceed 100; optionally sort by newest source and a per-kind newest date. No new store: every field comes from what #6421 already reads.</p>'
+        + '<h2>Pending the owner (⚑, option A drawn)</h2><p><b>Q1 · thesis vocabulary.</b> Profile sectors (11 options) and tracked sectors are different lists. A: a published crosswalk (Climate, Energy → [Climate & energy]; Robotics → [Robotics]); a market matches only through it; keywords and geographies never match. B: let the profile store tracked sectors. <b>Q2 · default grouping.</b> Main groups by tracked sector by default. A: a flat table by default, with Group by tracked sector kept as a toggle (<code>group=1</code>).</p>'
+        + '<h2>Frontend only</h2><p>Rename the destinations to Market directory and Listed companies; move government ownership into the coverage note; drop the internal source-table captions; draw the five coverage columns with Not recorded and its reason; the expanded row; Cards and Analysis; <code>tab</code>, <code>view</code>, <code>page</code>, <code>open</code> in the URL; the sector page’s Back link carrying the query and focus returning to the row; the investor thesis section from <code>GET /api/investor-profile/me</code>, the match marker and the matches-only toggle; hide the market-readings card and its form for an investor (approved #6273 Q2); replace the unbuilt toolbar ops with Export view and New market research (opens the existing New research form with the market named); on Listed companies, search, source and sort controls over the Worker’s existing <code>q</code>, <code>source</code> and <code>sort</code> on <code>GET /listed-companies</code>; phone sheet; dark.</p>'
+        + '<h2>Future work, not drawn</h2><p>Several theses with states, deals sourced per thesis and deal attribution stay with #6273 (RS-17B). No market size, growth or ranking is derived anywhere.</p>'
+        + '<h2>Which states use existing data</h2>' + tbl(['State', 'Data'], [['Loading, failed read with Retry, successful empty, filtered zero with Clear filters', 'Existing (the read and its total)'], ['Not recorded with reason for countries, sources, latest source', 'Existing (#6421)'], ['Partial when the sectors read fails', 'Existing (<code>/api/research/sectors</code>)'], ['Thesis match, missing thesis, thesis Unavailable', 'Existing profile read; match is frontend'], ['Facet counts and filtered totals past 100 markets', '◇ #7036']])
+        + '<h2>Accessibility</h2><p>One h1; tabs as a tablist; view switch as a radiogroup; sortable header with <code>aria-sort</code>; row expanders with <code>aria-expanded</code> and <code>aria-controls</code>; result line polite live region; failed read as an alert; the thesis marker is the words “Matches your thesis sectors” with a ✓, never a tint; Not recorded is a word with a dashed box and its reason, never 0 or blank; Stale is a word, a clock glyph and a dashed amber border; 2px focus ring; 44px targets and 48px primaries on phone.</p>')
+    };
+
+    /* ---------- route ---------- */
+    let html = '';
+    if (B === 'RMD01') html = pageF(dirDefault(), { h: 1180 });
+    else if (B === 'RMD02') html = pageF(dirSearch(), { h: 1040 });
+    else if (B === 'RMD03') html = pageF(dirFilter(), { h: 960, overlay: popCountry });
+    else if (B === 'RMD03B') html = crop('<span class="eye">Source freshness and source type · the two coverage filters</span><div style="display:flex;gap:16px">' + popFresh + popType + '</div>', 720);
+    else if (B === 'RMD04') html = pageF(dirExpanded(), { h: 960 });
+    else if (B === 'RMD05') html = pageF(sectorPage(), { h: 980 });
+    else if (B === 'RMD05B') html = restored();
+    else if (B === 'RMD06') html = pageF(cards(), { h: 1020 });
+    else if (B === 'RMD06B') html = pageF(analysis(), { h: 1080 });
+    else if (B === 'RMD07') html = pageF(listed(), { h: 960 });
+    else if (B === 'RMD08') html = pageI(invPage(''), { h: 1400 });
+    else if (B === 'RMD08B') html = pageI(invPage('none'), { h: 1310 });
+    else if (B === 'RMD08C') html = crop('<span class="eye">Thesis read failed · the directory stays usable · no marks, no claim that nothing matches</span><div style="display:grid;grid-template-columns:296px minmax(0,1fr);gap:16px;align-items:start">' + thesisUa() + '<div>' + tcard(table(['es', 'ir', 'dev'], { inv: true, th: 'ua' })) + '</div></div>', 1300);
+    else if (B === 'RMD09') html = statesA();
+    else if (B === 'RMD09B') html = statesB();
+    else if (B === 'RMD10') html = focusBoard();
+    else if (B === 'RMD12') html = pageF(dirExpanded(), { h: 960 });
+    else if (B === 'RMD12B') html = pageI(invPage(''), { h: 1400 });
+    else if (MOB[B]) html = MOB[B]();
+    else if (DOCS[B]) html = DOCS[B]();
+    else html = pageF(dirDefault(), { h: 1180 });
+    return { html: { __html: html } };
+  }
+}
+
+</script>
+</body>
+</html>
