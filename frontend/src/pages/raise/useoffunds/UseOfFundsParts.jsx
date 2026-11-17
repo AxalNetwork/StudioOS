@@ -192,7 +192,7 @@ export function Columns({ groups, label, testId, format = (v) => v }) {
  * Dialogs
  * ------------------------------------------------------------------ */
 
-function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
+export function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   return (
     <div className="flex justify-end gap-2 max-md:[&>*]:flex-1">
       <button type="button" className={BTN_GHOST} onClick={onClose} disabled={busy}>Cancel</button>
@@ -201,13 +201,13 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
+export const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
 /** D5069: the plan changed after the dialog opened. Nothing was written. */
 // D6082: `scenario_changed` is the same refusal, met when another save lands between the read and the write.
 const STALE_CODES = new Set(['changed_since_open', 'scenario_changed']);
 export const isStale = (e) => e?.status === 409 && (STALE_CODES.has(e?.code) || STALE_CODES.has(e?.data?.code));
 /** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
-function ReviewLatest({ onReview }) {
+export function ReviewLatest({ onReview }) {
   return <button type="button" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" onClick={onReview} data-testid="uof-review-latest">Review latest</button>;
 }
 export const REVIEWED = 'Showing the latest plan. Your change was not saved; make it again from here.';

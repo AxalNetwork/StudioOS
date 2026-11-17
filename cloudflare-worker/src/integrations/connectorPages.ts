@@ -225,7 +225,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Sign in with TikTok to grant access to your basic profile, audience counts and public videos. Read-only.',
       'You press each sync from Grow: your followers, total likes and video count land in Revenue and traction, beside revenue and never as revenue, and each public video’s views, likes, comments and shares land in Distribution, with their date. A figure you delete stays deleted. One TikTok account serves one venture.',
-      'Disconnecting removes every figure your TikTok fed.',
+      'When the venture has no channel with utm_source tiktok, Distribution asks the founder whether to add TikTok as a channel. Nothing is added unless the founder accepts, and a dismissed proposal does not come back.',
+      'Disconnecting removes every figure your TikTok fed and its channel proposal. A channel the founder accepted stays.',
     ],
     tools: [
       tool('audience', 'followers, likes and video count', 'read', 'Reads your follower count, total likes and video count, as a dated snapshot each sync.', 'revenue_and_traction', ['/v2/user/info/']),
