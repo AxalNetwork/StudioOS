@@ -120,3 +120,60 @@ test('merge CLI reads process traces from separate shard artifact directories', 
   assert.deepEqual(report.tests['fixture.test.mjs'].reads, ['a', 'b']);
   assert.equal(report.tests['fixture.test.mjs'].opaque, false);
 });
+
+// ── D5608: the ci.yml wiring ───────────────────────────────────────────────
+const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+/** One top-level job's text, from `  <id>:` to the next job. */
+function job(id) {
+  const lines = ci.split('\n');
+  const start = lines.findIndex((l) => l === `  ${id}:`);
+  assert.ok(start > 0, `ci.yml has a job ${id}`);
+  let end = lines.findIndex((l, i) => i > start && /^ {2}[a-z][\w-]*:$/.test(l));
+  if (end < 0) end = lines.length;
+  return lines.slice(start, end).join('\n');
+}
+const ONLY_QUEUE_AND_MAIN = "(github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')";
+
+test('ci.yml: the suite step traces only under merge_group and push, and its run line is unchanged', () => {
+  const suite = job('suite');
+  const step = suite.match(/ {6}- run: node scripts\/test-drift-parts\.mjs \$\{\{ matrix\.part \}\} --plan-file suite-plan\.json\n {8}env:\n {10}TEST_TRACE_DIR: (.+)\n/);
+  assert.ok(step, 'the test-drift-parts step keeps its run line and sets TEST_TRACE_DIR as env');
+  assert.equal(step[1], `\${{ ${ONLY_QUEUE_AND_MAIN} && format('{0}/test-traces', runner.temp) || '' }}`);
+  assert.equal((ci.match(/TEST_TRACE_DIR/g) || []).length, 1, 'no other step or job sets the tracer');
+});
+
+test('ci.yml: each part uploads its traces even when it failed, only under merge_group and push', () => {
+  const suite = job('suite');
+  const upload = suite.slice(suite.indexOf("- name: Upload this part's test traces"));
+  assert.ok(upload.includes(`\n        if: always() && ${ONLY_QUEUE_AND_MAIN}\n`), 'the upload runs even after a failed part, on the queue and main only');
+  assert.match(upload, /name: test-traces-\$\{\{ matrix\.part \}\}/);
+  assert.match(upload, /path: \$\{\{ runner\.temp \}\}\/test-traces/);
+  assert.match(upload, /continue-on-error: true/);
+});
+
+test('ci.yml: test-deps merges after the suite, uploads test-deps-<sha> for 30 days, and no gate waits on it', () => {
+  const deps = job('test-deps');
+  assert.match(deps, /\n {4}needs: suite\n/);
+  assert.ok(deps.includes(`\n    if: always() && ${ONLY_QUEUE_AND_MAIN} && needs.suite.result != 'skipped'\n`), 'test-deps runs on the queue and main only, after a suite that ran');
+  assert.match(deps, /pattern: test-traces-\*/);
+  assert.match(deps, /node scripts\/ci\/merge-test-deps\.mjs "\$RUNNER_TEMP\/test-traces" "\$RUNNER_TEMP\/test-deps" "\$GITHUB_SHA"/);
+  assert.match(deps, /name: test-deps-\$\{\{ github\.sha \}\}/);
+  assert.match(deps, /test-deps\.json\n\s+\$\{\{ runner\.temp \}\}\/test-deps\/test-timings\.json/);
+  assert.match(deps, /retention-days: 30\n/);
+  for (const gate of ['landing', 'gate']) {
+    const needs = job(gate).match(/\n {4}needs: \[([^\]]*)\]/);
+    assert.ok(needs, `${gate} lists its needs`);
+    assert.ok(!needs[1].split(',').map((n) => n.trim()).includes('test-deps'), `${gate} must not need test-deps: its failure cannot block`);
+  }
+  // No other job waits on it either, so a failed merge only loses the artifact.
+  assert.equal((ci.match(/needs:[^\n]*test-deps/g) || []).length, 0);
+});
+
+test('the tracer observes modules off-thread, never with a synchronous registerHooks hook', () => {
+  // With a synchronous hook in the test process, even one that passed every call
+  // through, data_room_d696 test 11 rendered the tool instead of the module page
+  // under _deck-loader.mjs's async hooks, and the merge queue ejected #6904.
+  const source = readFileSync(fileURLToPath(tracer), 'utf8');
+  assert.doesNotMatch(source.replace(/\/\/.*$/gm, ''), /registerHooks\s*\?*\.?\(/);
+  assert.match(source, /modules\.register\(new URL\('\.\/test-tracer-hooks\.mjs'/);
+});

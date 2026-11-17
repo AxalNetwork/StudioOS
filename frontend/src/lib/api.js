@@ -5464,6 +5464,8 @@ export const api = {
     // grant answers (`project_name` null where the call or deal behind it did
     // not name the venture); `requests: null` with `requests_unreadable` when
     // they could not be read, never an empty list.
+    // D6266: each room also carries `deals`: the permitted deals on its company
+    // (`{ id, stage, name }`), and `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one
