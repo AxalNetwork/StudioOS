@@ -24,7 +24,7 @@ import {
   LAB_APPLY_HREF,
   LAB_APPLY_HREF_SIGNED_IN, LAB_CONTACT_HREF,
   parseSqliteUtc, fmtRaised, useCohortRecord,
-  useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel,
+  useCohortDirectory, useShippedFeed, useCohortPlaces, placesLabel, LAB_WEEKS,
 } from "../lib/spinoutLab";
 import { DEFAULT_TRACK } from "../lib/spinoutLabArsenal";
 
@@ -256,7 +256,7 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
             </h1>
             <p className="mt-4 mb-8 text-[16px] text-[#cbc4e8] font-medium leading-relaxed">
               You've been admitted to the Spin-Out Lab. The next 28 days are four
-              gates that open on evidence — Validate, Build, Pitch, Fund — with
+              gates that open on evidence — {LAB_WEEKS.map((w) => w.name).join(', ')} — with
               every Lab tool on one company and one clock, and incorporation among
               them for founders who still need an entity.
             </p>

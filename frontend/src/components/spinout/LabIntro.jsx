@@ -7,7 +7,7 @@ import {
   LAB_PANEL_HEX, LAB_SURFACE, LAB_TAG_LEAD, LAB_TAG_SOON, LAB_TOOL, LAB_TOOL_LEAD,
 } from './labIntroStyles';
 import {
-  LAB_JURISDICTIONS, PIPELINE_PHASES, labJurisdiction, pipelineItemsFor,
+  LAB_FORMATION, LAB_JURISDICTIONS, PIPELINE_PHASES, formationItemsFor, labJurisdiction, pipelineItemsFor,
 } from '../../lib/spinoutLab';
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, labTrack, leadsWithFor,
@@ -310,7 +310,7 @@ export function LabGates({ jurisdiction }) {
                 {phase.name}
               </div>
               <ul className="mt-2.5 mb-3 grid gap-1.5">
-                {pipelineItemsFor(phase, jurisdiction).map((item) => (
+                {pipelineItemsFor(phase).map((item) => (
                   <li key={item} className="flex gap-2 text-[12px] leading-snug text-gray-600 dark:text-gray-400">
                     <span aria-hidden="true" className="text-axal-violet-deep dark:text-violet-400">✓</span>
                     <span>{item}</span>
@@ -318,7 +318,7 @@ export function LabGates({ jurisdiction }) {
                 ))}
               </ul>
               {/* mt-auto, so the four gate footers align on one line however
-                  many items a week carries — Fund has five, the rest four. */}
+                  many items a week carries. */}
               <div className={`mt-auto border-t pt-2.5 ${LAB_HAIRLINE}`}>
                 <div className={LAB_EYEBROW}>Gate opens on</div>
                 {/* Two lines' worth whether or not the sentence needs them: the
@@ -334,6 +334,12 @@ export function LabGates({ jurisdiction }) {
           </li>
         ))}
       </ol>
+      {/* D6991: formation has no week of its own (owner answer F1); the
+          jurisdiction's two lines sit here, under the four gates. */}
+      <p className={`mt-4 ${LAB_LEDE}`} data-testid="lab-formation">
+        {LAB_FORMATION}{' '}
+        <span className="text-gray-600 dark:text-gray-400">({formationItemsFor(jurisdiction).join('; ')}.)</span>
+      </p>
     </section>
   );
 }

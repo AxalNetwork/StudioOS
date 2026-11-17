@@ -100,17 +100,13 @@ export const METHOD_FIGURES = {
 /** The four disciplines' blueprints, two by two, in the canvas's order. */
 export const DISCIPLINE_FIGURES = ['lean', 'sprint', 'agile', 'kanban'];
 
-/** The Lab's four weeks. `tone` is the week's bar colour on the canvas. */
-export const LAB_WEEKS = [
-  { n: 'Week 1', t: 'Validate', tone: '#c4b5fd',
-    items: ['Problem definition', 'Customer discovery', 'ICP', 'Market context', 'Initial evidence'] },
-  { n: 'Week 2', t: 'Build', tone: '#a78bfa',
-    items: ['Solution definition', 'MVP scope', 'Prototype', 'Founding team', 'Company formation: entity, founder stock, vesting, 83(b)', '90-day roadmap'] },
-  { n: 'Week 3', t: 'Raise', tone: '#8b5cf6',
-    items: ['Readiness assessment', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Investor preparation'] },
-  { n: 'Week 4', t: 'Grow', tone: '#7c3aed',
-    items: ['Distribution', 'Partner network', 'Operating plan', 'Growth priorities', 'Next capital and execution commitments'] },
-];
+/**
+ * The bar colour of each of the Lab's four weeks on the canvas. The weeks'
+ * names and lines are the Lab's own (`LAB_WEEKS` in lib/spinoutLab.js, D6991):
+ * owner answer F1 on #6976 replaced the canvas's Validate, Build, Raise, Grow
+ * here, which name the company lifecycle (METHOD_STAGES), not the Lab's weeks.
+ */
+export const LAB_WEEK_TONES = ['#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed'];
 
 /** What the shared record connects. */
 export const METHOD_RECORD = [

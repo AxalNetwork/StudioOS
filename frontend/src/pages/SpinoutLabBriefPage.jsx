@@ -6,7 +6,7 @@ import { reportError } from '../lib/log';
 import { Unrecorded } from '../ui';
 import { inZone, dateInZone } from '../lib/zoneTime';
 import {
-  COHORT_WEEKS, LAB_APPLY_HREF, PIPELINE_PHASES, pipelineItemsFor, useSpinoutStats, companiesLabel,
+  COHORT_WEEKS, LAB_APPLY_HREF, LAB_FORMATION, PIPELINE_PHASES, pipelineItemsFor, useSpinoutStats, companiesLabel,
 } from '../lib/spinoutLab';
 import {
   LAB_TRACKS, TOOL_COUNT, arsenalFor, leadsWithFor,
@@ -406,6 +406,10 @@ export function BriefDocument({ brief, err, stats = [] }) {
               </div>
             ))}
           </div>
+          {/* D6991: formation has no week of its own (owner answer F1 on #6976). */}
+          <p className="text-[11px] leading-[1.55] m-0 mb-5" style={{ color: BODY }} data-testid="brief-formation">
+            {LAB_FORMATION}
+          </p>
         </div>
         <PageFoot n={2} year={year} />
       </section>
