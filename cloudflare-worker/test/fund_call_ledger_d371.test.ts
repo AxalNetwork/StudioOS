@@ -104,6 +104,7 @@ CREATE TABLE user_sessions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, revoked_at TIMESTAMP, factor TEXT, last_step_up_at TIMESTAMP);
 ${MIGRATION_312}
 ${readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8')}
+${readFileSync(resolve(HERE, '../sql/migrations/202611152336_6238_capital_call_amendments.sql'), 'utf8')}
 `;
 
 /**

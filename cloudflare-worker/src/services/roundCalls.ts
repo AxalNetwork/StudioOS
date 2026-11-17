@@ -1,7 +1,7 @@
 import { liveFiles } from './dataRoomTrash';
 import { holdsLicence, holdsOnlyLicence, heldLicences } from './accountLicences';
 import type { Env, User } from '../types';
-import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
+import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor, effectiveCallState } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
@@ -394,6 +394,33 @@ export async function sendCall(env: Env, call: CallRow, actor: User, acknowledge
     if(id!=null) notified++;
   }
   return { uid:call.uid,state:'sent',recipients:recipients.length,notified,not_delivered:recipients.length-notified };
+}
+/**
+ * D6160 (#6160), CLS16: the calls sent to this investor, each with the company's
+ * name (only the name, as `investorPage` reads it), the recorded terms the list
+ * shows, the state it reads as, and this investor's OWN response: their
+ * indication, their data-room request and how many questions they asked. Every
+ * response column is read from this investor's recipient row and questions
+ * alone, so no other recipient's indication, request, question or count can
+ * reach the reply. A draft is never listed.
+ */
+export async function investorList(env: Env, investor: User) {
+  await verifiedReader(env,investor);
+  const rows=await env.DB.prepare(`SELECT rc.uid,rc.name,rc.instrument,rc.amount_cents,rc.minimum_cheque_cents,rc.target_close,rc.state,rc.sent_at,rc.closed_at,
+      p.name AS company_name,rr.opened_at,rr.commitment_cents,rr.data_room_requested_at,
+      (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=rc.id AND q.investor_user_id=rr.investor_user_id) AS question_count,
+      (SELECT COUNT(*) FROM round_call_questions q WHERE q.call_id=rc.id AND q.investor_user_id=rr.investor_user_id AND q.answer IS NOT NULL) AS answered_count
+    FROM round_calls rc JOIN round_call_recipients rr ON rr.call_id=rc.id
+    LEFT JOIN projects p ON p.id=rc.project_id AND p.deleted_at IS NULL
+    WHERE rr.investor_user_id=? AND rc.state<>'draft' ORDER BY rc.sent_at DESC,rc.id DESC`).bind(investor.id).all<Record<string,unknown>>();
+  const day=today();
+  return { viewer:'investor', items:(rows.results||[]).map(r=>({
+    uid:r.uid,name:r.name,instrument:r.instrument,amount_cents:r.amount_cents,minimum_cheque_cents:r.minimum_cheque_cents,
+    target_close:r.target_close,state:r.state,effective_state:effectiveCallState(r as {state:string;target_close:string},day),
+    sent_at:r.sent_at,closed_at:r.closed_at??null,company:{name:(r.company_name as string|null)??null},
+    mine:{opened_at:r.opened_at??null,commitment_cents:r.commitment_cents??null,data_room_requested_at:r.data_room_requested_at??null,
+      question_count:Number(r.question_count),answered_count:Number(r.answered_count)},
+  })) };
 }
 export async function investorPage(env: Env, call: CallRow, investor: User) {
   await verifiedReader(env,investor);
