@@ -476,7 +476,8 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   const header = overview.slice(overview.indexOf('export function CycleHeader'), overview.indexOf('export default function'));
   assert.ok(header.length > 0);
   assert.doesNotMatch(header, /\bmd:/, 'the header switches at lg, with the route');
-  assert.match(header, /hidden flex-wrap gap-1\.5 lg:flex/);
+  // D6029 (#6029): the desktop tabs still switch at lg, unless the sidebar lists the cycle's pages (Build, BD23).
+  assert.match(header, /hidden flex-wrap gap-1\.5 \$\{sidebarLists \? '' : 'lg:flex '\}items-center/);
   assert.match(header, /px-3\.5 lg:hidden/);
   for (const f of ['CycleRoute.jsx', 'CycleOverview.jsx', 'PhoneCycleRoot.jsx', 'validatePhone.js']) {
     assert.doesNotMatch(readFileSync(`frontend/src/pages/cycles/${f}`, 'utf8'), /matchMedia|innerWidth/, f);
