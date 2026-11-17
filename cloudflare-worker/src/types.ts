@@ -114,6 +114,8 @@ export interface Env {
   // Used by the boot guards in auth.ts to decide whether to throw on missing
   // secrets vs warn-and-fallback.
   ENVIRONMENT?: string;
+  /** Fixed recipient of the scheduled production HQ magic-link insert probe. */
+  MAGIC_INSERT_CANARY_EMAIL?: string;
   /** D5059: opt-in for member program entry checks after existing grants have been reconciled. */
   PROGRAM_ENTITLEMENT_ENFORCEMENT?: string;
   // Audit #4: edge proxy → FastAPI origin (e.g. https://api.axal.vc).

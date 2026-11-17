@@ -504,6 +504,7 @@ import orders from './routes/orders';
 import products from './routes/products';
 import { Jobs } from './models/jobs';
 import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './util/cronHistory';
+import { runMagicLinkInsertCanary } from './services/magicLinkInsertCanary';
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
@@ -2080,7 +2081,7 @@ function requiresBlockingRoleSchemaBootstrap(pathname: string, method: string): 
   return !(method === 'GET' && isSafeAnonymousRead);
 }
 
-export default {
+const studioos = {
   fetch: async (request: Request, env: Env, ctx: ExecutionContext) => {
     // Task #37 — hardened static-asset serving. wrangler.toml lists
     // `/assets/*` in `run_worker_first`, so hashed SPA assets are routed
@@ -2180,6 +2181,9 @@ export default {
     return withThrownResponses(() => app.fetch(request, env, ctx));
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    // The insert probe has its own atomic per-slot claim and is independent of
+    // the queue drain's shared KV lease. It uses exactly the public fetch handler.
+    ctx.waitUntil(runMagicLinkInsertCanary(env, event.scheduledTime, request => studioos.fetch(request, env, ctx)));
     const work = (async () => {
       // The raw cron expression is stored as trigger_name, so the record is
       // keyed by expression: the key CRON_TRIGGERS (util/cronHistory) reads
@@ -3488,6 +3492,8 @@ export default {
     await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
   },
 };
+
+export default studioos;
 
 // Durable Object class re-exports — REQUIRED by the Workers runtime so it
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].

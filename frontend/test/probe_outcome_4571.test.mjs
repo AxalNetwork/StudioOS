@@ -57,9 +57,9 @@ test('both probes print the outcome on every exit path that ran a request', () =
   // Mutation checked: the insert probe's refusal path printing no outcome.
   const insert = readFileSync(new URL('../../scripts/check-magic-link-insert.mjs', import.meta.url), 'utf8');
   const live = readFileSync(new URL('../../scripts/check-magic-link-live.mjs', import.meta.url), 'utf8');
-  assert.match(insert, /function report\([^)]*\{ startStatus, refusal \}\) \{[\s\S]{0,300}outcome: \$\{insertOutcome\(/, 'the one printer prints the outcome');
+  assert.match(insert, /function report\([^)]*\{ startStatus, refusal \}\) \{[\s\S]{0,300}reportOutcome\(insertOutcome\(/, 'the one printer prints the outcome');
   assert.equal((insert.match(/\}\), \{ startStatus, refusal \}\);|report\(result, \{ startStatus, refusal \}\);/g) || []).length, 2, 'both report calls pass what the outcome needs');
-  assert.match(insert, /outcome: \$\{probeOutcome\(\{ startStatus: 429/, 'the rate-limit exit');
+  assert.match(insert, /reportOutcome\(probeOutcome\(\{ startStatus: 429/, 'the rate-limit exit');
   assert.match(live, /outcome: \$\{liveOutcome\(\{ startStatus: 429/, 'the rate-limit exit');
   assert.match(live, /if \(startStatus !== 202\) \{[\s\S]{0,400}outcome: \$\{liveOutcome/, 'a refusal ends the run, with its outcome');
   assert.match(live, /outcome: \$\{liveOutcome\(\{ startStatus, refusal, rows \}\)\}/, 'the full run');
