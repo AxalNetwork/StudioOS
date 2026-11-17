@@ -31,7 +31,7 @@ runs that folder, and adding a glob here would mean editing `package.json`, whic
   never read for counting.
 - **Per PR in any 24 hours, across kinds:** 4 bot commits and 2 model runs.
 - **Main repair:** 2 attempts per failure fingerprint (job plus test), whatever the commit.
-- **Daily caps** since 00:00 UTC: `LANDING_BOT_DAILY_MODEL_RUNS` (per provider call), `LANDING_BOT_DAILY_PUSHES`,
+- **Daily caps** since 00:00 UTC: `LANDING_BOT_DAILY_MODEL_RUNS` (per model run, whatever its rounds and account fallbacks; owner, 2026-11-17), `LANDING_BOT_DAILY_PUSHES`,
   `LANDING_BOT_DAILY_REQUEUES`. An unset cap is 0.
 - **Breakers:** main's newest completed push run of CI failed; an open `[alert] main is red`, `[alert] the Actions
   queue is backed up` or `[alert] merge queue stalled`; for the refresh, fresh queued CI runs above

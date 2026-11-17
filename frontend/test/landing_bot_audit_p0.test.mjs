@@ -126,3 +126,46 @@ test('audit P0: each model round call grants the permissions the round\'s edit j
   const conflict = readFileSync(new URL('../../.github/workflows/landing-bot-conflict.yml', import.meta.url), 'utf8');
   assert.match(conflict, /  resolve:\n[\s\S]*?permissions:\n {6}contents: read\n {6}id-token: write\n {4}uses: \.\/\.github\/workflows\/landing-bot-model\.yml/);
 });
+
+// Owner answers of 2026-11-17 to the audit's P1s.
+import { budget } from '../../scripts/landing-bot/rules.mjs';
+import { consent } from '../../scripts/landing-bot/ejection-rules.mjs';
+import { repairStatus } from '../../scripts/landing-bot/feeder-github.mjs';
+
+test('owner: the daily model cap counts runs, whatever rounds or accounts a run used', () => {
+  const now = Date.parse('2026-11-17T12:00:00Z');
+  const env = { LANDING_BOT_DAILY_MODEL_RUNS: '1', LANDING_BOT_DAILY_PUSHES: '5' };
+  // One earlier run today, however many provider calls it made: the second run is refused.
+  assert.equal(budget('conflict', env, { now, modelRuns: [], pushes: [] }).allowed, true);
+  const second = budget('conflict', env, { now, modelRuns: [{ at: '2026-11-17T09:00:00Z' }], pushes: [] });
+  assert.equal(second.allowed, false);
+  assert.match(second.reasons.join(), /LANDING_BOT_DAILY_MODEL_RUNS: 1 of 1 used today/);
+  // The resolver reserves one entry per run, never one per call.
+  const src = readFileSync(new URL('../../scripts/landing-bot/resolve-rules.mjs', import.meta.url), 'utf8');
+  assert.match(src, /budget\(KIND, env, \{ now, modelRuns: ctx\.reserved/);
+});
+
+test('owner: the landing App\'s own queue entry is consent; another bot\'s is not', () => {
+  const bot = 'axal-landing[bot]';
+  const pr = (actor) => ({ added: [{ at: '2026-11-17T10:00:00Z', actor }], removed: [], commits: [], autoMerge: null });
+  const own = consent(pr({ login: bot, type: 'Bot' }), { botLogin: bot });
+  assert.deepEqual([own.valid, own.source], [true, 'app-queued']);
+  assert.equal(consent(pr({ login: 'dependabot[bot]', type: 'Bot' }), { botLogin: bot }).valid, false);
+  assert.equal(consent(pr({ login: bot, type: 'Bot' }), {}).valid, false, 'no App login configured: no App consent');
+  // A model edit after the App's entry still voids it.
+  const edited = { ...pr({ login: bot, type: 'Bot' }), commits: [{ sha: 'c'.repeat(40), parents: [{}], author: { login: bot }, committer: { login: bot }, commit: { message: 'fix\n\nLanding-Bot-Kind: conflict', committer: { date: '2026-11-17T11:00:00Z' } } }] };
+  assert.equal(consent(edited, { botLogin: bot }).valid, false);
+});
+
+test('owner: the keeper\'s no-model merge by the App does not make a PR model-repaired', () => {
+  const bot = 'axal-landing[bot]';
+  const user = { login: 'dev', id: 1, type: 'User' };
+  const app = { login: bot, id: 2, type: 'Bot' };
+  const keeperMerge = { sha: 'd'.repeat(40), parents: [{}, {}], author: app, committer: app, commit: { message: 'Merge main into this branch (landing bot)\n\nLanding-Bot-Kind: keeper' } };
+  const own = { sha: 'e'.repeat(40), parents: [{}], author: user, committer: user, commit: { message: 'Fix' } };
+  assert.equal(repairStatus([own, keeperMerge], { botLogin: bot }), false);
+  assert.equal(repairStatus([own, keeperMerge]), null, 'no App login: uncertain, refused');
+  assert.equal(repairStatus([own, { ...keeperMerge, author: { ...app, login: 'other[bot]' }, committer: { ...app, login: 'other[bot]' } }], { botLogin: bot }), null, 'another bot\'s keeper trailer is not trusted');
+  assert.equal(repairStatus([own, { ...keeperMerge, parents: [{}] }], { botLogin: bot }), null, 'not a merge');
+  assert.equal(repairStatus([own, { ...keeperMerge, commit: { message: 'x\n\nLanding-Bot-Kind: scan-fix' } }], { botLogin: bot }), true, 'a model scan fix is a model repair');
+});

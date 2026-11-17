@@ -137,7 +137,7 @@ export function gate(pr, ctx) {
   }
   const a = attempts(pr, KIND, { botLogin: ctx.botLogin, now, commits: pr?.commits ?? null, runs: ctx.runs ?? null });
   if (!a.allowed) return { decision: 'handback', reasons: a.reasons };
-  const b = budget(KIND, env, { now, modelCalls: ctx.reserved, pushes: ctx.reserved });
+  const b = budget(KIND, env, { now, modelRuns: ctx.reserved, pushes: ctx.reserved });
   if (!b.allowed) return { decision: 'handback', reasons: b.reasons };
   return { decision: 'resolve', reasons: [] };
 }

@@ -28,12 +28,15 @@ export function keepsConsent(c, botLogin) {
  */
 export function consent(pr, { botLogin } = {}) {
   const human = (a) => a && a.type !== 'Bot' && !/\[bot\]$/.test(login(a) ?? '') && login(a) !== botLogin;
+  // Owner, 2026-11-17: an entry the landing App made (the feeder's first admission, after its T0/T1 gates) is consent
+  // too. Only the App's own login counts: any other bot's entry is not. Model-edited PRs never reach the feeder.
+  const app = (a) => Boolean(botLogin) && login(a) === botLogin;
   const signals = [
-    ...(pr?.added || []).filter((e) => human(e.actor)).map((e) => ({ at: time(e.at), source: 'queued' })),
+    ...(pr?.added || []).filter((e) => human(e.actor) || app(e.actor)).map((e) => ({ at: time(e.at), source: app(e.actor) ? 'app-queued' : 'queued' })),
     ...(pr?.autoMerge && human(pr.autoMerge.enabledBy) ? [{ at: time(pr.autoMerge.enabledAt), source: 'auto-merge' }] : []),
   ].filter((s) => s.at !== null).sort((a, b) => b.at - a.at);
   const last = signals[0];
-  if (!last) return { valid: false, reason: 'no person queued this PR (a bot-queued entry is not consent)' };
+  if (!last) return { valid: false, reason: 'neither a person nor the landing App queued this PR (another bot\'s entry is not consent)' };
   const manual = (pr?.removed || []).find((e) => time(e.at) > last.at && (/manual|dequeue/i.test(String(e.reason)) || human(e.actor)));
   if (manual) return { valid: false, reason: 'a person removed it from the queue after queueing it' };
   const later = (pr?.commits || []).filter((c) => (time(c?.commit?.committer?.date) ?? Infinity) > last.at);

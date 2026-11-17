@@ -29,13 +29,17 @@ const historyQuery = `query($owner: String!, $repo: String!, $number: Int!) {
 // #6467 binds repair kinds to commits from the landing App. A label can be removed;
 // refusing incomplete attribution and all unclassified bot commits preserves the owner lane.
 // An original agent session acting under a user identity is distinct from an automated repair.
-export function repairStatus(commits) {
+export function repairStatus(commits, {botLogin} = {}) {
   if (!Array.isArray(commits) || !commits.length) return null;
   let unknown = false;
   for (const c of commits) {
     if (!SHA.test(c?.sha ?? '') || typeof c.commit?.message !== 'string') return null;
     const kind = /^Landing-Bot-Kind:[ \t]*([^\r\n]+)$/im.exec(c.commit.message);
-    if (kind && ['red-pr', 'conflict', 'main-repair'].includes(kind[1].trim().toLowerCase())) return true;
+    if (kind && ['red-pr', 'conflict', 'main-repair', 'scan-fix'].includes(kind[1].trim().toLowerCase())) return true;
+    // Owner, 2026-11-17 (audit P1): the branch keeper's merge of main is no-model. It counts as such only when it is
+    // a two-parent merge made by the landing App itself (LANDING_BOT_LOGIN); unset, it stays uncertain and is refused.
+    if (kind && kind[1].trim().toLowerCase() === 'keeper' && botLogin && c.parents?.length === 2 &&
+        [c.author, c.committer].some(actor => actor?.login === botLogin && actor?.type === 'Bot')) continue;
     if (kind || [c.author, c.committer].some(actor => !positive(actor?.id) || actor.type !== 'User')) unknown = true;
   }
   return unknown ? null : false;
@@ -63,7 +67,7 @@ async function loadList() {
 }
 
 export function createGitHubReader({repo, token, fetchImpl = fetch, classify = classifyDiff,
-  loadOrderedList = loadList} = {}) {
+  loadOrderedList = loadList, botLogin} = {}) {
   if (!/^[\w-]+\/[\w.-]+$/.test(repo ?? '') || !token) throw new Error('A repository and read token are required');
   const [owner, name] = repo.split('/');
   let calls = 0;
@@ -258,7 +262,7 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
         if (typeof f.filename !== 'string' || !f.filename) throw new Error('Unreadable PR file');
         return {path: f.filename, previousPath: f.previous_filename};
       });
-      return {pull, files, commits, headSha, number, fullSuitePassed, modelRepaired: repairStatus(commits),
+      return {pull, files, commits, headSha, number, fullSuitePassed, modelRepaired: repairStatus(commits, {botLogin}),
         alreadyQueued: history.isInMergeQueue || Boolean(pull.auto_merge), priorQueueEntry: history.timelineItems.totalCount > 0};
     },
   };

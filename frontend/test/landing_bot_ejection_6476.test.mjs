@@ -45,8 +45,9 @@ test('#6476: consent: a person queued it and only no-model main merges followed'
   assert.equal(consent(queued({ commits: [commit('a', '2026-11-16T09:00:00Z'), keeperMerge('b', '2026-11-16T11:00:00Z')] }), { botLogin: BOT }).valid, true);
   const updateBranch = commit('c', '2026-11-16T11:00:00Z', { by: 'web-flow', parents: 2, message: "Merge branch 'main' into agent/x" });
   assert.ok(keepsConsent(updateBranch, BOT));
-  // A bot-queued entry is not consent.
-  assert.match(consent(queued({ added: [{ at: '2026-11-16T10:00:00Z', actor: bot }] }), { botLogin: BOT }).reason, /bot-queued entry is not consent/);
+  // Owner, 2026-11-17: the landing App's own entry is consent; another bot's is not.
+  assert.equal(consent(queued({ added: [{ at: '2026-11-16T10:00:00Z', actor: bot }] }), { botLogin: BOT }).source, 'app-queued');
+  assert.match(consent(queued({ added: [{ at: '2026-11-16T10:00:00Z', actor: { login: 'renovate[bot]', type: 'Bot' } }] }), { botLogin: BOT }).reason, /another bot's entry is not consent/);
   // A model commit (or any other commit) after consent voids it, even by the bot.
   const model = commit('d', '2026-11-16T11:00:00Z', { by: BOT, message: 'Resolve conflicts\n\nLanding-Bot-Kind: conflict' });
   assert.match(consent(queued({ commits: [commit('a', '2026-11-16T09:00:00Z'), model] }), { botLogin: BOT }).reason, /not a no-model merge/);
