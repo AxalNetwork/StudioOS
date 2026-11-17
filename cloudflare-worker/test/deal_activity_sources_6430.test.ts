@@ -28,7 +28,7 @@ function fixture(){
  INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,nda_envelope_uuid,status) VALUES(5,2,'nda-51','pending'),(5,3,'nda-52','active');
  INSERT INTO esign_recipients(envelope_id,user_id,recipient_email,signing_token,token_expires_at,status,signed_at) VALUES(51,2,'a@example.test','unit-51','2099-01-01','signed','2026-11-07 10:00:00'),(52,3,'b@example.test','unit-52','2099-01-01','signed','2026-11-08 10:00:00');`);
  const app=new Hono<any>().route('/api/deals',deals);app.onError((e,c)=>c.json({error:'refused'},(AUTH_ERROR_STATUSES[e.message]||500) as any));
- async function read(who=2,extra={},headers={}){const token=await new SignJWT({user_id:who,...extra}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('5m').sign(new TextEncoder().encode(secret));const r=await app.request('https://unit.test/api/deals/1/activity',{headers:{Authorization:`Bearer ${token}`,...headers}},{DB:d1Over(db),JWT_SECRET:secret,ENVIRONMENT:'development'} as any);return{status:r.status,body:await r.json() as any};}
+ async function read(who=2,extra={},headers={},binding?:any){const token=await new SignJWT({user_id:who,...extra}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('5m').sign(new TextEncoder().encode(secret));const r=await app.request('https://unit.test/api/deals/1/activity',{headers:{Authorization:`Bearer ${token}`,...headers}},{DB:binding??d1Over(db),JWT_SECRET:secret,ENVIRONMENT:'development'} as any);return{status:r.status,body:await r.json() as any};}
  return{db,read};
 }
 test('grants expose only admitted files and versions; folder, tier, NDA, expiry and revocation continue to apply',async()=>{
@@ -60,4 +60,30 @@ test('a grant for another firm never opens a deck without that firm’s deal rel
  const wrong=await f.read(2,{}, {'X-Company-Id':'20'});assert.equal(wrong.status,200);assert.equal(wrong.body.some((e:any)=>e.type==='deck_shared'),false);
  f.db.exec("UPDATE deck_grants SET company_id=10 WHERE uid='deck-2'");assert.equal((await f.read(2,{}, {'X-Company-Id':'10'})).body.some((e:any)=>e.type==='deck_shared'),true);
  assert.equal((await f.read(2,{}, {'X-Company-Id':'999'})).body.some((e:any)=>e.type==='deck_shared'),false);
+});
+
+
+test('Trash hides file and version activity from admitted readers; restoration brings it back', async () => {
+ const f=fixture();
+ const names=async(who:number)=>JSON.stringify((await f.read(who)).body.filter((e:any)=>e.type==='file_added'||e.type==='file_version'));
+ for(const who of [2,5]) assert.match(await names(who),/Allowed file/);
+ f.db.exec("UPDATE data_room_files SET removed_at='2026-11-17 00:00:00' WHERE id=21");
+ for(const who of [2,5]) assert.doesNotMatch(await names(who),/Allowed file/);
+ f.db.exec('UPDATE data_room_files SET removed_at=NULL WHERE id=21');
+ for(const who of [2,5]){const text=await names(who);assert.match(text,/File added: Allowed file/);assert.match(text,/New version of Allowed file/);}
+});
+
+test('removal after file admission still hides file and version events', async () => {
+ const f=fixture(), base=d1Over(f.db);let removed=false;
+ const binding={...base,prepare(sql:string){
+  const wrap=(s:any):any=>({
+   bind:(...args:any[])=>wrap(s.bind(...args)),
+   first:(...args:any[])=>s.first(...args),run:()=>s.run(),
+   all:async()=>{const result=await s.all();if(!removed&&sql.includes('SELECT id, name, visibility')){removed=true;f.db.exec("UPDATE data_room_files SET removed_at='2026-11-17 00:00:00' WHERE id=21");}return result;},
+  });return wrap(base.prepare(sql));
+ }};
+ const result=await f.read(2,{}, {},binding);
+ assert.equal(result.status,200);assert.equal(removed,true,'the removal happened between admission and event reads');
+ assert.doesNotMatch(JSON.stringify(result.body),/Allowed file/);
+ assert.ok(result.body.some((e:any)=>e.type==='deck_shared'),'other sources remain readable');
 });

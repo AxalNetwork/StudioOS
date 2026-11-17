@@ -1,6 +1,7 @@
 /** D6430: bounded data-room, shared-deck and NDA-signature activity, each under its own existing read rule. */
 import type { Env, User } from '../types';
 import { activeGrant, projectNdaActive, roomProject } from '../routes/data_room';
+import { liveFiles } from './dataRoomTrash';
 import { grantFolderScope, investorCommitted, tierAdmits } from './dataRoomAccess';
 import { isDealOwner } from './dealAccess';
 import { holdsLicence } from './accountLicences';
@@ -23,14 +24,15 @@ export async function dealActivitySources(c: any, deal: any, user: User): Promis
     const folders=grant?await grantFolderScope(env,grant.id,true):null;
     const committed=ownRoom?false:await investorCommitted(env,deal.project_id,user.id,true);
     const nda=ownRoom||await projectNdaActive(env,deal.project_id,user.id);
-    const files=await env.DB.prepare('SELECT id, name, visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?').bind(deal.project_id).all<any>();
+    const live = await liveFiles(env.DB, 'f');
+    const files=await env.DB.prepare(`SELECT id, name, visibility, access_tier, access_expires_at, folder_id FROM data_room_files f WHERE f.project_id = ?${live}`).bind(deal.project_id).all<any>();
     const allowed=(files.results||[]).filter(f=>ownRoom||(tierAdmits(f,committed,Date.now(),folders)&&(f.visibility==='open'||f.visibility==='nda'&&nda))).map(f=>Number(f.id));
     if(!allowed.length)return [];
     // Apply grants before the newest-N boundary, so hidden files cannot crowd out readable events.
     const rows=await env.DB.prepare(`SELECT type, name, at FROM (SELECT 'file_added' AS type, f.name, f.created_at AS at FROM data_room_files f
-        WHERE f.project_id = ? AND f.id IN (SELECT value FROM json_each(?))
+        WHERE f.project_id = ?${live} AND f.id IN (SELECT value FROM json_each(?))
       UNION ALL SELECT 'file_version' AS type, f.name, v.created_at AS at FROM data_room_file_versions v JOIN data_room_files f ON f.id = v.file_id
-        WHERE f.project_id = ? AND f.id IN (SELECT value FROM json_each(?))
+        WHERE f.project_id = ?${live} AND f.id IN (SELECT value FROM json_each(?))
       ) ORDER BY julianday(at) DESC LIMIT 50`).bind(deal.project_id,JSON.stringify(allowed),deal.project_id,JSON.stringify(allowed)).all<any>();
     return (rows.results||[]).map(r=>({type:r.type,kind:'documents',label:`${r.type==='file_added'?'File added:':'New version of'} ${r.name}`,at:r.at,mine:false}));
   });
