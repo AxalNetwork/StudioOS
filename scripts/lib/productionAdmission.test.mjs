@@ -1,7 +1,11 @@
 /** D5501: disposable promotion fixtures over the real Actions admission decision. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { verifyCandidate } from '../verify-production-candidate.mjs';
 import { checkProductionQueues } from '../check-production-queues.mjs';
 import { classifyStartup } from '../check-worker-startup.mjs';
@@ -80,6 +84,75 @@ test('a publish failure leaves migrations recorded and skips smoke without an au
 
 const workflow = name => readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
 const steps = source => source.split(/^      - name: /m).slice(1).map(step => step.trim());
+
+async function admissionCLI(t, { mode = '--wait-for-decision', stage = 'initial', fixture } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'release-admission-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const output = join(dir, 'output'), summary = join(dir, 'summary'), mock = join(dir, 'github.mjs');
+  writeFileSync(output, '');
+  writeFileSync(summary, '');
+  const replies = {};
+  if (fixture) {
+    const get = actions(fixture);
+    await verifyCandidate(a, async path => {
+      replies['https://api.github.com' + path] = await get(path);
+      return replies['https://api.github.com' + path];
+    });
+  }
+  // Exhaust the wait budget on the first API read. Missing fixture entries
+  // simulate an unavailable API, without contacting GitHub or sleeping in CI.
+  writeFileSync(mock, `const replies = JSON.parse(process.env.REPLIES);
+    let now = 0;
+    Date.now = () => now;
+    globalThis.fetch = async url => {
+      now = 96 * 60_000;
+      return url in replies ? Response.json(replies[url]) : new Response(null, { status: 503 });
+    };`);
+  const script = fileURLToPath(new URL('../verify-production-candidate.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, ['--import', mock, script, a, mode], {
+    encoding: 'utf8', timeout: 5000,
+    env: { REPLIES: JSON.stringify(replies), GITHUB_SHA: a, GITHUB_REF: 'refs/heads/main', GITHUB_EVENT_NAME: 'push',
+      GITHUB_REPOSITORY: repo, GH_TOKEN: 'fixture', STUDIOOS_RELEASE_CHECK: stage, GITHUB_RUN_ID: '31',
+      GITHUB_RUN_ATTEMPT: '2', GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary },
+  });
+  if (result.error) throw result.error;
+  return { code: result.status, stdout: result.stdout, output: readFileSync(output, 'utf8'), summary: readFileSync(summary, 'utf8') };
+}
+
+test('initial admission permits a superseded no-op and only a verified candidate can start the deploy job', async t => {
+  const stale = await admissionCLI(t, { fixture: { main: b } });
+  assert.deepEqual([stale.code, stale.output], [0, 'decision=superseded\n']);
+  assert.ok(stale.summary.includes(a) && stale.summary.includes(b));
+  assert.ok(stale.stdout.includes(`::notice title=StudioOS release outcome v1::superseded initial 31 2 ${a} ${b}`));
+  for (const [fixture, status, code, output] of [
+    [{}, 'verified', 0, 'decision=verified\n'],
+    [{ jobChange: { conclusion: 'failure' } }, 'blocked', 1, ''],
+    [{ missingJob: true }, 'waiting', 1, ''],
+    [undefined, 'unreadable', 1, ''],
+  ]) {
+    const result = await admissionCLI(t, { fixture });
+    assert.deepEqual([JSON.parse(result.stdout).status, result.code, result.output], [status, code, output]);
+  }
+  for (const mode of ['--once', '--wait', '--wait-for-decision']) {
+    const result = await admissionCLI(t, { mode, stage: 'production-lock', fixture: { main: b } });
+    assert.deepEqual([result.code, result.output], [1, ''], mode);
+  }
+});
+
+test('the Worker workflow consumes the decision before taking the production lock', () => {
+  const source = workflow('cloudflare-worker-deploy');
+  const admission = source.split('\n  admission:\n')[1].split('\n  deploy:\n')[0];
+  assert.match(admission, /outputs:\n      decision: \$\{\{ steps\.candidate\.outputs\.decision \}\}/);
+  const candidate = steps(admission).find(step => step.startsWith('Wait for all six required checks\n'));
+  assert.match(candidate, /id: candidate\b[\s\S]+STUDIOOS_RELEASE_CHECK: initial\b[\s\S]+verify-production-candidate\.mjs "\$GITHUB_SHA" --wait-for-decision$/);
+  const deploy = source.split('\n  deploy:\n')[1].split('\n  spa-smoke:\n')[0];
+  assert.match(deploy, /\n    needs: admission\n    if: needs\.admission\.outputs\.decision == 'verified'\n/);
+  for (const name of ['spa-smoke', 'schema-drift', 'branches']) {
+    const job = source.split(`\n  ${name}:\n`)[1].split(/^  [\w-]+:\n/m)[0].split('    steps:\n')[0];
+    assert.match(job, /^    needs: deploy$/m);
+    assert.doesNotMatch(job, /^    if:.*(?:always|cancelled|failure)\(/m);
+  }
+});
 
 test('real workflow gates the two mutation steps, retains diagnostics, and shares the manual D1 lock', () => {
   const source = workflow('cloudflare-worker-deploy');

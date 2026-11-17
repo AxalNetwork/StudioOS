@@ -50,6 +50,35 @@ test('supersession needs a trusted exact failed job, attempt, step and structure
   for (const variant of variants) assert.deepEqual(await withoutReads({ ...f, ...variant }), {});
 });
 
+test('a successful initial supersession requires a clean admission, skipped deploy and matching replacement notice', async () => {
+  const f = fixture('cloudflare-worker-deploy', 'Verify the exact main candidate', 'Wait for all six required checks');
+  f.run.conclusion = 'success';
+  const [admission] = f.jobs;
+  admission.conclusion = admission.steps[0].conclusion = 'success';
+  const deploy = { ...admission, id: 68, name: 'build and deploy studioos Worker', conclusion: 'skipped', steps: [] };
+  const smoke = { ...deploy, id: 69, name: 'live current and previous lazy chunks' };
+  const message = ['superseded', 'initial', f.run.id, f.run.run_attempt, head, baseSha].join(' ');
+  const inspect = rows => workflowFailureHints({ ...f, jobs: [admission, deploy, smoke], api(path) {
+    assert.equal(path, annotations);
+    return rows;
+  } });
+  const title = 'StudioOS release outcome v1';
+  assert.deepEqual(await inspect(notice(title, message)), { superseded: true, supersededStage: 'initial' });
+  for (const wrong of [message.replace('initial', 'production-lock'), message.replace(' 23 2 ', ' 23 1 '),
+    message.replace(baseSha, head), message.replace(head, baseSha), message.replace(baseSha, 'unknown')]) {
+    assert.deepEqual(await inspect(notice(title, wrong)), {});
+  }
+  assert.deepEqual(await inspect([]), {});
+  assert.deepEqual(await inspect([...notice(title, message), ...notice(title, message.replace(baseSha, 'c'.repeat(40)))]), {});
+  for (const jobs of [
+    [admission], [deploy], [admission, { ...deploy, conclusion: 'success' }],
+    [admission, deploy, { ...smoke, conclusion: 'failure' }], [admission, deploy, { ...smoke, conclusion: 'cancelled' }],
+    [{ ...admission, steps: [] }, deploy], [{ ...admission, steps: [{ ...admission.steps[0], conclusion: 'skipped' }] }, deploy],
+    [{ ...admission, steps: [...admission.steps, { name: 'Setup', conclusion: 'failure' }] }, deploy],
+    [admission, { ...deploy, run_attempt: 1 }],
+  ]) assert.deepEqual(await withoutReads({ ...f, jobs }), {});
+});
+
 test('old or missing main auth evidence stays available for triage; a verified edge refusal reuses the owner issue', async () => {
   for (const [slug, name] of [['magic-link-probe', 'magic-link round trip'], ['magic-link-insert-probe', 'magic-link insert']]) {
     const f = fixture(slug, name, 'Report the outcome', 'schedule');
