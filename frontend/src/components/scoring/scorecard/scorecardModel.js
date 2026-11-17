@@ -387,3 +387,9 @@ export function evidenceOf(s, masked) {
 
 /** The views on the Evidence tab that hold a scope's own context (D1151): Team, Market and Traction. */
 export const CONTEXT_VIEW = Object.freeze({ team: 'team', market: 'market', traction: 'traction' });
+
+/** D6168 (#6168): the scope an address names (`?scope=team`), when it is one of the eleven; otherwise none. */
+export function scopeParam(word) {
+  const key = String(word ?? '');
+  return SCOPES.some((s) => s.key === key) ? key : null;
+}

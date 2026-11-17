@@ -215,8 +215,8 @@ export default function DealRoomPage() {
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
-      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
+      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. D6168: `?scope=` opens a scope's drawer. */}
+      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} addressed />}
       {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
       {tab === 'evidence' && <EvidenceSummary key={deal.id} dealId={deal.id} company={deal.project_name || null} role={role} ndaHref={isInvestor ? tabHref(deal.id, 'documents') : null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
