@@ -212,7 +212,7 @@ async function mounted(url, handle, props = {}) {
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null,
     h(Route, { path: '/raise/investor-narrative', element: h(NarrativeOwnedHome, { projectId: 3, search: '?project_id=3', ...props }) }),
   ))));
-  const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); });
   await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');

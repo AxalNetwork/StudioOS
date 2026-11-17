@@ -13,7 +13,7 @@ import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { NarrativeHome } from './NarrativeTool';
 import { NarrativeReads } from './NarrativeAdmin';
 import {
-  AUDIENCES, SAVE_ACTION, SAVE_FAILED, SAVE_READ_ONLY, SETUP_LINE, SETUP_READER, SETUP_TITLE, NOT_RECORDED_REASON, VERSIONS_UNAVAILABLE,
+  AUDIENCES, SAVE_ACTION, SAVE_FAILED, SETUP_LINE, SETUP_READER, SETUP_TITLE, NOT_RECORDED_REASON, VERSIONS_UNAVAILABLE,
   closeSaveHref, homeView, isSaveOpen, isSaveRefusal, saveBody, saveHref, saveLine, saveReducer, saveStart, saveVersionAction,
   setupActions, singleFlight, stateLine, versionRows,
 } from './narrativeHomeModel';
