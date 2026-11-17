@@ -122,6 +122,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Validate · Customer research', key: 'ask:transcript', route: '/validate/session/1', label: 'Ask', kind: 'research', handler: 'draft',
     at: [[SESSION, 'api.ask(']],
   },
+  // D6008 (#6008): Eadwyn's interview questions, quoted before the press, saved only on Accept.
+  {
+    page: 'Founder · Validate · Customer research', key: 'draft:validate/interview-guide', route: '/validate/customer-research', label: 'Draft questions', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/InterviewGuide.jsx', 'api.draft(']],
+  },
   {
     page: 'Founder · Validate · Experiments and evidence', key: 'fill:hypothesis', route: '/validate/experiments', label: 'Draft a hypothesis', kind: 'reason', handler: 'form',
     at: [[VALIDATE, "experiments: 'hypothesis'"]],

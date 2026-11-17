@@ -105,7 +105,7 @@ test('the list is by deal: investment, progress, signatures, conditions, transfe
   assert.deepEqual(rows.map((r) => r.id), [1, 2]);
   const [a, b] = rows;
   assert.equal(a.name, 'Northwind Labs');
-  assert.equal(a.href, '/deals/1');
+  assert.equal(a.href, '/deals/closing?deal=1'); // D6866: the closing workspace
   // Money goes through money.js in the deal's currency.
   assert.equal(a.investment.text, '€100,000');
   // A skipped item is not counted either way: 6 done of 8.
