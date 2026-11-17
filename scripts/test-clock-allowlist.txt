@@ -796,7 +796,6 @@ sleep frontend/test/persona_segments_d997.test.mjs
 sleep frontend/test/persona_segments_overview_d1004.test.mjs
 sleep frontend/test/persona_segments_phone_d1007.test.mjs
 sleep frontend/test/phone_cycle_record_pages_d703.test.mjs
-sleep frontend/test/phone_cycle_roots_d703.test.mjs
 sleep frontend/test/phone_cycle_route_pages_d703.test.mjs
 sleep frontend/test/pipeline_retrieval_4701.test.mjs
 sleep frontend/test/pitch_assist_d899.test.mjs

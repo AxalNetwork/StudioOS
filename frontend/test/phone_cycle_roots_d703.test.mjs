@@ -35,6 +35,20 @@ import { aiBudgetApi } from '../src/lib/api/aiBudget.js';
 import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 
 const h = React.createElement;
+/**
+ * #7108: wait until `predicate()` holds, polling inside `act()` every 10 ms for
+ * up to 5 s (data_room_d696's `waitForRendered`). A fixed count of
+ * `setTimeout(0)` ticks raced the lazily loaded overview on a loaded CI runner
+ * (the Build root was not drawn yet, "the root, once — 0 !== 1"); a bounded
+ * wait for the element the test reads settles as soon as it is drawn and only
+ * gives up after 5 s, when the assertion then fails as before.
+ */
+async function waitForRendered(predicate) {
+  const deadline = performance.now() + 5_000;
+  while (!predicate() && performance.now() < deadline) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  }
+}
 const Q = '?project_id=3';
 const html = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { search: Q, ...props })));
 /** The opening tag that carries `data-testid="<id>"`, found by string search (no pattern is built from data). */
@@ -132,10 +146,12 @@ async function mount(props, { shellRole = null } = {}) {
     ? h(ViewModeContext.Provider, { value: { shellRole } }, h(React.Fragment, null, h(WorkerRail, { workspace: NAMES[props.cycle], role: 'founder' }), h(PanelProbe, { out }), page))
     : page;
   await act(async () => { root.render(tree); });
-  await act(async () => { for (let i = 0; i < 3; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const all = (id) => walk(container).filter((n) => pr(n)['data-testid'] === id);
+  // Bounded, not a fixed tick count (#7108): wait for the drawn root, and in a
+  // founder shell for its one page button, which the rail registers after mount.
+  await waitForRendered(() => all('phone-root').length === 1 && (shellRole !== 'founder' || all('button-eadwyn-open').length > 0));
   const txt = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(txt).join(' ') : n.textContent || '');
   return {
     out, pr, all, by: (id) => all(id)[0],
@@ -404,10 +420,15 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const root = createRoot(container);
   const page = h(MemoryRouter, { initialEntries: [`/${cycle}${Q}`] }, cycle === 'grow' ? h(GrowAskRail, { serves: shellRole === 'founder' }) : null, h(Routes, null, h(Route, { path: `/${cycle}`, element: h(CycleRoute, { cycle }) })));
   await act(async () => { root.render(shellRole ? h(ViewModeContext.Provider, { value: { shellRole } }, page) : page); });
-  await act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // Bounded, not six fixed ticks (#7108): the overview is lazily loaded and
+  // read, so wait for the element each width draws only once the read has
+  // landed (the root's index, Grow's attention list, the desktop overview's
+  // cards) and for nothing to be left busy.
+  const drawn = cycle === 'grow' ? 'grow-attention' : phone ? 'phone-index' : cycle === 'build' ? 'build-overview-v2' : 'cycle-cards';
+  await waitForRendered(() => ids().includes(drawn) && reads.some((r) => r.includes(`/cycles/${cycle}/overview`)) && !walk(container).some((n) => pr(n)['aria-busy']));
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
