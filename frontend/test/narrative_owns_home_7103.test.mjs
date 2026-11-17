@@ -7,6 +7,7 @@
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_owns_home_7103.test.mjs
  */
+import './_cycleSteps.mjs'; // D4574: CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
@@ -15,6 +16,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import NarrativeOwnedHome from '../src/pages/raise/narrative/NarrativeOwnedHome.jsx';
+import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   NOT_RECORDED_REASON, OLDER_NOT_CHECKED, SAVE_ACTION, SAVE_FAILED, SAVE_READ_ONLY, SETUP_READER, SETUP_TITLE,
   audienceKey, homeView, isSaveOpen, saveBody, saveDraft, saveHref, saveLine, saveReducer, saveStart, saveVersionAction,
@@ -270,4 +272,64 @@ test('a reader never gets the dialog, even from the address', async () => {
     assert.equal(view.byId('narrative-save-dialog').length, 0);
     assert.equal(view.byId('narrative-save-readonly').length, 1);
   } finally { await view.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * The module page, wired (`CYCLE_DEFS.raise.homes`)
+ * ------------------------------------------------------------------ */
+
+// The generic layer's module read: a card and a records table a non-owned page would draw.
+const MODULE = (part) => ({
+  module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' },
+  card: { slug: 'investor-narrative', name: 'Investor narrative', state: 'ok', series: [{ kind: 'rows', items: [{ label: 'Versions', value: 2 }] }], next: null, reason: null, caption: 'GENERIC-CARD' },
+  records: { cols: [{ key: 'version', label: 'Version' }], rows: [{ id: 4, cells: { version: 'GENERIC-ROW' } }], total: 1, page: 1, page_size: 25 },
+  parts: { narrative: part },
+});
+
+async function routed(part) {
+  const restore = installDocument();
+  const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
+  globalThis.fetch = async (u) => {
+    const url = String(u);
+    if (url.includes('/cycles/raise/modules/investor-narrative?')) return response(MODULE(part));
+    if (url.includes('/projects')) return response([{ id: 3, name: 'Fixture venture', role: 'owner' }]);
+    return reads(url);
+  };
+  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  const create = document.createElement.bind(document);
+  document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
+  document.body.style = { overflow: 'auto', paddingRight: '' };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/raise/investor-narrative?project_id=3'] }, h(Routes, null,
+    h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
+  ))));
+  await act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setImmediate(r)); });
+  const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
+  const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
+  const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+  const byId = (id) => nodes().filter((n) => props(n)['data-testid'] === id);
+  return { text: () => text(container), byId, props, async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); } };
+}
+
+test('wired: the module page draws Home in place of the generic layer, with Save version as the header\'s action', async () => {
+  // Mutation checked: the `homes` entry removed → the generic card and row return and the action is Build your deck.
+  const view = await routed(PART);
+  try {
+    assert.equal(view.byId('narrative-owned-home').length, 1);
+    assert.doesNotMatch(view.text(), /GENERIC-ROW|GENERIC-CARD|at a glance|Build your deck/);
+    const action = view.byId('cycle-action')[0];
+    assert.ok(view.text().includes(SAVE_ACTION));
+    assert.equal(view.props(action).href, '/raise/investor-narrative?project_id=3&save=version');
+  } finally { await view.close(); }
+  const reader = await routed({ ...PART, capabilities: ADMIN_CAPS });
+  try {
+    assert.equal(reader.props(reader.byId('cycle-action')[0]).disabled, true, 'a reader sees it disabled');
+    assert.ok(reader.text().includes(SAVE_READ_ONLY));
+  } finally { await reader.close(); }
+  const first = await routed(EMPTY);
+  try {
+    assert.equal(first.byId('cycle-action').length, 0, 'first use: the set-up card carries the one primary');
+    assert.equal(first.byId('narrative-setup').length, 1);
+  } finally { await first.close(); }
 });
