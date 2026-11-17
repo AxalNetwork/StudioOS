@@ -29,6 +29,7 @@ import { toFnMap } from '../adapters';
 import { MODULES } from '../modules';
 import { lazyStep } from '../lazyStep.jsx';
 import WaitlistBar from '../ValidateWaitlistBar.jsx';
+import { PrepareQuestions } from '../InterviewGuide.jsx';
 import { WaitlistLeads, addLeadButton, moveStageAction } from '../ResearchPipeline.jsx';
 import { MODULE_LINK_CLASS, projectSearch } from '../founderToolNavigation.js';
 
@@ -186,6 +187,8 @@ const validate = {
     // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
     'customer-research': (data, ctx) => (
       <>
+        {/* D6008 (#6008): Prepare questions, the interview guide as a sheet (D5995 V27 B). */}
+        <PrepareQuestions projectId={ctx.projectId} />
         <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
           onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
           onExport={() => api.exportValidateInterviews(ctx.projectId)} />

@@ -69,8 +69,9 @@ const BUDGET: Array<[string, number]> = [
   // #6027 (D6027): +1 on each Prototype read for the overdue count's probe of D6031's `idx_mvp_features_must_due`
   // (no must-have is dated here); the overview's plan preview reads 0 rows (no plan here).
   // Combined merge: the connector read plus D6027 overdue probe measure 1313 rows on local D1; Typeform
-  // (D5827) after Search Console (D5839) adds one catalogue row, 1314.
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1314],
+  // (D5827) after Search Console (D5839) adds one catalogue row, 1314; the X founders connector (D2403) adds
+  // one more, 1315.
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1315],
   [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 311],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
   [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 311],

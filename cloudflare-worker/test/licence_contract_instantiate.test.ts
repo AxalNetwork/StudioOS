@@ -234,6 +234,7 @@ const TEMPLATE_BODY =
 function seededDb({ templates = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(SCHEMA);
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611151226_6562_agreement_revision.sql'), 'utf8'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(HOLDER, 'admin', 'Sue', 'sue@axal.example');
   u.run(PLAIN, 'admin', 'Pat', 'pat@axal.example');
