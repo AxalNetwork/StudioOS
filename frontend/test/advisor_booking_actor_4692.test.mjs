@@ -63,7 +63,7 @@ test('a 409 on a lifecycle press says the session moved and offers the reload, w
   const mod = await sessionsModule({ completeAdvisorBooking: async () => { throw refusal(409); } });
   const f = await mountForm(panel(mod, async () => { reloads += 1; }));
   try {
-    await f.click('Session held');
+    await f.click('Complete');
     await f.flush();
     const text = f.text();
     assert.match(text, /changed somewhere else/, 'it says the session moved');
@@ -86,7 +86,7 @@ test('any other failure keeps the old message and offers no reload', async () =>
   const mod = await sessionsModule({ completeAdvisorBooking: async () => { throw refusal(500); } });
   const f = await mountForm(panel(mod, async () => {}));
   try {
-    await f.click('Session held');
+    await f.click('Complete');
     await f.flush();
     assert.match(f.text(), /The session is unchanged/);
     assert.ok(!/changed somewhere else/.test(f.text()));
@@ -106,7 +106,7 @@ test('the 409 branch is what produces the offer, not any failure', async () => {
     status = code;
     const f = await mountForm(panel(mod, async () => {}));
     try {
-      await f.click('Session held');
+      await f.click('Complete');
       await f.flush();
       return { offered: Boolean(f.by('lifecycle-reload')), text: f.text() };
     } finally { await f.unmount(); }

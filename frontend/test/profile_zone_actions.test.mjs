@@ -423,6 +423,13 @@ const PROFILES = {
     // ops come from the backlog file, by route rather than by directory. See
     // the `alsoZones` block in `canvasOps` for why the whole file is not swept.
     alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    // #4832 (D4832): Sessions' header is the Practice v2 canvas's (PX-05),
+    // written as `hdr('Sessions', '…', 'Block time', 'Share booking link')`, so
+    // its ops are that call's string arguments after the title and the blurb.
+    v2Ops: [['practice/sessions', 'design/incoming/Practice v2 Page.dc.html', 'sessions', { args: true }]],
+    // `Export to calendar` stays on the page off the v2 canvas: an .ics of the
+    // tab's sessions, built in the browser (D4832).
+    offCanvas: { 'practice/sessions': ['Export to calendar'] },
     buckets: /^(expertise|network|research|practice)\//,
     // 15 zones and 14 exports as of canvas PR4, and THIS IS THE FIRST TIME THE
     // TWO HAVE MOVED APART. PR1, PR2 and PR3 each drew exactly two ops, one of
@@ -468,7 +475,8 @@ const PROFILES = {
     // (#4681) — Profile's `Preview as founder` and Proof's `Public preview`
     // said no public profile page existed, and `/advisors/:uid` does; both
     // are the page's `openPublicPreview`. Two gaps became two handlers.
-    handlers: 13,
+    // FOURTEEN: #4832 (D4832) — Sessions' `Share booking link` (PX-05).
+    handlers: 14,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -822,12 +830,15 @@ function canvasOps(profile) {
   // #5935 (D4838): A ZONE A V2 CANVAS REDREW. Its section builder passes the
   // header's buttons to `hdr(…)` before `+ zones(…)`, so the ops are read from
   // that call, and they override the older artboard's row for the same route.
-  for (const [zone, file, section] of profile.v2Ops || []) {
+  for (const [zone, file, section, { args = false } = {}] of profile.v2Ops || []) {
     const src = read(file);
     const at = src.indexOf(`const ${section} = () => hdr(`);
     assert.ok(at >= 0, `${file} has no ${section} section builder`);
-    const call = src.slice(at, src.indexOf('+ zones(', at));
-    const ops = [...call.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+    // #4832 (D4832): a header written as string arguments (`hdr(title, blurb,
+    // primary, secondary)`) names its ops from the third argument on.
+    const ops = args
+      ? [...callText(src, src.indexOf('hdr(', at)).matchAll(/'([^']*)'/g)].map((m) => m[1].trim()).slice(2)
+      : [...src.slice(at, src.indexOf('+ zones(', at)).matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1].trim());
     assert.ok(ops.length, `${file}'s ${section} header parsed with no ops`);
     out[zone] = ops;
   }
