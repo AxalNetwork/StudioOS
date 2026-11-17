@@ -19,7 +19,8 @@ to switch runtimes.
 | `engine.ts` | The D1 side: a scope's settings, `admitInScope` (every admission check, then the run row), a run's timeline, a task's status and board column, pauses and who is told. |
 | `loop.ts` | The loop's steps as plain functions (`load`, `context`, `run`, `propose`, `after`), `runTaskLoop` over a step interface, and `deliverDecision`. |
 | `taskWorkflow.ts` | `AgentTaskWorkflow`: the Workflow class, a binding around `loop.ts` and nothing else. |
-| `agentQueue.ts` | The agent queue's producer and consumers, and `dispatchQueue`, the `queue()` handler's routing (the agent branch before the `dlq` test). |
+| `agentQueue.ts` | The agent queue's producer and consumers (D7077: a batch's runs start together, each message acked or retried on its own, a throttled one sent again for the next minute), and `dispatchQueue`, the `queue()` handler's routing (the agent branch before the `dlq` test). |
+| `modelBudget.ts` | D7077 (#7077): the platform admission budget per model (`AGENT_MODEL_RPM`, unset = no limit), starts a minute shared fairly across teams in `agent_model_admissions`. |
 | `sweep.ts` | D4592's five-minute (`% 5 === 1`) fair agent sweep: bounded stale-run resend, then a rotating ready-work scan with per-scope fairness; `AgentRuntime.admit` remains the final gate. D1530 (#3849, E5): `sweepAgentDuties` claims the due duties (claim before act) and applies the memory retention. |
 | `erasure.ts` | The product amendment: an agent removed, a scope deleted or an account erased ends its runs and empties its object. D1530 (E5): `eraseAccountAgents` adds the D1 half (notes, run summaries, queued tasks) for the manual account erasure. |
 
