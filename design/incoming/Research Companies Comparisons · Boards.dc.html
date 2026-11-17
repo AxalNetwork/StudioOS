@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Companies Comparisons · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Research · Companies 3/6 · RS-15 · #7043 (part of #7040, extends Research v2 #3701)</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Axal VC · Research Companies — select up to six companies, save a comparison you can trust, and read it on any screen</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A founder ticks companies in the directory (/research/companies), then either adds them to a research project (up to 25) or compares 2 to 6 of them in a project (/research/projects/:uid/comparisons). The two actions keep their own limits, and both limits are visible before any project is chosen or created. The save says only what the Worker confirmed: saved, refused before any write, rolled back, or outcome unknown with Check save status. "Nothing was added" appears only when that is true. The comparison shows each value with its source link and as-of date, Not recorded with the reason, Unreadable, and a company that left the directory; on a phone the same attribute is read across companies. Continues the Research v2 canvas (RS-02 D, RS-04 A, RS-10) and its shell; states follow Platform States (Unavailable on screen). Violet dashed ◇ tags mark Worker contracts; the amber ⚑ tag marks the one owner decision (option A drawn).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026, 14:40 UTC (save on Fri 13 Nov 16:05) · checked against main 87bf3ac4ac · Lumen Robotics, Halden Grid, Northwind Labs, Kestrel Robotics, Larkspur Bio, Quarry AI, Orchard Data, Tidewater Systems, the other companies, the projects and every figure are fictional</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="7">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Research Companies Comparisons Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['RS-15 · 0', 'Flow, prototype links and the rules', 'The linked prototype order, the selection rules for 0 to 26+ companies, and how the save copy follows the Worker’s answer.', [W('RCC00')]],
+      ['RS-15 A', 'Directory selection', 'Two selected with Compare 2; six across three pages at the limit; a seventh attempted, with Compare disabled and its reason before any sheet opens while Add to research stays available. Zero, one, the 25-company add limit and a role without My Research. Review lists every pick with its page and Remove.', [F('RCC01', '2 selected', 900), F('RCC01B', '6 selected · 2 on other pages', 900), F('RCC01C', 'Attempted 7th', 900), C('RCC01D', '0, 1, 26 selected and no write access', 1280, 420), F('RCC01E', 'Review selection · 7', 900)]],
+      ['RS-15 B', 'Save', 'Choose an existing project or create one, confirm the six companies in column order, and a generated title within 160 characters. Saving, saved with a link to the comparison, refused before any write, confirmed rollback (◇), and outcome unknown with Check save status. The status check is a read; Try again appears only when the ◇ request id says it is safe.', [F('RCC02', 'Compare sheet · existing project', 900), F('RCC02B', 'Compare sheet · new project', 1040), C('RCC02C', 'Long names and the title limit', 1280, 480), C('RCC03', 'Save outcomes', 1340, 510), C('RCC03B', 'Check save status', 1340, 545)]],
+      ['RS-15 C', 'Read the comparison', 'Six columns, seven attributes from the Worker, each value with source link and as-of date. Kestrel Robotics has no recorded headcount, Orchard Data’s total funding source is unreadable (◇ per cell), and Tidewater Systems left the directory. Loading, true empty, directory unreadable with Retry, archived and not-your-project states.', [F('RCC04', 'Comparison · table', 1200), C('RCC04B', 'Comparisons tab states', 1340, 435)]],
+      ['RS-15 D', 'Phone 390 and tablet 768', 'Selection summary with Review, Add to research and Compare; Review sheet with 44px Remove; the unknown outcome; the comparison read one attribute at a time across all six companies. Tablet keeps the attribute column and pages companies three at a time.', [P('RCC10A', 'Selection summary'), P('RCC10B', 'Review selection'), P('RCC10C', 'Outcome unknown'), P('RCC10D', 'By attribute · Last round'), P('RCC10E', 'By attribute · Total funding'), C('RCC12', 'Tablet 768 · comparison', 768, 1024)]],
+      ['RS-15 E', 'Dark', 'The directory at the comparison limit, the comparison table and the phone attribute view on the dark tokens.', [F('RCC11C', 'Directory · dark', 900), F('RCC11', 'Comparison · dark', 1200), P('RCC11B', 'Phone · by attribute · dark')]],
+      ['RS-15 F', 'Handoff and accessibility', 'What main does today, the Worker contracts (all-or-nothing save, request id, save status, title fix, per-cell Unreadable), the owner decision, frontend-only work, keyboard order and focus return.', [W('RCC08'), W('RCC09')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

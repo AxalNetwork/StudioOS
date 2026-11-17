@@ -25,8 +25,17 @@ import './cookieConsent.css';
 // categories the site really sets. The first-visit banner keeps its look and
 // its three choices; the canvas has no banner of its own.
 
-// The optional purposes the banner names: the rows with a switch.
-const OPTIONAL_PURPOSES = COOKIE_ROWS.filter((r) => !r.locked).map((r) => r.title.toLowerCase());
+// #6998: what the banner names, from the rows with a switch (each names the module it controls).
+export const OPTIONAL_PURPOSES = COOKIE_ROWS.filter((r) => !r.locked && r.controls).map((r) => r.banner);
+
+/** #6998: the banner's sentence, built only from the categories that exist. */
+export function bannerText(purposes = OPTIONAL_PURPOSES) {
+  const essential = 'Essential storage keeps you signed in and remembers this choice.';
+  if (!purposes.length) return `${essential} Nothing else is stored.`;
+  const kind = purposes.length === 1 ? 'first-party' : purposes.length === 2 ? 'both first-party' : 'all first-party';
+  return `${essential} With “Accept all”, Axal also keeps ${purposes.join(' and ')}, ${kind}. `
+    + 'Nothing loads from a third party to measure you or show you ads.';
+}
 
 function prefsFromConsent() {
   const c = getConsent();
@@ -162,10 +171,9 @@ export default function CookieConsent() {
         </h2>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-        {/* D680 — names only the optional purposes the site has (COOKIE_ROWS);
-            it used to list functional and advertising, which nothing sets. */}
-        By clicking “Accept all”, you agree to the storing of cookies on your device for{' '}
-        {OPTIONAL_PURPOSES.join(' and ')} purposes.
+        {/* D680, #6998 — names only the optional categories the site has (COOKIE_ROWS):
+            first-party sign-up measurement and the referral cookie. */}
+        {bannerText()}
       </p>
 
       <div className="mt-4 flex gap-2">
@@ -213,8 +221,9 @@ export function CookiePreferencesDialog({
           <div>
             <h2 id={titleId} className="ax-ck-title">Cookie preferences</h2>
             <p className="ax-ck-intro">
-              We use a minimal set of cookies. Essential cookies keep the workspaces signed in and cannot be
-              disabled. Everything else is optional and off by default.
+              Essential storage keeps you signed in and remembers this choice; it cannot be turned off. The
+              options below are first-party and off until you turn them on. Nothing loads from a third party to
+              measure you or show you ads.
             </p>
           </div>
           <button type="button" className="ax-ck-x" aria-label="Close cookie preferences" onClick={onClose}>×</button>

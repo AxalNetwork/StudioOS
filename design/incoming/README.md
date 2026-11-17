@@ -2769,3 +2769,31 @@ Two board sets from the owner's Claude Design canvas "Axal VC – platform desig
 **One edit, named.** Both pages drew the owner's dawn image as `./site/wellness-dawn.webp`; it now points at `/axal-vc-future.png`, the same image already served from `frontend/public/`. The presentation's other `./site/` references now point at `/site/` (`frontend/public/site/`). No other value was edited.
 
 None is built yet. Daily and monthly journals, recommendations and group sessions are drawn as planned (#7118, #7119, #7120). Every provider, session, date and price is sample content; the live provider roster is unverified. Open owner questions are marked ⚑ in each decision.
+## Landed 2026-11-16 — Research v2: Companies, Markets and Funds (#7031–#7046)
+
+Fifteen board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the Research briefs, each as a page plus its boards. They extend Research v2 (`Research v2 Page.dc.html`) and the Platform States vocabulary (D5129).
+
+Companies (RS-13 to RS-18):
+- **`Research Companies Analysis Setup and Results Page.dc.html`**, **`Research Companies Analysis Setup and Results · Boards.dc.html`**: RCA00 to RCA13, 25 frames (D7041).
+- **`Research Companies Saved Analyses and Export Page.dc.html`**, **`Research Companies Saved Analyses and Export · Boards.dc.html`**: RCS01 to RCS10, 24 frames (D7042).
+- **`Research Companies Comparisons Page.dc.html`**, **`Research Companies Comparisons · Boards.dc.html`**: RCC00 to RCC09, 24 frames (D7043).
+- **`Research Companies Sign-in and Licence Access Page.dc.html`**, **`Research Companies Sign-in and Licence Access · Boards.dc.html`**: RCL00 to RCL17, 32 frames (D7044).
+- **`Research Companies Directory Search Page.dc.html`**, **`Research Companies Directory Search · Boards.dc.html`**: RCD00 to RCD08, 24 frames (D7045).
+- **`Research Companies Profiles Peers and Evidence Page.dc.html`**, **`Research Companies Profiles Peers and Evidence · Boards.dc.html`**: RCP01B to RCPH, 21 frames (D7046).
+
+Markets:
+- **`Research Markets Directory and Investor View Page.dc.html`**, **`Research Markets Directory and Investor View · Boards.dc.html`**: RMD00 to RMD14, 29 frames (D7036).
+- **`Research Markets Listed Search and CSV Exports Page.dc.html`**, **`Research Markets Listed Search and CSV Exports · Boards.dc.html`**: RMLJ to RMLH, 20 frames (D7037).
+- **`Research Markets Ranked Signals and Evidence Page.dc.html`**, **`Research Markets Ranked Signals and Evidence · Boards.dc.html`**: RMS01 to RMS08B, 18 frames (D7038).
+- **`Research Markets Comparable Prices Page.dc.html`**, **`Research Markets Comparable Prices · Boards.dc.html`**: RMP00 to RMPH, 28 frames (D7039).
+
+Funds (FND-D, FND-P, FND-S, FND-Q and FND-G on the canvas):
+- **`Research Funds Directory and Discovery Page.dc.html`**, **`Research Funds Directory and Discovery · Boards.dc.html`**: RFD00 to RFD07, 22 frames (D7031).
+- **`Research Funds Fund Profile and Comparison Page.dc.html`**, **`Research Funds Fund Profile and Comparison · Boards.dc.html`**: RFP00 to RFPH, 25 frames (D7032).
+- **`Research Funds My Funds and Dossier Page.dc.html`**, **`Research Funds My Funds and Dossier · Boards.dc.html`**: RFM00 to RFM09, 26 frames (D7033).
+- **`Research Funds Quarterly Reports Page.dc.html`**, **`Research Funds Quarterly Reports · Boards.dc.html`**: RFQ00 to RFQ11, 25 frames (D7034).
+- **`Research Funds Google Sheets Sync Page.dc.html`**, **`Research Funds Google Sheets Sync · Boards.dc.html`**: RFG00 to RFG10, 26 frames (D7035).
+
+The two sign-in canvases (D7044, D7031) load the production artwork from `frontend/public/auth/login-background.webp`, and D7044 also loads `frontend/public/site/ead-map.webp`, so no second copy is committed.
+
+None is built yet. Companies, funds, markets, people and amounts are sample content; the Funds boards cite the committed fund lists only with their publisher and date. Owner questions on each issue are drawn as option A and marked ⚑; each decision lists what is frontend-only, what needs backend work and what waits on the owner.
