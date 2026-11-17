@@ -146,12 +146,11 @@ export const INVESTOR_ZONE_ACTIONS = {
     // an exact cents split and receipts, and the Calls page is the form: New
     // call previews the split and issues it.
     { label: 'New call', kind: 'handler', handler: 'newCall', primary: true },
-    // A reason still, and a narrower one than "nothing on this desk sends
-    // mail": a notice is logged per LP account when a call is issued, and the
-    // overdue lines are listed on the page. What nobody builds is the chase.
-    // D553: a reminder for ONE line is now drafted on its row (Draft reminder)
-    // and logged as sent (Log as sent). Sending in bulk from here still is not.
-    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, and each line offers a reminder draft and a sent log; sending reminders in bulk is not built', hover: 'Draft a reminder on the line itself; bulk sending is not built.' },
+    // D6238 (#6238): live. It opens the call's chase: one Eadwyn reminder
+    // draft per line behind (the `funds/calls` surface), each logged as sent
+    // only when the GP confirms it on that line. The product sends nothing;
+    // the GP sends each reminder themselves.
+    { label: 'Send reminders', kind: 'handler', handler: 'sendReminders' },
     // Was "no wire schedule is stored to export" — true until migration 312's
     // receipts. It exports the wire trail the page shows.
     { label: 'Export wires', kind: 'export' },

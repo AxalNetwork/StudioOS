@@ -33,6 +33,7 @@
 | `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
 | `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
 | `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
+| `d1-backup-upload.sh` | Uploads the nightly D1 SQL export to the primary R2 bucket over its S3-compatible multipart API. |
 
 ## The guards
 
@@ -337,5 +338,6 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
+| `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
 
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |
