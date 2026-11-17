@@ -15,7 +15,8 @@ import { parseTask } from '../../scripts/landing-bot/model/task.mjs';
 import {
   addedLines, afterStage, checkResolution, checkResolvedFile, conflictLines, gate, namesModule, reservedToday, testsFor, verifyCommands,
 } from '../../scripts/landing-bot/resolve-rules.mjs';
-import { applyStage, runsOf } from '../../scripts/landing-bot/resolve.mjs';
+import { applyStage, output, runsOf } from '../../scripts/landing-bot/resolve.mjs';
+import { gitIn } from '../../scripts/landing-bot/keeper-merge.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
 import { pathGuard, STICKY_MARKER } from '../../scripts/landing-bot/rules.mjs';
 
@@ -279,8 +280,10 @@ const cloneFrom = (f) => (_url, headSha, root) => {
   const dir = mkdtempSync(join(root, 'clone-'));
   execFileSync('git', ['clone', '-q', f.dir, dir]);
   execFileSync('git', ['checkout', '-q', '--detach', headSha], { cwd: dir });
-  const gitMod = (args, o = {}) => { try { return { ok: true, out: execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; } catch (e) { if (!o.allowFail) throw e; return { ok: false, out: '' }; } };
-  return { dir, git: gitMod, main: f.mainSha };
+  // The same git the apply job's `cloneFor` hands over: the bot's identity and the safe config. A
+  // plain `git` here leaned on the runner's global identity, which CI does not have, so `git merge`
+  // refused before it reached the conflict and the three apply tests failed there only.
+  return { dir, git: gitIn(dir), main: f.mainSha };
 };
 
 test('#6475: apply pushes one normal merge commit of the planned head and main, labelled and described', async () => {
@@ -362,4 +365,20 @@ test('#6475: the workflow: resolve has no write, apply has no model secret, no P
   assert.doesNotMatch(job('plan').lines.join('\n'), /permission-(?:contents|pull-requests|issues): write/, 'the plan token reads metadata only');
   for (const j of jobs) for (const s of j.steps) assert.doesNotMatch(s.split('\n').filter((l) => /^\s*run:/.test(l) || /^\s{8,}\S/.test(l) && !/:\s/.test(l)).join('\n'), /\$\{\{/, `job ${j.id}: no expression inside a run script`);
   assert.match(KEEPER, /gh workflow run landing-bot-conflict\.yml/);
+});
+
+// Mutation checked: the value written raw (fails); the key check dropped (fails).
+test('#6475: an output value from the API is one line, so it cannot add a second output', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'gh-output-'));
+  const file = join(dir, 'out');
+  writeFileSync(file, '');
+  const before = process.env.GITHUB_OUTPUT;
+  process.env.GITHUB_OUTPUT = file;
+  try {
+    output('ref', 'agent/x\ndecision=resolve');
+    assert.equal(readFileSync(file, 'utf8'), 'ref=agent/x decision=resolve\n');
+    assert.throws(() => output('ref\nx', 'y'), /bad output name/);
+  } finally {
+    if (before === undefined) delete process.env.GITHUB_OUTPUT; else process.env.GITHUB_OUTPUT = before;
+  }
 });

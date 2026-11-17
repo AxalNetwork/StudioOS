@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { giveUp, LABELS, mode, pathGuard, prIssue } from './rules.mjs';
 import { client, pages, push, readBreakers, upsertSticky } from './keeper.mjs';
 import { gitIn } from './keeper-merge.mjs';
+import { oneLine } from './ejection.mjs';
 import { sameFiles, sidesOf, stageMerge } from './model/stage.mjs';
 import { checkPatch } from './model/patch.mjs';
 import { parseTask } from './model/task.mjs';
@@ -25,7 +26,13 @@ import {
 const DATA_BUDGET = 180_000;
 const DIFF_MAX = 50_000;
 
-const output = (k, v) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); };
+// Values come from the API (a branch name, file paths, reasons). A line break in one would start a second
+// `key=value` line in GITHUB_OUTPUT, an output the next job trusts, so each is written on one line under a
+// key of safe characters only, as the ejection handler writes its own (code scanning alerts 7283, 7284).
+export const output = (k, v) => {
+  if (!/^[a-z_]+$/.test(k)) throw new Error(`bad output name ${k}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${oneLine(v)}\n`);
+};
 const summary = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`); };
 const prNumber = (v) => { const n = Number(v); return Number.isSafeInteger(n) && n > 0 ? n : null; };
 
@@ -224,7 +231,9 @@ export async function applyStage(env, {
     }
     try { await app.del(`issues/${plan.pr}/labels/${encodeURIComponent(LABELS.conflict)}`); } catch { /* not labelled */ }
     await app.post(`issues/${plan.pr}/labels`, { labels: [LABELS.resolved] });
-    const diff = c.git(['diff', '--no-color', plan.head, commit, '--', ...plan.files]).out;
+    // `--no-ext-diff`: SAFE_CONFIG empties `diff.external`, and git 2.43 then tries to run an empty
+    // program for a content diff ("cannot run : No such file"). The flag never runs one, on any git.
+    const diff = c.git(['diff', '--no-color', '--no-ext-diff', plan.head, commit, '--', ...plan.files]).out;
     const shown = diff.length > DIFF_MAX ? `${diff.slice(0, DIFF_MAX)}\n… (cut at ${DIFF_MAX} characters)` : diff;
     await upsertSticky(app, plan.pr, env.LANDING_BOT_LOGIN, [
       `Merged main into this branch (${commit.slice(0, 10)}) and resolved the conflicts in ${plan.files.map((f) => `\`${f}\``).join(', ')} with ${provider}.`,
