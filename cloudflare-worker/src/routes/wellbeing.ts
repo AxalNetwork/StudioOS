@@ -63,6 +63,7 @@ import { clampLimit } from '../util/pagination';
 import { bindingKey } from '../util/schemaBootstrap';
 import expertReviews, { expertReviewResult } from './wellbeing_expert_review';
 import { auditExpert, expertDecision, reviewTarget } from '../services/wellbeing/expertReview';
+import { consentedTopics, loadPreferences, usableTopics, wantedCategories } from '../services/wellbeing/recommend';
 
 const wellbeing = new Hono<{ Bindings: Env }>();
 
@@ -1218,8 +1219,24 @@ wellbeing.get('/experts', async (c) => {
     });
 
     // Build prefs from query string (FE may pass JSON arrays via repeated keys).
-    const prefsCategories = c.req.queries('want_category') || [];
-    const prefsLanguages = (c.req.queries('want_language') || ['en']).map((x) => x.toLowerCase());
+    let prefsCategories = c.req.queries('want_category') || [];
+    let prefsLanguages = (c.req.queries('want_language') || ['en']).map((x) => x.toLowerCase());
+    // D7119 — `personalise=1`: rank by the member's own choices, read here,
+    // and by the topics on their reflections only when they allowed it. The
+    // client then sends no history of its own. With consent off, no
+    // reflection or check-in is read (`consentedTopics` returns first).
+    let personalised: { interests: string[]; topics_used: string[]; topic_consent: boolean } | null = null;
+    if (c.req.query('personalise') === '1') {
+      const mine = await loadPreferences(c.env, user.id);
+      const topics = await consentedTopics(c.env, user.id, mine);
+      prefsCategories = wantedCategories(mine, topics);
+      if (mine.languages.length) prefsLanguages = mine.languages;
+      personalised = {
+        interests: mine.support_types,
+        topics_used: usableTopics(topics, mine.support_types).used,
+        topic_consent: mine.topic_consent,
+      };
+    }
     const prefsSectors = c.req.queries('want_sector') || [];
     const prefsModalities = c.req.queries('want_modality') || [];
     const prefs: MatchPrefs = {
@@ -1264,6 +1281,7 @@ wellbeing.get('/experts', async (c) => {
       total_active: experts.length,
       filtered_count: filtered.length,
       view_budget: viewBudget,
+      personalised,
     });
   } catch (e: any) {
     return unreadable(c, 'experts_unreadable', 'The expert directory could not be read. This is not a claim that no expert is listed.', e);
