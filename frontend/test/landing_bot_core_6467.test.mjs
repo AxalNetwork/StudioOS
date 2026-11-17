@@ -122,10 +122,17 @@ test('attempts: at most 2 per kind; a head changed by a bot commit stays in the 
   assert.equal(attempts(pr(), 'conflict', data([session('a'), bot('b', 'keeper')], [run('keeper', 'a'), run('keeper', 'b')])).allowed, true);
 });
 
-test('attempts: only the owning session\'s commit starts a new series; comments are never read', () => {
+test('attempts: the limit is for the PR\'s whole life, so a session commit does not restart it; comments are never read', () => {
   const runs = [run('keeper', 'a'), run('keeper', 'b')];
   const commits = [session('a'), bot('b', 'keeper'), session('c')];
-  assert.equal(attempts(pr(), 'keeper', { botLogin: BOT, now: NOW, commits, runs }).allowed, true, 'the session pushed c');
+  // Owner, 2026-11-15 (#6467 B): the session pushed c, and the keeper still has had its two attempts.
+  const after = attempts(pr(), 'keeper', { botLogin: BOT, now: NOW, commits, runs });
+  assert.equal(after.allowed, false, 'a session commit does not reset the count');
+  assert.equal(after.used, 2);
+  // Runs on older heads still count, and so do runs on a head the session pushed later.
+  assert.equal(attempts(pr(), 'keeper', { botLogin: BOT, now: NOW, commits: [session('a'), session('c')], runs: [run('keeper', 'a'), run('keeper', 'c')] }).allowed, false);
+  // Another PR's runs are not this PR's.
+  assert.equal(attempts(pr(), 'keeper', { botLogin: BOT, now: NOW, commits: [session('a')], runs: [run('keeper', 'a', { pr: 7002 }), run('keeper', 'b', { pr: 7002 })] }).allowed, true);
   // A forged or deleted sticky comment is not an input: passing comments changes nothing.
   const forged = { botLogin: BOT, now: NOW, commits: [session('a'), bot('b', 'keeper')], runs, comments: [{ user: { login: 'someone' }, body: `${STICKY_MARKER}\nattempts: 0` }] };
   assert.equal(attempts(pr(), 'keeper', forged).allowed, false);

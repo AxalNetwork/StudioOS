@@ -117,7 +117,9 @@ export const APPROVAL_LANES: Readonly<Record<ApprovalLaneKey, LaneFacts>> = {
   },
   best_fit: {
     label: 'Best-Fit consultations', group: 'programs', scope: 'studio',
-    notifies: 'Nobody yet', decidedOn: 'Best-Fit',
+    // D5886: confirmation and cancellation deliver an in-app notice.
+    notifies: 'The member, in app', decidedOn: 'Approvals › Best-Fit consultations',
+    decisionPath: '/admin/approvals/best-fit',
     decisions: {
       recorded: true, since: '2026-11-10',
       caveat: 'Best-Fit decisions before 10 November 2026 were not recorded.',

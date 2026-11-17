@@ -20,10 +20,10 @@ runs that folder, and adding a glob here would mean editing `package.json`, whic
 
 ## The limits
 
-- **Attempts:** at most 2 per PR per kind. The series counts the App's commits on the branch (a commit naming the
-  App as author or committer, with a `Landing-Bot-Kind:` trailer) and completed bot workflow runs on heads since the
-  owning session's newest commit. A bot commit never starts a new series; a session commit does. Comments are never
-  read for counting.
+- **Attempts:** at most 2 per PR per kind, for the PR's whole life (owner, 2026-11-15: no commit restarts the count,
+  a session's included). Counted from the App's commits on the branch (a commit naming the App as author or committer,
+  with a `Landing-Bot-Kind:` trailer) and completed bot workflow runs on the PR, whatever their head. Comments are
+  never read for counting.
 - **Per PR in any 24 hours, across kinds:** 4 bot commits and 2 model runs.
 - **Main repair:** 2 attempts per failure fingerprint (job plus test), whatever the commit.
 - **Daily caps** since 00:00 UTC: `LANDING_BOT_DAILY_MODEL_RUNS` (per provider call), `LANDING_BOT_DAILY_PUSHES`,
