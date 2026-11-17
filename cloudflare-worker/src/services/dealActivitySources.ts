@@ -24,6 +24,7 @@ export async function dealActivitySources(c: any, deal: any, user: User): Promis
     const folders=grant?await grantFolderScope(env,grant.id,true):null;
     const committed=ownRoom?false:await investorCommitted(env,deal.project_id,user.id,true);
     const nda=ownRoom||await projectNdaActive(env,deal.project_id,user.id);
+    // D6073: only the helper's fixed empty/live clause reaches SQL; ids stay bound.
     const live = await liveFiles(env.DB, 'f');
     const files=await env.DB.prepare(`SELECT id, name, visibility, access_tier, access_expires_at, folder_id FROM data_room_files f WHERE f.project_id = ?${live}`).bind(deal.project_id).all<any>();
     const allowed=(files.results||[]).filter(f=>ownRoom||(tierAdmits(f,committed,Date.now(),folders)&&(f.visibility==='open'||f.visibility==='nda'&&nda))).map(f=>Number(f.id));
