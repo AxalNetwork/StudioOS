@@ -6,8 +6,8 @@
  * own page 1 and page 2 figures for `asOf` and keeps nothing. The proposal offers Copy (the clipboard, for the
  * investor's own email), Edit (hands the text to the sheet's "Include as a cover note" box through `onEdit`) and
  * Discard (forgets it here; there is no record to delete). It reaches the PDF only through that box. When Eadwyn is
- * off or cannot answer, the card says "Eadwyn is unavailable. The statement does not need it." The sheet mounts it
- * once #6867's sheet has landed.
+ * off or cannot answer, the card says "Eadwyn is unavailable. The statement does not need it." `StatementSheet.jsx`
+ * mounts it in the sheet's rail for the chosen date (D6888 part 1).
  */
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';

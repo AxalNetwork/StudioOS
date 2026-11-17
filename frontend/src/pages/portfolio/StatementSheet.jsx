@@ -16,12 +16,20 @@
  * copy, and the sheet says so. A cover note goes into the PDF only when
  * "Include as a cover note" is ticked, and it is printed as the investor's
  * own words.
+ *
+ * D6888 (#6888): Eadwyn's covering-note proposal for the chosen date sits in
+ * the sheet's rail (PF-13a: Portfolio's rail slot, beside the sheet; PF-13h: a
+ * collapsible card in the sheet at 390). Nothing runs until the investor
+ * presses Propose. Edit ticks "Include as a cover note" and puts the proposal
+ * in that box for the investor to edit; the PDF still takes the note only from
+ * the box. Discard forgets it; nothing is sent and nothing is kept.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Check, Lock, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Lock, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { usePortfolioReads } from './usePortfolioReads';
+import StatementCoverNote from './StatementCoverNote.jsx';
 import { SHAPES, day, quarterEndsBetween, quarterShape, readOf } from './portfolioModel';
 import {
   ALL_POSITIONS, NO_POSITIONS, NO_QUARTER_YET, OWN_FILE, STATEMENT_BASIS, STATEMENT_PAGES, STATEMENT_QUARTERS,
@@ -73,6 +81,37 @@ function Preview({ date, preview, onRetry }) {
         </p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Eadwyn's rail for the sheet (D6888): beside the sheet on a desktop, a
+ * collapsible card inside it at 390 (statement.css). One mount, so the
+ * proposal is the same at either width.
+ */
+function CoverNoteRail({ asOf, onEdit }) {
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  return (
+    <aside className={`pst-rail${open ? ' is-open' : ''}`} aria-label="Eadwyn" data-testid="statement-eadwyn">
+      <div className="pst-rail-head">
+        <i aria-hidden="true">E</i><b>Eadwyn</b><small>Portfolio</small>
+      </div>
+      <button
+        type="button"
+        className="pst-rail-toggle"
+        aria-expanded={open ? 'true' : 'false'}
+        aria-controls={bodyId}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="button-statement-eadwyn-toggle"
+      >
+        {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+        Eadwyn · covering note proposal
+      </button>
+      <div className="pst-rail-body" id={bodyId}>
+        <StatementCoverNote asOf={asOf} onEdit={onEdit} />
+      </div>
+    </aside>
   );
 }
 
@@ -156,12 +195,21 @@ export default function StatementSheet({
   const [date, setDate] = useState(null);
   const [include, setInclude] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const noteRef = useRef(null);
+  const [noteFocus, setNoteFocus] = useState(0);
   const [done, setDone] = useState(null);
   const chosen = date || (choices.state === 'ok' ? choices.dates[0].date : null);
   const adminPreview = positions.state === 'ok' && positions.value.scope?.rule === 'all_positions';
   const scope = positions.state === 'ok' ? [positions.value.scope?.text, positions.value.fund_scope?.text].filter(Boolean) : [];
 
   useEffect(() => { closeRef.current?.focus?.(); }, []);
+  // Edit on Eadwyn's proposal: the box is ticked and holds the proposal, and the investor edits it there.
+  useEffect(() => { if (noteFocus) noteRef.current?.focus?.(); }, [noteFocus]);
+  const editProposal = (text) => {
+    setInclude(true);
+    setNoteText(text);
+    setNoteFocus((n) => n + 1);
+  };
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('keydown', onKey);
@@ -170,6 +218,7 @@ export default function StatementSheet({
 
   const empty = positions.state === 'ok' && positions.value.items.length === 0;
   let body;
+  let railed = false;
   if (done) {
     const d = downloadedOf(done.date, done.pages);
     body = (
@@ -209,6 +258,7 @@ export default function StatementSheet({
       </div>
     );
   } else {
+    railed = true;
     body = (
       <>
         <fieldset className="pst-dates">
@@ -236,6 +286,7 @@ export default function StatementSheet({
             onClose={onClose}
             onDownloaded={(pages) => setDone({ date: chosen, pages })}
           >
+        <CoverNoteRail asOf={chosen} onEdit={editProposal} />
         <section className="pst-toc" aria-label="What the PDF holds" data-testid="statement-toc">
           <p className="pst-eyebrow">The PDF holds · US Letter</p>
           <ol>{STATEMENT_PAGES.map((p) => <li key={p}>{p}</li>)}</ol>
@@ -252,6 +303,7 @@ export default function StatementSheet({
           {include ? (
             <>
               <textarea
+                ref={noteRef}
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
                 rows={4}
@@ -270,7 +322,7 @@ export default function StatementSheet({
   }
 
   return (
-    <div className="pst-layer" data-testid="statement-sheet-layer">
+    <div className={`pst-layer${railed ? ' has-rail' : ''}`} data-testid="statement-sheet-layer">
       <button type="button" className="pst-scrim" aria-label="Close the statement" onClick={onClose} tabIndex={-1} />
       <section className="pst-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} data-testid="statement-sheet">
         {adminPreview ? (
