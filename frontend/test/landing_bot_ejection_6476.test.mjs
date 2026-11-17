@@ -31,7 +31,8 @@ test('#6476: each class from its evidence', () => {
     [{ reason: 'FAILED_CHECKS', queueRun: { conclusion: 'cancelled', jobs: [] }, main: green }, 'cascade'],
     [{ reason: 'FAILED_CHECKS', queueRun: { conclusion: 'failure', jobs: [{ name: 'verify merge group ref', conclusion: 'failure' }] }, main: green }, 'cascade'],
     [{ reason: 'FAILED_CHECKS', queueRun: failRun, main: green, failedTests: [{ file: 'a.test.mjs', test: 't' }], flaky: [{ file: 'a.test.mjs', test: 't' }] }, 'flake'],
-    [{ reason: 'FAILED_CHECKS', queueRun: failRun, main: green, headRun: { conclusion: 'success' } }, 'flake'],
+    // Audit 2026-11-17 (P0): green on its own head and on main, red only in the group, is not a flake.
+    [{ reason: 'FAILED_CHECKS', queueRun: failRun, main: green, headRun: { conclusion: 'success' } }, 'incompatible'],
     [{ reason: 'FAILED_CHECKS', queueRun: failRun, main: green, headRun: { conclusion: 'failure' } }, 'own-failure'],
     [{ reason: 'SOMETHING_NEW' }, 'unknown'],
     [{ reason: 'FAILED_CHECKS', record: { class: 'cascade' } }, 'cascade'],

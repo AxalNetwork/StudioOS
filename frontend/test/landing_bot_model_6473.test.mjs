@@ -57,7 +57,7 @@ test('#6473: a quota, rate-limit, auth or 5xx error falls to the next provider, 
   }
   const ws = createWorkspace(repo(), { allowed: ['frontend/src/pages/sum.js'] });
   const r = await runRound({ task: taskOf(), workspace: ws, providers: { claude: stub('claude', quota), codex: stub('codex', quota), gemini: stub('gemini', fix) } });
-  assert.deepEqual([r.provider, r.attempts.map((a) => a.result)], ['gemini', ['billing', 'billing', 'done']]);
+  assert.deepEqual([r.provider, r.attempts.map((a) => a.result)], ['gemini', ['billing', 'not_configured', 'not_configured', 'billing', 'done']]);
 });
 
 test('#6473: a wrong fix, no fix, or a non-availability error does not move to the next provider', async () => {
@@ -74,16 +74,16 @@ test('#6473: a wrong fix, no fix, or a non-availability error does not move to t
 });
 
 test('#6473: an unconfigured provider is skipped, and LANDING_BOT_PROVIDERS sets the order', async () => {
-  assert.deepEqual(providerOrder(''), ['claude', 'codex', 'gemini']);
+  assert.deepEqual(providerOrder(''), ['claude', 'claude-2', 'claude-3', 'codex', 'gemini']);
   assert.deepEqual(providerOrder('gemini, claude, nope, gemini'), ['gemini', 'claude']);
   const p = makeProviders({});
-  assert.deepEqual(Object.values(p).map((x) => x.available), [false, false, false]);
+  assert.deepEqual(Object.values(p).map((x) => x.available), [false, false, false, false, false]);
   assert.equal(makeProviders({ ANTHROPIC_API_KEY: 'k' }).claude.available, true);
   assert.equal(makeProviders({ GEMINI_API_KEY: 'k' }).gemini.available, false, 'Gemini also needs a model');
   assert.equal(makeProviders({ ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01AbCdEfGh', ANTHROPIC_ORGANIZATION_ID: '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b' }).claude.available, true, 'federation needs no key');
   assert.deepEqual([NAMES.claude.secret, NAMES.codex.secret, NAMES.gemini.secret], ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY']);
   const r = await runRound({ task: taskOf(), workspace: createWorkspace(repo(), { allowed: ['frontend/src/pages/sum.js'] }), providers: { claude: { ...stub('claude', fix), available: false }, codex: stub('codex', fix) } });
-  assert.deepEqual(r.attempts.map((a) => a.result), ['not_configured', 'done']);
+  assert.deepEqual(r.attempts.map((a) => a.result), ['not_configured', 'not_configured', 'not_configured', 'done']);
 });
 
 test('#6473: the caps stop a run: turns, minutes, and HARD clamps what a caller asks for', async () => {
@@ -241,4 +241,31 @@ test('#6473: verify refuses an allowed file that became a symbolic link, and rea
   const v = verifyMain({ task: taskFile, work: dir, patch: out, out: join(out, 'v') }, { env: process.env });
   assert.equal(v.passed, false);
   assert.ok(v.problems.includes('frontend/src/pages/sum.js is a symbolic link'), JSON.stringify(v.problems));
+});
+
+test('audit P1: the review loop\'s Claude accounts in order, each its own key, and the manifest names the account', async () => {
+  const p = makeProviders({ ANTHROPIC_API_KEY_2: 'k2', ANTHROPIC_API_KEY_3: 'k3' });
+  assert.deepEqual(['claude', 'claude-2', 'claude-3'].map((n) => [n, p[n].available]), [['claude', false], ['claude-2', true], ['claude-3', true]]);
+  assert.deepEqual([NAMES['claude-2'].secret, NAMES['claude-3'].secret], ['ANTHROPIC_API_KEY_2', 'ANTHROPIC_API_KEY_3']);
+  // Federation is the primary's only: the variables do not make account 2 available.
+  assert.equal(makeProviders({ ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01AbCdEfGh', ANTHROPIC_ORGANIZATION_ID: '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b' })['claude-2'].available, false);
+  // Primary out of credit, account 2 unavailable, account 3 answers: the round reports claude-3.
+  const credit = () => { const e = new Error('billing'); e.kind = 'billing'; throw e; };
+  const order = providerOrder('');
+  const r = await runRound({ task: taskOf(), workspace: createWorkspace(repo(), { allowed: ['frontend/src/pages/sum.js'] }), order,
+    providers: { claude: stub('claude', credit), 'claude-2': { ...stub('claude-2', fix), available: false }, 'claude-3': stub('claude-3', fix), codex: stub('codex', fix) } });
+  assert.deepEqual([r.outcome, r.provider], ['patched', 'claude-3']);
+  assert.deepEqual(r.attempts.map((a) => [a.provider, a.result]), [['claude', 'billing'], ['claude-2', 'not_configured'], ['claude-3', 'done']]);
+  // All three Claude accounts out of credit: Codex answers.
+  const all = await runRound({ task: taskOf(), workspace: createWorkspace(repo(), { allowed: ['frontend/src/pages/sum.js'] }), order,
+    providers: { claude: stub('claude', credit), 'claude-2': stub('claude-2', credit), 'claude-3': stub('claude-3', credit), codex: stub('codex', fix) } });
+  assert.equal(all.provider, 'codex');
+});
+
+test('audit P1: the round job hands the numbered Claude keys to the edit step only', () => {
+  const round = read(WF('landing-bot-model-round.yml'));
+  assert.match(round, /ANTHROPIC_API_KEY_2: \$\{\{ secrets\.ANTHROPIC_API_KEY_2 \}\}/);
+  assert.match(round, /ANTHROPIC_API_KEY_3: \$\{\{ secrets\.ANTHROPIC_API_KEY_3 \}\}/);
+  const verify = round.slice(round.indexOf('\n  verify:'));
+  assert.doesNotMatch(verify, /secrets\./, 'verify holds no secret');
 });

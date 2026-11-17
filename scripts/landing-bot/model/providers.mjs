@@ -1,4 +1,4 @@
-// #6473: the three SDK adapters (Claude, Codex, Gemini) and the one map of the secret and variable names they read.
+// #6473: the SDK adapters (three Claude accounts, Codex, Gemini) and the one map of the secret and variable names they read.
 /**
  * Each adapter drives its SDK's tool-calling loop with the workspace tools
  * only. The SDKs are this folder's own pinned dependencies (package.json),
@@ -13,6 +13,9 @@ import { readFederation } from '../../lib/claudeReview.mjs';
 /** Every credential and setting the runner reads, in one place. The owner confirmed these names on #6473. */
 export const NAMES = Object.freeze({
   claude: Object.freeze({ secret: 'ANTHROPIC_API_KEY', model: 'LANDING_BOT_CLAUDE_MODEL', federation: ['ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_ORGANIZATION_ID', 'ANTHROPIC_SERVICE_ACCOUNT_ID', 'ANTHROPIC_WORKSPACE_ID'] }),
+  // Audit 2026-11-17 (P1): the review loop's two further Claude accounts (CLAUDE_REVIEW.md §6a). Key only, no federation.
+  'claude-2': Object.freeze({ secret: 'ANTHROPIC_API_KEY_2', model: 'LANDING_BOT_CLAUDE_MODEL' }),
+  'claude-3': Object.freeze({ secret: 'ANTHROPIC_API_KEY_3', model: 'LANDING_BOT_CLAUDE_MODEL' }),
   codex: Object.freeze({ secret: 'OPENAI_API_KEY', model: 'LANDING_BOT_OPENAI_MODEL' }),
   gemini: Object.freeze({ secret: 'GEMINI_API_KEY', model: 'LANDING_BOT_GEMINI_MODEL' }),
   order: 'LANDING_BOT_PROVIDERS',
@@ -42,10 +45,13 @@ function federationKind(e) {
   }
   return null;
 }
+// An account that is out of credit: Anthropic answers 400 "credit balance" or 429 enforced_spend_limit_reached.
+const creditRefusal = (e) => (e?.status === 400 && /credit balance/i.test(String(e?.error?.error?.message ?? e?.message ?? '')))
+  || (e?.error?.error?.details?.error_code ?? e?.error?.details?.error_code) === 'enforced_spend_limit_reached';
 const tagged = (e) => {
   const kind = federationKind(e);
   if (kind) { const out = new Error(`federation failed`); out.kind = kind; return out; }
-  if (['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active'].includes(e?.code || e?.error?.code)) { const out = new Error('billing'); out.kind = 'billing'; return out; }
+  if (['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active'].includes(e?.code || e?.error?.code) || creditRefusal(e)) { const out = new Error('billing'); out.kind = 'billing'; return out; }
   // Keep status and code only: an SDK error's message can quote a request.
   const out = new Error(`provider error${e?.status ? ` (HTTP ${e.status})` : ''}`);
   out.status = e?.status; out.code = e?.code;
@@ -68,13 +74,15 @@ function githubIdentityToken(env) {
   };
 }
 
-function claude(env, importSdk) {
+/** One Claude account. `claude` is the primary (federation preferred, else its key); `claude-2` and `claude-3` use their keys. */
+function claude(env, importSdk, name = 'claude') {
+  const names = NAMES[name];
   const fedErrors = [];
-  const federation = readFederation(env, fedErrors);
-  const apiKey = read(env, NAMES.claude.secret);
-  const model = read(env, NAMES.claude.model) || DEFAULT_MODELS.claude;
+  const federation = name === 'claude' ? readFederation(env, fedErrors) : null;
+  const apiKey = read(env, names.secret);
+  const model = read(env, names.model) || DEFAULT_MODELS.claude;
   return {
-    name: 'claude', model, available: Boolean(federation || apiKey) && !fedErrors.length,
+    name, model, available: Boolean(federation || apiKey) && !fedErrors.length,
     async run({ system, prompt, tools, call, signal }) {
       const { default: Anthropic } = await importSdk('@anthropic-ai/sdk');
       let client;
@@ -160,5 +168,8 @@ function gemini(env, importSdk) {
 
 /** The adapters for this environment. `importSdk` is `(name) => import(name)` resolved from this folder. */
 export function makeProviders(env, importSdk = (name) => import(name)) {
-  return { claude: claude(env, importSdk), codex: codex(env, importSdk), gemini: gemini(env, importSdk) };
+  return {
+    claude: claude(env, importSdk), 'claude-2': claude(env, importSdk, 'claude-2'), 'claude-3': claude(env, importSdk, 'claude-3'),
+    codex: codex(env, importSdk), gemini: gemini(env, importSdk),
+  };
 }

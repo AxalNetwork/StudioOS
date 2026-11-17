@@ -4,7 +4,7 @@ import { count, LABELS } from './rules.mjs';
 export const KIND = 'ejection';
 /** Owner, 2026-11-16: the bot may restore an entry only after these four classes. */
 export const REQUEUE_CLASSES = Object.freeze(['conflict', 'cascade', 'flake', 'infrastructure']);
-export const CLASSES = Object.freeze(['conflict', 'cascade', 'flake', 'infrastructure', 'timeout', 'own-failure', 'manual', 'unknown']);
+export const CLASSES = Object.freeze(['conflict', 'cascade', 'flake', 'infrastructure', 'timeout', 'own-failure', 'incompatible', 'manual', 'unknown']);
 export const MAX_REQUEUES_PER_DAY = 2;
 export const STALLED_ALERT = '[alert] merge queue stalled';
 const DAY = 24 * 60 * 60 * 1000;
@@ -42,6 +42,25 @@ export function consent(pr, { botLogin } = {}) {
   return { valid: true, source: last.source, at: new Date(last.at).toISOString() };
 }
 
+const QUEUE_BRANCH = /^gh-readonly-queue\/main\/pr-(\d+)-([0-9a-f]{40})$/;
+/**
+ * Audit 2026-11-17 (P0): the merge-group run for this ejection, matched exactly. Its queue branch names this PR's
+ * number (parsed, not a substring), and it started after the PR's last entry and before this removal. More than one
+ * such run, or none, is no evidence.
+ * @param runs [{ head_branch, event, created_at, status }]; @param pr { number, added: [{ at }] }; @param removal { at }
+ */
+export function groupRunFor(runs, pr, removal) {
+  const removedAt = time(removal?.at);
+  const entered = (pr?.added || []).map((a) => time(a.at)).filter((t) => t !== null && removedAt !== null && t <= removedAt).sort((a, b) => b - a)[0];
+  if (removedAt === null || entered === undefined) return null;
+  const hits = (runs || []).filter((r) => {
+    const m = QUEUE_BRANCH.exec(String(r?.head_branch ?? ''));
+    const at = time(r?.created_at);
+    return r?.event === 'merge_group' && m && Number(m[1]) === pr.number && at !== null && at >= entered && at <= removedAt;
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
 /**
  * The class of one ejection.
  * @param e { reason: GitHub's removal reason, actor, queueRun: { conclusion, jobs } | null (this PR's merge_group run),
@@ -59,13 +78,20 @@ export function classify(e) {
   if (e?.infra) return { class: 'infrastructure', why: 'every failed part died in runner setup' };
   const run = e?.queueRun;
   if (run && ['success', 'cancelled', 'skipped'].includes(run.conclusion)) return { class: 'cascade', why: 'its own queue run did not fail: an entry ahead did' };
-  if (run && Array.isArray(run.jobs) && run.jobs.filter((j) => j.conclusion === 'failure').every((j) => /queue.?ref|merge.?group.?ref/i.test(j.name ?? ''))) {
+  // Positive evidence only: at least one failed job, and every failed job is the queue-ref check (an empty list is not).
+  const failedJobs = Array.isArray(run?.jobs) ? run.jobs.filter((j) => j.conclusion === 'failure') : [];
+  if (failedJobs.length && failedJobs.every((j) => /queue.?ref|merge.?group.?ref/i.test(j.name ?? ''))) {
     return { class: 'cascade', why: 'its queue run failed only at the queue-ref check' };
   }
+  // A flake needs positive evidence: every failing test named, and every one on the flaky list.
   const flakyHit = (e?.failedTests || []).length > 0 && e.failedTests.every((t) => (e.flaky || []).some((f) => f.file === t.file && f.test === t.test));
   if (flakyHit) return { class: 'flake', why: 'every failing test is on the flaky list' };
   const mainGreen = e?.main?.conclusion === 'success';
-  if (e?.headRun?.conclusion === 'success' && mainGreen && run?.conclusion === 'failure') return { class: 'flake', why: 'it passed on its own head and on main' };
+  // Audit 2026-11-17 (P0): green alone and green on main, yet red together, is not a flake. It is the signature of
+  // two changes that break each other, so it is surfaced for diagnosis and never re-queued.
+  if (e?.headRun?.conclusion === 'success' && mainGreen && run?.conclusion === 'failure') {
+    return { class: 'incompatible', why: 'its queue run failed while its own head and main each passed: it may break with an entry ahead of it' };
+  }
   if (run?.conclusion === 'failure' && mainGreen) return { class: 'own-failure', why: 'its queue run failed and main is green' };
   return { class: 'unknown', why: 'not enough evidence to say' };
 }
@@ -81,9 +107,10 @@ export function decide(c) {
   // A conflict goes to the branch keeper first; once its merge has cleared it, the entry may be restored.
   if (c.klass === 'conflict' && c.stillConflicting !== false) return { action: 'keeper', reasons: ['GitHub reported a conflict: the branch keeper merges main, then this handler looks again'] };
   if (c.klass === 'own-failure') return { action: 'repair', label: LABELS.ejected, reasons: ['its own failure: never re-queued; red-PR repair (#5622) is asked when it exists'] };
+  if (c.klass === 'incompatible') return { action: 'label', label: LABELS.ejected, reasons: ['red only in its merge group: compare it with the entry ahead before it re-enters'] };
   if (!REQUEUE_CLASSES.includes(c.klass)) { reasons.push(`class ${c.klass} is never re-queued`); return label(); }
   if (!c.consent?.valid) reasons.push(c.consent?.reason ?? 'no consent');
-  if (!c.checksGreenOnHead) reasons.push('not every required check is green on the current head');
+  if (!c.checksGreenOnHead) reasons.push(`not every required check is green on the current head${c.checksDetail ? ` (${c.checksDetail})` : ''}`);
   if (!c.headUnchangedSinceChecks) reasons.push('the head changed since the checks went green');
   if (!c.eligible?.ok) reasons.push(...(c.eligible?.reasons ?? ['not eligible']));
   if (!c.breakers || c.breakers.open) reasons.push(...(c.breakers?.reasons ?? ['breakers could not be read']));

@@ -11,8 +11,9 @@ import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eligible, LABELS, renderSticky, stickyComment, verdictFor } from './rules.mjs';
-import { classify, consent, decide, KIND } from './ejection-rules.mjs';
+import { classify, consent, decide, groupRunFor, KIND } from './ejection-rules.mjs';
 import { client, readBreakers } from './keeper.mjs';
+import { createGitHubReader } from './feeder-github.mjs';
 
 const Q = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(first:100,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{
   id number state isDraft body isInMergeQueue mergeable headRefName headRefOid
@@ -82,6 +83,8 @@ export async function sweep(env, {
   gh = client({ repo: env.GITHUB_REPOSITORY, token: env.GH_TOKEN }),
   app = env.EJECTION_APP_TOKEN ? client({ repo: env.GITHUB_REPOSITORY, token: env.EJECTION_APP_TOKEN }) : null,
   now = Date.now(),
+  // The same trusted current-head evidence first admission reads (feeder-github.mjs).
+  evidence = (number, sha) => createGitHubReader({ repo: env.GITHUB_REPOSITORY, token: env.GH_TOKEN }).readHeadEvidence(number, sha),
 } = {}) {
   const botLogin = env.LANDING_BOT_LOGIN;
   const prs = normalise((await gh.graph(Q, {})).pullRequests.nodes);
@@ -99,7 +102,7 @@ export async function sweep(env, {
   const repair = [];
   for (const pr of todo) {
     const removal = [...pr.removed].sort((a, b) => (a.at < b.at ? 1 : -1))[0];
-    const queueRun = (await ciRuns(gh, 'event=merge_group')).find((r) => (r.head_branch ?? '').includes(`/pr-${pr.number}-`));
+    const queueRun = groupRunFor(await ciRuns(gh, 'event=merge_group'), pr, removal);
     const headRun = (await ciRuns(gh, `event=pull_request&head_sha=${pr.head.sha}`))[0] ?? null;
     const q = await withJobs(gh, queueRun);
     const k = classify({
@@ -109,12 +112,13 @@ export async function sweep(env, {
     });
     const files = (await gh.get(`pulls/${pr.number}/files?per_page=100`)).map((f) => ({ path: f.filename, previousPath: f.previous_filename }));
     const commits = await gh.get(`pulls/${pr.number}/commits?per_page=100`);
-    const checks = (await gh.get(`commits/${pr.head.sha}/check-runs?per_page=100`)).check_runs || [];
-    const green = checks.length > 0 && checks.every((c) => c.status === 'completed' && ['success', 'neutral', 'skipped'].includes(c.conclusion));
+    let ev;
+    try { ev = await evidence(pr.number, pr.head.sha); } catch (e) { ev = { ok: false, headSha: null, detail: `evidence unreadable: ${String(e?.message ?? e).slice(0, 120)}` }; }
     const fresh = await gh.get(`pulls/${pr.number}`);
     const d = decide({
       klass: k.class, stillConflicting: fresh.mergeable === false, consent: consent({ ...pr, commits }, { botLogin }),
-      checksGreenOnHead: green, headUnchangedSinceChecks: fresh.head?.sha === pr.head.sha && checks.every((c) => c.head_sha === pr.head.sha),
+      checksGreenOnHead: ev.ok === true, checksDetail: ev.detail,
+      headUnchangedSinceChecks: fresh.head?.sha === pr.head.sha && ev.headSha === pr.head.sha,
       eligible: eligible(pr, { env, event: env.GITHUB_EVENT_NAME, dispatchPr, repo: env.GITHUB_REPOSITORY, files, kind: KIND, breakers: brk }),
       breakers: brk, openAlertTitles, requeues, pr: pr.number, now, env, queueRuns,
     });

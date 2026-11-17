@@ -89,6 +89,10 @@ jobs:
 
   round1:
     needs: prepare
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/landing-bot-model-round.yml
     with:
       round: 1
@@ -99,6 +103,10 @@ jobs:
   round2:
     needs: [prepare, round1]
     if: needs.round1.outputs.outcome == 'verify_failed' && needs.prepare.outputs.rounds >= 2
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/landing-bot-model-round.yml
     with:
       round: 2
@@ -109,6 +117,10 @@ jobs:
   round3:
     needs: [prepare, round2]
     if: needs.round2.outputs.outcome == 'verify_failed' && needs.prepare.outputs.rounds >= 3
+    # A called workflow cannot raise what its caller grants: the round's edit job asks for these two.
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/landing-bot-model-round.yml
     with:
       round: 3

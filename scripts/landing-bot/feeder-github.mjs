@@ -145,8 +145,36 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
     return alerts.items;
   }
   const checkRunsFor = sha => pages(`commits/${sha}/check-runs?filter=latest`, 'check_runs', 3);
+  // main's required contexts, each kept only from the app its rule names (source restrictions).
+  const sourceMatched = (rules, checks) => {
+    const contexts = rules.filter(r => r.type === 'required_status_checks').flatMap(r => r.parameters.required_status_checks);
+    return checks.filter(c => contexts.filter(ctx => ctx.context === c.name)
+      .every(ctx => !positive(ctx.integration_id) || ctx.integration_id === c.app?.id));
+  };
   return {
     get,
+    /**
+     * Audit 2026-11-17 (P0): the evidence that a PR's current head may re-enter the queue. Every context main's rules
+     * require, from the app the rule names, `success` on this exact head (skipped and neutral are not green), and a
+     * full-suite job proven to be ci.yml's pull_request run for this PR and head. Check runs are read to the end of
+     * their pages; one unrelated success can qualify nothing.
+     */
+    async readHeadEvidence(number, expectedSha) {
+      if (!positive(number)) throw new Error('Invalid pull request number');
+      const policy = await import('../lib/landPr.mjs');
+      const pull = await get(`pulls/${number}`);
+      const headSha = pull.head?.sha;
+      if (pull.number !== number || !SHA.test(headSha ?? '')) throw new Error('Incomplete PR head for the evidence read');
+      if (expectedSha && headSha !== expectedSha) return {headSha, ok: false, fullSuitePassed: false, required: null, detail: 'the head moved since it was read'};
+      const [rules, checks] = await Promise.all([get('rules/branches/main'), checkRunsFor(headSha)]);
+      if (!Array.isArray(rules)) throw new Error('Unreadable main rules');
+      const {required} = policy.mainRules(rules);
+      const req = policy.requiredChecks(required, sourceMatched(rules, checks), headSha);
+      const fullSuitePassed = Boolean(await checkSource(number, headSha, checks, FULL_SUITE, CI_PATH));
+      const ok = req.ok && fullSuitePassed;
+      const detail = ok ? req.detail : [req.ok ? null : req.detail, fullSuitePassed ? null : 'no trusted full-suite run on this head'].filter(Boolean).join('; ');
+      return {headSha, ok, fullSuitePassed, required: req, detail};
+    },
     async readLandingDecision(number) {
       if (!positive(number)) throw new Error('Invalid pull request number');
       const policy = await import('../lib/landPr.mjs');
@@ -162,9 +190,7 @@ export function createGitHubReader({repo, token, fetchImpl = fetch, classify = c
       if (!Array.isArray(rules) || files.length !== pull.changed_files) throw new Error('Incomplete landing decision facts');
       // Source restrictions are part of required checks on StudioOS. Preserve those
       // when passing the matching runs into the shared name-based decision helper.
-      const contexts = rules.filter(r => r.type === 'required_status_checks').flatMap(r => r.parameters.required_status_checks);
-      const matchingChecks = checks.filter(c => contexts.filter(ctx => ctx.context === c.name)
-        .every(ctx => !positive(ctx.integration_id) || ctx.integration_id === c.app?.id));
+      const matchingChecks = sourceMatched(rules, checks);
       const source = await checkSource(number, head, checks, policy.POLICY_CHECK, policy.POLICY_WORKFLOW);
       const pr = {number, state: pull.state, merged: pull.merged, draft: pull.draft, base_ref: pull.base?.ref,
         head_sha: head, auto_merge: pull.auto_merge};

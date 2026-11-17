@@ -12,7 +12,8 @@
  */
 import { TOOL_SPECS } from './workspace.mjs';
 
-export const DEFAULT_ORDER = Object.freeze(['claude', 'codex', 'gemini']);
+// The review loop's order (CLAUDE_REVIEW.md §6a): primary Claude, Claude 2, Claude 3, Codex; then Gemini.
+export const DEFAULT_ORDER = Object.freeze(['claude', 'claude-2', 'claude-3', 'codex', 'gemini']);
 export const FALLTHROUGH = Object.freeze(['authentication', 'permission', 'billing', 'rate_limit', 'overloaded', 'server', 'federation', 'not_configured']);
 
 export class CapError extends Error {

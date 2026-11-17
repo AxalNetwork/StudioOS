@@ -25,10 +25,12 @@ manifest as untrusted and re-check it with `patch.mjs`'s `checkPatch` before the
 
 ## Providers
 
-Claude, then Codex, then Gemini, or the order in `LANDING_BOT_PROVIDERS`.
+The review loop's accounts in its order (`documentation/operations/CLAUDE_REVIEW.md` §6a): primary Claude, Claude 2,
+Claude 3, then Codex, then Gemini; or the order in `LANDING_BOT_PROVIDERS` (names `claude`, `claude-2`, `claude-3`,
+`codex`, `gemini`). The manifest's `provider` names the account that made the patch.
 
 **When the runner moves to the next provider.** Only when the provider could not work:
-- authentication, permission, billing or quota;
+- authentication, permission, billing or quota (an Anthropic "credit balance" refusal or spend limit included);
 - rate limit, overload or 5xx;
 - federation failure;
 - no credential configured.
@@ -39,6 +41,8 @@ the next provider is never asked to try again.
 | Provider | Credential (in the `repair` environment) | Model variable | Default model |
 | --- | --- | --- | --- |
 | Claude | The four `ANTHROPIC_*_ID` variables (federation, preferred), else `ANTHROPIC_API_KEY` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
+| Claude 2 | `ANTHROPIC_API_KEY_2` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
+| Claude 3 | `ANTHROPIC_API_KEY_3` | `LANDING_BOT_CLAUDE_MODEL` | `claude-opus-5-5` |
 | Codex | `OPENAI_API_KEY` | `LANDING_BOT_OPENAI_MODEL` | `gpt-5.3-codex` |
 | Gemini | `GEMINI_API_KEY` | `LANDING_BOT_GEMINI_MODEL`, else `GEMINI_MODEL` | none: unset means skipped |
 
