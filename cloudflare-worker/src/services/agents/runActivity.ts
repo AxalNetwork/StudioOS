@@ -132,9 +132,12 @@ async function usageOf(env: Env, usageLogId: number | null) {
 
 export const stepsOfRow = (r: Pick<RunRow, 'steps_json'>): StepEntry[] => parse<StepEntry[]>(r.steps_json, []);
 
-/** What the run read, by name, from its own context line ("Read a, b and N notes"). */
+/**
+ * What the run read, by name, from its own line ("Read a, b and N notes"): the `run` step's since D7076 (#7076),
+ * the `context` step's on a run from before it.
+ */
 export function sourcesOf(steps: StepEntry[]): string[] {
-  const line = steps.find((s) => s.name === 'context' && s.status === 'done')?.summary ?? '';
+  const line = steps.find((s) => (s.name === 'run' || s.name === 'context') && s.status === 'done' && s.summary.startsWith('Read '))?.summary ?? '';
   const m = /^Read (.+?) and \d+ notes?/.exec(line);
   if (!m || m[1] === 'nothing') return [];
   return m[1].split(/,\s*/).map((s) => s.trim()).filter(Boolean);
