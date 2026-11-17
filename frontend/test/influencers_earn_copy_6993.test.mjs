@@ -39,7 +39,7 @@ async function page(tiers) {
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/influencers'] },
     h(Routes, null, h(Route, { path: '/influencers', element: h(InfluencersPage) })))));
-  await act(async () => { for (let i = 0; i < 14; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { for (let i = 0; i < 14; i += 1) await new Promise((r) => setImmediate(r)); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
