@@ -10,7 +10,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/promo_issued_report_5949.test.ts
  */
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,6 +32,9 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test f
 const SECRET = 'synthetic-promo-report-secret';
 const NOW = new Date('2026-11-15T09:00:00.000Z');
 const PERIOD = quarterKey(NOW); // 2026-Q4
+// The ceilings read takes its own `now` from the clock, so every test here runs at
+// NOW: a report written at NOW turns stale 48 hours later, and the quarter changes.
+mock.timers.enable({ apis: ['Date'], now: NOW.getTime() });
 const PREVIOUS = '2026-Q3';
 const SUPER = 1;
 const LICENCE = 'lic_aa';
