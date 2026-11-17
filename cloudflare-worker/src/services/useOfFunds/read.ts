@@ -27,7 +27,13 @@ export async function roundSources(env: Env, s: Scope, baseRow: any) {
         AND rc.counsel_approved_hash=rc.terms_hash AND rc.counsel_approved_at IS NOT NULL
       ORDER BY rc.updated_at DESC,rc.id DESC`).bind(s.projectId).all<any>()).results ?? []),
     block(() => env.DB.prepare("SELECT id,name,target_cents,target_amount,currency,updated_at FROM raise_rounds WHERE project_id=? AND status='active' ORDER BY updated_at DESC,id DESC LIMIT 1").bind(s.projectId).first<any>()),
-    block(() => env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE project_id=? AND COALESCE(is_variant,0)=0 ORDER BY updated_at DESC,id DESC LIMIT 1').bind(s.projectId).first<any>()),
+    // D6085: the scenario the plan names, from this project only; without a link (or with a broken one), the latest model, unlinked.
+    block(async () => {
+      const linked = baseRow?.cap_table_scenario_uid
+        ? await env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE uid=? AND project_id=?').bind(baseRow.cap_table_scenario_uid,s.projectId).first<any>()
+        : null;
+      return linked ? { ...linked, linked: true } : env.DB.prepare('SELECT id,uid,name,inputs_json,result_json,updated_at FROM cap_table_scenarios WHERE project_id=? AND COALESCE(is_variant,0)=0 ORDER BY updated_at DESC,id DESC LIMIT 1').bind(s.projectId).first<any>();
+    }),
   ]);
   const candidates: any[] = [];
   for (const c of calls.value ?? []) candidates.push({ ...fact(integer(c.amount_cents),'Document',`round_calls:${c.id}`,c.counsel_approved_at), kind:'round_call',name:c.name,currency:(c.currency??'USD').toLowerCase(),eligible:true });
@@ -49,8 +55,13 @@ export async function roundSources(env: Env, s: Scope, baseRow: any) {
       const rounds=Array.isArray(input.rounds)?input.rounds:[];
       return { id:cap.value.id,uid:cap.value.uid,name:cap.value.name,source:'Modelled',as_of:cap.value.updated_at,
         rounds:rounds.map((r:any,i:number)=>({ ...fact(cents(r.investment),'Modelled',`cap_table_scenarios:${cap.value.id}:round:${i}`,cap.value.updated_at),name:typeof r.name==='string'?r.name:null })),
-        // No scenario link column exists in migration 606. Do not invent one.
-        link_state:'not_recorded',link_reason:'No explicit link between a Use of funds scenario and a cap-table scenario is stored.',result };
+        // D6085: `linked` when the plan names this scenario; otherwise the latest model, shown unlinked.
+        ...(cap.value.linked
+          ? {link_state:'linked',link_reason:null}
+          : baseRow?.cap_table_scenario_uid
+            ? {link_state:'deleted',link_reason:'The linked scenario no longer exists. The latest scenario is shown, unlinked.'}
+            : {link_state:'not_recorded',link_reason:'No cap-table scenario is linked. The latest scenario is shown, unlinked.'}),
+        result };
     });
     for (const c of capTable.value?.rounds??[]) candidates.push({...c,kind:'cap_table',currency:'usd',eligible:false});
   }

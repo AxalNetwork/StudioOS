@@ -709,6 +709,12 @@ jobs:
       - name: Visual regression and axe on the editor
         working-directory: frontend
         run: npx --no-install playwright test -c tests/visual/playwright.config.mjs
+      # #5933 (D4819-p5933): the Licences console at 390px and 1280px. The spec
+      # serves the docs/ built above itself and answers every /api/* call with
+      # invented fixtures, so it needs no preview and no account.
+      - name: Licences console in the browser (fixtures, no preview)
+        working-directory: frontend
+        run: npx --no-install playwright test -c playwright.config.js tests/e2e/licences_console_5933.spec.js --retries=0
       - name: Keep the report and the diffs
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -717,6 +723,7 @@ jobs:
           path: |
             frontend/tests/visual/playwright-report
             frontend/tests/visual/test-results
+            frontend/test-results
           retention-days: 14
 
   # -------------------------------------------------------------------------

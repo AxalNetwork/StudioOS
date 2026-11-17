@@ -14,6 +14,7 @@ import type { Env } from '../types';
 import { splitCall } from './fundCallSplit';
 import { readFundPerformance } from './fundPerformance';
 import { NO_FUND_ACCOUNT, fundCash } from './fundCashSummary';
+import type { SectorMix } from './fundSnapshotFigures';
 
 export type Line = { cents: number } | { cents: null; reason: string };
 export type Ratio = { value: number } | { value: null; reason: string };
@@ -322,6 +323,7 @@ export async function statementFigures(
 export function reportFigures(
   fund: { id: number; name: string }, p: Period, lps: number, totals: Record<string, number>, figures: FundFigures,
   statements: Array<{ uid: string; figures_sha256: string }>, unmatched = 0,
+  issued?: { deployed: Line; sector_mix: SectorMix },
 ) {
   return {
     schema: 'lp_quarterly_report/1',
@@ -329,13 +331,15 @@ export function reportFigures(
     period: p,
     currency: 'USD',
     lp_count: lps,
-    totals: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, known(v)])),
+    totals: { ...Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, known(v)])), ...(issued ? { deployed: issued.deployed } : {}) },
     books_closed: figures.books_closed,
     fund_figures: {
       expenses: figures.expenses, management_fee: figures.management_fee, investment_value: figures.investment_value,
       cash: figures.cash, liabilities: figures.liabilities, nav: figures.nav,
     },
     nav_basis: NAV_BASIS,
+    // D6870: the positions' sector mix at build, beside `totals.deployed`.
+    ...(issued ? { sector_mix: issued.sector_mix } : {}),
     statements,
     unmatched_count: unmatched,
   };
