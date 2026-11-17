@@ -52,7 +52,7 @@ import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
 import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
-import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import { usePhoneWidth, useTabletWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf } from './adapters';
 import { cellView, cycleOf, linkEvidenceAction, queryFromSearch } from './cycleModel';
@@ -437,7 +437,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
   const formOpen = adding && forms.length && !capTableAdding ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
   const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
-  const phone = usePhoneWidth();
+  // D4846 part 2 (#6032, BD14 B): a cycle whose def names `tabletPages` (Build) draws its desktop pages, laid
+  // out for 768px to 1023px, in place of the phone page there; below 768px it is the phone page, as every
+  // other cycle is below 1024px.
+  const tablet = useTabletWidth(def?.tabletPages === true);
+  const phone = usePhoneWidth() && !tablet;
   // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
   // URL becomes `/new`, the rest of the query kept. A module with no form, and
   // the overview, ignore it (D688).
@@ -713,7 +717,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
   // #3712: Add/Edit dialogs sit outside the page gate, including phone sheets.
   // The authenticated role decides read-only access; shell preview never grants writes.
-  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, user) : {};
+  // D5074 part 7: from the module read's narrative map; the account words only a read that carried none.
+  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, module?.parts?.narrative?.capabilities, user) : {};
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
@@ -1008,7 +1013,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" />
-          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1) }) : null}
+          : above ? above(module, { projectId, reload: () => setReload((n) => n + 1), query, onQuery: setQuery, search: q }) : null}
         {...(phoneRowOf ? { phoneRow: phoneRowOf } : {})}
         sources={moduleSources}
         sourcesAction={def.sourcesRegion && def.action ? def.action(q, openAction) : null}

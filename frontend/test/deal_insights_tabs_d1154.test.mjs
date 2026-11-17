@@ -138,7 +138,7 @@ test('traction: a month not reported is a gap in every series, never 0; a record
   assert.deepEqual([tile.customers.value, tile.customers.source], ['21', 'Typed · the founder’s own figure']);
   assert.deepEqual([tile.growth.value, tile.growth.reason], [null, 'Not shared in the last twelve months']);
   assert.deepEqual([tile.arr.value, tile.arr.reason], [null, 'No founder-shared ARR recorded; MRR is not annualised']);
-  assert.deepEqual([tile.nrr.value, tile.nrr.reason], [null, 'No founder-shared NRR recorded']);
+  assert.deepEqual([tile.net_retention.value, tile.net_retention.reason], [null, 'No founder-shared NRR recorded']);
   assert.equal(figureText(null, 'usd'), null);
   assert.equal(figureText(0, 'usd'), '$0');
   assert.equal(chartSummary('MRR by month', v.series.mrr).text, 'MRR by month: $10,000 in Nov 2025, $21,000 in Oct 2026. Jan 2026 was not reported.');
@@ -304,7 +304,9 @@ test('the history failing leaves the evidence slot and the scorecard rows standi
 
 test('the wiring: the three tabs drawn from their own file, the reads through dealInsightsApi, no hex colours', () => {
   const page = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
-  for (const t of ['Team', 'Market', 'Traction']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  for (const t of ['Team', 'Market']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  // D6187: Traction also takes the viewer, for Ask the founder (only a diligence case's owner may send).
+  assert.match(page, /\{tab === 'traction' && <DealTraction deal=\{deal\} userId=\{user\?\.id\} \/>\}/);
   const tabs = readFileSync(new URL('../src/pages/deal/DealInsightTabs.jsx', import.meta.url), 'utf8');
   assert.ok(!/['"`]#[0-9a-f]{3,8}['"`]|\[#[0-9a-f]{3,8}\]/i.test(tabs), 'colours come from the tokens');
   assert.match(tabs, /dealInsightsApi\.team/);

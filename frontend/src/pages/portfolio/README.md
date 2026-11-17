@@ -150,3 +150,11 @@ through `PortfolioPreview.jsx`' `OffWrites`. `previewCompanyTabOf` names the
 company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
 `PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
 notes: `documentation/architecture/decisions/D4817-p10.md`.
+
+D6888 (#6888, canvas D6217 PF-13a and PF-13h) adds Eadwyn's covering-note
+proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
+Discard, and "Eadwyn is unavailable. The statement does not need it." when
+Eadwyn is off), and `coverNoteModel.js` holds its words and what each answer
+reads as. It drafts on the press from the statement's own figures for the date
+and keeps nothing. The Statement sheet mounts it after #6867. Decision notes:
+`documentation/architecture/decisions/D6888.md`.

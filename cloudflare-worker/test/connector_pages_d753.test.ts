@@ -318,6 +318,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   facebook: '2026-11',
   tiktok: '2026-11',
+  x: '2026-11', // D2403
   google_search_console: '2026-11', // D5839
   typeform: '2026-11', // D5827
   teams: '2026-11', // D5810
@@ -363,6 +364,8 @@ const constant = (src: string, name: string) => {
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   facebook: { file: 'integrations/providers/facebook.ts', sign_in: ['AUTHORIZE', ''], api: 'GRAPH' },
   tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
+  // D2403: the founders app signs in and reads through the shared X client.
+  x: { file: 'services/xClient.ts', sign_in: ['AUTH_BASE', ''], api: 'API_BASE' },
   // D5839: Search Console's own client; the page names the property list it reads.
   google_search_console: { file: 'integrations/searchConsoleOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'SITES' },
   // D5827: the page names the US origin; an EU member's requests go to EU_API.
@@ -520,6 +523,7 @@ test('13. connectorPagePath', () => {
   assert.equal(connectorPagePath('linkedin'), '/account/connectors/linkedin');
   assert.equal(connectorPagePath('whatsapp'), '/account/connectors/whatsapp');
   assert.equal(connectorPagePath('telegram'), '/account/connectors/telegram');
+  assert.equal(connectorPagePath('x'), '/account/connectors/x', 'D2403: a one-letter key is a page');
   for (const bad of ['', '../x', 'Github', 'a/b', 'no_such_connector']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
   const re = /const PAGE_KEY_RE = \/(.+)\/;/.exec(SRC('integrations/connectorPages.ts'))![1];
   assert.equal(re, CONNECTOR_KEY_RE.source);

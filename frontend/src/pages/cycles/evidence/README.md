@@ -14,6 +14,8 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 | `moduleEvidence.js` | D1267: which surfaces and areas each Raise module shows, the newest version, a slide's claims, and the "Sources on Axal" lines |
 | `EvidencePart.jsx` | D1267: the Evidence part under each Raise module's table (VR6), and "Evidence on this slide" in the deck editor (VR7) |
 | `InvestorEvidence.jsx` | D1268: the investor's block (VR8 before the NDA, VR9 after it), one item's drawer (VR10) and the phone (VR18), on D1265's read. `EvidenceSummary` (the deal page), `SharedEvidence` (the diligence room) and `InvestorEvidence` (an investor's round call). It imports no `ui` index |
+| `ShareOutside.jsx` | D6864 (#6864): Share outside Axal's composer (RA-27), Shared links with Revoke (RA-29, `/raise/evidence/shared`) and Add evidence by hand (RA-32) |
+| `shareOutsideModel.js` | D6864: the reader choice, what each row tells the reader, link state words and glyphs, and the composer's and Add evidence's checks |
 
 `../cycleModel.js` lights Evidence after Overview in Raise's tab rail; `../../DealRoomPage.jsx` mounts `EvidenceSummary`, `../../founder/RoundCallPage.jsx` mounts `InvestorEvidence` on an investor's call, and `../../research/DiligenceRoom.jsx` mounts `SharedEvidence`. `../CycleRoute.jsx` mounts `EvidencePart` on every Raise module; `../../raise/pitch/PitchEditor.jsx` mounts `SlideEvidence`. A share-link deck draws none of it.
 
