@@ -49,6 +49,44 @@ test('fast runs the guards before installing dependencies on a single full-histo
   assert.ok(job('gate').includes("&& 'test:drift (draft fast tier)' || 'test:drift (full suite)'"));
 });
 
+// D7108 (#7108): in the merge queue, fast skips exactly the six steps that the
+// required `scan`, `worker (typecheck)` and `frontend (build)` jobs repeat on
+// the same candidate. Every other required step keeps a plain `!cancelled()`,
+// so the trusted-base migration and drift checkers still run in the queue.
+const QUEUE_SKIPPED = ['install_scanner', 'scan', 'worker_install', 'worker_typecheck', 'frontend_install', 'frontend_build'];
+const EVERY_EVENT = ['checkout', 'node', 'range', 'trusted', 'migrations', 'generated', 'drift', 'verdict'];
+function fastStepIfs(block) {
+  const out = {};
+  for (const step of block.split(/^ {6}- /m).slice(1)) {
+    const id = step.match(/^ {8}id: (\S+)$/m);
+    const cond = step.match(/^ {8}if: (.+)$/m);
+    if (id) out[id[1]] = cond ? cond[1] : null;
+  }
+  return out;
+}
+function assertQueueSkips(block) {
+  const ifs = fastStepIfs(block);
+  for (const id of QUEUE_SKIPPED) {
+    assert.equal(ifs[id], "${{ !cancelled() && github.event_name != 'merge_group' }}", `${id} is skipped only in the queue`);
+  }
+  for (const id of EVERY_EVENT) {
+    assert.equal(ifs[id], '${{ !cancelled() }}', `${id} runs on every event`);
+  }
+}
+
+test('D7108: fast skips only its six duplicated steps in the merge queue', () => {
+  assertQueueSkips(fast);
+  const swap = (id, from, to) => fast.replace(`id: ${id}\n        if: ${from}`, `id: ${id}\n        if: ${to}`);
+  const plain = '${{ !cancelled() }}';
+  const queue = "${{ !cancelled() && github.event_name != 'merge_group' }}";
+  // Mutations that must be caught: a duplicated step left running, a unique
+  // trusted-base check skipped in the queue, a step skipped on pull requests.
+  assert.throws(() => assertQueueSkips(swap('worker_typecheck', queue, plain)));
+  assert.throws(() => assertQueueSkips(swap('migrations', plain, queue)));
+  assert.throws(() => assertQueueSkips(swap('drift', plain, queue)));
+  assert.throws(() => assertQueueSkips(swap('scan', queue, "${{ !cancelled() && github.event_name == 'merge_group' }}")));
+});
+
 const verdict = shell(fast, 'Report required and advisory results');
 const verdictDefaults = Object.fromEntries([
   'CHECKOUT', 'NODE', 'INSTALL_SCANNER', 'RANGE', 'SCAN', 'TRUSTED', 'MIGRATIONS',
@@ -56,6 +94,10 @@ const verdictDefaults = Object.fromEntries([
   'LFS_BASE', 'LFS', 'FRONTEND_AUDIT', 'WORKER_AUDIT', 'PYTHON', 'PIP_TEST', 'PIP_INSTALL',
   'PIP_AUDIT', 'ROUTING_CHECK', 'ROUTING', 'AUTH', 'ROUTING_UPLOAD',
 ].map((step) => [step, 'success']));
+function QUEUE_SKIPPED_OUTCOMES(outcome) {
+  return Object.fromEntries(['INSTALL_SCANNER', 'SCAN', 'WORKER_INSTALL', 'WORKER_TYPECHECK', 'FRONTEND_INSTALL', 'FRONTEND_BUILD']
+    .map((step) => [step, outcome]));
+}
 
 for (const [label, overrides, required, advisory] of [
   ['all checks passed', {}, 'pass', 'pass'],
@@ -68,6 +110,15 @@ for (const [label, overrides, required, advisory] of [
   ['advisory checks skipped in the queue', {
     EVENT: 'merge_group', LFS_BASE: 'skipped', LFS: 'skipped', WORKER_AUDIT: 'skipped',
   }, 'pass', 'pass'],
+  // D7108: the six queue-skipped steps count as passed only under merge_group.
+  ['the six duplicated steps skipped in the queue', { EVENT: 'merge_group', ...QUEUE_SKIPPED_OUTCOMES('skipped') }, 'pass', 'pass'],
+  ['a failed typecheck in the queue', { EVENT: 'merge_group', ...QUEUE_SKIPPED_OUTCOMES('skipped'), WORKER_TYPECHECK: 'failure' }, 'fail', 'pass'],
+  ['a cancelled build in the queue', { EVENT: 'merge_group', ...QUEUE_SKIPPED_OUTCOMES('skipped'), FRONTEND_BUILD: 'cancelled' }, 'fail', 'pass'],
+  ['the migration check skipped in the queue', { EVENT: 'merge_group', ...QUEUE_SKIPPED_OUTCOMES('skipped'), MIGRATIONS: 'skipped' }, 'fail', 'pass'],
+  ['a missing drift result in the queue', { EVENT: 'merge_group', ...QUEUE_SKIPPED_OUTCOMES('skipped'), DRIFT: '' }, 'fail', 'pass'],
+  ['a missing scan result in the queue', { EVENT: 'merge_group', SCAN: '' }, 'fail', 'pass'],
+  ['the build skipped on a pull request', { FRONTEND_BUILD: 'skipped' }, 'fail', 'pass'],
+  ['gitleaks skipped on a push', { EVENT: 'push', SCAN: 'skipped' }, 'fail', 'pass'],
 ]) {
   test(`fast verdict with ${label}`, () => {
     const temp = mkdtempSync(join(tmpdir(), 'landing-gate-5606-'));
