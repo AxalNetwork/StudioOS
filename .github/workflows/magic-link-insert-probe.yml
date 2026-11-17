@@ -43,12 +43,12 @@ name: magic-link insert probe
 # nothing here follows the link or asserts a session. `magic-link-probe.yml` does
 # both and stays the only check that can close #168.
 #
-# SECRETS: two of the three already exist.
+# Secrets used by this job:
 #   MAGIC_PROBE_EMAIL      the one to add. A real email is sent to it on every
 #                          run, so it must be an inbox you own; a `+alias` of
 #                          the sending account is the cheapest. It is the same
 #                          secret the mailbox probe will want.
-#   CLOUDFLARE_API_TOKEN   already a repository secret, documented with D1 scope
+#   CLOUDFLARE_API_TOKEN   production-ops environment secret with D1 access
 #   CLOUDFLARE_ACCOUNT_ID  already a repository secret
 #
 # SIDE EFFECTS PER RUN, both real: one row in production `magic_link_tokens`
@@ -80,6 +80,7 @@ permissions:
 
 jobs:
   probe:
+    environment: production-ops
     name: magic-link insert
     runs-on: ubuntu-latest
     timeout-minutes: 10

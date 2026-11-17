@@ -20,8 +20,8 @@ name: Cloudflare Worker deploy
 # inventory and packaged Worker startup. The manual deploy command dispatches
 # this same workflow on main.
 #
-# Required repository secrets:
-#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit AND D1:Edit
+# The production environment supplies the release credentials (D7145):
+#   CLOUDFLARE_API_TOKEN  — see the production credential inventory
 #   CLOUDFLARE_ACCOUNT_ID — the Cloudflare account containing `studioos`
 
 on:
@@ -58,6 +58,7 @@ jobs:
 
   deploy:
     name: build and deploy studioos Worker
+    environment: production
     needs: admission
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -73,6 +74,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Verify the production environment branch policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-environment.mjs
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -348,11 +354,20 @@ jobs:
   # neither can skip the other.
   schema-drift:
     name: repo can still rebuild production's schema
+    environment: production
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify the production environment branch policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-environment.mjs
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -408,6 +423,7 @@ jobs:
   # outcome, and the job goes red if any failed.
   branches:
     name: redeploy every provisioned branch
+    environment: production
     needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -423,6 +439,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+
+      - name: Verify the production environment branch policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-environment.mjs
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:

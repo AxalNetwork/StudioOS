@@ -28,9 +28,9 @@ name: Provision a branch
 # -> write registry -> generate config -> migrate. A step moved is a step that
 # fails.
 #
-# Required repository secrets:
-#   CLOUDFLARE_API_TOKEN   — Workers Scripts:Edit, D1:Edit, Workers KV:Edit,
-#                            R2:Edit, Queues:Edit, Vectorize:Edit, Zone DNS:Edit
+# Required secrets for production-ops:
+#   Subsidiary publishing needs separate credentials before this can run
+#   with the non-publishing operations token. See PRODUCTION_CREDENTIALS.md.
 #   CLOUDFLARE_ACCOUNT_ID  — the account holding `studioos`
 #   BRANCH_SECRET_BUNDLE   — newline-separated NAME=VALUE pairs copied to the
 #                            new Worker (D.11's named list). Never echoed.
@@ -97,6 +97,7 @@ permissions:
 
 jobs:
   provision:
+    environment: production-ops
     name: provision ${{ inputs.code }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -134,7 +135,7 @@ jobs:
           if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then MISSING+=("CLOUDFLARE_API_TOKEN"); fi
           if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then MISSING+=("CLOUDFLARE_ACCOUNT_ID"); fi
           if [[ ${#MISSING[@]} -gt 0 ]]; then
-            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo "::error::Required secret(s) are missing or empty: ${MISSING[*]}"
             exit 1
           fi
 
@@ -291,7 +292,7 @@ jobs:
           # secret is one value that every branch stores the hash of — and
           # generating it here would rotate it on every provision, silently
           # breaking the HQ→branch leg for every branch provisioned earlier.
-          # It is a repository secret the operator sets once (D.11).
+          # The operator sets it once in production-ops (D.11, D7145).
           #
           # ONLY THE HASH IS SET HERE. The plaintext belongs on HQ's Worker, and
           # putting it from this job would mean a `wrangler secret put --config

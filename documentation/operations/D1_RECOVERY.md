@@ -308,7 +308,7 @@ nothing is copied.
      prefix or a rule the provider offers for it.
 3. **Make a write-only key** that can only put objects and read their metadata
    (`PutObject`, `HeadObject`) in that bucket. It must not be able to delete,
-   list or read object content. Store it as the repository secrets
+   list or read object content. Store it in the `production-ops` environment secrets
    `DR_COPY_ACCESS_KEY_ID` and `DR_COPY_SECRET_ACCESS_KEY`.
 4. **Make the owner's key, offline:** `age-keygen -o d1-recovery.key`.
    - Keep the file on two offline media in two places, never in the

@@ -41,6 +41,7 @@ permissions:
 
 jobs:
   rehearse:
+    environment: production-ops
     name: provision, seed, export, restore, compare
     runs-on: ubuntu-latest
     timeout-minutes: 180

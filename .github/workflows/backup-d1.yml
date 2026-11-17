@@ -48,6 +48,7 @@ env:
 
 jobs:
   backup:
+    environment: production-ops
     runs-on: ubuntu-latest
     env:
       # D4558: a step's `if:` cannot see its own `env:` (the defect D263 fixed
@@ -71,12 +72,12 @@ jobs:
             MISSING+=("CLOUDFLARE_ACCOUNT_ID")
           fi
           if [[ ${#MISSING[@]} -gt 0 ]]; then
-            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            echo "::error::Required secret(s) are missing or empty: ${MISSING[*]}"
             echo ""
-            echo "These must be set as REPOSITORY secrets (not environment-scoped):"
-            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo "Set CLOUDFLARE_API_TOKEN in Settings → Environments → production-ops."
+            echo "Check that CLOUDFLARE_ACCOUNT_ID is available to the job."
             echo ""
-            echo "Required token scopes: D1 export/read + R2 object write."
+            echo "Token permissions are listed in documentation/operations/PRODUCTION_CREDENTIALS.md."
             echo "See .github/workflows/README.md for the full triage guide."
             exit 1
           fi
