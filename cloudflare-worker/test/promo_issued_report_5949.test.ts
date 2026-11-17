@@ -10,7 +10,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/promo_issued_report_5949.test.ts
  */
-import test, { mock } from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -33,6 +33,10 @@ const SECRET = 'synthetic-promo-report-secret';
 const NOW = new Date('2026-11-15T09:00:00.000Z');
 const PERIOD = quarterKey(NOW); // 2026-Q4
 const PREVIOUS = '2026-Q3';
+// The reads judge "stale" and "this quarter" against the wall clock, so the
+// clock is pinned to NOW: these assertions must not expire 48 hours after NOW.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+afterEach(() => mock.timers.reset());
 const SUPER = 1;
 const LICENCE = 'lic_aa';
 
@@ -82,17 +86,11 @@ function branch(hqEnv: any, { period = PERIOD, currency = 'EUR' } = {}, binding?
 
 const app = new Hono<any>();
 app.route('/api/admin', adminStatements);
-// HQ's read judges freshness against its own clock (`promoIssuedState`'s default `now`). The fixtures are
-// stamped at NOW, so the read runs at NOW too: otherwise "reported" turns "stale" 48 hours after NOW on the
-// real calendar, and the test fails on any later day (it did, on 2026-11-17). Only `Date` is mocked.
 async function ceilings(env: any) {
-  mock.timers.enable({ apis: ['Date'], now: NOW });
-  try {
-    const token = await new SignJWT({ user_id: SUPER, role: 'admin', jti: 'totp-1' })
-      .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-    const res = await withThrownResponses(() => app.request('/api/admin/promo-ceilings', { headers: { Authorization: `Bearer ${token}` } }, env));
-    return { status: res.status, body: await res.json() as any };
-  } finally { mock.timers.reset(); }
+  const token = await new SignJWT({ user_id: SUPER, role: 'admin', jti: 'totp-1' })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await withThrownResponses(() => app.request('/api/admin/promo-ceilings', { headers: { Authorization: `Bearer ${token}` } }, env));
+  return { status: res.status, body: await res.json() as any };
 }
 const row = (db: DatabaseSync, period = PERIOD) => db.prepare('SELECT * FROM licence_promo_ceilings WHERE licence_uid = ? AND period = ?').get(LICENCE, period) as any;
 const quiet = async <T>(f: () => Promise<T>) => {
