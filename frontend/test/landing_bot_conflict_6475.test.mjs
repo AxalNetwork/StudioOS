@@ -13,7 +13,7 @@ import { editMain } from '../../scripts/landing-bot/model/edit.mjs';
 import { verifyMain } from '../../scripts/landing-bot/model/verify.mjs';
 import { parseTask } from '../../scripts/landing-bot/model/task.mjs';
 import {
-  addedLines, afterStage, checkResolution, checkResolvedFile, conflictLines, gate, reservedToday, testsFor, verifyCommands,
+  addedLines, afterStage, checkResolution, checkResolvedFile, conflictLines, gate, namesModule, reservedToday, testsFor, verifyCommands,
 } from '../../scripts/landing-bot/resolve-rules.mjs';
 import { applyStage, runsOf } from '../../scripts/landing-bot/resolve.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
@@ -166,6 +166,16 @@ test('#6475: verify runs the installs, a typecheck or build for the side touched
   assert.equal(cmds.length, 6);
   assert.deepEqual(cmds.slice(3, 5), [['npm', 'run', 'test:types'], ['npm', 'run', 'build']]);
   for (const c of cmds) assert.ok(['node', 'npm', 'npx'].includes(c[0]));
+});
+
+test('#6475: a test names a module only as a quoted specifier, and a file name never becomes a pattern', () => {
+  assert.equal(namesModule("import x from '../src/pages/validate.js';", 'validate'), true);
+  assert.equal(namesModule('import x from "validate";', 'validate'), true);
+  assert.equal(namesModule("import x from '../src/pages/validate.test.js';", 'validate'), false, 'a longer name is another module');
+  assert.equal(namesModule("import x from '../src/pages/prevalidate.js';", 'validate'), false);
+  assert.equal(namesModule("validate.js'", 'validate'), false, 'no opening quote or slash at the start of the text');
+  assert.equal(namesModule("import x from '../a/(a+)+$.js';", '(a+)+$'), true, 'regex characters in a stem are plain text');
+  assert.equal(namesModule('x', ''), false);
 });
 
 /** A stub provider that does what a model would through the runner's tools. */

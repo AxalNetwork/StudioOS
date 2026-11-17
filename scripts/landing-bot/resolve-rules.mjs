@@ -174,6 +174,28 @@ export function verifyCommands(files, tests = { worker: [], frontend: [] }) {
   return cmds.slice(0, 6);
 }
 
+/**
+ * True when `text` names `stem` as a module specifier: a quote or slash, the stem, an optional lowercase extension, then
+ * a closing quote (`'../src/pages/validate.js'`). Plain string scanning, no RegExp built from a file name (Semgrep
+ * detect-non-literal-regexp, code scanning alert 7281).
+ */
+export function namesModule(text, stem) {
+  if (!stem) return false;
+  const quote = (c) => c === "'" || c === '"';
+  for (let i = text.indexOf(stem); i !== -1; i = text.indexOf(stem, i + 1)) {
+    const before = text[i - 1];
+    if (!quote(before) && before !== '/') continue;
+    let j = i + stem.length;
+    if (text[j] === '.') {
+      let k = j + 1;
+      while (k < text.length && text[k] >= 'a' && text[k] <= 'z') k++;
+      if (k > j + 1 && quote(text[k])) return true;
+    }
+    if (quote(text[j])) return true;
+  }
+  return false;
+}
+
 /** Tests to run for the conflicted files: test files that import one of them, else ones named like it. At most 4 per area. */
 export function testsFor(files, testSources) {
   const pick = { worker: [], frontend: [] };
@@ -181,7 +203,7 @@ export function testsFor(files, testSources) {
   for (const [path, text] of Object.entries(testSources || {})) {
     const area = path.startsWith('cloudflare-worker/test/') ? 'worker' : path.startsWith('frontend/test/') ? 'frontend' : null;
     if (!area || pick[area].length >= 4 || path.split('/').pop().startsWith('_')) continue;
-    const hit = stems.some(({ stem }) => new RegExp(`['"/]${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\.[a-z]+)?['"]`).test(String(text)) || path.includes(stem));
+    const hit = stems.some(({ stem }) => namesModule(String(text), stem) || path.includes(stem));
     if (hit) pick[area].push(path);
   }
   return pick;
