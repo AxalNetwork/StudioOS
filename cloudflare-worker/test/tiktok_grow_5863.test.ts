@@ -156,8 +156,9 @@ test('1. a sync lands today\'s snapshot and the public videos through the ledger
   const dist = (await read(w, 'distribution')).body;
   assert.deepEqual(dist.parts.from_tiktok.videos.map((v: any) => v.video_id), ['7301', '7302', '7303']);
   assert.deepEqual(dist.parts.from_tiktok.videos[2].reasons, { views: 'Not recorded: TikTok gave no figure for this video', comments: 'Not recorded: TikTok gave no figure for this video', shares: 'Not recorded: TikTok gave no figure for this video' });
-  // The funnel's Visit row is computed in growCycle.ts, which never reads TikTok: a view is not a visit.
-  assert.doesNotMatch(readFileSync('cloudflare-worker/src/services/growCycle.ts', 'utf8'), /tiktok/i);
+  // The funnel's Visit row is PostHog's (D6107), which never reads TikTok: a view is not a visit. D5867's reach line
+  // sits beside the funnel, never in it (`tiktok_part3_5867.test.ts`).
+  assert.doesNotMatch(readFileSync('cloudflare-worker/src/services/posthog/visits.ts', 'utf8'), /tiktok/i);
 });
 
 test('2. a re-sync updates the same rows, and a deleted fact stays deleted', async () => {

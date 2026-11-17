@@ -5,8 +5,10 @@
  *
  * REMINDERS. For each N in an obligation's `remind_days_json`, once the day
  * `due_date` − N has come and while the obligation is not completed, one
- * notification goes to `owner_user_id`, else to the venture's founder (the
- * user whose `founder_id` is the project's). N is then appended to
+ * notification goes to `owner_user_id` while that person is still on the
+ * company team (D6790, #6790: the venture's `user_company_links`), else to the
+ * venture's founder (the user whose `founder_id` is the project's), and its
+ * body names who it went to and why. N is then appended to
  * `reminders_sent_json`, so it is sent once, and a day the step missed is
  * caught by the next run. A due-date change resets that list to `[]` (the
  * PATCH writer and Mark held), which re-arms every reminder.
@@ -33,6 +35,7 @@
 import type { Env } from '../types';
 import { notify } from './notify';
 import { checkKpiAlerts } from './growKpis';
+import { ownerShown } from './obligationOwner';
 
 const DAY = 86_400_000;
 
@@ -52,7 +55,26 @@ export const reminderLabel = (n: number): string => (n === 0 ? 'On the day' : n 
 type Obligation = {
   id: number; project_id: number; title: string; due_date: string; remind_days_json: string | null;
   reminders_sent_json: string | null; owner_user_id: number | null; founder_id: number | null;
+  owner_name: string | null; owner_user_name: string | null; owner_on_team: number;
 };
+
+/**
+ * D6790: who an obligation's reminder goes to, and the line that names them.
+ * The picked owner while they are on the company team; otherwise the founder,
+ * told why it came to them (no one picked, a name typed before #6790, or an
+ * owner who has left the team).
+ */
+export function reminderAssignee(e: Pick<Obligation, 'owner_user_id' | 'owner_name' | 'owner_user_name' | 'owner_on_team'>):
+  { to: 'owner' | 'founder'; line: string } {
+  if (e.owner_user_id != null && Number(e.owner_on_team) === 1) {
+    return { to: 'owner', line: `Sent to ${ownerShown(e.owner_user_name, null) ?? 'you'}, its owner on the company team.` };
+  }
+  if (e.owner_user_id != null) return { to: 'founder', line: 'Sent to you as the founder: its owner is no longer on the company team.' };
+  const typed = ownerShown(null, e.owner_name);
+  return { to: 'founder', line: typed
+    ? `Sent to you as the founder: it names ${typed}, who was typed in rather than picked from the company team.`
+    : 'Sent to you as the founder: no one on the company team is its owner yet.' };
+}
 
 export async function founderUser(env: Env, founderId: number | null): Promise<number | null> {
   if (founderId == null) return null;
@@ -66,8 +88,11 @@ export async function founderUser(env: Env, founderId: number | null): Promise<n
 export async function sendObligationReminders(env: Env, now: number): Promise<number> {
   const today = new Date(now).toISOString().slice(0, 10);
   const res = await env.DB.prepare(
-    `SELECT e.id, e.project_id, e.title, e.due_date, e.remind_days_json, e.reminders_sent_json, e.owner_user_id, p.founder_id
+    `SELECT e.id, e.project_id, e.title, e.due_date, e.remind_days_json, e.reminders_sent_json, e.owner_user_id, p.founder_id,
+            e.owner_name, o.name AS owner_user_name,
+            EXISTS (SELECT 1 FROM user_company_links l WHERE l.company_id = p.company_id AND l.user_id = e.owner_user_id) AS owner_on_team
        FROM compliance_events e JOIN projects p ON p.id = e.project_id
+       LEFT JOIN users o ON o.id = e.owner_user_id
       WHERE e.remind_days_json IS NOT NULL AND e.completion_status <> 'completed'
       ORDER BY e.id`,
   ).all<Obligation>();
@@ -81,14 +106,15 @@ export async function sendObligationReminders(env: Env, now: number): Promise<nu
       'UPDATE compliance_events SET reminders_sent_json = ? WHERE id = ? AND COALESCE(reminders_sent_json, \'[]\') = COALESCE(?, \'[]\')',
     ).bind(JSON.stringify([...sentDays, ...due].sort((a, b) => b - a)), e.id, e.reminders_sent_json).run();
     if (!claim.meta?.changes) continue;
-    const to = e.owner_user_id != null ? Number(e.owner_user_id) : await founderUser(env, e.founder_id);
+    const assignee = reminderAssignee(e);
+    const to = assignee.to === 'owner' ? Number(e.owner_user_id) : await founderUser(env, e.founder_id);
     if (to == null) continue;
     for (const n of due) {
       await notify(env, {
         userId: to, type: 'grow_obligation_reminder', title: `${e.title} is due ${e.due_date}`,
-        body: `${reminderLabel(n)}: the reminder you set on this obligation.`,
+        body: `${reminderLabel(n)}: the reminder set on this obligation. ${assignee.line}`,
         link: `/grow/durable-company-building/${e.id}?project_id=${e.project_id}`,
-        payload: { project_id: e.project_id, obligation: e.id, days_before: n }, channels: ['in_app'], category: 'compliance',
+        payload: { project_id: e.project_id, obligation: e.id, days_before: n, assignee_user_id: to }, channels: ['in_app'], category: 'compliance',
       });
       sent += 1;
     }

@@ -78,9 +78,20 @@ with the ones ahead of it is taken out of the queue with the reason.
 Only these three workflows listen for `merge_group`. Previews, reviews,
 comments and deployment stay outside the queue. The deploy starts on a push
 to `main`. During the D5606 shadow phase, `ci / fast` and `landing gate` also
-run in the queue. The fast job runs the required guards, typecheck and build
-there. Dependency audits and routing docs run on PRs and pushes, and the
-LFS check runs on PRs.
+run in the queue. There the fast job runs only the migration and drift
+checkers loaded from the trusted base. Its gitleaks, typecheck and build
+steps are skipped in the queue, because the required `scan`,
+`worker (typecheck)` and `frontend (build)` jobs run the same commands on the
+same candidate (D7108). So in the queue, `ci / fast` and `landing gate` do
+not reflect typecheck, build or secret-scan results, and the D5606 shadow
+comparison covers only migrations, drift and the suite there. Before the
+D5606 cutover makes either check required, or the `frontend`, `worker` or
+`scan` jobs are deleted, those six skips and the verdict's `merge_group`
+skip branch must be reverted; `landing_gate_5606.test.mjs` fails otherwise.
+On PRs and pushes, fast runs every step. Dependency
+audits and routing docs run on PRs and pushes, and the LFS check runs on PRs.
+The `worker-*` suite parts skip the frontend install and the SPA build, which
+only the `frontend-*` parts and `rest` need (D7108).
 
 The two aggregators run on `always()` so a failing dependency cannot make
 either check report as skipped. `landing gate` requires a passing fast

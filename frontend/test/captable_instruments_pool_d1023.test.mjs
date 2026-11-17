@@ -93,7 +93,7 @@ const PLAN = {
   scope: { kind: 'venture', project_id: 3 },
   pools: [{ id: 1, name: 'Options', shares_authorized: 1500000, shares_issued: 382000, shares_available: 1118000, source: 'manual' }],
   grants: [
-    { id: 1, holder_id: 15, start_date: '2025-03-01', cliff_months: 12, total_months: 48, total_shares: 300000, vested_shares: 118750, source: 'manual' },
+    { id: 1, holder_id: 15, start_date: '2025-03-01', cliff_months: 12, total_months: 48, total_shares: 300000, vested_shares: 118750, unvested_shares: 181250, vested_basis: 'schedule', vested_as_of: '2026-11-15', source: 'manual' },
     { id: 2, holder_id: 16, start_date: '2026-04-01', cliff_months: 0, total_months: 24, total_shares: 82000, vested_shares: 20500, source: 'manual' },
   ],
   summary: { pool_count: 1, grant_count: 2, shares_authorized: 1500000, shares_issued: 382000, shares_available: 1118000, granted_shares: 382000, vested_shares: 139250, unvested_shares: 242750 },
@@ -283,7 +283,7 @@ test('the grants from the venture\'s plan, named, priced and dated from the reco
   const rows = grantRows(PLAN, RECORD);
   assert.deepEqual(rows[0], {
     key: 1, holder: 'Jo Rivera', role: 'Employee', roleKey: 'employee', sharesN: 300000, shares: '300,000', strike: '$0.30', grantDate: '2 Feb 2026', grantOn: '2026-02-02',
-    vesting: '48 months · 12-month cliff · from 1 Mar 2025', vested: '118,750', exercise: 'Not exercised', document: 'Data room file', carta: false,
+    vesting: '48 months · 12-month cliff · from 1 Mar 2025', onGrant: false, vested: '118,750', unvested: '181,250', vestedBasis: 'Worked out from the schedule on 15 Nov 2026', exercise: 'Not exercised', document: 'Data room file', carta: false,
   });
   assert.equal(rows[1].vesting, '24 months · no cliff · from 1 Apr 2026');
   assert.equal(rows[1].document, null);
@@ -486,7 +486,7 @@ test('Option pool draws the tiles, the burn-down with the target, the 409A\'s ch
     assert.match(v.text(v.by('captable-409a')), /Safe harbour in force until 2027-03-03\. FMV \$0\.42 per common share/);
     assert.ok(v.hrefs().includes('/raise/cap-table/scenarios?project_id=3'), 'Top up the pool opens Scenarios (D1029)');
     assert.equal(v.count('captable-grant'), 2);
-    assert.match(v.text(v.by('captable-grants-table')), /Jo Rivera Employee 300,000 \$0\.30 2 Feb 2026 48 months · 12-month cliff · from 1 Mar 2025 118,750 Not exercised Data room file/);
+    assert.match(v.text(v.by('captable-grants-table')), /Jo Rivera Employee 300,000 \$0\.30 2 Feb 2026 48 months · 12-month cliff · from 1 Mar 2025 118,750 Worked out from the schedule on 15 Nov 2026 181,250 Not exercised Data room file/);
     assert.equal(v.text(v.by('captable-grants-foot')), 'Vested 139,250 adds up the 2 rows.');
     await v.change(v.by('captable-grants-role'), 'advisor');
     assert.equal(v.count('captable-grant'), 1);

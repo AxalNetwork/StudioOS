@@ -85,6 +85,7 @@ function freshDb() {
       due_date TEXT NOT NULL, completion_status TEXT NOT NULL DEFAULT 'pending',
       completed_at TEXT, completed_by_user_id INTEGER, recurrence TEXT DEFAULT 'none',
       source TEXT DEFAULT 'manual', reminders_sent_json TEXT DEFAULT '[]',
+      owner_name TEXT, owner_user_id INTEGER, -- migration 443; D6790's reads join the owner
       created_by_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))

@@ -259,8 +259,8 @@ function Grants({ plan, record, retry }) {
             : rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-grants-filtered">No grant matches these filters.</p>
               : (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse" data-testid="captable-grants-table">
-                    <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Role', 'Shares', 'Strike', 'Grant date', 'Vesting', 'Vested', '83(b) or exercise', 'Document'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+                  <table className="w-full min-w-[1040px] border-collapse" data-testid="captable-grants-table">
+                    <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Holder', 'Role', 'Shares', 'Strike', 'Grant date', 'Vesting', 'Vested', 'Unvested', '83(b) or exercise', 'Document'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
                     <tbody>
                       {rows.map((g) => (
                         <tr key={g.key} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-grant">
@@ -269,8 +269,9 @@ function Grants({ plan, record, retry }) {
                           <td className={`${TD} ${MONO}`}>{g.shares}</td>
                           <td className={`${TD} ${MONO}`}>{g.strike}</td>
                           <td className={`${TD} ${MONO}`}>{g.grantDate}</td>
-                          <td className={`${TD} text-[11.5px]`}>{g.vesting}</td>
-                          <td className={`${TD} ${MONO}`}>{g.vested}</td>
+                          <td className={`${TD} text-[11.5px]`}>{g.vesting}{g.onGrant ? <span className={`block ${MUTED}`} data-testid="captable-grant-on-grant">On the grant</span> : null}</td>
+                          <td className={`${TD} ${MONO}`} data-testid="captable-grant-vested">{g.vested}{g.vestedBasis ? <span className={`block font-sans text-[11px] ${MUTED}`} data-testid="captable-grant-vested-basis">{g.vestedBasis}</span> : null}</td>
+                          <td className={`${TD} ${MONO}`} data-testid="captable-grant-unvested">{g.unvested}</td>
                           <td className={`${TD} ${MUTED}`}>{g.election ? <span className="block" data-testid="captable-grant-election">{g.election}</span> : null}{g.exercise}</td>
                           <td className={TD}>{g.document ? <span className="text-[11.5px] text-axal-violet dark:text-violet-400">{g.document}</span> : <span className={`${PILL} ${AMBER}`}>! No document</span>}</td>
                         </tr>

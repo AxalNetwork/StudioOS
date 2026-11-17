@@ -60,7 +60,9 @@ function worker(user, o = {}) {
     if (method !== 'GET') return write ? write(path, method, options) : never();
     if (/^\/api\/admin\/programs\/[^/]+\/activity$/.test(path)) return response({ program: 'perks', rows: [], next_before: null, not_audited: null });
     if (path === '/api/admin/programs/perks') return detail();
-    if (path === '/api/admin/programs/learning') return response({ ...DETAIL, program: { ...DETAIL.program, key: 'learning', name: 'Learning', modules: ['learners'] } });
+    // D5887 (#5887): Learning has moved into the shell, as have Referral partners, Mentor and Investor cohorts and
+    // Influencers. Refer & Earn has not: its /availability is still the registry-backed page, so it stands for the rest.
+    if (path === '/api/admin/programs/refer-and-earn') return response({ ...DETAIL, program: { ...DETAIL.program, key: 'refer-and-earn', name: 'Refer & Earn', modules: [] } });
     if (path === '/api/perks/admin/listings') return response({ items: [listing('p1', 'in_review'), listing('p3', 'in_review')], total: 2 });
     if (path === '/api/perks/admin/claims') return claims();
     if (path === '/api/perks') return response({ items: [{ uid: 'live1' }] });
@@ -252,11 +254,11 @@ test('Settings and Availability are the shell\'s: HQ sets member access on perks
   } finally { await overview.close(); }
 });
 
-test('only Perks moved: another built-in program\'s new sections still open the registry-backed page', async () => {
-  const view = await mounted('/admin/programs/learning/settings', worker(ADMIN), ADMIN);
+test('a built-in program not yet moved: its new sections still open the registry-backed page', async () => {
+  const view = await mounted('/admin/programs/refer-and-earn/availability', worker(ADMIN), ADMIN);
   try {
     assert.ok(view.has('admin-board-program-generic'));
-    assert.ok(view.has('programs-generic-settings'));
+    assert.ok(view.has('programs-generic-availability'));
     assert.ok(!view.has('programs-page-perks'));
   } finally { await view.close(); }
 });
