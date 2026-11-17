@@ -49,9 +49,9 @@ own Retry; neither is a bar or a zero. The Overview's summary moved here as
 D4817 part 4 (canvas PF-04) draws Reports
 (`../investor/InvestorPortfolioUpdates.jsx` at `/portfolio/updates`) in the
 same frame (`tab="updates"`). The obligations inbox is one row per company in
-the reporting population (`obligationRowsOf`): its period, a Due cell that
-says no due date is recorded (`NO_DUE_DATE`) rather than counting overdue
-days, the last update received, the shared `ObligationStatus`, what is
+the reporting population (`obligationRowsOf`): its period, a Due cell with
+the Worker's due day or "Overdue by N days" (`dueOf`, D6204; Not recorded
+with the reason, `NO_DUE_DATE`, when the read gives none), the last update received, the shared `ObligationStatus`, what is
 missing against the required KPI set (`missingFor`, measured only against an
 update for the period, `periodCovers`) and the last chase (`lastChaseOf`). The
 report detail opens in the shared Sheet with each field's source and date
