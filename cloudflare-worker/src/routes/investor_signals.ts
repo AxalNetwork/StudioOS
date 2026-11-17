@@ -300,10 +300,10 @@ investorProfile.put('/me', async (c) => {
     return out;
   })();
 
-  // Onboarding fields the Settings cards don't send. Preserve-if-absent: the
-  // two Settings cards PUT a fixed subset (no accreditation/firm/LP/notes), so
-  // treating absent as null would wipe what onboarding persisted. Only
-  // overwrite when the key is present in the body.
+  // Onboarding fields. Preserve-if-absent: the Settings cards PUT a fixed
+  // subset, and "My thesis" sends one of these at a time when the investor
+  // corrects it (#6136), so treating absent as null would wipe the others.
+  // Only overwrite when the key is present in the body; present-but-blank clears.
   const ACCRED_OPTIONS = ['accredited', 'qp', 'non_us', 'not_sure'];
   const LP_INTENT_OPTIONS = ['yes_now', 'maybe', 'deal_only', 'no'];
   const existing = await c.env.DB.prepare(
