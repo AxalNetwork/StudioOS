@@ -54,6 +54,9 @@ async function admittedRuns(w: World, n: number): Promise<string[]> {
 const metricRows = (w: World, like: string) =>
   w.db.prepare('SELECT metric_name, value, labels FROM system_metrics WHERE metric_name LIKE ? ORDER BY id').all(like) as Array<{ metric_name: string; value: number; labels: string }>;
 
+/** Yield `n` event-loop turns: lets every other start reach its await, with no timer. */
+const turns = async (n: number) => { for (let i = 0; i < n; i += 1) await new Promise<void>((r) => setImmediate(r)); };
+
 test('a batch starts its Workflows together; one failed start is retried and the others are acked', async () => {
   const w = world();
   try {
@@ -64,8 +67,9 @@ test('a batch starts its Workflows together; one failed start is retried and the
     const start = async (_env: any, r: { uid: string }) => {
       inFlight += 1; peak = Math.max(peak, inFlight);
       if (inFlight === uids.length) release();
-      // Run one after another the gate never opens; the timeout keeps that failure a red test, not a hang.
-      await Promise.race([gate, new Promise((r) => setTimeout(r, 200))]);
+      // Run one after another the gate never opens; a bounded number of event-loop turns (no clock)
+      // keeps that failure a red test, not a hang.
+      await Promise.race([gate, turns(50)]);
       inFlight -= 1;
       if (r.uid === uids[1]) throw new Error('workflow create failed');
     };
