@@ -14,6 +14,11 @@ the generic route wrapper once a canvas has graduated.
   commitment for an investor on HQ only. It never draws a balance, and the
   account id lives in state only. `proofOfFundsModel.js` holds its words and
   rules, pure, and fills in the Worker's own consent and statement words.
+- `FundTermsForm.jsx` (D6235, #6235) is Create a fund record on the Fund
+  overview's no-fund state (FV1b, `POST /api/funds`) and Edit terms on the
+  fund page (`PATCH /api/funds/:id`) for the general partner of record. Its
+  rules and words are in `fundTermsModel.js`, pure, which reuses the admin
+  console's parsers in `../admin/fundAdmin/fundsModel.js`.
 - `PortfolioCompanyPage.jsx` (D1056, #2427) is the investor's page per
   portfolio company at `/portfolio/companies/:uid`, with Figures, Reports
   (`/reports`) and Terms (`/terms`). The header is the caller's own position
