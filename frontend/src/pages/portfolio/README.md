@@ -151,6 +151,16 @@ company addresses, so `pageOwnsPreviewBanner` (and App.jsx's
 `PREVIEW_BANNER_COMPANY`) stand the shell's strip down there too. Decision
 notes: `documentation/architecture/decisions/D4817-p10.md`.
 
+D6867 (#6867, canvas D6217 PF-13) adds the shareable statement: a
+Statement action on Overview and Performance opens `StatementSheet.jsx` (the
+sheet: the quarter-end chooser, the preview strip, the mismatch note, the
+cover note, Download PDF and the downloaded confirmation; `statement.css`
+holds its styles on the frame's tokens). `statementModel.js` is its pure half
+(`statementDatesOf`, `previewOf`, `mismatchOf`, `fundedAfter`,
+`summaryRowsOf`, `positionRowsOf`, `statementOf`) and owns `METHODOLOGY`,
+which Performance draws and page 5 prints word for word. The PDF is
+`../../lib/portfolioStatementPdf.js`. Decision notes:
+`documentation/architecture/decisions/D6867.md`.
 D6888 (#6888, canvas D6217 PF-13a and PF-13h) adds Eadwyn's covering-note
 proposal for the statement: `StatementCoverNote.jsx` is the card (Copy, Edit,
 Discard, and "Eadwyn is unavailable. The statement does not need it." when
