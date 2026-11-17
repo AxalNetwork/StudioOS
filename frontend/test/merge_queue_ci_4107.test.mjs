@@ -81,6 +81,12 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "always() && github.event_name == 'pull_request'",
 ]);
 
+// Jobs that run in the queue although no required check needs them, each with
+// why. D5608: `test-deps` merges the suite parts' traces into one artifact per
+// commit; a push that `verified` skips has none, so the queue run must make it.
+// test_tracer_5608.test.mjs keeps it advisory: neither gate needs it.
+const QUEUE_ADVISORY = Object.freeze({ 'test-deps': 'D5608' });
+
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
 test('every required and shadow check comes from a job in its workflow, which listens for merge_group and runs there', () => {
@@ -121,6 +127,7 @@ test('in a queue workflow, jobs outside the required and shadow checks skip unde
     for (const j of all) {
       if (required.has(queueName(j))) continue;
       if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
+      if (f === 'ci.yml' && Object.hasOwn(QUEUE_ADVISORY, j.id)) continue;
       assert.ok(
         SKIPS_IN_QUEUE.includes(j.if),
         `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,
