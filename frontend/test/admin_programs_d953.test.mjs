@@ -730,7 +730,8 @@ test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s throu
   // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client; D962 part 1's programsApi.
   // D963 (#2796) adds parts 5 and 6's clients; D4298 (#4298) the Influencers client.
   assert.deepEqual([...new Set(clients)].sort(), ['adminInfluencers:adminInfluencersApi', 'adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'investorCohorts:investorCohortsApi',
-    'learning:learningApi', 'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
+    'learning:learningApi', 'licencePrograms:licenceProgramsApi', 'licenceRequests:licenceRequestsApi',
+    'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
   assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');
