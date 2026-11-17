@@ -27,6 +27,7 @@ import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
 import { csvCell } from './capTableRegister';
 import { winAnsiSafe } from './legalDocFormat';
+import { liveFiles } from './dataRoomTrash';
 import { formatMinor, toMajorString } from '../../../frontend/src/lib/money.js';
 
 /** Q2, option A. */
@@ -347,7 +348,8 @@ export async function startFromClosed(env: Env, call: CallRow, actor: User, inpu
   const project = await projectFacts(env, call.project_id);
   let room = call.data_room_project_uid ?? null;
   if (room) {
-    const recorded = await env.DB.prepare('SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id=?)+(SELECT COUNT(*) FROM data_room_folders WHERE project_id=?) AS n').bind(project.id, project.id).first<{ n: number }>();
+    // A file in Trash is not data-room content to carry (D6073): `liveFiles` leaves it out.
+    const recorded = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM data_room_files WHERE project_id=?${await liveFiles(env.DB)})+(SELECT COUNT(*) FROM data_room_folders WHERE project_id=?) AS n`).bind(project.id, project.id).first<{ n: number }>();
     if (!recorded?.n || room !== project.uid) room = null;
   }
   const carried: Record<string, unknown> = {};
