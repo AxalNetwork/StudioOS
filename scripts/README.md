@@ -33,6 +33,7 @@
 | `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
 | `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
 | `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
+| `d1-backup-upload.sh` | Uploads the nightly D1 SQL export to the primary R2 bucket over its S3-compatible multipart API. |
 
 ## The guards
 
