@@ -60,8 +60,14 @@ export function botRequeues(prs, botLogin) {
   return prs.flatMap((p) => p.added.filter((e) => e.actor?.login === botLogin).map((e) => ({ pr: p.number, at: e.at })));
 }
 
-const out = (k, v) => { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); };
-const say = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${s}\n`); };
+// Values come from the API. A line break in one would start a second `key=value` line in GITHUB_OUTPUT (an output
+// another step trusts), so each is written on one line, with only safe characters in the key.
+export const oneLine = (v) => String(v ?? '').replace(/[\r\n]+/g, ' ');
+const out = (k, v) => {
+  if (!/^[a-z_]+$/.test(k)) throw new Error(`bad output name ${k}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${oneLine(v)}\n`);
+};
+const say = (s) => { if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${oneLine(s)}\n`); };
 
 async function ciRuns(gh, query) {
   return (await gh.get(`actions/workflows/ci.yml/runs?${query}&per_page=50`)).workflow_runs || [];
@@ -93,7 +99,7 @@ export async function sweep(env, {
   const repair = [];
   for (const pr of todo) {
     const removal = [...pr.removed].sort((a, b) => (a.at < b.at ? 1 : -1))[0];
-    const queueRun = (await ciRuns(gh, 'event=merge_group')).find((r) => new RegExp(`/pr-${pr.number}-`).test(r.head_branch ?? ''));
+    const queueRun = (await ciRuns(gh, 'event=merge_group')).find((r) => (r.head_branch ?? '').includes(`/pr-${pr.number}-`));
     const headRun = (await ciRuns(gh, `event=pull_request&head_sha=${pr.head.sha}`))[0] ?? null;
     const q = await withJobs(gh, queueRun);
     const k = classify({

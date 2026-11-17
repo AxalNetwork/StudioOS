@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { classify, consent, decide, keepsConsent, MAX_REQUEUES_PER_DAY } from '../../scripts/landing-bot/ejection-rules.mjs';
-import { botRequeues, candidates, normalise } from '../../scripts/landing-bot/ejection.mjs';
+import { botRequeues, candidates, normalise, oneLine } from '../../scripts/landing-bot/ejection.mjs';
 import { assertWorkflow, parseJobs } from '../../scripts/landing-bot/workflowGuard.mjs';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -124,4 +124,12 @@ test('#6476: the workflow: no PR or workflow_run trigger, dispatch only with GIT
   for (const step of jobs.flatMap((j) => j.steps).filter((s) => /\brun:/.test(s))) assert.doesNotMatch(step.slice(step.indexOf('run:')), /\$\{\{/);
   assert.doesNotMatch(WORKFLOW + readFileSync(new URL('scripts/landing-bot/ejection.mjs', ROOT), 'utf8'), /--admin|mergePullRequest|addPullRequestReview|jump/);
   assertWorkflow(new URL('.github/workflows/landing-bot-ejection.yml', ROOT).pathname);
+});
+
+test('a value from the API cannot start a second line in GITHUB_OUTPUT or the summary', () => {
+  // Mutation checked: oneLine returning its input unchanged fails here.
+  assert.equal(oneLine('[1]\nrepair=[999]'), '[1] repair=[999]');
+  assert.equal(oneLine('a\r\n\r\nb'), 'a b');
+  assert.equal(oneLine(undefined), '');
+  assert.equal(oneLine(JSON.stringify([{ pr: 7, note: 'x\ny' }])), '[{"pr":7,"note":"x\\ny"}]', 'JSON keeps its own escapes');
 });
