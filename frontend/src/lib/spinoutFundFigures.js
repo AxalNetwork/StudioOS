@@ -15,7 +15,7 @@
 // Pure, so the pages and `fundBriefViewModel.js` print the same strings and a
 // test can check them in Node.
 import { NOT_RECORDED } from './absence.js';
-import { PROGRAM, FUND_SCHEDULE, formatScheduleDate, schedulePassed } from './spinoutFundModel.js';
+import { FUND_SCHEDULE, formatScheduleDate, schedulePassed } from './spinoutFundModel.js';
 
 export { NOT_RECORDED };
 export const UNREADABLE = 'Unreadable';
@@ -111,23 +111,28 @@ export function fundFigures(read, { today } = {}) {
 }
 
 /**
- * The three program figures the workspace hero and the brief both print: live
- * when the read's program block is available, else the operator-maintained
- * track record (`PROGRAM`) with a caption that says so.
+ * The three program figures the workspace hero, the investor page and the brief
+ * all print, from the read's program block only (#5513, D5513-p2). There is no
+ * fixed fallback: until the block answers `available`, each figure reads
+ * "Not recorded" ("Unreadable" when the read itself failed), and so does any
+ * single figure the block leaves null.
+ *
+ * `onTimePct` and `alumniRaisedM` are the numbers behind the strings, for a
+ * page that formats them its own way.
  */
 export function programFigures(read) {
   const live = read && read.program && read.program.available ? read.program : null;
-  const P = live
-    ? {
-      graduates: live.graduates,
-      onTimeIncorpPct: live.on_time_pct,
-      alumniRaisedM: live.alumni_raised != null ? live.alumni_raised / 1e6 : null,
-    }
-    : PROGRAM;
+  const missing = read ? NOT_RECORDED : UNREADABLE;
+  const count = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  const graduates = live ? count(live.graduates) : null;
+  const onTimePct = live ? count(live.on_time_pct) : null;
+  const alumniRaised = live ? count(live.alumni_raised) : null;
   return {
     live: !!live,
-    graduates: String(P.graduates),
-    onTime: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—',
-    alumni: P.alumniRaisedM != null ? usdM(P.alumniRaisedM * 1e6) : '—',
+    graduates: graduates != null ? String(graduates) : missing,
+    onTime: onTimePct != null ? `${onTimePct}%` : missing,
+    alumni: alumniRaised != null ? usdM(alumniRaised) : missing,
+    onTimePct,
+    alumniRaisedM: alumniRaised != null ? alumniRaised / 1e6 : null,
   };
 }
