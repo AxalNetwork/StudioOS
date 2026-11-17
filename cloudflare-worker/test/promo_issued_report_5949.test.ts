@@ -106,7 +106,10 @@ test('the branch counts issued (committed + live holds) and spent (committed) fo
   assert.deepEqual([none.sent, /holds no promo ceiling/.test(String(none.reason))], [false, true]);
 });
 
-test('after a branch run, HQ\'s row holds the branch\'s figures, currency and own as-of time; the read says reported', async () => {
+test('after a branch run, HQ\'s row holds the branch\'s figures, currency and own as-of time; the read says reported', async (t) => {
+  // The read judges staleness against its own clock (promoIssuedState's `now`); pin it to NOW, the time the
+  // branch reports at, or the row reads stale once the real date is 48 hours past NOW (red on main from 2026-11-17).
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const h = await hq();
   const b = branch(h.env);
   const before = (await ceilings(h.env)).body.items[0];
