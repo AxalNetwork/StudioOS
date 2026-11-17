@@ -45,6 +45,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_260 = readFileSync(
   resolve(ROOT, 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
 );
+const MIGRATION_5947 = readFileSync(
+  resolve(ROOT, 'cloudflare-worker/sql/migrations/202611161359_5947_usage_report_source.sql'), 'utf8',
+);
 
 /**
  * The one real secret in this file. Its digest is COMPUTED by the fixture and
@@ -64,7 +67,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async all() { return { success: true, results: db.prepare(sql).all(...b) }; },
         async run() {
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
@@ -96,6 +99,7 @@ async function hqEnv() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(HQ_SCHEMA);
   db.exec(MIGRATION_260);
+  db.exec(MIGRATION_5947);
   db.prepare(
     `INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, revenue_share_bps, currency)
      VALUES (?,?,?,?,?,?)`,
@@ -301,6 +305,62 @@ test('a nameless stream is dropped rather than written as an empty one', async (
   assert.deepEqual(rows.map((x) => x.stream), ['other']);
 });
 
+test('D5947: each figure is stored with its state, reason, source and as-of time', async () => {
+  const { env, db } = await hqEnv();
+  await reportUsage(env, 'fr', SECRET, '2026-Q3', [
+    {
+      stream: 'subscriptions', gross_cents: 15_500, currency: 'chf', available: true, state: 'incomplete',
+      reason: 'Stripe ledger coverage began on 2026-08-15T09:00:00Z, during the requested period.',
+      source: 'financial_events', source_as_of: '2026-10-01T05:10:00Z',
+    },
+    { stream: 'licence_fees', gross_cents: null, available: false, state: 'not_available', source: 'none',
+      source_as_of: 'not a time' },
+  ] as any);
+  const by = Object.fromEntries((db.prepare('SELECT * FROM subsidiary_usage_reports').all() as any[]).map((x) => [x.stream, x]));
+  assert.equal(by.subscriptions.gross_cents, 15_500, 'the measured figure was changed on the way in');
+  assert.equal(by.subscriptions.currency, 'CHF');
+  assert.equal(by.subscriptions.state, 'incomplete');
+  assert.match(by.subscriptions.reason, /2026-08-15T09:00:00Z/);
+  assert.equal(by.subscriptions.source, 'financial_events');
+  assert.equal(by.subscriptions.source_as_of, '2026-10-01T05:10:00.000Z');
+  assert.notEqual(by.subscriptions.reported_at, by.subscriptions.source_as_of, 'reported_at stays the report\'s own stamp');
+  assert.equal(by.licence_fees.source_as_of, null, 'a time that does not parse is not stored as one');
+  assert.equal(by.licence_fees.state, 'not_available');
+});
+
+test('D5947: a figure whose state carries no amount is stored NULL, whatever number came with it', async () => {
+  const { env, db } = await hqEnv();
+  await reportUsage(env, 'fr', SECRET, '2026-Q3', [
+    { stream: 'a', gross_cents: 500, state: 'not_recorded' },
+    { stream: 'b', gross_cents: 500, state: 'unreadable' },
+    { stream: 'c', gross_cents: 500, state: 'not_available' },
+    { stream: 'd', gross_cents: 500, state: 'complete' },
+    { stream: 'e', gross_cents: 500, state: 'measured-ish' },
+  ] as any);
+  const by = Object.fromEntries((db.prepare('SELECT stream, gross_cents, state FROM subsidiary_usage_reports').all() as any[])
+    .map((x) => [x.stream, x]));
+  assert.equal(by.a.gross_cents, null, 'a not-recorded stream kept a number');
+  assert.equal(by.b.gross_cents, null, 'an unreadable stream kept a number');
+  assert.equal(by.c.gross_cents, null, 'a not-available stream kept a number');
+  assert.equal(by.d.gross_cents, 500);
+  assert.equal(by.e.state, null, 'a state outside the vocabulary was stored');
+  assert.equal(by.e.gross_cents, 500, 'no state (a pre-D5947 build) keeps the D266 rule');
+});
+
+test('D5947: a re-report replaces the metadata with the figure', async () => {
+  const { env, db } = await hqEnv();
+  await reportUsage(env, 'fr', SECRET, '2026-Q3', [
+    { stream: 'subscriptions', gross_cents: 100, currency: 'EUR', state: 'incomplete', reason: 'partial', source: 'financial_events', source_as_of: '2026-09-01T00:00:00Z' },
+  ] as any);
+  await reportUsage(env, 'fr', SECRET, '2026-Q3', [
+    { stream: 'subscriptions', gross_cents: 200, currency: 'EUR', state: 'complete', source: 'financial_events', source_as_of: '2026-10-01T00:00:00Z' },
+  ] as any);
+  const rows = db.prepare('SELECT * FROM subsidiary_usage_reports').all() as any[];
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].gross_cents, rows[0].state, rows[0].reason, rows[0].source_as_of],
+    [200, 'complete', null, '2026-10-01T00:00:00.000Z'], 'the old state or reason survived the correction');
+});
+
 /* ------------------------------------------------------------------ *
  * The branch side                                                     *
  * ------------------------------------------------------------------ */
@@ -315,7 +375,15 @@ test('a branch reports every stream it cannot measure, with a reason for each', 
     assert.equal(x.available, false, `${x.stream} claims to be measurable`);
     assert.equal(x.gross_cents, null, `${x.stream} reported a figure it says it cannot measure`);
     assert.ok(String(x.reason || '').length > 20, `${x.stream} is absent with no usable reason`);
+    // D5947: every figure says where it came from and when that was read.
+    assert.ok(x.source, `${x.stream} has no source`);
+    assert.equal(x.source_as_of, s.as_of, `${x.stream} has no as-of time`);
   }
+  // This branch database has no financial ledger at all: that is a failed read, said as one.
+  const sub = s.streams.find((x) => x.stream === 'subscriptions')!;
+  assert.equal(sub.state, 'unreadable');
+  assert.equal(sub.source, 'financial_events');
+  assert.deepEqual(s.streams.map((x) => x.state), ['unreadable', 'not_available', 'not_available']);
 });
 
 test('the token COST is carried as a basis, never as revenue', async () => {

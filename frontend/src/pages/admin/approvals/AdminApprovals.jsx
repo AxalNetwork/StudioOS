@@ -97,7 +97,8 @@ export function LaneDoor({ k }) {
     case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
     case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
     case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
-    case 'best_fit': return <span className={SUB}>Best-Fit · no review page yet</span>;
+    // D5885: Best-Fit is decided on its own board here.
+    case 'best_fit': return <Link to="/admin/approvals/best-fit" className={LINK}>Best-Fit</Link>;
     case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
     case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
     case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Wellbeing experts</Link>;
@@ -131,6 +132,11 @@ function DoorFor({ lane }) {
   return hq ? <HqDoor lane={hq} /> : <LaneDoor k={lane} />;
 }
 
+/** D5885: a Best-Fit item opens on its board, at its own address (a literal template). */
+function BestFitItemDoor({ id }) {
+  return <Link to={`/admin/approvals/best-fit/${id}`} className={LINK}>Best-Fit</Link>;
+}
+
 /**
  * D4814: a lane's door dressed as a button or a list action — "Continue
  * review in KYC & KYB →", "Open in Due diligence ↗". The door itself stays the
@@ -139,7 +145,7 @@ function DoorFor({ lane }) {
  * control, so all of it is the target. A lane with no page to open (Best-Fit,
  * an HQ page not built yet) is plain words, never a control that goes nowhere.
  */
-function DressedDoor({ lane, before, after, className, plain, testId }) {
+function DressedDoor({ lane, itemId = null, before, after, className, plain, testId }) {
   const dest = reviewDestination(lane);
   const box = useRef(null);
   // The link's own text is the lane alone; its name is the whole control ("Open in KYC & KYB").
@@ -151,7 +157,7 @@ function DressedDoor({ lane, before, after, className, plain, testId }) {
   return (
     <span ref={box} data-testid={testId}
       className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
-      <span>{before}<DoorFor lane={lane} />{after}</span>
+      <span>{before}{lane === 'best_fit' && itemId != null ? <BestFitItemDoor id={itemId} /> : <DoorFor lane={lane} />}{after}</span>
     </span>
   );
 }
@@ -260,7 +266,7 @@ function RowActions({ row, onAssign, onCopy }) {
         <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
           <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
-          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
+          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} itemId={row.id} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
       ) : null}
     </div>
@@ -363,7 +369,7 @@ function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
       footer={ready ? (
         <div className="flex flex-col gap-2" data-testid="approvals-item-continue">
           <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
-            <DressedDoor lane={v.lane} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
+            <DressedDoor lane={v.lane} itemId={v.id} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
             <button type="button" className={BTN} onClick={onClose}>Close</button>
           </div>
           <p className={`m-0 ${SUB}`} data-testid="approvals-item-why">{continueLine(v.lane)}</p>
@@ -488,7 +494,7 @@ function RowSheet({ row, onAssign, onCopy, onClose }) {
       <div className="flex flex-col gap-1 px-3 py-3">
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
         <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
-        <span onClickCapture={onClose}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
+        <span onClickCapture={onClose}><DressedDoor lane={row.lane} itemId={row.id} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
       </div>
     </Lightbox>
   );

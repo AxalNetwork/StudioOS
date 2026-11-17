@@ -129,7 +129,9 @@ export default function PhoneModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = header === undefined ? (
-    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : card?.caption || undefined}
+    // D5081 part 4 (#5081): a tool that owns its page says its own line, as the desktop header does, never the
+    // caption of the generic card it no longer draws.
+    <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={sub !== undefined ? (sub || undefined) : owned ? owned.sub : card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
