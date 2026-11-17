@@ -74,7 +74,7 @@ test('new issues contain only the opaque alert link; repeat runs converge throug
   const { issue, created, actionable } = await trackers.ensure(42)
   assert.ok(created && actionable)
   assert.deepEqual(issue.labels, [{ name: 'bug' }])
-  assert.ok(issue.body.includes(url))
+  assert.deepEqual([...issue.body.matchAll(/\]\(([^)]+)\)/g)].map(([, href]) => href), [url])
   await trackers.markReady(issue)
   await trackers.linkPull(issue, 99)
   await trackers.linkPull(issue, 99)

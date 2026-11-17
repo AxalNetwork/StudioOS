@@ -62,7 +62,8 @@ function fake() {
         assert.equal(api.refs[data.head], patch)
         assert.doesNotMatch(JSON.stringify(data), /PRIVATE|sensitive finding|private|closes|fixes #/i)
         assert.match(data.body, /Tracking issue #17/)
-        assert.ok(data.body.includes('https://github.com/AxalNetwork/StudioOS/security/code-scanning/42'))
+        assert.deepEqual([...data.body.matchAll(/\]\(([^)]+)\)/g)].map(([, href]) => href),
+          ['https://github.com/AxalNetwork/StudioOS/security/code-scanning/42'])
         const pr = { number: 55, state: 'open', ...data, head: { ref: data.head, repo: { full_name: 'AxalNetwork/StudioOS' } },
           user: { login: 'github-actions[bot]' }, labels: [] }
         api.pulls.push(pr)
