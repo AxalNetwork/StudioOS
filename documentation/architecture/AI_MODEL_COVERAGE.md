@@ -475,7 +475,7 @@ chat: Southeast Asian language conversations and regional market copy.
 
 chat: Interactive explanations, evidence summaries and planning drafts.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 7 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 8 more
 - Record a Session: **gap**, `#3721`
 - Build: **wired**, `BU2 on "Founder · Build · Founding team"`; `BU2 on "Founder · Build · Operating systems"`; `BU2 on "Founder · Build · Product roadmap"`; `BU2 on "Founder · Build · Solution design"`; and 1 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; and 21 more
@@ -795,7 +795,7 @@ voice: Read prepared session prompts and conversational replies aloud.
 
 chat: Investor narratives, distribution copy and multilingual summaries.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 2 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 3 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/plan`
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `EM1 on "Founder · Raise · Investor narrative"`; `NE1 on "Founder · Raise · Capital relationships"`; and 19 more
