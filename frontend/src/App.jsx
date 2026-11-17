@@ -4004,7 +4004,8 @@ function AppInner() {
           founder's board and the partner's bucket root with it. */}
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
+      {/* #6245 (owner: C): the Worker's gate, so no tier here. An LP reads their funds and a GP of record theirs (#6246). */}
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], holds('investor') ? <FundPerformancePage fundUnlocked={hasInvestorTier(user, 'institutional')} /> : effectiveRole !== 'admin' ? <FundPerformancePage locked /> : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

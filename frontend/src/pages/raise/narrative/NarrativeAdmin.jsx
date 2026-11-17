@@ -8,7 +8,7 @@ import { ENDED_NOW, endedLine, grantSpan } from '../../../ui/reasonGate';
 import {
   BOUNDARY, HOME_PATH, NOTES_META, NOTES_TITLE, NOTE_ANSWER_PLACEHOLDER, NOTE_MAX, NOTE_PLACEHOLDER, NO_NOTES, NO_READS,
   OTHER_VENTURE, READS_LINE, READS_TITLE, READ_ONLY, REASON_HOURS, REASON_MAX, REASON_MIN, TITLE,
-  noteRow, notePosts, isNarrativeAdmin, openedLine, readRow,
+  noteRow, notePosts, isNarrativeAdmin, narrativeStanding, openedLine, readRow,
 } from './narrativeModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -86,10 +86,18 @@ export function NarrativeReasonForm({ projectId, onOpened, submitLabel = 'Open r
   );
 }
 
-/** #3712: shared by the cycle's Add/Edit dialogs, outside the page's gate. */
-export function narrativeFormAccess(projectId, user) {
-  // Use the authenticated role. A shell preview is not a different principal.
-  if (!isNarrativeAdmin(user)) return {};
+/**
+ * #3712: shared by the cycle's Add/Edit dialogs, outside the page's gate.
+ *
+ * D5074 part 7: the module read's narrative map decides (`parts.narrative.capabilities`, the map the writes refuse
+ * from, part 3): a map without `edit` makes the dialog read only. Only when the module read carried no map (it was
+ * refused, or has not answered) does the account word it, as part 3's page does: an admin's dialog is read only and
+ * offers the reason form, which is the one way an admin's refused read recovers. A shell preview is never a
+ * different principal.
+ */
+export function narrativeFormAccess(projectId, capabilities, user) {
+  const standing = narrativeStanding(capabilities);
+  if (standing.known ? !standing.readOnly : !isNarrativeAdmin(user)) return {};
   return {
     readOnly: `${READ_ONLY} Only the venture’s founders create or change versions.`,
     renderReadRecovery: (error, retry) => error?.data?.code === 'read_reason_required'
