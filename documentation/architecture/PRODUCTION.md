@@ -260,6 +260,8 @@ D5673: the disabled Cloudflare metadata reconciler requires a separately scoped 
 
 D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
 
+D2403: a founder's own X connection uses a second HQ-owned "founders" X app, never HQ's posting app (`X_CLIENT_ID`). Its client goes under `X_FOUNDERS_CLIENT_ID` and `X_FOUNDERS_CLIENT_SECRET`, set as Worker secrets or from HQ › Integration keys (key `x`); until both are set the connector reads as not set up. Register `/api/integrations/oauth/x/callback` on that app with X.
+
 ## 5. Post-deploy checklist
 
 - [ ] `curl https://axal.vc/api/health` returns `{ "status": "ok", ... }` with

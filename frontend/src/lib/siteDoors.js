@@ -81,7 +81,7 @@ export const DOORS = {
     secondary: { t: 'See Spin-Out Lab', to: '/spinout-lab' },
     problem: 'Founders lose months stitching together tools, templates, and cold outreach before anyone serious looks at the company.',
     facts: [
-      'The 28-day Spin-Out Lab takes an idea to an incorporated company',
+      'The Spin-Out Lab is a 28-day programme from idea to an incorporation order; when the company is registered depends on eligibility and the jurisdiction',
       'Validate, Build, Raise, and Grow run the company after that, in the same workspace',
       'Network, Research, and Eadwyn work across all four',
       'Introductions are earned and proceed under a three-way NDA',
@@ -96,7 +96,7 @@ export const DOORS = {
     chapters: [
       {
         k: 'Idea to company',
-        t: 'The 28-day Spin-Out Lab takes an idea to an incorporated company.',
+        t: 'The 28-day Spin-Out Lab works an idea through to an incorporation order.',
         d: 'Four weeks, four gates. Problem and customer, then solution and roadmap, then validation and team, then the entity, founder stock, and cap table. Its tools carry the work, from customer discovery and market sizing to incorporation.',
         flow: ['Week 1 · Idea & customer', 'Week 2 · Solution & roadmap', 'Week 3 · Validate & team', 'Week 4 · Incorporate & capital'],
       },

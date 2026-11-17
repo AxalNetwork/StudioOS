@@ -59,9 +59,10 @@ r.get('/approvals', async (c) => {
     const limit = Number.isFinite(raw) ? Math.min(200, Math.max(1, Math.trunc(raw))) : 100;
 
     const board = await approvalBoard(c.env, limit);
-    // D470 — the current reviewer, when the side record can be read. A missing
+    // D470 — the current reviewer, when the side record can be read (D5875: of
+    // the rows this board read, never the whole table). A missing
     // table stays off the items: `assignee: null` would say nobody is assigned.
-    const assignments = await readAssignmentState(c.env);
+    const assignments = await readAssignmentState(c.env, board.items);
     const items = assignments.available
       ? board.items.map((it) => ({
         ...it,

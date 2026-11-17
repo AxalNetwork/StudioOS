@@ -107,3 +107,17 @@
   .a6-hero nav{display:none}
   .a6-section-picker{order:4;display:flex;flex-direction:column;margin-top:8px}
 }
+/* #5310 part 5 (D5310-p5): Recent network activity from the recorded-events read (D6557). */
+.a6-activity li{flex-wrap:nowrap}
+.a6-activity .a6-row-text{flex-basis:auto}
+.a6-activity-mark{display:inline-flex;align-items:center;justify-content:center;flex:none;width:22px;height:22px;border:1px solid #e5e1e9;border-radius:999px;color:#5f5869;font-size:11px;font-weight:800}
+.a6-activity-mark.is-ok{border-color:#cce9d6;background:#f0faf3;color:#17703f}
+.a6-activity-mark.is-off{border-color:#f0d3cf;background:#fff4f2;color:#9b3d42}
+.a6-activity-detail{font-weight:600;color:#6f6877}
+.a6-activity-at{flex:none;margin-left:auto;color:#7a7383;font-family:var(--font-mono);font-size:11px}
+.a6-card .a6-unread+.a6-rows,.a6-card .a6-unread+.a6-empty{margin-top:10px}
+.dark .a6-activity-mark{border-color:#4b4353;color:#d6cfdc}
+.dark .a6-activity-mark.is-ok{background:#1f3328;border-color:#2f5a40;color:#86efac}
+.dark .a6-activity-mark.is-off{background:#3a2629;border-color:#6b3a40;color:#fca5a5}
+.dark .a6-activity-detail,.dark .a6-activity-at{color:#c7c0cd}
+@media(max-width:600px){.a6-activity li{flex-wrap:wrap}.a6-activity .a6-row-text{flex:1 1 calc(100% - 32px)}.a6-activity-at{margin-left:32px}}

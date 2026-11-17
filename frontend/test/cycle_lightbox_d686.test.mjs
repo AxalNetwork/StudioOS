@@ -282,8 +282,10 @@ const cards = (cycle) => MODULES[cycle].map((m) => ({ slug: m.slug, name: m.name
 
 test('history: Validate has none; other histories require module tabs and appear once', () => {
   assert.deepEqual(cycleTabs('validate', cards('validate'), null, '?project_id=7').slice(0, 2).map((t) => [t.name, t.href]), [['Overview', '/validate?project_id=7'], ['Problem discovery', '/validate/problem-discovery?project_id=7']]);
-  // #1598 and #1599: Raise's Calls and Grow's Updates sections shipped, so their histories are live.
-  for (const [c, key] of [['raise', 'calls'], ['grow', 'reporting']]) {
+  // #1599: Grow's history is live. D5081 part 5 (#5081, RA-12): Raise's Calls is Capital relationships' own tab, not a history.
+  assert.equal(CYCLES.raise.history, undefined);
+  assert.equal(cycleTabs('raise', cards('raise')).some((t) => t.key === 'calls'), false, 'Raise draws no Calls peer tab');
+  for (const [c, key] of [['grow', 'reporting']]) {
     assert.equal(CYCLES[c].history.live, true, `${c} is live`);
     assert.equal(cycleTabs(c, cards(c)).some((t) => t.key === key), true, `${c} draws its history`);
   }
@@ -301,19 +303,18 @@ test('Build\'s Tools is live now its section ships (#1597): second, on Operating
 });
 
 test('a live history keeps ?project_id= and its hash, and is never current outside Validate', () => {
-  const saved = CYCLES.raise.history.live;
-  CYCLES.raise.history.live = true;
-  try {
-    const tabs = cycleTabs('raise', cards('raise'), 'capital-relationships', '?project_id=7');
-    // D1261 (#2430): Evidence leads, after Overview; Calls follows it.
-    assert.deepEqual([tabs[1].name, tabs[1].href, tabs[1].active], ['Evidence', '/raise/evidence?project_id=7', false]);
-    assert.deepEqual([tabs[2].name, tabs[2].href, tabs[2].active], ['Calls', '/raise/capital-relationships/calls?project_id=7', false]);
-    assert.equal(tabs.find((t) => t.key === 'capital-relationships').active, true, 'the module tab keeps aria-current');
-    const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'raise', cards: cards('raise'), active: 'capital-relationships', search: '?project_id=7' })));
-    const values = [...out.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
-    assert.equal(new Set(values).size, values.length, 'the phone select has one value per tab');
-    assert.match(out, /<option value="calls">Calls<\/option>/);
-  } finally { CYCLES.raise.history.live = saved; }
+  // Build's Tools carries the rule now Raise has no history tab (D5081 part 5).
+  const tabs = cycleTabs('build', cards('build'), 'operating-systems', '?project_id=7');
+  const tools = tabs.find((t) => t.key === 'tools');
+  assert.deepEqual([tools.href, tools.active], ['/build/operating-systems?project_id=7#tools', false]);
+  // D1261 (#2430): Evidence leads Raise, after Overview; the modules follow it, and Calls is not among them.
+  const raise = cycleTabs('raise', cards('raise'), 'capital-relationships', '?project_id=7');
+  assert.deepEqual([raise[1].name, raise[1].href, raise[1].active], ['Evidence', '/raise/evidence?project_id=7', false]);
+  assert.equal(raise.find((t) => t.key === 'capital-relationships').active, true, 'the module tab keeps aria-current');
+  const out = renderToStaticMarkup(h(MemoryRouter, null, h(CycleHeader, { cycle: 'raise', cards: cards('raise'), active: 'capital-relationships', search: '?project_id=7' })));
+  const values = [...out.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(values).size, values.length, 'the phone select has one value per tab');
+  assert.doesNotMatch(out, /<option value="calls">/);
 });
 
 test('every live history path is a static route in App.jsx or a module of its cycle', () => {

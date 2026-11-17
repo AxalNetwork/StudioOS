@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { NoPartnerProfile, isNoPartnerProfile } from '../kit';
+import { partnerPipelineActivityApi } from '../../../lib/api/partnerPipelineActivity';
+import { NoPartnerProfile, formatDay, isNoPartnerProfile } from '../kit';
 import { Unreadable } from '../../../ui/Honesty';
 import { NotRecorded } from '../../../workspaces/canvasKit';
 import {
-  ATTENTION_SHOWN, SETUP_LINKS, attentionItems, headlineMetrics, isFirstRun, lifecycleStrip, ok, railSteps,
-  riskItems, setupSteps, unreadable,
+  ATTENTION_SHOWN, MOVEMENT_SHOWN, SETUP_LINKS, attentionItems, headlineMetrics, isFirstRun, lifecycleStrip, movementView, ok,
+  railSteps, riskItems, setupSteps, unreadable,
 } from './commandCentre';
 
 /**
@@ -16,8 +17,8 @@ import {
  * is one activation path: "Set up your pipeline", five setup steps derived from the record, Add services and Set
  * fit rules linking to the editors that already exist (Offers › Catalog, Offers › Audience fit), and a lifecycle
  * preview. No $0 won and no 0% win rate. Populated, it is a command centre in the canvas's order: Needs attention,
- * four metrics each with its basis and How calculated, the lifecycle strip, Recent movement (no store: Not
- * recorded) and Risks. The rules are `commandCentre.js`'s, so the page and its tests agree.
+ * four metrics each with its basis and How calculated, the lifecycle strip, Recent movement (D5942's recorded
+ * lifecycle feed, newest first: D4838 part 9, #5943) and Risks. The rules are `commandCentre.js`'s, so the page and its tests agree.
  *
  * Every read is the zones' own; this page adds no route. A read that fails is Unreadable where it would have been
  * drawn, never a zero, and never a reason to call the pipeline empty.
@@ -31,9 +32,11 @@ const SOURCES = {
   analytics: () => api.quotesAnalytics(),
   fitRules: () => api.listPartnerFitRules(),
   services: () => api.listServiceOfferings({ mine: 1 }),
+  // D4838 part 9 (#5943): Recent movement is the recorded lifecycle feed, never derived on this page.
+  activity: () => partnerPipelineActivityApi.list({ limit: MOVEMENT_SHOWN }),
 };
 
-/** All seven reads, settled; a failed one is `unreadable`, and "no partner profile" is said once. */
+/** Every read, settled; a failed one is `unreadable`, and "no partner profile" is said once. */
 export async function readPipeline(sources = SOURCES) {
   const keys = Object.keys(sources);
   const settled = await Promise.allSettled(keys.map((k) => sources[k]()));
@@ -61,6 +64,7 @@ export function pipelineView(sources) {
     metrics: headlineMetrics(sources),
     lifecycle: lifecycleStrip(sources),
     risks: riskItems(sources),
+    movement: movementView(sources.activity),
     scoringNote: sources.leads?.state === 'ok' ? sources.leads.data?.scoring_note || null : null,
   };
 }
@@ -226,16 +230,33 @@ function Lifecycle({ cells }) {
   );
 }
 
-function Movement() {
+/** Recent movement (D4838 part 9, #5943): the feed's recorded events, newest first, each with its opportunity. */
+function Movement({ movement }) {
+  const rows = movement?.state === 'ok' ? movement.rows : [];
   return (
-    <section className={card} aria-labelledby="pl-move-h" data-testid="pipeline-movement">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 id="pl-move-h" className={h2}>Recent movement</h2>
-        <NotRecorded />
-      </div>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-axal-muted dark:text-gray-400">
-        Nothing joins lead, proposal, negotiation and retainer events into one timeline yet. Each zone keeps its own dates.
-      </p>
+    <section className={card} aria-labelledby="pl-move-h" data-testid="pipeline-movement" data-state={movement?.state || 'unreadable'}>
+      <h2 id="pl-move-h" className={h2}>Recent movement</h2>
+      {movement?.state !== 'ok' ? (
+        <p className="mt-1.5 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="pipeline-movement-unreadable">
+          Unreadable. The lifecycle feed could not be read; this is not evidence that nothing moved.
+        </p>
+      ) : rows.length ? (
+        <ul className="mt-2 flex list-none flex-col gap-1.5 p-0" data-testid="pipeline-movement-list">
+          {rows.map((e) => (
+            <li key={e.key} className="grid grid-cols-[88px_minmax(0,1fr)] gap-2 text-[13.5px]">
+              <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{formatDay(e.at)}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                <b className="text-axal-ink dark:text-gray-100">{e.text}</b>
+                {e.who ? <span className="text-axal-muted dark:text-gray-400"> · {e.who}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1.5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="pipeline-movement-none">
+          Nothing has moved yet. No lead was passed, no proposal version or decision was recorded, no negotiation moved and no retainer started or ended.
+        </p>
+      )}
     </section>
   );
 }
@@ -268,7 +289,7 @@ export function CommandCentre({ view }) {
       </div>
       <Lifecycle cells={view.lifecycle} />
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Movement />
+        <Movement movement={view.movement} />
         <Risks items={view.risks} />
       </div>
       <ExploreDemand />

@@ -163,3 +163,72 @@ export function grantRows(room, now = Date.now()) {
  */
 export const ROOM_REFUSED_LINE = 'You do not have access to this venture’s data room.';
 export const ROOM_SUMMARY_LINE = 'This room is not yours to read. Open a tab and give a reason, and it opens read only.';
+
+/**
+ * D5081 part 4 (#5081, RA-19 and RA-14's table: Data room · Complete data room) — the module's own actions.
+ * Home owns its page: the header's one primary is the tool's, chosen from the room read Home draws, by the
+ * capability map the room's writes refuse from (D5074). Nothing here is drawn from `role`.
+ */
+export const COMPLETE_ACTION = 'Complete data room';
+export const UPLOAD_ACTION = 'Upload files';
+export const CHECKLIST_ACTION = 'See what diligence asks for';
+export const FIRST_USE_TITLE = 'Nothing is in the room yet.';
+export const FIRST_USE_LINE = 'Upload the files investors ask for in diligence, then choose who can open them.';
+export const FIRST_USE_READER = 'Nothing is in the room yet. The venture’s owner uploads its files.';
+export const uploadHref = (search = '') => `${HOME_PATH}/new${tabSearch(search)}`;
+const checklistHref = (search = '') => tabHref(TABS.find((t) => t.id === 'checklist'), search);
+
+/** The room read answered with the room itself (not a refusal, a failure or an admin's summary). */
+const roomRead = (read) => read?.status === 'ready' && read.room && read.room.mode !== 'summary';
+
+/**
+ * First use (RA-14's empty state): the room read answered and the room holds no file and no folder. A read
+ * still loading, failed or refused, or an admin's summary, is never first use: that would claim an empty
+ * room nobody read.
+ */
+export const isFirstUse = (read) => roomRead(read)
+  && Array.isArray(read.room.files) && read.room.files.length === 0
+  && (!Array.isArray(read.room.folders) || read.room.folders.length === 0);
+
+/**
+ * The module header's one primary (RA-19's Complete data room): it opens Checklist, where each missing item
+ * links to Match and Upload. None while the room is unread, failed, refused or a summary; on first use, where
+ * the empty state's first action is the page's one primary (D5076); for a viewer the map does not let upload;
+ * and on Checklist itself, which is where it leads.
+ */
+export function homeAction(read, { search = '', tab = 'home' } = {}) {
+  if (!roomRead(read) || isFirstUse(read) || !roomCan(read.room, 'upload') || tab === 'checklist') return null;
+  return { label: COMPLETE_ACTION, href: checklistHref(search) };
+}
+
+/**
+ * First use's set-up actions (at most three, the first the page's primary): Upload files, and the checklist
+ * that says what diligence asks for. None for a viewer the map does not let upload.
+ */
+export function setupActions(read, { search = '' } = {}) {
+  if (!isFirstUse(read) || !roomCan(read.room, 'upload')) return [];
+  return [
+    { key: 'upload', label: UPLOAD_ACTION, href: uploadHref(search) },
+    { key: 'checklist', label: CHECKLIST_ACTION, href: checklistHref(search) },
+  ];
+}
+
+/**
+ * Home's checklist block (RA-19 A's "n of 12", with the missing items named) from D1105's checklist read:
+ * answered of items, the items no file answers, and how many answered items no investor can open. A read
+ * without totals or items is unreadable, never zero.
+ */
+export function checklistNeed(read) {
+  const t = read?.totals;
+  const items = Array.isArray(read?.items) ? read.items : null;
+  if (!items || !t || !Number.isSafeInteger(t.answered) || !Number.isSafeInteger(t.items)) return { state: 'unreadable' };
+  const missing = items.filter((i) => i?.state === 'no_file').map((i) => i.label || NOT_RECORDED);
+  const shut = items.filter((i) => i?.state === 'no_one_can_open').length;
+  return {
+    state: 'ok',
+    figure: `${t.answered} of ${t.items}`,
+    line: 'checklist items have a file',
+    missing: missing.length ? `Missing: ${missing.join(' · ')}` : 'Every checklist item has a file.',
+    shut: shut ? `${shut} answered item${shut === 1 ? '' : 's'} no investor can open yet` : null,
+  };
+}

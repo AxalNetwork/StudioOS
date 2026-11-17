@@ -301,12 +301,13 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [
-    { label: 'New benchmark', unbuilt: 'the add-a-metric form below takes one, with its source and sample size' },
+    { label: 'New benchmark', kind: 'handler', handler: 'newBenchmark' },
     { label: 'Change peer set', unbuilt: 'a peer source is recorded per row, so there is no one set to switch' },
     // Not an export. The zone renders comparisons as rows precisely so each
     // carries the base it rests on; a chart is the shape that detaches a figure
     // from its sample size, which is the thing this zone exists to refuse.
     { label: 'Export chart', unbuilt: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
+    { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
     { label: 'New deep-dive', unbuilt: 'a sector opens its own profile; nothing here starts a separate deep-dive' },

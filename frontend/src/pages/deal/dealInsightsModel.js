@@ -249,6 +249,29 @@ export function tractionView(read) {
   };
 }
 
+/**
+ * D6187 (#6187): the request an investor may send the founder about the gaps
+ * in the shared figures. The owner chose A: it is a diligence request on the
+ * deal's case (`POST /api/dd/cases/:uid/requests`), pre-filled with each
+ * figure and the months it was not reported, and editable before it is sent.
+ * Null when nothing is missing: there is nothing to ask for.
+ */
+export function askDraft(view) {
+  if (!view || view.state !== 'recorded') return null;
+  const lines = TRACTION_CHARTS.map((c) => {
+    const gaps = (view.series?.[c.key] || []).filter((p) => p.value == null).map((p) => dateText(p.month)).filter(Boolean);
+    return gaps.length ? { figure: c.title.replace(' by month', ''), gaps } : null;
+  }).filter(Boolean);
+  if (!lines.length) return null;
+  const figures = lines.map((l) => l.figure);
+  const named = figures.length === 1 ? figures[0] : `${figures.slice(0, -1).join(', ')} and ${figures[figures.length - 1]}`;
+  return {
+    title: `An update on ${named}`.slice(0, 200),
+    details: ['Could you share the figures for the months not reported yet?', ...lines.map((l) => `${l.figure}: ${l.gaps.join(', ')}.`)].join('\n'),
+    lines,
+  };
+}
+
 /** One chart's sentence for a screen reader, and which months are gaps. */
 export function chartSummary(title, points) {
   const shown = points.filter((p) => p.value != null);

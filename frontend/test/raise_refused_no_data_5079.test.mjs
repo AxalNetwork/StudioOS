@@ -169,13 +169,15 @@ test('Cap table: a refused record read draws the refusal and none of the module�
   } finally { await view.close(); }
 });
 
-test('Cap table: an empty record read still draws the module’s card and table', async () => {
+test('Cap table: an empty record read draws the tool’s own empty card, not a refusal', async () => {
+  // D5081 part 3 (#5081, RA-20): the tool owns its page, so the module's generic card and Holders table are not
+  // drawn under it; an answered empty record is the tool's "Nothing is recorded yet." card instead.
   const view = await mounted(`/raise/cap-table?project_id=${P}`);
   try {
     assert.ok(!view.by('cycle-module-refused'), 'nothing was refused');
-    assert.ok(view.by('cycle-module-chart'), 'a measured empty cap table still shows its card');
-    assert.match(view.text(), /· at a glance/);
-    assert.match(view.text(), /No holders yet/, 'an empty read is allowed to say it is empty');
+    assert.ok(view.by('captable-empty'), 'a measured empty cap table says it is empty');
+    assert.ok(!view.by('cycle-module-chart'), 'no generic card under the tool');
+    assert.doesNotMatch(view.text(), /· at a glance/);
   } finally { await view.close(); }
 });
 

@@ -76,6 +76,8 @@ HEAD metadata after deployment; the migration never reads or deletes objects.
 | `migrations/202611100929_financial_events.sql` | D5299 (#5299, revenue ledger 1/6 of #5038): `financial_events`, one append-only row per Stripe or HQ financial event, idempotent on (source, source event id) and on a refund's charge and cumulative total; rows immutable but for reconciliation (triggers); `financial_event_coverage` records each source's coverage start. New tables, re-runnable, no backfill. |
 | `migrations/202611112356_4662_mail_conversation.sql` | D4662 (#4662): independent sent conversation association, known same-user draft backfill and stable-order index. |
 | `migrations/202611122121_4557_compute_host.sql` | D4557 part 2: request/run snapshots, execution fences and private object metadata. |
+
+| `migrations/202611151226_6562_agreement_revision.sql` | D6562: nullable rendered terms/schedule revisions and contractual input snapshot on licence contracts; legacy agreements remain unknown. |
 | `migrations/202611151315_6272_ask_history_cleared.sql` | D6272 (#6272): `research_ask_sessions.cleared_at` — Ask's Clear history hides the caller's sessions and Restore sets it back to NULL; nothing is deleted. Additive, no backfill. |
 | `migrations/202611150148_5454_deal_preparations.sql` | D5454 (#5454, ADP-01): `deal_preparations` (issuer company and project scope, deployment scope, independent preparation and publication states, revision pointers) and immutable `deal_preparation_revisions` (triggers). A never-released draft owns no deal row (CHECK). New tables, re-runnable, no backfill. |
 | `migrations/202611161619_6960_package_service_delivery.sql` | D6960 (#6960) adds an optional, versioned HQ service description to a package item. |

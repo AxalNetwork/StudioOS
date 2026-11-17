@@ -558,6 +558,8 @@ test('Compliance reader/writer privileges follow held Partner and keep Admin pri
   const f=fixture(); try {
     f.db.exec(readFileSync(new URL('../sql/migrations/467_founder_profile_pages.sql',import.meta.url),'utf8'));
     f.db.exec("INSERT INTO projects(id,name,founder_id,investor_findable) VALUES (447402,'Synthetic compliance venture',447402,0)");
+    // Migration 443's kind column, which D6872's Calendar create now writes.
+    f.db.exec('ALTER TABLE compliance_events ADD COLUMN kind TEXT');
     assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,403);
     await grantLicence(f.DB,change('partner',9002));
     assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,200);

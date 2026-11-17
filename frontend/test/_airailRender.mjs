@@ -166,7 +166,6 @@ export const RENDER_NOT_YET = {
     'Founder /raise/legal-engine',
   ],
   2098: [
-    'Investor /funds/performance',
   ],
   2099: [
   ],

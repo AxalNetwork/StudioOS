@@ -1,7 +1,8 @@
 /**
  * D1152 (#3057) — the investor's Overview (DL1) on today's reads: the
  * scorecard's scope strip (DL24a, live since D1257), what is new since you last looked (part 2),
- * the terms at a glance (the deal read) and the deck's slot. Since D4815
+ * the terms at a glance (the deal read) and, since D6165, the deck the venture
+ * granted you (`DealDeck.jsx`). Since D4815
  * part 4 (DE04) the round's figures are the strip's and the one next action
  * is the header's, so this file repeats neither. A card whose read fails says so
  * and leaves the others standing.
@@ -11,7 +12,8 @@ import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
-import { DECK_SLOT, termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { DealDeckCard } from './DealDeck';
 import { DealScoreStrip } from '../../components/scoring/scorecard/Scorecard';
 import { whatsNewOnce } from './dealVisit';
 
@@ -92,7 +94,8 @@ export default function DealOverview({ deal, investor }) {
           <h3 className={H3}>The round</h3>
           <p className={`m-0 ${SUB}`}>The round size and the committed total are in the strip above. Other investors’ names and amounts are not shown.</p>
         </section>
-        <Slot slot={DECK_SLOT} testId="deal-deck-slot" />
+        {/* D6165 (#6165): the investor's granted deck; a founder or staff member reads none here. */}
+        {investor && <DealDeckCard dealId={deal.id} />}
       </div>
     </div>
   );

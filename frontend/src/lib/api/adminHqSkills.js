@@ -9,6 +9,10 @@
 //   GET  /admin/ai-agents/skills                    → { skills: [{ uid, name, area, level, status: draft|in_review|published|retired,
 //                                                        version | null, agents, tokens_per_run: null, golden: { pass, total, meets_bar }, last_eval }], pass_bar }
 //   D4537: each row also has slug, roles: [{ key, label }], tools: [name]
+//   D5970: list(options, filters) passes { scope, status, uid, version, category, tag, role, model, from, to } through
+//                                                    as query parameters; they narrow coverage and published_evaluation
+//                                                    (never skills), the Worker checks each one (400 with a code) and
+//                                                    answers filters: { applied, window, coverage, published_evaluation }
 //   GET  /admin/ai-agents/skills/library            D4225: the source library files → { skills: [{ slug, name, area, level, cases,
 //                                                        check: { ok } | { ok: false, code, message }, in_store: status | null }] }
 //                                                    D4574 H3: 503 library_unreadable when the library's static asset cannot be read
@@ -35,7 +39,10 @@ const BASE = '/admin/ai-agents/skills';
 const send = (path, method, body) => request(`${BASE}${path}`, { method, body: JSON.stringify(body ?? {}) });
 
 export const adminHqSkillsApi = {
-  list: (options) => request(BASE, options),
+  list: (options, filters) => {
+    const q = new URLSearchParams(Object.entries(filters ?? {}).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])).toString();
+    return request(q ? `${BASE}?${q}` : BASE, options);
+  },
   library: (options) => request(`${BASE}/library`, options),
   get: (uid) => request(`${BASE}/${enc(uid)}`),
   diff: (uid, { from, to } = {}) => {

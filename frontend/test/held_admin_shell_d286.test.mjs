@@ -1,4 +1,5 @@
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { readRoutesSource } from './_routesSource.mjs';
 /**
  * D286 — the Admin shell on accounts HQ holds directly (canvas S20), its wall
  * rules, and every leftover console placed (S22). Tasks 415, 416, 418, 419;
@@ -67,7 +68,9 @@ const CODE = Object.fromEntries(HELD_FILES.map((f) => [f, codeOnly(SRC[f])]));
 
 const rows = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []);
 const pathOf = (to) => to.split('?')[0];
-const routeLine = (path) => APP.split('\n').find((l) => l.includes(`path="${path}"`));
+// App.jsx and every route module (D528, #4105), as the router composes them.
+const ROUTES = readRoutesSource(root);
+const routeLine = (path) => ROUTES.split('\n').find((l) => l.includes(`path="${path}"`));
 /** Literal `to="/…"` doors in one file's code, comments stripped. */
 const doorsIn = (code) => [...code.matchAll(/\bto="(\/[^"]*)"/g)].map((m) => m[1]);
 
@@ -210,7 +213,9 @@ test('Approvals draws the canvas\'s twenty lanes, with Best-Fit reviewed here an
   const { LANES } = await import('../src/pages/admin/approvals/approvalsModel.js');
   const doors = laneDoors();
   assert.equal(LANES.length, 20);
-  assert.deepEqual(Object.keys(doors).sort(), LANES.filter((l) => l.key !== 'best_fit').map((l) => l.key).sort(), 'every remaining console has exactly one door');
+  // D5885: Best-Fit's door is its Approvals board, so every lane now has one.
+  assert.deepEqual(Object.keys(doors).sort(), LANES.map((l) => l.key).sort(), 'every lane has exactly one door');
+  assert.equal(doors.best_fit, '/admin/approvals/best-fit');
   for (const [k, to] of Object.entries(doors)) assert.ok(routeLine(pathOf(to)), `${k} opens ${to}, which is not a registered route`);
   assert.equal(doors.moderation, '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
   // The laned queues the glance counts are the lanes with a glance key: D215's
@@ -225,7 +230,8 @@ test('Approvals draws the canvas\'s twenty lanes, with Best-Fit reviewed here an
   // D215's eleven only: the nine new lanes' doors are D1038's canvas, drawn after the H35 map,
   // and every door is a registered route by the check above.
   for (const l of LANES.filter((x) => x.glance && !x.isNew)) {
-    if (l.key === 'best_fit') { assert.equal(doors[l.key], undefined, 'retired Best-Fit has no console door'); continue; }
+    // D5885: Best-Fit's board postdates the H35 map (its old console was retired by #3734).
+    if (l.key === 'best_fit') continue;
     const route = doors[l.key];
     // The Lab's queue is placed on Programs (D937); moderation (D442) postdates the map (D506);
     // Events opens the desk's Review tab, a sub-path of the placed /admin/events (D1038).

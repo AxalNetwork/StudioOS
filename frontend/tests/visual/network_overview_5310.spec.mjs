@@ -21,6 +21,13 @@ function reads(mode) {
     [/intro-requests\?status=pending/, empty ? log([], []) : log([req({ uid: 's1' })], [req({ uid: 'd1' })], { sent_pending: 2, received_pending: 1 })],
     [/intro-requests\?status=accepted/, empty ? log([], []) : log([req({ uid: 'a1', status: 'accepted', accepted_at: '2026-11-03', person: { name: 'Example Priya' }, teammate: { name: 'Example Tom' } })], [])],
     [/intro-requests\?status=made/, empty ? log([], []) : log([req({ uid: 'm1', status: 'made', made_at: '2026-11-01T10:00:00Z', person: { name: 'Example Sara' }, outcome: { label: 'Meeting held' } })], [])],
+    [/\/api\/relationships\/activity/, { complete: true, sources: { follow_ups: { state: 'readable' }, introductions: { state: 'readable' }, imports: { state: 'readable' }, duplicate_reviews: { state: 'readable' } },
+      events: empty ? [] : [
+        { kind: 'follow_up_completed', at: '2026-10-19 16:20:00', label_parts: { action: 'Follow-up completed' } },
+        { kind: 'intro_requested', at: '2026-10-17 09:12:00', label_parts: { action: 'Introduction requested' } },
+        { kind: 'intro_accepted', at: '2026-10-16 11:04:00', label_parts: { action: 'Introduction accepted' } },
+        { kind: 'duplicate_merged', at: '2026-10-12 18:52:00', label_parts: { action: 'Duplicate merged' } },
+        { kind: 'contacts_imported', at: '2026-10-12 18:47:00', label_parts: { action: 'Contacts imported', count: 118 } }] }],
     [/\/api\/introductions\/propositions/, { propositions: empty ? [] : [{ uid: 'p1', status: 'pending', expires_at: '2026-11-20', target: { name: 'Example Kim', headline: 'GP, Example Fund' }, breakdown: { reasons: ['Invests pre-seed B2B SaaS'] } }], credits: { balance: empty ? 2 : 4 } }],
   ];
 }
@@ -30,7 +37,7 @@ async function open(page, request, { width, mode, dark = false }) {
   // The member's saved appearance (SettingsContext reads it): dark for the dark boards (NW10).
   if (dark) await page.route(/\/api\/settings\/appearance/, (route) => route.fulfill({ status: 200, json: { theme: 'dark' } }));
   const table = reads(mode);
-  await page.route(/\/api\/(contacts\/book|relationships\/summary|relationships\/intro-requests|introductions\/propositions)/, (route) => {
+  await page.route(/\/api\/(contacts\/book|relationships\/summary|relationships\/intro-requests|relationships\/activity|introductions\/propositions)/, (route) => {
     if (mode === 'fail') return route.fulfill({ status: 503, json: { detail: 'Synthetic read failure' } });
     const hit = table.find(([re]) => re.test(route.request().url()));
     return hit ? route.fulfill({ status: 200, json: hit[1] }) : route.continue();
@@ -54,6 +61,10 @@ for (const width of [1440, 390]) {
       await expect(page.getByTestId('tile-network-connections')).not.toHaveClass(/is-marked/);
       // Accept on a curated match is the primary action, in both themes.
       expect(await page.getByTestId('button-match-accept-p1').evaluate((b) => getComputedStyle(b).backgroundColor)).toMatch(/rgb\((109, 40, 217|124, 58, 237)\)/);
+      // D5310-p5: Recent network activity is the recorded events, with their times.
+      await expect(page.getByTestId('row-network-activity')).toHaveCount(5);
+      await expect(page.getByTestId('card-network-activity')).toContainText('Contacts imported · 118 added');
+      await expect(page.getByTestId('card-network-activity')).toContainText('2026-10-19 16:20');
       // NW8: one Section picker on the phone in place of the pill row; the pills on a desktop.
       await expect(page.getByTestId('select-network-section')).toBeVisible({ visible: width < 600 });
       await expect(page.getByTestId('link-network-relationships-anchor')).toBeVisible({ visible: width >= 600 });
@@ -86,6 +97,7 @@ for (const width of [1440, 390]) {
     await open(page, request, { width, mode: 'fail' });
     await expect(page.getByTestId('tile-network-connections')).toContainText('Could not be read');
     await expect(page.getByTestId('card-network-introductions')).toContainText('Nothing is shown as zero');
+    await expect(page.getByTestId('card-network-activity')).toContainText('This is not an empty history');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`nw5-${width}.png`), fullPage: true });
   });

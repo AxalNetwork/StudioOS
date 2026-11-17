@@ -52,8 +52,8 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   assert.match(page, /<Link to=\{zone\('\/funds\/calls'\)\} data-testid="link-review-call-ledger">/);
   assert.doesNotMatch(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
   assert.match(app, /function FundCapitalCallsRedirect\(\)[\s\S]{0,200}?pathname: '\/funds\/calls', search: loc\.search, hash: loc\.hash/);
-  // D1160: Fund Ops is retired; an investor's Performance is the page itself.
-  assert.match(app, /path="\/funds\/performance"[^\n]+investorFundWorkspace\(<FundPerformancePage embedded \/>\)/);
+  // D1160: Fund Ops is retired; an investor's Performance is the page itself. #6245: it draws its own Fund chrome, no tier gate.
+  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? <FundPerformancePage fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : effectiveRole !== 'admin' \? <FundPerformancePage locked \/> : <FundOpsRedirect \/>\)\}/);
 });
 
 test('I6 does not ship canvas sample funds, LPs, figures, or models', () => {

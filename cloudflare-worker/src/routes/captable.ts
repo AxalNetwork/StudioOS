@@ -580,9 +580,23 @@ captable.get('/scenarios/:uid', async (c) => {
   const user = await requireAuth(c);
   try {
     const row = await ensureScenarioReadOr404(c, c.req.param('uid'), user);
-    return c.json(serialize(row));
+    return c.json({ ...serialize(row), used_by_plans: await plansUsing(c.env, row) });
   } catch (e) { return asJsonError(c, e); }
 });
+
+/**
+ * D6085 (#6085): the Use of funds scenarios of the same venture that name this
+ * cap-table scenario ("Paid for by"). Null when that read fails: the scenario
+ * page still reads, and says nothing it does not know.
+ */
+async function plansUsing(env: Env, row: ScenarioRow): Promise<Array<{ id: number; name: string; is_base: boolean }> | null> {
+  if (row.project_id == null) return [];
+  try {
+    const res = await env.DB.prepare('SELECT id,name,is_base FROM uof_scenarios WHERE project_id=? AND cap_table_scenario_uid=? ORDER BY is_base DESC,id LIMIT 20')
+      .bind(row.project_id, row.uid).all<{ id: number; name: string; is_base: number }>();
+    return (res.results ?? []).map((p) => ({ id: p.id, name: p.name, is_base: !!p.is_base }));
+  } catch { return null; }
+}
 
 /** D5069: a save made from a read that is no longer the row's. Nothing was written. */
 function changedSinceOpen(c: Ctx, current: string | null): Response {

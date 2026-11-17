@@ -206,5 +206,5 @@ test('RR07: a founder sees who read the narrative on Home, even with no saved ve
   assert.match(founder, /data-testid="narrative-reads"/);
   assert.match(founder, /An admin gives a reason before reading\. You see each read here\./);
   assert.doesNotMatch(html(h(NarrativeHome, { data: { parts: {} }, projectId: 7, admin: true })), /narrative-reads/);
-  assert.match(cycleRouteText(), /<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>/);
+  assert.match(cycleRouteText(), /<NarrativeHome data=\{data\} admin=\{narrativeStanding\(data\?\.parts\?\.narrative\?\.capabilities\)\.readOnly\} projectId=\{ctx\.projectId\} \/>/);
 });

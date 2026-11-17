@@ -12,6 +12,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
+import { CORE_TERM_KEYS, LICENCE_TERM_KEYS } from '../src/services/licenceTerms';
 import adminLicences from '../src/routes/admin_licences.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -128,6 +129,15 @@ function freshDb() {
      VALUES ('ctr_1','lic_fr','licence_agreement',4,'Territory licence agreement',
              'AGREEMENT for Axal VC France SAS in FR at EUR 90,000.00.','[]','draft')`,
   ).run();
+  // D6562: existing send regressions use a recorded ready draft, not an unknown legacy one.
+  db.exec(readFileSync(resolve(REPO_ROOT, 'cloudflare-worker/sql/migrations/202611151226_6562_agreement_revision.sql'), 'utf8'));
+  const licence = db.prepare("SELECT * FROM territory_licences WHERE uid='lic_fr'").get() as any;
+  const values: Record<string, unknown> = {};
+  for (const key of [...CORE_TERM_KEYS,'legal_entity_name','brand_name','registered_address','signatory_name','signatory_title']) values[key] = licence[key] ?? null;
+  for (const key of LICENCE_TERM_KEYS) values[`schedule.${key}`] = null;
+  values.territory = ['FR']; values.exclusivity = null; values['schedule.governing_law'] = 'France';
+  db.prepare("UPDATE licence_contracts SET terms_revision=0,schedule_revision=1,terms_snapshot_json=? WHERE uid='ctr_1'")
+    .run(JSON.stringify({version:1,terms_revision:0,schedule_revision:1,values}));
   return db;
 }
 

@@ -91,6 +91,8 @@ function FundDetail({ fund }) {
           <div><dt>RVPI · on NAV</dt><dd><Unrecorded /></dd></div>
         </dl>
         <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
+        {/* #6245: NAV and the multiples are read on Fund performance, from recorded marks and cash flows. */}
+        <Link to="/funds/performance" className="i6-perf-link" data-testid="link-fund-performance">Open fund performance <ArrowUpRight size={12} /></Link>
       </section>
 
       <div className="i6-grid">

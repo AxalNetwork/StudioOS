@@ -24,7 +24,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_funds', 'limited_partners', 'fund_report_periods',
-  'capital_calls', 'fund_distributions', 'portfolio_positions', 'user_company_links', 'admin_audit_log'];
+  'capital_calls', 'fund_distributions', 'portfolio_positions', 'projects', 'user_company_links', 'admin_audit_log'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
   + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql'].map(mig).join('\n');
@@ -461,4 +461,16 @@ test('no file this task adds reads a secret or a bank provider', () => {
     assert.doesNotMatch(src, /integrations\/secrets|integrations\/providers\//, file);
   }
   assert.ok(readdirSync(new URL('../sql/migrations/', import.meta.url)).includes('476_fund_report_drafts.sql'));
+});
+
+// ── D6870: the pack freezes deployed and the sector mix ─────────────────────
+
+test('D6870: the built pack carries the positions\' deployed total beside its totals, and their sector mix', async () => {
+  const f = fixture();
+  f.db.exec(`INSERT INTO projects (id, name, sector) VALUES (1, 'Seeded Co', 'Climate')`);
+  await built(f);
+  const pack = JSON.parse(reportOf(f).figures_json);
+  assert.deepEqual(pack.totals.deployed, { cents: 10000 });
+  assert.deepEqual(pack.sector_mix.items, [{ sector: 'Climate', invested_cents: 10000, position_count: 1 }]);
+  assert.match(pack.sector_mix.basis, /^Invested amount of the fund's positions/);
 });

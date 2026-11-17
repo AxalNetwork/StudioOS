@@ -76,7 +76,8 @@ test('1: Grow obligations save and read on a full fresh build with foreign keys 
   await patch({ due_at: '2020-01-01' });
   assert.equal(row().reminders_sent_json, '[]');
   assert.deepEqual([(await read()).body.records.rows[0].due_at, (await read()).body.records.rows[0].status], ['2020-01-01', 'overdue']);
-  const mappings = [['compliance', 'other'], ['risk', 'risk'], ['culture', 'culture'], ['tax', 'franchise_tax'], ['other', 'other']];
+  // D6872 (#6872): compliance has its own event type, apart from other.
+  const mappings = [['compliance', 'compliance'], ['risk', 'risk'], ['culture', 'culture'], ['tax', 'franchise_tax'], ['other', 'other']];
   for (const [index, [kind, eventType]] of mappings.entries()) {
     const date = '2099-01-' + String(index + 1).padStart(2, '0');
     const result = await call('POST', '/obligations', { title: 'Example ' + kind, kind, due_at: date });

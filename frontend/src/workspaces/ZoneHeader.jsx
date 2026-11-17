@@ -46,6 +46,8 @@ export default function ZoneHeader({
   primary = null,
   refresh = null,
   navClassName = 'my-3',
+  // #6245: false keeps the crumb and drops the zone row, for a reader the bucket's zones would only refuse.
+  nav = true,
 }) {
   const bucket = bucketPath ? bucketForPath(role, bucketPath) : null;
   const i6 = family === 'i6';
@@ -59,7 +61,7 @@ export default function ZoneHeader({
         </div>
         <ZoneHeaderTools role={role} primary={primary}>{refresh}</ZoneHeaderTools>
       </header>
-      {bucket ? <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className={navClassName} /> : null}
+      {bucket && nav ? <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className={navClassName} /> : null}
     </>
   );
 }

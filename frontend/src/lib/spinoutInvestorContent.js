@@ -40,7 +40,7 @@ export const HERO = {
   headline: THESIS.headline,
   sub:
     'The Spin-Out Lab is a 28-day company-formation environment. Founders enter with an idea and '
-    + 'leave incorporated, 83(b)-filed, cap-table-clean, with verified customer discovery and revenue '
+    + 'work through to an incorporation order, the 83(b) election, a clean cap table, customer discovery and revenue '
     + 'proof — and Axal VC underwrites them on observed execution, not a pitch.',
 };
 

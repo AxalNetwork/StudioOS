@@ -187,7 +187,7 @@ const INVESTOR = [
   own('/funds/calls', key(I, 'Fund', 'Capital calls')),
   own('/funds/ledger', key(I, 'Fund', 'Distributions')),
   own('/funds/reporting', key(I, 'Fund', 'Reporting')),
-  alias('/funds/performance', key(I, 'Fund'), 'Fund Ops’ performance tab, on the fund.'),
+  alias('/funds/performance', key(I, 'Fund'), '#6245: an LP’s and a GP’s fund performance, drawn in the Fund chrome with its rail.'),
   off('/raise/data-room', key(I, 'Data room')),
   off('/build/competitors', key(I, 'Competitor analysis')),
   ...NETWORK(I),

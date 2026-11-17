@@ -76,3 +76,5 @@ amendment, effects and conflict, D4819), `licenceReasonModel.js` and `LicenceRea
 by `LicenceDetail.jsx`. Tests that read the page as text read every file here
 through `frontend/test/_licencePage.mjs`, so moving code between these files
 does not break them.
+
+- `AgreementReplacement.jsx` — D6562: L09 comparison and five-field readiness, L10 frozen text/hash preview, and the send-readiness predicate. ContractStep integration awaits #5920's ownership handoff.

@@ -12,6 +12,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { api, dd } from '../../lib/api';
+import { ddLifecycleApi } from '../../lib/api/ddLifecycle';
+import { ddDeskApi } from '../../lib/api/ddDesk';
 import { dealWorkroomApi } from '../../lib/api/dealWorkroom';
 import { reportError } from '../../lib/log';
 import { safeExternalUrl } from '../../lib/url';
@@ -28,10 +30,10 @@ import { Slot } from './DealOverview';
 import SharedRoomFiles from './SharedRoomFiles.jsx';
 import InvestorCapTablePanel from '../raise/captable/InvestorCapTablePanel';
 import { LINK_LINE, composeBody } from '../duediligence/ddCaseModel';
-import { DECK_SLOT } from './dealFrameModel';
+import { DealDeckCard } from './DealDeck';
 import {
   ASK_MAX, CAP_TABLE_SLOT, LEGAL_SLOT, NOTE_READERS, QUESTIONS_SLOT, ROUTES, ROUTE_NOTE, SYNDICATES_LINE, WITHDRAW_MAX,
-  caseCard, caseForDeal, closedReason, myCommitment, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
+  caseCard, caseDoors, caseForDeal, closedReason, icStep, myCommitment, openFlagRows, sectionProgress, templateChoices, paperRows, proposedTerms, requestRows, roomListing, roomStateOf, roundLines, withdrawError,
 } from './dealWorkModel';
 
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink focus:border-axal-violet focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
@@ -118,6 +120,11 @@ export function DealDiligence({ deal, userId }) {
   const result = caseRead.data;
   const data = result && result.uid === uid && result.userId === userId ? result.data : null;
   const card = found.state === 'ready' ? caseCard(found.row, data, userId) : null;
+  const flagList = data ? openFlagRows(data) : null;
+  const progress = data ? sectionProgress(data) : [];
+  const ic = found.state === 'ready' ? icStep(found.row, data) : null;
+  const doors = found.state === 'ready' ? caseDoors(found.row, data) : [];
+  const [sending, setSending] = useState(false);
   return (
     <div className="grid gap-3.5 md:grid-cols-2" data-testid="deal-diligence">
       {found.state === 'loading' && <Card title="Diligence case"><Reading /></Card>}
@@ -135,26 +142,110 @@ export function DealDiligence({ deal, userId }) {
           <div className="flex flex-wrap gap-1.5"><Pill tone="wait">{card.stage}</Pill><Pill tone="off">{card.risk}</Pill></div>
           <p className="m-0 font-mono text-[13px] font-bold text-axal-ink dark:text-gray-100">{card.items.line}</p>
           {card.items.pct != null && <Bar pct={card.items.pct} />}
-          <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{card.flags}</p>
+          {!flagList?.rows && <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="deal-dd-flags-line">{card.flags}</p>}
+          {flagList?.rows && (
+            <div className="flex flex-col gap-1.5" data-testid="deal-dd-flags">
+              <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="deal-dd-flags-line">{flagList.line}</p>
+              {flagList.rows.length > 0 && (
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+                  {flagList.rows.map((f) => (
+                    <li key={f.key} className="flex flex-wrap items-center gap-1.5 border-t border-axal-hairline pt-1.5 text-[13px] dark:border-gray-700" data-testid="deal-dd-flag">
+                      <Pill tone="wait">{f.severity}</Pill>
+                      <span className="font-bold text-axal-ink dark:text-gray-100">{f.title}</span>
+                      <span className={SUB}>{f.section} · {f.state}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{card.opened}</p>
           {caseRead.status === 'unreadable' && <Unreadable what="The case’s sections and requests" onRetry={loadDetail} />}
           {card.yours?.map((s) => <p key={s.title} className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Your section: {s.title} <Pill tone="now">{s.status}</Pill></p>)}
-          <Link to={card.href} className={`${BTN_S} w-fit`} data-testid="deal-dd-door">Open the case</Link>
+          {ic && (
+            <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-dd-ic">
+              <span className={EYE}>Investment committee</span>
+              <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="deal-dd-ic-line">{ic.text}</p>
+              {ic.state === 'ready' && <button type="button" className={`${BTN_P} w-fit`} onClick={() => setSending(true)} data-testid="deal-dd-ic-open">Send to IC</button>}
+              {ic.state === 'decide' && <Link to={ic.href} className={`${BTN_S} w-fit`} data-testid="deal-dd-ic-decide">Record the decision</Link>}
+              {ic.state === 'sent' && <Link to={ic.href} className={`${BTN_S} w-fit`} data-testid="deal-dd-ic-commit">Open the Commit zone</Link>}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Link to={card.href} className={`${BTN_S} w-fit`} data-testid="deal-dd-door">Open the case</Link>
+            {doors.map((d) => <Link key={d.key} to={d.href} className={`${BTN_S} w-fit`} data-testid={`deal-dd-door-${d.key}`}>{d.label}</Link>)}
+          </div>
           <p className={`m-0 ${SUB}`}>The case lives on its own page.</p>
+        </Card>
+      )}
+      {card && progress.length > 0 && (
+        <Card title="Progress by section" testId="deal-dd-sections">
+          {progress.map((p) => (
+            <div key={p.id} className="flex flex-col gap-1 border-t border-axal-hairline pt-2 first:border-t-0 first:pt-0 dark:border-gray-700" data-testid="deal-dd-section">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{p.title}</span>
+                <span className={SUB}>{p.line} · {p.verdict}</span>
+              </div>
+              {p.pct != null && <Bar pct={p.pct} />}
+            </div>
+          ))}
         </Card>
       )}
       {card && <FounderRequests key={`${uid}:${userId}`} row={found.row} userId={userId} data={data}
         unreadable={caseRead.status === 'unreadable'} reload={loadDetail} />}
       <div className="md:col-span-1"><DealReferencesTab dealId={deal.id} /></div>
       <Slot slot={QUESTIONS_SLOT} testId="deal-dd-questions" />
-      {opening && (
-        <ConfirmDialog testId="deal-dd-open-dialog" title={`Open a diligence case on ${deal.project_name || 'this company'}?`}
-          sub="A case is yours: it holds the standard checklist, the requests you send the founder and the risk band. The founder sees a request only when you send one."
-          act="Open the case"
-          onConfirm={() => dd.openCase({ subject_type: 'project', subject_id: deal.project_id, subject_label: deal.project_name || `Deal #${deal.id}`, template_depth: 'standard' })}
-          onClose={(changed) => { setOpening(false); if (changed) reloadList(); }} />
+      {opening && <OpenCaseDialog deal={deal} onClose={(changed) => { setOpening(false); if (changed) reloadList(); }} />}
+      {sending && uid && (
+        <ConfirmDialog testId="deal-dd-ic-dialog" title={`Send ${card?.title || 'this case'} to IC?`}
+          sub="A new IC record is opened with this case, its decision and its memo attached. The case can be sent once."
+          act="Send to IC"
+          onConfirm={() => ddLifecycleApi.sendToIc(uid)}
+          done={() => (
+            <div className="flex flex-col gap-2" data-testid="deal-dd-ic-sent">
+              <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">The case is with IC.</p>
+              <Link to="/deals/commit" className={`${BTN_S} w-fit`} data-testid="deal-dd-ic-sent-commit">Open the Commit zone</Link>
+            </div>
+          )}
+          onClose={(changed) => { setSending(false); if (changed) loadDetail(); }} />
       )}
     </div>
+  );
+}
+
+/**
+ * D6180: opening a case. The template depths come from `GET /dd/templates`;
+ * when more than one is offered the investor picks one, Standard first. A
+ * failed read of the templates still opens at Standard, and says so.
+ */
+function OpenCaseDialog({ deal, onClose }) {
+  const [tpl] = useRead(() => ddDeskApi.templates(), []);
+  const choices = templateChoices(tpl);
+  const [depth, setDepth] = useState('standard');
+  const offered = choices.length > 1;
+  const chosen = offered && choices.some((c) => c.depth === depth) ? depth : (choices[0]?.depth || 'standard');
+  const word = (choices.find((c) => c.depth === chosen)?.label || 'Standard').toLowerCase();
+  return (
+    <ConfirmDialog testId="deal-dd-open-dialog" title={`Open a diligence case on ${deal.project_name || 'this company'}?`}
+      sub={`A case is yours: it holds the ${word} checklist, the requests you send the founder and the risk band. The founder sees a request only when you send one.`}
+      act="Open the case"
+      onConfirm={() => dd.openCase({ subject_type: 'project', subject_id: deal.project_id, subject_label: deal.project_name || `Deal #${deal.id}`, template_depth: chosen })}
+      onClose={onClose}>
+      {tpl.status === 'loading' && <Reading />}
+      {tpl.status === 'unreadable' && <p className={`m-0 ${SUB}`} data-testid="deal-dd-templates-unreadable">The templates could not be read, so the case opens at Standard.</p>}
+      {offered && (
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0" data-testid="deal-dd-templates">
+          <legend className="mb-1 text-[13px] font-bold text-axal-ink dark:text-gray-100">Checklist depth</legend>
+          {choices.map((c) => (
+            <label key={c.depth} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+              <input type="radio" name="dd-depth" value={c.depth} checked={chosen === c.depth} onChange={() => setDepth(c.depth)} data-testid={`deal-dd-depth-${c.depth}`} />
+              <span className="font-bold">{c.label}</span>
+              <span className={SUB}>{c.line}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+    </ConfirmDialog>
   );
 }
 
@@ -330,18 +421,30 @@ export function DealDocuments({ deal }) {
       if (r?.url && typeof window !== 'undefined') window.location.assign(r.url);
     } catch (e) { setDl((m) => ({ ...m, [f.uid]: { err: e?.message || 'The file did not open. Try again.' } })); }
   };
-  const tone = { not_opened: 'off', behind_nda: 'wait', nda_on_file: 'done', open: 'done' }[st.state];
+  const tone = { not_opened: 'off', behind_nda: 'wait', nda_pending: 'wait', nda_on_file: 'done', open: 'done' }[st.state];
+  // D4815 DX10 (#5907): each state's label, so no two read alike.
+  const pill = { not_opened: 'Not opened to you', behind_nda: 'NDA required', nda_pending: 'Waiting for signatures', nda_on_file: 'Open to you', open: 'Open to you' }[st.state];
   return (
     <div className="flex flex-col gap-3.5" data-testid="deal-documents">
       {st.state === 'loading' && <Card><Reading /></Card>}
-      {st.state === 'unreadable' && <Unreadable what={st.what} claim="That is not a claim that the room is closed to you." onRetry={access.status === 'unreadable' ? reloadAccess : loadRoom} />}
+      {/* D4815 DX10 (#5907) E: access that could not be confirmed is its own card, with Try again and never Ask
+          for access. A room that could not be read after access was confirmed keeps the shared Unreadable. */}
+      {st.state === 'unreadable' && access.status === 'unreadable' && (
+        <section role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 p-4`} data-testid="deal-room-state-unreadable">
+          <Pill tone="off">Unreadable</Pill>
+          <p className="m-0 flex-1 text-[14px] font-bold text-axal-ink dark:text-gray-100">{st.line}</p>
+          <button type="button" className={BTN_S} onClick={reloadAccess} data-testid="deal-room-retry">Try again</button>
+          <span className={`${SUB} w-full`}>That is not a claim that the room is closed to you.</span>
+        </section>
+      )}
+      {st.state === 'unreadable' && access.status !== 'unreadable' && <Unreadable what={st.what} claim="That is not a claim that the room is closed to you." onRetry={loadRoom} />}
       {tone && (
         <section className={`${CARD} flex flex-wrap items-center gap-2.5 p-4`} data-testid={`deal-room-state-${st.state}`}>
-          <Pill tone={tone}>{st.state === 'not_opened' ? 'Not opened to you' : st.state === 'behind_nda' ? 'Behind an NDA' : 'Open to you'}</Pill>
+          <Pill tone={tone}>{pill}</Pill>
           <p className="m-0 flex-1 text-[14px] font-bold text-axal-ink dark:text-gray-100">{st.line}</p>
           {st.state === 'not_opened' && st.canAsk && <button type="button" className={BTN_S} onClick={() => setDialog('ask')} data-testid="deal-room-ask">Ask for access</button>}
-          {st.state === 'behind_nda' && st.canSign && <button type="button" className={BTN_S} onClick={() => setDialog('nda')} data-testid="deal-room-nda">Sign the NDA</button>}
-          {st.state === 'behind_nda' && st.ndaPending && <span className={SUB}>The NDA is out for signature. The files open once every party has signed.</span>}
+          {st.state === 'behind_nda' && st.canSign && <button type="button" className={BTN_S} onClick={() => setDialog('nda')} data-testid="deal-room-nda">Sign NDA</button>}
+          {st.state === 'nda_pending' && st.sub && <span className={`${SUB} w-full`} data-testid="deal-room-nda-pending">{st.sub}</span>}
         </section>
       )}
       {listing && <SharedRoomFiles key={projectUid} projectUid={projectUid} listing={listing} rawFiles={room.data?.files || []} withheld={st.withheld || 0} onDownload={download} downloads={dl} />}
@@ -354,7 +457,8 @@ export function DealDocuments({ deal }) {
           {/* D6184 (#6184): each envelope with its signed count, Download once fully signed, and how to sign. */}
           {paper.status === 'ready' && paperRows(paper.data?.envelopes).map((p) => <DealPaperRow key={p.id} row={p} />)}
         </Card>
-        <Slot slot={DECK_SLOT} testId="deal-docs-deck" />
+        {/* D6165 (#6165): the deck the venture granted you, in place of the old grey slot. */}
+        <DealDeckCard dealId={deal.id} testId="deal-docs-deck" />
       </div>
       {dialog === 'ask' && (
         <ConfirmDialog testId="deal-room-ask-dialog" title={`Ask ${deal.project_name || 'the founder'} for data room access?`}

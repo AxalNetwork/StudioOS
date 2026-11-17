@@ -18,6 +18,9 @@ export const useOfFundsApi = {
   updateScenario: (project, id, body) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteScenario: (project, id) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}?${q(project)}`, { method: 'DELETE' }),
   makeBase: (project, id) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}/make-base?${q(project)}`, { method: 'POST', body: '{}' }),
+  // D6085 (#6085): the venture's cap-table scenarios for the picker, and the link set, changed or cleared (null) with the scenario's revision.
+  capTableScenarios: (project, scenarioId) => request(`/cycles/raise/use-of-funds/cap-table-scenarios?${q(project, scenarioId == null ? {} : { scenario_id: String(scenarioId) })}`),
+  linkCapTable: (project, id, uid, revision) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}/cap-table?${q(project)}`, { method: 'PUT', body: JSON.stringify({ cap_table_scenario_uid: uid ?? null, expected_revision: revision }) }),
   compare: (project, ids) => request(`/cycles/raise/use-of-funds/compare?${q(project, { ids: ids.join(',') })}`),
   milestones: (project, scenarioId) => request(`/cycles/raise/use-of-funds/milestones?${q(project, scenarioId == null ? {} : { scenario_id: String(scenarioId) })}`),
   milestone: (project, id) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project)}`),

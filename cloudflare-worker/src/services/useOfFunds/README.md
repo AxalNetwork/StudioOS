@@ -39,3 +39,11 @@ Migration 606 creates the three new stores. Hires remain in
 `use_of_funds_hires` (migration 463); part 3 scopes and supplies that list.
 
 D1176: `store.ts` supplies scoped scenario/milestone/hire writes, the shared module and record-drawer split writer, Base projection and atomic activity rows. `read.ts` supplies independent Home blocks, round precedence, founder-only cached Mercury, measured runway precedence, ties and Needs you. Neither uses a forecast as runway today. See D1176 for the API contract.
+
+`capTableLink.ts` (D6085, #6085) reads the cap-table scenario a plan scenario
+names (`uof_scenarios.cap_table_scenario_uid`), from the same project only: a
+link to a scenario no longer there reads `deleted`, never an error. It gives
+the picker's list, the raise compared with the plan's (shown, never fixed)
+and Founders after the round from the scenario's first round, all Modelled.
+`store.ts`'s `saveCapTableLink` sets, changes or clears the link with the
+scenario's revision and one audit row; linking changes neither figure.

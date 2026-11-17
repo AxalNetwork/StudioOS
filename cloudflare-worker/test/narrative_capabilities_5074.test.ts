@@ -208,3 +208,22 @@ test('every narrative write refuses from the map, in the route source', () => {
     assert.ok(/narrativeScope\(c, 'write'\)|keptScope\(c\)/.test(handler), `${path} goes through the write gate`);
   }
 });
+
+test('D5074 part 7: the module read\'s narrative part carries the same map as the versions read', async () => {
+  const db = fixture();
+  await v1(db);
+  const founder = await call(db, FOUNDER, 'GET', '/modules/investor-narrative');
+  assert.equal(founder.status, 200, JSON.stringify(founder.body));
+  assert.deepEqual(founder.body.parts.narrative.capabilities, (await capsOf(db, FOUNDER)).body.capabilities);
+  assert.equal(founder.body.parts.narrative.capabilities.edit, true);
+  // An admin reads the module only with a reason; then the part carries the admin's map, and without one no map at all.
+  const refused = await call(db, ADMIN, 'GET', '/modules/investor-narrative');
+  assert.equal(refused.status, 403);
+  assert.ok(!refused.body?.parts, 'a refused read carries no part and no map');
+  await openAsAdmin(db);
+  const admin = await call(db, ADMIN, 'GET', '/modules/investor-narrative');
+  assert.equal(admin.status, 200, JSON.stringify(admin.body));
+  assert.deepEqual(admin.body.parts.narrative.capabilities, narrativeCapabilities({ admin: true, founder: false }));
+  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/cycle_raise.ts'), 'utf8');
+  assert.match(route, /parts\.narrative = \{ \.\.\.home, capabilities: narrativeCapabilities\(await narrativeStanding\(c, s\.user, s\.projectId\)\) \};/);
+});

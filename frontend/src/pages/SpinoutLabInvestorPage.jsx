@@ -25,9 +25,10 @@
 //    "Present" toggle; this page renders inside the authenticated app shell,
 //    so both are dropped and the design's nav CTAs live in the page header.
 // 2. LIVE FIGURES WHERE A SOURCE EXISTS. The hero proof tiles overlay
-//    GET /api/spinout-lab/fund-metrics (same merge, same fallback semantics as
-//    the LP workspace); everything else is the operator-maintained content in
-//    lib/spinoutInvestorContent.js, one auditable module.
+//    GET /api/spinout-lab/fund-metrics; copy is the content in
+//    lib/spinoutInvestorContent.js, one auditable module. Fund figures (D6137)
+//    come only from that read through lib/spinoutFundFigures.js: deployment is
+//    a committed LP's figure, and one with no record reads "Not recorded".
 // 3. HONEST COHORT SECTION. The design presents six named "live readings".
 //    No endpoint reports per-company cohort telemetry to investors, so that
 //    section renders as an explicitly-captioned illustrative composite —
@@ -35,16 +36,17 @@
 //    render verbatim.
 // 4. REAL DOCUMENT CTA. "Fund brief (PDF)" produces the actual brief via the
 //    same exportFundBriefPdf the workspace uses — not a decorative button.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, FileDown, Landmark, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api, spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
-import { fundModel, lpWorkspaceCallToAction, money } from '../lib/spinoutFundModel';
+import { lpWorkspaceCallToAction } from '../lib/spinoutFundModel';
+import { fundFigures, LP_ONLY } from '../lib/spinoutFundFigures';
 import {
   HERO, JOURNEY, STACK, WHY_NOW, EDGE, NETWORK, PROOF_STUDIO_STATIC,
-  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER, FUND, PROGRAM,
+  COHORT_SNAPSHOT, CASE_ITEMS, FINAL_CTA, DISCLAIMER, PROGRAM,
 } from '../lib/spinoutInvestorContent';
 
 /** The deeper LP workspace — the single destination every CTA points at. */
@@ -84,8 +86,12 @@ function SectionHead({ label, headline, sub }) {
 const btnPrimary = 'inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-6 py-3 text-sm font-extrabold text-white hover:bg-violet-800 transition-colors';
 const btnGhost = 'inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 dark:border-gray-700 px-6 py-3 text-sm font-bold text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors';
 
-/** "Fund brief (PDF)" — generates the real document via the shared renderer. */
-function FundBriefButton({ className }) {
+/**
+ * "Fund brief (PDF)" — generates the real document via the shared renderer,
+ * from the same /fund-metrics read this page drew (D6137), so the PDF prints
+ * the page's figures and a visitor's brief carries no LP figure.
+ */
+function FundBriefButton({ className, metrics }) {
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -94,7 +100,7 @@ function FundBriefButton({ className }) {
     setBusy(true); setErr('');
     try {
       const { exportFundBriefPdf } = await import('../lib/fundBriefPdf');
-      await exportFundBriefPdf({ recipient: { name: user?.name, email: user?.email } });
+      await exportFundBriefPdf({ recipient: { name: user?.name, email: user?.email }, metrics: metrics ?? null });
     } catch (e) {
       setErr(e?.message || 'Could not generate the fund brief.');
       reportError('SpinoutLabInvestorPage:brief', e);
@@ -132,11 +138,10 @@ export default function SpinoutLabInvestorPage() {
   const cta = standing?.viewerId === viewerId && standing ? standing.cta : lpWorkspaceCallToAction();
   const workspaceHref = LP_WORKSPACE_PATH + cta.hash;
 
-  // Live program/raise overlay — identical merge to the LP workspace: a block
-  // is used only when it answers `available: true`; a failed fetch or an
-  // unavailable block falls back to the operator-maintained model, and the
-  // provenance caption follows the same flag so this page never claims live
-  // telemetry it does not have.
+  // Live program overlay: the program block is used only when it answers
+  // `available: true`; otherwise the operator-maintained track record, and the
+  // provenance caption follows the same flag. Fund figures have no fallback
+  // (D6137): they come from the read's fund block or read "Not recorded".
   const [live, setLive] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -146,9 +151,8 @@ export default function SpinoutLabInvestorPage() {
     return () => { alive = false; };
   }, []);
 
-  const M = useMemo(() => fundModel(), []);
   const liveProgram = live?.program?.available ? live.program : null;
-  const liveFund = live?.fund?.available ? live.fund : null;
+  const F = fundFigures(live);
 
   const P = liveProgram
     ? {
@@ -158,16 +162,17 @@ export default function SpinoutLabInvestorPage() {
     }
     : PROGRAM;
 
-  const committedM = liveFund && Number(liveFund.committed) > 0
-    ? Number(liveFund.committed) / 1e6
-    : FUND.committed;
-  const capacityM = Math.max(0, FUND.target - committedM);
+  // Capacity remaining is target minus committed, so it is a committed LP's
+  // figure: drawn only when the read carried the raise (D6137).
+  const capacity = F.raise && F.raise.recorded && F.target.recorded ? F.raise.capacity : null;
 
   const heroProof = [
     { k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across three completed cohorts' },
     { k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Within the 28-day schedule' },
     { k: 'Raised post-program', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'External capital, alumni companies' },
-    { k: 'Deployed by the fund', v: money.m(M.investedK), tone: 'violet', note: `${M.positions.length} positions held` },
+    F.portfolio
+      ? { k: 'Deployed by the fund', v: F.portfolio.invested, tone: 'violet', note: `Positions held: ${F.portfolio.positions}` }
+      : { k: 'Deployed by the fund', v: '—', tone: 'violet', note: LP_ONLY },
   ];
 
   // Studio throughput, tile by tile. Each takes the live value when
@@ -210,7 +215,7 @@ export default function SpinoutLabInvestorPage() {
           <p className="mt-5 max-w-[600px] text-[15px] sm:text-[16px] leading-relaxed text-gray-600 dark:text-gray-300">{HERO.sub}</p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link to={workspaceHref} data-testid="link-review-fund-hero" className={btnPrimary}>{cta.label ?? 'Review the fund'}</Link>
-            <FundBriefButton className={btnGhost} />
+            <FundBriefButton metrics={live} className={btnGhost} />
           </div>
 
           {/* studio proof strip */}
@@ -225,8 +230,8 @@ export default function SpinoutLabInvestorPage() {
           </div>
           <div className="mt-3 text-[11px] text-gray-400 dark:text-gray-500" data-testid="text-proof-provenance">
             {liveProgram
-              ? 'Program figures are live from platform records; fund deployment reflects the operator-maintained portfolio model.'
-              : 'Program and deployment figures are operator-maintained; live platform metrics substitute automatically when available.'}
+              ? 'Program figures are live from platform records; fund deployment comes from the fund’s position records, or reads Not recorded.'
+              : 'Program figures are operator-maintained until live platform metrics are available; fund deployment comes from the fund’s position records, or reads Not recorded.'}
           </div>
         </div>
       </div>
@@ -436,7 +441,7 @@ export default function SpinoutLabInvestorPage() {
             <Link to={workspaceHref} data-testid="link-open-workspace" className={`${btnPrimary} mt-5 w-full`}>
               {cta.label ?? 'Open the LP workspace'} <ArrowRight size={14} />
             </Link>
-            <FundBriefButton className={`${btnGhost} mt-2.5 w-full`} />
+            <FundBriefButton metrics={live} className={`${btnGhost} mt-2.5 w-full`} />
             <p className="m-0 mt-3.5 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">Full terms and capital account statements are available to approved LPs.</p>
           </div>
         </div>
@@ -447,7 +452,7 @@ export default function SpinoutLabInvestorPage() {
         <div className="relative overflow-hidden rounded-3xl border border-violet-300/40 dark:border-violet-800 bg-gradient-to-br from-violet-100/80 to-white dark:from-violet-950/50 dark:to-gray-900 px-7 py-11 sm:px-12">
           <div className="max-w-[660px]">
             <div className={`${LBL} mb-4 text-violet-700 dark:text-violet-400`}>
-              {FINAL_CTA.kicker} · ${capacityM.toFixed(1)}M capacity remaining
+              {FINAL_CTA.kicker}{capacity && ` · ${capacity} capacity remaining`}
             </div>
             <h2 className="m-0 text-[26px] sm:text-[34px] font-black leading-[1.14] tracking-[-.03em] text-gray-900 dark:text-gray-100">{FINAL_CTA.headline}</h2>
             <p className="mt-4 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">{FINAL_CTA.body}</p>
@@ -455,7 +460,7 @@ export default function SpinoutLabInvestorPage() {
               <Link to={workspaceHref} data-testid="link-request-access" className={btnPrimary}>
                 <Landmark size={15} /> {cta.label ?? 'Request LP access'}
               </Link>
-              <FundBriefButton className={btnGhost} />
+              <FundBriefButton metrics={live} className={btnGhost} />
             </div>
           </div>
         </div>

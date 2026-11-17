@@ -32,7 +32,6 @@ const rootPath = fileURLToPath(root);
 const ALLOW = [
   { kind: 'not-money', reason: "A percentage, ratio or rounding to two places, not an amount of currency: the line has a money word beside it.", files: {
     "frontend/src/pages/PortfolioPerformancePage.jsx": 1,
-    "frontend/src/pages/SpinoutLabLpWorkspacePage.jsx": 1,
     "frontend/src/pages/SpinoutLabMarketPage.jsx": 2,
     "frontend/src/pages/admin/insights/insightsModel.js": 1,
     "frontend/src/pages/admin/payments/dialogModel.js": 1,
@@ -112,6 +111,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/fundReportDrafts.ts": 1,
     "cloudflare-worker/src/services/fundReports.ts": 1,
     "cloudflare-worker/src/services/fundRollup.ts": 2,
+    "cloudflare-worker/src/services/fundSnapshotFigures.ts": 1,
     "cloudflare-worker/src/services/queueWorker.ts": 1,
     "cloudflare-worker/src/services/mercury/investorFeeds.ts": 3,
     "cloudflare-worker/src/services/mercury/match.ts": 2,

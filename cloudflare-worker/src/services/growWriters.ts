@@ -703,7 +703,9 @@ export async function updateMarket(env: Env, pid: number, user: User, uid: strin
 
 export const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
 export const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
-const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+// D6872 (#6872, owner answer B): compliance and other are stored as two event types, so one of each can fall on the
+// same day (UNIQUE(project_id, event_type, due_date)) and each reads back its own kind.
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'compliance', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
 /** Repeats, as the form says it, to `compliance_events.recurrence` (decision 1). */
 export const REPEATS = { once: 'one_time', monthly: 'monthly', quarterly: 'quarterly', yearly: 'annual' } as const;
 export const REPEATS_OF: Record<string, keyof typeof REPEATS> = { one_time: 'once', monthly: 'monthly', quarterly: 'quarterly', annual: 'yearly' };
@@ -712,6 +714,7 @@ export function obligationKind(event: Row): string {
   if (event.kind) return String(event.kind);
   if (event.event_type === 'board_meeting') return 'governance';
   if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  // D6872: a kind-less `compliance` or `other` row (Calendar, or older than D6872) reads as compliance, as before.
   return 'compliance';
 }
 

@@ -199,7 +199,20 @@ export async function authorizeCompute(env: ComputeEnv, jobUid: string, raw: unk
       && (scope.kind === 'company' ? scope.id : scope.company_id) === admission.spec.company_id
       && await canRead(env, scope, user) && !await haltedAll(env) && !['off', 'paused'].includes(await engineMode(env));
   }
-  return { allowed, revision: 1, approved: false };
+  if (!allowed) return { allowed, revision: 1, approved: false };
+  // D5567 part 3: the sponsor's authorization revision, raised by D1 triggers whenever any of their access is taken
+  // away (migration 202611161330). A grant or registration from before the change no longer matches. Unreadable: refuse.
+  const revision = await authorizationRevision(env, admission.sponsor.member_id);
+  return revision === null ? { allowed: false, revision: 1, approved: false } : { allowed, revision, approved: false };
+}
+
+/** A member's authorization revision: 1 until their access first changes, then one more each time. Null when unreadable. */
+export async function authorizationRevision(env: Env, memberId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare('SELECT revision FROM agent_authz_revisions WHERE member_id = ?').bind(memberId).first<{ revision: number }>();
+    if (!row) return 1;
+    return Number.isSafeInteger(row.revision) && row.revision >= 2 ? row.revision : null;
+  } catch { return null; }
 }
 
 export async function computeInternal(env: ComputeEnv, action: string, jobUid: string, raw: unknown): Promise<unknown> {

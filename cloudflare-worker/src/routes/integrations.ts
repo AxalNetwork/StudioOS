@@ -1507,6 +1507,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
   if (provider === 'carta') extra.carta_audience = cartaAudience(user.role);
   // D5827: the member's Typeform data center; `connect` reads it from the state, never the callback's query.
+  // D2403: "Turn on publishing" asks X for the publish set; the provider reads it from the state, never the callback's query.
+  if (provider === 'x') extra.x_publish = c.req.query('publish') === '1';
   if (provider === 'typeform') extra.typeform_region = c.req.query('region') === 'eu' ? 'eu' : 'us';
   if (c.req.query('return_to') === 'build') {
     extra.return_to = 'build';

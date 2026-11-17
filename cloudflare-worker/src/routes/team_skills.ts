@@ -55,6 +55,16 @@
  *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
  *   Every card carries `based_on: { skill_uid, version } | null`.
  *
+ * D4538 part 6 (#5967): task-to-skill discovery for an agent the caller manages (SKILL_DISCOVERY_CONTRACT.md).
+ *   POST /skills/discover                { task, output_kind?, agent_uid, taxonomy_focus?, workflow_context: null, limit? }:
+ *                                        `services/agents/skillDiscovery.ts`'s answer, `recommend` | `ambiguous` |
+ *                                        `no_suitable_skill`, all 200. The agent's role, company and tool grants come
+ *                                        from its row. 404 `not_found` unless the caller can manage the agent; 400
+ *                                        `body_invalid`, `field_not_accepted` { field } (a role, tools or a record),
+ *                                        `agent_uid_invalid`, `workflow_context_invalid` (until #4535), `task_invalid`,
+ *                                        `output_kind_invalid`, `taxonomy_focus_invalid`, `limit_invalid`; 409
+ *                                        `agent_removed`. Reads only: no link, pin or event is written.
+ *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
  *    that company's members (`user_company_links`) and HQ's admins. A draft
@@ -107,6 +117,7 @@ import {
   ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, linksOf, logSkillsChanged, peopleAxes, skillsChange, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
 } from '../services/agents/skillLinks';
+import { checkDiscoveryRequest, discoverSkills, type DiscoverySkill } from '../services/agents/skillDiscovery';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {
@@ -892,6 +903,88 @@ router.put('/agents/:uid/skills', async (c) => {
   // D4534: who added, re-pinned or removed which skills.
   await logSkillsChanged(c.env, a.id, user.id, skillsChange(before, await linksOf(c.env, a.id)));
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
+});
+
+// ── Skill discovery (D4538 part 6, #5967) ───────────────────────────────────
+
+/** The request's keys (SKILL_DISCOVERY_CONTRACT.md). Anything else, such as a role, tools or a record, is refused. */
+const DISCOVER_KEYS = new Set(['task', 'output_kind', 'agent_uid', 'taxonomy_focus', 'workflow_context', 'limit']);
+const discoverWords: Record<string, string> = {
+  task_invalid: 'Describe the task in 1 to 500 characters.',
+  output_kind_invalid: 'The output kind is brief, draft or record_change.',
+  taxonomy_focus_invalid: 'Name at most 3 skills from the /studio taxonomy.',
+  limit_invalid: 'Ask for 1 to 10 skills.',
+};
+
+/**
+ * The catalogue as discovery reads it: every HQ skill and the agent's company's skills, each described by its
+ * current published version (a never-published draft by its draft, with no roles or tags: the gate stops it at
+ * `version_not_published`). `readable` is the caller's read gate (`mayRead`), `suspended` the run gate
+ * (`skillRunRefusal`) at that version, asked only of skills HQ ever suspended. Reads only.
+ */
+async function discoveryCatalogue(env: Env, user: User, companyId: number | null): Promise<DiscoverySkill[]> {
+  type Row = SkillRow & {
+    v_version: number | null; v_name: string | null; v_purpose: string | null; v_steps_json: string | null; v_tools_json: string | null;
+    v_output_kind: OutputKind | null; v_taxonomy_json: string | null; v_roles_json: string | null;
+  };
+  const rows = await all<Row>(env,
+    `SELECT s.*, v.version AS v_version, v.name AS v_name, v.purpose AS v_purpose, v.steps_json AS v_steps_json,
+            v.allowed_tools_json AS v_tools_json, v.output_kind AS v_output_kind, v.taxonomy_json AS v_taxonomy_json, v.roles_json AS v_roles_json
+       FROM agent_skills s LEFT JOIN agent_skill_versions v ON v.skill_id = s.id AND v.version = s.current_version
+      WHERE s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?) ORDER BY s.id`, companyId ?? -1);
+  const everSuspended = new Set((await all<{ skill_id: number }>(env,
+    `SELECT DISTINCT m.skill_id FROM agent_skill_moderation m JOIN agent_skills s ON s.id = m.skill_id
+      WHERE m.action = 'suspend' AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?))`, companyId ?? -1)).map((r) => r.skill_id));
+  const out: DiscoverySkill[] = [];
+  for (const s of rows) {
+    const published = s.v_version != null && s.current_version > 0;
+    out.push({
+      uid: s.uid, scope: s.scope, company: s.company_id, status: s.status,
+      readable: await mayRead(env, s, user),
+      version: published ? s.current_version : null,
+      suspended: published && everSuspended.has(s.id) && !!(await skillRunRefusal(env, s.id, s.current_version)),
+      name: published ? s.v_name ?? s.name : s.name,
+      purpose: published ? s.v_purpose ?? s.purpose : s.purpose,
+      steps: parse(published ? s.v_steps_json : s.steps_json, [] as string[]),
+      roles: published ? parse(s.v_roles_json, [] as string[]) : [],
+      tools: parse(published ? s.v_tools_json : s.allowed_tools_json, [] as string[]),
+      output_kind: (published ? s.v_output_kind : null) ?? s.output_kind,
+      taxonomy: published ? parse(s.v_taxonomy_json, [] as Tag[]) : [],
+    });
+  }
+  return out;
+}
+
+/**
+ * POST /skills/discover — the contract's request, answered with `discoverSkills` (D4538 part 4) for an agent the
+ * caller manages. The agent's role, company and tool grants come from its row; the body carries only the task and
+ * the agent's uid. Reads only: nothing is attached, pinned or logged. `no_suitable_skill` and `ambiguous` are 200.
+ */
+router.post('/skills/discover', async (c) => {
+  const user = await requireAuth(c);
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the task and the agent as a JSON object.');
+  const extra = Object.keys(b).find((k) => !DISCOVER_KEYS.has(k));
+  if (extra !== undefined) {
+    return say(c, 400, 'field_not_accepted', 'Send only the task, the agent, and the optional output kind, taxonomy focus and limit. The agent\'s role and tools are read from the agent.', { field: extra });
+  }
+  if (typeof b.agent_uid !== 'string' || !/^[a-f0-9]{32}$/.test(b.agent_uid)) return say(c, 400, 'agent_uid_invalid', 'Name the agent by its uid.');
+  // Reserved for #4535: a workflow step's identity, once it is stable.
+  if (b.workflow_context != null) return say(c, 400, 'workflow_context_invalid', 'Workflow context is not accepted yet; send null.');
+  const checked = checkDiscoveryRequest(b);
+  if (!checked.ok) return say(c, 400, checked.code, discoverWords[checked.code] ?? 'The request is not valid.');
+  if (checked.request.taxonomy_focus.length) {
+    const tax = await taxonomy(c.env);
+    if (!checked.request.taxonomy_focus.every((slug) => tax.slugs.has(slug))) return say(c, 400, 'taxonomy_focus_invalid', discoverWords.taxonomy_focus_invalid);
+  }
+  // Only the agent's managers get an answer; anyone else is told what another company's agent tells them.
+  const a = await agentByUid(c.env, b.agent_uid);
+  const scope = a && await scopeOfAgent(c.env, a);
+  if (!a || !scope || !(await canRead(c.env, scope, user)) || !(await canManage(c.env, scope, user))) return say(c, 404, 'not_found', 'There is no such agent.');
+  if (a.status === 'removed') return say(c, 409, 'agent_removed', 'This agent was removed.');
+  const companyId = await agentCompanyId(c.env, a);
+  const agent = { role: a.role_key, company: companyId, tools: grantsOf(a.tool_grants_json).map((g) => g.tool) };
+  return c.json(discoverSkills(checked.request, agent, await discoveryCatalogue(c.env, user, companyId)));
 });
 
 // ── Run cost (D4121, #4121) ─────────────────────────────────────────────────

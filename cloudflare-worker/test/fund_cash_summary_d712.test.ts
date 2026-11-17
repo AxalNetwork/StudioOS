@@ -28,7 +28,7 @@ const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const baseline = read('../sql/schema_baseline.sql');
 const mig = (f: string) => read(`../sql/migrations/${f}`);
 const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_funds', 'limited_partners', 'fund_report_periods',
-  'capital_calls', 'fund_distributions', 'portfolio_positions', 'user_company_links', 'admin_audit_log', 'integrations'];
+  'capital_calls', 'fund_distributions', 'portfolio_positions', 'projects', 'user_company_links', 'admin_audit_log', 'integrations'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
   + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '472_entity_bank_accounts.sql',

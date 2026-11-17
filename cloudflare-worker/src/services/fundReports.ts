@@ -2,6 +2,8 @@
 import type { Env } from '../types';
 import { deleteReportWithoutStatement, reportHasStatement } from './mercury/investorFeeds';
 import { effectiveDisplayName } from './profileExpansion';
+import { fundFigures } from './fundReportBuild';
+import { asTotals, capitalToDate, deployedAndSectors } from './fundSnapshotFigures';
 const SENTENCES={
  not_found:'Fund or reporting period not found.',
  period:'Record a period label of up to 100 characters.',
@@ -109,7 +111,24 @@ async function issuedFigures(env:Env,row:any){
   if(!cents(value)||(reason!==null&&typeof reason!=='string')||(value===null&&!reason))throw new Error('Report snapshot unreadable');
   totals[`${key}_cents`]=value;totals[`${key}_reason`]=value===null?reason:null;
  }
- return {figures:{source:'issue_snapshot',currency:'USD',totals},figures_reason:null};
+ // D6870: a snapshot issued since carries these too. One issued before keeps what it holds: the key is absent, never 0.
+ for(const key of ['called','collected','nav']){
+  if(!(`${key}_cents` in t))continue;
+  const value=t[`${key}_cents`],reason=t[`${key}_reason`]??null;
+  if(!cents(value)||(reason!==null&&typeof reason!=='string')||(value===null&&!reason))throw new Error('Report snapshot unreadable');
+  totals[`${key}_cents`]=value;totals[`${key}_reason`]=value===null?reason:null;
+ }
+ const sectorMix=snapshot.sector_mix===undefined?undefined:sectorMixOf(snapshot.sector_mix);
+ return {figures:{source:'issue_snapshot',currency:'USD',totals,...(sectorMix?{sector_mix:sectorMix}:{})},figures_reason:null};
+}
+/** D6870: a frozen sector mix, checked row by row, or a throw. */
+function sectorMixOf(raw:any){
+ if(!raw||typeof raw!=='object'||typeof raw.basis!=='string'||!Array.isArray(raw.items))throw new Error('Report snapshot unreadable');
+ for(const item of raw.items){
+  if(!item||(item.sector!==null&&typeof item.sector!=='string')||!Number.isSafeInteger(item.invested_cents)||item.invested_cents<0
+   ||!Number.isSafeInteger(item.position_count)||item.position_count<1)throw new Error('Report snapshot unreadable');
+ }
+ return {basis:raw.basis,items:raw.items.map((i:any)=>({sector:i.sector,invested_cents:i.invested_cents,position_count:i.position_count}))};
 }
 /** D6249: the issuer's display name only, never their email or other account fields. */
 async function issuerName(env:Env,issuedBy:unknown){
@@ -124,6 +143,19 @@ async function correctedBy(env:Env,fundId:number,periodId:number):Promise<number
  const next=await env.DB.prepare(`SELECT id FROM fund_report_periods WHERE fund_id=? AND status='issued' AND id<>?
    AND CASE WHEN json_valid(notes) THEN json_extract(notes,'$._receipt.corrects_period_id') END=? ORDER BY issued_at DESC,id DESC LIMIT 1`).bind(fundId,periodId,periodId).first<any>();
  return next?Number(next.id):null;
+}
+/**
+ * D6870: what a GP's own issue freezes. The manager's page as before, with the
+ * figures the overview chart plots added to its totals as of the period end:
+ * called and collected to date, NAV (the pack's own working), and the
+ * positions' sector mix. `invested_*` stays the deployed figure.
+ */
+async function issueSnapshot(env:Env,fund:any,p:{label:string;start:string;end:string}){
+ const page=await readFundPage(env,fund,true);
+ const {called,collected}=await capitalToDate(env,fund.id,p.end);
+ const {nav}=await fundFigures(env,fund,p);
+ const {sector_mix}=await deployedAndSectors(env,fund.id);
+ return {...page,totals:{...page.totals,...asTotals('called',called),...asTotals('collected',collected),...asTotals('nav',nav)},sector_mix};
 }
 export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:any){
  if(!body||!text(body.period,100))throw new FundReportRefusal('period');
@@ -148,7 +180,7 @@ export async function saveFundPeriod(env:Env,fundId:number,actorId:number,body:a
  // The snapshot is recorded by the server, never supplied by a client.
  const fund=await env.DB.prepare('SELECT * FROM vc_funds WHERE id=?').bind(fundId).first<any>();
  if(!fund)throw new FundReportRefusal('not_found',404);
- const snapshot=issue?JSON.stringify(await readFundPage(env,fund,true)):(previous?.snapshot_json??null);
+ const snapshot=issue?JSON.stringify(await issueSnapshot(env,fund,{label,start:body.period_start,end:body.period_end})):(previous?.snapshot_json??null);
  const write=previous
   ?env.DB.prepare(`UPDATE fund_report_periods SET period_start=?,period_end=?,notes=?,snapshot_json=?,status=?,issued_at=?,issued_by=?,updated_at=datetime('now')
     WHERE fund_id=? AND id=? AND status='draft' AND notes IS ?`).bind(body.period_start,body.period_end,notes,snapshot,status,issuedAt,issue?actorId:null,fundId,previous.id,previous.notes)

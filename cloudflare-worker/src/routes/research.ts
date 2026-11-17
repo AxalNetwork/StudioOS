@@ -58,6 +58,8 @@ import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from
 import { scopedDecisions } from './ic';
 import { investorProjectIds } from './_investorProjectScope';
 import { PORTFOLIO_NOTE_INSTRUCTION, portfolioNoteMaterial } from '../services/portfolioNotes';
+import { STATEMENT_COVER_INSTRUCTION, statementCoverMaterial, statementDate } from '../services/statementCoverNote';
+import positionsRoutes from './positions';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 // The perk lifecycle window lives in ONE place. `offers/perk-deals`'s gather
 // below decides what is expiring, and it has to agree with what the zone shows
@@ -1462,9 +1464,30 @@ async function portfolioNoteGather(c: any, userId: number, quarters: number): Pr
   });
 }
 
+/**
+ * D6888 (#6888): one of the statement sheet's own reads, called in-process with
+ * the caller's own headers, as `admin_insights_export.ts` calls its page's read:
+ * the same session, the same position scope (`positionScope`, the active
+ * company header included) and the same arithmetic, so the cover note's material
+ * can only carry what the statement prints. A refused or failed read is null.
+ */
+async function statementRead(c: any, path: string): Promise<any | null> {
+  let ctx: any;
+  try { ctx = c.executionCtx; } catch { /* no execution context outside a live request */ }
+  const res = await positionsRoutes.request(path, { headers: c.req.raw.headers }, c.env, ctx);
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
 const DRAFT_SURFACES: Record<string, {
   instruction: string;
   gather: (c: { env: Env }, userId: number, scope: string) => Promise<string[]>;
+  /**
+   * D6888: false for a surface whose canvas says nothing is kept. The run's text
+   * goes back to the member and is not stored: no `research_zone_drafts` row, so
+   * there is nothing to list, accept or discard on the Worker.
+   */
+  keep?: false;
   /**
    * What Accept writes BESIDES stamping the draft, for a surface whose canvas
    * says Accept writes somewhere ("Accept writes the note"). It runs before
@@ -2735,6 +2758,26 @@ const DRAFT_SURFACES: Record<string, {
     instruction: PORTFOLIO_NOTE_INSTRUCTION,
     gather: async (c, userId) => portfolioNoteGather(c, userId, 2),
   },
+  // D6888 (#6888): Eadwyn's covering-note proposal in the statement sheet (D6217
+  // PF-13a, PF-13h). `scope_key` is the statement's quarter-end. The material is
+  // the sheet's own two reads for that date, page 1 (`/analytics?as_of=`) and
+  // page 2 (`/?as_of=`), formatted by `services/statementCoverNote.ts`. A date
+  // that is not a completed quarter-end, a failed read or a date with no book
+  // gathers [] and the route answers `nothing_to_draft` before any model call.
+  // Nothing is kept: the investor copies, edits or discards it in the sheet.
+  'portfolio/statement': {
+    instruction: STATEMENT_COVER_INSTRUCTION,
+    keep: false,
+    gather: async (c, _userId, scope) => {
+      const asOf = statementDate(scope, todayIso());
+      if (!asOf) return [];
+      const [analytics, positions] = await Promise.all([
+        statementRead(c, `/analytics?as_of=${asOf}`),
+        statementRead(c, `/?as_of=${asOf}`),
+      ]);
+      return statementCoverMaterial(asOf, analytics, positions);
+    },
+  },
 
   'portfolio/updates': {
     // IP2's band: "Proposal · parse N updates ... arriving as editable
@@ -3802,6 +3845,10 @@ research.post('/drafts', async (c) => {
   if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
   const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
   if (!text) return c.json({ detail: 'draft_unfaithful' }, 503);
+  // D6888: a surface that keeps nothing hands the text back and writes no row.
+  if (spec.keep === false) {
+    return c.json({ item: { uid: null, surface, scope_key: scope || null, body: text, kept: false, accepted: false } });
+  }
 
   const uid = newUid();
   await c.env.DB.prepare(

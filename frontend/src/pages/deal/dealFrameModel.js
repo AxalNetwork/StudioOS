@@ -338,9 +338,3 @@ export function draftSourceRows(sources) {
   }));
 }
 
-/** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
-export const DECK_SLOT = {
-  eye: 'Pitch deck studio canvas',
-  title: 'Deck',
-  line: 'The deck shows here once a per-deal deck grant exists; today a deck opens through its share link.',
-};

@@ -31,7 +31,8 @@ r.post('/:id/packet-ready', async (c) => {
   const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { document_id?: unknown };
-  const out = await markPacketReady(c.env, id, body.document_id, admin.id, admin.email);
+  // D6686 part 2: one log per step, this route's own (the owner's answer); the service is not handed the email.
+  const out = await markPacketReady(c.env, id, body.document_id, admin.id);
   if (!out.ok) return c.json({ error: out.error }, out.status);
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_packet_ready', {
     incorporation_id: id, document_id: Number(body.document_id),
@@ -43,7 +44,7 @@ r.post('/:id/filed', async (c) => {
   const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   const body = (await c.req.json().catch(() => ({}))) as { filed_on?: unknown };
-  const out = await markFiled(c.env, id, body.filed_on, admin.id, undefined, admin.email);
+  const out = await markFiled(c.env, id, body.filed_on, admin.id);
   if (!out.ok) return c.json({ error: out.error }, out.status);
   // D1415 Part 3: the company's uid only; no name and no address in the log.
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_filed', {

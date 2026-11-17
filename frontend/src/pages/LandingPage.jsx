@@ -43,7 +43,7 @@ const PILLARS = [
   { eyebrow: 'Build', title: 'Venture tools', capital: false,
     desc: 'Spin-Out Lab, discovery, scoring, cap table, incorporation — the work that makes a company real.' },
   { eyebrow: 'Collaborate', title: 'Global partner network', capital: false,
-    desc: 'Verified partners, advisors, and operators working with founders across borders, not a vendor directory.' },
+    desc: 'Partners, advisors, and operators working with founders across borders, each approved before they are listed, not a vendor directory.' },
   { eyebrow: 'Capital', title: 'When the record is ready', capital: true,
     desc: 'Fund I and the LP workspace see the same evidence the company was built on.' },
 ];
@@ -53,7 +53,7 @@ const LANES = [
   { title: 'Founders', img: 'lane-founders', cta: 'Start free',
     desc: 'Enter with an idea or an operating company. Leave with one that survives diligence.',
     items: [
-      'The 28-day Spin-Out Lab takes an idea to an incorporated company',
+      'The Spin-Out Lab is a 28-day programme from idea to an incorporation order; when the company is registered depends on eligibility and the jurisdiction',
       'Pitch deck, cap table, and fundraise in one workspace for existing companies',
       'Introductions are earned and proceed under a three-way NDA',
     ] },
@@ -193,7 +193,7 @@ function Hero({ stats }) {
         <div className="ax-lbl">The global venture creation network</div>
         <h1 id="ax-hero-h" className="ax-h1">Where we <em>build</em> the rails for the next generation of ventures</h1>
         <p className="ax-hero-copy">
-          Axal VC is the operating platform for venture creation: venture tools, a verified global partner network,
+          Axal VC is the operating platform for venture creation: venture tools, a global partner network,
           and capital when you’re ready to scale, all in one system for turning an idea into an organization.
         </p>
         <div className="ax-row-btns" style={{ marginTop: 34 }}>
@@ -327,8 +327,9 @@ function LabBand() {
             <div className="ax-lab-eyebrow">Flagship · The Spin-Out Lab</div>
             <h2 id="ax-lab-h">Spin-Out Lab<br />28-day venture sprint.</h2>
             <p className="ax-lab-copy">
-              Founders arrive with a thesis and leave with an incorporated entity, clean cap table, filed 83(b),
-              evidenced discovery, revenue proof, and a deck built from their own data.
+              Founders arrive with a thesis and work through to an incorporation order, a cap table, the 83(b)
+              election, evidenced discovery and a deck built from their own data. When the company is registered
+              depends on eligibility and the jurisdiction.
             </p>
             <div className="ax-row-btns" style={{ marginTop: 22 }}>
               <Link to="/spinout-lab" className="ax-btn ax-btn-md ax-btn-bright">See the full Lab →</Link>

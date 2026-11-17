@@ -14,7 +14,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
 import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import {
-  caseForDeal, caseCard, requestRows, roomStateOf, roomListing, paperRows, proposedTerms, myCommitment, roundLines, withdrawError, NOTE_READERS,
+  caseForDeal, caseCard, caseDoors, casePath, icStep, openFlagRows, sectionProgress, templateChoices, requestRows, roomStateOf, roomListing, paperRows, proposedTerms, myCommitment, roundLines, withdrawError, NOTE_READERS,
 } from '../src/pages/deal/dealWorkModel.js';
 import { paperSigning, signedLine } from '../src/pages/deal/dealWorkModel.js';
 
@@ -43,7 +43,7 @@ test('the room\'s three access states; behind an NDA the withheld files are a co
   assert.match(roomStateOf({ status: 'ready', data: { granted: null, request: { state: 'declined', decided_at: '2026-10-21', decline_reason: 'Not yet.' } } }).line, /declined your request on 21 Oct 2026: Not yet\./);
   const access = { status: 'ready', data: { granted: { expires_at: null }, founder_user_id: 9, nda: null } };
   const nda = roomStateOf(access, ready(ROOM));
-  assert.deepEqual([nda.state, nda.withheld, nda.canSign, nda.line], ['behind_nda', 6, true, 'You have access. 6 files are behind an NDA.']);
+  assert.deepEqual([nda.state, nda.withheld, nda.canSign, nda.line], ['behind_nda', 6, true, 'You have access. 6 files require an NDA.']);
   assert.equal(roomStateOf({ ...access, data: { ...access.data, nda: { status: 'out_for_signature' } } }, ready(ROOM)).canSign, false, 'an NDA out for signature is not asked for twice');
   const on = roomStateOf({ status: 'ready', data: { granted: { expires_at: null }, nda: { status: 'on_file', valid_until: '2027-10-09 00:00:00' } } }, ready({ ...ROOM, nda_signed: true, withheld_behind_nda: 0 }));
   assert.deepEqual([on.state, on.line], ['nda_on_file', 'You have access and an NDA on file until 9 Oct 2027.']);
@@ -63,7 +63,7 @@ test('Diligence: your case on this company only, its card and requests', () => {
   assert.equal(caseForDeal(ready({ items: [], total: 0 }), 7).state, 'none');
   assert.equal(caseForDeal(ready({ items: [{ uid: 'x', subject_type: 'project', subject_id: 8 }], total: 400 }), 7).state, 'none', 'D6181: no not_in_read state');
   const card = caseCard(found.row, { sections: [{ id: 1, title: 'Financial health', status: 'assigned', assignee_user_id: 21 }, { id: 2, title: 'Legal', status: 'assigned', assignee_user_id: 9 }], reviewers: [] }, 21);
-  assert.deepEqual([card.stage, card.risk, card.items.line, card.items.pct, card.flags, card.opened, card.href], ['In review', 'Moderate risk', '38 of 52 items worked', 73, '3 open flags', 'Opened 1 Oct 2026 · led by Ada', '/admin/due-diligence/dd1']);
+  assert.deepEqual([card.stage, card.risk, card.items.line, card.items.pct, card.flags, card.opened, card.href], ['In review', 'Moderate risk', '38 of 52 items worked', 73, '3 open flags', 'Opened 1 Oct 2026 · led by Ada', '/due-diligence/dd1']);
   assert.deepEqual(card.yours, [{ title: 'Financial health', status: 'Open' }]);
   assert.equal(caseCard({ ...found.row, checklist_total: 0, risk_band: null, open_flags: 0 }, null, 21).items.line, 'No checklist items are recorded on this case.');
   const now = Date.parse('2026-10-25T12:00:00Z');
@@ -252,7 +252,7 @@ test('D6181: with 251 cases the Diligence tab asks for this company exactly, sho
     const door = v.byId('deal-dd-door')[0];
     assert.ok(door, 'the case door is drawn');
     const doorProps = Object.entries(door).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
-    assert.match(String(doorProps.href ?? ''), /\/admin\/due-diligence\/dd-live$/, 'the live case, not the archived one');
+    assert.match(String(doorProps.href ?? ''), /^\/due-diligence\/dd-live$/, 'the live case, not the archived one, at the non-admin address (D6180)');
     assert.equal(v.has('deal-dd-none'), false);
     assert.equal(v.has('deal-dd-open'), false, 'Open a diligence case is never offered beside a live case');
   } finally { await v.close(); }
@@ -380,6 +380,161 @@ test('Terms: proposed terms with their source, the slots, and How you invest say
     assert.ok(v.has('deal-terms-captable'));
     assert.match(v.textOf('deal-terms-routes'), /No preference is recorded here yet\./);
   } finally { await v.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D6180 (#6180) — the case card: open flags in words, progress by
+ * section, the Memo and reports doors, Send to IC, the template depth,
+ * and no /admin address.
+ * ------------------------------------------------------------------ */
+
+const D6180_SECTIONS = [{ id: 1, title: 'Financial health', verdict: 'pass' }, { id: 2, title: 'Legal', verdict: null }];
+const D6180_CHECKLIST = [
+  { id: 11, section_id: 1, status: 'pass' }, { id: 12, section_id: 1, status: 'flag' }, { id: 13, section_id: 1, status: 'pending' },
+  { id: 21, section_id: 2, status: 'n_a' },
+];
+const D6180_FLAGS = [
+  { kind: 'checklist', id: null, checklist_item_id: 12, section_id: 1, severity: 'low', title: 'Burn above plan', state: 'open', created_at: '2026-10-02' },
+  { kind: 'finding', id: 5, section_id: 2, severity: 'critical', title: 'Founder litigation', state: 'in_progress', created_at: '2026-10-01' },
+  { kind: 'finding', id: 6, section_id: 2, severity: 'high', title: 'Old lien', state: 'closed', created_at: '2026-10-03' },
+  { kind: 'finding', id: 7, section_id: null, severity: 'weird', title: 'Unsorted', state: 'condition_to_close', created_at: '2026-10-04' },
+];
+const d6180Detail = (over = {}) => ({
+  case: { uid: 'dd-ready', decision: null, ic_record: null, scoped: false, ...(over.case || {}) },
+  allowed: { decide: true, report: true, memo_read: true, ...(over.allowed || {}) },
+  sections: D6180_SECTIONS, checklist: D6180_CHECKLIST, flags: D6180_FLAGS, reviewers: [], requests: [],
+});
+
+test('D6180: open flags are words with severity, severest first, closed ones left out; none reads "No open flags"', () => {
+  // Mutation checked: closed flags kept; severity dropped to colour only (the word missing); the order not by severity;
+  // an absent list read as "No open flags".
+  const f = openFlagRows(d6180Detail());
+  assert.equal(f.line, '3 open flags');
+  assert.deepEqual(f.rows.map((r) => [r.title, r.severity, r.state, r.section]), [
+    ['Founder litigation', 'Critical severity', 'In progress', 'Legal'],
+    ['Burn above plan', 'Low severity', 'Open', 'Financial health'],
+    ['Unsorted', 'Severity not recorded', 'Condition to close', 'Case-wide'],
+  ]);
+  assert.deepEqual(openFlagRows({ ...d6180Detail(), flags: [D6180_FLAGS[2]] }), { line: 'No open flags', rows: [] });
+  assert.deepEqual(openFlagRows({ sections: [] }), { line: 'Open flags not recorded', rows: null }, 'no list is not "none"');
+});
+
+test('D6180: progress per section is its items worked of its checklist, with its verdict', () => {
+  // Mutation checked: another section's items counted; pending counted as worked; the verdict dropped.
+  assert.deepEqual(sectionProgress(d6180Detail()).map((p) => [p.title, p.line, p.pct, p.verdict]), [
+    ['Financial health', '2 of 3 items worked', 67, 'Pass'],
+    ['Legal', '1 of 1 items worked', 100, 'No verdict yet'],
+  ]);
+  assert.deepEqual(sectionProgress({ sections: [{ id: 9, title: 'Market' }], checklist: [] }).map((p) => [p.line, p.pct]), [['No checklist items', null]]);
+});
+
+test('D6180: Send to IC only after a Proceed decision and only for the lead or an Admin; Ready for a decision opens Sign-off', () => {
+  // Mutation checked: Send to IC offered in the ready stage before a decision; offered without `allowed.decide`;
+  // a sent case offered again; the decide door at an /admin address; a scoped reviewer shown the IC step.
+  const row = { uid: 'dd-ready', stage: 'ready' };
+  assert.deepEqual(icStep(row, d6180Detail()), { state: 'decide', text: 'Every section has a verdict. Record Proceed or Proceed with conditions on the case before it goes to IC.', href: '/due-diligence/dd-ready/sign-off' });
+  const decided = { uid: 'dd-ready', stage: 'decided' };
+  assert.equal(icStep(decided, d6180Detail({ case: { decision: 'proceed' } })).state, 'ready');
+  assert.equal(icStep(decided, d6180Detail({ case: { decision: 'proceed_with_conditions' } })).state, 'ready');
+  assert.deepEqual(icStep(decided, d6180Detail({ case: { decision: 'proceed' }, allowed: { decide: false } })), { state: 'waits', text: 'The case lead or an Admin sends the case to IC.' });
+  assert.equal(icStep(decided, d6180Detail({ case: { decision: 'do_not_proceed' } })).state, 'waits');
+  assert.deepEqual(icStep(decided, d6180Detail({ case: { decision: 'proceed', ic_record: { uid: 'ic1', status: 'in_review' } } })), { state: 'sent', text: 'With IC · in review', href: '/deals/commit' });
+  assert.equal(icStep({ uid: 'x', stage: 'in_review' }, d6180Detail()), null, 'nothing before the ready stage');
+  assert.equal(icStep(decided, d6180Detail({ case: { decision: 'proceed', scoped: true } })), null, 'a section reviewer is not shown the IC step');
+  assert.equal(icStep(row, null), null, 'no case read, no IC step');
+});
+
+test('D6180: the Memo and reports doors open the case\'s Sign-off tab, for the readers the Worker lets read them; no address is /admin', () => {
+  // Mutation checked: the memo door shown without `memo_read`; a door at /admin/due-diligence.
+  const row = { uid: 'dd-ready' };
+  assert.deepEqual(caseDoors(row, d6180Detail()).map((d) => [d.key, d.href]), [['report', '/due-diligence/dd-ready/sign-off'], ['memo', '/due-diligence/dd-ready/sign-off']]);
+  assert.deepEqual(caseDoors(row, d6180Detail({ allowed: { report: false, memo_read: false } })), []);
+  assert.deepEqual(caseDoors(row, d6180Detail({ case: { scoped: true } })), []);
+  assert.equal(casePath('a/b'), '/due-diligence/a%2Fb');
+  assert.equal(casePath('dd1', 'flags'), '/due-diligence/dd1/flags');
+});
+
+test('D6180: the template depths offered, each with its item count; an unread or unknown one is not offered', () => {
+  // Mutation checked: an unknown depth offered; the item count read as 0 when absent.
+  const read = ready({ templates: [{ depth: 'lite', current: { item_count: 12 } }, { depth: 'standard', current: { item_count: 1 } }, { depth: 'deep', current: {} }, { depth: 'mega', current: { item_count: 3 } }] });
+  assert.deepEqual(templateChoices(read).map((c) => [c.depth, c.label, c.line]), [['lite', 'Lite', '12 checklist items'], ['standard', 'Standard', '1 checklist item'], ['deep', 'Deep', 'Item count not recorded']]);
+  assert.deepEqual(templateChoices({ status: 'unreadable' }), []);
+});
+
+const D6180_ROW = { uid: 'dd-ready', subject_type: 'project', subject_id: 7, status: 'in_review', stage: 'ready', subject_label: 'Harbor Ledger', checklist_total: 4, checklist_worked: 3, open_flags: 3, risk_band: 'high', created_at: '2026-10-01 08:00:00', lead_name: 'Ada', owner_user_id: 21, lead_user_id: 21 };
+const d6180Handler = (row, detail, extra = {}) => handlerWith({
+  'dd/cases\\?': (u, m) => (m === 'GET' ? response({ items: [row], total: 1 }) : null),
+  [`dd/cases/${row.uid}$`]: (u, m) => (m === 'GET' ? response(detail) : null),
+  ...extra,
+});
+const hrefsIn = (v) => {
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  return walk(document.body).map((n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.href).filter(Boolean);
+};
+
+test('D6180: a case ready for a decision shows its open flags in words, its sections, the doors and Record the decision; no /admin link', async () => {
+  // Mutation checked: the flags list not drawn from the case read; the section card dropped; the decide door missing.
+  const v = await mounted('/deals/4/diligence', INVESTOR, d6180Handler(D6180_ROW, d6180Detail()));
+  try {
+    assert.equal(v.byId('deal-dd-flag').length, 3);
+    assert.match(v.textOf('deal-dd-flags'), /3 open flags[\s\S]*Critical severity[\s\S]*Founder litigation[\s\S]*Legal · In progress/);
+    assert.equal(v.byId('deal-dd-section').length, 2);
+    assert.match(v.textOf('deal-dd-sections'), /Financial health[\s\S]*2 of 3 items worked · Pass/);
+    assert.ok(v.has('deal-dd-ic-decide'));
+    assert.equal(v.has('deal-dd-ic-open'), false, 'no Send to IC before a Proceed decision');
+    assert.ok(v.has('deal-dd-door-report') && v.has('deal-dd-door-memo'));
+    const hrefs = hrefsIn(v);
+    assert.ok(hrefs.includes('/due-diligence/dd-ready/sign-off'));
+    assert.deepEqual(hrefs.filter((x) => /\/admin\//.test(x)), [], 'no link on the deal page points to an /admin address');
+  } finally { await v.close(); }
+});
+
+test('D6180: after Proceed the lead sends the case to IC through a dialog; the Worker\'s refusal stays in the dialog', async () => {
+  // Mutation checked: sent without the dialog; the refusal swallowed; Send to IC drawn for a reader without `decide`.
+  const row = { ...D6180_ROW, stage: 'decided', status: 'completed' };
+  const detail = d6180Detail({ case: { decision: 'proceed' } });
+  let answer = response({ error: 'This case is already with IC.', code: 'already_sent' }, 409);
+  const v = await mounted('/deals/4/diligence', INVESTOR, d6180Handler(row, detail, { 'dd/cases/dd-ready/ic$': (u, m) => (m === 'POST' ? answer : null) }));
+  try {
+    await v.click('deal-dd-ic-open');
+    assert.ok(v.has('deal-dd-ic-dialog'));
+    assert.equal(v.posts(/\/ic$/).length, 0, 'nothing is sent before the dialog is confirmed');
+    await v.click('deal-dd-ic-dialog-confirm');
+    assert.equal(v.posts(/dd\/cases\/dd-ready\/ic$/).length, 1);
+    assert.match(v.textOf('deal-dd-ic-dialog'), /This case is already with IC\./, 'the refusal is shown in the dialog');
+    answer = response({ ok: true, ic_record: { uid: 'ic1', status: 'in_review' } }, 201);
+    await v.click('deal-dd-ic-dialog-confirm');
+    assert.ok(v.has('deal-dd-ic-sent-commit'), 'a link to the Commit zone after sending');
+  } finally { await v.close(); }
+  const w = await mounted('/deals/4/diligence', INVESTOR, d6180Handler(row, d6180Detail({ case: { decision: 'proceed' }, allowed: { decide: false } })));
+  try {
+    assert.equal(w.has('deal-dd-ic-open'), false, 'only the lead or an Admin is offered Send to IC');
+    assert.match(w.textOf('deal-dd-ic-line'), /The case lead or an Admin sends the case to IC\./);
+  } finally { await w.close(); }
+});
+
+test('D6180: opening a case offers the template depths when more than one is offered, and opens at the one chosen', async () => {
+  // Mutation checked: the picker drawn for one template; the chosen depth not sent (always standard).
+  const templates = { templates: [{ depth: 'lite', current: { item_count: 12 } }, { depth: 'standard', current: { item_count: 30 } }, { depth: 'deep', current: { item_count: 52 } }] };
+  const v = await mounted('/deals/4/diligence', INVESTOR, handlerWith({ 'dd/templates': (u, m) => (m === 'GET' ? response(templates) : null) }));
+  try {
+    await v.click('deal-dd-open');
+    assert.ok(v.has('deal-dd-templates'));
+    assert.match(v.textOf('deal-dd-templates'), /Lite[\s\S]*12 checklist items[\s\S]*Deep[\s\S]*52 checklist items/);
+    const deep = v.byId('deal-dd-depth-deep')[0];
+    await act(async () => { Object.entries(deep).find(([k]) => k.startsWith('__reactProps$'))[1].onChange({ target: { value: 'deep' } }); });
+    await v.click('deal-dd-open-dialog-confirm');
+    const sent = v.posts(/\/dd\/cases$/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].body.template_depth, 'deep');
+  } finally { await v.close(); }
+  const one = await mounted('/deals/4/diligence', INVESTOR, handlerWith({ 'dd/templates': (u, m) => (m === 'GET' ? response({ templates: [templates.templates[1]] }) : null) }));
+  try {
+    await one.click('deal-dd-open');
+    assert.equal(one.has('deal-dd-templates'), false, 'one template offered: no picker');
+    await one.click('deal-dd-open-dialog-confirm');
+    assert.equal(one.posts(/\/dd\/cases$/)[0].body.template_depth, 'standard');
+  } finally { await one.close(); }
 });
 
 // D6184 (#6184) — the Deal paper card: the signed count, Download once fully signed (the Worker's refusal shown),

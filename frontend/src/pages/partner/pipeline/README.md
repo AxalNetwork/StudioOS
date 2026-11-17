@@ -6,8 +6,8 @@ The Pipeline root and its five zones, each the body of one `/pipeline/*` address
 
 | File | What it is |
 | --- | --- |
-| `PipelineCommandCentre.jsx` | `/pipeline` itself since D4838: the first-run setup path (PP01) or the command centre (PP02): Needs attention, four metrics with their basis, the lifecycle strip, Recent movement (Not recorded) and Risks. It also hands the Eadwyn rail its next steps. |
-| `commandCentre.js` | D4838: the pure rules the root reads. They cover setup steps from the record, when first run applies, metrics that print a zero only over a population, attention and risks from recorded fields, the lifecycle strip and the rail's steps. |
+| `PipelineCommandCentre.jsx` | `/pipeline` itself since D4838: the first-run setup path (PP01) or the command centre (PP02): Needs attention, four metrics with their basis, the lifecycle strip, Recent movement (D5942's recorded lifecycle feed, newest first: D4838 part 9, #5943) and Risks. It also hands the Eadwyn rail its next steps. |
+| `commandCentre.js` | D4838: the pure rules the root reads. They cover setup steps from the record, when first run applies, metrics that print a zero only over a population, attention and risks from recorded fields, the lifecycle strip and the rail's steps. Since D4838 part 9 (#5943) it also holds the feed's event words (`EVENT_WORDS`, `activityRows`), shared with the opportunity sheet's Activity tab, and `movementView`. |
 | `LeadsZone.jsx` | `/pipeline/leads` to boards PP03, PP03b and PP03m (#5935): five views, a strip whose zeros carry a population, cards with the fit reasons before the score and Why this score?, and a pass dialog with a required reason. |
 | `ProposalsZone.jsx` | `/pipeline/proposals` since D4838 PP04: a follow-up list (client, value, state, last activity, next action), a phone card per proposal, and a sheet with each quote's versions and its outcome with a loss reason. |
 | `proposalsFollowUp.js` | D4838 PP04: the pure rules the Proposals list reads. They cover last activity, next action, the sheet's tabs and the strip, and they never count an open. |

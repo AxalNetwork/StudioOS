@@ -27,6 +27,8 @@ band underneath.
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
 | `ClosingZone.jsx` | ID4 · Deals · Closing, redrawn to DX8 board DE08 A (D4815 part 8) | `/deals/closing` | COLLECTION. A deal-first list under a five-figure strip |
 | `closingListModel.js` | (DX8) | — | The Closing zone's joins, pure: `closingKpis` and `closingRows`. The one file that changes when `GET /api/deals/closing-overview` (#6157) lands |
+| `ClosingWorkspace.jsx` | DX17 to DX26 · the closing workspace (D6866, #6866) | `/deals/closing?deal=<id>` | WORKSPACE. One deal's Checklist, Paper, Conditions, Transfer and Audit tabs, rendered by `ClosingZone.jsx` when `?deal=` is set; the checklist item side sheet; the before-close rules. Every read is a route main serves, scoped at the route |
+| `closingWorkspaceModel.js` | (DX17 to DX26) | — | The workspace's pure rules: status words and glyphs, Overdue, condition order, the transfer hold, the Audit merge, the close rules and the side sheet's patch. Read by `ClosingWorkspace.jsx` and its test |
 
 ## The rule for adding to this folder
 

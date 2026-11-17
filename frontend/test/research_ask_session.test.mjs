@@ -336,7 +336,11 @@ test('the AI band never runs on mount, and its surfaces are allow-listed', () =>
     return src.split('<ZoneDraft').slice(1)
       .map((seg) => seg.slice(0, seg.indexOf('/>')).match(/surface="([a-z/-]+)"/)?.[1])
       .filter(Boolean);
-  }), ...fromCycles])].sort();
+  }), ...fromCycles,
+  // D6888: a draft card that keeps nothing (the statement's cover note) is not a band and names its surface on its root.
+  ...execFileSync('grep', ['-rhoE', 'data-draft-surface="[a-z/-]+"', 'frontend/src'], { encoding: 'utf8' })
+    .split('\n').filter(Boolean).map((s) => s.slice('data-draft-surface="'.length, -1)),
+  ])].sort();
   assert.ok(mounted.length >= 6, `expected the band to be mounted on the artboards; found ${mounted.length}`);
   assert.deepEqual(allowed, mounted,
     'the worker’s draft surfaces and the pages that mount a band have diverged: '

@@ -5,7 +5,7 @@ import { api as legacyApi } from '../../../lib/api';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { NOT_RECORDED, SECTIONS, TABS, money, sourceText, tabHref } from './useOfFundsModel';
 import {
-  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
+  BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
   Skeleton, Source, useRead,
 } from './UseOfFundsParts';
 import {
@@ -14,6 +14,7 @@ import {
 } from './scenariosForecastModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { CapTableLinkDialog } from './CapTableLink';
 
 /**
  * D1178 (#3105) — Use of funds part 5: Runway › Forecast (UF8), Scenarios
@@ -355,7 +356,11 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
               <SplitBar card={c} />
               <div className="flex flex-wrap items-center justify-between gap-1 text-[12.5px]"><span>Runway after the raise</span><span className="flex items-center gap-2"><span className={MONO} data-testid="uof-scenario-runway">{c.runway.value || NOT_RECORDED}</span><Source source="Modelled" /></span></div>
               <div className="flex justify-between text-[12.5px]"><span>Milestones funded</span><span className={MONO}>{c.milestones}</span></div>
-              <div className="flex justify-between gap-2 text-[12.5px]"><span>Cap table</span><span className={MUTED}>{c.capTable}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]" data-testid="uof-scenario-captable" data-state={c.capTableState}>
+                <span>Cap table</span>
+                <span className="flex flex-wrap items-center gap-2"><span className={MUTED}>{c.capTable}</span>
+                  <button type="button" className={`${LINK} text-[12px]`} onClick={() => setDialog({ kind: 'captable', s })} data-testid="uof-scenario-captable-act">{c.capTableState === 'linked' ? 'Change' : c.capTableState === 'deleted' ? 'Pick another' : 'Link'}</button></span>
+              </div>
               {isOpen ? (
                 <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid="uof-scenario-detail">
                   <span className={EYEBROW}>Allocation</span>
@@ -380,6 +385,7 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
       {dialog?.kind === 'new' ? <NewScenarioDialog projectId={projectId} base={base} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'edit' ? <EditScenarioDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog?.kind === 'base' ? <MakeBaseDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog?.kind === 'captable' ? <CapTableLinkDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onSaved={done} /> : null}
       {dialog?.kind === 'delete' ? <DeleteScenarioDialog projectId={projectId} scenario={dialog.s} api={api} onClose={() => setDialog(null)} onDone={done} /> : null}
     </div>
   );
@@ -444,7 +450,7 @@ export function Compare({ projectId, search = '', api = useOfFundsApi }) {
                 <tr key={r.key} className="border-b border-axal-hairline last:border-0 align-top dark:border-gray-800" data-testid={`uof-compare-row-${r.key}`}>
                   <td className="px-2 py-1.5 font-bold text-axal-ink dark:text-gray-100">{r.label}</td>
                   <td className={`border-l-2 border-dotted border-gray-400 px-2 py-1.5 ${MONO} ${MUTED} dark:border-gray-500`}>{r.today.text}</td>
-                  {r.cells.map((c, i) => <td key={i} className={`px-2 py-1.5 ${MONO} ${c.missing ? MUTED : 'text-axal-ink dark:text-gray-100'}`}>{c.text}{c.missing && c.reason ? <span className="block font-sans text-[11px]">{c.reason}</span> : null}</td>)}
+                  {r.cells.map((c, i) => <td key={i} className={`px-2 py-1.5 ${MONO} ${c.missing ? MUTED : 'text-axal-ink dark:text-gray-100'}`}>{c.text}{c.tag ? <span className="block font-sans text-[11px] text-axal-muted dark:text-gray-400">◇ {c.tag}</span> : null}{c.missing && c.reason ? <span className="block font-sans text-[11px]">{c.reason}</span> : null}</td>)}
                 </tr>
               ))}</tbody>
             </table>

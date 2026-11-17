@@ -38,7 +38,8 @@ export const EXPLORER_LINE = 'An Explorer has no profile yet, so there is no cap
 export const OTHER_TITLE = 'This cap table belongs to another company.';
 export const OTHER_LINE = 'Switch company, or ask its founder for access.';
 export const EMPTY_TITLE = 'Nothing is recorded yet.';
-export const EMPTY_LINE = 'Start with the founding shares, import a spreadsheet, or connect Carta.';
+// D5081 part 3 (#5081): the card's set-up actions are Set up cap table, Import a spreadsheet and Model a round.
+export const EMPTY_LINE = 'Start with the founding shares, or import a spreadsheet or Carta. Scenarios can model a round before anything is recorded.';
 export const MODEL_TITLE = 'Your earlier model is kept as a scenario, Cap table · model.';
 export const MODEL_LINE = 'Its founders and SAFEs are not recorded yet.';
 export const NO_ROUND = 'No round is planned. Plan one in Scenarios.';

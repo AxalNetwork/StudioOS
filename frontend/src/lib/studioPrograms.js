@@ -33,7 +33,7 @@ export const NOT_ENTERED = 'HQ has not entered this term.';
 
 /** The canvas's line under each program's name. */
 export const PURPOSE = {
-  'spinout-lab': 'Idea to incorporated company in 28 days.',
+  'spinout-lab': 'A 28-day programme from idea to an incorporation order.',
   'ai-native-venture': 'A venture program built with Eadwyn and the studio’s tools.',
   'mentor-cohorts': 'Advisors who mentor a Lab cohort.',
   'investor-cohorts': 'Verified investors follow one Lab cohort.',

@@ -304,7 +304,9 @@ test('the history failing leaves the evidence slot and the scorecard rows standi
 
 test('the wiring: the three tabs drawn from their own file, the reads through dealInsightsApi, no hex colours', () => {
   const page = readFileSync(new URL('../src/pages/DealRoomPage.jsx', import.meta.url), 'utf8');
-  for (const t of ['Team', 'Market', 'Traction']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  for (const t of ['Team', 'Market']) assert.match(page, new RegExp(`\\{tab === '${t.toLowerCase()}' && <Deal${t} deal=\\{deal\\} />\\}`));
+  // D6187: Traction also takes the viewer, for Ask the founder (only a diligence case's owner may send).
+  assert.match(page, /\{tab === 'traction' && <DealTraction deal=\{deal\} userId=\{user\?\.id\} \/>\}/);
   const tabs = readFileSync(new URL('../src/pages/deal/DealInsightTabs.jsx', import.meta.url), 'utf8');
   assert.ok(!/['"`]#[0-9a-f]{3,8}['"`]|\[#[0-9a-f]{3,8}\]/i.test(tabs), 'colours come from the tokens');
   assert.match(tabs, /dealInsightsApi\.team/);
