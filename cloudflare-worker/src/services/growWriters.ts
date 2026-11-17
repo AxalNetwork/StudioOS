@@ -21,6 +21,7 @@ import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
 import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
 import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
+import { onCompanyTeam } from './obligationOwner';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null; extra: Record<string, unknown> | null;
@@ -751,6 +752,16 @@ function remindDays(v: unknown): string | null {
   return unique.length ? JSON.stringify(unique) : null;
 }
 
+/** D6790: an obligation's owner is picked from the company team; '' or null names nobody. */
+async function obligationOwner(env: Env, pid: number, value: unknown): Promise<number | null> {
+  if (value == null || value === '') return null;
+  const id = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0 || !(await onCompanyTeam(env, pid, id))) {
+    throw new Refused(400, 'Choose someone on the company team', 'owner_user_id');
+  }
+  return id;
+}
+
 /** `source` is `manual` for a typed obligation; D1095's Calendar proposal writes `google_calendar`. */
 export async function addObligation(env: Env, pid: number, user: User, b: Body, source: 'manual' | 'google_calendar' = 'manual'): Promise<{ id: number }> {
   const title = str(b.title, 200);
@@ -760,6 +771,8 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
   const repeats = oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats') ?? 'once';
   const remind = remindDays(b.remind_days);
   const completion = obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status'));
+  // D6790: a picked team member is the owner; the typed name is kept only for callers that still send one.
+  const ownerId = await obligationOwner(env, pid, b.owner_user_id);
   const entity = await env.DB.prepare(
     'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
   ).bind(pid).first<{ id: number; jurisdiction: string | null }>();
@@ -770,7 +783,7 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
         completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
         completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
-      completion, REPEATS[repeats], source, kind, str(b.owner_name, 120), null, user.id, user.id,
+      completion, REPEATS[repeats], source, kind, ownerId == null ? str(b.owner_name, 120) : null, ownerId, user.id, user.id,
       completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null, remind).run();
     id = ins.meta.last_row_id;
   } catch (error) { obligationClash(error, kind, due); }
@@ -779,9 +792,9 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body, 
 }
 
 export async function updateObligation(env: Env, pid: number, user: User, id: number, b: Body): Promise<{ id: number }> {
-  const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; due_date: string; title: string;
+  const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; owner_user_id: number | null; due_date: string; title: string;
     completed_at: string | null; completed_by_user_id: number | null; reminders_sent_json: string; recurrence: string; remind_days_json: string | null }>(env,
-    `SELECT id, title, kind, event_type, completion_status, owner_name, due_date, completed_at, completed_by_user_id, reminders_sent_json,
+    `SELECT id, title, kind, event_type, completion_status, owner_name, owner_user_id, due_date, completed_at, completed_by_user_id, reminders_sent_json,
             recurrence, remind_days_json FROM compliance_events WHERE id = ? AND project_id = ?`, id, pid);
   const due = b.due_at === undefined ? row.due_date : obligationDue(b.due_at);
   const completion = b.status === undefined ? row.completion_status : obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status', true));
@@ -792,12 +805,16 @@ export async function updateObligation(env: Env, pid: number, user: User, id: nu
   const kind = has(b, 'kind') ? oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)! : null;
   const recurrence = has(b, 'repeats') ? REPEATS[oneOf(b.repeats, Object.keys(REPEATS) as Array<keyof typeof REPEATS>, 'repeats', true)!] : row.recurrence;
   const remind = has(b, 'remind_days') ? remindDays(b.remind_days) : row.remind_days_json;
+  // D6790: picking a team member replaces a typed name; picking nobody keeps a name typed before #6790.
+  const ownerId = has(b, 'owner_user_id') ? await obligationOwner(env, pid, b.owner_user_id) : row.owner_user_id;
+  const ownerName = has(b, 'owner_user_id') ? (ownerId == null ? row.owner_name : null)
+    : b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120);
   try {
     await env.DB.prepare(
-      `UPDATE compliance_events SET title = ?, kind = ?, event_type = ?, completion_status = ?, owner_name = ?, due_date = ?, completed_at = ?,
+      `UPDATE compliance_events SET title = ?, kind = ?, event_type = ?, completion_status = ?, owner_name = ?, owner_user_id = ?, due_date = ?, completed_at = ?,
         completed_by_user_id = ?, reminders_sent_json = ?, recurrence = ?, remind_days_json = ?, updated_at = ? WHERE id = ?`,
     ).bind(title, kind ?? row.kind ?? null, kind ? OBLIGATION_EVENTS[kind] : row.event_type, completion,
-      b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, completedAt, completedBy,
+      ownerName, ownerId, due, completedAt, completedBy,
       due !== row.due_date || remind !== row.remind_days_json ? '[]' : row.reminders_sent_json, recurrence, remind, nowIso(), row.id).run();
   } catch (error) { obligationClash(error, kind ?? obligationKind(row), due); }
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: row.id, action: 'grow_obligation_updated', summary: 'Obligation updated' });
