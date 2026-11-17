@@ -32,6 +32,7 @@
  * as the page's `accessNow` reads it. A file only a `nobody` tier answers is
  * "no one can open it".
  */
+import { liveFiles } from './dataRoomTrash';
 import type { Env } from '../types';
 import { grantFolderScope, tierAdmits, type FolderScope } from './dataRoomAccess';
 import { DILIGENCE_CHECKLIST } from './raiseCycle';
@@ -257,7 +258,7 @@ export async function checklistRead(env: Env, projectId: number, now: number = D
 
   const files = ((await env.DB.prepare(
     `SELECT uid, name, folder_id, visibility, access_tier, access_expires_at, checklist_item, source_kind, source_ref
-       FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL ORDER BY name`,
+       FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL${await liveFiles(env.DB)} ORDER BY name`,
   ).bind(projectId).all<ChecklistFile>()).results || []);
 
   const opensFor = (f: ChecklistFile) => scoped

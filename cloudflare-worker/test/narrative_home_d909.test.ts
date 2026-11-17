@@ -204,6 +204,9 @@ test('the part fails on its own: an unreadable store answers state unreadable an
   await threeVersions(db);
   db.exec('DROP TABLE narrative_version_meta');
   const body = await home(db);
-  assert.deepEqual(body.parts.narrative, { state: 'unreadable', reason: 'The narrative versions could not be read' });
+  // D5074 part 7: the caller's map rides with the part even when its store fails; who the caller is does not.
+  const { capabilities, ...part } = body.parts.narrative;
+  assert.deepEqual(part, { state: 'unreadable', reason: 'The narrative versions could not be read' });
+  assert.equal(capabilities?.edit, true, 'the founder\'s map');
   assert.ok(body.card, 'the card is still drawn');
 });

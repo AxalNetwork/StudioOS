@@ -28,8 +28,14 @@ export const LANE_UNREADABLE = (label: string) =>
 export const REVIEWERS_UNREADABLE =
   'The admin accounts on this territory could not be read, so there is nobody to offer. That is not a claim that this territory has no admins.';
 
+/**
+ * D5875: a reviewer workload count failed while the item rows were read, so the
+ * counts are not shown. That is not a claim that anybody holds nothing.
+ */
+export const WORKLOAD_UNREADABLE =
+  'The reviewer workload could not be counted on this database, so these counts are not shown. That is not a claim that anybody holds nothing.';
+
 export const ASSIGNMENT_CAP = 40;
-const READ_CAP = 5000;
 const HISTORY_CAP = 100;
 
 /**
@@ -82,60 +88,122 @@ async function tablesReadable(env: Env): Promise<boolean> {
   }
 }
 
-export async function readAssignmentState(env: Env): Promise<AssignmentRead> {
+/** An item on a board, by lane and id: what an assignment read is scoped to (D5875). */
+export type BoardKey = { lane: string; id: number };
+
+/**
+ * D5875: the items a read is about, as one JSON parameter, so any number of them
+ * is one bound value (D1 allows 100) and the statement text never grows. Each
+ * row is `[lane, id, past]`; `past` is 1 for an item over the SLA's past band.
+ */
+const OPEN_ITEMS =
+  "WITH open_items(lane, item_id, past) AS (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), "
+  + "json_extract(value, '$[2]') FROM json_each(?)) ";
+
+function itemsParam(items: ReadonlyArray<BoardKey & { sla?: string }>): string {
+  return JSON.stringify(items.map((it) => [it.lane, Number(it.id), it.sla === 'past' ? 1 : 0]));
+}
+
+/**
+ * The current assignee of each item named, and only those (D5875). The read is
+ * joined to the items by the table's `UNIQUE (lane, item_id)` key, so its size
+ * follows the items asked about, never the table's: a record of any length is
+ * read the same way. It throws when the read fails.
+ */
+async function readAssignees(env: Env, items: readonly BoardKey[]): Promise<Map<string, Assignee>> {
+  const assignees = new Map<string, Assignee>();
+  if (!items.length) return assignees;
+  const got = await env.DB.prepare(
+    OPEN_ITEMS
+    + 'SELECT a.lane AS lane, a.item_id AS item_id, a.assignee_user_id AS assignee_user_id, '
+    + 'u.name AS name, u.email AS email '
+    + 'FROM open_items o JOIN approval_assignments a ON a.lane = o.lane AND a.item_id = o.item_id '
+    + 'LEFT JOIN users u ON u.id = a.assignee_user_id',
+  ).bind(itemsParam(items)).all<AssigneeRow>();
+  for (const row of got.results || []) {
+    const id = Number(row.assignee_user_id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    assignees.set(`${row.lane}:${Number(row.item_id)}`, {
+      user_id: id,
+      name: personLabel({ id, name: row.name, email: row.email }),
+    });
+  }
+  return assignees;
+}
+
+async function readReviewers(env: Env): Promise<{ reviewers: Reviewer[] | null; reviewers_reason?: string }> {
+  try {
+    const admins = await env.DB.prepare(
+      "SELECT id, name, email FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id",
+    ).all<ReviewerRow>();
+    return {
+      reviewers: (admins.results || []).map((row) => ({
+        id: Number(row.id),
+        name: personLabel({ id: Number(row.id), name: row.name, email: row.email }),
+      })).filter((row) => Number.isInteger(row.id) && row.id > 0),
+    };
+  } catch (e) {
+    console.error('[approval-assignments] could not read reviewers', (e as Error).message);
+    return { reviewers: null, reviewers_reason: REVIEWERS_UNREADABLE };
+  }
+}
+
+/**
+ * The assignees of `items` (the rows a page shows, or one item), and the
+ * reviewers who may be offered. D5875: scoped to those items. Until then this
+ * read the whole table to 5,000 rows and, past that, answered "unreadable" for
+ * every row on every page; a long record is no longer a failure. A real read
+ * failure still answers `ASSIGNMENTS_UNREADABLE`.
+ */
+export async function readAssignmentState(env: Env, items: readonly BoardKey[]): Promise<AssignmentRead> {
   const readable = await tablesReadable(env);
   if (!readable) {
     return { available: false, reason: ASSIGNMENTS_UNREADABLE, assignees: new Map(), reviewers: null };
   }
+  let assignees: Map<string, Assignee>;
   try {
-    const got = await env.DB.prepare(
-      'SELECT a.lane AS lane, a.item_id AS item_id, a.assignee_user_id AS assignee_user_id, '
-      + 'u.name AS name, u.email AS email '
-      + 'FROM approval_assignments a LEFT JOIN users u ON u.id = a.assignee_user_id '
-      + 'LIMIT ?',
-    ).bind(READ_CAP).all<AssigneeRow>();
-    const rows = got.results || [];
-    if (rows.length >= READ_CAP) {
-      return {
-        available: false,
-        reason: 'The assignment record is larger than this read, so it is not shown. That is not a claim that nobody is assigned.',
-        assignees: new Map(),
-        reviewers: null,
-      };
-    }
-    const assignees = new Map<string, Assignee>();
-    for (const row of rows) {
-      const id = Number(row.assignee_user_id);
-      if (!Number.isInteger(id) || id <= 0) continue;
-      assignees.set(`${row.lane}:${Number(row.item_id)}`, {
-        user_id: id,
-        name: personLabel({ id, name: row.name, email: row.email }),
-      });
-    }
-    let reviewers: Reviewer[] | null = null;
-    let reviewers_reason: string | undefined;
-    try {
-      const admins = await env.DB.prepare(
-        "SELECT id, name, email FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY id",
-      ).all<ReviewerRow>();
-      reviewers = (admins.results || []).map((row) => ({
-        id: Number(row.id),
-        name: personLabel({ id: Number(row.id), name: row.name, email: row.email }),
-      })).filter((row) => Number.isInteger(row.id) && row.id > 0);
-    } catch (e) {
-      console.error('[approval-assignments] could not read reviewers', (e as Error).message);
-      reviewers = null;
-      reviewers_reason = REVIEWERS_UNREADABLE;
-    }
-    return {
-      available: true,
-      assignees,
-      reviewers,
-      ...(reviewers_reason ? { reviewers_reason } : {}),
-    };
+    assignees = await readAssignees(env, items);
   } catch (e) {
     console.error('[approval-assignments] could not read assignees', (e as Error).message);
     return { available: false, reason: ASSIGNMENTS_UNREADABLE, assignees: new Map(), reviewers: null };
+  }
+  const { reviewers, reviewers_reason } = await readReviewers(env);
+  return { available: true, assignees, reviewers, ...(reviewers_reason ? { reviewers_reason } : {}) };
+}
+
+export type Workload =
+  | { ok: true; byReviewer: Map<number, number>; assigned: number; pastAssigned: number }
+  | { ok: false; reason: string };
+
+/**
+ * D5875: how many of `items` each reviewer holds, counted in SQL, apart from the
+ * page's rows. Only items still waiting count (the ones passed in): a row left
+ * behind by an item since decided is not workload. `pastAssigned` is how many of
+ * the held items are past the SLA. A failed count answers `ok: false` with its
+ * reason, never zero.
+ */
+export async function readWorkload(env: Env, items: ReadonlyArray<BoardKey & { sla?: string }>): Promise<Workload> {
+  const byReviewer = new Map<number, number>();
+  if (!items.length) return { ok: true, byReviewer, assigned: 0, pastAssigned: 0 };
+  try {
+    const got = await env.DB.prepare(
+      OPEN_ITEMS
+      + 'SELECT a.assignee_user_id AS assignee_user_id, COUNT(*) AS n, SUM(o.past) AS past '
+      + 'FROM open_items o JOIN approval_assignments a ON a.lane = o.lane AND a.item_id = o.item_id '
+      + 'WHERE a.assignee_user_id > 0 GROUP BY a.assignee_user_id',
+    ).bind(itemsParam(items)).all<{ assignee_user_id: number; n: number; past: number | null }>();
+    let assigned = 0;
+    let pastAssigned = 0;
+    for (const row of got.results || []) {
+      const n = Number(row.n);
+      byReviewer.set(Number(row.assignee_user_id), n);
+      assigned += n;
+      pastAssigned += Number(row.past ?? 0);
+    }
+    return { ok: true, byReviewer, assigned, pastAssigned };
+  } catch (e) {
+    console.error('[approval-assignments] could not count workload', (e as Error).message);
+    return { ok: false, reason: WORKLOAD_UNREADABLE };
   }
 }
 
@@ -418,7 +486,8 @@ export async function inboxItem(env: Env, a: { lane: ApprovalLaneKey; itemId: nu
     return 'unreadable' as const;
   }
   if (!item) return null;
-  const assignments = await readAssignmentState(env);
+  // D5875: the one item's assignee, read by its key.
+  const assignments = await readAssignmentState(env, [item]);
   return {
     item: { ...item, assignee: assignments.available ? assignments.assignees.get(`${item.lane}:${item.id}`) ?? null : undefined },
     ...(assignments.available ? {} : { assignee_reason: assignments.reason }),
@@ -473,25 +542,39 @@ export async function hqInbox(env: Env, a: {
     total = extra == null ? null : board.items.length + extra;
   }
 
-  const assignments = await readAssignmentState(env);
-  const items: InboxItem[] = assignments.available
-    ? board.items.map((it) => ({ ...it, assignee: assignments.assignees.get(`${it.lane}:${it.id}`) ?? null }))
-    : board.items;
+  // D5875: an assigned filter needs every row's assignee, so it reads the
+  // assignees of the rows the board read (still scoped to them, never the whole
+  // table). Without one, only the page's rows are read, below.
+  const byAssignee = query.assigned !== null;
+  const assignments = await readAssignmentState(env, byAssignee ? board.items : []);
+  // D1132: an assigned filter on an unreadable assignment record would answer
+  // "nobody" for every row, so it is refused rather than answered
+  // (`assigned_unreadable`).
+  if (byAssignee && !assignments.available) {
+    return { refused: { status: 503, code: 'assigned_unreadable', message: assignments.reason ?? ASSIGNMENTS_UNREADABLE } } as const;
+  }
+  const withAssignee = (rows: ApprovalItem[], map: Map<string, Assignee>): InboxItem[] =>
+    rows.map((it) => ({ ...it, assignee: map.get(`${it.lane}:${it.id}`) ?? null }));
 
+  // D5875: the workload tiles are counted in SQL over the rows read, apart from
+  // the page. A count that fails is null with its reason, never 0.
+  const workload: Workload = assignments.available ? await readWorkload(env, board.items) : { ok: false, reason: assignments.reason ?? ASSIGNMENTS_UNREADABLE };
+  const counted = workload.ok ? workload : null;
+  const pastAll = board.items.filter((it) => it.sla === 'past').length;
   const short = board.unreadable.length ? TILES_UNREADABLE(board.unreadable) : capped.length ? TILES_CAPPED(capped.map((c) => c.label)) : null;
-  const assigneeOf = (it: ApprovalItem) => assignments.assignees.get(`${it.lane}:${it.id}`);
+  const mine = counted ? counted.byReviewer.get(a.callerId) ?? 0 : null;
   const tiles = {
-    over_72h: short ? null : board.items.filter((it) => it.sla === 'past').length,
-    assigned_to_me: short || !assignments.available ? null : board.items.filter((it) => assigneeOf(it)?.user_id === a.callerId).length,
-    per_admin: short || !assignments.available || !assignments.reviewers ? null : assignments.reviewers.map((r) => ({
-      id: r.id, name: r.name, count: board.items.filter((it) => assigneeOf(it)?.user_id === r.id).length,
+    over_72h: short ? null : pastAll,
+    assigned_to_me: short ? null : mine,
+    per_admin: short || !counted || !assignments.reviewers ? null : assignments.reviewers.map((r) => ({
+      id: r.id, name: r.name, count: counted.byReviewer.get(r.id) ?? 0,
     })),
     // D4814: the items nobody holds, across every lane read, not one page. Like
     // the others it is null when a lane failed or was cut at the cap (shown
-    // short), and null when the assignment record could not be read (that is
-    // "not read", never "nobody").
-    unassigned: short || !assignments.available ? null : board.items.filter((it) => !assigneeOf(it)).length,
-    overdue_unassigned: short || !assignments.available ? null : board.items.filter((it) => it.sla === 'past' && !assigneeOf(it)).length,
+    // short), and null when the assignment record could not be read or counted
+    // (that is "not read", never "nobody").
+    unassigned: short || !counted ? null : board.items.length - counted.assigned,
+    overdue_unassigned: short || !counted ? null : pastAll - counted.pastAssigned,
     // D4814: the oldest item read, with its lane. With a lane unreadable it is
     // the oldest of the lanes that answered, and `complete` says so.
     oldest: oldestOf(board.items, board.lanes),
@@ -499,32 +582,40 @@ export async function hqInbox(env: Env, a: {
       // D4814: what the rows that were read hold, so a page can say "127+"
       // rather than nothing; each is a floor, never the figure.
       at_least: {
-        over_72h: board.items.filter((it) => it.sla === 'past').length,
-        unassigned: assignments.available ? board.items.filter((it) => !assigneeOf(it)).length : null,
-        assigned_to_me: assignments.available ? board.items.filter((it) => assigneeOf(it)?.user_id === a.callerId).length : null,
+        over_72h: pastAll,
+        unassigned: counted ? board.items.length - counted.assigned : null,
+        assigned_to_me: mine,
       },
     } : {}),
     complete: !short,
     ...(short ? { reason: short }
-      : !assignments.available ? { reason: assignments.reason }
+      : !workload.ok ? { reason: workload.reason }
         : !assignments.reviewers ? { reason: assignments.reviewers_reason } : {}),
   };
 
-  // D1132: the query narrows the rows read. An assigned filter on an
-  // unreadable assignment record would answer "nobody" for every row, so it is
-  // refused rather than answered (`assigned_unreadable`).
-  if (query.assigned !== null && !assignments.available) {
-    return { refused: { status: 503, code: 'assigned_unreadable', message: assignments.reason ?? ASSIGNMENTS_UNREADABLE } } as const;
-  }
   const filtered = isFiltered(query);
-  const shown = filtered || query.sort !== 'oldest' ? filterInbox(items, query, a.callerId) : items;
+  const rows: InboxItem[] = byAssignee ? withAssignee(board.items, assignments.assignees) : board.items;
+  const shown = filtered || query.sort !== 'oldest' ? filterInbox(rows, query, a.callerId) : rows;
   // A narrowed total counts the rows read; a lane cut at the cap may hold more
   // that match, so the total is withheld then rather than shown short.
   const matching: number | null = !filtered ? total : capped.length ? null : shown.length;
 
   const start = (a.page - 1) * INBOX_PAGE_SIZE;
+  const pageRows = shown.slice(start, start + INBOX_PAGE_SIZE);
+  // D5875: without an assigned filter, the assignees read are the page's own.
+  // A failed page read leaves `assignee` off the rows (not read, never nobody).
+  let page: InboxItem[] = pageRows;
+  let pageState = assignments;
+  if (!byAssignee && assignments.available) {
+    try {
+      page = withAssignee(pageRows, await readAssignees(env, pageRows));
+    } catch (e) {
+      console.error('[approval-assignments] could not read the page\'s assignees', (e as Error).message);
+      pageState = { ...assignments, available: false, reason: ASSIGNMENTS_UNREADABLE };
+    }
+  }
   return {
-    items: shown.slice(start, start + INBOX_PAGE_SIZE),
+    items: page,
     total: matching,
     ...(matching == null
       ? { total_reason: filtered && capped.length ? TOTAL_CAPPED_FILTERED(capped.map((c) => c.label)) : TOTAL_UNREADABLE }
@@ -542,7 +633,7 @@ export async function hqInbox(env: Env, a: {
     } : {}),
     ...(capped.length ? { capped: capped.map((c) => c.label) } : {}),
     tiles,
-    assignments: assignments.available ? { available: true } : { available: false, reason: assignments.reason },
+    assignments: pageState.available ? { available: true } : { available: false, reason: pageState.reason },
     reviewers: assignments.reviewers,
     ...(assignments.reviewers_reason ? { reviewers_reason: assignments.reviewers_reason } : {}),
     sla_bands: { due_soon_hours: SLA_DUE_SOON_HOURS, past_hours: SLA_PAST_HOURS },

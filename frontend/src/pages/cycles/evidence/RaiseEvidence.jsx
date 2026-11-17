@@ -9,6 +9,10 @@
  * `/raise/evidence/review` and See as an investor (VR11) `/raise/evidence/preview`.
  * Look again is the Worker's refresh. A change reads the page again.
  *
+ * D6048 (#6048): Raise v2's RA-15. A venture with no evidence draws first use (the founder's setup actions, or
+ * an admin viewer's "no visible evidence"), never the zero-filled dashboard; `EvidenceMain` decides from the
+ * read's own `permissions.can_decide`, the signal every Evidence block already uses.
+ *
  * The investor block (VR8–VR10) is `InvestorEvidence.jsx` (D1268), placed by
  * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
@@ -20,7 +24,9 @@ import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { CycleHeader } from '../CycleOverview';
 import { useProject } from '../CycleRoute';
 import { MODULES } from '../modules';
-import { PAGE_LINE, TITLE, viewOf } from './evidenceModel';
+import { PAGE_LINE, TITLE, viewOf, sharedHref } from './evidenceModel';
+import { Link } from 'react-router-dom';
+import { AddEvidenceSheet, SharedLinks, ShareOutsideSheet } from './ShareOutside';
 import { viewModel } from './evidenceView';
 import { BTN_S } from './EvidenceParts';
 import { EvidenceError, EvidenceForbidden, EvidenceLoading, EvidenceMain } from './EvidenceView';
@@ -36,7 +42,7 @@ export const PAGE = Object.freeze({ limit: 100 });
  * with the page and drawer the address names. Pure in its inputs, so the test
  * renders every state.
  */
-export function EvidenceBody({ state, view, search = '', projectId, reload }) {
+export function EvidenceBody({ state, view, search = '', projectId, reload, onShareOutside }) {
   const read = state?.read;
   const model = useMemo(() => viewModel(read), [read]);
   if (!state || state.status === 'loading') return <EvidenceLoading />;
@@ -44,6 +50,8 @@ export function EvidenceBody({ state, view, search = '', projectId, reload }) {
   if (state.status === 'error') return <EvidenceError message={state.message} onRetry={() => reload?.()} />;
   if (view.page === 'review') return <ReviewQueue model={model} read={read} search={search} projectId={projectId} onChanged={() => reload?.()} />;
   if (view.page === 'preview') return model.canDecide ? <InvestorPreview projectId={projectId} search={search} /> : <EvidenceForbidden />;
+  // D6864 (RA-29): Shared links is the founders' own record; an admin reading the venture gets no Share action.
+  if (view.page === 'shared') return model.canDecide ? <SharedLinks projectId={projectId} onMakeNew={onShareOutside} /> : <EvidenceForbidden />;
   const changed = () => reload?.();
   return (
     <>
@@ -96,14 +104,26 @@ export default function RaiseEvidence() {
   const cards = MODULES.raise.map((m) => ({ slug: m.slug, name: m.name }));
   const founder = !!state.read?.permissions?.can_decide;
   const rail = <WorkerRail workspace="Raise" role="founder" stance="Evidence-led view" coverage={[state.read ? 'Evidence pack: read from your records' : 'Evidence pack: reading']} footer="Traceable surface · no unsupported automated actions" />;
-  const look = founder && view.page === 'view'
-    ? <button type="button" className={BTN_S} onClick={() => reload({ refresh: true })} disabled={!!state.busy} data-testid="evidence-look-again">{state.busy ? 'Looking…' : 'Look again'}</button> : null;
+  const [sheet, setSheet] = useState(null);
+  const [sharedKey, setSharedKey] = useState(0);
+  // D6864 (RA-27, RA-29, RA-32): Share outside Axal and Add evidence are founders' actions, secondary beside Look again.
+  // Super Admins and capital staff get no Share action (can_decide is the founders' alone).
+  const look = founder && (view.page === 'view' || view.page === 'shared') ? (
+    <div className="flex flex-wrap gap-2">
+      {view.page === 'view' ? <button type="button" className={BTN_S} onClick={() => reload({ refresh: true })} disabled={!!state.busy} data-testid="evidence-look-again">{state.busy ? 'Looking…' : 'Look again'}</button> : null}
+      <button type="button" className={BTN_S} onClick={() => setSheet('add')} data-testid="evidence-add-typed">Add evidence</button>
+      <button type="button" className={BTN_S} onClick={() => setSheet('share')} data-testid="evidence-share-outside">Share outside Axal</button>
+      {view.page === 'view' ? <Link className={BTN_S} to={sharedHref(search)} data-testid="evidence-shared-links">Shared links</Link> : null}
+    </div>
+  ) : null;
   const shown = status === 'none' ? { status: 'error', message: 'There is no venture to read evidence for yet.' } : status === 'unreadable' ? { status: 'error', message: 'Your ventures could not be read.' } : state;
   return (
     <RailFrame rail={rail} data-testid="raise-evidence-route">
       <main className="space-y-4 p-4 text-axal-ink sm:p-5 dark:text-gray-100">
-        <CycleHeader cycle="raise" cards={cards} active="evidence" title={view.page === 'review' ? 'Waiting for review' : view.page === 'preview' ? 'See as an investor' : TITLE} sub={PAGE_LINE} search={search} more={look} />
-        <EvidenceBody state={shown} view={view} search={search} projectId={projectId} reload={reload} />
+        <CycleHeader cycle="raise" cards={cards} active="evidence" title={view.page === 'review' ? 'Waiting for review' : view.page === 'preview' ? 'See as an investor' : view.page === 'shared' ? 'Shared links' : TITLE} sub={PAGE_LINE} search={search} more={look} />
+        <EvidenceBody key={sharedKey} state={shown} view={view} search={search} projectId={projectId} reload={reload} onShareOutside={() => setSheet('share')} />
+        {sheet === 'share' ? <ShareOutsideSheet projectId={projectId} onClose={() => setSheet(null)} onMade={() => setSharedKey((k) => k + 1)} /> : null}
+        {sheet === 'add' ? <AddEvidenceSheet projectId={projectId} onClose={() => setSheet(null)} onAdded={() => reload()} /> : null}
       </main>
     </RailFrame>
   );

@@ -10,6 +10,7 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
 import { DISTRIBUTIONS_TODAY, NOT_RECORDED, NO_FUND_TODAY, collectedLine, fundZoneHref, lpCommitmentText } from './investorFundLandingModel';
+import FundOverviewPanel from './FundOverviewParts';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const callDollars = (call) => call?.amount_cents != null ? Number(call.amount_cents) / 100 : Number(call?.amount);
@@ -90,6 +91,8 @@ function FundDetail({ fund }) {
           <div><dt>RVPI · on NAV</dt><dd><Unrecorded /></dd></div>
         </dl>
         <p>Every recorded amount originates in this fund’s operating record. NAV, RVPI, TVPI, IRR, and expense accruals are unavailable until the underlying records exist.</p>
+        {/* #6245: NAV and the multiples are read on Fund performance, from recorded marks and cash flows. */}
+        <Link to="/funds/performance" className="i6-perf-link" data-testid="link-fund-performance">Open fund performance <ArrowUpRight size={12} /></Link>
       </section>
 
       <div className="i6-grid">
@@ -199,6 +202,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
               </select>
               <span>{titleCase(active.status)}</span>
             </div>
+            {/* #6234: IF0's tiles, quarterly chart and pack gaps (FundOverviewParts.jsx). */}
+            <FundOverviewPanel key={`overview-${active.id}-${detailKey}`} fund={active} />
             <FundDetail key={`${active.id}-${detailKey}`} fund={active} />
           </>
         );

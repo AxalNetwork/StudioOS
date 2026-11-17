@@ -13,7 +13,13 @@ const at = (projectId) => `/closings/company-receiving-accounts/${encodeURICompo
 
 export const companyReceivingAccountsApi = {
   read: (projectId) => request(at(projectId)),
-  /** The founder's save: the account's details and the revision it was read at. */
+  /**
+   * The founder's save (#6190 draws it in the closing room): `payee_name`, `bank_name`,
+   * `account_number` and `account_number_confirm` (typed twice), `routing_number` (ABA),
+   * `swift_code` (optional), `currency`, `payment_reference` (optional) and
+   * `expected_revision`, the revision it was read at (0 before the first account).
+   * The answer is `{ recorded, changed, account }`, the account masked as on a read.
+   */
   save: (projectId, body) => request(at(projectId), { method: 'PUT', body: JSON.stringify(body || {}) }),
   /** An investor's reveal of the full number, for their own signed commitment. */
   reveal: (projectId, commitmentUid) =>
