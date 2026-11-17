@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
 import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
+import { HistoryPager, useMorePages } from './historyPages';
 import { api } from '../../../lib/api';
+import { partnerDeliveryHistoryApi } from '../../../lib/api/partnerDeliveryHistory';
 import { partnerDeliveryReviewsApi } from '../../../lib/api/partnerDeliveryReviews';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
@@ -566,6 +568,9 @@ function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
   );
 }
 
+const healthKey = (r) => r.engagement_id;
+const fetchHealthPage = (o) => partnerDeliveryHistoryApi.partnerDeliveryHealthPage(o);
+
 export default function PartnerHealthZone() {
   // The roster is what the owner picker offers, and it is the firm's own
   // people only — an owner naming anybody else would be as false as a seat
@@ -615,7 +620,9 @@ export default function PartnerHealthZone() {
   const d = state.data;
   // D4822 part 2: `?engagement=` narrows Health to the one engagement the Sheet opened it for.
   const focus = useEngagementFocus();
-  const allItems = Array.isArray(d?.items) ? d.items : [];
+  // #4709: the read is the book's first page; Load more adds the rest. The strip's figures are the whole book's.
+  const more = useMorePages(d, fetchHealthPage, healthKey);
+  const allItems = Array.isArray(more?.items) ? more.items : [];
   const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const roster = state.people || [];
   const counts = items.reduce((acc, r) => {
@@ -845,9 +852,12 @@ export default function PartnerHealthZone() {
           note={'Utilisation is seam-marked because it is read from the retainer record on Pipeline · Retainers rather than recalculated here: two pages disagreeing about the same client’s utilisation is worse than either number, and the lowest one — a client not using what they pay for — is the near-term renewal risk this page exists to surface. Scope state is absent rather than “within scope” where nobody has assessed it, because an engagement no one has looked at has not been cleared of drift. A satisfaction score is shown with where it was said, every time, and the firm-wide average stays refused while any live engagement has none: averaging the rest would present a few opinions as a fact about all of them.'}
         />
 
+        <HistoryPager page={more.page} shown={allItems.length} noun="engagements"
+          loadingMore={more.loadingMore} moreError={more.moreError} onMore={more.loadMore} />
+
         {items.length > 0 && visible.length === 0 && (
           <p className="text-[12px] text-axal-muted">
-            No engagement is in this state. {items.length} in the book in total.
+            No engagement is in this state. {more.page?.total ?? items.length} in the book in total.
           </p>
         )}
 

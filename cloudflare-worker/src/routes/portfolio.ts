@@ -29,6 +29,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { requireFundGp } from '../services/fundGpAccess';
 import { getMemberProjectIds } from '../services/projectAccess';
 import { type Scored, healthOf, scorable } from '../services/portfolioHealthSources';
+import { raiseAttentionAlerts } from '../services/portfolioAttentionAlerts';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -144,6 +145,11 @@ async function upsertSnapshot(env: Env, project: any): Promise<{ row: SnapRow | 
   const row = await env.DB.prepare(
     'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? AND snapshot_date = ?'
   ).bind(project.id, today).first<SnapRow>();
+  // D6218: a change into Attention tells the company's holders, once. An alert that fails is logged; the recompute answers as before.
+  if (row) {
+    try { await raiseAttentionAlerts(env, project, row); }
+    catch (e) { console.warn('[portfolio] attention alert failed', e); }
+  }
   return { row: row!, scored };
 }
 

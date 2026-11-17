@@ -174,7 +174,8 @@ test('AP-04: the drawer\'s place in the queue, its closing line and the owner li
   assert.equal(queueStep(INBOX, { lane: 'kyc', id: 999 }), null, 'not on this page: no position is invented');
   assert.equal(continueLine('kyc'), 'This decision is completed in KYC & KYB, where its evidence and notification rules live.');
   assert.equal(continueLine('product_testers'), 'This decision is made on the Product testers board in Approvals, where its evidence and notification rules live.');
-  assert.match(continueLine('best_fit'), /no review page yet/);
+  // D5885: Best-Fit is decided on its own board.
+  assert.equal(continueLine('best_fit'), 'This decision is made on the Best-Fit board in Approvals, where its evidence and notification rules live.');
   const hist = ITEM.history;
   assert.equal(ownerLine({ kind: 'person', id: 8 }, hist), 'Owner since 3 Nov 2026, 09:30 · assigned by Admin A');
   assert.equal(ownerLine({ kind: 'person', id: 8 }, { available: false }), null, 'History not read: nothing invented');
