@@ -221,7 +221,7 @@ export default function DealRoomPage() {
       {tab === 'evidence' && <EvidenceSummary key={deal.id} dealId={deal.id} company={deal.project_name || null} role={role} ndaHref={isInvestor ? tabHref(deal.id, 'documents') : null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
       {tab === 'market' && <DealMarket deal={deal} />}
-      {tab === 'traction' && <DealTraction deal={deal} />}
+      {tab === 'traction' && <DealTraction deal={deal} userId={user?.id} />}
       {/* D1153 (#3058): the working tabs, DL7–DL13. An investor's Documents and Commitment are theirs; a founder and staff keep today's. */}
       {tab === 'diligence' && <DealDiligence deal={deal} userId={user?.id} />}
       {tab === 'documents' && (isInvestor ? <DealDocuments deal={deal} /> : <DocumentsTab dealId={deal.id} />)}
