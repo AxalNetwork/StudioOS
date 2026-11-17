@@ -404,10 +404,19 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const root = createRoot(container);
   const page = h(MemoryRouter, { initialEntries: [`/${cycle}${Q}`] }, cycle === 'grow' ? h(GrowAskRail, { serves: shellRole === 'founder' }) : null, h(Routes, null, h(Route, { path: `/${cycle}`, element: h(CycleRoute, { cycle }) })));
   await act(async () => { root.render(shellRole ? h(ViewModeContext.Provider, { value: { shellRole } }, page) : page); });
-  await act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // Build and Grow draw through a lazy step (defs/<cycle>.jsx, lazyStep) and
+  // the phone root draws a busy skeleton until the overview read lands; on a
+  // loaded CI runner that can take longer than `settle`'s six ticks (#7023).
+  // Wait for a drawn, settled page, bounded, so a slow chunk is waited for and
+  // a page that never draws still fails on the test's own assertions.
+  const drawn = () => ['phone-root', 'cycle-overview', 'grow-overview-v2'].some((id) => ids().includes(id))
+    && !walk(container).some((n) => { const busy = pr(n)['aria-busy']; return busy === true || busy === 'true'; });
+  for (let i = 0; i < 50 && !drawn(); i += 1) await settle();
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
