@@ -59,6 +59,7 @@ function freshDb() {
   runMigration(db, '335_deal_transfers_and_closing_checklists.sql');
   runMigration(db, '340_deal_transfer_company.sql');
   runMigration(db, '202611161150_6889_deal_transfer_phone_verifier.sql'); // D6889
+  runMigration(db, '202611152241_6735_reference_check_firm.sql');
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, investor_tier, investor_subscription_status, investor_dealroom_max)
                         VALUES (?, ?, ?, ?, 1, ?, ?, ?)`);
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', 'free', 'free', 5);

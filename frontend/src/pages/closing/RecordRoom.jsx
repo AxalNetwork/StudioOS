@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { closingsApi, stagedSigningApi } from '../../lib/api/closings';
+import { companyReceivingAccountsApi } from '../../lib/api/companyReceivingAccounts';
 import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
 import { reportingApi } from '../../lib/api/reporting';
 import { Unreadable, Unrecorded, usePhoneWidth } from '../../ui';
@@ -24,16 +25,15 @@ import { closingHrefFor, envelopesOf, moneyCents } from './deskModel';
 import { parseMinor } from '../../lib/money';
 import { SyndicatePanel } from './RoutePanels';
 import PaperState from './PaperState';
-import { CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
+import { AccountDialog, CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
 import {
-  INVESTOR_PART_CLAIM, NO_ACCESS, ROOM_FAILED, ROOM_WAITS, STEPS, captableView, dutyRows, investorDuties, investorLeft, investorPartUnreadable, investorSummary,
+  ACCOUNT_WORDS, accountView, savedNote, INVESTOR_PART_CLAIM, NO_ACCESS, ROOM_FAILED, ROOM_WAITS, STEPS, captableView, dutyRows, investorDuties, investorLeft, investorPartUnreadable, investorSummary,
   liveEnvelope, matchesFor, needsYou, portfolioCompanyHref, roomLines, roomTiles, stepStrip,
 } from './roomModel';
 
 const box = 'flex min-w-0 flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
 const pulse = 'animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800';
-const NOT_YET_PILL = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400';
 
 function useLoad(run, deps, enabled = true) {
   const [state, setState] = useState({ status: enabled ? 'loading' : 'off', data: null, error: null });
@@ -83,13 +83,14 @@ export function NoAccess({ text, back }) {
   );
 }
 
-function Head({ title, crumb, sub, instrument }) {
+function Head({ title, crumb, sub, instrument, action = null }) {
   return (
     <header className="flex flex-col gap-1" data-testid="closing-head">
       <p className="m-0 text-[12px] font-semibold text-gray-500 dark:text-gray-400">{crumb}</p>
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="m-0 text-[19px] font-extrabold tracking-tight">{title}</h2>
         {instrument ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">{instrument}</span> : null}
+        {action ? <><span className="flex-1" />{action}</> : null}
       </div>
       {sub ? <p className={mutedText}>{sub}</p> : null}
     </header>
@@ -187,12 +188,41 @@ function LinesBlock({ rows, phone, onReceipt, onSign }) {
   );
 }
 
-function AccountCard() {
+/**
+ * CP1's receiving account card (#6190): the masked account or No account set,
+ * with Set or Change for the founder the Worker lets read it (see
+ * `roomModel.js` `accountView`). A failed read is never drawn as no account.
+ */
+function AccountCard({ view, note, phone, onOpen, onRetry }) {
+  const full = phone ? 'min-h-[44px] w-full' : 'min-h-[44px] w-fit';
   return (
-    <section className={box} data-testid="closing-account">
-      <h3 className="m-0 text-[15px] font-bold">Your company’s receiving account</h3>
-      <span className={NOT_YET_PILL}>Not read here yet</span>
-      <p className={mutedText}>{ROOM_WAITS.account}</p>
+    <section className={box} data-testid="closing-account" data-state={view.state}>
+      <h3 className="m-0 text-[15px] font-bold">{ACCOUNT_WORDS.title}</h3>
+      {view.state === 'reading' ? <div className={`h-10 ${pulse}`} />
+        : view.state === 'unreadable' ? <Unreadable what="Your company’s receiving account" claim="This is not a claim that none is set." onRetry={onRetry} />
+          : view.state === 'refused' ? (
+            <>
+              {view.text ? <p className={mutedText} data-testid="closing-account-refused">{view.text}</p> : null}
+              <p className={mutedText}>{ACCOUNT_WORDS.readOnly}</p>
+            </>
+          ) : view.state === 'none' ? (
+            <>
+              <span className="w-fit rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" data-testid="closing-account-none">{ACCOUNT_WORDS.none}</span>
+              <p className={mutedText}>{ACCOUNT_WORDS.noneText}</p>
+              <button type="button" className={`${BTN.ghost} ${full}`} onClick={onOpen} data-testid="closing-account-set">{ACCOUNT_WORDS.set}</button>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[15px] font-semibold" data-testid="closing-account-number">{view.number}</span>
+                {view.bank ? <span className="text-[13px] text-gray-600 dark:text-gray-400">{view.bank}</span> : null}
+                <span className="flex-1" />
+                <button type="button" className={`${BTN.ghost} ${full}`} onClick={onOpen} data-testid="closing-account-change">{ACCOUNT_WORDS.change}</button>
+              </div>
+              <p className={mutedText}>{view.setOn ? `Set ${view.setOn}. ` : ''}Investors see it with the payment warning. Changing it tells every investor with an unpaid line.</p>
+            </>
+          )}
+      {note ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-800 dark:text-emerald-300" data-testid="closing-account-saved">{note}</p> : null}
     </section>
   );
 }
@@ -532,6 +562,10 @@ export default function RecordRoom({ entry, viewer, deal }) {
   const closing = read.status === 'ok' ? read.data : null;
   const { papers, retry: retryPapers } = usePapers(closing?.lines);
   const [drawer, setDrawer] = useState(null);
+  const projectId = closing?.project_id ?? entry.project_id ?? null;
+  const accountRead = useLoad(() => companyReceivingAccountsApi.read(projectId), [projectId], viewer === 'founder' && projectId != null);
+  const account = accountView(accountRead);
+  const [accountNote, setAccountNote] = useState('');
   const companyName = entry.project_name || deal?.project_name || 'The company';
   const title = `Closing · ${companyName}${entry.round_label ? ` ${entry.round_label}` : ''}`;
   const crumb = viewer === 'founder' ? 'Raise › Capital relationships › Closing' : viewer === 'admin' ? 'Deals › Closing · as the studio team reads it' : `Deals › ${companyName} › Closing`;
@@ -575,10 +609,14 @@ export default function RecordRoom({ entry, viewer, deal }) {
   const openLine = (kind) => (r) => setDrawer({ kind, row: r, line: (closing.lines || []).find((l) => l.uid === r.uid) });
   const twoCol = phone ? 'flex flex-col gap-4' : 'grid grid-cols-[minmax(0,1fr)_320px] items-start gap-4';
   const papersFailed = rows.some((r) => r.paper === 'Could not be read');
+  const openAccount = () => { setAccountNote(''); setDrawer({ kind: 'account' }); };
+  // CP1's header strip: before the account is set, its door is in the header too.
+  const headAction = viewer === 'founder' && account.state === 'none'
+    ? <button type="button" className={`${BTN.primary} min-h-[44px]`} onClick={openAccount} data-testid="closing-head-account-set">{ACCOUNT_WORDS.set}</button> : null;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="closing-room">
-      <Head title={title} crumb={crumb} sub={sub} instrument={instrument} />
+      <Head title={title} crumb={crumb} sub={sub} instrument={instrument} action={headAction} />
       <Strip steps={steps} phone={phone} />
       {papersFailed ? (
         <section className={box} data-testid="closing-papers-failed">
@@ -616,7 +654,7 @@ export default function RecordRoom({ entry, viewer, deal }) {
                 <p className={mutedText}>Routes, paper, evidence, Axal’s acts and Mark Closed are on Contracts › Closings.</p>
                 <Link className={`${BTN.primary} w-fit`} to={closingHrefFor(closing.deal_id)}>Open in Contracts › Closings</Link>
               </section>
-            ) : <AccountCard />}
+            ) : viewer === 'founder' ? <AccountCard view={account} note={accountNote} phone={phone} onOpen={openAccount} onRetry={accountRead.retry} /> : null}
             {viewer === 'founder' ? <NeedsYou items={needs} onOpen={(it) => (it.line ? setDrawer({ kind: 'sign', row: it.line, line: (closing.lines || []).find((l) => l.uid === it.line.uid) }) : setDrawer({ kind: 'captable' }))} /> : null}
             <CaptableCard view={view} onOpen={() => setDrawer({ kind: 'captable' })} />
             <ReportingCard closing={closing} />
@@ -630,6 +668,11 @@ export default function RecordRoom({ entry, viewer, deal }) {
       {drawer?.kind === 'pay' ? (
         // D6189: the company's account for this project, revealed for this line's own commitment.
         <PaymentDrawer company={companyName} amount={tiles.mine} projectId={closing.project_id ?? entry.project_id} dealId={closing.deal_id ?? entry.deal_id} commitmentId={drawer.row?.commitmentId ?? null} onClose={() => setDrawer(null)} />
+      ) : null}
+      {drawer?.kind === 'account' && (account.state === 'none' || account.state === 'set') ? (
+        <AccountDialog projectId={projectId} view={account} currency={currency} onClose={() => setDrawer(null)}
+          onSaved={(result, had) => { setDrawer(null); setAccountNote(savedNote(result, had)); accountRead.retry(); }}
+          onReload={() => { setDrawer(null); accountRead.retry(); }} />
       ) : null}
       {drawer?.kind === 'captable' ? (
         <CaptableDialog closing={closing} view={view} rows={rows} instrument={instrument} onClose={() => setDrawer(null)} onDone={() => { setDrawer(null); read.retry(); }} />

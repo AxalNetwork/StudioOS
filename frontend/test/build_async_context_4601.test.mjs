@@ -29,6 +29,8 @@ import { OVERVIEWS, card } from './_cycle_fixtures.mjs';
 import { mutationCheck, propsOf, sourceModule, textOf } from './_form_d695.mjs';
 import RealSend from '../src/pages/cycles/BuildPlanSend.jsx';
 import RealRoute from '../src/pages/cycles/CycleRoute.jsx';
+// Loaded up front: CycleRoute draws it through a lazy step (see mountOverview).
+await import('../src/pages/cycles/BuildOverview.jsx');
 
 const h = React.createElement;
 const read = (rel) => readFileSync(new URL('../src/' + rel, import.meta.url), 'utf8');
@@ -223,7 +225,14 @@ async function mountOverview(Route_) {
   const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await settle();
   const by = (id) => walk(container).find((n) => propsOf(n)['data-testid'] === id);
-  const cardNode = () => by('cycle-card-operating-systems');
+  // D6028 (#6028): Build's overview draws its module cards in `BuildOverview.jsx`, the same retry behind them.
+  const cardNode = () => by('build-module-operating-systems');
+  // `BuildOverview` is a lazy step (defs/build.jsx, lazyStep): the card exists
+  // only once its chunk has resolved, which on a loaded CI runner can take
+  // longer than `settle`'s eight ticks. Wait for the card itself, bounded, so a
+  // slow import is waited for and a card that never draws still fails by name.
+  for (let i = 0; i < 50 && !cardNode(); i += 1) await settle();
+  assert.ok(cardNode(), 'the Build overview never drew the Operating systems card');
   return {
     at, retries, overviews, settle, cardNode, state: () => cardNode()?.parentNode && propsOf(cardNode())['data-state'], text: () => textOf(cardNode()),
     go: async (project) => { await act(async () => at.navigate('/build?project_id=' + project)); await settle(); },

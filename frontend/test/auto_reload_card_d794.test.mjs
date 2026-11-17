@@ -148,7 +148,7 @@ test('the three calls go to the Worker\'s routes, and Billing mounts the card be
   assert.match(src, /autoReload: \(\) => request\('\/ai-budget\/auto-reload'\)/);
   assert.match(src, /saveAutoReload: \(settings\) => request\('\/ai-budget\/auto-reload', \{ method: 'PUT', body: body\(settings\) \}\)/);
   assert.match(src, /autoReloadSetup: \(nonce\) => request\('\/ai-budget\/auto-reload\/setup', \{ method: 'POST', body: body\(\{ nonce \}\) \}\)/);
-  const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/pages/account/BillingSection.jsx', import.meta.url), 'utf8');
   // D792 (#2217) moved it from beside the orders to the Billing console, beside the plan and Payment details.
   const consoleSrc = page.slice(page.indexOf('function BillingConsole('), page.indexOf('\n}\n', page.indexOf('function BillingConsole(')));
   assert.match(consoleSrc, /<PaymentDetailsCard [^>]*\/>\n\s*<\/div>\n\s*<AutoReloadCard \/>/);

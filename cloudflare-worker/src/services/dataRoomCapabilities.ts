@@ -9,9 +9,11 @@
  *   - `owner`     the account that owns the venture: everything;
  *   - `cofounder` an accepted `project_members` co-founder: reads, uploads,
  *                 renames and moves, deletes a folder, downloads, makes a
- *                 version current, exports activity and indexes search, but
- *                 never sets a gate, deletes a file, shares, answers a request,
- *                 sends the NDA or opts a file into decks;
+ *                 version current, exports activity and indexes search,
+ *                 reads Trash and restores from it (`restore`, D6073; D6071
+ *                 owner question 4, option A), but never sets a gate, removes
+ *                 or deletes a file (`delete`: Remove and Delete now), shares,
+ *                 answers a request, sends the NDA or opts a file into decks;
  *   - `support`   an admin after a reasoned, audited support read: nothing;
  *   - `summary`   an admin's plain read, which is the aggregate summary: nothing,
  *                 and `admin_reason_required`, because the room itself opens
@@ -27,12 +29,12 @@ export type RoomViewer = 'owner' | 'cofounder' | 'support' | 'summary';
 
 export const ROOM_CAPABILITIES = [
   'upload', 'edit', 'delete_folder', 'set_gate', 'delete', 'share', 'answer_requests',
-  'send_nda', 'deck_source', 'download', 'make_current', 'export', 'search_index', 'admin_reason_required',
+  'send_nda', 'deck_source', 'download', 'make_current', 'export', 'search_index', 'restore', 'admin_reason_required',
 ] as const;
 export type RoomCapability = typeof ROOM_CAPABILITIES[number];
 export type RoomCapabilities = Record<RoomCapability, boolean>;
 
-const MEMBER: readonly RoomCapability[] = ['upload', 'edit', 'delete_folder', 'download', 'make_current', 'export', 'search_index'];
+const MEMBER: readonly RoomCapability[] = ['upload', 'edit', 'delete_folder', 'download', 'make_current', 'export', 'search_index', 'restore'];
 const OWNER: readonly RoomCapability[] = [...MEMBER, 'set_gate', 'delete', 'share', 'answer_requests', 'deck_source'];
 
 /** The whole map for this viewer; every key is present and a boolean. */
