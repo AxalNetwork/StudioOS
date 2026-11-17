@@ -121,7 +121,7 @@ function assertQueueSkipsCovered({ fastBlock, ciText, gitleaksText, required }) 
   ]) {
     const block = jobIn(text, id);
     assert.ok(block, `the duplicate ${name} job was removed while fast skips it in the queue`);
-    assert.match(block, new RegExp(`^    name: ${name.replace(/[()]/g, '\\$&')}$`, 'm'));
+    assert.match(block, new RegExp(`^    name: ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
     assert.doesNotMatch(block, /^    if:/m, `${name} must run on every candidate`);
     for (const command of commands) assert.ok(block.includes(command), `${name} still runs ${command}`);
   }
