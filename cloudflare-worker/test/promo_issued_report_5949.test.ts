@@ -82,8 +82,9 @@ function branch(hqEnv: any, { period = PERIOD, currency = 'EUR' } = {}, binding?
 
 const app = new Hono<any>();
 app.route('/api/admin', adminStatements);
-// The read judges the current period and staleness by the clock. Every fixture here is dated from NOW, so the read
-// runs at NOW too: on the real clock, a report made at NOW reads as stale 48 hours later and the test fails by date.
+// HQ's read judges freshness against its own clock (`promoIssuedState`'s default `now`). The fixtures are
+// stamped at NOW, so the read runs at NOW too: otherwise "reported" turns "stale" 48 hours after NOW on the
+// real calendar, and the test fails on any later day (it did, on 2026-11-17). Only `Date` is mocked.
 async function ceilings(env: any) {
   mock.timers.enable({ apis: ['Date'], now: NOW });
   try {
@@ -91,9 +92,7 @@ async function ceilings(env: any) {
       .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
     const res = await withThrownResponses(() => app.request('/api/admin/promo-ceilings', { headers: { Authorization: `Bearer ${token}` } }, env));
     return { status: res.status, body: await res.json() as any };
-  } finally {
-    mock.timers.reset();
-  }
+  } finally { mock.timers.reset(); }
 }
 const row = (db: DatabaseSync, period = PERIOD) => db.prepare('SELECT * FROM licence_promo_ceilings WHERE licence_uid = ? AND period = ?').get(LICENCE, period) as any;
 const quiet = async <T>(f: () => Promise<T>) => {
