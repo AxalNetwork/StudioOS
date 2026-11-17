@@ -75,8 +75,11 @@ export function attemptLine(a) {
  */
 export const SYNC_RETRY_WINDOW_MINUTES = 60;
 
-/** Why Retry sync is drawn but cannot be pressed: no Worker route re-sends a copy on demand. */
-export const RETRY_SYNC_REASON = 'HQ has no way yet to re-send a copy on demand. It re-sends a copy that has not landed by itself, at most once an hour.';
+/**
+ * What Retry sync does, said beside it. D4819 part 21 (#5928) added the route (`POST /:uid/sync/retry`), so the
+ * button sends; HQ's own hourly re-send still runs.
+ */
+export const RETRY_SYNC_REASON = 'Re-sends the licence’s current copy to the branch now. HQ also re-sends a copy that has not landed by itself, at most once an hour.';
 
 /** Where the branch line comes from. HQ never reads the branch itself, so the line never says the branch "responded". */
 export const BRANCH_LINE_NOTE = 'This is the branch’s answer to HQ’s last push. HQ does not read what a branch holds on its own yet.';

@@ -135,7 +135,7 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export as client pack', kind: 'export' },
   ],
 
-  // BOTH BUILT, AND THE FIRST ONE IS THE CAREFUL ONE. `Block a date range`
+  // BOTH BUILT, AND THE FIRST ONE IS THE CAREFUL ONE. `Block time` (PR4's `Block a date range`)
   // withdraws hours that were never taken, which is NOT what cancelling does:
   // cancelling undoes a booking and tells whoever held it. Conflating them
   // would send a cancellation notice for an hour nobody had, so migration 240
@@ -152,8 +152,16 @@ export const ADVISOR_ZONE_ACTIONS = {
   // have produced "Export to calendar · this view" and handed the advisor a
   // spreadsheet. It stays client-side either way: the file is built from rows
   // already on screen, so there is no endpoint and nothing leaves the browser.
+  // #4832 (D4832): PX-05's header, `Block time` (the primary) and `Share
+  // booking link`, which replaced PR4's `Block a date range`. Block time is
+  // the same handler and the same form (D1424, D1596, the Ask hand-over in
+  // `sessionsBlockHandoff.js`). Share booking link copies the one active link,
+  // or sends the reader to Booking links to choose among several, or says
+  // there is none. `Export to calendar` stays, off the v2 canvas: it writes
+  // the tab's sessions as an .ics file built in the browser.
   'practice/sessions': [
-    { label: 'Block a date range', kind: 'handler', handler: 'blockRange', primary: true },
+    { label: 'Block time', kind: 'handler', handler: 'blockRange', primary: true },
+    { label: 'Share booking link', kind: 'handler', handler: 'shareBookingLink' },
     { label: 'Export to calendar', kind: 'handler', handler: 'exportCalendar' },
   ],
   // D4's two ops. NEITHER is `kind: 'export'`: the builder's export kind emits
