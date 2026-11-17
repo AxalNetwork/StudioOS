@@ -931,18 +931,21 @@ spinoutLab.get('/shipped', async (c) => {
   return c.json(events.slice(0, SHIPPED_MAX_EVENTS));
 });
 
-// GET /fund-metrics — auth-gated: live program + raise numbers for the LP &
-// Investor Workspace. Program figures come from real graduate rows (the same
-// week-4 `incorporation_completed` signal /stats uses, plus on-time timing
-// against `spinout_lab_started_at`); raise figures aggregate the Spin-Out
-// fund's own `limited_partners` rows. Aggregation lives in
+// GET /fund-metrics — auth-gated: live program figures and the fund block for
+// the LP & Investor Workspace and the investor page. Program figures come from
+// real graduate rows (the same week-4 `incorporation_completed` signal /stats
+// uses, plus on-time timing against `spinout_lab_started_at`). The fund block
+// (D6137) is the target and close status for every reader, and for committed
+// LPs also the raise (`limited_partners`) and the portfolio
+// (`portfolio_positions`, `portfolio_marks`). Aggregation lives in
 // services/spinoutFundMetrics.ts (pure, tested); this handler only queries.
-// Each block carries `available` so the SPA can fall back to its
-// operator-maintained model with honest provenance instead of rendering
-// zeros as facts. Never throws — a missing table answers `available: false`.
+// Every figure carries `available`, and one without a record is drawn as
+// "Not recorded". Never throws — a missing table answers `available: false`.
 spinoutLab.get('/fund-metrics', async (c) => {
   const user = await requireAuth(c);
-  const { summarizeGraduates, summarizeLpRows } = await import('../services/spinoutFundMetrics');
+  const {
+    summarizeGraduates, fundHeadline, raiseBlock, summarizePortfolio, unavailablePortfolio,
+  } = await import('../services/spinoutFundMetrics');
 
   let program: import('../services/spinoutFundMetrics').ProgramSummary = {
     available: false, graduates: 0, on_time_pct: null, alumni_raised: null,
@@ -991,19 +994,26 @@ spinoutLab.get('/fund-metrics', async (c) => {
   // The fund this workspace reports on — resolved by slug, not name, for the
   // same rename-safety reason the SPA's SPINOUT_FUND_SLUG comment gives.
   //
-  // Raise aggregates (committed, soft-circled, LP count, median ticket) are
-  // capital-side facts, so they are scoped beyond bare authentication:
-  // admin/partner/investor roles see them, as does any caller who actually
-  // holds an LP row in this fund. Everyone else gets `available: false` and
-  // the SPA's operator-maintained figures — exactly what such a viewer saw
-  // before this endpoint existed, so nothing is newly exposed to founders or
-  // guests. The program block above stays role-free: it is the same
-  // graduate-level data the public GET /stats already serves.
-  let fund: Record<string, unknown> = { available: false };
+  // WHO SEES WHAT (D6137, owner Q2). Every reader gets the headline: the
+  // target and the close status. Committed capital, the LP count, positions
+  // and MOIC are for committed LPs, so they are not in a visitor's JSON at
+  // all — absent, not null. A committed LP is a caller holding a
+  // `limited_partners` row in this fund with `commitment_amount > 0` (the
+  // 'committed' rung of the page's access ladder). The fund side (admin and
+  // the partner licence) reads them too. The investor licence alone no longer
+  // does: that is the invited visitor. The program block above stays
+  // role-free: it is the same graduate-level data GET /stats serves.
+  const today = new Date().toISOString().slice(0, 10);
+  let fund: Record<string, unknown> = { ...fundHeadline(false, null, today) };
   try {
     const { Funds } = await import('../models/funds');
     const row = await Funds.bySlug(c.env, 'spinout-fund-i');
-    let entitled = !!user && (user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'));
+    // Fund size (target) is the v2 `fund_size_cents` column — `total_commitment`
+    // is aggregated LP commitments, which would make the raise bar read 100% by
+    // definition. Zero is "no size recorded", never a $0 target.
+    const targetDollars = row && Number(row.fund_size_cents || 0) > 0 ? Number(row.fund_size_cents) / 100 : null;
+    fund = { ...fundHeadline(!!row, targetDollars, today) };
+    let entitled = !!user && (user.role === 'admin' || holdsLicence(user, 'partner'));
     if (row && !entitled) {
       // lpSelfScope, not the hand-rolled predicate this line used to carry.
       // It bound `user.email ?? ''`, and `LOWER(email) = LOWER('')` is true for
@@ -1013,7 +1023,7 @@ spinoutLab.get('/fund-metrics', async (c) => {
       await claimLpRowsByEmail(c.env, Number(user.id), user.email, Number(row.id));
       const scope = lpSelfScope(user as any);
       const mine = await c.env.DB.prepare(
-        `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`,
+        `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND lp.commitment_amount > 0 AND ${scope.sql} LIMIT 1`,
       ).bind(row.id, ...scope.binds).first();
       entitled = !!mine;
     }
@@ -1021,20 +1031,21 @@ spinoutLab.get('/fund-metrics', async (c) => {
       const lps = await c.env.DB.prepare(
         `SELECT commitment_amount, lpa_signed FROM limited_partners WHERE fund_id = ?`,
       ).bind(row.id).all<import('../services/spinoutFundMetrics').LpCommitmentRow>();
-      fund = {
-        available: true,
-        fund_id: row.id,
-        name: row.name,
-        slug: row.slug,
-        // Fund size (target) is the v2 `fund_size_cents` column —
-        // `total_commitment` is aggregated LP commitments, which would make
-        // the raise bar read 100% by definition. Null falls back to the
-        // operator-stated target in the SPA.
-        target: Number(row.fund_size_cents || 0) > 0 ? Number(row.fund_size_cents) / 100 : null,
-        ...summarizeLpRows(lps.results ?? []),
-      };
+      // The portfolio reads separately: a positions or marks outage must not
+      // take the raise with it, and says "read_failed", never "no records".
+      let portfolio = unavailablePortfolio('read_failed');
+      try {
+        const positions = await c.env.DB.prepare(
+          `SELECT id, project_id, invested_amount, position_date FROM portfolio_positions WHERE fund_id = ?`,
+        ).bind(row.id).all<import('../services/spinoutFundMetrics').PositionRow>();
+        const marks = await c.env.DB.prepare(
+          `SELECT id, project_id, as_of_date, fmv FROM portfolio_marks WHERE fund_id = ?`,
+        ).bind(row.id).all<import('../services/spinoutFundMetrics').MarkRow>();
+        portfolio = summarizePortfolio(positions.results ?? [], marks.results ?? []);
+      } catch { /* portfolio tables absent: stays read_failed */ }
+      fund = { ...fund, raise: raiseBlock(lps.results ?? []), portfolio };
     }
-  } catch { /* fund tables absent or pre-slug */ }
+  } catch { /* fund tables absent or pre-slug: the headline stays unrecorded */ }
 
   return c.json({ ok: true, program, fund });
 });

@@ -99,7 +99,7 @@ test('the scanner reads attribute names and nothing inside them', () => {
   assert.deepEqual(zoneHeadingProps('<ZoneHeadingRow a="1" />'), []);
 });
 
-test('the three Research headings draw their sub-line and pill (#6265)', () => {
+test('the three Research headings draw their sub-lines and Diligence shows its grant count (#6265)', () => {
   const read = (rel) => readFileSync(join(src, rel), 'utf8');
   const heading = (text) => text.slice(text.indexOf('<ZoneHeading'), text.indexOf('/>', text.indexOf('<ZoneHeading')) + 2);
   const diligence = heading(read('pages/research/DiligenceZone.jsx'));
@@ -107,6 +107,5 @@ test('the three Research headings draw their sub-line and pill (#6265)', () => {
   assert.match(diligence, /action=\{data \? <Pill tone=\{data\.granted_count \? 'ok' : 'neutral'\}>\{`\$\{data\.granted_count\} rooms granted`\}<\/Pill> : null\}/);
   const bench = heading(read('pages/research/BenchmarkingZone.jsx'));
   assert.match(bench, /blurb="What you are measuring, what the peer set says, and how many it was measured over\."/);
-  assert.match(bench, /action=\{data \? <Pill tone="neutral">/);
   assert.match(heading(read('pages/research/ClientPrepZone.jsx')), /blurb="One client\. Founder-sourced rows are read-only\."/);
 });

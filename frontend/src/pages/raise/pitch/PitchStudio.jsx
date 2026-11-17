@@ -16,6 +16,7 @@ import {
 } from './pitchStudioModel';
 import ShareDialog from './ShareDialog';
 import ShareBoard from './ShareBoard';
+import DeckGrants from './DeckGrants';
 import StudioHome from './StudioHome';
 import ScriptTab from './ScriptTab';
 import PitchOverview from './PitchOverview';
@@ -45,7 +46,8 @@ import { NEW_LINK, ndaCell, settingsLine } from './shareModel';
  *                           board on top (`ShareBoard.jsx`, the daily read:
  *                           views per day, the two funnels, drop-off); below it
  *                           every investor link, a page at a time, with
- *                           Withdraw on every link not known to be dead.
+ *                           Withdraw on every link not known to be dead;
+ *                           then D6166's "Shared on a deal" (`DeckGrants.jsx`).
  *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
  *                           admins to its founders, and the composer.
  *   /raise/pitch/new        New deck (PD3–PD6, D897): `NewDeck.jsx`. The Decks
@@ -445,6 +447,10 @@ export function StudioAnalytics({ reads, readOnly }) {
             </nav>
           ) : null}
         </section>
+        {/* D6166 (#6166): one saved version for one investor on one of the venture's deals (D1587's grants). */}
+        {reads.project?.id && reads.versions.status === 'ok' ? (
+          <DeckGrants projectId={reads.project.id} versions={versions} readOnly={readOnly} />
+        ) : null}
       </>
     );
   }

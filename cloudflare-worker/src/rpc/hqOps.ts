@@ -632,7 +632,36 @@ export type UsageFigure = {
   estimate_basis?: string;
   available?: boolean;
   reason?: string;
+  /**
+   * D5947 — what the branch says about the figure: `complete`, `incomplete`,
+   * `not_recorded`, `not_available` or `unreadable` (`StreamState`, rpc/branchOps.ts).
+   * A build before D5947 sends none, and HQ stores NULL.
+   */
+  state?: string;
+  /** D5947 — what the figure was read from on the branch, or `none`. */
+  source?: string;
+  /** D5947 — when the branch read that source (ISO). `reported_at` stays HQ's stamp of the report. */
+  source_as_of?: string;
 };
+
+/** D5947 — the states a stored figure may carry. Only the first two may carry an amount. */
+export const USAGE_FIGURE_STATES: readonly string[] = Object.freeze([
+  'complete', 'incomplete', 'not_recorded', 'not_available', 'unreadable',
+]);
+const FIGURE_STATES_WITH_AMOUNT = new Set(['complete', 'incomplete']);
+
+/** D5947 — an ISO instant, normalised, or null for anything that does not parse. */
+function isoOrNull(v: unknown): string | null {
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/** D5947 — a short stored text, trimmed and capped, or null when empty. */
+function textOrNull(v: unknown, max: number): string | null {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return t ? t.slice(0, max) : null;
+}
 
 /**
  * A branch reports what it billed in a period (D.8).
@@ -643,11 +672,16 @@ export type UsageFigure = {
  * remembered. `reported_at` is the BRANCH's own stamp, so a statement built
  * from a three-week-old report shows the age of its evidence.
  *
- * A FIGURE THE BRANCH COULD NOT MEASURE IS STORED AS NULL, NOT 0. Measured
- * against the schema: no branch can total subscription revenue locally
- * (`account_subscriptions` has a plan and no amount; the charges are in
- * Stripe), so this is the normal case and not an edge one. A zero there would
- * make a statement drawn from it read as a complete quarter that earned less.
+ * A FIGURE THE BRANCH COULD NOT MEASURE IS STORED AS NULL, NOT 0. A branch
+ * measures subscriptions only from its own financial ledger (D5947), which is
+ * empty while it receives no Stripe webhooks, so this is the normal case and
+ * not an edge one. A zero there would make a statement drawn from it read as a
+ * complete quarter that earned less. A figure whose state is neither
+ * `complete` nor `incomplete` is stored NULL whatever number came with it.
+ *
+ * D5947: each row also keeps the branch's `state` and `reason`, the `source`
+ * it read, and `source_as_of`, when it read it. The currency is the figure's
+ * own, as sent; nothing here converts or sums one.
  */
 export async function reportUsage(
   env: Env, callerCode: string, secret: string,
@@ -663,24 +697,27 @@ export async function reportUsage(
     // A value that is not a finite number is as unmeasured as a null one, so
     // it is stored as NULL too. `Number(x) || 0` used to turn it into a zero,
     // which is the one reading this function exists to refuse.
+    const state = typeof f.state === 'string' && USAGE_FIGURE_STATES.includes(f.state) ? f.state : null;
     const n = f.available === false || f.gross_cents === null || f.gross_cents === undefined
+      || (state !== null && !FIGURE_STATES_WITH_AMOUNT.has(state))
       ? NaN
       : Number(f.gross_cents);
     const gross = Number.isFinite(n) ? Math.trunc(n) : null;
     await env.DB.prepare(
       `INSERT INTO subsidiary_usage_reports
          (licence_uid, branch_code, period, stream, gross_cents, currency,
-          is_estimate, estimate_basis, reported_at)
-       VALUES (?,?,?,?,?,?,?,?,?)
+          is_estimate, estimate_basis, reported_at, state, reason, source, source_as_of)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(licence_uid, period, stream) DO UPDATE SET
          gross_cents = excluded.gross_cents, currency = excluded.currency,
          is_estimate = excluded.is_estimate, estimate_basis = excluded.estimate_basis,
-         reported_at = excluded.reported_at`,
+         reported_at = excluded.reported_at, state = excluded.state, reason = excluded.reason,
+         source = excluded.source, source_as_of = excluded.source_as_of`,
     ).bind(
       who.licence_uid, who.code, p, String(f.stream).trim().slice(0, 40),
       gross, String(f.currency || 'EUR').toUpperCase().slice(0, 3),
       f.is_estimate ? 1 : 0, f.estimate_basis ? String(f.estimate_basis).slice(0, 300) : null,
-      now,
+      now, state, textOrNull(f.reason, 600), textOrNull(f.source, 60), isoOrNull(f.source_as_of),
     ).run();
   }
   return { ok: true, period: p, streams: rows.length };
