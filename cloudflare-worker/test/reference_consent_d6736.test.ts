@@ -7,7 +7,7 @@ import references from '../src/routes/references.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { SCHEMA_OPTIONS, loadSchema } from './_schema_once.mjs';
 
-test('D6736: the stored default matches the shared copy while recording features return 501', async (t) => {
+test('D6736: the stored default matches the shared copy; recordings stay unavailable and notes summaries require notes', async (t) => {
   const db = new DatabaseSync(':memory:', SCHEMA_OPTIONS);
   t.after(() => db.close());
   loadSchema(db);
@@ -42,9 +42,12 @@ test('D6736: the stored default matches the shared copy while recording features
   assert.equal(db.prepare('SELECT consent_text FROM reference_checks WHERE id = ?').get(row.id)?.consent_text, DEFAULT_REFERENCE_CONSENT);
 
   for (const [path, method] of [
-    ['recording', 'POST'], ['recording-url', 'GET'], ['transcribe', 'POST'], ['summarize', 'POST'],
+    ['recording', 'POST'], ['recording-url', 'GET'], ['transcribe', 'POST'],
   ]) {
-    assert.equal((await call(`/${row.id}/${path}`, method)).status, 501, 'Revisit the consent wording when recording features change');
+    assert.equal((await call(`/${row.id}/${path}`, method)).status, 404, 'Recording and transcription routes must stay absent until their consent is reviewed');
   }
+  const summary = await call(`/${row.id}/summarize`, 'POST');
+  assert.equal(summary.status, 409, 'Typed-note summarisation requires notes and does not enable call recording');
+  assert.equal((await summary.json() as { code: string }).code, 'notes_required');
   assert.doesNotMatch(DEFAULT_REFERENCE_CONSENT, /record|transcri|summari/i);
 });
