@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Program Mentor Cohort Access Presentation · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@800&amp;family=Public+Sans:wght@400;500;600;700;800&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Program · Mentor cohort access presentation and PDF deck · sibling of the #6966 pilot · PGM01 to PGM08 · #6968, #6965</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Mentor cohort access as a shareable page and a five-slide PDF: assigned to one cohort, supporting its founders, not running the Lab</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A presenter opens Programs, selects Mentor cohort access and lands on its public, signed-out page at /programs/mentor-cohorts, built with the program presentation kit the Spin-Out Lab pilot defined (#6965, #6966): the name and one-sentence purpose first, “Assigned by an admin” in words, “Download PDF” above the fold as an ink link to a committed file, apart from “Sign in to your cohorts”, “Ask about advising” and the studio enquiry, then the five sections in the kit’s order. The signature visual is three stages with a labelled boundary around the one assigned cohort, and what stays outside it. The same story is a 16:9 deck of five slides with a grayscale print variant. Every claim comes from main: admins assign and end access, founders are told and can hide from a mentor, a mentor reads one cohort and writes nothing to the Lab. No public read exists, so the availability panel is a fixed statement. The admin entry points and the Programs index are the pilot’s PGS07 and PGS08, not redrawn. Frontend only.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Mon 16 Nov 2026 · checked against main 87bf3ac4ac · the edition date is a bracketed sample; the cohort is a generic “[cohort name]” label; founders are generic labels; no real advisor, founder, company, quote or logo</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Program Mentor Cohort Access Presentation Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PGM-01', 'Mentor cohort access · public page · desktop 1440 · frontend only', '/programs/mentor-cohorts signed out. Name and purpose first; Assigned by an admin; Download PDF and Print; the dark availability panel with three fixed facts and the one primary, Sign in to your cohorts; then 1 Who it helps, 2 What they do (the boundary diagram and “A mentor can / The Lab keeps”), 3 How participation works, 4 Access required, 5 Next step with the PDF apart.', [F('PGM01', false, 5286)]],
+      ['PGM-02', 'Availability and the destination · frontend only', 'Default: nothing to apply for, ever; the panel says so in words and never counts. Held ⚑: a “Not assigning now” state that needs a public read (◇) and the owner. The destination check: where Sign in to your cohorts lands for an assigned advisor, an unassigned one, one whose access is not in force, and anyone else.', [C('PGM02A', 'Default · nothing open', 1440, 719), C('PGM02B', 'Held · not assigning now', 1440, 719), C('PGM02C', 'Destination check', 1440, 534)]],
+      ['PGM-03', 'Mentor cohort access · phone 390 · frontend only', 'Stacked in reading order: name, purpose, audience, Download PDF full width, Print, the availability panel with Sign in, the section nav two per row, the diagram stacked (stage 1, a down arrow, the boundary), the next steps and the PDF.', [C('PGM03', false, 390, 9542)]],
+      ['PGM-04', 'The PDF deck · 5 slides at 1920 × 1080', 'axal-vc-mentor-cohorts-v1.pdf. 1 Cover (availability, name, purpose, audience, edition) · 2 Who it helps · 3 What happens (the boundary diagram) · 4 The difference: supporting founders is not operating the Lab · 5 Access and next step (conditions, addresses, public URL, edition). Evergreen: no cohort, name or count.', [C('PGM04A', '1 · Cover', 1920, 1080), C('PGM04B', '2 · Who it helps', 1920, 1080), C('PGM04C', '3 · What happens', 1920, 1080), C('PGM04D', '4 · The difference', 1920, 1080), C('PGM04E', '5 · Access and next step', 1920, 1080)]],
+      ['PGM-05', 'Grayscale print sheet', 'The five slides as a black-and-white printer gives them: violet to ink, the boundary still dashed and labelled, the hidden founder still dashed with ◌, the closing panel as an outline; export settings.', [C('PGM05', false, 1440, 1340)]],
+      ['PGM-06', 'Slide contact sheet', 'The deck in order with each slide’s text alternative, and how the slides map to the page’s sections.', [C('PGM06', false, 1440, 866)]],
+      ['PGM-07', 'Reading and focus order · frontend only', 'Numbered reading order of the hero at 1440 and 390, the focus ring on Download PDF, the element each action is, and the diagram’s text alternative.', [C('PGM07A', 'Desktop', 1440, 947), C('PGM07B', 'Phone 390', 390, 1580)]],
+      ['PGM-08', 'Handoff', 'Registry key, canonical URL, PDF path, editable source, edition and alt text; what exists on main and what changes; live-state claims; ◇ backend (optional), frontend only, accessibility and the owner’s open points. Entry points: PGS07–PGS08 on the pilot canvas.', [W('PGM08')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

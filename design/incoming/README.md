@@ -2742,6 +2742,24 @@ Four board sets from the owner's Claude Design canvas "Axal VC – platform desi
 None is built yet. Companies, founders, partners, countries' details and amounts are sample content; government fees read Not recorded and legal and tax wording waits on counsel. Open owner questions on #6681 and #6682 are drawn as option A and marked ⚑.
 
 
+## Landed 2026-11-17 — Program presentations: ten public pages and PDF decks (#6966 to #6975)
+
+Ten board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-16 from the briefs under #6965, each as a page plus its boards. The Spin-Out Lab pilot defines the program presentation kit, the admin entry points (PGS07) and the public Programs index (PGS08); the nine others reuse it:
+- **`Program Spin-Out Lab Presentation Page.dc.html`**, **`Program Spin-Out Lab Presentation · Boards.dc.html`** (#6966, D6966).
+- **`Program AI-native Venture Presentation Page.dc.html`**, **`Program AI-native Venture Presentation · Boards.dc.html`** (#6967, D6967).
+- **`Program Mentor Cohort Access Presentation Page.dc.html`**, **`Program Mentor Cohort Access Presentation · Boards.dc.html`** (#6968, D6968).
+- **`Program Investor Cohort Access Presentation Page.dc.html`**, **`Program Investor Cohort Access Presentation · Boards.dc.html`** (#6969, D6969).
+- **`Program Referral Partners Presentation Page.dc.html`**, **`Program Referral Partners Presentation · Boards.dc.html`** (#6970, D6970).
+- **`Program Refer and Earn Presentation Page.dc.html`**, **`Program Refer and Earn Presentation · Boards.dc.html`** (#6971, D6971).
+- **`Program Perks Presentation Page.dc.html`**, **`Program Perks Presentation · Boards.dc.html`** (#6972, D6972).
+- **`Program Learning Presentation Page.dc.html`**, **`Program Learning Presentation · Boards.dc.html`** (#6973, D6973).
+- **`Program Product Testing Presentation Page.dc.html`**, **`Program Product Testing Presentation · Boards.dc.html`** (#6974, D6974).
+- **`Program Influencers Presentation Page.dc.html`**, **`Program Influencers Presentation · Boards.dc.html`** (#6975, D6975).
+
+**One edit, named.** The pages drew the public site's artwork as `./site/<file>`; every such reference now points at `/site/<file>`, served from `frontend/public/site/`, where each file already exists. No other value was edited.
+
+None is built yet: `/programs/*` and `frontend/public/program-briefs/` are new with #6966. Availability labels, dates and edition dates are drawn from what main records or bracketed; open owner questions are marked ⚑ in each decision.
+
 ## Landed 2026-11-17 — Wellness: the member home at /wellbeing and the public presentation (#7117, #7121)
 
 Two board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-17 from the #7117 and #7121 briefs and the owner's Wellness direction of the same day, each as a page plus its boards:
