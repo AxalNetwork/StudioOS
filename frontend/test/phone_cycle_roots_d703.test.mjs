@@ -408,6 +408,12 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  // Lazy cycle chunks can outlast a fixed number of ticks on a loaded runner.
+  // Keep the assertions below, and give the actual route a bounded chance to mount.
+  const expected = cycle === 'grow' ? 'grow-overview-v2' : phone ? 'phone-root' : cycle === 'build' ? 'build-overview-v2' : 'cycle-overview';
+  for (let attempt = 0; attempt < 200 && !ids().includes(expected); attempt += 1) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  }
   return {
     reads, ids, all: (id) => ids().filter((x) => x === id),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
