@@ -21,6 +21,11 @@
  *   · HQ NEVER REPORTS TO ITSELF, and the stub is never called there.
  *   · 1 OCTOBER STILL CLOSES Q3. Two quarters per run, oldest first.
  *   · A RE-RUN REPLACES ROWS. The upsert key is (licence, period, stream).
+ *   · D5947: A BRANCH WITH LEDGER ROWS REPORTS THEIR GROSS, in the rows' own
+ *     currency, and HQ stores it unchanged with its state, source and as-of
+ *     time. A quarter that began before the ledger's coverage is incomplete;
+ *     a second currency is named, never added; a branch with no Stripe
+ *     webhook says its ledger is empty by design.
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/usage_report_d266.test.ts
@@ -33,11 +38,15 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import { reportUsage } from '../src/rpc/hqOps.ts';
-import { pushUsageReport, reportPeriods } from '../src/services/usageReport.ts';
+import { pushUsageReport, reportPeriods, sendUsageReportNow } from '../src/services/usageReport.ts';
+import { FINANCIAL_EVENTS_DDL } from '../src/services/financialEvents.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_260 = readFileSync(
   resolve(ROOT, 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
+);
+const MIGRATION_5947 = readFileSync(
+  resolve(ROOT, 'cloudflare-worker/sql/migrations/202611161359_5947_usage_report_source.sql'), 'utf8',
 );
 
 /** Synthetic. Its digest is computed by the fixture, never pasted in. */
@@ -54,7 +63,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
+        async all() { return { success: true, results: db.prepare(sql).all(...b) }; },
         async run() {
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
@@ -83,6 +92,7 @@ async function hqDb() {
       status TEXT NOT NULL DEFAULT 'live', rpc_secret_hash TEXT);
   `);
   db.exec(MIGRATION_260);
+  db.exec(MIGRATION_5947);
   db.prepare(
     `INSERT INTO territory_licences (uid, licence_ref, legal_entity_name, brand_name, revenue_share_bps)
      VALUES ('lic_fr','AXL-001','Axal VC France SAS','Axal VC France',3500)`,
@@ -119,7 +129,7 @@ function branchEnv(over: Record<string, unknown> = {}) {
   db.exec('CREATE TABLE ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, est_cost_usd REAL, created_at TEXT)');
   db.prepare("INSERT INTO ai_usage_logs (est_cost_usd, created_at) VALUES (1.25, '2026-08-14 10:00:00')").run();
   db.prepare("INSERT INTO ai_usage_logs (est_cost_usd, created_at) VALUES (0.75, '2026-09-02 10:00:00')").run();
-  return { DB: makeD1(db), BRANCH_CODE: 'fr', BRANCH_NAME: 'Axal VC France', RPC_SECRET: SECRET, ...over } as any;
+  return { DB: makeD1(db), __db: db, BRANCH_CODE: 'fr', BRANCH_NAME: 'Axal VC France', RPC_SECRET: SECRET, ...over } as any;
 }
 
 const rows = (db: InstanceType<typeof DatabaseSync>) =>
@@ -222,4 +232,154 @@ test('an HQ that never answers is a stated deadline, not a hang', async () => {
   assert.equal(r.sent, false);
   assert.deepEqual(r.periods.map((p) => p.sent), [false, false]);
   assert.match(String(r.reason), /did not answer the 2026-Q3 report within 0\.05 seconds/);
+});
+
+
+/* ------------------------------------------------------------------ *
+ * D5947 — the measured subscriptions stream, end to end               *
+ * ------------------------------------------------------------------ */
+
+const WEBHOOK = { STRIPE_WEBHOOK_SECRET: 'whsec_synthetic_for_tests' };
+
+/**
+ * A branch whose database holds the financial ledger (D5299's DDL, as every
+ * migrated database does), its Stripe coverage starting at `coverage`.
+ */
+function ledgerBranch(coverage: string, over: Record<string, unknown> = {}, licenceCurrency = 'EUR') {
+  const env = branchEnv(over);
+  const db: InstanceType<typeof DatabaseSync> = (env as any).__db;
+  for (const statement of FINANCIAL_EVENTS_DDL) {
+    if (statement.startsWith('INSERT OR IGNORE INTO financial_event_coverage')) {
+      db.prepare('INSERT INTO financial_event_coverage (source, coverage_starts_at) VALUES (?, ?)').run('stripe', coverage);
+    } else {
+      db.exec(statement);
+    }
+  }
+  db.exec('CREATE TABLE branch_licence (id INTEGER PRIMARY KEY, currency TEXT)');
+  db.prepare('INSERT INTO branch_licence (id, currency) VALUES (1, ?)').run(licenceCurrency);
+  let n = 0;
+  const invoice = (currency: string, gross: number, at: string, stream = 'tier') => {
+    n += 1;
+    db.prepare(
+      `INSERT INTO financial_events (uid, source, source_event_id, source_event_type, kind, livemode,
+         revenue_stream, currency, gross_cents, refund_cents, net_cents, occurred_at)
+       VALUES (?, 'stripe', ?, 'invoice.paid', 'invoice', 1, ?, ?, ?, 0, ?, ?)`,
+    ).run(`fe_${n}`, `evt_${n}`, stream, currency, gross, gross, at);
+  };
+  return { env, db, invoice };
+}
+
+const subs = (hq: InstanceType<typeof DatabaseSync>, period: string) =>
+  hq.prepare(
+    `SELECT gross_cents, currency, state, reason, source, source_as_of, reported_at
+       FROM subsidiary_usage_reports WHERE period = ? AND stream = 'subscriptions'`,
+  ).get(period) as any;
+
+test('D5947: a branch with ledger rows reports their gross in their own currency, and HQ stores it unchanged', async () => {
+  const hq = await hqDb();
+  const stub = stubHq(hq);
+  const { env, invoice } = ledgerBranch('2026-06-01T00:00:00Z', { HQ: stub.binding, ...WEBHOOK });
+  invoice('CHF', 12_000, '2026-07-02T10:00:00Z');
+  invoice('CHF', 3_500, '2026-09-30T23:59:59Z');
+  invoice('CHF', 99_999, '2026-10-01T00:00:00Z');           // Q4 — not Q3's
+  invoice('CHF', 77_777, '2026-08-01T00:00:00Z', 'cart_order'); // not a subscription stream
+
+  const r = await pushUsageReport(env, OCT_1);
+  assert.equal(r.sent, true, r.reason);
+  const q3 = subs(hq, '2026-Q3');
+  assert.equal(q3.gross_cents, 15_500, 'the quarter\'s invoices, and only those, are the gross');
+  assert.equal(q3.currency, 'CHF', 'the figure travels in the rows\' own currency, not the EUR default');
+  assert.equal(q3.state, 'complete');
+  assert.equal(q3.source, 'financial_events');
+  assert.match(String(q3.source_as_of), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'the figure has an as-of time');
+  assert.match(String(q3.reported_at), /^\d{4}-\d{2}-\d{2}T/, 'reported_at is still the report\'s own stamp');
+
+  const q4 = subs(hq, '2026-Q4');
+  assert.equal(q4.gross_cents, 99_999);
+  const others = hq.prepare(
+    "SELECT stream, gross_cents, state, source FROM subsidiary_usage_reports WHERE period = '2026-Q3' AND stream != 'subscriptions' ORDER BY stream",
+  ).all() as any[];
+  assert.deepEqual(others.map((x) => [x.stream, x.gross_cents, x.state, x.source]), [
+    ['licence_fees', null, 'not_available', 'none'],
+    ['token_margin', null, 'not_available', 'ai_usage_logs'],
+  ], 'a stream the branch cannot measure is still NULL, with its state and source');
+});
+
+test('D5947: a quarter that began before the ledger\'s coverage is reported incomplete, never as the full quarter', async () => {
+  const hq = await hqDb();
+  const stub = stubHq(hq);
+  const { env, invoice } = ledgerBranch('2026-08-15T09:00:00Z', { HQ: stub.binding, ...WEBHOOK });
+  invoice('EUR', 4_000, '2026-09-01T00:00:00Z');
+  await pushUsageReport(env, OCT_1);
+  const q3 = subs(hq, '2026-Q3');
+  assert.equal(q3.state, 'incomplete');
+  assert.equal(q3.gross_cents, 4_000, 'what the ledger holds is reported, marked partial');
+  assert.match(String(q3.reason), /2026-08-15T09:00:00Z/, 'the coverage start is named');
+  assert.equal(subs(hq, '2026-Q4').state, 'not_recorded', 'Q4 has no invoice, and an empty quarter is not a zero');
+  assert.equal(subs(hq, '2026-Q4').gross_cents, null);
+  assert.doesNotMatch(String(subs(hq, '2026-Q4').reason), /receives no Stripe webhooks/,
+    'a branch that does receive webhooks was told its ledger is empty by design');
+});
+
+test('D5947: a branch with no Stripe webhook reports its ledger empty by design, not as zero', async () => {
+  const hq = await hqDb();
+  const stub = stubHq(hq);
+  const { env } = ledgerBranch('2026-06-01T00:00:00Z', { HQ: stub.binding });
+  await pushUsageReport(env, OCT_1);
+  for (const period of ['2026-Q3', '2026-Q4']) {
+    const row = subs(hq, period);
+    assert.equal(row.gross_cents, null);
+    assert.equal(row.state, 'not_recorded');
+    assert.match(String(row.reason), /receives no Stripe webhooks/);
+    assert.match(String(row.reason), /empty by design/);
+  }
+});
+
+test('D5947: two currencies are never added — the licence currency is kept, the other named, the stream incomplete', async () => {
+  const hq = await hqDb();
+  const stub = stubHq(hq);
+  const { env, invoice } = ledgerBranch('2026-06-01T00:00:00Z', { HQ: stub.binding, ...WEBHOOK });
+  invoice('EUR', 10_000, '2026-07-10T00:00:00Z');
+  invoice('USD', 2_500, '2026-07-11T00:00:00Z');
+  await pushUsageReport(env, OCT_1);
+  const q3 = subs(hq, '2026-Q3');
+  assert.equal(q3.gross_cents, 10_000, 'a cross-currency sum reached HQ');
+  assert.equal(q3.currency, 'EUR');
+  assert.equal(q3.state, 'incomplete');
+  assert.match(String(q3.reason), /USD 2500 minor units/);
+  assert.equal(
+    (hq.prepare("SELECT COUNT(*) AS n FROM subsidiary_usage_reports WHERE period = '2026-Q3' AND stream = 'subscriptions'").get() as any).n,
+    1, 'one row per stream: the key is not widened',
+  );
+
+  // None of the currencies is the licence's: no figure stands for the stream.
+  const hq2 = await hqDb();
+  const stub2 = stubHq(hq2);
+  const other = ledgerBranch('2026-06-01T00:00:00Z', { HQ: stub2.binding, ...WEBHOOK }, 'GBP');
+  other.invoice('EUR', 10_000, '2026-07-10T00:00:00Z');
+  other.invoice('USD', 2_500, '2026-07-11T00:00:00Z');
+  await pushUsageReport(other.env, OCT_1);
+  const none = subs(hq2, '2026-Q3');
+  assert.equal(none.gross_cents, null);
+  assert.equal(none.state, 'incomplete');
+  assert.match(String(none.reason), /EUR 10000 minor units, USD 2500 minor units/);
+});
+
+test('D5947: a re-report replaces the measured figure, and Send now carries the same metadata', async () => {
+  const hq = await hqDb();
+  const stub = stubHq(hq);
+  const store = new Map<string, string>();
+  const kv = { get: async (k: string) => store.get(k) ?? null, put: async (k: string, v: string) => { store.set(k, v); } };
+  const { env, invoice } = ledgerBranch('2026-06-01T00:00:00Z', { HQ: stub.binding, RATE_LIMITS: kv, ...WEBHOOK });
+  invoice('EUR', 1_000, '2026-07-10T00:00:00Z');
+  await pushUsageReport(env, OCT_1);
+  assert.equal(subs(hq, '2026-Q3').gross_cents, 1_000);
+  invoice('EUR', 2_000, '2026-08-10T00:00:00Z');
+  const sent = await sendUsageReportNow(env, OCT_1);
+  assert.equal(sent.called, true, sent.reason);
+  const rowsQ3 = hq.prepare("SELECT * FROM subsidiary_usage_reports WHERE period = '2026-Q3' AND stream = 'subscriptions'").all() as any[];
+  assert.equal(rowsQ3.length, 1, 'the re-report added a row');
+  assert.equal(rowsQ3[0].gross_cents, 3_000);
+  assert.equal(rowsQ3[0].source, 'financial_events');
+  assert.ok(rowsQ3[0].source_as_of);
 });
