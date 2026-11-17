@@ -231,7 +231,8 @@ test('the strip draws the worst day, a Not recorded day dashed and never green, 
   try {
     assert.equal(v.textOf('trust-status-count'), 'Days with no incident reported: 3 of 4 days recorded');
     assert.match(v.props('trust-status-cells')['aria-label'], /3 of 4 days recorded; the 3 days before records began are not recorded\./);
-    assert.equal(v.textOf('trust-status-line'), 'All systems operational');
+    // #7002: the tile's headline is /status's own (lib/statusSummary.js).
+    assert.equal(v.textOf('trust-status-line'), 'All monitored services operational');
   } finally { await v.close(); }
 });
 
@@ -242,7 +243,7 @@ test('a failed store read is Unreadable with Try again, never the page\'s lines 
     assert.ok(v.has('trust-glance-unreadable'));
     assert.ok(!v.has('trust-glance'), 'no fallback lines in its place');
     assert.ok(v.has('trust-changes-unreadable'));
-    assert.match(v.textOf('trust-status-line'), /All systems operational/, 'the status still answers');
+    assert.match(v.textOf('trust-status-line'), /All monitored services operational/, 'the status still answers');
     await v.press('Try again');
     assert.equal(n, 2);
     assert.ok(v.has('trust-glance'));
@@ -255,7 +256,9 @@ test('TRU15c and never-published blocks: no changes reads its line; a block the 
   try {
     assert.match(v.textOf('trust-changes-empty'), new RegExp(NO_CHANGES));
     assert.equal(v.props('trust-glance')['data-source'], 'fallback');
-    assert.match(v.textOf('trust-glance'), new RegExp(`Axal VC Management LLC is the data controller\\.${CHECKED_WAIT}`));
+    // #7002 (D1072): a line with no recorded check date gets no tick; it reads Not recorded with the reason.
+    assert.match(v.textOf('trust-glance'), /Axal VC Management LLC is the data controller\. Not recordedNo check date is recorded for this yet\./);
+    assert.ok(!v.has('trust-fact'), 'no ticked line without a check date');
     assert.equal(v.textOf('trust-reviewed'), 'Last reviewed: Not recorded');
   } finally { await v.close(); }
   const sec = await mount('/trust/security', worker({ trust: empty }));
@@ -273,7 +276,7 @@ test('TRU4 and TRU4v: the listed companies, From for one not started; none liste
   } finally { await v.close(); }
   const r = await mount('/trust/subprocessors', worker({ trust: { ...TRUST, subprocessors: { items: [], last_change: null } } }));
   try {
-    assert.equal(r.textOf('trust-subprocessors-review'), `Subprocessors${SUBPROCESSORS_WAIT}`);
+    assert.equal(r.textOf('trust-subprocessors-review'), `Subprocessors${SUBPROCESSORS_WAIT}Request the subprocessor list`);
     assert.ok(!r.has('trust-subprocessors-list'));
   } finally { await r.close(); }
 });

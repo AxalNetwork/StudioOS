@@ -205,7 +205,7 @@ import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
 import { narrativeCan, narrativeCapabilities, narrativeStanding } from '../services/narrative/capabilities';
 import { capRelCan, capRelCapabilities, capRelStanding, type CapRelCapabilities } from '../services/capRelCapabilities';
-import { addTypedEvidence, createPackLink, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
+import { addTypedEvidence, createPackLink, createReadinessLink, listPackLinks, revokePackLink, EvidenceShareError } from '../services/raiseEvidenceShare';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -1800,6 +1800,11 @@ cycleRaise.get('/evidence/share-links', async c => {
 });
 cycleRaise.post('/evidence/share-links', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createPackLink(ctx, await evidenceBody(c)), 201); }
+  catch (error) { return shareFailure(c, error); }
+});
+// D6897 (#6897, RA-30): the readiness snapshot as a link. Listed and revoked with the pack links above.
+cycleRaise.post('/readiness/share-links', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await createReadinessLink(ctx, await evidenceBody(c)), 201); }
   catch (error) { return shareFailure(c, error); }
 });
 cycleRaise.post('/evidence/share-links/:uid/revoke', async c => {

@@ -32,7 +32,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
   computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
-  periodComplete, periodCounts,
+  periodComplete, periodCounts, reportDue, REPORT_DUE_DEFAULT_DAYS,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
 import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
@@ -511,6 +511,29 @@ r.get('/kpi-compliance', async (c) => {
       ).bind(scope.visibleCsv, scope.visibleCsv).all<any>().catch(() => ({ results: [] as any[] })),
     ]);
 
+    // #6204 (D6204): each company's due day for this period. The term is the reporting duty's own
+    // (`reporting_duties.due_days`, `after_end`, at this cadence) for the caller's book: the duties
+    // the caller holds, or every duty for an admin's whole book. Several duties on one company take
+    // the earliest due day. A company with no duty takes the firm default; a read that fails claims
+    // no due date at all.
+    const dutyDays = new Map<number, number>();
+    let dutiesRead = true;
+    try {
+      const duties = await c.env.DB.prepare(
+        `SELECT project_id, MIN(due_days) AS due_days
+           FROM reporting_duties
+          WHERE status = 'active' AND due_rule = 'after_end' AND cadence = ?
+            AND (? IS NULL OR holder_user_id = ?)
+            AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)
+          GROUP BY project_id`,
+      ).bind(cadence, scope.heldCsv, Number(user.id), scope.visibleCsv, scope.visibleCsv).all<any>();
+      if (!duties.success) throw new Error('reporting duties read failed');
+      for (const d of duties.results || []) {
+        const n = Number(d.due_days);
+        if (Number.isInteger(n) && n >= 0) dutyDays.set(Number(d.project_id), n);
+      }
+    } catch { dutiesRead = false; }
+
     const thisPeriod = new Set<number>();
     const lastSeen = new Map<number, string>();
     for (const u of (updates.results || [])) {
@@ -525,13 +548,15 @@ r.get('/kpi-compliance', async (c) => {
     const companies = (held.results || []).map((h: any) => {
       const pid = Number(h.project_id);
       const last = lastSeen.get(pid) || null;
+      const reportedNow = thisPeriod.has(pid);
       return {
         project_id: pid,
         project_uid: h.uid || null,
         name: h.name || `Startup ${pid}`,
-        reported: thisPeriod.has(pid),
+        reported: reportedNow,
         last_reported_at: last,
         days_since_report: daysSince(last, today),
+        ...reportDue(bounds?.until ?? null, dutiesRead ? (dutyDays.get(pid) ?? null) : undefined, reportedNow, today),
       };
     });
     const reported = companies.filter(x => x.reported).length;
@@ -560,6 +585,11 @@ r.get('/kpi-compliance', async (c) => {
       // named here so the ratio can be checked rather than trusted.
       population: { basis: 'companies_held_in_book', period },
       compliance_pct: companies.length > 0 ? Math.round((reported / companies.length) * 100) : null,
+      // #6204: the overdue set, by the Worker's date, and the default a company with no duty takes.
+      overdue_count: companies.filter(x => x.overdue).length,
+      overdue_project_ids: companies.filter(x => x.overdue).map(x => x.project_id),
+      due_default_days: REPORT_DUE_DEFAULT_DAYS,
+      due_read: dutiesRead ? 'ok' : 'unreadable',
     });
   } catch (e) { return mapError(c, e); }
 });

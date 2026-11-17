@@ -151,6 +151,7 @@ import {
   readCalendar, readFromGoogle, syncMetricsSheets,
 } from '../services/google/growFeeds';
 import { withKpiTargets } from '../services/growKpiTargets';
+import { ownerShown } from '../services/obligationOwner';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -357,12 +358,15 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
   }
   // durable-company-building
   const ev = await env.DB.prepare(
-    `SELECT id, title, kind, event_type, due_date, owner_name, completion_status, recurrence FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
+    `SELECT e.id, e.title, e.kind, e.event_type, e.due_date, e.owner_name, e.owner_user_id, o.name AS owner_user_name, e.completion_status, e.recurrence
+       FROM compliance_events e LEFT JOIN users o ON o.id = e.owner_user_id WHERE e.project_id = ? ORDER BY e.due_date`,
   ).bind(projectId).all<Row>();
   const obligations = (ev.results || []).map((event) => {
     const kind = obligationKind(event);
     const status = obligationState(event.completion_status, kind, String(event.due_date), today(x));
-    return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name, status,
+    // D6790: `owner` is what every surface shows; `owner_user_id` is the picked team member, which the Edit carries.
+    return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name,
+      owner: ownerShown(event.owner_user_name, event.owner_name), owner_user_id: event.owner_user_id ?? null, status,
       repeats: REPEATS_OF[String(event.recurrence)] ?? null, due_window: dueWindow(String(event.due_date), status, today(x)) };
   });
   // D6122 (GR-21): the due strip's counts, over every obligation whatever the page's filter, and the day they are counted from.

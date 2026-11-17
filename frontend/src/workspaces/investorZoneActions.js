@@ -146,12 +146,11 @@ export const INVESTOR_ZONE_ACTIONS = {
     // an exact cents split and receipts, and the Calls page is the form: New
     // call previews the split and issues it.
     { label: 'New call', kind: 'handler', handler: 'newCall', primary: true },
-    // A reason still, and a narrower one than "nothing on this desk sends
-    // mail": a notice is logged per LP account when a call is issued, and the
-    // overdue lines are listed on the page. What nobody builds is the chase.
-    // D553: a reminder for ONE line is now drafted on its row (Draft reminder)
-    // and logged as sent (Log as sent). Sending in bulk from here still is not.
-    { label: 'Send reminders', unbuilt: 'a notice is logged per LP account when a call is issued, and each line offers a reminder draft and a sent log; sending reminders in bulk is not built', hover: 'Draft a reminder on the line itself; bulk sending is not built.' },
+    // D6238 (#6238): live. It opens the call's chase: one Eadwyn reminder
+    // draft per line behind (the `funds/calls` surface), each logged as sent
+    // only when the GP confirms it on that line. The product sends nothing;
+    // the GP sends each reminder themselves.
+    { label: 'Send reminders', kind: 'handler', handler: 'sendReminders' },
     // Was "no wire schedule is stored to export" — true until migration 312's
     // receipts. It exports the wire trail the page shows.
     { label: 'Export wires', kind: 'export' },
@@ -290,14 +289,10 @@ export const INVESTOR_ZONE_ACTIONS = {
     // The zone's own StatedLimit argues this one, and the note says the same
     // thing it does: "a request button that wrote nowhere would be worse than
     // the conversation it replaced."
-    // D6272: THE NOTES SAY WHERE A ROOM IS ASKED FOR TODAY. They said both
-    // waited on "the deal-request routes in research.ts (slot S02)", but the
-    // request shipped on the deal itself (`POST /api/deals/:id/room-access/
-    // request`, the deal's Documents tab, `Ask for access`). This list is the
-    // rooms already granted, so the request stays on the deal and the row
-    // points there. Interim wording until the room-list build replaces it.
+    // Data-room requests live on the deal’s Documents tab; this list shows granted rooms.
     { label: 'New request', unbuilt: 'a room is asked for on its deal: open the deal, then Documents, then Ask for access. The founder decides, and you get a notice either way', hover: 'Ask for a data room from the deal’s Documents tab.' },
-    { label: 'Attach to deal', unbuilt: 'a room opens from its own deal, and nothing on this list links a grant to a deal record yet; open the deal to see its room', hover: 'Each room opens from its own deal.' },
+    // D6266: a room already shows the deals on its company that you may open; there is nothing to attach by hand.
+    { label: 'Attach to deal', unbuilt: 'a room shows the deals on its company that you are invited to or committed on, with their stage and a link; there is nothing to attach by hand', hover: 'Each room already shows its deal when you are invited to it.' },
     { label: 'Export', kind: 'export' },
   ],
   'research/benchmarking': [

@@ -52,7 +52,10 @@ function fixture() {
   db.exec(`INSERT INTO founders (id, name, email) VALUES (${FOUNDER}, 'Ana Wren', 'ana@example.test')`);
   db.exec(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES
     (${FOUNDER}, 'founder', 'Ana Wren', 'ana@example.test', ${FOUNDER}, 1), (${OWNER}, 'founder', 'Cai Moreno', 'cai@example.test', NULL, 1)`);
-  db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${A}, 'Harbour Lantern', ${FOUNDER})`);
+  // D6790: a reminder goes to its owner while they are on the company team.
+  db.exec(`INSERT INTO company_profiles (id, uid, company_name) VALUES (5, 'co-harbour', 'Harbour Lantern Ltd')`);
+  db.exec(`INSERT INTO user_company_links (uid, company_id, user_id) VALUES ('ucl-owner', 5, ${OWNER})`);
+  db.exec(`INSERT INTO projects (id, name, founder_id, company_id) VALUES (${A}, 'Harbour Lantern', ${FOUNDER}, 5)`);
   return { db, env: { DB: d1Over(db) } as any };
 }
 

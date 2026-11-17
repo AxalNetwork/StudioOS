@@ -32,7 +32,9 @@ import { userMeetsInvestorTier, investorUpsell } from '../middleware/requireInve
 import { splitCall } from '../services/fundCallSplit';
 import {
   issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
+  applyAmendments, readCallAmendments, readFundCall, correctFundCall, withdrawFundCall, type AmendOutcome,
 } from '../services/fundCallLedger';
+import { callNoticeSummaries } from '../services/fundNoticeStore';
 import {
   FUND_I_SLUG, assertFundCallPayable, capitalCallReference, fundPayeeOf, payInstructionsFor, revealPayInstructions,
 } from '../services/payInstructions';
@@ -1285,7 +1287,9 @@ funds.get('/:id/capital-calls', async (c) => {
   const { fund } = await requireFundGp(c, fundId);
   try {
     const ledger = await readFundCalls(c.env, fundId, todayUtc());
-    return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...ledger });
+    // D6238: each call as corrected, with who withdrew it and when.
+    const calls = applyAmendments(ledger.calls, await readCallAmendments(c.env, fundId));
+    return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...ledger, calls });
   } catch (e) {
     return refuse(c, 503, {
       code: 'call_ledger_unreadable',
@@ -1293,6 +1297,135 @@ funds.get('/:id/capital-calls', async (c) => {
       raw: e,
     });
   }
+});
+
+/** A positive integer id from a path segment, written as one, or null. */
+function pathId(raw: string | undefined): number | null {
+  return raw && /^[1-9]\d{0,9}$/.test(raw) ? Number(raw) : null;
+}
+
+const CALL_NOT_FOUND = { code: 'call_not_found', message: 'That call is not on this fund.' };
+
+/**
+ * D6238: one call — its header as corrected (with every correction and the
+ * withdrawal, each with who and when), its lines, the receipts and comms
+ * recorded against them, and the notices Axal issued on its lines, read from
+ * the one notice record (`legal_notices`, routes/fund_notices.ts) as
+ * summaries. Receipts, comms and notices are each read apart, so one that
+ * fails reads Unreadable while the rest shows.
+ */
+funds.get('/:id/capital-calls/:callId', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const { fund } = await requireFundGp(c, fundId);
+  const callId = pathId(c.req.param('callId'));
+  if (callId === null) return refuse(c, 404, CALL_NOT_FOUND);
+  let read;
+  try {
+    read = await readFundCall(c.env, fundId, callId, todayUtc());
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'call_unreadable',
+      message: 'This call could not be read. Nothing here says it has no lines; try again.',
+      raw: e,
+    });
+  }
+  if (!read) return refuse(c, 404, CALL_NOT_FOUND);
+  let notices: { status: 'ready'; rows: any[] } | { status: 'unreadable'; rows: null };
+  try {
+    notices = { status: 'ready', rows: await callNoticeSummaries(c.env, fundId, callId) };
+  } catch {
+    notices = { status: 'unreadable', rows: null };
+  }
+  return c.json({ ok: true, fund: { id: fund.id, name: fund.name }, today: todayUtc(), ...read, notices });
+});
+
+/** The refusal for an amendment that did not happen. */
+function amendRefusal(c: any, out: AmendOutcome) {
+  switch (out.kind) {
+    case 'not_found': return refuse(c, 404, CALL_NOT_FOUND);
+    case 'withdrawn': return refuse(c, 409, { code: 'call_withdrawn', message: 'This call was withdrawn, so it cannot be corrected or withdrawn again.' });
+    case 'no_change': return refuse(c, 409, { code: 'no_change', message: 'That is what the call already says, so nothing was recorded.' });
+    case 'before_issue': return refuse(c, 400, {
+      code: 'due_before_issue', message: 'The due date cannot be before the day the call was issued.', extra: { issued_on: out.issuedOn },
+    });
+    case 'has_receipts': return refuse(c, 409, {
+      code: 'call_has_receipts',
+      message: 'A receipt is recorded on this call, so it cannot be withdrawn. Correct its due date or purpose instead.',
+    });
+    case 'carries_fee': return refuse(c, 409, {
+      code: 'call_carries_fee',
+      message: 'A management-fee line is linked to this call, so it cannot be withdrawn.',
+    });
+    default: return null;
+  }
+}
+
+/** A short reason from a request body, or null. */
+function amendReason(body: any): string | null {
+  const s = typeof body?.reason === 'string' ? body.reason.trim() : '';
+  return s ? s.slice(0, 500) : null;
+}
+
+/**
+ * D6238: correct an issued call's due date or purpose, `{ field, value,
+ * reason? }`. The header stays as issued (migration 312 seals it); the
+ * correction is its own append-only row, with who and when. A due date moves
+ * onto the call's lines too. Notices already issued keep what they said.
+ */
+funds.post('/:id/capital-calls/:callId/correct', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.correct');
+  const callId = pathId(c.req.param('callId'));
+  if (callId === null) return refuse(c, 404, CALL_NOT_FOUND);
+  const body = await c.req.json<{ field?: string; value?: string; reason?: string }>().catch(() => ({} as any));
+  const field = body.field === 'due_date' || body.field === 'purpose' ? body.field : null;
+  if (!field) return refuse(c, 400, { code: 'invalid_field', message: 'A correction changes the due_date or the purpose.' });
+  let value: string;
+  if (field === 'due_date') {
+    const due = isoDate(body.value);
+    if (!due) return refuse(c, 400, { code: 'invalid_due_date', message: 'The due date must be a real date, written YYYY-MM-DD.' });
+    value = due;
+  } else {
+    const raw = typeof body.value === 'string' ? body.value.trim() : '';
+    if (!raw || raw.length > 500) {
+      return refuse(c, 400, { code: 'invalid_purpose', message: 'The purpose is between 1 and 500 characters.' });
+    }
+    value = raw;
+  }
+  const reason = amendReason(body);
+  const out = await correctFundCall(c.env, { fundId, callId, field, value, reason, recordedBy: Number(user.id) });
+  if (out.kind !== 'recorded') return amendRefusal(c, out)!;
+  await logActivity(c.env, Number(user.id), 'capital_call_corrected', {
+    entityType: 'fund_capital_call', entityId: callId, metadata: { fund_id: fundId, field },
+  }).catch(() => {});
+  // No purpose or reason text in the audit row: the field and the call are enough to find it.
+  await auditFundAct(c.env, user, 'capital_call.correct', { fund_id: fundId, call_id: callId, field });
+  return c.json({ ok: true, amendment: out.amendment }, 201);
+});
+
+/**
+ * D6238: withdraw a call that nothing has been paid against, `{ reason? }`.
+ * Refused once a receipt is recorded on any line, a line is paid, or a
+ * management-fee line is linked to one. Notices already issued are not
+ * recalled: the call page says so before the GP confirms.
+ */
+funds.post('/:id/capital-calls/:callId/withdraw', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.withdraw');
+  const callId = pathId(c.req.param('callId'));
+  if (callId === null) return refuse(c, 404, CALL_NOT_FOUND);
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({} as any));
+  const out = await withdrawFundCall(c.env, { fundId, callId, reason: amendReason(body), recordedBy: Number(user.id) });
+  if (out.kind !== 'recorded') return amendRefusal(c, out)!;
+  await logActivity(c.env, Number(user.id), 'capital_call_withdrawn', {
+    entityType: 'fund_capital_call', entityId: callId, metadata: { fund_id: fundId },
+  }).catch(() => {});
+  await auditFundAct(c.env, user, 'capital_call.withdraw', { fund_id: fundId, call_id: callId });
+  return c.json({ ok: true, amendment: out.amendment }, 201);
 });
 
 /**
@@ -1386,6 +1519,9 @@ funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
   if (!Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
   const line = await readLine(c.env, lineId);
   if (!line || Number(line.fund_id) !== fundId) return notFound();
+  if (line.status === 'withdrawn') {
+    return refuse(c, 409, { code: 'call_withdrawn', message: 'This line belongs to a withdrawn call, so nothing is owed on it.' });
+  }
 
   const body = await c.req.json<{ amount_cents?: number; received_on?: string; reference?: string }>()
     .catch(() => ({} as any));

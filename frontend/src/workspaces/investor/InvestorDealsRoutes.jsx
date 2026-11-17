@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
-import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, ROUND_CALLS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
 import { STATES as ROOM_STATES } from '../../components/deals/dealRoomCopy';
 
 const COMPARE_TITLE = 'Compare';
@@ -13,6 +13,10 @@ const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'
 // D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
 const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
 const DealCompare = lazy(() => import('../../pages/investor/dealflow/DealFlow').then((m) => ({ default: m.DealCompare })));
+// D6160 (#6160): the investor's round calls at `/round-calls`, a page of Deals with no pill of its own (D6159 Q1).
+const RoundCallIndex = lazy(() => import('../../pages/investor/RoundCallIndex'));
+const ROUND_CALLS_TITLE = 'Round calls';
+const ROUND_CALLS_LINE = 'Private calls founders sent you. An amount you indicate is Indicated, never committed.';
 /**
  * ONE FILE PER ZONE.
  *
@@ -94,10 +98,11 @@ export default function InvestorDealsRoutes() {
   // D4815: the deal rooms are a page of the bucket with no pill of their own,
   // as Compare is; the canvas's zone row is Deal flow, Screening, Commit, Closing.
   const isRooms = location.pathname === ROOMS;
+  const isRoundCalls = location.pathname === ROUND_CALLS;
   const zone = zoneForPath(bucket, location.pathname);
 
   const Zone = ZONES[zone?.slug];
-  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, slug: zone?.slug });
+  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, isRoundCalls, slug: zone?.slug });
   useEffect(() => { document.title = pageTitle; }, [pageTitle]);
 
   // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
@@ -108,16 +113,17 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : undefined}
-      activeSlug={isRoot || isCompare || isRooms ? null : undefined}
-      intro={isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
+      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : isRoundCalls ? ROUND_CALLS_TITLE : undefined}
+      activeSlug={isRoot || isCompare || isRooms || isRoundCalls ? null : undefined}
+      bucketPath={isRoundCalls ? '/deals' : undefined}
+      intro={isRoundCalls ? ROUND_CALLS_LINE : isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
       rail={(
         <WorkerRail
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
           note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
-          coverage={[`${isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
+          coverage={[`${isRoundCalls ? ROUND_CALLS_TITLE : isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
             // WAS "Nothing on this page drafts a memo or produces a score" —
@@ -142,6 +148,8 @@ export default function InvestorDealsRoutes() {
           ? <DealCompare ids={compareIds(location.search)} />
           : isRooms
           ? <DealRoomsPanel />
+          : isRoundCalls
+          ? <RoundCallIndex />
           : Zone && !isRoot
           ? <Zone />
           : <DealsRoot search={location.search} />}

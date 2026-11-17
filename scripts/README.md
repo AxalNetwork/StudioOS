@@ -33,6 +33,7 @@
 | `workspace-validation.mjs` | D5573: the LOCAL MOCKED workspace validation run (`--tasks --tenants --concurrency --faults --seed --out`): synthetic ventures through the D5565/D5567 contracts and a faultable in-process provider; deterministic per seed; writes a `local_mocked` JSON and Markdown report. No network, credentials or cloud. |
 | `flaky-tests.mjs` | D6464: builds the known-flaky test list from the last days of merge-queue CI runs (`--write` updates `flaky-tests.json`, `--open-issues` opens one `ci` issue per listed test). Logic in `lib/flakyTests.mjs`. |
 | `flaky-tests.json` | D6464: the tracked flaky list. `test-drift-parts.mjs` reads it under merge_group to retry a listed test's file once; only a PR committing `flaky-tests.mjs` output changes it. |
+| `d1-backup-upload.sh` | Uploads the nightly D1 SQL export to the primary R2 bucket over its S3-compatible multipart API. |
 
 ## The guards
 
@@ -46,6 +47,8 @@ represents a bug that reached production once:
 | `lib/noAnthropicInProd.mjs` | D5339's import-graph, reference-allowlist and assistant-mount rules, shared by the guard and its synthetic-tree tests. |
 | `pip_audit_gate.py` | #5526: audits the pinned Python requirements, retries transient PyPI advisory lookup failures, and preserves strict scan findings. |
 | `ci/test-tracer.mjs` | D5608: opt-in Node test dependency and timing preload. Set `TEST_TRACE_DIR` when invoking a suite part to record repo-relative paths, probes, subprocess visibility and wall time. |
+| `ci/test-tracer-hooks.mjs` | D5608: the tracer's off-thread module hooks — report each resolved repo module over a MessagePort and send `node:sqlite` through the shim. Off-thread because a synchronous `registerHooks` hook changed what `_deck-loader.mjs` tests rendered. |
+| `ci/test-tracer-sqlite.mjs` | D5608: `node:sqlite` with a `DatabaseSync` that records each file database a traced test opens. |
 | `ci/merge-test-deps.mjs` | D5608: merges process traces into commit-level dependency and timing JSON, reports untraced tests and counts opaque ones. |
 | `lib/prTier.mjs` | D5621: standalone PR tier selection and exact-head full-run evidence validation. |
 | `test-drift-parts.mjs` | Not a check: D4130. Cuts `npm run test:drift` into the parts CI runs in parallel, derived from `package.json` — the frontend and worker suites as `--test-shard` shards (`SHARDS`), everything else as `rest`. `--list` prints the parts; `<part>` runs one. `frontend/test/ci_suite_parts_4130.test.mjs` holds the union to the suite and ci.yml's matrix to the parts. Locally, run the whole suite with `npm run test:drift`. |
@@ -334,5 +337,6 @@ D5675: `verify-meeting-bot-preview.mjs` validates the deployed preview receipt b
 | `check-agent-compute-image.py` | D4557: local-only image build, isolation tests, scan, SBOM and synthetic profile evidence. |
 | `check-agent-compute-mutations.py` | D4557: source guard mutations against isolated Worker copies and deny-network image fixtures. |
 | `workflow-failure-reconcile.mjs` | D6387: verify completed attempts and report actionable failures to GitHub. |
+| `build-r2-inventory.mjs` | D6650: read-only typed R2 mutation inventory and classification/provenance guard; `--write` renders the generated, gitignored Markdown inventory beside the policy JSON. |
 
 | `report-incorporation-state.mjs` | #6684: read-only incorporation state by jurisdiction id (orders by status, a Stripe one-time price yes/no, template bodies and counsel approvals, ids outside the six, multi-paid projects, a US beneficial-ownership step); counts and yes/no only. |

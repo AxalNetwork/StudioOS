@@ -12,12 +12,18 @@
  *   refused with a page that carries no venture data.
  * - **Add evidence by hand (RA-32).** Source "Typed: stated by you", strength Anecdote, sharing Private.
  *
+ * - **Readiness snapshot (RA-30, D6897).** The same link store with `output = 'readiness'`: the seven readiness areas
+ *   with their score out of 10, evidence kind, what is missing and the day scored, frozen when made. Data room with no
+ *   score reads "Not scored yet", never 0; Team reads "Team is assessed by a person". There is no overall score and
+ *   no Product-market fit row. An optional one-sentence covering line from the founder sits above it.
+ *
  * Nothing here sends anything: making a link only returns its address to the founder.
  */
 import type { Env } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { EVIDENCE_AREAS, type EvidenceArea } from './raiseEvidenceSources';
 import { outsidePackView, evidenceUid, TYPED_EVIDENCE_KIND, TYPED_EVIDENCE_TABLE, type RaiseEvidenceContext } from './raiseEvidence';
+import { READINESS_ITEMS, loadReadiness, latestScores } from './raiseCycle';
 
 const SENTENCES = {
   forbidden: 'Only this venture’s founders can share evidence outside Axal.',
@@ -173,10 +179,13 @@ export async function listPackLinks(ctx: RaiseEvidenceContext) {
     const state = linkState(row);
     let changed: boolean | null = null;
     if (state === 'live') {
-      const key = row.reader + '|' + (row.item_uids_json ?? '*');
+      const key = row.output === 'readiness' ? 'readiness' : row.reader + '|' + (row.item_uids_json ?? '*');
       if (!current.has(key)) {
-        try { current.set(key, (await packBody(ctx.env, ctx.projectId, row.reader, row.item_uids_json ? new Set(JSON.parse(row.item_uids_json)) : null)).hash); }
-        catch { current.set(key, null); }
+        try {
+          current.set(key, row.output === 'readiness'
+            ? (await readinessBody(ctx.env, ctx.projectId)).hash
+            : (await packBody(ctx.env, ctx.projectId, row.reader, row.item_uids_json ? new Set(JSON.parse(row.item_uids_json)) : null)).hash);
+        } catch { current.set(key, null); }
       }
       const now = current.get(key);
       changed = now == null ? null : now !== row.pack_hash;
@@ -216,17 +225,17 @@ export const REFUSALS = {
 export type Refusal = keyof typeof REFUSALS;
 
 /** RA-28: the public read. One view is consumed only when the link is live; a refusal never says whose link it was. */
-export async function openPackLink(env: Env, token: string): Promise<{ ok: true; pack: unknown; link: { made_at: string; expires_at: string } } | { ok: false; refusal: Refusal }> {
+export async function openPackLink(env: Env, token: string, output: 'pack' | 'readiness' = 'pack'): Promise<{ ok: true; pack: unknown; link: { made_at: string; expires_at: string } } | { ok: false; refusal: Refusal }> {
   if (!TOKEN.test(token)) return { ok: false, refusal: 'not_found' };
   const hash = await tokenHash(token);
   const now = new Date().toISOString();
   const res = await env.DB.prepare(`UPDATE raise_evidence_share_links SET view_count = view_count + 1, last_viewed_at = ?
-      WHERE token_hash = ? AND output = 'pack' AND revoked_at IS NULL AND view_count < view_limit AND datetime(expires_at) > datetime(?)
+      WHERE token_hash = ? AND output = ? AND revoked_at IS NULL AND view_count < view_limit AND datetime(expires_at) > datetime(?)
         AND EXISTS (SELECT 1 FROM projects p WHERE p.id = raise_evidence_share_links.project_id AND p.deleted_at IS NULL)`)
-    .bind(now, hash, now).run();
+    .bind(now, hash, output, now).run();
   const row = await env.DB.prepare(`SELECT l.snapshot_json, l.created_at, l.expires_at, l.revoked_at, l.view_count, l.view_limit,
-      (SELECT p.deleted_at FROM projects p WHERE p.id = l.project_id) AS deleted_at FROM raise_evidence_share_links l WHERE l.token_hash = ? AND l.output = 'pack'`)
-    .bind(hash).first<{ snapshot_json: string; created_at: string; expires_at: string; revoked_at: string | null; view_count: number; view_limit: number; deleted_at: string | null }>();
+      (SELECT p.deleted_at FROM projects p WHERE p.id = l.project_id) AS deleted_at FROM raise_evidence_share_links l WHERE l.token_hash = ? AND l.output = ?`)
+    .bind(hash, output).first<{ snapshot_json: string; created_at: string; expires_at: string; revoked_at: string | null; view_count: number; view_limit: number; deleted_at: string | null }>();
   if ((res as { meta?: { changes?: number } }).meta?.changes === 1 && row) {
     try { return { ok: true, pack: JSON.parse(row.snapshot_json), link: { made_at: row.created_at, expires_at: row.expires_at } }; }
     catch { return { ok: false, refusal: 'not_found' }; }
@@ -235,6 +244,90 @@ export async function openPackLink(env: Env, token: string): Promise<{ ok: true;
   if (row.revoked_at) return { ok: false, refusal: 'revoked' };
   if (Date.parse(row.expires_at) <= Date.now()) return { ok: false, refusal: 'expired' };
   return { ok: false, refusal: 'used_up' };
+}
+
+// ---------------------------------------------------------------------------
+// D6897 (#6897, RA-30): the readiness snapshot shared outside Axal
+// ---------------------------------------------------------------------------
+
+/** The seven areas a snapshot shows: every readiness item but Product-market fit (D6054: no PMF row). */
+export const SNAPSHOT_AREAS = READINESS_ITEMS.filter((i) => i.key !== 'pmf');
+export const NOT_SCORED = 'Not scored yet';
+export const TEAM_LINE = 'Team is assessed by a person';
+export const COVERING_LINE_MAX = 200;
+const EVIDENCE_WORD: Record<string, string> = { measured: 'Measured', stated: 'Stated', pattern: 'Pattern', anecdote: 'Anecdote' };
+
+export type SnapshotArea = { key: string; label: string; score: number | null; evidence: string | null; missing: string | null; scored_on: string | null; words: string };
+
+/** The seven areas as stored now, and the hash "Changed since sent" compares. Never an overall score. */
+export async function readinessBody(env: Env, projectId: number): Promise<{ body: { areas: SnapshotArea[] }; hash: string }> {
+  const { items, scores } = await loadReadiness({ env, projectId, today: todayUtc() });
+  const latest = latestScores(scores);
+  const idOf = new Map(items.map((i) => [i.item_key, Number(i.id)]));
+  const areas: SnapshotArea[] = SNAPSHOT_AREAS.map(({ key, label }) => {
+    const id = idOf.get(key);
+    const s = id == null ? undefined : latest.get(id);
+    if (key === 'team') {
+      return { key, label, score: null, evidence: null, missing: null, scored_on: null, words: TEAM_LINE };
+    }
+    const raw = s?.score == null ? null : Number(s.score);
+    const score = raw != null && Number.isFinite(raw) ? Math.max(0, Math.min(10, raw)) : null;
+    const evidence = s?.evidence ? EVIDENCE_WORD[String(s.evidence)] ?? null : null;
+    return {
+      key, label, score, evidence,
+      missing: s?.missing ? String(s.missing).slice(0, 300) : null,
+      scored_on: score != null && s?.scored_at ? String(s.scored_at).slice(0, 10) : null,
+      words: score == null ? NOT_SCORED : `${score} of 10`,
+    };
+  });
+  const body = { areas };
+  return { body, hash: await sha256Hex(JSON.stringify(body)) };
+}
+
+/** One sentence the founder adds above the snapshot, or null. At most 200 characters, no line breaks. */
+export function coveringLine(v: unknown): string | null | 'bad' {
+  if (v == null || v === '') return null;
+  if (typeof v !== 'string') return 'bad';
+  const t = v.trim().replace(/\s+/g, ' ');
+  if (!t) return null;
+  if (t.length > COVERING_LINE_MAX || /[\r\n]/.test(v.trim())) return 'bad';
+  return t;
+}
+
+/** RA-30: make the readiness snapshot and its link. Nothing is sent; the founder copies the address. */
+export async function createReadinessLink(ctx: RaiseEvidenceContext, data: Record<string, unknown>) {
+  founderOnly(ctx);
+  const allowed = ['label', 'expires_in_days', 'view_limit', 'covering_line'];
+  if (!data || typeof data !== 'object' || Object.keys(data).some(k => !allowed.includes(k))) throw new EvidenceShareError('invalid', 400);
+  const label = typeof data.label === 'string' ? data.label.trim() : '';
+  if (!label || label.length > LINK_BOUNDS.label) throw new EvidenceShareError('invalid', 400);
+  const days = data.expires_in_days ?? LINK_DEFAULTS.expires_in_days;
+  const limit = data.view_limit ?? LINK_DEFAULTS.view_limit;
+  if (!intIn(days, LINK_BOUNDS.expires_in_days) || !intIn(limit, LINK_BOUNDS.view_limit)) throw new EvidenceShareError('invalid', 400);
+  const line = coveringLine(data.covering_line);
+  if (line === 'bad') throw new EvidenceShareError('invalid', 400);
+
+  let made: Awaited<ReturnType<typeof readinessBody>>;
+  try { made = await readinessBody(ctx.env, ctx.projectId); }
+  catch { throw new EvidenceShareError('unreadable', 503); }
+
+  const now = new Date();
+  const madeAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + Number(days) * 86400000).toISOString();
+  const snapshot = { kind: 'readiness', ...made.body, covering_line: line, venture: await ventureName(ctx.env, ctx.projectId), made_at: madeAt };
+  const token = newShareToken();
+  const uid = newUid();
+  try {
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare(`INSERT INTO raise_evidence_share_links(uid,project_id,output,token_hash,label,reader,nda_signed_on,nda_confirmed_by,item_uids_json,item_count,
+          snapshot_json,pack_hash,expires_at,view_limit,created_by,created_at) VALUES(?,?,'readiness',?,?,'before_nda',NULL,NULL,NULL,?,?,?,?,?,?,?)`)
+        .bind(uid, ctx.projectId, await tokenHash(token), label, made.body.areas.length, JSON.stringify(snapshot), made.hash, expiresAt, limit, ctx.user.id, madeAt),
+      logCycleWriteStatement(ctx.env, { projectId: ctx.projectId, userId: ctx.user.id, cycle: 'raise', module: 'fundraising-readiness', entityId: uid,
+        action: 'readiness_snapshot_shared', summary: 'A readiness snapshot link was made.' }),
+    ]);
+  } catch { throw new EvidenceShareError('failed', 503); }
+  return { uid, output: 'readiness' as const, path: '/share/readiness/' + token, label, covering_line: line, item_count: made.body.areas.length,
+    created_at: madeAt, expires_at: expiresAt, view_limit: limit, view_count: 0, state: 'live' as const, sent: false };
 }
 
 /** RA-32: evidence the founder adds by hand. Typed: stated by you · Anecdote · Private. A claim it backs stays Founder's figure. */

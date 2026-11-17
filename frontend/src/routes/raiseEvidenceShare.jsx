@@ -8,12 +8,15 @@ import { Route } from 'react-router-dom';
 
 const RaiseEvidence = lazy(() => import('../pages/cycles/evidence/RaiseEvidence'));
 const EvidencePackPage = lazy(() => import('../pages/share/EvidencePackPage'));
+// D6897 (#6897, RA-30): the readiness snapshot a founder shared outside Axal; public on the same terms.
+const ReadinessSnapshotPage = lazy(() => import('../pages/share/ReadinessSnapshotPage'));
 
 export default function raiseEvidenceShareRoutes({ guard, labRoles }) {
   return (
     <>
       <Route path="/raise/evidence/shared" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/share/evidence/:token" element={<EvidencePackPage />} />
+      <Route path="/share/readiness/:token" element={<ReadinessSnapshotPage />} />
     </>
   );
 }

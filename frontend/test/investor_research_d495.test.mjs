@@ -34,6 +34,7 @@ test('IR2 New request and Attach to deal point at the deal, not at slot S02', ()
     assert.doesNotMatch(a.title, /slot S02|research\.ts/, `${label} still cites the old wait`);
   }
   assert.match(op('research/diligence', 'New request').title, /deal’s Documents tab/);
+  assert.match(op('research/diligence', 'Attach to deal').title, /already shows its deal/);
 });
 
 test('IR4: the investor’s Markets zone states that theses wait on a decision', () => {

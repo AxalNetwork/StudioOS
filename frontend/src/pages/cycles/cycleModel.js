@@ -382,3 +382,13 @@ export function linkEvidenceAction(row, first, open) {
   if (row?.keys?.evidence !== 'none' || typeof open !== 'function') return null;
   return { text: 'Link evidence', label: `Link evidence to ${first && !first.nr ? first.text : 'this feature'}`, onClick: open };
 }
+
+/**
+ * D6790 (#6790, GR-23): an obligation with no owner offers "Pick owner" in
+ * place of Edit. It opens the same Edit (the same PATCH), focused on the
+ * owner listbox of the company team. Any other row: null.
+ */
+export function pickOwnerAction(row, first, open) {
+  if (row?.keys?.owner !== 'none' || typeof open !== 'function') return null;
+  return { text: 'Pick owner', label: `Pick an owner for ${first && !first.nr ? first.text : 'this obligation'}`, onClick: open };
+}

@@ -152,12 +152,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BACKUP_KEY: ${{ steps.name.outputs.key }}
           BACKUP_FILENAME: ${{ steps.name.outputs.filename }}
-        run: |
-          wrangler r2 object put \
-            "${BACKUP_BUCKET}/${BACKUP_KEY}" \
-            --file "${BACKUP_FILENAME}" \
-            --content-type 'application/sql' \
-            --remote
+        # The SQL export exceeds Wrangler's 300 MiB PUT limit. The S3
+        # client on the hosted runner uploads it in parts to the same key.
+        run: bash scripts/d1-backup-upload.sh "${BACKUP_FILENAME}"
 
       - name: Read the upload back and check it, then upload the manifest
         # The manifest is written only for an object whose bytes match it.

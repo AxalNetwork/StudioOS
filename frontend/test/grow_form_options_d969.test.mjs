@@ -129,7 +129,9 @@ async function assertChips(m) {
 
   // D4486: Channel now reads venture-member owner choices from its dedicated channel read.
   assert.equal(typeof form('distribution').loadOptions, 'function');
-  for (const slug of ['partner-network', 'durable-company-building']) assert.equal(form(slug).loadOptions, undefined, slug);
+  // D6790: Add obligation reads its owner listbox (the company team) from Durable's form-options.
+  assert.equal(typeof form('durable-company-building').loadOptions, 'function');
+  for (const slug of ['partner-network']) assert.equal(form(slug).loadOptions, undefined, slug);
 }
 
 test('1: Log feedback, Enter a KPI, Open a role and Add market read their chips from form-options', async () => {

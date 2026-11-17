@@ -249,7 +249,55 @@ jobs:
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
         run: bash scripts/ci/queue-ref-alive.sh
+      # D5608: trace what each test file reads and how long it takes, on the
+      # queue and on main only (never a PR run, never a benchmark branch). An
+      # empty value leaves the tracer inert, so the run line is the same for
+      # every event.
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
+        env:
+          TEST_TRACE_DIR: ${{ (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}/test-traces', runner.temp) || '' }}
+      - name: Upload this part's test traces
+        if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main')
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-traces-${{ matrix.part }}
+          path: ${{ runner.temp }}/test-traces
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # D5608: one dependency and timing artifact per commit, merged from the
+  # parts' traces. Advisory: neither `landing` nor `gate` needs it, so its
+  # failure never blocks a merge. It runs in the queue on purpose, because a
+  # push that `verified` skips has no traces of its own: the queue run on the
+  # same SHA carries them (the `plan` job reads its test-timings.json).
+  test-deps:
+    name: test deps
+    needs: suite
+    if: always() && (github.event_name == 'merge_group' || github.event_name == 'push' && github.ref == 'refs/heads/main') && needs.suite.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-traces-*
+          path: ${{ runner.temp }}/test-traces
+      - name: Merge the parts' traces
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-traces"
+          node scripts/ci/merge-test-deps.mjs "$RUNNER_TEMP/test-traces" "$RUNNER_TEMP/test-deps" "$GITHUB_SHA"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-deps-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/test-deps/test-deps.json
+            ${{ runner.temp }}/test-deps/test-timings.json
+          if-no-files-found: error
+          retention-days: 30
 
   # D5606: shadow the replacement for the existing required checks.
   fast:

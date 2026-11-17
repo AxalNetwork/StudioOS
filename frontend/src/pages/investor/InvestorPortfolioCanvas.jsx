@@ -117,9 +117,10 @@ function ReportingCard({ summary, onRetry }) {
   else if (summary.total === 0) figures = <p className="pf-note" data-testid="portfolio-reporting-empty">No company is in the reporting population{summary.period ? ` for ${summary.period}` : ''}.</p>;
   else {
     figures = (
-      <div className="pf-tiles" data-testid="portfolio-reporting-figures">
+      <div className="pf-tiles pf-tiles-4" data-testid="portfolio-reporting-figures">
         <SummaryTile label="Received" value={`${summary.received} of ${summary.total}`} />
         <SummaryTile label={summary.inProgress ? 'Outstanding' : 'Not received'} value={String(summary.outstanding)} tone={summary.outstanding && !summary.inProgress ? 'late' : null} />
+        <SummaryTile label="Overdue" value={summary.overdue == null ? NOT_RECORDED : String(summary.overdue)} tone={summary.overdue ? 'late' : null} note={summary.overdue == null ? 'No due dates in the reporting read' : 'Past the due date'} />
         <SummaryTile label="Period" value={summary.period || NOT_RECORDED} note={summary.period ? (summary.inProgress ? 'In progress' : 'Complete') : null} />
       </div>
     );

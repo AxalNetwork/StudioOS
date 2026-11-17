@@ -257,3 +257,5 @@ a.pf-co:hover,a.pf-co:focus-visible{color:var(--pf-vt);text-decoration:underline
   .pf-obligations td.pf-row-actions .pf-btn+.pf-btn{margin-left:0}
   .pf-obligations td[data-label="Due"]{max-width:none}
 }
+/* D6204: an obligation past its due date, by the Worker's date. */
+.pf-late-text{color:var(--pf-neg);font-weight:700;display:block}

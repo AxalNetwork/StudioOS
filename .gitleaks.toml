@@ -56,6 +56,11 @@ regexes = [
   # every Stripe call in that suite goes to an in-test fake. Pinned as the
   # literal, as D1135 is, rather than rewriting the PR branch's history.
   '''\bsk_test_d4570_fixture\b''',
+  # D7127 (#7127): the D1 backup upload test's synthetic Cloudflare token id,
+  # '0123456789abcdef'.repeat(2): sequential hex, because the script under test
+  # accepts only a 32-hex id. Anchored to the exact literal; pinned rather than
+  # rewriting the PR branch's history, as D1135 and D4570-p6 are.
+  '''^0123456789abcdef$''',
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',

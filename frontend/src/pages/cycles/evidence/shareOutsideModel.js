@@ -91,3 +91,32 @@ export function typedBody(form) {
 
 /** The reader's refusal pages (RA-36) come from the Worker; this is the fallback when it said nothing readable. */
 export const REFUSAL_FALLBACK = Object.freeze({ title: 'This link does not open anything', sentence: 'Ask the sender for a new link.' });
+
+// ---------------------------------------------------------------------------
+// D6897 (#6897, canvas D6054 RA-30): the readiness snapshot shared outside Axal
+// ---------------------------------------------------------------------------
+export const COVERING_LINE_MAX = 200;
+export const SNAPSHOT_IS_DATED = 'The reader sees your readiness as it is now. It does not update; make a new snapshot after a change.';
+export const SNAPSHOT_SHOWS = 'Seven areas, each with its score out of 10, its evidence, what is missing and the day it was scored. Team reads “Team is assessed by a person”. No overall score and no Product-market fit.';
+/** What a Shared links row shares: a readiness snapshot, or an evidence pack for its reader. */
+export function whatItShares(link) {
+  if (link?.output === 'readiness') return 'Readiness snapshot';
+  return readerWord(link?.reader) + (link?.nda_signed_on ? ` · NDA ${String(link.nda_signed_on).slice(0, 10)}` : '');
+}
+/** The snapshot composer's checks, the same ones the Worker makes. */
+export function snapshotErrors(form) {
+  const e = {};
+  const label = String(form?.label ?? '').trim();
+  if (!label) e.label = 'Name who this is for.';
+  else if (label.length > LINK_LIMITS.label) e.label = `At most ${LINK_LIMITS.label} characters.`;
+  if (!intIn(form?.expires_in_days, LINK_LIMITS.expires_in_days)) e.expires_in_days = 'Between 1 and 90 days.';
+  if (!intIn(form?.view_limit, LINK_LIMITS.view_limit)) e.view_limit = 'Between 1 and 100 views.';
+  const line = String(form?.covering_line ?? '');
+  if (/[\r\n]/.test(line.trim())) e.covering_line = 'One sentence, on one line.';
+  else if (line.trim().replace(/\s+/g, ' ').length > COVERING_LINE_MAX) e.covering_line = `At most ${COVERING_LINE_MAX} characters.`;
+  return e;
+}
+export function snapshotBody(form) {
+  const line = String(form?.covering_line ?? '').trim().replace(/\s+/g, ' ');
+  return { label: String(form.label).trim(), expires_in_days: form.expires_in_days, view_limit: form.view_limit, ...(line ? { covering_line: line } : {}) };
+}

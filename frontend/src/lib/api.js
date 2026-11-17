@@ -219,6 +219,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/share/captable/')
     // D6864 (#6864): an evidence pack a founder shared outside Axal; no sign-in by design.
     || currentPath.startsWith('/share/evidence/')
+    // D6897 (#6897): a readiness snapshot a founder shared outside Axal; no sign-in by design.
+    || currentPath.startsWith('/share/readiness/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads
     // window.location. /account/email/* is the live pair; /settings/email/*
@@ -5464,6 +5466,8 @@ export const api = {
     // grant answers (`project_name` null where the call or deal behind it did
     // not name the venture); `requests: null` with `requests_unreadable` when
     // they could not be read, never an empty list.
+    // D6266: each room also carries `deals`: the permitted deals on its company
+    // (`{ id, stage, name }`), and `deal_stage_note` only when there are none.
     diligence: () => request('/research/diligence'),
     // One room and one document in it, keyed by the grant the investor holds.
     // A grant they do not hold is a 404 (`room_not_found`), the same as one

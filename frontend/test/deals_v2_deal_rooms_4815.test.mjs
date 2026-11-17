@@ -150,7 +150,7 @@ test('the route: registered, answered in the Deals shell with no pill lit, and l
 
   const shell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
   assert.match(shell, /const isRooms = location\.pathname === ROOMS;/);
-  assert.match(shell, /activeSlug=\{isRoot \|\| isCompare \|\| isRooms \? null : undefined\}/);
+  assert.match(shell, /activeSlug=\{isRoot \|\| isCompare \|\| isRooms \|\| isRoundCalls \? null : undefined\}/); // D6160: /round-calls lights no pill either
   assert.match(shell, /isRooms\s*\?\s*<DealRoomsPanel \/>/);
   // The root is the flow alone: no rooms and no tasks under it.
   assert.doesNotMatch(shell, /<MyTasks|more=/);

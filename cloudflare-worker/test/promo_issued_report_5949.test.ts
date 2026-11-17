@@ -10,7 +10,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/promo_issued_report_5949.test.ts
  */
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -33,6 +33,10 @@ const SECRET = 'synthetic-promo-report-secret';
 const NOW = new Date('2026-11-15T09:00:00.000Z');
 const PERIOD = quarterKey(NOW); // 2026-Q4
 const PREVIOUS = '2026-Q3';
+// The reads judge "stale" and "this quarter" against the wall clock, so the
+// clock is pinned to NOW: these assertions must not expire 48 hours after NOW.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+afterEach(() => mock.timers.reset());
 const SUPER = 1;
 const LICENCE = 'lic_aa';
 

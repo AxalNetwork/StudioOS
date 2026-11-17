@@ -59,8 +59,9 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // D5791 (#5791): an investor's attached walkthrough on their share link, its
 // takes and each take's file (routes/deck_share_walkthrough.ts).
 export const DECK_SHARE_WALKTHROUGH = /^\/api\/decks\/share\/[^/]+\/walkthrough(?:\/[0-9a-f-]{36}\/media)?$/;
-// D6864 (#6864): the public evidence-pack read. Each open consumes one of the link's views, so a tight per-IP bucket.
-export const EVIDENCE_SHARE_READ = /^\/api\/share\/evidence\/[^/]+$/;
+// D6864 (#6864): the public evidence-pack read, and D6897's readiness snapshot read on the same link store. Each open
+// consumes one of the link's views, so a tight per-IP bucket.
+export const EVIDENCE_SHARE_READ = /^\/api\/share\/(?:evidence|readiness)\/[^/]+$/;
 // D1502 part 2 (#3753): starting a deck generation run. A run holds the
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)

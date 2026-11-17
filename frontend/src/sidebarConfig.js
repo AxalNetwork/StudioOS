@@ -788,6 +788,8 @@ export const INVESTOR_FULL_BLEED = [
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
   '/portfolio/health', '/portfolio/waterfall',
+  // D6160 (#6160): the investor's round calls list, a page of Deals in its shell.
+  '/round-calls',
 ];
 
 /**
