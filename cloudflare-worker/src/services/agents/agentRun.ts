@@ -52,6 +52,15 @@
  * answers 503 `gateway_limit`, which the runtime treats as the platform's
  * circuit breaker.
  *
+ * D7073 (#7073): the gateway fails closed. An id that is set but unusable
+ * refuses every run (503 `gateway_misconfigured`); a run the engine started
+ * (`engine: true`, the task loop) with no id refuses 503 `gateway_required`,
+ * unless the deterministic inference stub answers the call (no model is
+ * reached). Both refuse before anything is priced, held or read. A sponsor's
+ * own run with no id set is unchanged. And a 429 is no longer always the
+ * gateway's: an attempt Workers AI refused for capacity (codes 3040, 3036) is
+ * `model_throttled` (503), which pauses nothing.
+ *
  * The tool reads are named by the same run uid. Neither the prompt nor the
  * output is logged, thrown or written to an event.
  *
@@ -74,6 +83,7 @@
 import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
+import { inferenceStubOn } from '../ai/inferenceStub';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
 import { agentArea } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
@@ -110,6 +120,8 @@ export type AgentRunInput = {
   skillVersion?: number | null;
   /** D4555, tests only: the SDK and resource provider the preview skill runtime uses. */
   skillDeps?: RunSkillDeps;
+  /** D7073: true only from the task loop (`agents/loop.ts`). An engine run needs the `agents` gateway. */
+  engine?: boolean;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -125,15 +137,47 @@ const RUN_UID_RE = /^[A-Za-z0-9-]{8,64}$/;
 export const runKeyOf = (runUid: string) => `agent:${runUid}`;
 export const holdKeyOf = (runKey: string) => `${runKey}:run`;
 /**
+ * D7073: what `AGENT_AI_GATEWAY` holds. `none` is unset or blank; `malformed`
+ * is set to something that cannot name a gateway, which is never read as none.
+ */
+export type AgentGateway = { kind: 'none' } | { kind: 'ok'; id: string } | { kind: 'malformed' };
+export const agentGateway = (env: Pick<Env, 'AGENT_AI_GATEWAY'>): AgentGateway => {
+  const v = String(env.AGENT_AI_GATEWAY ?? '').trim();
+  if (!v) return { kind: 'none' };
+  return /^[A-Za-z0-9_-]{1,64}$/.test(v) ? { kind: 'ok', id: v } : { kind: 'malformed' };
+};
+/**
  * D1528 (#3847, #3742 E3): the `agents` AI Gateway id, from `AGENT_AI_GATEWAY`;
  * unset is none. Only this file passes a gateway id to the router.
  */
 export const agentGatewayId = (env: Pick<Env, 'AGENT_AI_GATEWAY'>): string | null => {
-  const v = String(env.AGENT_AI_GATEWAY ?? '').trim();
-  return /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
+  const g = agentGateway(env);
+  return g.kind === 'ok' ? g.id : null;
 };
-/** A gatewayed call the gateway refused for its limit: an attempt answered 429. */
-export const gatewayLimited = (r: { attempts?: { ok: boolean; status?: number }[] }) => !!r.attempts?.some((x) => !x.ok && x.status === 429);
+/**
+ * D7073: the gateway's refusal of a run, before anything is priced, held or
+ * read; null lets it on. A malformed id refuses every run. An engine run with
+ * no id is refused unless the inference stub answers it (`inferenceStubOn`:
+ * the preview Worker of #4594, where no model is reached).
+ */
+export function gatewayRefusal(env: Pick<Env, 'AGENT_AI_GATEWAY' | 'ENVIRONMENT' | 'STUDIOOS_ENV' | 'AGENT_INFERENCE_STUB'>, engineRun: boolean): AgentRefusal | null {
+  const g = agentGateway(env);
+  if (g.kind === 'malformed') return no(503, 'gateway_misconfigured', 'The agent gateway is set up wrongly, so the agent was not run. Nothing was charged.');
+  if (g.kind === 'none' && engineRun && !inferenceStubOn(env)) return no(503, 'gateway_required', 'The agent gateway is not set up yet, so the agent was not run. Nothing was charged.');
+  return null;
+}
+type Attempt = { ok: boolean; status?: number; code?: number | null };
+/** Workers AI's own 429s: 3040 out of capacity, 3036 the account's allocation. Neither is the gateway's limit. */
+const MODEL_THROTTLE_CODES: ReadonlySet<number> = new Set([3036, 3040]);
+const limited = (x: Attempt) => !x.ok && x.status === 429;
+const modelsOwn = (x: Attempt) => MODEL_THROTTLE_CODES.has(Number(x.code));
+/** A gatewayed call the gateway refused for its limit: an attempt answered 429 that Workers AI's capacity does not explain. */
+export const gatewayLimited = (r: { attempts?: Attempt[] }) => !!r.attempts?.some((x) => limited(x) && !modelsOwn(x));
+/** D7073: every 429 of a failed run was Workers AI's own capacity. Ordinary throttling: nothing is paused. */
+export const modelThrottled = (r: { attempts?: Attempt[] }) => {
+  const l = (r.attempts ?? []).filter(limited);
+  return l.length > 0 && l.every(modelsOwn);
+};
 export type AgentQuote = { ok: true; quote: Spend } | AgentRefusal;
 
 const no = (status: number, code: string, message: string, extra?: Record<string, unknown>): AgentRefusal => ({ ok: false, status, code, message, ...(extra ? { extra } : {}) });
@@ -361,6 +405,9 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   if (bad) return refused(env, a, bad, input.module, input.option);
   const c = await check(env, input);
   if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
+  // D7073: the gateway fails closed, before the policy quote, the reads and the hold.
+  const ungated = gatewayRefusal(env, input.engine === true);
+  if (ungated) return refused(env, a, ungated, input.module, input.option);
   // D4162 (#4162): HQ's AI policy, before anything is read, held or charged.
   const held = await underPolicy(env, a, c);
   if (held) return refused(env, a, held, input.module, input.option);
@@ -410,6 +457,10 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   if (!r.ok && gatewayId && gatewayLimited(r)) {
     // D1528: the `agents` gateway's limit is the platform's circuit breaker; the runtime pauses the engine.
     return refused(env, a, no(503, 'gateway_limit', 'Agents reached the platform\'s limit, so they are paused for now. You can still work on this yourself.'), input.module, input.option);
+  }
+  if (!r.ok && modelThrottled(r)) {
+    // D7073: Workers AI was out of capacity. The task is tried again later; no agent and no engine is paused.
+    return refused(env, a, no(503, 'model_throttled', 'The model is busy right now, so the agent did not finish. Try again shortly.'), input.module, input.option);
   }
   if (!r.ok) {
     // The guard's own words (and its Wellbeing link) when it refused; else the router's.

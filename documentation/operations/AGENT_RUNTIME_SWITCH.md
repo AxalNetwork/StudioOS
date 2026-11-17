@@ -13,7 +13,7 @@ the engine is down. The decision is
 | --- | --- | --- |
 | `AGENT_ENGINE` | `[vars]` and `[env.production.vars]` (and `[env.preview.vars]`) | `off`: every engine route answers 404 `agent_engine_off`; a run in flight ends at its next step (`engine_off`). `paused`: admissions stop (403 `engine_paused`); runs already admitted carry on and decisions still land. `canary`: only a platform admin's own start is admitted. `cohort`: platform admins plus HQ-listed users or scopes (D4423). `on`: everything. Needs `TEAM_AGENTS_ENABLED = "true"` too. |
 | `agents:halt` | KV `RATE_LIMITS` | Set: every run ends at its next step (`halted`) and nothing is admitted. The fastest stop; no deploy. |
-| `agents:paused` | KV `RATE_LIMITS` | The platform circuit breaker. A gateway limit sets it (`gateway_limit`); while it is set the engine reads `paused`. A person clears it. |
+| `agents:paused` | KV `RATE_LIMITS` | The platform circuit breaker. A gateway limit sets it (`gateway_limit`); while it is set the engine reads `paused`. A person clears it. A model that was only out of capacity does not set it (`model_throttled`, D7073). |
 | A scope's pause | `PUT /api/teams/:scope/:id/engine` `{ paused: true }` | That scope admits nothing more; a resume rebuilds its object from D1. |
 | `AGENT_RUNTIME` | `[vars]` and `[env.production.vars]` | `do` (the default). `sdk` (#3852, E0: an evaluation) runs one Agents SDK `ScopeAgent` per scope through `AGENT_SCOPE_SDK`; without that binding, asking for it falls back to `do` and logs a warning. |
 | `AGENT_AUTONOMY` | `[vars]` and `[env.production.vars]` | `manual` (default): only a person starts a task. `self_start` only after E3 and E5 merge (owner Q1 B). |
@@ -107,6 +107,13 @@ for the staged rollout. `AGENT_AI_GATEWAY` remains unset; the monthly alert
 threshold is now explicitly `100000000` micro-USD in all three var tables.
 That var does not configure the gateway's hard limit: the owner sets $100 in
 the dashboard too.
+
+Until `AGENT_AI_GATEWAY` is set, a run the engine starts is refused
+`gateway_required` before anything is priced, held or sent to a model (D7073).
+A value that cannot name a gateway refuses every agent run
+(`gateway_misconfigured`). A sponsor's own run from the page is unchanged while
+the var is unset. The Stage A preview needs no gateway: its deterministic
+inference stub reaches no model.
 
 `TEAM_AGENTS_ENABLED`, `AGENT_ENGINE`, `AGENT_AUTONOMY` and `AGENT_RUNTIME`
 retain their current values. Each later switch requires its own owner-approved

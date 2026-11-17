@@ -55,6 +55,8 @@ export function lifecycleWorld(o: { engine?: string; autonomy?: string; modes?: 
       },
     }),
   };
+  // D7073: an engine run needs the `agents` gateway, so the simulated deployment has one, as production must.
+  w.env.AGENT_AI_GATEWAY = 'agents';
   const modes = [...(o.modes ?? ['ok'])];
   const ai = { calls: 0, models: [] as string[], modes };
   w.env.AI = withGuard({
@@ -63,7 +65,8 @@ export function lifecycleWorld(o: { engine?: string; autonomy?: string; modes?: 
       ai.models.push(model);
       const mode = modes.length > 1 ? modes.shift()! : modes[0];
       if (mode === 'timeout') throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
-      if (mode === 'rate_limited') throw Object.assign(new Error('429 Too Many Requests'), { status: 429 });
+      // Workers AI's own 429 (code 3040, out of capacity). D7073: that is `model_throttled`, not the gateway's limit.
+      if (mode === 'rate_limited') throw Object.assign(new Error('3040: Capacity temporarily exceeded, please try again.'), { status: 429 });
       if (mode === 'throw') throw new Error('upstream exploded');
       return { response: STUB_ANSWER, usage: { prompt_tokens: 40, completion_tokens: 10 } };
     },
