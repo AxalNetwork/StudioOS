@@ -308,8 +308,10 @@ const PARTNER_TYPE = { reseller: 'Reseller', integration: 'Integration', agency:
 const PARTNER_PILL = { talking: ['Talking', 'v3'], terms: ['Terms', 'v2'], signed: ['Signed', 'ok'], ended: ['Ended', 'grey'] };
 const MARKET_STATE = { considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now' };
 const DECISION = { enter: 'Enter', not_yet: 'Not yet', exit: 'Exit' };
-const OBLIGATION_KIND = { governance: 'Governance', compliance: 'Compliance', risk: 'Risk', tax: 'Tax', other: 'Other' };
-const OBLIGATION_STATE = { scheduled: ['Scheduled', 'v2'], upcoming: ['Upcoming', 'v3'], draft: ['Draft', 'grey'], done: ['Done', 'ok'], not_set_up: ['Not set up', 'warn'] };
+const OBLIGATION_KIND = { governance: 'Governance', compliance: 'Compliance', risk: 'Risk', culture: 'Culture', tax: 'Tax', other: 'Other' };
+// D6122 (GR-21): Overdue and Snoozed carry a word, never a colour alone.
+const OBLIGATION_STATE = { overdue: ['Overdue', 'bad'], scheduled: ['Scheduled', 'v2'], upcoming: ['Upcoming', 'v3'], snoozed: ['Snoozed', 'grey'], draft: ['Draft', 'grey'], done: ['Done', 'ok'], not_set_up: ['Not set up', 'warn'] };
+const REPEATS = { once: 'Once', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 
 /** A KPI row's value: MRR is in dollars, a movement in cents, customers a count. */
 function kpiValue(r) {
@@ -426,13 +428,15 @@ export const RECORDS = {
     sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }],
   },
   'durable-company-building': {
-    keys: ['obligation', 'kind', 'due', 'owner', 'state'],
+    keys: ['obligation', 'kind', 'due', 'owner', 'state', 'repeats'],
     row: (r, i) => ({ id: r.id ?? `obligation-${i}`, recordId: workerId(r.id), cells: {
       obligation: r.title ?? null,
       kind: word(OBLIGATION_KIND, r.kind),
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
-      owner: r.owner_name ?? { text: 'No owner', tone: 'warn' },
+      owner: r.owner_name ?? { text: 'No owner named', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
+      // A repeat the store does not hold is Not recorded, never "Once".
+      repeats: word(REPEATS, r.repeats),
     }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
