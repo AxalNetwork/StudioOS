@@ -13,6 +13,17 @@ import { boardFor } from './boards';
 import { api } from '../lib/api';
 import ResearchOverviewPanel from '../pages/research/ResearchOverviewPanel';
 
+export function benchmarkingExportView(rows) {
+  return {
+    scope: null,
+    zone: 'benchmarking',
+    header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
+    rows,
+    cells: (b) => [b.metric, b.our_value, b.peer_value, b.peer_source, b.peer_sample_size, b.peer_as_of, b.reading]
+      .map((value) => typeof value === 'string' && /^\s*[=+@-]/u.test(value) ? `'${value}` : value),
+  };
+}
+
 /**
  * `/research/*` — one path, four zone lists.
  *
@@ -307,13 +318,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           <BenchmarkingZone
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/benchmarking', opts)}
-            zoneActions={(rows) => zoneActionsFor(role, 'research/benchmarking', { view: {
-            scope: null,
-            zone: 'benchmarking',
-            header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
-            rows,
-            cells: (b) => [b.metric, b.our_value, b.peer_value, b.peer_source, b.peer_sample_size, b.peer_as_of, b.reading],
-          } })} />
+            zoneActions={(rows, handlers) => zoneActionsFor(role, 'research/benchmarking', { handlers, view: benchmarkingExportView(rows) })} />
         </Suspense>
       );
     }

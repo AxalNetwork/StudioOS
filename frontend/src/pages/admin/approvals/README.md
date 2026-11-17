@@ -17,6 +17,8 @@ under the shared admin header (D936). `/admin/held/approvals` forwards here with
 | `approvalReads.js` | D5881: cancel superseded reads and debounce Inbox search. |
 | `HeldApprovalsRedirect.jsx` | The old address, forwarded with its query and hash. |
 | `lanesDecidedModel.js` | D4814 (#4814, part 4): pure functions for Lanes as an operations map (group totals, overdue from the inbox's band split, the unread-lane banner) and Decided as an audit trail (Include HQ lanes, note kinds, About this history). |
+| `BestFitBoard.jsx` | D5885 (#5885, AP-20 to AP-31): Best-Fit consultations at `/admin/approvals/best-fit` (routes in `frontend/src/routes/adminApprovalsBestFit.jsx`), with Confirmed, Completed and Cancelled as path tabs and one consultation at `/admin/approvals/best-fit/:item`. It decides on the consultations route: only the Worker's transitions, the version read sent back, a 409 redrawn from `current`, and nobody told (#5886). |
+| `bestFitModel.js` | D5885: the Best-Fit board as pure functions: its address, tabs and counts, rows, the decisions each status allows, each dialog's words, the history, and what a refusal means. |
 | `boardGrammar.js` | D4814 (#4814, part 3): pure functions for the native boards' one grammar — the crumb, the owner read joined on numeric id, the four-cell summary and Co-marketing's lifecycle. |
 
 The rule for adding here: a lane joins `LANES` with its glance key once the

@@ -36,7 +36,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { hydrate, type LicenceRow } from './admin_licences';
-import { DERIVED_UNAVAILABLE } from './licence';
+import { DERIVED_UNAVAILABLE, revenuePerSubsidiaryUnavailable } from './licence';
 import { normalizeTeamSearch } from '../util/teamSearch';
 import { fanOut, branchRead, branchBindings, coverage, teamCoverage, withRegistry, type BranchResult } from '../services/branches';
 import { openEscalations } from '../rpc/hqOps';
@@ -344,6 +344,8 @@ r.get('/overview', async (c) => {
     ...registryFlags(deployments),
     usage_coverage: usageCoverage,
     ...DERIVED_UNAVAILABLE,
+    // D5947: worded for what this quarter's reports carried, not fixed at "every stream unmeasured".
+    ...revenuePerSubsidiaryUnavailable(usageCoverage),
   });
 });
 
